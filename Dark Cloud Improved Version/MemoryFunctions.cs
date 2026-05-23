@@ -1,393 +1,392 @@
-﻿using Dark_Cloud_Improved_Version.Properties;
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
-using System.Diagnostics.Eventing.Reader;
-using System.Diagnostics.PerformanceData;
 using System.IO;
 using System.Linq;
-using System.Resources;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Forms;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace Dark_Cloud_Improved_Version
 {
     class Memory
     {
-        internal static Process process;
         internal static string procName = "pcsx2";
-        internal static long EEMem_Address, EEMem_Offset;
-        internal static long Check_EEMem_Address, Check_EEMem_Offset;
+        internal static Process process;
 
-        //Define some needed flags
-        internal const uint FORMAT_MESSAGE_ALLOCATE_BUFFER = 0x00000100;
-        internal const uint FORMAT_MESSAGE_IGNORE_INSERTS = 0x00000200;
-        internal const uint FORMAT_MESSAGE_FROM_SYSTEM = 0x00001000;
+        private static Socket _socket;
+        private static NetworkStream _stream;
+        private static readonly object _lock = new object();
 
-        internal const uint PROCESS_VM_READ = 0x0010;
-        internal const uint PROCESS_VM_WRITE = 0x0020;
-        internal const uint PROCESS_VM_OPERATION = 0x0008;
-        internal const uint PROCESS_SUSPEND_RESUME = 0x0800;
-
-        internal const uint PAGE_EXECUTE_READWRITE = 0x40;
-
-        [DllImport("\\Resources\\pcsx2_offsetreader.dll", EntryPoint = "?GetEEMem@@YAJH@Z", CallingConvention = CallingConvention.Cdecl)]
-        private static extern long GetEEMem(int procID);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        internal static extern uint GetLastError();
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern int FormatMessage(uint dwFlags, IntPtr lpSource, uint dwMessageId, uint dwLanguageId, ref IntPtr lpBuffer, uint nSize, IntPtr Arguments);
-
-        [DllImport("user32.dll", SetLastError = true)] //Import DLL that will allow us to retrieve processIDs from Window Handles.
-        private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int processID); //This is a function within the dll that we are adding to our program.
-
-        [DllImport("kernel32.dll", SetLastError = true)] //Import DLL for reading processes and add the function to our program.
-        private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
-
-        [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.ThisCall)]
-        public static extern bool VirtualProtect(IntPtr processH, long lpAddress, long lpBuffer, uint flNewProtect, out uint lpflOldProtect);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool VirtualProtectEx(IntPtr processH, long lpAddress, long lpBuffer, uint flNewProtect, out uint lpflOldProtect);
-
-        [DllImport("kernel32.dll", SetLastError = true)] //Import for reading process memory.
-        private static extern bool ReadProcessMemory(IntPtr processH, long lpBaseAddress, byte[] lpBuffer, long dwSize, out ulong lpNumberOfBytesRead);
-
-        [DllImport("kernel32.dll", SetLastError = true)] //Import for writing process memory.
-        private static extern bool WriteProcessMemory(IntPtr processH, long lpBaseAddress, byte[] lpBuffer, long dwSize, out ulong lpNumberOfBytesWritten);
-
-        [DllImport("kernel32.dll", SetLastError = true)]  //Import DLL again for Closing Handles to processes and add the function to our program.
-        internal static extern bool CloseHandle(IntPtr processH);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool DebugActiveProcess(int PID);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool DebugSetProcessKillOnExit(bool boolean);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool DebugActiveProcessStop(int PID);
-
-        public static void SuspendProcess()
+        public static void Connect(int slot = 0)
         {
-            DebugActiveProcess(process.Id);
-            DebugSetProcessKillOnExit(false);
+            _stream?.Close();
+            _socket?.Close();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                _socket.NoDelay = true;
+                _socket.Connect(new IPEndPoint(IPAddress.Loopback, 28011 + slot));
+            }
+            else
+            {
+                string sockPath = Path.Combine(Path.GetTempPath(),
+                    slot == 0 ? "pcsx2.sock" : $"pcsx2_slot{slot}.sock");
+                _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                _socket.Connect(new UnixDomainSocketEndPoint(sockPath));
+            }
+
+            _stream = new NetworkStream(_socket, ownsSocket: false);
+            _writeFailCount = 0;
+            _writeProbeDone = false;
         }
 
-        public static void ResumeProcess()
-        {
-            DebugActiveProcessStop(process.Id);
-        }
-
-        internal static string GetSystemMessage(uint errorCode)
-        {
-            IntPtr lpMsgBuf = IntPtr.Zero;
-
-            int dwChars = FormatMessage(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, IntPtr.Zero, (uint)errorCode, 0, ref lpMsgBuf, 0, IntPtr.Zero);
-
-            string sRet = Marshal.PtrToStringAnsi(lpMsgBuf);
-            return sRet;
-        }
-
-        //private static IntPtr GetEEmemAddress()
-        //{
-        //    switch(process.ProcessName)
-        //    {
-        //        case "pcsx2": //Most likely 1.6 or below version of pcsx2
-        //            return (IntPtr)0x20000000; //Our addresses already include the previous fixed offset, so, return 0.
-
-        //        case "pcsx2-qtx64":
-        //            break;
-
-        //        case "pcsx2x64-avx2":
-        //            break;
-
-        //        default:
-        //            return IntPtr.Zero;
-        //    }
-
-        //    return GetProcAddressEx(process.MainModule.BaseAddress, process.Handle, "EEmem".ToCharArray());
-        //}
+        public static bool IsConnected => _socket?.Connected ?? false;
 
         public static int Initialize()
         {
             process = GetProcess(procName);
-
-            if (process != null)
+            if (process == null)
+                return -1;
+            try
             {
-                Check_EEMem_Address = ReadLong(GetEEMem(process.Id));
-                Check_EEMem_Offset = Check_EEMem_Address - 0x20000000;
-
-                switch (process.ProcessName)
-                {
-                    case "pcsx2":
-                        EEMem_Offset = 0x00000000;
-                        break;
-                }
-
-                if (Check_EEMem_Address > 0x0)
-                {
-                    EEMem_Address = Check_EEMem_Address;
-                    EEMem_Offset = Check_EEMem_Offset;
-                    ModWindow.NightlyVersionCheck();
-                }
+                Connect();
+                QueryVersion();
+                ProbeWriteOpcodes();
+                ModWindow.NightlyVersionCheck();
+                return 0;
             }
-
-            return 0;
+            catch (Exception ex)
+            {
+                Console.WriteLine("PINE connection failed: " + ex.Message);
+                Console.WriteLine("Ensure PINE is enabled in PCSX2: Settings → Advanced → PINE Server (port 28011)");
+                return -2;
+            }
         }
 
-        public static Process GetProcess(string procName) //Function for retrieving process from running processes.
+        public static Process GetProcess(string name)
         {
-            Process[] processes = Process.GetProcesses(); //Fetch the array of running processes
-            Process foundProcess = null;
-            int processInstances = 0;
-
-            procName = procName.ToLowerInvariant().Trim();
-
-            foreach(Process process in processes)
+            name = name.ToLowerInvariant().Trim();
+            Process found = null;
+            int count = 0;
+            foreach (Process p in Process.GetProcesses())
             {
-                if(process.ProcessName.ToLowerInvariant().Trim().Contains(procName)) //If we found the process, continue.
+                if (p.ProcessName.ToLowerInvariant().Trim().Contains(name))
                 {
-                    foundProcess = process;
-                    processInstances++;
+                    found = p;
+                    count++;
                 }
             }
+            if (count > 1)
+                Console.WriteLine("Found {0} running instances of {1}. Using last found.", count, found?.ProcessName);
+            return found;
+        }
 
-            if(processInstances > 1)
+        private static int _writeFailCount = 0;
+        private static bool _writeProbeDone = false;
+        private static bool _altWriteOpcodes = false; // true = use 0x04/0x05/0x06 (current PCSX2), false = 0x08/0x09/0x0A (legacy)
+        private static byte OpWrite8  => _altWriteOpcodes ? (byte)0x04 : (byte)0x08;
+        private static byte OpWrite16 => _altWriteOpcodes ? (byte)0x05 : (byte)0x09;
+        private static byte OpWrite32 => _altWriteOpcodes ? (byte)0x06 : (byte)0x0A;
+        private static byte OpWrite64 => _altWriteOpcodes ? (byte)0x07 : (byte)0x0B;
+        private static byte[] SendBatch(byte[] packet)
+        {
+            lock (_lock)
             {
-                Console.WriteLine("Found {0} running instances of {1}. Using the last instance found...", processInstances, foundProcess.ProcessName);
+                if (_stream == null) throw new InvalidOperationException("PINE not connected.");
+                _stream.Write(packet, 0, packet.Length);
+                var lenBuf = new byte[4];
+                ReadFully(lenBuf, 0, 4);
+                int respLen = BitConverter.ToInt32(lenBuf, 0) - 4;
+                if (respLen <= 0) return Array.Empty<byte>();
+                var resp = new byte[respLen];
+                ReadFully(resp, 0, respLen);
+                // resp[0] is the per-command error code: 0x00 = IPC_OK, 0xFF = IPC_FAIL
+                if (resp[0] != 0)
+                {
+                    byte opcode = packet.Length > 4 ? packet[4] : (byte)0;
+                    bool isWrite = (opcode >= 0x04 && opcode <= 0x07) || (opcode >= 0x08 && opcode <= 0x0B);
+                    if (isWrite)
+                    {
+                        _writeFailCount++;
+                        if (_writeFailCount <= 3)
+                            Console.WriteLine($"PINE write fail #{_writeFailCount} (opcode 0x{opcode:X2})");
+                        if (_writeFailCount == 5)
+                        {
+                            Console.WriteLine("Multiple PINE write failures. PCSX2 may be paused or this build doesn't support writes.");
+                            ModWindow.PineWritesFailing();
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"PINE IPC_FAIL on read (opcode 0x{opcode:X2})");
+                    }
+                    return Array.Empty<byte>();
+                }
+                if (respLen < 2) return Array.Empty<byte>();
+                var payload = new byte[respLen - 1];
+                Array.Copy(resp, 1, payload, 0, respLen - 1);
+                return payload;
+            }
+        }
+
+        private static void ReadFully(byte[] buf, int offset, int count)
+        {
+            while (count > 0)
+            {
+                int read = _stream.Read(buf, offset, count);
+                if (read == 0) throw new System.IO.EndOfStreamException("PINE stream closed.");
+                offset += read;
+                count -= read;
+            }
+        }
+
+        private static void QueryVersion()
+        {
+            // 0x08 = MsgVersion (PINE/PCSX2 version), 0x0E = MsgGameVersion (game version)
+            (byte op, string label)[] queries = { (0x08, "PINE version"), (0x0E, "Game version") };
+            foreach (var (op, label) in queries)
+            {
+                var pkt = new byte[5];
+                BitConverter.GetBytes(5).CopyTo(pkt, 0);
+                pkt[4] = op;
+                try
+                {
+                    lock (_lock)
+                    {
+                        _stream.Write(pkt, 0, pkt.Length);
+                        var lenBuf = new byte[4];
+                        ReadFully(lenBuf, 0, 4);
+                        int n = BitConverter.ToInt32(lenBuf, 0) - 4;
+                        if (n > 0)
+                        {
+                            var r = new byte[n];
+                            ReadFully(r, 0, n);
+                            if (r[0] == 0 && n > 1)
+                            {
+                                string raw = Encoding.UTF8.GetString(r, 1, n - 1);
+                                string ver = new string(raw.Where(c => c >= ' ').ToArray()).Trim();
+                                if (!string.IsNullOrEmpty(ver))
+                                    Console.WriteLine($"{label}: {ver}");
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static void ProbeWriteOpcodes()
+        {
+            if (_writeProbeDone) return;
+            _writeProbeDone = true;
+
+            // Try current PCSX2 PINE spec: Write8 = 0x04
+            SendBatch(BuildWritePacket(0x04, 0x21F10024, new byte[] { 0x01 }));
+            if (ReadByte(0x21F10024) == 0x01)
+            {
+                _altWriteOpcodes = true;
+                Console.WriteLine("[PINE probe] Write8 opcode 0x04 works (current PCSX2 PINE spec).");
+                goto Done;
             }
 
-            return foundProcess; //Return our process or default null if not found
+            // Fallback: legacy PCSX2 PINE spec: Write8 = 0x08
+            SendBatch(BuildWritePacket(0x08, 0x21F10024, new byte[] { 0x01 }));
+            if (ReadByte(0x21F10024) == 0x01)
+            {
+                Console.WriteLine("[PINE probe] Write8 opcode 0x08 works (legacy PCSX2 PINE spec).");
+                goto Done;
+            }
+
+            Console.WriteLine("[PINE probe] All write strategies failed. Memory writes will not work.");
+
+            Done:
+            _writeFailCount = 0;
+            WriteByte(0x21F10024, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
+            _writeFailCount = 0;
         }
 
-        public static IntPtr GetProcessHandle(int PID)
+        private static uint PhysAddr(long address) => (uint)(address & 0x1FFFFFFF);
+
+        private static byte[] BuildReadPacket(byte opcode, long address)
         {
-            IntPtr processH = OpenProcess(PROCESS_VM_OPERATION | PROCESS_SUSPEND_RESUME | PROCESS_VM_READ | PROCESS_VM_WRITE, false, PID);
-            return processH;
+            var pkt = new byte[9];
+            BitConverter.GetBytes(9).CopyTo(pkt, 0);
+            pkt[4] = opcode;
+            BitConverter.GetBytes(PhysAddr(address)).CopyTo(pkt, 5);
+            return pkt;
         }
 
-        internal static byte ReadByte(long address)  //Read byte from address + EEMem_Offset
+        private static byte[] BuildWritePacket(byte opcode, long address, byte[] value)
         {
-            byte[] dataBuffer = new byte[1];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _); //_ seems to act as NULL, we don't need numOfBytesRead
-
-            return dataBuffer[0];
+            int totalLen = 4 + 1 + 4 + value.Length;
+            var pkt = new byte[totalLen];
+            BitConverter.GetBytes(totalLen).CopyTo(pkt, 0);
+            pkt[4] = opcode;
+            BitConverter.GetBytes(PhysAddr(address)).CopyTo(pkt, 5);
+            value.CopyTo(pkt, 9);
+            return pkt;
         }
 
-        internal static byte[] ReadByteArray(long address, long numBytes)  //Read byte array from address + EEMem_Offset
+        internal static byte ReadByte(long address)
         {
-            byte[] dataBuffer = new byte[numBytes];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.LongLength, out _); //_ seems to act as NULL, we don't need numOfBytesRead
-
-            return dataBuffer;
+            var r = SendBatch(BuildReadPacket(0x00, address));
+            return r.Length >= 1 ? r[0] : (byte)0;
         }
 
-        internal static ushort ReadUShort(long address)  //Read unsigned short from address + EEMem_Offset
+        internal static byte[] ReadByteArray(long address, long numBytes)
         {
-            byte[] dataBuffer = new byte[2];
+            var result = new byte[numBytes];
+            for (long i = 0; i < numBytes; i++)
+                result[i] = ReadByte(address + i);
+            return result;
+        }
 
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _);
-
-            return BitConverter.ToUInt16(dataBuffer, 0);
+        internal static ushort ReadUShort(long address)
+        {
+            var r = SendBatch(BuildReadPacket(0x01, address));
+            return r.Length >= 2 ? BitConverter.ToUInt16(r, 0) : (ushort)0;
         }
 
         internal static short ReadShort(long address)
         {
-            byte[] dataBuffer = new byte[2]; //Read this many bytes of the address + EEMem_Offset
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _); //_ seems to act as NULL, we don't need numOfBytesRead
-
-            return BitConverter.ToInt16(dataBuffer, 0); //Convert Bit Array to 16-bit Int (short) and return it
+            var r = SendBatch(BuildReadPacket(0x01, address));
+            return r.Length >= 2 ? BitConverter.ToInt16(r, 0) : (short)0;
         }
 
         internal static uint ReadUInt(long address)
         {
-            byte[] dataBuffer = new byte[4];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _); //_ seems to act as NULL, we don't need numOfBytesRead
-
-            return BitConverter.ToUInt32(dataBuffer, 0);
+            var r = SendBatch(BuildReadPacket(0x02, address));
+            return r.Length >= 4 ? BitConverter.ToUInt32(r, 0) : 0u;
         }
 
         internal static int ReadInt(long address)
         {
-            byte[] dataBuffer = new byte[4];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _); //_ seems to act as NULL, we don't need numOfBytesRead
-
-            return BitConverter.ToInt32(dataBuffer, 0);
+            var r = SendBatch(BuildReadPacket(0x02, address));
+            return r.Length >= 4 ? BitConverter.ToInt32(r, 0) : 0;
         }
 
         internal static float ReadFloat(long address)
         {
-            byte[] dataBuffer = new byte[4];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _);
-
-            return BitConverter.ToSingle(dataBuffer, 0);
+            // New PINE spec: 0x04 = Write8, not ReadFloat. Use Read32 (0x02) and reinterpret bytes.
+            var r = SendBatch(BuildReadPacket(0x02, address));
+            return r.Length >= 4 ? BitConverter.ToSingle(r, 0) : 0f;
         }
 
         internal static double ReadDouble(long address)
         {
-            byte[] dataBuffer = new byte[8];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _);
-
-            return BitConverter.ToDouble(dataBuffer, 0); ;
+            var r = SendBatch(BuildReadPacket(0x03, address));
+            return r.Length >= 8 ? BitConverter.ToDouble(r, 0) : 0.0;
         }
 
         internal static long ReadLong(long address)
         {
-            byte[] dataBuffer = new byte[8];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.Length, out _); //_ seems to act as NULL, we don't need numOfBytesRead
-
-            return BitConverter.ToInt64(dataBuffer, 0);
+            var r = SendBatch(BuildReadPacket(0x03, address));
+            return r.Length >= 8 ? BitConverter.ToInt64(r, 0) : 0L;
         }
 
         internal static string ReadString(long address, long length)
         {
-            //http://stackoverflow.com/questions/1003275/how-to-convert-byte-to-string
-            byte[] dataBuffer = new byte[length];
-
-            ReadProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, length, out _);
-
-            return Encoding.GetEncoding(10000).GetString(dataBuffer);
-        }
-
-        internal static bool Write(long address, byte[] value)
-        {
-            return WriteProcessMemory(process.Handle, address + EEMem_Offset, value, value.LongLength, out _);
-        }
-
-        internal static bool WriteOneByte(long address, byte[] value)
-        {
-            return WriteProcessMemory(process.Handle, address + EEMem_Offset, value, sizeof(byte), out _);
-        }
-
-        internal static bool WriteString(long address, string stringToWrite) //Untested
-        {
-            // http://stackoverflow.com/questions/16072709/converting-string-to-byte-array-in-c-sharp
-            byte[] dataBuffer = Encoding.GetEncoding(10000).GetBytes(stringToWrite); //Western European (Mac) Encoding Table
-
-            return WriteProcessMemory(process.Handle, address + EEMem_Offset, dataBuffer, dataBuffer.LongLength, out _);
+            return Encoding.GetEncoding(10000).GetString(ReadByteArray(address, length));
         }
 
         internal static bool WriteByte(long address, byte value)
         {
-            //return Write(address + EEMem_Offset + EEMem_Offset, BitConverter.GetBytes(value));
-            return WriteOneByte(address, BitConverter.GetBytes(value));
+            SendBatch(BuildWritePacket(OpWrite8, address, new[] { value }));
+            return true;
         }
 
-        internal static void WriteByteArray(long address, byte[] byteArray)  //Write byte array at address + EEMem_Offset
+        internal static bool WriteOneByte(long address, byte[] value)
         {
-            bool successful;
+            return WriteByte(address, value[0]);
+        }
 
-            //successful = VirtualProtectEx(process.Handle, address + EEMem_Offset, byteArray.LongLength, PAGE_EXECUTE_READWRITE, out _);
-
-            //if (successful == false) //There was an error
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + GetLastError() + " - " + GetSystemMessage(GetLastError())); //Get the last error code and write out the message associated with it.
-
-            successful = WriteProcessMemory(process.Handle, address + EEMem_Offset, byteArray, byteArray.LongLength, out _);
-
-            if (successful == false)
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + GetLastError() + " - " + GetSystemMessage(GetLastError()));
+        internal static void WriteByteArray(long address, byte[] byteArray)
+        {
+            Write(address, byteArray);
         }
 
         internal static bool WriteUShort(long address, ushort value)
         {
-            return Write(address, BitConverter.GetBytes(value));
+            SendBatch(BuildWritePacket(OpWrite16, address, BitConverter.GetBytes(value)));
+            return true;
         }
 
         internal static bool WriteInt(long address, int value)
         {
-            return Write(address, BitConverter.GetBytes(value));
+            SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
+            return true;
         }
 
         internal static bool WriteUInt(long address, uint value)
         {
-            return Write(address, BitConverter.GetBytes(value));
+            SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
+            return true;
         }
 
         internal static bool WriteFloat(long address, float value)
         {
-            return Write(address, BitConverter.GetBytes(value));
+            // No dedicated WriteFloat opcode in current PINE spec — write raw bytes as Write32
+            SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
+            return true;
         }
 
         internal static bool WriteDouble(long address, double value)
         {
-            return Write(address, BitConverter.GetBytes(value));
+            SendBatch(BuildWritePacket(OpWrite64, address, BitConverter.GetBytes(value)));
+            return true;
+        }
+
+        internal static bool Write(long address, byte[] value)
+        {
+            for (int i = 0; i < value.Length; i++)
+                WriteByte(address + i, value[i]);
+            return true;
+        }
+
+        internal static bool WriteString(long address, string stringToWrite)
+        {
+            return Write(address, Encoding.GetEncoding(10000).GetBytes(stringToWrite));
         }
 
         internal static List<long> StringSearch(long startOffset, long stopOffset, string searchString)
         {
-            byte[] stringBuffer = new byte[searchString.LongCount()];
-            List<long> resultsList = new List<long>();
-
-            VirtualProtectEx(process.Handle, startOffset, stopOffset - startOffset, PAGE_EXECUTE_READWRITE, out _); //Change our protection first
-
+            var results = new List<long>();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Searching for " + searchString + ". This may take awhile.");
-
-            for (long currentOffset = startOffset; currentOffset < stopOffset; currentOffset++)
+            for (long cur = startOffset; cur < stopOffset; cur++)
             {
-                if (ReadString(currentOffset, stringBuffer.LongLength) == searchString) //If we found a match
-                    resultsList.Add(currentOffset); //Add it to the list
-
-                ReadString(currentOffset, stringBuffer.LongLength); //Search for our string at the current offset
+                if (ReadString(cur, searchString.Length) == searchString)
+                    results.Add(cur);
             }
-            return resultsList;
+            return results;
         }
 
         internal static List<long> IntSearch(long startOffset, long stopOffset, int searchValue)
         {
-            List<long> resultsList = new List<long>();
-
-            VirtualProtectEx(process.Handle, startOffset, stopOffset - startOffset, PAGE_EXECUTE_READWRITE, out _); //Change our protection first
-
+            var results = new List<long>();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Searching for " + searchValue + ". This may take awhile.");
-
-            for (long currentOffset = startOffset; currentOffset < stopOffset; currentOffset++)
+            for (long cur = startOffset; cur < stopOffset; cur++)
             {
-                if (ReadInt(currentOffset) == searchValue)
-                    resultsList.Add(currentOffset);
-
-                //ReadInt(currentOffset);
+                if (ReadInt(cur) == searchValue)
+                    results.Add(cur);
             }
-            return resultsList;
+            return results;
         }
 
         internal static List<long> ByteArraySearch(long startOffset, long stopOffset, byte[] byteArray)
         {
-            List<long> resultsList = new List<long>();
-
-            VirtualProtectEx(process.Handle, startOffset, stopOffset - startOffset, PAGE_EXECUTE_READWRITE, out _);
-
-            for (long currentOffset = startOffset; currentOffset < stopOffset; currentOffset++)
+            var results = new List<long>();
+            for (long cur = startOffset; cur < stopOffset; cur++)
             {
-                if (ReadByteArray(currentOffset, byteArray.LongLength).SequenceEqual(byteArray))
-                {
-                    resultsList.Add(currentOffset);
-                }
-
-                Console.WriteLine("{0:X8}", currentOffset);
+                bool match = true;
+                for (int i = 0; i < byteArray.Length && match; i++)
+                    match = ReadByte(cur + i) == byteArray[i];
+                if (match) results.Add(cur);
             }
-            return resultsList;
+            return results;
         }
     }
 }

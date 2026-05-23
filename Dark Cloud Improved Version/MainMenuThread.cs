@@ -32,7 +32,7 @@ namespace Dark_Cloud_Improved_Version
             Program.ConsoleLogging(); //LOGS CONSOLE WRITES TO TEXT FILE!
             while (true)
             {
-                if (Memory.process != null)
+                if (Memory.process != null && Memory.IsConnected)
                 {
                     Memory.WriteByte(0x21F10024, 0); //mod's flag for PNACH
                 }
@@ -66,6 +66,17 @@ namespace Dark_Cloud_Improved_Version
                 }
                 else if (PID != 0)
                 {
+                    if (!Memory.IsConnected)
+                    {
+                        try { Memory.Connect(); }
+                        catch
+                        {
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "PINE not reachable. Enable PINE in PCSX2: Settings → Advanced → PINE Server (port 28011)");
+                            ModWindow.PineNotConnected();
+                            Thread.Sleep(2000);
+                            continue;
+                        }
+                    }
                     //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Memory.ReadInt(0x20299540));
                     if (Memory.ReadInt(0x20299540) != 1802658116) //check if DC1 has been booted
                     {
@@ -115,18 +126,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static void TitleMenu()
         {
-            TownCharacter.InitializeCharacterOffsetValues();
-            while (true)
-            {
-                currentFrameCounter = Memory.ReadInt(0x202A2400);
-                if (currentFrameCounter > 0)
-                {
-                    break;
-                }
-            }
-            previousFrameCounter = currentFrameCounter;
-            Thread.Sleep(10);
-
+            // Check for another active mod instance before claiming the flag
             while (true)
             {
                 if (Memory.ReadByte(0x21F10024) == 1)
@@ -138,6 +138,21 @@ namespace Dark_Cloud_Improved_Version
                     break;
                 }
             }
+
+            // Claim the flag immediately to minimise the gap during which PNACH shows the "Launch Enhanced Mod" message
+            Memory.WriteByte(0x21F10024, 1);
+
+            TownCharacter.InitializeCharacterOffsetValues();
+            while (true)
+            {
+                currentFrameCounter = Memory.ReadInt(0x202A2400);
+                if (currentFrameCounter > 0)
+                {
+                    break;
+                }
+            }
+            previousFrameCounter = currentFrameCounter;
+            Thread.Sleep(10);
 
             while (true)
             {

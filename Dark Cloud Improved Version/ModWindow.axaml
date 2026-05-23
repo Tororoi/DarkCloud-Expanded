@@ -1,0 +1,329 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Dark_Cloud_Improved_Version.ModWindow"
+        Title="Dark Cloud Enhanced Mod"
+        Width="574" Height="430"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        ShowActivated="False"
+        FontFamily="Georgia"
+        FontSize="10"
+        FontWeight="Bold">
+
+  <Window.Background>
+    <ImageBrush Source="avares://Dark Cloud Enhanced Mod/Resources/d06o_out_result.png" Stretch="Fill"/>
+  </Window.Background>
+
+  <Grid Margin="22,16,22,16">
+
+    <!-- ═══════════════════════════════════════════════
+         Mode selection screen (shown on launch)
+    ═══════════════════════════════════════════════ -->
+    <Panel x:Name="Container_MainModes">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Orientation="Horizontal" Spacing="68">
+        <Button x:Name="Btn_ModeUser" Width="145" Height="74"
+                Content="Launch Mod as User"
+                FontSize="12" FontWeight="Regular"
+                Click="buttonLaunchModAsUser"/>
+        <Button x:Name="Btn_ModeDev" Width="145" Height="74"
+                Content="Launch Mod as Developer"
+                FontSize="12" FontWeight="Regular"
+                Click="buttonLaunchModAsDev"/>
+      </StackPanel>
+    </Panel>
+
+    <!-- ═══════════════════════════════════════════════
+         User mode tabs (hidden until "Launch as User")
+    ═══════════════════════════════════════════════ -->
+    <TabControl x:Name="TabControl_USER" IsVisible="False">
+
+      <!-- General tab -->
+      <TabItem Header="General">
+        <Panel>
+          <TextBlock x:Name="Label_UserMode_WelcomeTitle"
+                     Text="Welcome to the Enhanced Mod!"
+                     Margin="46,39,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <TextBlock x:Name="Label_UserMode_PlaceholderText"
+                     Text="Loading..."
+                     Margin="46,70,0,0" Width="414" Height="110"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     TextWrapping="Wrap" FontWeight="Normal"/>
+          <Button x:Name="Btn_UserMode_Quit" Content="Quit"
+                  Width="86" Height="26"
+                  Margin="49,205,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left"
+                  FontWeight="Normal"
+                  Click="Btn_UserMode_Quit_Clicked"/>
+          <TextBlock x:Name="label6" Text="Version: 1.0.1"
+                     Margin="49,264,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     FontWeight="Normal"/>
+          <Button x:Name="button2" Content="Join our Discord!"
+                  Width="148" Height="23"
+                  Margin="349,261,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left"
+                  FontWeight="Normal"
+                  Click="button2_Click"/>
+        </Panel>
+      </TabItem>
+
+      <!-- Options tab -->
+      <TabItem Header="Options">
+        <Panel>
+          <CheckBox x:Name="CBox_UserMode_Graphics"
+                    Content="Enable Graphical Improvements (not compatible in pcsx2 v1.7)"
+                    Margin="46,28,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_Graphics_Changed"/>
+          <CheckBox x:Name="CBox_UserMode_Widescreen"
+                    Content="Enable Increased FOV"
+                    Margin="46,54,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_Widescreen_Changed"/>
+          <CheckBox x:Name="CBox_UserMode_WeaponBeeps"
+                    Content="Disable Low Weapon HP Beeping Sounds"
+                    Margin="46,80,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_WeaponBeepsChanged"/>
+          <CheckBox x:Name="CBox_UserMode_BattleMusic"
+                    Content="Disable Battle Music (make sure it's not already playing!)"
+                    Margin="46,106,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_GraphicsChanged"/>
+          <CheckBox x:Name="CBox_UserMode_MuteMusic"
+                    Content="Mute all music (only updates after changing area)"
+                    Margin="65,132,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_MuteMusic_CheckedChanged"/>
+          <CheckBox x:Name="Cbox_Usermode_AttackSounds"
+                    Content="Disable Character Attack Sounds"
+                    Margin="46,158,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="Cbox_Usermode_AttackSounds_CheckedChanged"/>
+          <TextBlock x:Name="label4"
+                     Text="These options will be saved to your save file. When you load a save, the options are loaded in automatically."
+                     Margin="43,192,0,0" Width="434" Height="44"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     TextWrapping="Wrap" FontWeight="Normal"/>
+          <Button x:Name="button1"
+                  Content="Submit Bug Report (opens a website)"
+                  Width="289" Height="34"
+                  Margin="46,259,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left"
+                  FontWeight="Normal"
+                  Click="button1_Click"/>
+        </Panel>
+      </TabItem>
+
+      <!-- Credits tab -->
+      <TabItem Header="Credits">
+        <Panel>
+          <TextBlock x:Name="labelForkDev"
+                     Text="Cross-Platform Fork Developer: Tororoi"
+                     Margin="57,33,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     FontWeight="Normal"/>
+          <TextBlock x:Name="labelOrigTeam"
+                     Text="— Original Dark Cloud Enhanced Team —"
+                     Margin="57,83,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     FontWeight="Bold"/>
+          <TextBlock x:Name="label1"
+                     Text="Developers: WordofWind, MikeZorD, Dayuppy"
+                     Margin="57,113,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     FontWeight="Normal"/>
+          <TextBlock x:Name="label5"
+                     Text="Lead Writer (Dialogues): Hiddencastle"
+                     Margin="57,153,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     FontWeight="Normal"/>
+          <TextBlock x:Name="label2"
+                     Text="Contributors: Glitchedd, Plgue"
+                     Margin="57,193,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     FontWeight="Normal"/>
+          <TextBlock x:Name="label3"
+                     Text="Testers: aWolfsOath, Glace, Glitchedd, Hiddencastle, Kazarov, MagicaJesta, Meredith, Misterboy64, Rashi753, Ridepod, Shaztopia"
+                     Margin="57,233,0,0" Width="432" Height="77"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"
+                     TextWrapping="Wrap" FontWeight="Normal"/>
+        </Panel>
+      </TabItem>
+
+    </TabControl>
+
+    <!-- ═══════════════════════════════════════════════
+         Dev mode tabs (hidden until "Launch as Dev")
+    ═══════════════════════════════════════════════ -->
+    <TabControl x:Name="TabControl_DEV" IsVisible="False">
+
+      <!-- Page 1: thread controls -->
+      <TabItem Header="Page1">
+        <DockPanel LastChildFill="False">
+
+          <!-- Personal Threads grid -->
+          <Grid DockPanel.Dock="Top" Height="90">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                       Text="Personal Threads:" VerticalAlignment="Center"/>
+            <Button x:Name="Btn_Dayuppy" Grid.Column="1" Grid.Row="0"
+                    Content="Dayuppy" Margin="12,7"
+                    Click="DEV_Page1_Btn_Dayuppy"/>
+            <Button x:Name="Btn_Plgue" Grid.Column="2" Grid.Row="0"
+                    Content="Plgue" Margin="12,7"
+                    Click="DEV_Page1_Btn_Plgue"/>
+            <Button x:Name="Btn_Mikezord" Grid.Column="1" Grid.Row="1"
+                    Content="Mikezord" Margin="12,7"
+                    Click="DEV_Page1_Btn_Mike"/>
+            <Button x:Name="Btn_Wordofwind" Grid.Column="2" Grid.Row="1"
+                    Content="Wordofwind" Margin="12,7"
+                    Click="DEV_Page1_Btn_WordOfWind"/>
+          </Grid>
+
+          <Rectangle DockPanel.Dock="Top" Height="4" Fill="DarkGray"/>
+
+          <!-- Main Threads grid -->
+          <Grid DockPanel.Dock="Top" Height="90">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                       Text="Main Threads:" VerticalAlignment="Center"/>
+            <Button x:Name="Btn_TownThread" Grid.Column="1" Grid.Row="0"
+                    Content="Town Thread" Margin="12,7"
+                    Click="DEV_Page1_Btn_TownThread"/>
+            <Button x:Name="Btn_DungeonThread" Grid.Column="2" Grid.Row="0"
+                    Content="Dungeon Thread" Margin="12,7"
+                    Click="DEV_Page1_Btn_DungeonThread"/>
+            <CheckBox x:Name="CBox_DebugThread" Grid.Column="1" Grid.Row="1"
+                      Content="Enable Debug Thread" Margin="8,6"
+                      FontWeight="Normal"
+                      IsCheckedChanged="DEV_Page1_CBox_DebugThread"/>
+          </Grid>
+
+          <Rectangle DockPanel.Dock="Top" Height="4" Fill="DarkGray"/>
+
+          <!-- Quit button at bottom -->
+          <Button x:Name="TabDev_BtnQuit" DockPanel.Dock="Bottom"
+                  Content="Quit" Width="86" Height="26"
+                  HorizontalAlignment="Right" Margin="12,7"
+                  FontWeight="Normal"
+                  Click="Btn_UserMode_Quit_Clicked"/>
+
+        </DockPanel>
+      </TabItem>
+
+      <!-- Page 2: enemy HP and Gilda controls -->
+      <TabItem Header="Page2">
+        <DockPanel>
+
+          <!-- Top section: Gilda and Max HP -->
+          <Grid DockPanel.Dock="Top" Height="160">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="4" VerticalAlignment="Top">
+              <TextBlock Text="Set Gilda:" Margin="5,8,0,0" FontWeight="Normal"/>
+              <TextBlock x:Name="DEV_Page2_Label_Enemies"
+                         Text="Enemies HPs:" Margin="5,110,0,0" FontWeight="Normal"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="4" VerticalAlignment="Top">
+              <TextBox x:Name="DEV_Page2_TextBox_Gilda"
+                       MaxLength="5" Width="98" Margin="0,4,0,0"
+                       HorizontalAlignment="Left"
+                       TextChanged="DEV_Page2_TextBox_Gilda_TextChanged"/>
+              <Button x:Name="DEV_Page2_Btn_SetEnemiesMaxHP"
+                      Content="Max HPs" Width="99" Height="17"
+                      HorizontalAlignment="Left" Margin="0,110,0,0"
+                      FontWeight="Normal"
+                      Click="DEV_Page2_Btn_SetEnemiesMaxHP_Click"/>
+            </StackPanel>
+          </Grid>
+
+          <!-- 16-enemy HP grid (4 columns × 4 rows) -->
+          <Grid DockPanel.Dock="Bottom">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="5*"/>
+              <ColumnDefinition Width="20*"/>
+              <ColumnDefinition Width="5*"/>
+              <ColumnDefinition Width="20*"/>
+              <ColumnDefinition Width="5*"/>
+              <ColumnDefinition Width="20*"/>
+              <ColumnDefinition Width="5*"/>
+              <ColumnDefinition Width="20*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="26"/>
+              <RowDefinition Height="26"/>
+              <RowDefinition Height="26"/>
+              <RowDefinition Height="26"/>
+            </Grid.RowDefinitions>
+            <!-- Row 0: 1–4 -->
+            <TextBlock Grid.Column="0" Grid.Row="0" Text="1" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy1" Grid.Column="1" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy1_TextChanged"/>
+            <TextBlock Grid.Column="2" Grid.Row="0" Text="2" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy2" Grid.Column="3" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy2_TextChanged"/>
+            <TextBlock Grid.Column="4" Grid.Row="0" Text="3" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy3" Grid.Column="5" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy3_TextChanged"/>
+            <TextBlock Grid.Column="6" Grid.Row="0" Text="4" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy4" Grid.Column="7" Grid.Row="0" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy4_TextChanged"/>
+            <!-- Row 1: 5–8 -->
+            <TextBlock Grid.Column="0" Grid.Row="1" Text="5" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy5" Grid.Column="1" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy5_TextChanged"/>
+            <TextBlock Grid.Column="2" Grid.Row="1" Text="6" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy6" Grid.Column="3" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy6_TextChanged"/>
+            <TextBlock Grid.Column="4" Grid.Row="1" Text="7" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy7" Grid.Column="5" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy7_TextChanged"/>
+            <TextBlock Grid.Column="6" Grid.Row="1" Text="8" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy8" Grid.Column="7" Grid.Row="1" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy8_TextChanged"/>
+            <!-- Row 2: 9–12 -->
+            <TextBlock Grid.Column="0" Grid.Row="2" Text="9" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy9" Grid.Column="1" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy9_TextChanged"/>
+            <TextBlock Grid.Column="2" Grid.Row="2" Text="10" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy10" Grid.Column="3" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy10_TextChanged"/>
+            <TextBlock Grid.Column="4" Grid.Row="2" Text="11" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy11" Grid.Column="5" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy11_TextChanged"/>
+            <TextBlock Grid.Column="6" Grid.Row="2" Text="12" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy12" Grid.Column="7" Grid.Row="2" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy12_TextChanged"/>
+            <!-- Row 3: 13–16 -->
+            <TextBlock Grid.Column="0" Grid.Row="3" Text="13" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy13" Grid.Column="1" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy13_TextChanged"/>
+            <TextBlock Grid.Column="2" Grid.Row="3" Text="14" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy14" Grid.Column="3" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy14_TextChanged"/>
+            <TextBlock Grid.Column="4" Grid.Row="3" Text="15" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy15" Grid.Column="5" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy15_TextChanged"/>
+            <TextBlock Grid.Column="6" Grid.Row="3" Text="16" VerticalAlignment="Center" HorizontalAlignment="Right" FontWeight="Normal"/>
+            <TextBox x:Name="DEV_Page2_TextBox_Enemy16" Grid.Column="7" Grid.Row="3" MaxLength="10" TextAlignment="Right" FontWeight="Normal" TextChanged="DEV_Page2_TextBox_Enemy16_TextChanged"/>
+          </Grid>
+
+        </DockPanel>
+      </TabItem>
+
+    </TabControl>
+
+  </Grid>
+</Window>

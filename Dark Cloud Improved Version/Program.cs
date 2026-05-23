@@ -1,119 +1,65 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using Avalonia;
+using System;
 using System.IO;
 using System.Threading;
-using Microsoft.VisualBasic.ApplicationServices;
-using System.Windows;
-using Application = System.Windows.Forms.Application;
-using System.Diagnostics;
-using System.Security.Cryptography.X509Certificates;
-using System.Security.Cryptography;
-using System.Collections;
-using System.Collections.Generic;
-using System.Windows.Controls;
 
 namespace Dark_Cloud_Improved_Version
 {
     static class Program
     {
-        [DllImport("kernel32.dll")]
-        static extern IntPtr GetConsoleWindow();
-
-        [DllImport("user32.dll")]
-        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        public const int SW_HIDE = 0;
-        public const int SW_SHOWNOACTIVATE = 4;
-        public const int SW_SHOW = 5;
-
-        internal static Form modWindowForm;
-
-        internal static readonly IntPtr consoleH = GetConsoleWindow();
-
-        [STAThread]
-        private static void Main()
+        public static void Main(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(true);
-
             Console.WriteLine("Dark Cloud Enhanced - Created by Wordofwind, Dayuppy, MikeZorD, and Plgue");
             Console.WriteLine("Version 1.xxx - Release");
-
-            //ShowWindow(consoleH, SW_HIDE); //Hide Console
-            
-            /*
-            while (Memory.process == null)
-            {
-                GetPCSX2Executable();
-            }
-            Memory.WriteByte(0x21F10024, 0);
-            */
-            
-            modWindowForm = new ModWindow();
-            Application.Run(modWindowForm);
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
+
+        public static AppBuilder BuildAvaloniaApp()
+            => AppBuilder.Configure<App>()
+                .UsePlatformDetect()
+                .LogToTrace();
 
         public static void GetPCSX2Executable()
         {
-            Memory.Initialize();
+            int result = Memory.Initialize();
 
-            if (Memory.process == null)
+            if (result == -1)
             {
-                ShowWindow(consoleH, SW_SHOW); //Show the console
-                Console.WriteLine("\n{0} was not found in the list of running processes.", Memory.procName);
+                Console.WriteLine("\nPCSX2 process not found. Is the emulator running?");
                 Thread.Sleep(1000);
                 return;
             }
 
+            if (!Memory.IsConnected)
+            {
+                Console.WriteLine("\nPCSX2 found but PINE connection failed. Enable PINE in PCSX2: Settings → Advanced → PINE Server (port 28011)");
+                Thread.Sleep(1000);
+                return;
+            }
 
-            Console.WriteLine("\nFound running instance of {0} ({1})", Memory.process.ProcessName, Memory.process.Id);
-
-
-
-            //Memory.EEMem_Offset = Memory.GetEEMem_Offset();
-
-            //if (Memory.EEMem_Offset < 0)
-            //{
-            //    ShowWindow(consoleH, SW_SHOW); //Show the console
-
-            //    if (Memory.EEMem_Offset == -1)
-            //    {
-            //        Console.WriteLine("\nUnable to locate pcsx2_offsetreader.exe in the resources directory");
-            //    }
-
-            //    Console.WriteLine("\nEEMem_Loc file from the pcsx2_offsetreader.exe helper application was not found.");
-
-            //    Console.WriteLine("\nSetting EEMem location to 0x0. If you are not running pcsx2 version 1.6 or lower, this is a mistake! Please restart the mod and try again.");
-            //}
-
-            //Console.WriteLine("\nEEmem Location: {0:X8}", Memory.EEMem_Offset);  
-            //Memory.TestProgress();
-
-            Console.WriteLine("\nEEMem_Address: {0:X8}", $"0x{Memory.EEMem_Address:X}");
-            Console.WriteLine("\nEEMem_Offset: {0:X8}", $"0x{Memory.EEMem_Offset:X}");
+            Console.WriteLine("\nConnected to PCSX2 via PINE IPC.");
         }
 
         public static void ConsoleLogging()
         {
-            string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string strWorkPath = System.IO.Path.GetDirectoryName(strExeFilePath);
-            string logFileFolderPath = strWorkPath + @"\EnhancedModLogs";
-            if (Directory.Exists(logFileFolderPath) == false)
-            {
-                System.IO.Directory.CreateDirectory(logFileFolderPath);
-            }
-            FileStream filestream = new FileStream(logFileFolderPath + @"\EnhancedModLogFile-" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt", FileMode.Create);
-            var streamwriter = new StreamWriter(filestream);
-            streamwriter.AutoFlush = true;
-            Console.SetOut(streamwriter);
-            Console.SetError(streamwriter);
+            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string workPath = Path.GetDirectoryName(exePath);
+            string logFolder = Path.Combine(workPath, "EnhancedModLogs");
+            if (!Directory.Exists(logFolder))
+                Directory.CreateDirectory(logFolder);
+            var fileStream = new FileStream(
+                Path.Combine(logFolder, "EnhancedModLogFile-" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt"),
+                FileMode.Create);
+            var writer = new StreamWriter(fileStream, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
+            Console.SetOut(writer);
+            Console.SetError(writer);
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
         }
 
-        public static void PressAnyKey() //Added a simple function for pausing and waiting for input from the user.
+        public static void PressAnyKey()
         {
             Console.WriteLine("\nPress any key to continue . . .");
-            Console.ReadKey(); //Wait for input and then discard it.
+            Console.ReadKey();
         }
     }
 }
