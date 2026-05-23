@@ -146,8 +146,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static void QueryVersion()
         {
-            // Probe version opcode (0x0E in PCSX2 Qt 2.x, 0x0C in some older builds)
-            foreach (byte op in new byte[] { 0x0E, 0x0C })
+            // 0x08 = MsgVersion (PINE/PCSX2 version), 0x0E = MsgGameVersion (game version)
+            (byte op, string label)[] queries = { (0x08, "PINE version"), (0x0E, "Game version") };
+            foreach (var (op, label) in queries)
             {
                 var pkt = new byte[5];
                 BitConverter.GetBytes(5).CopyTo(pkt, 0);
@@ -166,22 +167,16 @@ namespace Dark_Cloud_Improved_Version
                             ReadFully(r, 0, n);
                             if (r[0] == 0 && n > 1)
                             {
-                                // Strip any non-printable bytes (PINE response may include a 4-byte
-                                // length prefix before the version string that would corrupt the log).
                                 string raw = Encoding.UTF8.GetString(r, 1, n - 1);
                                 string ver = new string(raw.Where(c => c >= ' ').ToArray()).Trim();
                                 if (!string.IsNullOrEmpty(ver))
-                                {
-                                    Console.WriteLine($"PCSX2/PINE version: {ver}");
-                                    return;
-                                }
+                                    Console.WriteLine($"{label}: {ver}");
                             }
                         }
                     }
                 }
                 catch { }
             }
-            Console.WriteLine("PCSX2 version query returned no readable string.");
         }
 
         private static void ProbeWriteOpcodes()
