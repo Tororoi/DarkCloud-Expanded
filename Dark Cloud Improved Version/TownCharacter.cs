@@ -142,14 +142,7 @@ namespace Dark_Cloud_Improved_Version
             //THE FOLLOWING CODE UP TO WHILE LOOP is for setting up ally switching in the overworld, by editing
             //some of the game's code that handles the character files
 
-            Memory.VirtualProtect(Memory.process.Handle, Addresses.chrConfigFileOffset, 8, Memory.PAGE_EXECUTE_READWRITE, out _);
-            successful = Memory.VirtualProtectEx(Memory.process.Handle, Addresses.chrConfigFileOffset, 8, Memory.PAGE_EXECUTE_READWRITE, out _);
-            
-            if (successful == false) //There was an error
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Memory.GetLastError() + " - " + Memory.GetSystemMessage(Memory.GetLastError())); //Get the last error code and write out the message associated with it.
-
             Memory.Write(Addresses.chrConfigFileOffset, BitConverter.GetBytes(608545264)); //this changes the offset value in game's code to make it read the file in right location
-
 
             currentAddress = Addresses.chrConfigFileLocation;
 
@@ -1920,12 +1913,6 @@ namespace Dark_Cloud_Improved_Version
             //This process is required at the start of the game to edit the memory offsets for the character file switching
             //The game reads the character file (for example Xiao's model and such) from a specific address,
             //but this location needs to be moved, so that we can apply longer character file paths
-
-            Memory.VirtualProtect(Memory.process.Handle, Addresses.chrConfigFileOffset, 8, Memory.PAGE_EXECUTE_READWRITE, out _);
-            successful = Memory.VirtualProtectEx(Memory.process.Handle, Addresses.chrConfigFileOffset, 8, Memory.PAGE_EXECUTE_READWRITE, out _);
-
-            if (successful == false) //There was an error
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Memory.GetLastError() + " - " + Memory.GetSystemMessage(Memory.GetLastError())); //Get the last error code and write out the message associated with it.
 
             Memory.Write(Addresses.chrConfigFileOffset, BitConverter.GetBytes(608545264)); //this changes the offset value in game's code to make it read the file in right location
 

@@ -1088,19 +1088,6 @@ namespace Dark_Cloud_Improved_Version
 
         public static void TestElementFunctionStuff()
         {
-            bool successful;
-
-            Memory.VirtualProtect(Memory.process.Handle, 0x201B6A0C, 8, Memory.PAGE_EXECUTE_READWRITE, out _);
-            successful = Memory.VirtualProtectEx(Memory.process.Handle, 0x201B6A0C, 8, Memory.PAGE_EXECUTE_READWRITE, out _);
-            
-            if (successful == false) //There was an error
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Memory.GetLastError() + " - " + Memory.GetSystemMessage(Memory.GetLastError())); //Get the last error code and write out the message associated with it.
-
-            successful = Memory.VirtualProtectEx(Memory.process.Handle, 0x201B6A14, 4, Memory.PAGE_EXECUTE_READWRITE, out _);
-
-            if (successful == false) //There was an error
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Memory.GetLastError() + " - " + Memory.GetSystemMessage(Memory.GetLastError())); //Get the last error code and write out the message associated with it.
-
             Memory.WriteInt(0x201B6A0C, 0);
             Memory.WriteInt(0x201B6A14, 0);
         }

@@ -1382,7 +1382,7 @@ namespace Dark_Cloud_Improved_Version
                 }
 
 
-                Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
 
                 currentAddress += 0x00000001;
 
@@ -1590,24 +1590,24 @@ namespace Dark_Cloud_Improved_Version
                     }
 
 
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
 
                     currentAddress += 0x00000001;
 
                     if (value1[0] == 0 || value1[0] == 2 || value1[0] == 3)
                     {
                         value1 = BitConverter.GetBytes(255);
-                        Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                        Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                     }
                     else if (value1[0] == 250 || value1[0] == 251 || value1[0] == 252 || value1[0] == 253 || value1[0] == 254 || value1[0] == 255)
                     {
                         value1 = BitConverter.GetBytes(250);
-                        Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                        Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                     }
                     else
                     {
                         value1 = BitConverter.GetBytes(253);
-                        Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                        Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                     }
 
                     currentAddress += 0x00000001;
@@ -1743,24 +1743,24 @@ namespace Dark_Cloud_Improved_Version
                 }
 
 
-                Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
 
                 currentAddress += 0x00000001;
 
                 if (value1[0] == 0 || value1[0] == 2 || value1[0] == 3)
                 {
                     value1 = BitConverter.GetBytes(255);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
                 else if (value1[0] == 250)
                 {
                     value1 = BitConverter.GetBytes(250);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
                 else
                 {
                     value1 = BitConverter.GetBytes(253);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
 
                 currentAddress += 0x00000001;
@@ -1807,24 +1807,24 @@ namespace Dark_Cloud_Improved_Version
                 }
 
 
-                Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
 
                 currentAddress += 0x00000001;
 
                 if (value1[0] == 0 || value1[0] == 2 || value1[0] == 3)
                 {
                     value1 = BitConverter.GetBytes(255);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
                 else if (value1[0] == 250)
                 {
                     value1 = BitConverter.GetBytes(250);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
                 else
                 {
                     value1 = BitConverter.GetBytes(253);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
 
                 currentAddress += 0x00000001;
@@ -1871,24 +1871,24 @@ namespace Dark_Cloud_Improved_Version
                 }
 
 
-                Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
 
                 currentAddress += 0x00000001;
 
                 if (value1[0] == 0 || value1[0] == 2 || value1[0] == 3)
                 {
                     value1 = BitConverter.GetBytes(255);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
                 else if (value1[0] == 250)
                 {
                     value1 = BitConverter.GetBytes(250);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
                 else
                 {
                     value1 = BitConverter.GetBytes(253);
-                    Memory.WriteOneByte(currentAddress, BitConverter.GetBytes(value1[0]));
+                    Memory.WriteOneByte(currentAddress, new byte[] { value1[0] });
                 }
 
                 currentAddress += 0x00000001;

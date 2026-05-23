@@ -1,127 +1,26 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{5DC59CC2-DE0D-4B2F-B383-3DE33ED4D3B7}</ProjectGuid>
-    <OutputType>WinExe</OutputType>
-    <RootNamespace>Dark_Cloud_Improved_Version</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Dark Cloud Enhanced Mod</AssemblyName>
-    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
-    <Deterministic>true</Deterministic>
-    <TargetFrameworkProfile />
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>embedded</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>none</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>
-    </DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup>
-    <StartupObject />
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>ModIcon.ico</ApplicationIcon>
-  </PropertyGroup>
-  <PropertyGroup>
+    <RootNamespace>Dark_Cloud_Improved_Version</RootNamespace>
     <LangVersion>preview</LangVersion>
-  </PropertyGroup>
-  <PropertyGroup>
-    <NoWin32Manifest>true</NoWin32Manifest>
+    <ApplicationIcon>ModIcon.ico</ApplicationIcon>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Microsoft.VisualBasic" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xaml" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Deployment" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml" />
-    <Reference Include="UIAutomationProvider" />
-    <Reference Include="WindowsBase" />
-    <Reference Include="WindowsFormsIntegration" />
+    <PackageReference Include="Avalonia" Version="11.*" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.*" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.*" />
+    <PackageReference Include="MsBox.Avalonia" Version="3.0.0-rc2" />
+    <PackageReference Include="System.Drawing.Common" Version="8.*" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.*" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.*" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Addresses.cs" />
-    <Compile Include="CheatCodes.cs" />
-    <Compile Include="DailyShopItem.cs" />
-    <Compile Include="MainMenuThread.cs" />
-    <Compile Include="Resources.cs" />
-    <Compile Include="SideQuestManager.cs" />
-    <Compile Include="MiniBoss.cs" />
-    <Compile Include="TASThread.cs" />
-    <Compile Include="Dialogues.cs" />
-    <Compile Include="CustomEffects.cs" />
-    <Compile Include="ReusableFunctions.cs" />
-    <Compile Include="RubyOrbs.cs" />
-    <Compile Include="TownCharacter.cs" />
-    <Compile Include="CustomChests.cs" />
-    <Compile Include="Dayuppy.cs" />
-    <Compile Include="Enemies.cs" />
-    <Compile Include="Items.cs" />
-    <Compile Include="Dungeon.cs" />
-    <Compile Include="Patcher.cs" />
-    <Compile Include="Player.cs" />
-    <Compile Include="MemoryFunctions.cs" />
-    <Compile Include="ModWindow.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="ModWindow.Designer.cs">
-      <DependentUpon>ModWindow.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Program.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Shop.cs" />
-    <Compile Include="Weapons.cs" />
-    <EmbeddedResource Include="ModWindow.resx">
-      <DependentUpon>ModWindow.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-      <SubType>Designer</SubType>
-    </EmbeddedResource>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.resx</DependentUpon>
-      <DesignTime>True</DesignTime>
-    </Compile>
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-    </Compile>
     <EmbeddedResource Include="Resources\RubyMemeFix\Fire" />
     <EmbeddedResource Include="Resources\RubyMemeFix\Holy" />
     <EmbeddedResource Include="Resources\RubyMemeFix\Ice" />
@@ -133,13 +32,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Resources\d06o_out_result.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Content Include="ModIcon.ico" />
-    <Content Include="Resources\pcsx2_offsetreader.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+    <AvaloniaResource Include="Resources\d06o_out_result.png" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

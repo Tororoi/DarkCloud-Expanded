@@ -1,66 +1,49 @@
-﻿using System;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
+using MsBox.Avalonia;
+using System;
+using System.Diagnostics;
 using System.Threading;
-using System.Windows.Forms;
+using MsBoxButtonEnum = MessageBox.Avalonia.Enums.ButtonEnum;
+using MsBoxIcon = MsBox.Avalonia.Enums.Icon;
+using ButtonResult = MsBox.Avalonia.Enums.ButtonResult;
+using ThreadState = System.Threading.ThreadState;
 
 namespace Dark_Cloud_Improved_Version
 {
-    public partial class ModWindow : Form
+    public partial class ModWindow : Window
     {
         private static ModWindow instance;
-        private delegate void EnableDelegate(bool enable);
+
         public ModWindow()
         {
             InitializeComponent();
             instance = this;
-
-            //User mode on launch!!!
             UserModeLaunch();
+        }
 
-        } 
-
-        //public static Thread dayThread = new Thread(new ThreadStart(Dayuppy.Testing)); //Create a new thread to run Testing() from within Dayuppy.cs
-        //public static Thread chestThread = new Thread(new ThreadStart(CustomChests.ChestRandomizer));
-        public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript));
-        public static Thread TASSThread = new Thread(new ThreadStart(TASThread.RunTAS));
-        public static Thread TASSThread2 = new Thread(new ThreadStart(TASThread.RecordTAS));
-        public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread));
-        public static Thread debugThread = new Thread(new ThreadStart(CheatCodes.DebugOptions));
-        public static Thread launchThread = new Thread(new ThreadStart(MainMenuThread.CheckEmulatorAndGame));
+        public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript)) { IsBackground = true };
+        public static Thread TASSThread = new Thread(new ThreadStart(TASThread.RunTAS)) { IsBackground = true };
+        public static Thread TASSThread2 = new Thread(new ThreadStart(TASThread.RecordTAS)) { IsBackground = true };
+        public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread)) { IsBackground = true };
+        public static Thread debugThread = new Thread(new ThreadStart(CheatCodes.DebugOptions)) { IsBackground = true };
+        public static Thread launchThread = new Thread(new ThreadStart(MainMenuThread.CheckEmulatorAndGame)) { IsBackground = true };
 
         public int[] attackSoundAddresses = { 0x20265DBC, 0x20265DC2, 0x20265DC8, 0x20265DCE, 0x20265F0C, 0x20265F12, 0x2026605C, 0x20266062, 0x202661AC, 0x202661B8, 0x202662FC, 0x20266302, 0x20266308, 0x2026644C };
         public byte[] attackSoundValues = { 68, 69, 70, 71, 83, 84, 98, 99, 113, 115, 128, 129, 130, 156 };
         public bool nightlyVersion = false;
 
-        #region Basic stuff
-        private void ModWindow_FormClosed(object sender, FormClosedEventArgs e)
-        {
-            Environment.Exit(0);
-        }
-        #endregion
-
-        #region Validations
-        private void ValidateNumber(object sender, KeyEventArgs e)
-        {
-            if (!char.IsDigit(Convert.ToChar(e.KeyValue)))
-            {
-                e.SuppressKeyPress = true;
-            }
-        }
+        #region Static callbacks (called from background threads)
 
         public static void EmulatorCount(int newValue)
         {
             if (newValue == 0)
-            {
                 instance.NoEmulatorsActive(true);
-            }
             else if (newValue > 1)
-            {
                 instance.TooManyEmulatorsActive(true);
-            }
             else if (newValue == 1)
-            {
                 instance.GameNotActive(true);
-            }
         }
 
         public static void PnachNotActive()
@@ -90,14 +73,10 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FirstLaunchGameMode(bool validGameMode)
         {
-            if (validGameMode == false)
-            {
+            if (!validGameMode)
                 instance.InvalidFirstLaunchGameMode(true);
-            }
             else
-            {
                 instance.ValidFirstLaunchGameMode(true);
-            }
         }
 
         public static void NotEnhancedModSaveFile()
@@ -110,305 +89,244 @@ namespace Dark_Cloud_Improved_Version
             instance.FormEnhancedModAlreadyOpen(true);
         }
 
+        public static void PineWritesFailing()
+        {
+            instance.ShowPineWritesFailing();
+        }
+
         public static void ModWindowOptionsEnabled()
         {
             instance.ModWindowSettingsCheck(true);
-                
         }
+
+        #endregion
+
+        #region UI update methods (dispatched to UI thread)
+
         void NoEmulatorsActive(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(NoEmulatorsActive), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Cannot detect PCSX2-Emulator!\n\nPlease launch your emulator to continue.";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "Cannot detect PCSX2-Emulator!\n\nPlease launch your emulator to continue.");
         }
 
         void TooManyEmulatorsActive(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(TooManyEmulatorsActive), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Too many PCSX2-emulators open!\n\nPlease make sure only one is running at time.";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "Too many PCSX2-emulators open!\n\nPlease make sure only one is running at time.");
         }
 
         void GameNotActive(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(GameNotActive), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Please boot Dark Cloud (USA) to continue.";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "Please boot Dark Cloud (USA) to continue.");
+        }
+
+        public static void PineNotConnected()
+        {
+            instance.ShowPineNotConnected();
+        }
+
+        void ShowPineNotConnected()
+        {
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "PINE not enabled in PCSX2!\n\nGo to Settings → Advanced → PINE Server\nand enable it on port 28011.");
+        }
+
+        void ShowPineWritesFailing()
+        {
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "PCSX2 is pausing and rejecting memory writes.\n\nIn PCSX2: Settings → General\nUncheck \"Pause Emulation When Focus is Lost\"\nthen click Launch as User again.");
         }
 
         void InvalidFirstLaunchGameMode(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(InvalidFirstLaunchGameMode), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Detected a save file already running!\n\nPlease re-boot Dark Cloud to start the Mod.";
-            MainMenuThread.saveFileMessageBox = true;
-            string message = "Detected a save file already running! Enhanced Mod currently not active.\n\nThe mod needs to be launched while in the Main Menu.\n\nDo you want the mod to return your game to Main Menu?";
-            string title = "Save file running!";
-            MessageBoxButtons buttons = MessageBoxButtons.YesNo;
-            DialogResult result = MessageBox.Show(message, title, buttons, MessageBoxIcon.Exclamation);
-            this.TopMost = false;
-
-            while (true)
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
                 Label_UserMode_PlaceholderText.Text = "Detected a save file already running!\n\nPlease re-boot Dark Cloud to start the Mod.";
-                if (result == DialogResult.Yes)
+                MainMenuThread.saveFileMessageBox = true;
+                string message = "Detected a save file already running! Enhanced Mod currently not active.\n\nThe mod needs to be launched while in the Main Menu.\n\nDo you want the mod to return your game to Main Menu?";
+                var box = MessageBoxManager.GetMessageBoxStandard("Save file running!", message, MsBoxButtonEnum.YesNo, MsBoxIcon.Warning);
+                var result = await box.ShowWindowDialogAsync(this);
+
+                Label_UserMode_PlaceholderText.Text = "Detected a save file already running!\n\nPlease re-boot Dark Cloud to start the Mod.";
+                if (result == ButtonResult.Yes)
                 {
-                    if (Player.InDungeonFloor() == true)
-                        Memory.WriteInt(Addresses.dungeonDebugMenu, 151); //If we are in a dungeon, this will take us to the main menu
+                    if (Player.InDungeonFloor())
+                        Memory.WriteInt(Addresses.dungeonDebugMenu, 151);
                     else
                         Memory.WriteByte(Addresses.townSoftReset, 1);
-                    //MainMenuThread.saveFileMessageBox = false;
-                    break;
                 }
-                else if (result == DialogResult.No)
-                {
-                    break;
-                }
-            }
-
-
+            });
         }
 
         void ValidFirstLaunchGameMode(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(ValidFirstLaunchGameMode), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Dark Cloud has been booted!";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "Dark Cloud has been booted!");
         }
 
         void FormPnachNotActive(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(FormPnachNotActive), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "PNACH File not active!\n\nPlease put the Enhanced Mod's PNACH file into the Emulator's Cheats folder and active cheats in Emulator with System->Enable Cheats";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "PNACH File not active!\n\nPlease put the Enhanced Mod's PNACH file into the Emulator's Cheats folder and active cheats in Emulator with System->Enable Cheats");
         }
 
         void FormCurrentlyInMainMenu(bool enable)
         {
-            if (InvokeRequired)
+            Dispatcher.UIThread.Post(() =>
             {
-                this.Invoke(new EnableDelegate(FormCurrentlyInMainMenu), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Enhanced Mod is active! Currently in Main menu.\n\nYou can start a new game or load a save.";
-            if (instance.nightlyVersion == true)
-            {
-                instance.CBox_UserMode_Graphics.Enabled = false;
-            }
+                Label_UserMode_PlaceholderText.Text = "Enhanced Mod is active! Currently in Main menu.\n\nYou can start a new game or load a save.";
+                if (instance.nightlyVersion)
+                    instance.CBox_UserMode_Graphics.IsEnabled = false;
+            });
         }
 
         void FormCurrentlyInGame(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(FormCurrentlyInGame), new object[] { enable });
-                return;
-            }
-            Label_UserMode_PlaceholderText.Text = "Enhanced Mod is active and running!\n\nRemember to NEVER use save states with the mod! Always save the game normally through the game's save menu.";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "Enhanced Mod is active and running!\n\nRemember to NEVER use save states with the mod! Always save the game normally through the game's save menu.");
         }
 
         void FormSaveStateDetected(bool enable)
         {
-            if (InvokeRequired)
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                this.Invoke(new EnableDelegate(FormSaveStateDetected), new object[] { enable });
-                return;
-            }
-            this.TopMost = true;
-            MainMenuThread.saveStateUsed = true;
-            string message = "The mod has detected a possible save state load!\n\nUsing save states is NOT ALLOWED while using the Enhanced Mod, since it can cause major issues.\n\nThe game has been reset, and this mod will be closed.";
-            string title = "Save state detected!";
-            MessageBoxButtons buttons = MessageBoxButtons.OK;
-            DialogResult result = MessageBox.Show(message, title, buttons, MessageBoxIcon.Exclamation);
-            this.TopMost = false;
-            while (true)
-            {
+                Topmost = true;
+                MainMenuThread.saveStateUsed = true;
+                string message = "The mod has detected a possible save state load!\n\nUsing save states is NOT ALLOWED while using the Enhanced Mod, since it can cause major issues.\n\nThe game has been reset, and this mod will be closed.";
+                var box = MessageBoxManager.GetMessageBoxStandard("Save state detected!", message, MsBoxButtonEnum.Ok, MsBoxIcon.Warning);
+                await box.ShowWindowDialogAsync(this);
+                Topmost = false;
                 Label_UserMode_PlaceholderText.Text = "A possible save state used! Mod has been terminated.";
-                launchThread.Abort();
                 Memory.WriteByte(0x21F10024, 0);
-                if (result == DialogResult.OK)
-                {
-                    this.Close();
-                }
-                else
-                {
-                    this.Close();
-                }
-            }
+                Close();
+            });
         }
 
         void FormNotEnhancedModSaveFile(bool enable)
         {
-            if (InvokeRequired)
+            Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                this.Invoke(new EnableDelegate(FormNotEnhancedModSaveFile), new object[] { enable });
-                return;
-            }
-
-            this.TopMost = true;
-            string message = "Loaded a Dark Cloud save file which was not started with Enhanced Mod!\n\nPlease load a save file which you have started with Enhanced Mod, or start a New Game with the mod.";
-            string title = "Invalid save file!";
-            MessageBoxButtons buttons = MessageBoxButtons.OK;
-            DialogResult result = MessageBox.Show(message, title, buttons, MessageBoxIcon.Exclamation);
-            this.TopMost = false;
-            while (true)
-            {
-                if (result == DialogResult.OK)
-                {
-                    break;
-                }
-                else
-                {
-                    break;
-                }
-            }
+                Topmost = true;
+                string message = "Loaded a Dark Cloud save file which was not started with Enhanced Mod!\n\nPlease load a save file which you have started with Enhanced Mod, or start a New Game with the mod.";
+                var box = MessageBoxManager.GetMessageBoxStandard("Invalid save file!", message, MsBoxButtonEnum.Ok, MsBoxIcon.Warning);
+                await box.ShowWindowDialogAsync(this);
+                Topmost = false;
+            });
         }
 
         void FormEnhancedModAlreadyOpen(bool enable)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new EnableDelegate(FormEnhancedModAlreadyOpen), new object[] { enable });
-                return;
-            }
-
-            Label_UserMode_PlaceholderText.Text = "Another instance of Enhanced Mod is already active!\n\nYou can close this window.";
+            Dispatcher.UIThread.Post(() =>
+                Label_UserMode_PlaceholderText.Text = "Another instance of Enhanced Mod is already active!\n\nYou can close this window.");
         }
 
         void ModWindowSettingsCheck(bool enable)
         {
-            if (InvokeRequired)
+            Dispatcher.UIThread.Post(() =>
             {
-                this.Invoke(new EnableDelegate(ModWindowSettingsCheck), new object[] { enable });
-                return;
-            }
-
-            if (Memory.ReadByte(0x21CE4490) == 1) //option 1
-            {
-                CBox_UserMode_Graphics.Checked = true;
-                Memory.WriteByte(0x21F10034, 1);
-            }
-            else
-            {
-                CBox_UserMode_Graphics.Checked = false;
-                Memory.WriteByte(0x21F10034, 0);
-            }
-
-            if (Memory.ReadByte(0x21CE4491) == 1) //option 2
-            {
-                CBox_UserMode_Widescreen.Checked = true;
-                Memory.WriteByte(0x21F10030, 1);
-            }
-            else
-            {
-                CBox_UserMode_Widescreen.Checked = false;
-                Memory.WriteByte(0x21F10030, 0);
-            }
-
-            if (Memory.ReadByte(0x21CE4492) == 1) //option 3
-            {
-                CBox_UserMode_WeaponBeeps.Checked = true;
-                Memory.WriteByte(0x21F10028, 1);
-            }
-            else
-            {
-                CBox_UserMode_WeaponBeeps.Checked = false;
-                Memory.WriteByte(0x21F10028, 0);
-            }
-
-            if (Memory.ReadByte(0x21CE4493) == 1) //option 4
-            {
-                CBox_UserMode_BattleMusic.Checked = true;
-                Memory.WriteByte(0x21F1002C, 1);
-            }
-            else
-            {
-                CBox_UserMode_BattleMusic.Checked = false;
-                Memory.WriteByte(0x21F1002C, 0);
-            }
-
-            if (Memory.ReadByte(0x21CE4495) == 1) //option 4.5 (all music)
-            {
-                CBox_UserMode_MuteMusic.Checked = true;
-                Memory.WriteUShort(0x20299F53, 0);
-            }
-            else
-            {            
-                CBox_UserMode_MuteMusic.Checked = false;
-                Memory.WriteUShort(0x20299F53, 25637);
-            }
-
-            if (Memory.ReadByte(0x21CE4494) == 1) //option 5
-            {
-                Cbox_Usermode_AttackSounds.Checked = true;
-                for (int c = 0; (c < attackSoundAddresses.Length) && (c < attackSoundValues.Length); c++)
+                if (Memory.ReadByte(0x21CE4490) == 1)
                 {
-                    Memory.WriteByte(attackSoundAddresses[c], 0); //disable attack sounds
+                    CBox_UserMode_Graphics.IsChecked = true;
+                    Memory.WriteByte(0x21F10034, 1);
                 }
-            }
-            else
-            {
-                Cbox_Usermode_AttackSounds.Checked = false;
-                for (int c = 0; (c < attackSoundAddresses.Length) && (c < attackSoundValues.Length); c++)
+                else
                 {
-                    Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]); //enable attack sounds
+                    CBox_UserMode_Graphics.IsChecked = false;
+                    Memory.WriteByte(0x21F10034, 0);
                 }
-            }
+
+                if (Memory.ReadByte(0x21CE4491) == 1)
+                {
+                    CBox_UserMode_Widescreen.IsChecked = true;
+                    Memory.WriteByte(0x21F10030, 1);
+                }
+                else
+                {
+                    CBox_UserMode_Widescreen.IsChecked = false;
+                    Memory.WriteByte(0x21F10030, 0);
+                }
+
+                if (Memory.ReadByte(0x21CE4492) == 1)
+                {
+                    CBox_UserMode_WeaponBeeps.IsChecked = true;
+                    Memory.WriteByte(0x21F10028, 1);
+                }
+                else
+                {
+                    CBox_UserMode_WeaponBeeps.IsChecked = false;
+                    Memory.WriteByte(0x21F10028, 0);
+                }
+
+                if (Memory.ReadByte(0x21CE4493) == 1)
+                {
+                    CBox_UserMode_BattleMusic.IsChecked = true;
+                    Memory.WriteByte(0x21F1002C, 1);
+                }
+                else
+                {
+                    CBox_UserMode_BattleMusic.IsChecked = false;
+                    Memory.WriteByte(0x21F1002C, 0);
+                }
+
+                if (Memory.ReadByte(0x21CE4495) == 1)
+                {
+                    CBox_UserMode_MuteMusic.IsChecked = true;
+                    Memory.WriteUShort(0x20299F53, 0);
+                }
+                else
+                {
+                    CBox_UserMode_MuteMusic.IsChecked = false;
+                    Memory.WriteUShort(0x20299F53, 25637);
+                }
+
+                if (Memory.ReadByte(0x21CE4494) == 1)
+                {
+                    Cbox_Usermode_AttackSounds.IsChecked = true;
+                    for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                        Memory.WriteByte(attackSoundAddresses[c], 0);
+                }
+                else
+                {
+                    Cbox_Usermode_AttackSounds.IsChecked = false;
+                    for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                        Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]);
+                }
+            });
         }
 
         void UserModeLaunch()
         {
-            TabControl_USER.Visible = true;
-            Container_MainModes.Visible = false;
+            TabControl_USER.IsVisible = true;
+            Container_MainModes.IsVisible = false;
             if (!launchThread.IsAlive) launchThread.Start();
         }
 
-        protected override void OnFormClosed(FormClosedEventArgs e) //when mod is quit
+        protected override void OnClosed(EventArgs e)
         {
-            launchThread.Abort();
             Memory.WriteByte(0x21F10024, 0);
-            base.OnFormClosed(e);
+            base.OnClosed(e);
+            Environment.Exit(0);
         }
+
         #endregion
 
-        #region Main Screen
-        private void buttonLaunchModAsUser(object sender, EventArgs e) //Launch Mod as normal User
+        #region Mode selection
+
+        private void buttonLaunchModAsUser(object sender, RoutedEventArgs e)
         {
-            TabControl_USER.Visible = true;
-            Container_MainModes.Visible = false;
+            TabControl_USER.IsVisible = true;
+            Container_MainModes.IsVisible = false;
             if (!launchThread.IsAlive) launchThread.Start();
         }
 
-        private void buttonLaunchModAsDev(object sender, EventArgs e) //Launch Mod with dev buttons
+        private void buttonLaunchModAsDev(object sender, RoutedEventArgs e)
         {
-            TabControl_DEV.Visible = true;
-            Container_MainModes.Visible = false;
+            TabControl_DEV.IsVisible = true;
+            Container_MainModes.IsVisible = false;
 
-            //Show console if launched as Dev
-            Program.ShowWindow(Program.consoleH, Program.SW_SHOWNOACTIVATE);
-
-            //Initialize fields
             DEV_Page2_TextBox_Gilda.Text = Player.Gilda.ToString();
 
-            //Initialize enemy hp fields
             DEV_Page2_TextBox_Enemy1.Text = Memory.ReadUInt(Enemies.Enemy0.hp).ToString();
             DEV_Page2_TextBox_Enemy2.Text = Memory.ReadUInt(Enemies.Enemy1.hp).ToString();
             DEV_Page2_TextBox_Enemy3.Text = Memory.ReadUInt(Enemies.Enemy2.hp).ToString();
@@ -426,131 +344,120 @@ namespace Dark_Cloud_Improved_Version
             DEV_Page2_TextBox_Enemy15.Text = Memory.ReadUInt(Enemies.Enemy14.hp).ToString();
             DEV_Page2_TextBox_Enemy16.Text = Memory.ReadUInt(Enemies.Enemy15.hp).ToString();
         }
+
         #endregion
 
         #region User Page 1
-        private void Btn_UserMode_Quit_Clicked(object sender, EventArgs e)
+
+        private async void Btn_UserMode_Quit_Clicked(object sender, RoutedEventArgs e)
         {
             if (Memory.ReadByte(Addresses.mode) == 2 || Memory.ReadByte(Addresses.mode) == 3)
             {
-                this.TopMost = true;
+                Topmost = true;
                 string message = "Closing the mod will return your game to the Main Menu, remember to save your game!\n\nAre you sure you want to quit?\n\nTip: You can soft-reset your game back to the Main Menu by holding Start+Select+L1+L2+R1+R2, and then quit the mod without any warnings.";
-                string title = "Are you sure you want to quit?";
-                MessageBoxButtons buttons = MessageBoxButtons.YesNo;
-                DialogResult result = MessageBox.Show(message, title, buttons, MessageBoxIcon.Exclamation);
-
-
-                while (true)
-                {
-                    if (result == DialogResult.Yes)
-                    {
-                        this.Close();
-                    }
-                    else if (result == DialogResult.No)
-                    {
-                        break;
-                    }
-                }
+                var box = MessageBoxManager.GetMessageBoxStandard("Are you sure you want to quit?", message, MsBoxButtonEnum.YesNo, MsBoxIcon.Warning);
+                var result = await box.ShowWindowDialogAsync(this);
+                Topmost = false;
+                if (result == ButtonResult.Yes)
+                    Close();
             }
             else
             {
-                this.Close();
+                Close();
             }
         }
+
         #endregion
 
-        #region USER Page 2
-        private void CBox_UserMode_WeaponBeepsChanged(object sender, EventArgs e) //Option 1 Checkbox
+        #region User Page 2 — Options
+
+        private void CBox_UserMode_WeaponBeepsChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_WeaponBeeps.Checked == true)
+            if (CBox_UserMode_WeaponBeeps.IsChecked == true)
             {
-                Memory.WriteByte(0x21F10028, 1); //Flag to disable weapon beeping sounds
+                Memory.WriteByte(0x21F10028, 1);
                 Memory.WriteByte(0x21CE4492, 1);
             }
-            else if (CBox_UserMode_WeaponBeeps.Checked == false)
+            else
             {
                 Memory.WriteByte(0x21F10028, 0);
                 Memory.WriteByte(0x21CE4492, 0);
             }
         }
 
-        private void CBox_UserMode_GraphicsChanged(object sender, EventArgs e)
+        private void CBox_UserMode_GraphicsChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_BattleMusic.Checked == true)
+            if (CBox_UserMode_BattleMusic.IsChecked == true)
             {
-                Memory.WriteByte(0x21F1002C, 1); //Flag to disable battle music
+                Memory.WriteByte(0x21F1002C, 1);
                 Memory.WriteByte(0x21CE4493, 1);
             }
-            else if (CBox_UserMode_BattleMusic.Checked == false)
+            else
             {
                 Memory.WriteByte(0x21F1002C, 0);
                 Memory.WriteByte(0x21CE4493, 0);
             }
         }
 
-        private void CBox_UserMode_Widescreen_Changed(object sender, EventArgs e)
+        private void CBox_UserMode_Widescreen_Changed(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_Widescreen.Checked == true)
+            if (CBox_UserMode_Widescreen.IsChecked == true)
             {
-                Memory.WriteByte(0x21F10030, 1); //Flag to enable widescreen
+                Memory.WriteByte(0x21F10030, 1);
                 Memory.WriteByte(0x21CE4491, 1);
             }
-            else if (CBox_UserMode_Widescreen.Checked == false)
+            else
             {
                 Memory.WriteByte(0x21F10030, 0);
                 Memory.WriteByte(0x21CE4491, 0);
             }
         }
 
-        private void CBox_UserMode_Graphics_Changed(object sender, EventArgs e)
+        private void CBox_UserMode_Graphics_Changed(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_Graphics.Checked == true)
+            if (CBox_UserMode_Graphics.IsChecked == true)
             {
-                Memory.WriteByte(0x21F10034, 1); //Flag to enable graphical improvements
+                Memory.WriteByte(0x21F10034, 1);
                 Memory.WriteByte(0x21CE4490, 1);
             }
-            else if (CBox_UserMode_Graphics.Checked == false)
+            else
             {
                 Memory.WriteByte(0x21F10034, 0);
                 Memory.WriteByte(0x21CE4490, 0);
             }
         }
 
-        private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, EventArgs e)
+        private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (Cbox_Usermode_AttackSounds.Checked == true)
+            if (Cbox_Usermode_AttackSounds.IsChecked == true)
             {
-                for (int c = 0; (c < attackSoundAddresses.Length) && (c < attackSoundValues.Length); c++)
-                {
-                    Memory.WriteByte(attackSoundAddresses[c], 0); //disable attack sounds
-                }
+                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                    Memory.WriteByte(attackSoundAddresses[c], 0);
                 Memory.WriteByte(0x21CE4494, 1);
             }
-            else if (Cbox_Usermode_AttackSounds.Checked == false)
+            else
             {
-                for (int c = 0; (c < attackSoundAddresses.Length) && (c < attackSoundValues.Length); c++)
-                {
-                    Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]); //enable attack sounds
-                }
+                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                    Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]);
                 Memory.WriteByte(0x21CE4494, 0);
             }
         }
 
-        private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, EventArgs e)
+        private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_MuteMusic.Checked == true)
+            if (CBox_UserMode_MuteMusic.IsChecked == true)
             {
                 Memory.WriteUShort(0x20299F53, 0);
                 Memory.WriteByte(0x21CE4495, 1);
 
-                if (CBox_UserMode_BattleMusic.Checked == false)
+                if (CBox_UserMode_BattleMusic.IsChecked == false)
                 {
-                    Memory.WriteByte(0x21F1002C, 1); //Flag to battle music
+                    Memory.WriteByte(0x21F1002C, 1);
                     Memory.WriteByte(0x21CE4493, 1);
-                    CBox_UserMode_BattleMusic.Checked = true;
+                    CBox_UserMode_BattleMusic.IsChecked = true;
                 }
             }
-            else if (CBox_UserMode_MuteMusic.Checked == false)
+            else
             {
                 Memory.WriteUShort(0x20299F53, 25637);
                 Memory.WriteByte(0x21CE4495, 0);
@@ -559,261 +466,197 @@ namespace Dark_Cloud_Improved_Version
 
         #endregion
 
-        #region DEV Page 1
-        private void DEV_Page1_Btn_Dayuppy(object sender, EventArgs e)  //Dayuppy
+        #region Dev Page 1
+
+        private void DEV_Page1_Btn_Dayuppy(object sender, RoutedEventArgs e)
         {
-            //if (dayThread.ThreadState == ThreadState.Unstarted)
-            //{
-             //   dayThread.Start();
-            //}
         }
 
-        private void DEV_Page1_Btn_Mike(object sender, EventArgs e) //Mike
+        private void DEV_Page1_Btn_Mike(object sender, RoutedEventArgs e)
         {
-            //Start the changes Thread
             if (MainMenuThread.changesThread.ThreadState == ThreadState.Unstarted)
-            {
                 MainMenuThread.changesThread.Start();
-            }
-
-            //The Synthsphere Listener thread
             if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Unstarted)
-            {
-                Weapons.weaponsMenuListener.Start();//Start thread
-            }
+                Weapons.weaponsMenuListener.Start();
         }
 
-        private void DEV_Page1_Btn_Plgue(object sender, EventArgs e)      //plgue
+        private void DEV_Page1_Btn_Plgue(object sender, RoutedEventArgs e)
         {
-            //place here the function you want to use from your .cs file            
         }
 
-        private void DEV_Page1_Btn_WordOfWind(object sender, EventArgs e)      //wordofwind
+        private void DEV_Page1_Btn_WordOfWind(object sender, RoutedEventArgs e)
         {
-            //if (!chestThread.IsAlive) chestThread.Start();
-
-            //if (townThread.ThreadState == ThreadState.Unstarted)
-            // {
-            //    townThread.Start();//Start thread
-            //}
             Program.ConsoleLogging();
-
-            //if (!TASSThread.IsAlive) TASSThread.Start();
-            //if (!TASSThread2.IsAlive) TASSThread2.Start();
-
-
         }
 
-        private void DEV_Page1_Btn_DungeonThread(object sender, EventArgs e)  //Dungeon
+        private void DEV_Page1_Btn_DungeonThread(object sender, RoutedEventArgs e)
         {
             if (dungeonthread.ThreadState == ThreadState.Unstarted)
-            {
-                dungeonthread.Start();//Start thread
-            }
+                dungeonthread.Start();
         }
 
-        private void DEV_Page1_Btn_TownThread(object sender, EventArgs e)  //townThread
+        private void DEV_Page1_Btn_TownThread(object sender, RoutedEventArgs e)
         {
             if (townThread.ThreadState == ThreadState.Unstarted)
-            {
-                townThread.Start();//Start thread
-            }
+                townThread.Start();
         }
 
-        private void DEV_Page1_CBox_DebugThread(object sender, EventArgs e)
+        private void DEV_Page1_CBox_DebugThread(object sender, RoutedEventArgs e)
         {
-            if (CBox_DebugThread.Checked)
+            if (CBox_DebugThread.IsChecked == true)
             {
                 if (debugThread.ThreadState == ThreadState.Unstarted)
-                {
-                    debugThread.Start();//Start thread
-                }
-
-                CBox_DebugThread.Enabled = false;
+                    debugThread.Start();
+                CBox_DebugThread.IsEnabled = false;
             }
         }
+
         #endregion
 
-        #region DEV Page 2
+        #region Dev Page 2
 
-
-
-        private void DEV_Page2_TextBox_Gilda_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Gilda_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Gilda.Text == "")
             {
                 DEV_Page2_TextBox_Gilda.Text = "0";
                 return;
             }
-            
-            Player.Gilda = Convert.ToUInt16(DEV_Page2_TextBox_Gilda.Text);
-
+            if (ushort.TryParse(DEV_Page2_TextBox_Gilda.Text, out ushort val))
+                Player.Gilda = val;
         }
 
-        private void DEV_Page2_Btn_SetEnemiesMaxHP_Click(object sender, EventArgs e)
+        private void DEV_Page2_Btn_SetEnemiesMaxHP_Click(object sender, RoutedEventArgs e)
         {
-            int MaxEnemyHp = int.MaxValue;
-
-            DEV_Page2_TextBox_Enemy1.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy0.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy2.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy1.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy3.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy2.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy4.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy3.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy5.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy4.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy6.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy5.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy7.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy6.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy8.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy7.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy9.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy8.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy10.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy9.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy11.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy10.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy12.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy11.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy13.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy12.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy14.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy13.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy15.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy14.hp, MaxEnemyHp);
-            DEV_Page2_TextBox_Enemy16.Text = MaxEnemyHp.ToString(); Memory.WriteInt(Enemies.Enemy15.hp, MaxEnemyHp);
+            int max = int.MaxValue;
+            DEV_Page2_TextBox_Enemy1.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy0.hp, max);
+            DEV_Page2_TextBox_Enemy2.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy1.hp, max);
+            DEV_Page2_TextBox_Enemy3.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy2.hp, max);
+            DEV_Page2_TextBox_Enemy4.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy3.hp, max);
+            DEV_Page2_TextBox_Enemy5.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy4.hp, max);
+            DEV_Page2_TextBox_Enemy6.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy5.hp, max);
+            DEV_Page2_TextBox_Enemy7.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy6.hp, max);
+            DEV_Page2_TextBox_Enemy8.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy7.hp, max);
+            DEV_Page2_TextBox_Enemy9.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy8.hp, max);
+            DEV_Page2_TextBox_Enemy10.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy9.hp, max);
+            DEV_Page2_TextBox_Enemy11.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy10.hp, max);
+            DEV_Page2_TextBox_Enemy12.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy11.hp, max);
+            DEV_Page2_TextBox_Enemy13.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy12.hp, max);
+            DEV_Page2_TextBox_Enemy14.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy13.hp, max);
+            DEV_Page2_TextBox_Enemy15.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy14.hp, max);
+            DEV_Page2_TextBox_Enemy16.Text = max.ToString(); Memory.WriteInt(Enemies.Enemy15.hp, max);
         }
 
-
-        private void DEV_Page2_TextBox_Enemy1_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy1_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy1.Text == "") DEV_Page2_TextBox_Enemy1.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy0.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy1.Text));
+            if (int.TryParse(DEV_Page2_TextBox_Enemy1.Text, out int v)) Memory.WriteInt(Enemies.Enemy0.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy2_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy2_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy2.Text == "") DEV_Page2_TextBox_Enemy2.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy1.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy2.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy2.Text, out int v)) Memory.WriteInt(Enemies.Enemy1.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy3_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy3_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy3.Text == "") DEV_Page2_TextBox_Enemy3.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy2.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy3.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy3.Text, out int v)) Memory.WriteInt(Enemies.Enemy2.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy4_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy4_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy4.Text == "") DEV_Page2_TextBox_Enemy4.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy3.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy4.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy4.Text, out int v)) Memory.WriteInt(Enemies.Enemy3.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy5_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy5_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy5.Text == "") DEV_Page2_TextBox_Enemy5.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy4.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy5.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy5.Text, out int v)) Memory.WriteInt(Enemies.Enemy4.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy6_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy6_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy6.Text == "") DEV_Page2_TextBox_Enemy6.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy5.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy6.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy6.Text, out int v)) Memory.WriteInt(Enemies.Enemy5.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy7_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy7_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy7.Text == "") DEV_Page2_TextBox_Enemy7.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy6.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy7.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy7.Text, out int v)) Memory.WriteInt(Enemies.Enemy6.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy8_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy8_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy8.Text == "") DEV_Page2_TextBox_Enemy8.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy7.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy8.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy8.Text, out int v)) Memory.WriteInt(Enemies.Enemy7.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy9_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy9_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy9.Text == "") DEV_Page2_TextBox_Enemy9.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy8.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy9.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy9.Text, out int v)) Memory.WriteInt(Enemies.Enemy8.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy10_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy10_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy10.Text == "") DEV_Page2_TextBox_Enemy10.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy9.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy10.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy10.Text, out int v)) Memory.WriteInt(Enemies.Enemy9.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy11_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy11_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy11.Text == "") DEV_Page2_TextBox_Enemy11.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy10.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy11.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy11.Text, out int v)) Memory.WriteInt(Enemies.Enemy10.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy12_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy12_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy12.Text == "") DEV_Page2_TextBox_Enemy12.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy11.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy12.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy12.Text, out int v)) Memory.WriteInt(Enemies.Enemy11.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy13_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy13_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy13.Text == "") DEV_Page2_TextBox_Enemy13.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy12.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy13.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy13.Text, out int v)) Memory.WriteInt(Enemies.Enemy12.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy14_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy14_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy14.Text == "") DEV_Page2_TextBox_Enemy14.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy13.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy14.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy14.Text, out int v)) Memory.WriteInt(Enemies.Enemy13.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy15_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy15_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy15.Text == "") DEV_Page2_TextBox_Enemy15.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy14.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy15.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy15.Text, out int v)) Memory.WriteInt(Enemies.Enemy14.hp, v);
         }
 
-        private void DEV_Page2_TextBox_Enemy16_TextChanged(object sender, EventArgs e)
+        private void DEV_Page2_TextBox_Enemy16_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy16.Text == "") DEV_Page2_TextBox_Enemy16.Text = "0";
-
-            Memory.WriteInt(Enemies.Enemy15.hp, Convert.ToInt32(DEV_Page2_TextBox_Enemy16.Text));
-
+            if (int.TryParse(DEV_Page2_TextBox_Enemy16.Text, out int v)) Memory.WriteInt(Enemies.Enemy15.hp, v);
         }
-
-
-
-
 
         #endregion
 
-        private void button1_Click(object sender, EventArgs e)
+        #region Info/links
+
+        private void button1_Click(object sender, RoutedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://docs.google.com/forms/d/e/1FAIpQLSdIaCjLTJ9aRqQVO731o2UwQKByF85W_yAj54pssO1RMkLewQ/viewform?usp=sf_link");
+            Process.Start(new ProcessStartInfo("https://docs.google.com/forms/d/e/1FAIpQLSdIaCjLTJ9aRqQVO731o2UwQKByF85W_yAj54pssO1RMkLewQ/viewform?usp=sf_link") { UseShellExecute = true });
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        private void button2_Click(object sender, RoutedEventArgs e)
         {
-            System.Diagnostics.Process.Start("https://discord.gg/8KcnBjgRHP");
+            Process.Start(new ProcessStartInfo("https://discord.gg/8KcnBjgRHP") { UseShellExecute = true });
         }
+
+        #endregion
     }
 }
