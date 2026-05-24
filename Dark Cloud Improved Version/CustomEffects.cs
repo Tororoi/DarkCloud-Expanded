@@ -852,17 +852,14 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void Cactus()
         {
-            while ((Player.Weapon.GetCurrentWeaponId() == Items.cactus ||
-                    Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot) && // TEMP: test
+            while (Player.Weapon.GetCurrentWeaponId() == Items.cactus &&
                    Player.InDungeonFloor())
             {
                 int[] former = ReusableFunctions.GetEnemiesHp();
                 Thread.Sleep(50);
                 int[] current = ReusableFunctions.GetEnemiesHp();
 
-                bool isBoneSlingshot = Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot;
-                int expectedSource = isBoneSlingshot ? Player.XiaoId : Player.UngagaId;
-                if (ReusableFunctions.GetDamageSourceCharacterID() != expectedSource)
+                if (ReusableFunctions.GetDamageSourceCharacterID() != Player.UngagaId)
                 {
                     ReusableFunctions.ClearRecentDamageAndDamageSource();
                     continue;
@@ -877,8 +874,8 @@ namespace Dark_Cloud_Improved_Version
                     if (CactusImmuneNameTags.Contains(nameTag))
                         continue;
 
-                    float curThirst = isBoneSlingshot ? Player.Xiao.GetThirst() : Player.Ungaga.GetThirst();
-                    float maxThirst = isBoneSlingshot ? Player.Xiao.GetMaxThirst() : Player.Ungaga.GetMaxThirst();
+                    float curThirst = Player.Ungaga.GetThirst();
+                    float maxThirst = Player.Ungaga.GetMaxThirst();
                     if (maxThirst > 0 && curThirst >= maxThirst)
                         break;
 
@@ -886,8 +883,7 @@ namespace Dark_Cloud_Improved_Version
                     float newThirst = (maxThirst > 0)
                         ? Math.Min(curThirst + gain, maxThirst)
                         : curThirst + gain;
-                    if (isBoneSlingshot) Player.Xiao.SetThirst(newThirst);
-                    else Player.Ungaga.SetThirst(newThirst);
+                    Player.Ungaga.SetThirst(newThirst);
                     break;
                 }
 

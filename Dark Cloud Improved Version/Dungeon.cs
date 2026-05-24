@@ -142,14 +142,6 @@ namespace Dark_Cloud_Improved_Version
                                             angelGearThread.Start();
                                         }
                                         break;
-
-                                    case Items.boneslingshot: // TEMP: test Cactus effect
-                                        if (!cactusThread.IsAlive)
-                                        {
-                                            cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
-                                            cactusThread.Start();
-                                        }
-                                        break;
                                 }
                                 break;
 
