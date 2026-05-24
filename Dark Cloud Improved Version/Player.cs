@@ -831,7 +831,7 @@ namespace Dark_Cloud_Improved_Version
             private const int maxHP = 0x21CD9552;
             private const int defense = 0x21CDD894;
             private const int thirst = 0x21CDD850;
-            private const int thirstMax = 0x21CDD83A;
+            private const int thirstMax = 0x21CDD838;
             //private const int pocketSize = 0x21CDD8AC;
             private const int status = 0x21CDD814;           //02 Near Death, 04 Freeze, 08 Stamina, 16 Poison, 32 Curse, 64 Goo.
             private const int statusTimer = 0x21CDD824;
@@ -877,7 +877,7 @@ namespace Dark_Cloud_Improved_Version
             }
             public static float GetMaxThirst()
             {
-                return Memory.ReadFloat(thirst);
+                return Memory.ReadFloat(thirstMax);
             }
 
             public static void SetMaxThirst(float newmaxthirst)
@@ -1600,7 +1600,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHP = 0x21CD9554;
             public const int defense = 0x21CDD898;
             public const int thirst = 0x21CDD854;
-            public const int thirstMax = 0x21CDD83E;
+            public const int thirstMax = 0x21CDD83C;
             public const int status = 0x21CDD818;
             public const int statusTimer = 0x21CDD828;
             public const int currentWeaponSlot = 0x21CDD88D;
@@ -1644,7 +1644,7 @@ namespace Dark_Cloud_Improved_Version
             }
             public static float GetMaxThirst()
             {
-                return Memory.ReadFloat(thirst);
+                return Memory.ReadFloat(thirstMax);
             }
 
             public static void SetMaxThirst(float newmaxthirst)
@@ -2346,7 +2346,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHP = 0x21CD9556;
             public const int defense = 0x21CDD89C;
             public const int thirst = 0x21CDD858;
-            public const int thirstMax = 0x21CDD842;
+            public const int thirstMax = 0x21CDD840;
             public const int status = 0x21CDD81C;
             public const int statusTimer = 0x21CDD82C;
             public const int currentWeaponSlot = 0x21CDD88E;
@@ -3092,7 +3092,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHP = 0x21CD9558;
             public const int defense = 0x21CDD8A0;
             public const int thirst = 0x21CDD85C;
-            public const int thirstMax = 0x21CDD846;
+            public const int thirstMax = 0x21CDD844;
             public const int status = 0x21CDD820;
             public const int statusTimer = 0x21CDD830;
             public const int currentWeaponSlot = 0x21CDD88F;
@@ -3136,7 +3136,7 @@ namespace Dark_Cloud_Improved_Version
             }
             public static float GetMaxThirst()
             {
-                return Memory.ReadFloat(thirst);
+                return Memory.ReadFloat(thirstMax);
             }
 
             public static void SetMaxThirst(float newmaxthirst)
@@ -3848,7 +3848,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHP = 0x21CD955A;
             public const int defense = 0x21CDD8A4;
             public const int thirst = 0x21CDD860;
-            public const int thirstMax = 0x21CDD84A;
+            public const int thirstMax = 0x21CDD848;
             public const int status = 0x21CDD824;
             public const int statusTimer = 0x21CDD834;
             public const int currentWeaponSlot = 0x21CDD890;
@@ -3891,7 +3891,7 @@ namespace Dark_Cloud_Improved_Version
             }
             public static float GetMaxThirst()
             {
-                return Memory.ReadFloat(thirst);
+                return Memory.ReadFloat(thirstMax);
             }
 
             public static void SetMaxThirst(float newmaxthirst)
@@ -4593,7 +4593,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHP = 0x21CD955C;
             public const int defense = 0x21CDD8A8;
             public const int thirst = 0x21CDD864;
-            public const int thirstMax = 0x21CDD84E;
+            public const int thirstMax = 0x21CDD84C;
             public const int status = 0x21CDD828;
             public const int statusTimer = 0x21CDD838;
             public const int currentWeaponSlot = 0x21CDD891;
@@ -4637,7 +4637,7 @@ namespace Dark_Cloud_Improved_Version
             }
             public static float GetMaxThirst()
             {
-                return Memory.ReadFloat(thirst);
+                return Memory.ReadFloat(thirstMax);
             }
 
             public static void SetMaxThirst(float newmaxthirst)
