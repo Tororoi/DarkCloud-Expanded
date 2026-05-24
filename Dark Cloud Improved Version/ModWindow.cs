@@ -183,8 +183,38 @@ namespace Dark_Cloud_Improved_Version
 
         void FormCurrentlyInGame(bool enable)
         {
+            BeginQuestPolling();
             Dispatcher.UIThread.Post(() =>
                 Label_UserMode_PlaceholderText.Text = "Enhanced Mod is active and running!\n\nRemember to NEVER use save states with the mod! Always save the game normally through the game's save menu.");
+        }
+
+        void RefreshQuestTab()
+        {
+            string summary = QuestTracker.GetActiveQuestsSummary();
+            Dispatcher.UIThread.Post(() =>
+            {
+                var label = this.FindControl<TextBlock>("Label_QuestTracker");
+                label?.SetValue(TextBlock.TextProperty, summary);
+            });
+        }
+
+        static bool questPollingStarted = false;
+
+        void BeginQuestPolling()
+        {
+            if (questPollingStarted) return;
+            questPollingStarted = true;
+
+            var thread = new Thread(() =>
+            {
+                while (true)
+                {
+                    if (QuestTracker.HasStateChanged())
+                        RefreshQuestTab();
+                    Thread.Sleep(1000);
+                }
+            }) { IsBackground = true };
+            thread.Start();
         }
 
         void FormSaveStateDetected(bool enable)

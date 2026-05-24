@@ -123,6 +123,25 @@
         </Panel>
       </TabItem>
 
+      <!-- Quests tab -->
+      <TabItem Header="Quests">
+        <DockPanel Margin="22,8,22,10">
+          <TextBlock DockPanel.Dock="Top"
+                     Text="Auto-refreshes when you open Manuals in-game"
+                     FontWeight="Normal"
+                     FontSize="8"
+                     Foreground="#888888"
+                     Margin="0,0,0,8"
+                     TextWrapping="Wrap"/>
+          <ScrollViewer>
+            <TextBlock x:Name="Label_QuestTracker"
+                       Text="Loading..."
+                       FontWeight="Normal"
+                       TextWrapping="Wrap"/>
+          </ScrollViewer>
+        </DockPanel>
+      </TabItem>
+
       <!-- Credits tab -->
       <TabItem Header="Credits">
         <Panel>
