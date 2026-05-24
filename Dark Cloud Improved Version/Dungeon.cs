@@ -50,7 +50,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread spawnsCheck;
         public static Thread minibossProcess;
         public static Thread miniBossMessage;
-
+        
         //Weapon threads, only 1 should run at a time
         public static Thread boneDoorThread = new Thread(new ThreadStart(CustomEffects.BoneDoorTrigger));
         public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeaven));
@@ -62,7 +62,6 @@ namespace Dark_Cloud_Improved_Version
         public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
         public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrath));
         public static Thread babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpear));
-        public static Thread cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
         public static Thread supernovaThread = new Thread(new ThreadStart(CustomEffects.Supernova));
         public static Thread starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreaker));
         public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
@@ -76,7 +75,7 @@ namespace Dark_Cloud_Improved_Version
             elementSwapThread.Start();
             if (!cheatCodeThread.IsAlive)
             {
-                cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
+                cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));             
                 cheatCodeThread.Start();
                 Resources.initiateRubyMemeFix();
             }
@@ -171,7 +170,7 @@ namespace Dark_Cloud_Improved_Version
                                         break;
                                 }
                                 break;
-
+                             
                             //Ruby
                             case Player.RubyId:
                                 CustomEffects.BoneRapierEffect(false);
@@ -188,7 +187,7 @@ namespace Dark_Cloud_Improved_Version
                                         }
                                         break;
                                     case Items.secretarmlet:
-                                        if (!magicCircleChanged) {
+                                        if (!magicCircleChanged) { 
                                             bool executed = CustomEffects.SecretArmletEnable();
                                             if(executed) magicCircleChanged = true;
                                         }
@@ -220,14 +219,6 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpear));
                                             babelSpearThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.cactus:
-                                        if (!cactusThread.IsAlive)
-                                        {
-                                            cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
-                                            cactusThread.Start();
                                         }
                                         break;
                                     default:
@@ -262,7 +253,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 break;
                         }
-
+                        
 
                         CheckActiveItems();
                     }
@@ -296,10 +287,10 @@ namespace Dark_Cloud_Improved_Version
                     //Define event and boss floors
                     excludeFloors = GetDungeonEventFloors(currentDungeon);
 
-
+                   
                     //Get current Floor
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
-
+                    
 
                     //Check if the player has entered a new floor
                     if (currentFloor != prevFloor)
@@ -405,7 +396,7 @@ namespace Dark_Cloud_Improved_Version
                     key.Add(Items.dranscrest); break;
                 //Wise Owl
                 case 1:
-                    key.Add(Items.shinystone); key.Add(Items.redberry); key.Add(Items.pointychestnut); break;
+                    key.Add(Items.shinystone); key.Add(Items.redberry); key.Add(Items.pointychestnut); break; 
                 //Shipwreck
                 case 2:
                     key.Add(Items.hook); break;
@@ -428,7 +419,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         public static byte GetDungeonBackFloorKey(byte dungeon)
-        {
+        { 
             switch (dungeon)
             {
                 //DBC
@@ -578,7 +569,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Check enemy spawns upon entering a dungeon floor
         /// </summary>
-        public static void CheckSpawns()
+        public static void CheckSpawns() 
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Checking spawns...");
 
@@ -669,11 +660,11 @@ namespace Dark_Cloud_Improved_Version
         public static void DoMinibossSpawn(byte currentDungeon)
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Processing mini boss...");
-
-            hasMiniBoss = MiniBoss.MiniBossSpawn(true, currentDungeon, currentFloor);
+           
+            hasMiniBoss = MiniBoss.MiniBossSpawn(false, currentDungeon, currentFloor); 
 
             //If the mini boss spawned, start its warning message thread
-            if (hasMiniBoss) {
+            if (hasMiniBoss) { 
                 miniBossMessage = new Thread(new ThreadStart(MiniBossMessage));
                 miniBossMessage.Start();
             }
@@ -811,7 +802,7 @@ namespace Dark_Cloud_Improved_Version
                             }
                         }
 
-
+                        
                     }
 
                     if (Memory.ReadByte(0x202A2010) == 3)
@@ -829,7 +820,7 @@ namespace Dark_Cloud_Improved_Version
 
             prevCharCursor = currentCharCursor;
         }
-
+        
 
 
         public static void CheckClown()
@@ -1064,7 +1055,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.Circle)
                 {
-                    circlePressed = true;
+                    circlePressed = true;                 
                 }
             }
             else
@@ -1164,7 +1155,7 @@ namespace Dark_Cloud_Improved_Version
                             }
                             float currentWHP = Memory.ReadFloat(whp);
                             if (currentWHP < currentmaxWHP)
-                            {
+                            {                         
                                 Memory.WriteFloat(whp, currentmaxWHP);
                                 Dayuppy.DisplayMessage("Used Repair Powder!", 1, 20, 2000);
                                 byte currentPowders = Memory.ReadByte(0x21CDD8B2 + (0x2 * currentSlot));
@@ -1183,7 +1174,7 @@ namespace Dark_Cloud_Improved_Version
             else
             {
                 squareActive = false;
-            }
+            }          
         }
 
         public static void DunEscapeConfirmTimer()
@@ -1223,7 +1214,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Consumed escape powder from active slots");
                 }
-                else if (Memory.ReadByte(0x21CDD8B0) == 175)
+                else if (Memory.ReadByte(0x21CDD8B0) == 175) 
                 {
                     byte currentPowders = Memory.ReadByte(0x21CDD8B6);
                     currentPowders--;
@@ -1281,7 +1272,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 else
                 {
-                    if (menuMode == 1)
+                    if (menuMode == 1) 
                     {
                         if (Memory.ReadByte(0x21D9EC08) == 6)
                         {
@@ -1305,7 +1296,7 @@ namespace Dark_Cloud_Improved_Version
                                 }
                             }
                             PPowdermenuOpen = false;
-                        }
+                        }                                            
                     }
                     else if (menuMode == 2)
                     {
