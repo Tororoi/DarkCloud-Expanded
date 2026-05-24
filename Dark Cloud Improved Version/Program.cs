@@ -9,6 +9,7 @@ namespace Dark_Cloud_Improved_Version
     {
         public static void Main(string[] args)
         {
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             Console.WriteLine("Dark Cloud Enhanced - Created by Wordofwind, Dayuppy, MikeZorD, and Plgue");
             Console.WriteLine("Version 1.xxx - Release");
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

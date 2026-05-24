@@ -13,10 +13,34 @@ namespace Dark_Cloud_Improved_Version
         static float chronicleFormerWHP = 0;
         static int[] chronicleCurrentEnemyHP;
         static int[] chronicleFormerEnemyHP;
-        public const int mode = Addresses.mode;                                            
+        public const int mode = Addresses.mode;
 
         private static Random random = new Random();
         public static Thread damageFadeoutThread = new Thread(new ThreadStart(DamageFadeout));
+
+        private static readonly HashSet<int> CactusImmuneNameTags = new()
+        {
+            Enemies.masterjacket,    // 1
+            Enemies.skeletonsoldier, // 3
+            Enemies.statue,          // 5
+            Enemies.pirateschariot,  // 25
+            Enemies.golem,           // 30
+            Enemies.mrblare,         // 31
+            Enemies.dune,            // 32
+            Enemies.titan,           // 33
+            Enemies.arthur,          // 40
+            Enemies.livingarmor,     // 55
+            Enemies.steelgiant,      // 64
+            Enemies.billy,           // 69
+            Enemies.vulcan,          // 70
+            Enemies.rockanoff,       // 77
+            Enemies.gol,             // 90
+            Enemies.sil,             // 91
+            Enemies.statuedog,       // 303
+            Enemies.gacious,         // 317
+            Enemies.silvergear,      // 318
+            Enemies.hornhead,        // 319
+        };
 
         /// <summary>
         /// Toggles the effect of the bone rapier
@@ -32,7 +56,7 @@ namespace Dark_Cloud_Improved_Version
             //Otherwise reset BypassBoneDoor
             else if (Dungeon.IsBypassBoneDoor()) Dungeon.SetBypassBoneDoor(false);
         }
-        
+
         /// <summary>
         /// Trigger to open a bone door
         /// </summary>
@@ -72,7 +96,7 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(500);
             }
         }
-        
+
         public static bool CheckChronicle2(bool acquired)
         {
             acquired = false;
@@ -114,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(500);
                 for (int i = 0; i < 15; i++)
                 {
-                    if (Memory.ReadByte(0x21E16BC8 + (i * 0x190)) == 8) 
+                    if (Memory.ReadByte(0x21E16BC8 + (i * 0x190)) == 8)
                     {
                         Memory.WriteUShort(0x21E16C74 + (i * 0x190), 1);
                     }
@@ -138,8 +162,8 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void SeventhHeaven()
         {
-            while ( Player.Weapon.GetCurrentWeaponId() == Items.seventhheaven && 
-                    Memory.ReadByte(Addresses.mode) == 3 && 
+            while ( Player.Weapon.GetCurrentWeaponId() == Items.seventhheaven &&
+                    Memory.ReadByte(Addresses.mode) == 3 &&
                     Player.CheckDunIsWalkingMode() == true)
             {
                 //Store the first empty slot
@@ -158,7 +182,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     const int attachmentOffset = 0x20;
                     const int attachmentValuesRange = 0x1F;
-                    
+
                     //Store the newly obtained attachment values
                     byte[] attachmentValues = Memory.ReadByteArray(Addresses.firstBagAttachment + (attachmentOffset * slot), attachmentValuesRange);
 
@@ -172,7 +196,7 @@ namespace Dark_Cloud_Improved_Version
                             //Put a copy of the same attachment on the next available slot
                             if (Player.Inventory.GetBagAttachmentsFirstAvailableSlot() != -1) Memory.WriteByteArray(Addresses.firstBagAttachment + (attachmentOffset * Player.Inventory.GetBagAttachmentsFirstAvailableSlot()), attachmentValues);
 
-                            Dayuppy.DisplayMessage("The 7th Heaven has blessed\nyou with a gift!", 2, 27, 3500);                          
+                            Dayuppy.DisplayMessage("The 7th Heaven has blessed\nyou with a gift!", 2, 27, 3500);
                         }
                         return;
                     }
@@ -193,7 +217,7 @@ namespace Dark_Cloud_Improved_Version
             if (chronicleNewFloor == true)
             {
                 for (int i = 0; i < 7; i++ )
-                {                   
+                {
                     Memory.WriteInt(0x21EC828C + (0x60 * i), 0);
                     Memory.WriteInt(0x21EC8290 + (0x60 * i), 158);
                     Memory.WriteInt(0x21EC8294 + (0x60 * i), 12);
@@ -243,7 +267,7 @@ namespace Dark_Cloud_Improved_Version
                         flashRGB_G = Memory.ReadFloat(Enemies.Enemy0.flashColorGreen + (i * 0x190));
                         flashRGB_B = Memory.ReadFloat(Enemies.Enemy0.flashColorBlue + (i * 0x190));
                         damageDealt = Memory.ReadInt(0x21DC452C);
-                        break; 
+                        break;
                     }
                 }
 
@@ -274,7 +298,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                if (enemiesinRange.Count > 0) 
+                if (enemiesinRange.Count > 0)
                 {
                     for (int i = 0; i < enemiesinRange.Count; i++)
                     {
@@ -282,7 +306,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteFloat(Enemies.Enemy0.flashColorGreen + (0x190 * enemiesinRange[i]), flashRGB_G);
                         Memory.WriteFloat(Enemies.Enemy0.flashColorBlue + (0x190 * enemiesinRange[i]), flashRGB_B);
                         Memory.WriteFloat(Enemies.Enemy0.flashDuration + (0x190 * enemiesinRange[i]), (float)(0.1));
-                        
+
 
                         enemiescoordinateX[i] = Memory.ReadFloat(Enemies.Enemy0.locationCoordinateX + (0x190 * enemiesinRange[i]));
                         enemiescoordinateZ[i] = Memory.ReadFloat(Enemies.Enemy0.locationCoordinateZ + (0x190 * enemiesinRange[i]));
@@ -296,7 +320,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                         else
                         {
-                            float effectDamagePercent = ((300 - enemiesDistance[enemiesinRange[i]]) / 5); 
+                            float effectDamagePercent = ((300 - enemiesDistance[enemiesinRange[i]]) / 5);
                             if (effectDamagePercent < 1)
                             {
                                 effectDamagePercent = 1;
@@ -304,7 +328,7 @@ namespace Dark_Cloud_Improved_Version
                             effectDamage[i] = (float)System.Math.Floor(damageDealt * (effectDamagePercent / 100));
                         }
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Enemy " + enemiesinRange[i] + " effect dmg: " + effectDamage[i]);
-                        
+
                     }
 
                     for (int i = 0; i < enemiesinRange.Count; i++)
@@ -386,7 +410,7 @@ namespace Dark_Cloud_Improved_Version
                         damageFadeoutThread = new Thread(new ThreadStart(DamageFadeout));
                         damageFadeoutThread.Start();
                     }
-                }            
+                }
             }
             ReusableFunctions.ClearRecentDamageAndDamageSource();
             chronicleFormerWHP = chronicleCurrentWHP;
@@ -514,7 +538,7 @@ namespace Dark_Cloud_Improved_Version
                     //Set a counter for how many times to change the enemy's dimensions (this acts as a duration variable)
                     int counter = 0;
 
-                    //Instructions will run for 1000 times (arbitrary number) and only while the enemy's dimensions are between 30% - 100% of their original size 
+                    //Instructions will run for 1000 times (arbitrary number) and only while the enemy's dimensions are between 30% - 100% of their original size
                     while (counter < 1000 && ((enemyZeroWidth >= 0.3f && enemyZeroWidth <= 1f) || (enemyZeroHeight >= 0.3f && enemyZeroHeight <= 1f) || (enemyZeroDepth >= 0.3f && enemyZeroDepth <= 1f)))
                     {
                         //Change each of the enemy axis dimensions (X,Y and Z) based on the offset from the original Enemy 0 address
@@ -693,7 +717,7 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
         }
-        
+
         /// <summary>
         /// Enables the Secret Armlet special effect:
         /// <br></br>
@@ -721,7 +745,7 @@ namespace Dark_Cloud_Improved_Version
                 { int effectPositive5 = random.Next(5); Memory.WriteByte(Addresses.backfloorcircleEffect2, (byte)effectPositive5); changed = true; }
 
             if (Memory.ReadByte(Addresses.backfloorcircleSpawn3) != 0 && Memory.ReadByte(Addresses.backfloorcircleEffect3) > 4)
-                { int effectPositive6 = random.Next(5); Memory.WriteByte(Addresses.backfloorcircleEffect3, (byte)effectPositive6); changed = true; }    
+                { int effectPositive6 = random.Next(5); Memory.WriteByte(Addresses.backfloorcircleEffect3, (byte)effectPositive6); changed = true; }
 
             if (changed) return true; else return false;
         }
@@ -819,6 +843,56 @@ namespace Dark_Cloud_Improved_Version
 
             //Reset the damage and source values
             ReusableFunctions.ClearRecentDamageAndDamageSource();
+        }
+
+        /// <summary>
+        /// Cactus: on hit, restore Ungaga's thirst scaled by damage dealt.
+        /// 100 damage = 10.0 thirst units = 1 visible water drop.
+        /// Rock, metal, and undead types are immune.
+        /// </summary>
+        public static void Cactus()
+        {
+            while ((Player.Weapon.GetCurrentWeaponId() == Items.cactus ||
+                    Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot) && // TEMP: test
+                   Player.InDungeonFloor())
+            {
+                int[] former = ReusableFunctions.GetEnemiesHp();
+                Thread.Sleep(50);
+                int[] current = ReusableFunctions.GetEnemiesHp();
+
+                bool isBoneSlingshot = Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot;
+                int expectedSource = isBoneSlingshot ? Player.XiaoId : Player.UngagaId;
+                if (ReusableFunctions.GetDamageSourceCharacterID() != expectedSource)
+                {
+                    ReusableFunctions.ClearRecentDamageAndDamageSource();
+                    continue;
+                }
+
+                for (int i = 0; i < 15; i++)
+                {
+                    if (former[i] <= 0 || current[i] >= former[i])
+                        continue;
+
+                    int nameTag = Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i));
+                    if (CactusImmuneNameTags.Contains(nameTag))
+                        continue;
+
+                    float curThirst = isBoneSlingshot ? Player.Xiao.GetThirst() : Player.Ungaga.GetThirst();
+                    float maxThirst = isBoneSlingshot ? Player.Xiao.GetMaxThirst() : Player.Ungaga.GetMaxThirst();
+                    if (maxThirst > 0 && curThirst >= maxThirst)
+                        break;
+
+                    float gain = (former[i] - current[i]) / 10.0f;
+                    float newThirst = (maxThirst > 0)
+                        ? Math.Min(curThirst + gain, maxThirst)
+                        : curThirst + gain;
+                    if (isBoneSlingshot) Player.Xiao.SetThirst(newThirst);
+                    else Player.Ungaga.SetThirst(newThirst);
+                    break;
+                }
+
+                ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
         }
 
         /// <summary>
