@@ -69,7 +69,7 @@ namespace Dark_Cloud_Improved_Version
         public static bool fishingQuestSamActive = false;
         public static bool fishingQuestDeviaActive = false;
         public static bool hasMardanSword = false;
-        public static byte mardanMultiplier;
+        public static float mardanMultiplier;
         
         public static int onDialogueFlag = 0;
         public static int sidequestonDialogueFlag = 0;
@@ -1412,11 +1412,11 @@ namespace Dark_Cloud_Improved_Version
                                 if (fishArray[i] != 17)
                                 {
                                     int FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x00000004;
                                     FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x0000240C;
                                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!" /*multiplied FP's"*/);
@@ -1519,11 +1519,11 @@ namespace Dark_Cloud_Improved_Version
                                 if (fishArray[i] != 17)
                                 {
                                     int FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x00000004;
                                     FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x0000240C;
                                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!" /*multiplied FP's"*/);
@@ -1626,11 +1626,11 @@ namespace Dark_Cloud_Improved_Version
                                 if (fishArray[i] != 17)
                                 {
                                     int FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x00000004;
                                     FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x0000240C;
                                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!" /*multiplied FP's"*/);
@@ -1750,11 +1750,11 @@ namespace Dark_Cloud_Improved_Version
                                 if (fishArray[i] != 17)
                                 {
                                     int FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x00000004;
                                     FPavg = Memory.ReadInt(currentAddress);
-                                    FPavg = FPavg * mardanMultiplier;
+                                    FPavg = (int)(FPavg * mardanMultiplier);
                                     Memory.WriteInt(currentAddress, FPavg);
                                     currentAddress += 0x0000240C;
                                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!" /*multiplied FP's"*/);
@@ -1846,19 +1846,19 @@ namespace Dark_Cloud_Improved_Version
             if (currentwepID == 278)
             {
                 hasMardanSword = true;
-                mardanMultiplier = 2;
+                mardanMultiplier = 1.2f;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Mardan Eins");
             }
             else if (currentwepID == 279)
             {
                 hasMardanSword = true;
-                mardanMultiplier = 3;
+                mardanMultiplier = 1.5f;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Mardan Twei");
             }
             else if (currentwepID == 280)
             {
                 hasMardanSword = true;
-                mardanMultiplier = 5;
+                mardanMultiplier = 2f;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Arise Mardan");
             }
             else
