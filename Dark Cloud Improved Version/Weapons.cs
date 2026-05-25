@@ -3354,7 +3354,7 @@ namespace Dark_Cloud_Improved_Version
                 //Brave Ark
                 Memory.WriteUShort((synth3 + (weaponoffset * (Items.braveark - daggerid))), 1);    //Adds a 3rd regular attachment slot
 
-                //Big Gang
+                //Big Bang
                 Memory.WriteUShort((speed + (weaponoffset * (Items.bigbang - daggerid))), 70);    //Speed set to 70
 
                 //Small Sword
@@ -3509,11 +3509,11 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((buildup + (rubyoffset + (weaponoffset * (Items.pocklekul - goldringid)))), 8256);   //Sets build-up branches to both Fairy Ring and Thorn Armlet
 
                 //Thorn Armlet
-                Memory.WriteUShort((maxmagic + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 65); //Max Magic set to 65
-                Memory.WriteUShort((buildup + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 128); //Sets build-up branches to Destruction Ring
+                Memory.WriteUShort((maxmagic + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 65);  //Max Magic set to 65
+                Memory.WriteUShort((buildup + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 128);  //Sets build-up branches to Destruction Ring
 
                 //Athenas Armlet
-                Memory.WriteByte((effect2 + (rubyoffset + (weaponoffset * (Items.athenasarmlet - daggerid)))), 32);
+                Memory.WriteByte((effect2 + (rubyoffset + (weaponoffset * (Items.athenasarmlet - daggerid)))), 32);     //Adds ABS up effect
 
 
 
@@ -3649,7 +3649,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if (attributeRoll < 50) //first roll if weapon gets effect
                 {
-                    attributeRoll = rnd.Next(100); 
+                    attributeRoll = rnd.Next(100);
 
                     if (attributeRoll < 50) //roll for which effect it gets
                     {
@@ -3676,7 +3676,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if (attributeRoll < 50) //first roll if weapon gets effect
                 {
-                    attributeRoll = rnd.Next(100); 
+                    attributeRoll = rnd.Next(100);
 
                     if (attributeRoll < 50) //roll for which effect it gets
                     {
@@ -3696,7 +3696,7 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 /*********************
-                 *       Dagger      *
+                 *       Dusack      *
                  *********************/
 
                 attributeRoll = rnd.Next(100);
@@ -3708,6 +3708,36 @@ namespace Dark_Cloud_Improved_Version
                 else
                 {
                     Memory.WriteByte((effect + (weaponoffset * (Items.dusack - daggerid))), 0);
+                }
+
+                /************************
+                 *    Bone Slingshot    *
+                 ************************/
+
+                attributeRoll = rnd.Next(100);
+
+                if (attributeRoll < 50)
+                {
+                    Memory.WriteByte((effect2 + (xiaooffset + (weaponoffset * (Items.boneslingshot - woodenid)))), 1);
+                }
+                else
+                {
+                    Memory.WriteByte((effect2 + (xiaooffset + (weaponoffset * (Items.boneslingshot - woodenid)))), 0);
+                }
+
+                /*********************
+                 *    Hardshooter    *
+                 *********************/
+
+                attributeRoll = rnd.Next(100);
+
+                if (attributeRoll < 50)
+                {
+                    Memory.WriteByte((effect2 + (xiaooffset + (weaponoffset * (Items.hardshooter - woodenid)))), 1);
+                }
+                else
+                {
+                    Memory.WriteByte((effect2 + (xiaooffset + (weaponoffset * (Items.hardshooter - woodenid)))), 0);
                 }
 
                 /**********************
@@ -3753,6 +3783,21 @@ namespace Dark_Cloud_Improved_Version
                 else
                 {
                     Memory.WriteByte((effect2 + (rubyoffset + (weaponoffset * (Items.satansring - goldringid)))), 0);
+                }
+
+                /*********************
+                 *      De Sanga     *
+                 *********************/
+
+                attributeRoll = rnd.Next(100);
+
+                if (attributeRoll < 30)
+                {
+                    Memory.WriteByte((effect2 + (ungagaoffset + (weaponoffset * (Items.desanga - stickid)))), 4);
+                }
+                else
+                {
+                    Memory.WriteByte((effect2 + (ungagaoffset + (weaponoffset * (Items.desanga - stickid)))), 0);
                 }
 
                 /*********************
