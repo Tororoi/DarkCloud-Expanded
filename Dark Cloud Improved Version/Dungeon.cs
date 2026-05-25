@@ -85,6 +85,15 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Player.InDungeonFloor())
                 {
+                    // Evilcise curse applies immediately on equip, even from the pause menu
+                    if (Player.CurrentCharacterNum() == Player.ToanId &&
+                        Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
+                        !evilciseThread.IsAlive)
+                    {
+                        evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+                        evilciseThread.Start();
+                    }
+
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
