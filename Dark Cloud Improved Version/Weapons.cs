@@ -3346,6 +3346,10 @@ namespace Dark_Cloud_Improved_Version
                 //Evilcise
                 Memory.WriteByte((effect + (weaponoffset * (Items.evilcise - daggerid))), 4);    //Poor (100%)
 
+                //Aga's Sword
+                Memory.WriteUShort((buildup   + (weaponoffset * (Items.agassword - daggerid))), 0);   //No buildup paths (final form)
+                Memory.WriteUShort((maxattack + (weaponoffset * (Items.agassword - daggerid))), 190); //Max attack set to 190
+
                 //Heaven's Cloud
                 Memory.WriteUShort((synth3 + (weaponoffset * (Items.heavenscloud - daggerid))), 1);    //Adds a 3rd regular attachment slot
                 Memory.WriteUShort((buildup + (weaponoffset * (Items.heavenscloud - daggerid))), 0);   //No buildup paths (final form)

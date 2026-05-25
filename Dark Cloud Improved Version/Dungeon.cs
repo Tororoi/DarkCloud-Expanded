@@ -58,6 +58,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
+        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
         public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
         public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
         public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
@@ -150,6 +151,16 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
                                             evilciseThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.agassword:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!agasSwordThread.IsAlive)
+                                        {
+                                            agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
+                                            agasSwordThread.Start();
                                         }
                                         break;
 
