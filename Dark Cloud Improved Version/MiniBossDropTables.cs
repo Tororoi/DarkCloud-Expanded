@@ -10,6 +10,7 @@ namespace Dark_Cloud_Improved_Version
             public int WeaponId;
             public ushort Attack;
             public ushort Endurance;
+            public ushort Speed;
             public ushort Magic;
             public ushort Whp;
             public byte Fire;

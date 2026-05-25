@@ -57,6 +57,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
+        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
         public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
         public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
         public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
@@ -119,6 +120,26 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
                                             chronicleSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.heavenscloud:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!heavensCloudThread.IsAlive)
+                                        {
+                                            heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
+                                            heavensCloudThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.evilcise:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!evilciseThread.IsAlive)
+                                        {
+                                            evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+                                            evilciseThread.Start();
                                         }
                                         break;
 

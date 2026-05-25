@@ -131,29 +131,95 @@ namespace Dark_Cloud_Improved_Version
             return acquired;
         }
 
-        public static void Evilcise() //Currently unused effect due to memes happening
+        /// <summary>
+        /// Evilcise effect: Toan is cursed while equipped and immune to all other status effects.
+        /// Breaking the curse with holy water applies poison and sets HP to 1.
+        /// The curse is reapplied on each new floor.
+        /// </summary>
+        public static void Evilcise()
         {
-            if (evilciseNewFloor == true)
+            // Toan status bits: 0x02=NearDeath 0x04=Freeze 0x08=Stamina 0x10=Poison 0x20=Curse 0x40=Goo
+            const int toanStatus      = 0x21CDD814;
+            const int toanStatusTimer = 0x21CDD824;
+            const int toanHp          = 0x21CD955E;
+
+            bool penalized = false;
+            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
+
+            // Apply curse immediately on equip
+            ushort cur = Memory.ReadUShort(toanStatus);
+            Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
+            Memory.WriteUShort(toanStatusTimer, 3600);
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
+                   Player.InDungeonFloor())
             {
-                Thread.Sleep(500);
-                for (int i = 0; i < 15; i++)
+                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+                if (currentFloor != lastFloor)
                 {
-                    if (Memory.ReadByte(0x21E16BC8 + (i * 0x190)) == 8)
+                    // New floor: clear penalty and reapply curse
+                    penalized = false;
+                    lastFloor = currentFloor;
+                    cur = Memory.ReadUShort(toanStatus);
+                    Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
+                    Memory.WriteUShort(toanStatusTimer, 3600);
+                }
+
+                if (!penalized)
+                {
+                    cur = Memory.ReadUShort(toanStatus);
+                    if ((cur & 0x20) == 0)
                     {
-                        Memory.WriteUShort(0x21E16C74 + (i * 0x190), 1);
+                        // Curse was removed externally (holy water) — penalize
+                        penalized = true;
+                        Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x10)); // Poison
+                        Memory.WriteUShort(toanStatusTimer, 3600);
+                        Memory.WriteUShort(toanHp, 1);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise: curse broken — poison and HP=1 applied");
+                    }
+                    else
+                    {
+                        // Curse active: strip other statuses and refresh timer
+                        Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
+                        Memory.WriteUShort(toanStatusTimer, 3600);
                     }
                 }
 
-                for (int i = 0; i < 20; i++)
+                Thread.Sleep(100);
+            }
+
+            // Strip curse on unequip or dungeon exit
+            ushort final = Memory.ReadUShort(toanStatus);
+            Memory.WriteUShort(toanStatus, (ushort)(final & ~0x20));
+        }
+
+        /// <summary>
+        /// Heaven's Cloud effect: 50% chance on hit to inflict gooey on the struck enemy.
+        /// </summary>
+        public static void HeavensCloud()
+        {
+            while (Player.Weapon.GetCurrentWeaponId() == Items.heavenscloud &&
+                   Player.InDungeonFloor())
+            {
+                int[] formerHp = ReusableFunctions.GetEnemiesHp();
+                Thread.Sleep(50);
+                int[] currentHp = ReusableFunctions.GetEnemiesHp();
+
+                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.ToanId)
                 {
-                    if (Memory.ReadUShort(0x21DD0360 + (i * 0x40)) < 40)
+                    for (int i = 0; i < 15; i++)
                     {
-                        Memory.WriteByte(0x21DD0380 + (i * 0x40), 0);
+                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
+                        {
+                            if (random.Next(100) < 50)
+                            {
+                                Memory.WriteUShort(Enemies.Enemy0.gooeyState + (Enemies.offset * i), 1);
+                            }
+                        }
                     }
                 }
 
-                evilciseNewFloor = false;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise effect activated!");
+                ReusableFunctions.ClearRecentDamageAndDamageSource();
             }
         }
 
@@ -1111,5 +1177,6 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
         }
+
     }
 }

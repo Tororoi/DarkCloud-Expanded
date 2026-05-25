@@ -3343,8 +3343,14 @@ namespace Dark_Cloud_Improved_Version
                 //Macho Sword
                 Memory.WriteByte((effect2 + (weaponoffset * (Items.machosword - daggerid))), 32);  //Adds ABS up effect
 
+                //Evilcise
+                Memory.WriteByte((effect + (weaponoffset * (Items.evilcise - daggerid))), 4);    //Poor (100%)
+
                 //Heaven's Cloud
                 Memory.WriteUShort((synth3 + (weaponoffset * (Items.heavenscloud - daggerid))), 1);    //Adds a 3rd regular attachment slot
+                Memory.WriteUShort((buildup + (weaponoffset * (Items.heavenscloud - daggerid))), 0);   //No buildup paths (final form)
+                Memory.WriteUShort((maxattack + (weaponoffset * (Items.heavenscloud - daggerid))), 180); //Max attack set to 180
+                Memory.WriteUShort((maxmagic  + (weaponoffset * (Items.heavenscloud - daggerid))), 180); //Max magic set to 180
 
                 //Lamb's Sword
                 Memory.WriteUShort((synth3 + (weaponoffset * (Items.lambsswordnormal - daggerid))), 1);    //Adds a 3rd regular attachment slot
@@ -3555,7 +3561,12 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteUShort((maxattack + (osmondoffset + (weaponoffset * (osmondweaponid - machinegunid)))), (ushort)(CurrWeaponMaxAttack + 15)); //Adds +15 Max Attack to the current weapon being looped through
                 }
 
-                Memory.WriteUShort((buildup + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 386);    //Add the Hexa Blaster buildup option
+                Memory.WriteUShort((buildup + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 0);       //No buildup paths (final form)
+
+                Memory.WriteUShort((maxattack + (osmondoffset + (weaponoffset * (Items.blessinggun - machinegunid)))), 87);   //Blessing Gun max attack set to 87
+                Memory.WriteUShort((maxmagic  + (osmondoffset + (weaponoffset * (Items.blessinggun - machinegunid)))), 80);   //Blessing Gun max magic set to 80
+                Memory.WriteUShort((maxattack + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 143);        //Skunk max attack set to 143
+                Memory.WriteUShort((maxmagic  + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 105);         //Skunk max magic set to 105
 
 
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished applying new weapon changes!");

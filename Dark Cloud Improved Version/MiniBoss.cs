@@ -219,6 +219,7 @@ namespace Dark_Cloud_Improved_Version
             const int weaponOffset     = 0xF8;
             const int attackOffset     = 0x04;
             const int enduranceOffset  = 0x06;
+            const int speedOffset      = 0x08;
             const int magicOffset      = 0x0A;
             const int whpMaxOffset     = 0x0C;
             const int whpOffset        = 0x10;
@@ -277,6 +278,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         if (pendingBoost.Attack > 0)     Memory.WriteUShort(slotBase + attackOffset,    pendingBoost.Attack);
                         if (pendingBoost.Endurance > 0)  Memory.WriteUShort(slotBase + enduranceOffset, pendingBoost.Endurance);
+                        if (pendingBoost.Speed > 0)      Memory.WriteUShort(slotBase + speedOffset,     pendingBoost.Speed);
                         if (pendingBoost.Magic > 0)      Memory.WriteUShort(slotBase + magicOffset,     pendingBoost.Magic);
                         if (pendingBoost.Whp > 0)      { Memory.WriteUShort(slotBase + whpMaxOffset,    pendingBoost.Whp); Memory.WriteUShort(slotBase + whpOffset, pendingBoost.Whp); }
                         if (pendingBoost.Fire > 0)       Memory.WriteByte(slotBase + fireOffset,        pendingBoost.Fire);
@@ -299,6 +301,7 @@ namespace Dark_Cloud_Improved_Version
                             $"Weapon boost applied to bag slot {i}:" +
                             (pendingBoost.Attack > 0     ? $" atk={pendingBoost.Attack}"              : "") +
                             (pendingBoost.Endurance > 0  ? $" end={pendingBoost.Endurance}"           : "") +
+                            (pendingBoost.Speed > 0      ? $" spd={pendingBoost.Speed}"               : "") +
                             (pendingBoost.Magic > 0      ? $" mp={pendingBoost.Magic}"                : "") +
                             (pendingBoost.Whp > 0        ? $" whp={pendingBoost.Whp}"                 : "") +
                             (pendingBoost.Fire > 0       ? $" fire={pendingBoost.Fire}"               : "") +
