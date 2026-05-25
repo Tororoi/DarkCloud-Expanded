@@ -26,7 +26,7 @@ namespace Dark_Cloud_Improved_Version
         static byte checkByte;
         static byte[] townDialogueIDs = { 247, 167, 87, 27, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 0, 0, 240, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 101, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         static byte[] fishArray = new byte[5];
-        
+
         static string cfgFile;
         static string chrFilePath;
         static string currentCharacter = "chara/c01d.chr";
@@ -70,7 +70,8 @@ namespace Dark_Cloud_Improved_Version
         public static bool fishingQuestDeviaActive = false;
         public static bool hasMardanSword = false;
         public static float mardanMultiplier;
-        
+        public static int mardanSwordId = 0; // 278=Eins, 279=Twei, 280=Arise
+        private static readonly Random fishingRandom = new Random();
         public static int onDialogueFlag = 0;
         public static int sidequestonDialogueFlag = 0;
         public static int itsfinishedonDialogueFlag = 0;
@@ -206,11 +207,11 @@ namespace Dark_Cloud_Improved_Version
             {
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)
-                {                   
+                {
 
                     if (Memory.ReadByte(Addresses.mode) == 0x2 && Memory.ReadByte(Addresses.selectedMenu) == 0x3) //check if player entered allies menu in the overworld
                     {
-                        
+
                         if (Memory.ReadInt(0x202A28F4) == 0)    //set currentCharacter variable after cycling through allies
                         {
                             currentCharacter = chrFilePath;
@@ -230,7 +231,7 @@ namespace Dark_Cloud_Improved_Version
                                 Memory.WriteByte(currentAddress, 0);
                                 currentAddress += 0x00000001;
                             }
-     
+
 
                             switch (charNumber) //gets character file path based on selected ally
                             {
@@ -891,6 +892,7 @@ namespace Dark_Cloud_Improved_Version
                         }
 
                         Thread.Sleep(350);
+
                         if (Memory.ReadByte(0x21D2DA4C) < 61) //sometimes when teleporting from yellow drops or dark heaven, the area might turn dark. This part tries to prevent it
                         {
                             int timerCheck = 0;
@@ -957,7 +959,7 @@ namespace Dark_Cloud_Improved_Version
                     }
 
                     Dungeon.CheckWepLvlUp(); //check if player is upgrading a weapon
-                    
+
                     DemonShaftUnlockCheck(); //prevents players from accessing post-game dungeon before completing the base game
 
                     //Check if player is inside the weapon customize menu
@@ -1066,7 +1068,7 @@ namespace Dark_Cloud_Improved_Version
                 if (currentArea == 0)
                 {
                     Memory.WriteOneByte(0x2041BF4E, BitConverter.GetBytes(1)); //disable fishing
-                    Dialogues.SetFishingDisabledDialogue(currentArea);               
+                    Dialogues.SetFishingDisabledDialogue(currentArea);
                 }
                 else if (currentArea == 1)
                 {
@@ -1084,14 +1086,14 @@ namespace Dark_Cloud_Improved_Version
                 {
                     Memory.WriteOneByte(0x20421A8A, BitConverter.GetBytes(1)); //disable fishing
                     Dialogues.SetFishingDisabledDialogue(currentArea);
-                }              
+                }
             }
         }
 
         public static void CheckSideQuestDialogue()
         {
             sidequestOptionFlag = false;
-            
+
             if (characterIDData == 12592) //macho sidequest
             {
                 if (Memory.ReadByte(0x21CE4474) == 1)
@@ -1347,7 +1349,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteByte(0x21CE445D, 2);
                         Memory.WriteByte(0x21CE4459, 2);
                         Memory.WriteUShort(Addresses.firstBagItem + (0x2 * Player.Inventory.GetBagItemsFirstAvailableSlot()), 234);
-                    }                 
+                    }
                 }
                 if (Memory.ReadByte(0x21D26FD4) == 1)
                 {
@@ -1480,7 +1482,7 @@ namespace Dark_Cloud_Improved_Version
                                         fishingQuestPikeActive = false;
                                     }
                                 }
-                            }                        
+                            }
                         }
 
                         currentAddress += 0x00002410;
@@ -1500,13 +1502,16 @@ namespace Dark_Cloud_Improved_Version
                         fishCaught[i] = false;
                     }
 
+                    if (mardanSwordId == Items.mardaneins)
+                        RollGarayanBonus(0x214D9910, 5);
+
                     if (Memory.ReadByte(0x21CE441E) == 1)
                     {
                         fishingQuestPaoActive = true;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Currently on Paos quest");
 
                         minFishSize = Memory.ReadByte(0x21CE4423);
-                        maxFishSize = Memory.ReadByte(0x21CE4424);                    
+                        maxFishSize = Memory.ReadByte(0x21CE4424);
                     }
                     if (hasMardanSword)
                     {
@@ -1613,7 +1618,7 @@ namespace Dark_Cloud_Improved_Version
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Currently on Sams quest");
 
                         minFishSize = Memory.ReadByte(0x21CE442C);
-                        maxFishSize = Memory.ReadByte(0x21CE442D);                      
+                        maxFishSize = Memory.ReadByte(0x21CE442D);
                     }
                     if (hasMardanSword)
                     {
@@ -1731,13 +1736,16 @@ namespace Dark_Cloud_Improved_Version
                         fishCaught[i] = false;
                     }
 
+                    if (mardanSwordId == Items.mardaneins)
+                        RollGarayanBonus(0x213C3150, 4);
+
                     if (Memory.ReadByte(0x21CE4431) == 1)
                     {
                         fishingQuestDeviaActive = true;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Currently on Devias quest");
 
                         minFishSize = Memory.ReadByte(0x21CE4436);
-                        maxFishSize = Memory.ReadByte(0x21CE4437);                      
+                        maxFishSize = Memory.ReadByte(0x21CE4437);
                     }
                     if (hasMardanSword)
                     {
@@ -1838,32 +1846,74 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteByte(fishflag, 1);
         }
 
+        // Mardan Eins bonus: each non-Garayan slot gets a second independent roll using the
+        // same native spawn rates, effectively doubling the chance a Garayan appears.
+        private static void RollGarayanBonus(int areaBase, int slotCount)
+        {
+            float tod = Memory.ReadFloat(Addresses.timeofDayWrite);
+            int pct;
+            if      (tod >= 2.5f && tod < 5.5f)  pct = 5; // Dusk
+            else if (tod >= 5.5f && tod < 8.5f)  pct = 3; // Night
+            else if (tod >= 8.5f && tod < 11.5f) pct = 4; // Morning
+            else                                  pct = 2; // Afternoon
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                if (fishArray[i] == 5 || fishArray[i] == 17) continue;
+                if (fishingRandom.Next(100) < pct)
+                {
+                    byte newId = (byte)(fishingRandom.Next(100) < 80 ? 5 : 17);
+                    fishArray[i] = newId;
+                    Memory.WriteByte(areaBase + (0x2410 * i), newId);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[GarayanBonus] reroll hit slot={i} id={newId} tod={tod:F2}");
+                }
+            }
+        }
+
         public static void CheckMardanSword()
         {
-            int slot = Player.Toan.GetWeaponSlot();
-            int currentwepID = Memory.ReadUShort(0x21CDDA58 + (slot * 0xF8));
+            int foundId = 0;
 
-            if (currentwepID == 278)
+            for (int i = 0; i < 10 && foundId == 0; i++)
             {
-                hasMardanSword = true;
-                mardanMultiplier = 1.2f;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Mardan Eins");
+                int id = Memory.ReadUShort(Addresses.firstBagWeapon + (0xF8 * i));
+                if (id == Items.mardaneins || id == Items.mardantwei || id == Items.arisemardan)
+                    foundId = id;
             }
-            else if (currentwepID == 279)
+
+            for (int i = 0; i < 30 && foundId == 0; i++)
+            {
+                int id = Memory.ReadUShort(Addresses.firstStorageWeapon + (0xF8 * i));
+                if (id == Items.mardaneins || id == Items.mardantwei || id == Items.arisemardan)
+                    foundId = id;
+            }
+
+            if (foundId == Items.arisemardan)
             {
                 hasMardanSword = true;
+                mardanSwordId = Items.arisemardan;
+                mardanMultiplier = 2f;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Arise Mardan");
+            }
+            else if (foundId == Items.mardantwei)
+            {
+                hasMardanSword = true;
+                mardanSwordId = Items.mardantwei;
                 mardanMultiplier = 1.5f;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Mardan Twei");
             }
-            else if (currentwepID == 280)
+            else if (foundId == Items.mardaneins)
             {
                 hasMardanSword = true;
-                mardanMultiplier = 2f;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Arise Mardan");
+                mardanSwordId = Items.mardaneins;
+                mardanMultiplier = 1.2f;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has Mardan Eins");
             }
             else
             {
                 hasMardanSword = false;
+                mardanSwordId = 0;
             }
         }
 
@@ -1886,7 +1936,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     Memory.WriteByte(0x21DA8AD0, 1); //changes the menu to properly save the game
                     playerAtCredits = false;
-                }              
+                }
             }
         }
         public static void DemonShaftUnlockCheck()
@@ -1903,7 +1953,7 @@ namespace Dark_Cloud_Improved_Version
                     if (Memory.ReadByte(0x21CE448B) == 0) //check if game cleared flag not true
                     {
                         Memory.WriteByte(0x21CE70A0, 0);
-                    }                 
+                    }
                 }
             }
         }
