@@ -18,6 +18,13 @@ namespace Dark_Cloud_Improved_Version
         private static Random random = new Random();
         public static Thread damageFadeoutThread = new Thread(new ThreadStart(DamageFadeout));
 
+        private static readonly HashSet<int> FrozenTunaIceEnemies = new()
+        {
+            Enemies.blizzard,   // 65
+            Enemies.sam,        // 85
+            Enemies.gemronice,  // 312
+        };
+
         private static readonly HashSet<int> CactusImmuneNameTags = new()
         {
             Enemies.masterjacket,    // 1
@@ -726,6 +733,70 @@ namespace Dark_Cloud_Improved_Version
             ushort thirstAttackBoost = (ushort)((currentTotalAttack / 100) * (thirstPercentage / 2));
 
             Memory.WriteUShort(0x21EA7594, (ushort)(currentTotalAttack + hpAttackBoost + thirstAttackBoost));
+        }
+
+        /// <summary>
+        /// Frozen Tuna: WHP lost heals Goro's HP (fractional losses accumulate).
+        /// On hit, 20% chance to stop all non-ice enemies and freeze Goro.
+        /// Ice enemies (Blizzard, Sam, Ice Gemron) are immune to the stop proc.
+        /// </summary>
+        public static void FrozenTuna()
+        {
+            float hpAccumulator = 0f;
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.frozentuna && Player.InDungeonFloor())
+            {
+                int[] formerHp = ReusableFunctions.GetEnemiesHp();
+                float whpBefore = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+
+                Thread.Sleep(50);
+
+                int[] currentHp  = ReusableFunctions.GetEnemiesHp();
+                float whpAfter   = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+
+                // WHP lost → heal Goro's HP
+                if (whpAfter < whpBefore)
+                {
+                    hpAccumulator += whpBefore - whpAfter;
+                    if (hpAccumulator >= 1f)
+                    {
+                        int heal = (int)hpAccumulator;
+                        ushort goroHp    = Player.Goro.GetHp();
+                        ushort goroMaxHp = Player.Goro.GetMaxHp();
+                        Player.Goro.SetHp((ushort)Math.Min(goroHp + heal, goroMaxHp));
+                        hpAccumulator -= heal;
+                    }
+                }
+
+                // On-hit 20% stop proc: all non-ice enemies stopped; Goro frozen too
+                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.GoroId)
+                {
+                    bool hitDetected = false;
+                    for (int i = 0; i < 15; i++)
+                    {
+                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
+                        {
+                            hitDetected = true;
+                            break;
+                        }
+                    }
+
+                    if (hitDetected && random.Next(100) < 20)
+                    {
+                        for (int i = 0; i < 15; i++)
+                        {
+                            if (Memory.ReadByte(Enemies.Enemy0.renderStatus + (Enemies.offset * i)) == 2 &&
+                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i))))
+                            {
+                                Memory.WriteUShort(Enemies.Enemy0.freezeTimer + (Enemies.offset * i), 300);
+                            }
+                        }
+                        Player.Goro.SetStatus("freeze", 300);
+                    }
+                }
+
+                ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
         }
 
         /// <summary>

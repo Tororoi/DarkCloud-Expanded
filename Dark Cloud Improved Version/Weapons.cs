@@ -3344,7 +3344,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByte((effect2 + (weaponoffset * (Items.machosword - daggerid))), 32);  //Adds ABS up effect
 
                 //Evilcise
-                Memory.WriteByte((effect + (weaponoffset * (Items.evilcise - daggerid))), 4);    //Poor (100%)
+                Memory.WriteByte((effect + (weaponoffset * (Items.evilcise - daggerid))), 4);    //Poor
 
                 //Aga's Sword
                 Memory.WriteUShort((buildup   + (weaponoffset * (Items.agassword - daggerid))), 0);   //No buildup paths (final form)
@@ -3483,7 +3483,11 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt((buildup + (gorooffset + (weaponoffset * (Items.bigbuckshammer - malletid)))), 8); //Sets build-up branch to Magical Hammer only
 
                 //Frozen Tuna
-                Memory.WriteUShort((whp + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 65); //Whp set to 65
+                Memory.WriteUShort((whp       + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 65);  //Whp set to 65
+                Memory.WriteUShort((buildup   + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 0);   //No buildup paths (final form)
+                Memory.WriteUShort((maxattack + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 100); //Max attack set to 100
+                Memory.WriteUShort((maxmagic  + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 678); //Max MP set to 678
+                Memory.WriteByte  ((effect    + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 64);  //Stop
 
                 //Gaia Hammer
                 Memory.WriteUShort((endurance + (gorooffset + (weaponoffset * (Items.gaiahammer - malletid)))), 25); //Endurance set to 25

@@ -60,6 +60,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
         public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
+        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
         public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
         public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
         public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrath));
@@ -207,6 +208,13 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
                                             tallHammerThread.Start();
+                                        }
+                                        break;
+                                    case Items.frozentuna:
+                                        if (!frozenTunaThread.IsAlive)
+                                        {
+                                            frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
+                                            frozenTunaThread.Start();
                                         }
                                         break;
                                     case Items.inferno:
