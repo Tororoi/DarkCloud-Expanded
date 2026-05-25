@@ -132,6 +132,53 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Wise Owl Sword passive: displays a message when the correct WOF floor key is picked up,
+        /// provided the player owns a Wise Owl Sword anywhere (bag, storage, or equipped).
+        /// </summary>
+        public static void WiseOwlSword()
+        {
+            const int bagItemSlots = 60;
+            ushort[] snapshot = new ushort[bagItemSlots];
+
+            for (int i = 0; i < bagItemSlots; i++)
+                snapshot[i] = Memory.ReadUShort(Addresses.firstBagItem + (2 * i));
+
+            while (Memory.ReadByte(Addresses.checkDungeon) == 1 && Player.InDungeonFloor())
+            {
+                Thread.Sleep(200);
+
+                for (int i = 0; i < bagItemSlots; i++)
+                {
+                    ushort current = Memory.ReadUShort(Addresses.firstBagItem + (2 * i));
+                    if (current != snapshot[i] &&
+                        (current == Items.shinystone || current == Items.redberry || current == Items.pointychestnut))
+                    {
+                        if (PlayerHasWiseOwlSword())
+                            Dayuppy.DisplayMessage("You found Wise Owl's favorite!", 1, 30, 3000);
+                        break;
+                    }
+                    snapshot[i] = current;
+                }
+            }
+        }
+
+        private static bool PlayerHasWiseOwlSword()
+        {
+            if (Player.Weapon.GetCurrentWeaponId() == Items.wiseowlsword)
+                return true;
+
+            for (int i = 0; i < 10; i++)
+                if (Memory.ReadUShort(Addresses.firstBagWeapon + (0xF8 * i)) == Items.wiseowlsword)
+                    return true;
+
+            for (int i = 0; i < 30; i++)
+                if (Memory.ReadUShort(Addresses.firstStorageWeapon + (0xF8 * i)) == Items.wiseowlsword)
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>
         /// Evilcise effect: Toan is cursed while equipped and immune to all other status effects.
         /// Breaking the curse with holy water applies poison and sets HP to 1.
         /// The curse is reapplied on each new floor.

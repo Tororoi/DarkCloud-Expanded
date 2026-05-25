@@ -66,6 +66,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
         public static Thread supernovaThread = new Thread(new ThreadStart(CustomEffects.Supernova));
         public static Thread starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreaker));
+        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSword));
         public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
 
@@ -334,6 +335,11 @@ namespace Dark_Cloud_Improved_Version
                     //Define event and boss floors
                     excludeFloors = GetDungeonEventFloors(currentDungeon);
 
+                    if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
+                    {
+                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSword));
+                        wiseOwlSwordThread.Start();
+                    }
 
                     //Get current Floor
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
