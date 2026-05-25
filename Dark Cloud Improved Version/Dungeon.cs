@@ -59,6 +59,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
+        public static Thread braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
         public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
         public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
         public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
@@ -162,6 +163,16 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
                                             agasSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.braveark:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!braveArkThread.IsAlive)
+                                        {
+                                            braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
+                                            braveArkThread.Start();
                                         }
                                         break;
 

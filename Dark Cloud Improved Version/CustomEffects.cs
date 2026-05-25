@@ -301,6 +301,24 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Brave Ark: resists Freeze, Poison, Curse, and Goo status effects while equipped.
+        /// Clears any of those statuses within the polling interval.
+        /// </summary>
+        public static void BraveArk()
+        {
+            const int toanStatus   = 0x21CDD814;
+            const ushort resistMask = 0x04 | 0x10 | 0x20 | 0x40; // Freeze, Poison, Curse, Goo
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.braveark && Player.InDungeonFloor())
+            {
+                Thread.Sleep(100);
+                ushort status = Memory.ReadUShort(toanStatus);
+                if ((status & resistMask) != 0)
+                    Memory.WriteUShort(toanStatus, (ushort)(status & ~resistMask));
+            }
+        }
+
+        /// <summary>
         /// Triggers SeventhHeaven effect: Whenever an attachment is acquired, another one is given.
         /// </summary>
         public static void SeventhHeaven()
