@@ -324,6 +324,7 @@ namespace Dark_Cloud_Improved_Version
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
                             MiniBoss.miniBossRolled = false;
+                            MiniBoss.CancelPendingBoost();
 
                             //Check if player is not on an event floor and call the Mini Boss
                             if (!excludeFloors.Contains(currentFloor))
