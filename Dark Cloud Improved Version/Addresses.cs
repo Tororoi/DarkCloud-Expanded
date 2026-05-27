@@ -399,9 +399,14 @@
 
         /// <summary>
         /// Address of the lui instruction that sets the fish detection (bite) radius.
-        /// The upper 16 bits of the immediate encode the radius; patch to double it for the range boost.
+        /// Owned by PNACH — do not write here via PINE. Set <see cref="fishRangeBoostFlag"/> instead.
         /// </summary>
         public const int fishDetectionRadiusPatch = 0x20240364;
+        /// <summary>
+        /// Reserved flag byte read by the PNACH conditional: 1 = boosted radius, 0 = normal.
+        /// Write via PINE; PNACH patches <see cref="fishDetectionRadiusPatch"/> in response.
+        /// </summary>
+        public const int fishRangeBoostFlag = 0x21F10038;
 
     }
 }

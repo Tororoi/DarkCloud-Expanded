@@ -10,7 +10,7 @@ patch=1,EE,E1040001,extended,01D90470 //cursor on Xiao
 patch=1,EE,E1010002,extended,21CD9551 //if ally amount < 2
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
 patch=1,EE,E1010001,extended,31CD9551 //if ally amount > 1
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map) 
+patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
 
 patch=1,EE,E1040002,extended,01D90470 //cursor on Goro
 patch=1,EE,E1010003,extended,21CD9551 //if ally amount < 3
@@ -361,7 +361,7 @@ patch=1,EE,21354CA0,extended,FD3FFD46 //text15 le
 patch=1,EE,21354CA4,extended,FD23FF02 //text16  C
 patch=1,EE,21354CA8,extended,FD3FFD42 //text17 he
 patch=1,EE,21354CAC,extended,FD4EFD3B //text18 at
-patch=1,EE,21354CB0,extended,FF01FD4D //text19 s¤
+patch=1,EE,21354CB0,extended,FF01FD4D //text19 sï¿½
 patch=1,EE,E1010002,extended,002A2534 //check current mode
 patch=1,EE,202A287C,extended,00000001 //change current mode
 patch=1,EE,E1020003,extended,002A2534 //check current mode
