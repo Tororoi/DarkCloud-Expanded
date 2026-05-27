@@ -80,6 +80,55 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
    ```
 6. Click **Launch as User** in the mod window
 
+---
+
+## Testing Needed
+
+<details>
+<summary>⚠️ Spoilers — click to expand</summary>
+
+### Platform
+
+- [ ] **Running on Windows** — Launch mod, connect to PCSX2, confirm PINE handshake and basic dungeon loop
+- [ ] **Running on Linux** — Same as above; verify Unix socket path and Flatpak network override if applicable
+
+### Custom Weapon Effects
+
+- [ ] **Evilcise** — Equip in dungeon: curse applies immediately (including from pause menu). Break curse with holy water: verify poison is applied and HP is set to 1. Change floors: verify curse is reapplied. Unequip or leave dungeon: verify curse is stripped
+- [ ] **Heaven's Cloud** — Equip in dungeon: confirm 50% gooey proc triggers on hit and does not affect other weapons
+- [ ] **Aga's Sword** — Equip in dungeon: Toan gains +15 defense. Take hits that would change defense externally: verify boost is re-applied. Unequip: verify +15 is removed
+- [ ] **Brave Ark** — Equip in dungeon: get hit with Freeze, Poison, Curse, or Goo — confirm each is cleared within the polling interval. Stamina (not in resist mask) should still apply
+- [ ] **Frozen Tuna (Goro)** — Equip in dungeon: WHP loss heals Goro HP proportionally. On hit, 20% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc
+- [ ] **Wise Owl Sword** — Own a Wise Owl Sword (bag, storage, or equipped) in Wise Owl Forest: pick up a Shiny Stone, Red Berry, or Pointy Chestnut — confirm "You found Wise Owl's favorite!" message. Test with sword NOT owned: confirm no message
+
+### Miniboss System
+
+- [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 5× the base enemy values (up from 3×)
+- [ ] **Flavor rare drops (5%)** — Each dungeon has per-enemy rare drops; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
+- [ ] **Flavor common drops (30%)** — Verify themed items drop from the correct enemies per dungeon
+- [ ] **Weapon stat boosts on pickup** — When a miniboss drops a boosted weapon (e.g., Gladius in DBC, Frozen Tuna in Moon Sea), pick it up and confirm the preset stats are written to the weapon slot
+- [ ] **Boost monitor cancels on floor change** — Do not pick up the weapon drop; advance to the next floor and confirm no orphaned boost thread is running
+
+### Mardan Sword Rework
+
+- [ ] **Detection from bag/storage** — Place a Mardan sword in bag or storage (not equipped): confirm fishing FP multiplier is still applied
+- [ ] **Multiplier values** — Eins: 1.2×, Twei: 1.5×, Arise: 2× FP gain
+- [ ] **Mardan Eins Garayan bonus** — Own Mardan Eins; confirm a second independent roll for Garayan fish occurs and appears in the log
+- [ ] **No Mardan sword owned** — Confirm FP multiplier is not applied and `hasMardanSword` is false
+
+### Weapon Stat Changes
+
+- [ ] **Bone Slingshot / Hardshooter** — Confirm each has a 50% chance to generate with the Fragile effect on a new game/weapon load
+- [ ] **De Sanga** — Confirm 30% chance to generate with the Drain effect
+- [ ] **Frozen Tuna base stats** — Confirm max attack 100, max MP 678, Stop effect, no buildup paths
+- [ ] **Heaven's Cloud base stats** — Confirm max attack 180, max magic 180, no buildup paths, third attachment slot
+- [ ] **Aga's Sword base stats** — Confirm max attack 190, no buildup paths
+- [ ] **Skunk / Blessing Gun** — Confirm Skunk is a final-form weapon (no buildup) with max attack 143, max magic 105; Blessing Gun max attack 87, max magic 80
+
+</details>
+
+---
+
 ### Troubleshooting
 
 - **"Could not connect to PCSX2 via PINE"** — Make sure PCSX2 is running, PINE is enabled at slot 28011, and a game is loaded before starting the mod.
