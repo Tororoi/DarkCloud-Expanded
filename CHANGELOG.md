@@ -12,7 +12,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 ## Mod Window
 
-- **Quest Tracker** — Added a quest tracker panel to the mod window that displays active fishing quests and their completion state.
+- **Quest Tracker** — Added a quest tracker panel to the mod window that displays active quests and their completion state.
 
 ---
 
