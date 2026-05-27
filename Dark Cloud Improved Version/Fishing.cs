@@ -4,269 +4,12 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    /// <summary>In-game time periods that govern fish spawn weights.</summary>
-    internal enum TimeOfDay { Morning, Afternoon, Dusk, Night }
-
-    /// <summary>
-    /// Known data for a single fish species, mirroring the in-game slot layout.
-    /// Null fields have not yet been confirmed from a slot dump or observed in gameplay.
-    /// </summary>
-    internal struct FishData
-    {
-        internal byte   Id;
-        internal float? Unk004;           // +0x004; null = not yet dumped
-        internal float? Unk008;           // +0x008; null = not yet dumped
-        internal float? MaxSize;          // +0x00C (float; ×10 = display cm); null = unknown
-        internal int?   FpMin;            // +0x010; null = unknown
-        internal int?   FpMax;            // +0x014; null = unknown
-        internal float? EstimatedMinSize;    // observed gameplay minimum (×10 = cm); null = not yet observed
-        // Relative spawn weight per time period. null = unknown; 0.0 = never; equal values = uniform chance.
-        internal float? SpawnWeightMorning;
-        internal float? SpawnWeightAfternoon;
-        internal float? SpawnWeightDusk;
-        internal float? SpawnWeightNight;
-        // Bait affinity table (+0x018–+0x048): 13 floats, 4 bytes each.
-        // null = unknown; 0.0 = never bites; 1.0 = normal
-        internal float? BaitAffEvy;
-        internal float? BaitAffMimi;
-        internal float? BaitAffPrickly;
-        internal float? BaitAffThrobbingCherry;
-        internal float? BaitAffGooeypeach;
-        internal float? BaitAffBombnuts;
-        internal float? BaitAffPoisonousApple;
-        internal float? BaitAffMellowBanana;
-        internal float? BaitAffCarrot;
-        internal float? BaitAffPotatoCake;
-        internal float? BaitAffMinon;
-        internal float? BaitAffBattan;
-        internal float? BaitAffPetitefish;
-    }
-
     /// <summary>
     /// Core fishing mod logic: slot initialization, quest tracking, Mardan sword bonuses,
     /// bait detection, range boost, and diagnostic utilities.
     /// </summary>
     internal static class Fishing
     {
-        /// <summary>
-        /// Fish slot field offsets relative to slot base address. All confirmed via slot dump analysis.
-        /// </summary>
-        internal static class FishSlotOffsets
-        {
-            internal const int Unk004              = 0x004;
-            internal const int Unk008              = 0x008;
-            internal const int MaxSize             = 0x00C;
-            internal const int FpMin               = 0x010;
-            internal const int FpMax               = 0x014;
-            internal const int BaitAffEvy             = 0x018;
-            internal const int BaitAffMimi            = 0x01C;
-            internal const int BaitAffPrickly         = 0x020;
-            internal const int BaitAffThrobbingCherry = 0x024;
-            internal const int BaitAffGooeypeach      = 0x028;
-            internal const int BaitAffBombnuts        = 0x02C;
-            internal const int BaitAffPoisonousApple  = 0x030;
-            internal const int BaitAffMellowBanana    = 0x034;
-            internal const int BaitAffCarrot          = 0x038;
-            internal const int BaitAffPotatoCake      = 0x03C;
-            internal const int BaitAffMinon           = 0x040;
-            internal const int BaitAffBattan          = 0x044;
-            internal const int BaitAffPetitefish      = 0x048;
-            internal const int Size                = 0x060;
-            internal const int ScaleX              = 0x064;
-            internal const int ScaleY              = 0x068;
-            internal const int Heading             = 0x074;
-            internal const int LivePosY            = 0x0B0;
-            internal const int LivePosZ            = 0x0B4;
-            internal const int LivePosX            = 0x0B8;
-        }
-
-        /// <summary>
-        /// Static repository of per-species <see cref="FishData"/> records, keyed by fish ID.
-        /// All confirmed entries are sourced from natural slot dumps with no mod writes active.
-        /// </summary>
-        internal static class FishDatabase
-        {
-            internal static readonly FishData Bobo      = new FishData { Id =  0 };
-            internal static readonly FishData Gobbler   = new FishData
-            {
-                Id = 1,
-                Unk004 = 19.5f, Unk008 = 8.0f, MaxSize = 16.0f, FpMin = 10, FpMax = 30,
-                EstimatedMinSize = 6.6f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 0.5f,
-                BaitAffPrickly         = 0.5f,
-                BaitAffThrobbingCherry = 0.2f,
-                BaitAffGooeypeach      = 0.2f,
-                BaitAffBombnuts        = 0.2f,
-                BaitAffPoisonousApple  = 0.0f,
-                BaitAffMellowBanana    = 0.2f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 0.0f,
-                BaitAffMinon           = 0.5f,
-                BaitAffBattan          = 0.5f,
-                BaitAffPetitefish      = 1.0f,
-            };
-            internal static readonly FishData Nonky = new FishData
-            {
-                Id = 2,
-                Unk004 = 25.5f, Unk008 = 8.0f, MaxSize = 19.0f, FpMin = 8, FpMax = 25,
-                EstimatedMinSize = 4.6f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 0.5f,
-                BaitAffPrickly         = 0.5f,
-                BaitAffThrobbingCherry = 0.2f,
-                BaitAffGooeypeach      = 0.2f,
-                BaitAffBombnuts        = 0.2f,
-                BaitAffPoisonousApple  = 0.0f,
-                BaitAffMellowBanana    = 0.2f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 1.0f,
-                BaitAffMinon           = 0.5f,
-                BaitAffBattan          = 0.5f,
-                BaitAffPetitefish      = 0.0f,
-            };
-            internal static readonly FishData Kaiji     = new FishData { Id =  3 };
-            internal static readonly FishData BakuBaku = new FishData
-            {
-                Id = 4,
-                Unk004 = 28.0f, Unk008 = 8.0f, MaxSize = 16.0f, FpMin = 10, FpMax = 40,
-                EstimatedMinSize = 5.7f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 0.5f,
-                BaitAffPrickly         = 0.5f,
-                BaitAffThrobbingCherry = 0.2f,
-                BaitAffGooeypeach      = 0.2f,
-                BaitAffBombnuts        = 0.2f,
-                BaitAffPoisonousApple  = 0.0f,
-                BaitAffMellowBanana    = 0.2f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 0.0f,
-                BaitAffMinon           = 0.5f,
-                BaitAffBattan          = 0.5f,
-                BaitAffPetitefish      = 1.0f,
-            };
-            internal static readonly FishData MardanGarayan = new FishData
-            {
-                Id = 5,
-                Unk004 = 21.0f, Unk008 = 10.0f, MaxSize = 16.0f, FpMin = 200, FpMax = 400,
-                EstimatedMinSize = 5.0f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 0.0f,
-                BaitAffPrickly         = 0.0f,
-                BaitAffThrobbingCherry = 0.0f,
-                BaitAffGooeypeach      = 0.0f,
-                BaitAffBombnuts        = 0.0f,
-                BaitAffPoisonousApple  = 1.0f,
-                BaitAffMellowBanana    = 0.0f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 0.0f,
-                BaitAffMinon           = 0.0f,
-                BaitAffBattan          = 0.0f,
-                BaitAffPetitefish      = 0.0f,
-            };
-            internal static readonly FishData Gummy = new FishData
-            {
-                Id = 6,
-                Unk004 = 20.0f, Unk008 = 6.0f, MaxSize = 12.0f, FpMin = 15, FpMax = 40,
-                EstimatedMinSize = 4.9f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 1.0f,
-                BaitAffPrickly         = 0.5f,
-                BaitAffThrobbingCherry = 0.2f,
-                BaitAffGooeypeach      = 0.2f,
-                BaitAffBombnuts        = 0.2f,
-                BaitAffPoisonousApple  = 0.0f,
-                BaitAffMellowBanana    = 0.2f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 0.5f,
-                BaitAffMinon           = 0.5f,
-                BaitAffBattan          = 0.5f,
-                BaitAffPetitefish      = 0.0f,
-            };
-            internal static readonly FishData Niler = new FishData
-            {
-                Id = 7,
-                Unk004 = 20.0f, Unk008 = 6.0f, MaxSize = 10.0f, FpMin = 20, FpMax = 50,
-                EstimatedMinSize = 5.3f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 0.5f,
-                BaitAffPrickly         = 1.0f,
-                BaitAffThrobbingCherry = 0.2f,
-                BaitAffGooeypeach      = 0.2f,
-                BaitAffBombnuts        = 0.2f,
-                BaitAffPoisonousApple  = 0.0f,
-                BaitAffMellowBanana    = 0.2f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 0.5f,
-                BaitAffMinon           = 0.5f,
-                BaitAffBattan          = 0.5f,
-                BaitAffPetitefish      = 0.0f,
-            };
-            internal static readonly FishData Umadakara = new FishData { Id =  9 };
-            internal static readonly FishData Tarton    = new FishData { Id = 10 };
-            internal static readonly FishData Piccoly   = new FishData { Id = 11 };
-            internal static readonly FishData Bon       = new FishData { Id = 12 };
-            internal static readonly FishData Hamahama  = new FishData { Id = 13 };
-            internal static readonly FishData Negie     = new FishData { Id = 14 };
-            internal static readonly FishData Den       = new FishData { Id = 15 };
-            internal static readonly FishData Heela     = new FishData { Id = 16 };
-            internal static readonly FishData BaronGarayan = new FishData
-            {
-                Id = 17,
-                Unk004 = 21.0f, Unk008 = 10.0f, MaxSize = 30.0f, FpMin = 600, FpMax = 1000,
-                EstimatedMinSize = 5.0f,
-                BaitAffEvy             = 0.0f,
-                BaitAffMimi            = 0.0f,
-                BaitAffPrickly         = 0.0f,
-                BaitAffThrobbingCherry = 0.0f,
-                BaitAffGooeypeach      = 0.0f,
-                BaitAffBombnuts        = 0.0f,
-                BaitAffPoisonousApple  = 0.0f,
-                BaitAffMellowBanana    = 0.0f,
-                BaitAffCarrot          = 0.0f,
-                BaitAffPotatoCake      = 0.5f,
-                BaitAffMinon           = 0.0f,
-                BaitAffBattan          = 0.0f,
-                BaitAffPetitefish      = 0.0f,
-            };
-
-            // Dynamic lookup by fish ID — built from each entry's Id field so no hardcoded keys.
-            private static readonly Dictionary<byte, FishData> ById;
-            static FishDatabase()
-            {
-                FishData[] allFish = {
-                    Bobo, Gobbler, Nonky, Kaiji, BakuBaku, Gummy, Niler,
-                    Umadakara, Tarton, Piccoly, Bon, Hamahama, Negie, Den, Heela,
-                    MardanGarayan, BaronGarayan,
-                };
-                ById = new Dictionary<byte, FishData>(allFish.Length);
-                foreach (FishData fish in allFish) ById[fish.Id] = fish;
-            }
-
-            /// <summary>
-            /// Looks up a fish by its numeric ID. Returns false if the species has no confirmed data entry.
-            /// </summary>
-            internal static bool TryGetValue(byte id, out FishData data) => ById.TryGetValue(id, out data);
-        }
-
-        private static readonly string[] FishNames =
-        {
-            "Bobo", "Gobbler", "Nonky", "Kaiji", "Baku Baku",
-            "Mardan Garayan", "Gummy", "Niler", "NULL", "Umadakara",
-            "Tarton", "Piccoly", "Bon", "Hamahama", "Negie", "Den", "Heela", "Baron Garayan"
-        };
-        /// <summary>Returns the display name for a fish ID, or <c>"Unknown(N)"</c> if the ID is out of range.</summary>
-        internal static string GetFishName(byte id) =>
-            id < FishNames.Length ? FishNames[id] : $"Unknown({id})";
-
         /// <summary>
         /// Returns the display name for a bait item ID, or <c>"Unknown(N)"</c> if the ID is unrecognised.
         /// </summary>
@@ -288,54 +31,6 @@ namespace Dark_Cloud_Improved_Version
             _                     => $"Unknown({id})",
         };
 
-        /// <summary>
-        /// Per-area fishing configuration. <c>QuestBase</c> byte layout:
-        /// +0 state (0=none, 1=active, 2=complete), +1 type (0=count fish, 1=size range),
-        /// +3 target fish ID, +4 count remaining, +5 min size, +6 max size.
-        /// </summary>
-        private struct AreaFishData
-        {
-            internal int      SlotBase;
-            internal int      SlotCount;
-            internal int      QuestBase;       // base of this NPC's quest block in mod memory
-            internal string   GiverName;
-            internal int      QuestsDoneAddr;  // Sam only: multi-quest counter (0 = not present)
-            internal int      PostLoopSrc;     // Sam only: queens-quest trigger src (0 = not present)
-            internal int      PostLoopDst;     // Sam only: queens-quest trigger dst
-            internal byte[]   FishIds;           // naturally-spawning fish IDs; null = not yet catalogued
-        }
-
-        // Keyed by area ID. Add an entry here to support a new fishing area.
-        private static readonly Dictionary<int, AreaFishData> AreaData = new Dictionary<int, AreaFishData>
-        {
-            [0] = new AreaFishData
-            {
-                SlotBase = Addresses.fishSlotBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
-                FishIds = new byte[]
-                {
-                    FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
-                },
-            },
-            [1] = new AreaFishData
-            {
-                SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
-                FishIds = new byte[]
-                {
-                    FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
-                    FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
-                },
-            },
-            [19] = new AreaFishData
-            {
-                SlotBase = Addresses.fishSlotBase_Area19, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
-                QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
-            },
-            [3] = new AreaFishData
-            {
-                SlotBase = Addresses.fishSlotBase_Area3, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
-            },
-        };
-
         internal static readonly Random Rng = new Random();
         internal static byte[] fishArray = new byte[5];
         private static ushort[] _bagSnapshot = null;
@@ -354,7 +49,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Dictionary<int, bool> questActive = new Dictionary<int, bool>();
         private static int minFishSize = 0;
         private static DateTime _lastSlotPollTime = DateTime.MinValue;
-        private static readonly DateTime[] _lastSteerTime = new DateTime[5];
+        private static readonly DateTime[] _lastSteerTime        = new DateTime[5];
+        private static readonly DateTime[] _lastMatatakiSteerTime = new DateTime[5];
         private static int maxFishSize = 0;
 
         /// <summary>
@@ -384,9 +80,9 @@ namespace Dark_Cloud_Improved_Version
         /// <see cref="CheckFishingQuest"/>.
         /// </summary>
         /// <param name="area">Area ID used to look up the <see cref="AreaFishData"/> configuration.</param>
-        public static void InitFishingSession(int area)
+        public static void InitFishingSession(int areaId)
         {
-            if (!AreaData.TryGetValue(area, out AreaFishData areaData)) return;
+            if (!FishingAreaDatabase.TryGetValue(areaId, out AreaFishData areaData)) return;
             if (!fishingQuestCheck)
             {
                 int slotAddr = areaData.SlotBase;
@@ -404,11 +100,14 @@ namespace Dark_Cloud_Improved_Version
                     minFishSize = Memory.ReadByte(areaData.QuestBase + 5);
                     maxFishSize = Memory.ReadByte(areaData.QuestBase + 6);
                 }
+                // Mardan Twei ability: reroll slots to spawn additional Mardan or Baron Garayan with the native chances.
                 if (mardanSwordId == Items.mardantwei || mardanSwordId == Items.arisemardan)
                     RollFishSlots(areaData.SlotBase, areaData.SlotCount, FishDatabase.MardanGarayan.Id, 0.2f);
+                // Apply the Mardan sword FP boost to all non-Garayan fish in the area. Must be done after rolling so bonus applies to new spawns.
                 ApplyMardanBonus(areaData.SlotBase, areaData.SlotCount);
                 // GiveBaitForTesting();
-                LogFishSession(area, areaData.SlotBase, areaData.SlotCount);
+                LogFishSession(areaId, areaData.SlotBase, areaData.SlotCount);
+                // Arise Mardan ability: scale fish sizes up to set scale factor, with curve based on the fish's original size. Must be done after all rolling and bonuses so the boost is applied to final sizes.
                 if (mardanSwordId == Items.arisemardan)
                     ScaleFishSizes(areaData.SlotBase, areaData.SlotCount);
                 fishingQuestCheck = true;
@@ -541,8 +240,8 @@ namespace Dark_Cloud_Improved_Version
                     WriteSlotData(slotStart, newId, fishData);
                     float size = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[RollFishSlots] slot={slotIndex} {GetFishName(originalId)} (id={originalId}) " +
-                        $"→ {GetFishName(newId)} (id={newId}) " +
+                        $"[RollFishSlots] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) " +
+                        $"→ {FishDatabase.GetName(newId)} (id={newId}) " +
                         $"size={size:F4} ({(int)(size*10)}cm) tod={timeOfDay:F2}");
                 }
             }
@@ -551,7 +250,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Doubles the size and scale of every fish slot in the area. Logs original vs scaled values per slot.
         /// </summary>
-        private const float SizeScaleFactor  = 2f;
+        private const float SizeScaleFactor       = 2f;
         private const float SizeScaleFloorDefault = 5.0f;
 
         internal static void ScaleFishSizes(int slotBase, int slotCount)
@@ -583,7 +282,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleY,
                     Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleY) * scaleRatio);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SizeScale] slot={slotIndex} {GetFishName(fishId)} " +
+                    $"[SizeScale] slot={slotIndex} {FishDatabase.GetName(fishId)} " +
                     $"floor={floor:F1} max={maxSize:F1} orig={originalSize:F4} scaled={scaledSize:F4} " +
                     $"({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
             }
@@ -710,7 +409,7 @@ namespace Dark_Cloud_Improved_Version
                 int   fpMin    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMin);
                 int   fpMax    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMax);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[FishInfo] area={areaId} slot={slotIndex} {GetFishName(fishId)} (id={fishId}) " +
+                    $"[FishInfo] area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) " +
                     $"unk004={unk004:F1} unk008={unk008:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +
                     $"size={size:F4} ({(int)(size*10)}cm) fp={fpMin}-{fpMax} tod={currentTod}");
                 // bait affinity table — values are bite-likelihood weights (0.0=never, 1.0=normal)
@@ -728,7 +427,7 @@ namespace Dark_Cloud_Improved_Version
                 float affBattan   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBattan);
                 float affPetite   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPetitefish);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[BaitAff]  area={areaId} slot={slotIndex} {GetFishName(fishId)} " +
+                    $"[BaitAff]  area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} " +
                     $"Evy={affEvy:F2} Mimi={affMimi:F2} Prickly={affPrickly:F2} " +
                     $"Cherry={affCherry:F2} Peach={affPeach:F2} " +
                     $"Bomb={affBombnuts:F2} Poison={affPoison:F2} Banana={affBanana:F2} Carrot={affCarrot:F2} " +
@@ -752,7 +451,7 @@ namespace Dark_Cloud_Improved_Version
                 byte originalId = Memory.ReadByte(slotStart);
                 Memory.WriteByte(slotStart, 0xFF);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Despawn] slot={slotIndex} {GetFishName(originalId)} (id={originalId}) cleared");
+                    $"[Despawn] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) cleared");
             }
         }
 
@@ -869,7 +568,7 @@ namespace Dark_Cloud_Improved_Version
                 int unk054  = Memory.ReadInt(s + 0x054);
                 int unk058  = Memory.ReadInt(s + 0x058);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SlotWatch] slot={slotIndex} {GetFishName(fishId)} " +
+                    $"[SlotWatch] slot={slotIndex} {FishDatabase.GetName(fishId)} " +
                     $"hdg={hdg:F3} spd={spd:F3} curVel={curVel:F3} " +
                     $"pos=({posX:F1},{posY:F2},{posZ:F1}) fishPos=({fishPosX:F1},{fishPosY:F1},{fishPosZ:F1}) " +
                     $"b150={b150:F2} b154={b154:F2} b158={b158:F2} " +
@@ -884,6 +583,35 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void SteerFishToPlayer(AreaFishData areaData)
         {
+            bool isMatataki = areaData.Id == FishingAreaDatabase.MatatakiWaterfall.Id;
+            if (!hasMardanSword && !isMatataki) return;
+
+            float playerX = Memory.ReadFloat(Addresses.positionX);
+            float playerY = Memory.ReadFloat(Addresses.positionY);
+
+            // Rebalance Matataki Waterfall fishing so fish are nudged toward the player without being perfectly locked on, which would feel unnatural and reduce challenge.
+            if (isMatataki)
+            {
+                for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
+                {
+                    if ((DateTime.UtcNow - _lastMatatakiSteerTime[slotIndex]).TotalSeconds < 11.0) continue;
+                    _lastMatatakiSteerTime[slotIndex] = DateTime.UtcNow;
+
+                    int s = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                    float fishX = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
+                    float fishY = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
+                    float dx = playerX - fishX;
+                    float dy = playerY - fishY;
+                    if (dx == 0f && dy == 0f) continue;
+
+                    float angle = (float)Math.Atan2(dy, dx);
+                    Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[Steer/Matataki] slot={slotIndex} fish={fishArray[slotIndex]} angle={angle:F2}");
+                }
+            }
+
+            // Mardan Eins ability: steer certain fish toward the player with a frequency based on bait affinity.
             if (!hasMardanSword) return;
 
             double baseSecs = mardanSwordId switch
@@ -895,9 +623,6 @@ namespace Dark_Cloud_Improved_Version
 
             int baitId     = GetCurrentBaitId();
             int baitOffset = BaitIdToOffset(baitId);
-
-            float playerX = Memory.ReadFloat(Addresses.positionX);
-            float playerY = Memory.ReadFloat(Addresses.positionY);
 
             for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
             {
@@ -924,7 +649,7 @@ namespace Dark_Cloud_Improved_Version
                 float angle = (float)Math.Atan2(dy, dx);
                 Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Steer] slot={slotIndex} fish={fishId} " +
+                    $"[Steer/Mardan] slot={slotIndex} fish={fishId} " +
                     $"aff={affinity:F2} interval={interval:F1}s angle={angle:F2}");
             }
         }
@@ -962,7 +687,7 @@ namespace Dark_Cloud_Improved_Version
                 int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
                 byte fishId = Memory.ReadByte(slotStart);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SlotDump] slot={slotIndex} {GetFishName(fishId)} (id={fishId}) base=0x{slotStart:X8}");
+                    $"[SlotDump] slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) base=0x{slotStart:X8}");
                 for (int offset = 0; offset < 0x200; offset += 4)
                 {
                     int rawValue   = Memory.ReadInt(slotStart + offset);
@@ -1065,7 +790,7 @@ namespace Dark_Cloud_Improved_Version
                     fishCaught[slotIndex] = true;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} " +
-                        $"({GetFishName(fishArray[slotIndex])})");
+                        $"({FishDatabase.GetName(fishArray[slotIndex])})");
                     FishAcquiredFlag(fishArray[slotIndex]);
                     if (isQuestActive)
                     {
