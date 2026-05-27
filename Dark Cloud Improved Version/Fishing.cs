@@ -368,7 +368,6 @@ namespace Dark_Cloud_Improved_Version
                 LogFishSession(area, areaData.SlotBase, areaData.SlotCount);
                 if (mardanSwordId == Items.arisemardan)
                     ScaleFishSizes(areaData.SlotBase, areaData.SlotCount);
-                ScaleFishSizes(areaData.SlotBase, areaData.SlotCount);
                 fishingQuestCheck = true;
             }
             CheckFishingQuest(areaData);
@@ -482,20 +481,37 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Doubles the size and scale of every fish slot in the area. Logs original vs scaled values per slot.</summary>
+        private const float SizeScaleFactor  = 2f;
+        private const float SizeScaleFloorDefault = 5.0f;
+
         internal static void ScaleFishSizes(int slotBase, int slotCount)
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
+                byte fishId = Memory.ReadByte(slotStart);
                 float originalSize = Memory.ReadFloat(slotStart + OffsetSize);
-                float scaledSize   = originalSize * 2.0f;
-                Memory.WriteFloat(slotStart + OffsetSize,   scaledSize);
+                if (originalSize <= 0f) continue;
+
+                float floor   = FishDatabase.TryGetValue(fishId, out FishData fishData) && fishData.EstimatedMinSize.HasValue
+                    ? fishData.EstimatedMinSize.Value
+                    : SizeScaleFloorDefault;
+                float maxSize = Memory.ReadFloat(slotStart + OffsetMaxSize);
+                float range   = maxSize - floor;
+
+                // Multiplier scales from 1× at the floor up to SizeScaleFactor× at max size.
+                // Fish that rolled small get almost no boost; only near-max rolls approach the full factor.
+                float t          = range > 0f ? Math.Max(0f, originalSize - floor) / range : 0f;
+                float multiplier = 1f + (SizeScaleFactor - 1f) * t * t;
+                float scaledSize = originalSize * multiplier;
+
                 float scaleRatio = scaledSize / originalSize;
+                Memory.WriteFloat(slotStart + OffsetSize,   scaledSize);
                 Memory.WriteFloat(slotStart + OffsetScaleX, Memory.ReadFloat(slotStart + OffsetScaleX) * scaleRatio);
                 Memory.WriteFloat(slotStart + OffsetScaleY, Memory.ReadFloat(slotStart + OffsetScaleY) * scaleRatio);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SizeScale] slot={slotIndex} {GetFishName(Memory.ReadByte(slotStart))} " +
-                    $"orig={originalSize:F4} scaled={scaledSize:F4} ({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
+                    $"[SizeScale] slot={slotIndex} {GetFishName(fishId)} " +
+                    $"floor={floor:F1} max={maxSize:F1} orig={originalSize:F4} scaled={scaledSize:F4} ({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
             }
         }
 
