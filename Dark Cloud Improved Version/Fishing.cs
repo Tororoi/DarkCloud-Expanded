@@ -48,28 +48,37 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class Fishing
     {
-        // Fish slot field offsets (relative to slot base address). All confirmed via slot dump analysis.
-        internal const int OffsetUnk004              = 0x004;
-        internal const int OffsetUnk008              = 0x008;
-        internal const int OffsetMaxSize             = 0x00C;
-        internal const int OffsetFpMin               = 0x010;
-        internal const int OffsetFpMax               = 0x014;
-        internal const int OffsetBaitEvy             = 0x018;
-        internal const int OffsetBaitMimi            = 0x01C;
-        internal const int OffsetBaitPrickly         = 0x020;
-        internal const int OffsetBaitThrobbingCherry = 0x024;
-        internal const int OffsetBaitGooeypeach      = 0x028;
-        internal const int OffsetBaitBombnuts        = 0x02C;
-        internal const int OffsetBaitPoisonousApple  = 0x030;
-        internal const int OffsetBaitMellowBanana    = 0x034;
-        internal const int OffsetBaitCarrot          = 0x038;
-        internal const int OffsetBaitPotatoCake      = 0x03C;
-        internal const int OffsetBaitMinon           = 0x040;
-        internal const int OffsetBaitBattan          = 0x044;
-        internal const int OffsetBaitPetitefish      = 0x048;
-        internal const int OffsetSize                = 0x060;
-        internal const int OffsetScaleX              = 0x064;
-        internal const int OffsetScaleY              = 0x068;
+        /// <summary>
+        /// Fish slot field offsets relative to slot base address. All confirmed via slot dump analysis.
+        /// </summary>
+        internal static class FishSlotOffsets
+        {
+            internal const int Unk004              = 0x004;
+            internal const int Unk008              = 0x008;
+            internal const int MaxSize             = 0x00C;
+            internal const int FpMin               = 0x010;
+            internal const int FpMax               = 0x014;
+            internal const int BaitAffEvy             = 0x018;
+            internal const int BaitAffMimi            = 0x01C;
+            internal const int BaitAffPrickly         = 0x020;
+            internal const int BaitAffThrobbingCherry = 0x024;
+            internal const int BaitAffGooeypeach      = 0x028;
+            internal const int BaitAffBombnuts        = 0x02C;
+            internal const int BaitAffPoisonousApple  = 0x030;
+            internal const int BaitAffMellowBanana    = 0x034;
+            internal const int BaitAffCarrot          = 0x038;
+            internal const int BaitAffPotatoCake      = 0x03C;
+            internal const int BaitAffMinon           = 0x040;
+            internal const int BaitAffBattan          = 0x044;
+            internal const int BaitAffPetitefish      = 0x048;
+            internal const int Size                = 0x060;
+            internal const int ScaleX              = 0x064;
+            internal const int ScaleY              = 0x068;
+            internal const int Heading             = 0x074;
+            internal const int LivePosY            = 0x0B0;
+            internal const int LivePosZ            = 0x0B4;
+            internal const int LivePosX            = 0x0B8;
+        }
 
         /// <summary>
         /// Static repository of per-species <see cref="FishData"/> records, keyed by fish ID.
@@ -78,12 +87,13 @@ namespace Dark_Cloud_Improved_Version
         internal static class FishDatabase
         {
             internal static readonly FishData Bobo      = new FishData { Id =  0 };
-            internal static readonly FishData Gobbler = new FishData
+            internal static readonly FishData Gobbler   = new FishData
             {
                 Id = 1,
                 Unk004 = 19.5f, Unk008 = 8.0f, MaxSize = 16.0f, FpMin = 10, FpMax = 30,
                 EstimatedMinSize = 6.6f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f, SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
+                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
+                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
                 BaitAffEvy             = 0.0f,
                 BaitAffMimi            = 0.5f,
                 BaitAffPrickly         = 0.5f,
@@ -103,7 +113,8 @@ namespace Dark_Cloud_Improved_Version
                 Id = 2,
                 Unk004 = 25.5f, Unk008 = 8.0f, MaxSize = 19.0f, FpMin = 8, FpMax = 25,
                 EstimatedMinSize = 4.6f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f, SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
+                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
+                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
                 BaitAffEvy             = 0.0f,
                 BaitAffMimi            = 0.5f,
                 BaitAffPrickly         = 0.5f,
@@ -162,7 +173,8 @@ namespace Dark_Cloud_Improved_Version
                 Id = 6,
                 Unk004 = 20.0f, Unk008 = 6.0f, MaxSize = 12.0f, FpMin = 15, FpMax = 40,
                 EstimatedMinSize = 4.9f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f, SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
+                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
+                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
                 BaitAffEvy             = 0.0f,
                 BaitAffMimi            = 1.0f,
                 BaitAffPrickly         = 0.5f,
@@ -182,7 +194,8 @@ namespace Dark_Cloud_Improved_Version
                 Id = 7,
                 Unk004 = 20.0f, Unk008 = 6.0f, MaxSize = 10.0f, FpMin = 20, FpMax = 50,
                 EstimatedMinSize = 5.3f,
-                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f, SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
+                SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
+                SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
                 BaitAffEvy             = 0.0f,
                 BaitAffMimi            = 0.5f,
                 BaitAffPrickly         = 1.0f,
@@ -238,7 +251,9 @@ namespace Dark_Cloud_Improved_Version
                 foreach (FishData fish in allFish) ById[fish.Id] = fish;
             }
 
-            /// <summary>Looks up a fish by its numeric ID. Returns false if the species has no confirmed data entry.</summary>
+            /// <summary>
+            /// Looks up a fish by its numeric ID. Returns false if the species has no confirmed data entry.
+            /// </summary>
             internal static bool TryGetValue(byte id, out FishData data) => ById.TryGetValue(id, out data);
         }
 
@@ -252,10 +267,13 @@ namespace Dark_Cloud_Improved_Version
         internal static string GetFishName(byte id) =>
             id < FishNames.Length ? FishNames[id] : $"Unknown({id})";
 
+        /// <summary>
+        /// Returns the display name for a bait item ID, or <c>"Unknown(N)"</c> if the ID is unrecognised.
+        /// </summary>
         internal static string GetBaitName(int id) => id switch
         {
             Items.throbbingcherry => "ThrobbingCherry",
-            Items.gooeypeach      => "GooeYPeach",
+            Items.gooeypeach      => "GooeyPeach",
             Items.bombnuts        => "BombNuts",
             Items.poisonousapple  => "PoisonousApple",
             Items.mellowbanana    => "MellowBanana",
@@ -284,18 +302,38 @@ namespace Dark_Cloud_Improved_Version
             internal int      QuestsDoneAddr;  // Sam only: multi-quest counter (0 = not present)
             internal int      PostLoopSrc;     // Sam only: queens-quest trigger src (0 = not present)
             internal int      PostLoopDst;     // Sam only: queens-quest trigger dst
-            internal byte[]   FishIds;         // fish IDs that can naturally appear in this area; null = not yet catalogued
+            internal byte[]   FishIds;           // naturally-spawning fish IDs; null = not yet catalogued
         }
 
         // Keyed by area ID. Add an entry here to support a new fishing area.
         private static readonly Dictionary<int, AreaFishData> AreaData = new Dictionary<int, AreaFishData>
         {
-            [0]  = new AreaFishData { SlotBase = Addresses.fishSlotBase_Norune,   SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",  FishIds = new byte[] { FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id } },
-            [1]  = new AreaFishData { SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
-                                      FishIds = new byte[] { FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id, FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id } },
-            [19] = new AreaFishData { SlotBase = Addresses.fishSlotBase_Area19,   SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
-                                      QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0 },
-            [3]  = new AreaFishData { SlotBase = Addresses.fishSlotBase_Area3,    SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia"  },
+            [0] = new AreaFishData
+            {
+                SlotBase = Addresses.fishSlotBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
+                FishIds = new byte[]
+                {
+                    FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
+                },
+            },
+            [1] = new AreaFishData
+            {
+                SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+                FishIds = new byte[]
+                {
+                    FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
+                    FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
+                },
+            },
+            [19] = new AreaFishData
+            {
+                SlotBase = Addresses.fishSlotBase_Area19, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
+                QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
+            },
+            [3] = new AreaFishData
+            {
+                SlotBase = Addresses.fishSlotBase_Area3, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
+            },
         };
 
         internal static readonly Random Rng = new Random();
@@ -319,7 +357,9 @@ namespace Dark_Cloud_Improved_Version
         private static readonly DateTime[] _lastSteerTime = new DateTime[5];
         private static int maxFishSize = 0;
 
-        /// <summary>Called when the player enters a fishing area. Resets quest state and snapshots the bag inventory.</summary>
+        /// <summary>
+        /// Called when the player enters a fishing area. Resets quest state and snapshots the bag inventory.
+        /// </summary>
         internal static void OnSessionStart()
         {
             fishingQuestCheck = false;
@@ -328,7 +368,9 @@ namespace Dark_Cloud_Improved_Version
             CheckMardanSword();
         }
 
-        /// <summary>Resets per-session bait detection state and restores the native detection radius patch if it was boosted.</summary>
+        /// <summary>
+        /// Resets per-session bait detection state and restores the native detection radius patch if it was boosted.
+        /// </summary>
         internal static void ResetSession()
         {
             _bagSnapshot = null;
@@ -357,7 +399,8 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadByte(areaData.QuestBase) == 1)
                 {
                     questActive[areaData.QuestBase] = true;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Currently on {areaData.GiverName}s quest");
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"Currently on {areaData.GiverName}s quest");
                     minFishSize = Memory.ReadByte(areaData.QuestBase + 5);
                     maxFishSize = Memory.ReadByte(areaData.QuestBase + 6);
                 }
@@ -383,10 +426,11 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!hasMardanSword) return;
             Thread.Sleep(300);
-            int addr = slotBase + OffsetFpMin;
+            int addr = slotBase + FishSlotOffsets.FpMin;
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id || fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
+                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
+                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
                 {
                     addr += Addresses.fishSlotStride;
                     continue;
@@ -413,27 +457,47 @@ namespace Dark_Cloud_Improved_Version
             float maxSize = fishData.MaxSize ?? minSize;
             float size = minSize + (float)(Rng.NextDouble() * Math.Max(0, maxSize - minSize));
             Memory.WriteByte(slotStart, fishId);
-            if (fishData.Unk004.HasValue)                 Memory.WriteFloat(slotStart + OffsetUnk004,              fishData.Unk004.Value);
-            if (fishData.Unk008.HasValue)                 Memory.WriteFloat(slotStart + OffsetUnk008,              fishData.Unk008.Value);
-            if (fishData.MaxSize.HasValue)                Memory.WriteFloat(slotStart + OffsetMaxSize,             fishData.MaxSize.Value);
-            if (fishData.FpMin.HasValue)                  Memory.WriteInt(slotStart + OffsetFpMin,                 fishData.FpMin.Value);
-            if (fishData.FpMax.HasValue)                  Memory.WriteInt(slotStart + OffsetFpMax,                 fishData.FpMax.Value);
-            if (fishData.BaitAffEvy.HasValue)             Memory.WriteFloat(slotStart + OffsetBaitEvy,             fishData.BaitAffEvy.Value);
-            if (fishData.BaitAffMimi.HasValue)            Memory.WriteFloat(slotStart + OffsetBaitMimi,            fishData.BaitAffMimi.Value);
-            if (fishData.BaitAffPrickly.HasValue)         Memory.WriteFloat(slotStart + OffsetBaitPrickly,         fishData.BaitAffPrickly.Value);
-            if (fishData.BaitAffThrobbingCherry.HasValue) Memory.WriteFloat(slotStart + OffsetBaitThrobbingCherry, fishData.BaitAffThrobbingCherry.Value);
-            if (fishData.BaitAffGooeypeach.HasValue)      Memory.WriteFloat(slotStart + OffsetBaitGooeypeach,      fishData.BaitAffGooeypeach.Value);
-            if (fishData.BaitAffBombnuts.HasValue)        Memory.WriteFloat(slotStart + OffsetBaitBombnuts,        fishData.BaitAffBombnuts.Value);
-            if (fishData.BaitAffPoisonousApple.HasValue)  Memory.WriteFloat(slotStart + OffsetBaitPoisonousApple,  fishData.BaitAffPoisonousApple.Value);
-            if (fishData.BaitAffMellowBanana.HasValue)    Memory.WriteFloat(slotStart + OffsetBaitMellowBanana,    fishData.BaitAffMellowBanana.Value);
-            if (fishData.BaitAffCarrot.HasValue)          Memory.WriteFloat(slotStart + OffsetBaitCarrot,          fishData.BaitAffCarrot.Value);
-            if (fishData.BaitAffPotatoCake.HasValue)      Memory.WriteFloat(slotStart + OffsetBaitPotatoCake,      fishData.BaitAffPotatoCake.Value);
-            if (fishData.BaitAffMinon.HasValue)           Memory.WriteFloat(slotStart + OffsetBaitMinon,           fishData.BaitAffMinon.Value);
-            if (fishData.BaitAffBattan.HasValue)          Memory.WriteFloat(slotStart + OffsetBaitBattan,          fishData.BaitAffBattan.Value);
-            if (fishData.BaitAffPetitefish.HasValue)      Memory.WriteFloat(slotStart + OffsetBaitPetitefish,      fishData.BaitAffPetitefish.Value);
-            Memory.WriteFloat(slotStart + OffsetSize,   size);
-            Memory.WriteFloat(slotStart + OffsetScaleX, size * 0.04f);
-            Memory.WriteFloat(slotStart + OffsetScaleY, size * 0.04f);
+            if (fishData.Unk004.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.Unk004, fishData.Unk004.Value);
+            if (fishData.Unk008.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.Unk008, fishData.Unk008.Value);
+            if (fishData.MaxSize.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.MaxSize, fishData.MaxSize.Value);
+            if (fishData.FpMin.HasValue)
+                Memory.WriteInt(slotStart + FishSlotOffsets.FpMin, fishData.FpMin.Value);
+            if (fishData.FpMax.HasValue)
+                Memory.WriteInt(slotStart + FishSlotOffsets.FpMax, fishData.FpMax.Value);
+            if (fishData.BaitAffEvy.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffEvy, fishData.BaitAffEvy.Value);
+            if (fishData.BaitAffMimi.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffMimi, fishData.BaitAffMimi.Value);
+            if (fishData.BaitAffPrickly.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffPrickly, fishData.BaitAffPrickly.Value);
+            if (fishData.BaitAffThrobbingCherry.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffThrobbingCherry,
+                    fishData.BaitAffThrobbingCherry.Value);
+            if (fishData.BaitAffGooeypeach.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffGooeypeach, fishData.BaitAffGooeypeach.Value);
+            if (fishData.BaitAffBombnuts.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffBombnuts, fishData.BaitAffBombnuts.Value);
+            if (fishData.BaitAffPoisonousApple.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffPoisonousApple,
+                    fishData.BaitAffPoisonousApple.Value);
+            if (fishData.BaitAffMellowBanana.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffMellowBanana, fishData.BaitAffMellowBanana.Value);
+            if (fishData.BaitAffCarrot.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffCarrot, fishData.BaitAffCarrot.Value);
+            if (fishData.BaitAffPotatoCake.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffPotatoCake, fishData.BaitAffPotatoCake.Value);
+            if (fishData.BaitAffMinon.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffMinon, fishData.BaitAffMinon.Value);
+            if (fishData.BaitAffBattan.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffBattan, fishData.BaitAffBattan.Value);
+            if (fishData.BaitAffPetitefish.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffPetitefish, fishData.BaitAffPetitefish.Value);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.Size,   size);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleX, size * 0.04f);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleY, size * 0.04f);
         }
 
         /// <summary>
@@ -458,13 +522,15 @@ namespace Dark_Cloud_Improved_Version
 
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id || fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
+                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
+                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
                 // TEST: force reroll on every non-Garayan slot
                 if (Rng.Next(100) < pct)
                 {
                     int slotStart = areaBase + (Addresses.fishSlotStride * slotIndex);
                     byte originalId = Memory.ReadByte(slotStart);
-                    byte newId = (baronChance > 0f && Rng.NextDouble() < baronChance) ? FishDatabase.BaronGarayan.Id : targetFishId;
+                    byte newId = (baronChance > 0f && Rng.NextDouble() < baronChance)
+                        ? FishDatabase.BaronGarayan.Id : targetFishId;
                     if (!FishDatabase.TryGetValue(newId, out FishData fishData))
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -473,14 +539,18 @@ namespace Dark_Cloud_Improved_Version
                     }
                     fishArray[slotIndex] = newId;
                     WriteSlotData(slotStart, newId, fishData);
-                    float size = Memory.ReadFloat(slotStart + OffsetSize);
+                    float size = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[RollFishSlots] slot={slotIndex} {GetFishName(originalId)} (id={originalId}) → {GetFishName(newId)} (id={newId}) size={size:F4} ({(int)(size*10)}cm) tod={timeOfDay:F2}");
+                        $"[RollFishSlots] slot={slotIndex} {GetFishName(originalId)} (id={originalId}) " +
+                        $"→ {GetFishName(newId)} (id={newId}) " +
+                        $"size={size:F4} ({(int)(size*10)}cm) tod={timeOfDay:F2}");
                 }
             }
         }
 
-        /// <summary>Doubles the size and scale of every fish slot in the area. Logs original vs scaled values per slot.</summary>
+        /// <summary>
+        /// Doubles the size and scale of every fish slot in the area. Logs original vs scaled values per slot.
+        /// </summary>
         private const float SizeScaleFactor  = 2f;
         private const float SizeScaleFloorDefault = 5.0f;
 
@@ -490,13 +560,14 @@ namespace Dark_Cloud_Improved_Version
             {
                 int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
                 byte fishId = Memory.ReadByte(slotStart);
-                float originalSize = Memory.ReadFloat(slotStart + OffsetSize);
+                float originalSize = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 if (originalSize <= 0f) continue;
 
-                float floor   = FishDatabase.TryGetValue(fishId, out FishData fishData) && fishData.EstimatedMinSize.HasValue
+                float floor = FishDatabase.TryGetValue(fishId, out FishData fishData) &&
+                    fishData.EstimatedMinSize.HasValue
                     ? fishData.EstimatedMinSize.Value
                     : SizeScaleFloorDefault;
-                float maxSize = Memory.ReadFloat(slotStart + OffsetMaxSize);
+                float maxSize = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
                 float range   = maxSize - floor;
 
                 // Multiplier scales from 1× at the floor up to SizeScaleFactor× at max size.
@@ -506,12 +577,15 @@ namespace Dark_Cloud_Improved_Version
                 float scaledSize = originalSize * multiplier;
 
                 float scaleRatio = scaledSize / originalSize;
-                Memory.WriteFloat(slotStart + OffsetSize,   scaledSize);
-                Memory.WriteFloat(slotStart + OffsetScaleX, Memory.ReadFloat(slotStart + OffsetScaleX) * scaleRatio);
-                Memory.WriteFloat(slotStart + OffsetScaleY, Memory.ReadFloat(slotStart + OffsetScaleY) * scaleRatio);
+                Memory.WriteFloat(slotStart + FishSlotOffsets.Size,   scaledSize);
+                Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleX,
+                    Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleX) * scaleRatio);
+                Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleY,
+                    Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleY) * scaleRatio);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[SizeScale] slot={slotIndex} {GetFishName(fishId)} " +
-                    $"floor={floor:F1} max={maxSize:F1} orig={originalSize:F4} scaled={scaledSize:F4} ({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
+                    $"floor={floor:F1} max={maxSize:F1} orig={originalSize:F4} scaled={scaledSize:F4} " +
+                    $"({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
             }
         }
 
@@ -564,7 +638,9 @@ namespace Dark_Cloud_Improved_Version
             return _cachedBaitId;
         }
 
-        /// <summary>Reads the in-game time float and maps it to the corresponding <see cref="TimeOfDay"/> period.</summary>
+        /// <summary>
+        /// Reads the in-game time float and maps it to the corresponding <see cref="TimeOfDay"/> period.
+        /// </summary>
         private static TimeOfDay GetCurrentTimeOfDay()
         {
             float t = Memory.ReadFloat(Addresses.timeofDayWrite);
@@ -578,17 +654,17 @@ namespace Dark_Cloud_Improved_Version
         /// [TEST] Adds one of every bait type to the bag at session start so all 13 baits are available.
         /// Bait list from wiki — 13 total:
         /// throbbingcherry(166)  Heela, Niler, Den
-        //   gooeypeach(167)       Gummy, Nonky, Niler
-        //   bombnuts(168)         Gobbler, Niler
-        //   poisonousapple(169)   Mardan Garayan
-        //   mellowbanana(170)     Baku Baku
-        //   evy(193)              Bobo, Bon, Kaiji, Piccoly
-        //   mimi(197)             Baku Baku, Gobbler
-        //   minon(188)            Majority
-        //   petitefish(190)       Majority
-        //   prickly(199)          Majority
-        //   battan(189)           Baku Baku, Den, Gobbler, Gummy, Heela, Negie, Niler, Nonky, Tarton
-        //   carrot(186)           Umadakara
+        ///   gooeypeach(167)       Gummy, Nonky, Niler
+        ///   bombnuts(168)         Gobbler, Niler
+        ///   poisonousapple(169)   Mardan Garayan
+        ///   mellowbanana(170)     Baku Baku
+        ///   evy(193)              Bobo, Bon, Kaiji, Piccoly
+        ///   mimi(197)             Baku Baku, Gobbler
+        ///   minon(188)            Majority
+        ///   petitefish(190)       Majority
+        ///   prickly(199)          Majority
+        ///   battan(189)           Baku Baku, Den, Gobbler, Gummy, Heela, Negie, Niler, Nonky, Tarton
+        ///   carrot(186)           Umadakara
         ///   potatocake(187)       Baron Garayan, Den, Niler, Nonky, Tarton
         /// </summary>
         internal static void GiveBaitForTesting()
@@ -627,33 +703,34 @@ namespace Dark_Cloud_Improved_Version
             {
                 int slotStart  = slotBase + slotIndex * Addresses.fishSlotStride;
                 byte fishId    = Memory.ReadByte(slotStart);
-                float unk004   = Memory.ReadFloat(slotStart + OffsetUnk004);
-                float unk008   = Memory.ReadFloat(slotStart + OffsetUnk008);
-                float maxSize  = Memory.ReadFloat(slotStart + OffsetMaxSize);
-                float size     = Memory.ReadFloat(slotStart + OffsetSize);
-                int   fpMin    = Memory.ReadInt(slotStart + OffsetFpMin);
-                int   fpMax    = Memory.ReadInt(slotStart + OffsetFpMax);
+                float unk004   = Memory.ReadFloat(slotStart + FishSlotOffsets.Unk004);
+                float unk008   = Memory.ReadFloat(slotStart + FishSlotOffsets.Unk008);
+                float maxSize  = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
+                float size     = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
+                int   fpMin    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMin);
+                int   fpMax    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMax);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[FishInfo] area={areaId} slot={slotIndex} {GetFishName(fishId)} (id={fishId}) " +
                     $"unk004={unk004:F1} unk008={unk008:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +
                     $"size={size:F4} ({(int)(size*10)}cm) fp={fpMin}-{fpMax} tod={currentTod}");
                 // bait affinity table — values are bite-likelihood weights (0.0=never, 1.0=normal)
-                float affEvy      = Memory.ReadFloat(slotStart + OffsetBaitEvy);
-                float affMimi     = Memory.ReadFloat(slotStart + OffsetBaitMimi);
-                float affPrickly  = Memory.ReadFloat(slotStart + OffsetBaitPrickly);
-                float affCherry   = Memory.ReadFloat(slotStart + OffsetBaitThrobbingCherry);
-                float affPeach    = Memory.ReadFloat(slotStart + OffsetBaitGooeypeach);
-                float affBombnuts = Memory.ReadFloat(slotStart + OffsetBaitBombnuts);
-                float affPoison   = Memory.ReadFloat(slotStart + OffsetBaitPoisonousApple);
-                float affBanana   = Memory.ReadFloat(slotStart + OffsetBaitMellowBanana);
-                float affCarrot   = Memory.ReadFloat(slotStart + OffsetBaitCarrot);
-                float affPotato   = Memory.ReadFloat(slotStart + OffsetBaitPotatoCake);
-                float affMinon    = Memory.ReadFloat(slotStart + OffsetBaitMinon);
-                float affBattan   = Memory.ReadFloat(slotStart + OffsetBaitBattan);
-                float affPetite   = Memory.ReadFloat(slotStart + OffsetBaitPetitefish);
+                float affEvy      = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffEvy);
+                float affMimi     = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMimi);
+                float affPrickly  = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPrickly);
+                float affCherry   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffThrobbingCherry);
+                float affPeach    = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffGooeypeach);
+                float affBombnuts = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBombnuts);
+                float affPoison   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPoisonousApple);
+                float affBanana   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMellowBanana);
+                float affCarrot   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffCarrot);
+                float affPotato   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPotatoCake);
+                float affMinon    = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMinon);
+                float affBattan   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBattan);
+                float affPetite   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPetitefish);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[BaitAff]  area={areaId} slot={slotIndex} {GetFishName(fishId)} " +
-                    $"Evy={affEvy:F2} Mimi={affMimi:F2} Prickly={affPrickly:F2} Cherry={affCherry:F2} Peach={affPeach:F2} " +
+                    $"Evy={affEvy:F2} Mimi={affMimi:F2} Prickly={affPrickly:F2} " +
+                    $"Cherry={affCherry:F2} Peach={affPeach:F2} " +
                     $"Bomb={affBombnuts:F2} Poison={affPoison:F2} Banana={affBanana:F2} Carrot={affCarrot:F2} " +
                     $"Potato={affPotato:F2} Minon={affMinon:F2} Battan={affBattan:F2} Petite={affPetite:F2}");
             }
@@ -679,30 +756,42 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // ── Slot structure notes from Norune pond dump (2026-05-26) ─────────────────────────────
+        // ── Slot structure notes from Norune pond dump (2026-05-26) ──────────────────────────────────────────────────
         // Known mapped offsets: 0x000 fishId, 0x004 Unk004, 0x008 Unk008, 0x00C MaxSize,
         //   0x010 FpMin, 0x014 FpMax, 0x018–0x048 bait affinities (13×float),
-        //   0x060 Size, 0x064 ScaleX, 0x068 ScaleY.
+        //   0x060 Size, 0x064 ScaleX, 0x068 ScaleY,
+        //   0x074 Heading, 0x0B0 LivePosY, 0x0B4 LivePosZ, 0x0B8 LivePosX.
         //
         // Unmapped region 0x04C–0x05C:
         //   +0x04C  int 1     — constant across all slots; unknown (flag? type byte?)
         //   +0x050  0xFFFFFFFF — NaN float; constant; possibly uninitialized padding or sentinel
-        //   +0x054  int varies — CONFIRMED waypoint refresh timer; counts down to 0 to trigger new patrol target selection; normal range 0–~150; holding at 9999 prevents re-evaluation (fish complete initial waypoint but never pick a new one); initial waypoints are assigned separately at session start
-        //   +0x058  int varies — game-controlled live state; normal range ~20–50, fluctuates non-monotonically each frame (game resets our writes within 1 second); holding above ~9999 via per-second enforcement prevents biting, suggesting bite fires when value falls below a threshold; purpose/units unclear
+        //   +0x054  int varies — CONFIRMED waypoint refresh timer; counts down to 0 to trigger new patrol
+        //              target selection; normal range 0–~150; holding at 9999 prevents re-evaluation
+        //              (fish complete initial waypoint but never pick a new one);
+        //              initial waypoints are assigned separately at session start
+        //   +0x058  int varies — game-controlled live state; normal range ~20–50, fluctuates
+        //              non-monotonically each frame (game resets our writes within 1 second);
+        //              holding above ~9999 via per-second enforcement prevents biting, suggesting
+        //              bite fires when value falls below a threshold; purpose/units unclear
         //   +0x05C  int 0     — constant
         //
         // Movement data (confirmed via live polling — values change each second while fish swim):
-        //   +0x074  float — heading angle (radians, ~[-π, π]); drives both facing and movement direction; game updates it each frame toward active waypoint; writes accepted but game re-steers between our writes — per-second enforcement creates a directional bias, not a hard lock; bait attraction overrides normally (its AI also writes through this field)
-        //   +0x080  float — target speed; nonzero while moving toward waypoint, drops to 0 on arrival
-        //   +0x084  float — current velocity; smoothly decelerates toward target speed (visibly coasts to 0)
-        //   +0x090  float — Y world position (live) — matches Addresses.positionY axis
-        //   +0x094  float — Z world position (live) — matches Addresses.positionZ axis (vertical)
-        //   +0x098  float — X world position (live) — matches Addresses.positionX axis
+        //   +0x074  Heading  — heading angle (radians, ~[-π, π]); drives both facing and movement direction;
+        //              game updates it each frame toward active waypoint; writes accepted but game re-steers
+        //              between our writes — per-second enforcement creates a directional bias, not a hard lock;
+        //              bait attraction overrides normally (its AI also writes through this field)
+        //   +0x080  float    — target speed; nonzero while moving toward waypoint, drops to 0 on arrival
+        //   +0x084  float    — current velocity; smoothly decelerates toward target speed (visibly coasts to 0)
+        //   +0x090  float    — Y world position (live) — matches Addresses.positionY axis
+        //   +0x094  float    — Z world position (live) — matches Addresses.positionZ axis (vertical)
+        //   +0x098  float    — X world position (live) — matches Addresses.positionX axis
         //   NOTE: all slots read the same pos value each tick — this offset aliases the player position
         //         rather than storing an individual fish live position; actual per-fish XYZ is unknown.
-        //   +0x0B0  float — Y live position (per-fish); (0,0,0) when slot empty — matches Addresses.positionY axis
-        //   +0x0B4  float — Z live position (per-fish); observed -25.0 in Norune/Matataki (pond floor depth) — matches Addresses.positionZ axis (vertical)
-        //   +0x0B8  float — X live position (per-fish) — matches Addresses.positionX axis
+        //   +0x0B0  LivePosY — Y live position (per-fish); (0,0,0) when slot empty;
+        //              matches Addresses.positionY axis
+        //   +0x0B4  LivePosZ — Z live position (per-fish); observed -25.0 in Norune/Matataki (pond floor depth);
+        //              matches Addresses.positionZ axis (vertical)
+        //   +0x0B8  LivePosX — X live position (per-fish) — matches Addresses.positionX axis
         //
         // Behavior floats (same across all slots/species in Norune; writes persist — game does NOT restore them):
         //   +0x150  float  7.0  — unknown; tested with 99.0, no visible effect observed yet
@@ -715,7 +804,7 @@ namespace Dark_Cloud_Improved_Version
         //
         // Spawn chance: NOT stored per slot. Time-of-day spawn weights are computed by game
         //   spawn code from external tables, not accessible via slot dump.
-        // ──────────────────────────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// [DIAG] Writes a test integer value to the given slot field offset across all slots in the area.
@@ -762,15 +851,15 @@ namespace Dark_Cloud_Improved_Version
             {
                 int s       = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
                 byte fishId = Memory.ReadByte(s);
-                float hdg   = Memory.ReadFloat(s + 0x074);
+                float hdg   = Memory.ReadFloat(s + FishSlotOffsets.Heading);
                 float spd    = Memory.ReadFloat(s + 0x080);
                 float curVel = Memory.ReadFloat(s + 0x084);
                 float posX  = Memory.ReadFloat(s + 0x098); // positionX axis
                 float posY  = Memory.ReadFloat(s + 0x090); // positionY axis
                 float posZ  = Memory.ReadFloat(s + 0x094); // positionZ axis (vertical)
-                float wptX  = Memory.ReadFloat(s + 0x0B8); // positionX axis
-                float wptY  = Memory.ReadFloat(s + 0x0B0); // positionY axis
-                float wptZ  = Memory.ReadFloat(s + 0x0B4); // positionZ axis (vertical, pond floor = -25)
+                float fishPosX  = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
+                float fishPosY  = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
+                float fishPosZ  = Memory.ReadFloat(s + FishSlotOffsets.LivePosZ);
                 float b150  = Memory.ReadFloat(s + 0x150);
                 float b154  = Memory.ReadFloat(s + 0x154);
                 float b158  = Memory.ReadFloat(s + 0x158);
@@ -782,14 +871,15 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[SlotWatch] slot={slotIndex} {GetFishName(fishId)} " +
                     $"hdg={hdg:F3} spd={spd:F3} curVel={curVel:F3} " +
-                    $"pos=({posX:F1},{posY:F2},{posZ:F1}) wpt=({wptX:F1},{wptY:F1},{wptZ:F1}) " +
-                    $"b150={b150:F2} b154={b154:F2} b158={b158:F2} unk054={unk054} unk058={unk058} scl=({scl0:F4},{scl1:F4},{scl2:F4})");
+                    $"pos=({posX:F1},{posY:F2},{posZ:F1}) fishPos=({fishPosX:F1},{fishPosY:F1},{fishPosZ:F1}) " +
+                    $"b150={b150:F2} b154={b154:F2} b158={b158:F2} " +
+                    $"unk054={unk054} unk058={unk058} scl=({scl0:F4},{scl1:F4},{scl2:F4})");
             }
         }
 
         /// <summary>
         /// Writes the player's world position into every fish slot's patrol waypoint once per second,
-        /// directing all fish toward the player. Resets the waypoint refresh timer to prevent the game
+        /// directing fish toward the player. Resets the waypoint refresh timer to prevent the game
         /// from overwriting the target before the fish arrives.
         /// </summary>
         private static void SteerFishToPlayer(AreaFishData areaData)
@@ -825,34 +915,39 @@ namespace Dark_Cloud_Improved_Version
                 if ((DateTime.UtcNow - _lastSteerTime[slotIndex]).TotalSeconds < interval) continue;
                 _lastSteerTime[slotIndex] = DateTime.UtcNow;
 
-                float fishX = Memory.ReadFloat(s + 0x0B8);
-                float fishY = Memory.ReadFloat(s + 0x0B0);
+                float fishX = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
+                float fishY = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
                 float dx = playerX - fishX;
                 float dy = playerY - fishY;
                 if (dx == 0f && dy == 0f) continue;
 
                 float angle = (float)Math.Atan2(dy, dx);
-                Memory.WriteFloat(s + 0x074, angle);
+                Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Steer] slot={slotIndex} fish={fishId} aff={affinity:F2} interval={interval:F1}s angle={angle:F2}");
+                    $"[Steer] slot={slotIndex} fish={fishId} " +
+                    $"aff={affinity:F2} interval={interval:F1}s angle={angle:F2}");
             }
         }
 
+        /// <summary>
+        /// Maps a bait item ID to its <see cref="FishSlotOffsets"/> bait-affinity field offset.
+        /// Returns -1 for unknown bait IDs.
+        /// </summary>
         private static int BaitIdToOffset(int baitId) => baitId switch
         {
-            Items.evy             => OffsetBaitEvy,
-            Items.mimi            => OffsetBaitMimi,
-            Items.prickly         => OffsetBaitPrickly,
-            Items.throbbingcherry => OffsetBaitThrobbingCherry,
-            Items.gooeypeach      => OffsetBaitGooeypeach,
-            Items.bombnuts        => OffsetBaitBombnuts,
-            Items.poisonousapple  => OffsetBaitPoisonousApple,
-            Items.mellowbanana    => OffsetBaitMellowBanana,
-            Items.carrot          => OffsetBaitCarrot,
-            Items.potatocake      => OffsetBaitPotatoCake,
-            Items.minon           => OffsetBaitMinon,
-            Items.battan          => OffsetBaitBattan,
-            Items.petitefish      => OffsetBaitPetitefish,
+            Items.evy             => FishSlotOffsets.BaitAffEvy,
+            Items.mimi            => FishSlotOffsets.BaitAffMimi,
+            Items.prickly         => FishSlotOffsets.BaitAffPrickly,
+            Items.throbbingcherry => FishSlotOffsets.BaitAffThrobbingCherry,
+            Items.gooeypeach      => FishSlotOffsets.BaitAffGooeypeach,
+            Items.bombnuts        => FishSlotOffsets.BaitAffBombnuts,
+            Items.poisonousapple  => FishSlotOffsets.BaitAffPoisonousApple,
+            Items.mellowbanana    => FishSlotOffsets.BaitAffMellowBanana,
+            Items.carrot          => FishSlotOffsets.BaitAffCarrot,
+            Items.potatocake      => FishSlotOffsets.BaitAffPotatoCake,
+            Items.minon           => FishSlotOffsets.BaitAffMinon,
+            Items.battan          => FishSlotOffsets.BaitAffBattan,
+            Items.petitefish      => FishSlotOffsets.BaitAffPetitefish,
             _                     => -1,
         };
 
@@ -878,7 +973,9 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Sets the fish-acquired flag byte for <paramref name="caughtFishId"/> in the mod memory region.</summary>
+        /// <summary>
+        /// Sets the fish-acquired flag byte for <paramref name="caughtFishId"/> in the mod memory region.
+        /// </summary>
         /// <param name="caughtFishId">Fish ID of the species that was just caught.</param>
         public static void FishAcquiredFlag(byte caughtFishId)
         {
@@ -967,7 +1064,8 @@ namespace Dark_Cloud_Improved_Version
                 {
                     fishCaught[slotIndex] = true;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} ({GetFishName(fishArray[slotIndex])})");
+                        $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} " +
+                        $"({GetFishName(fishArray[slotIndex])})");
                     FishAcquiredFlag(fishArray[slotIndex]);
                     if (isQuestActive)
                     {
@@ -991,7 +1089,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                         else // size quest
                         {
-                            int catchSize = (int)Math.Floor(Memory.ReadFloat(slotAddr + OffsetSize) * 10);
+                            int catchSize = (int)Math.Floor(Memory.ReadFloat(slotAddr + FishSlotOffsets.Size) * 10);
                             if (minFishSize <= catchSize && maxFishSize >= catchSize)
                             {
                                 CompleteQuest(areaData);
