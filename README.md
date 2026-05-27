@@ -8,6 +8,8 @@ Enhanced Mod is a fan-made community project that brings new features and QoL ch
 
 For the full list of features and changes, see the original project's [Changelog](https://github.com/Gundorada-Workshop/DarkCloud-Enhanced/files/12431854/Full_Change_Log_Public_Release_v1.00.pdf).
 
+For changes made in this fork, see [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## Running Enhanced Mod alongside PCSX2
