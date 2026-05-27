@@ -90,7 +90,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Running on Linux** — Same as above; verify Unix socket path and Flatpak network override if applicable
 
 <details>
-<summary>⚠️ Spoilers — click to expand</summary>
+<summary>⚠️ **Mod Spoilers Ahead** — click to expand</summary>
 
 ### Custom Weapon Effects
 
@@ -113,8 +113,27 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 
 - [ ] **Detection from bag/storage** — Place a Mardan sword in bag or storage (not equipped): confirm fishing FP multiplier is still applied
 - [ ] **Multiplier values** — Eins: 1.2×, Twei: 1.5×, Arise: 2× FP gain
-- [ ] **Mardan Eins Garayan bonus** — Own Mardan Eins; confirm a second independent roll for Garayan fish occurs and appears in the log
+- [ ] **Mardan Twei Garayan bonus** — Own Mardan Twei or Arise Mardan; confirm a second independent roll for Garayan fish occurs and appears in the log
+- [ ] **Arise Mardan size scaling** — Own Arise Mardan; enter a fishing area and confirm the console logs scaled size values. Fish that rolled near their max size should visibly increase; fish that rolled near their minimum should change very little
 - [ ] **No Mardan sword owned** — Confirm FP multiplier is not applied and `hasMardanSword` is false
+
+### Fishing — Fish Steering
+
+- [ ] **Matataki Waterfall (no Mardan sword)** — Fish at Matataki without any Mardan sword equipped or stored: confirm fish visibly drift toward the player's position roughly every 11 seconds and the log shows `[Steer/Matataki]` entries
+- [ ] **Mardan Eins steering** — Own Mardan Eins; cast a bait with affinity for Garayan (Poisonous Apple) or Umadakara (Carrot): confirm those fish visibly steer toward the player and `[Steer/Mardan]` appears in the log at an interval matching the affinity weight
+- [ ] **No steering for non-Garayan/Umadakara** — Confirm that common fish (Gobbler, Nonky, etc.) are not steered by the Mardan Eins ability; only Mardan Garayan, Baron Garayan, and Umadakara should be affected
+- [ ] **Bait Detection** - Confirm bait detection works when switching bait multiple times in same fishing session.
+
+### Fishing Quests
+
+- [ ] **Pike (Norune, area 0)** — Accept a count quest or size-range quest from Pike; catch the required fish and confirm the quest completes (state byte → 2) and the dialogue reflects completion
+- [ ] **Pao (Matataki Waterfall, area 1)** — Same as above for Pao's quest
+- [ ] **Sam (Area 19)** — Complete one of Sam's quests; confirm the multi-quest counter increments and, after the required number, the post-loop queens-quest trigger fires
+- [ ] **Devia (Area 3)** — Accept and complete Devia's quest; confirm normal count/size completion flow
+
+### PINE Connection Recovery
+
+- [ ] **Graceful disconnect** — While the mod is running and connected to PCSX2, close the emulator (or stop emulation). Confirm the mod does not crash and logs `[PINE] Stream closed — emulator disconnected.` or `[PINE] IO error — connection lost:`
 
 ### Weapon Stat Changes
 
