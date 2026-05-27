@@ -84,13 +84,13 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 
 ## Testing Needed
 
-<details>
-<summary>⚠️ Spoilers — click to expand</summary>
-
 ### Platform
 
 - [ ] **Running on Windows** — Launch mod, connect to PCSX2, confirm PINE handshake and basic dungeon loop
 - [ ] **Running on Linux** — Same as above; verify Unix socket path and Flatpak network override if applicable
+
+<details>
+<summary>⚠️ Spoilers — click to expand</summary>
 
 ### Custom Weapon Effects
 
