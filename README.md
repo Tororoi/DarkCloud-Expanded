@@ -92,7 +92,8 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 <details>
 <summary>⚠️ **Mod Spoilers Ahead** — click to expand</summary>
 
-### Custom Weapon Effects
+<details>
+<summary>Custom Weapon Effects</summary>
 
 - [ ] **Evilcise** — Equip in dungeon: curse applies immediately (including from pause menu). Break curse with holy water: verify poison is applied and HP is set to 1. Change floors: verify curse is reapplied. Unequip or leave dungeon: verify curse is stripped
 - [ ] **Heaven's Cloud** — Equip in dungeon: confirm 50% gooey proc triggers on hit and does not affect other weapons
@@ -101,7 +102,10 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Frozen Tuna (Goro)** — Equip in dungeon: WHP loss heals Goro HP proportionally. On hit, 20% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc
 - [ ] **Wise Owl Sword** — Own a Wise Owl Sword (bag, storage, or equipped) in Wise Owl Forest: pick up a Shiny Stone, Red Berry, or Pointy Chestnut — confirm "You found Wise Owl's favorite!" message. Test with sword NOT owned: confirm no message
 
-### Miniboss System
+</details>
+
+<details>
+<summary>Miniboss System</summary>
 
 - [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 5× the base enemy values (up from 3×)
 - [ ] **Flavor rare drops (5%)** — Each dungeon has per-enemy rare drops; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
@@ -109,7 +113,10 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Weapon stat boosts on pickup** — When a miniboss drops a boosted weapon (e.g., Gladius in DBC, Frozen Tuna in Moon Sea), pick it up and confirm the preset stats are written to the weapon slot
 - [ ] **Boost monitor cancels on floor change** — Do not pick up the weapon drop; advance to the next floor and confirm no orphaned boost thread is running
 
-### Mardan Sword Rework
+</details>
+
+<details>
+<summary>Mardan Sword Rework</summary>
 
 - [ ] **Detection from bag/storage** — Place a Mardan sword in bag or storage (not equipped): confirm fishing FP multiplier is still applied
 - [ ] **Multiplier values** — Eins: 1.2×, Twei: 1.5×, Arise: 2× FP gain
@@ -117,25 +124,37 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Arise Mardan size scaling** — Own Arise Mardan; enter a fishing area and confirm the console logs scaled size values. Fish that rolled near their max size should visibly increase; fish that rolled near their minimum should change very little
 - [ ] **No Mardan sword owned** — Confirm FP multiplier is not applied and `hasMardanSword` is false
 
-### Fishing — Fish Steering
+</details>
+
+<details>
+<summary>Fishing — Fish Steering</summary>
 
 - [ ] **Matataki Waterfall (no Mardan sword)** — Fish at Matataki without any Mardan sword equipped or stored: confirm fish visibly drift toward the player's position roughly every 11 seconds and the log shows `[Steer/Matataki]` entries
 - [ ] **Mardan Eins steering** — Own Mardan Eins; cast a bait with affinity for Garayan (Poisonous Apple) or Umadakara (Carrot): confirm those fish visibly steer toward the player and `[Steer/Mardan]` appears in the log at an interval matching the affinity weight
 - [ ] **No steering for non-Garayan/Umadakara** — Confirm that common fish (Gobbler, Nonky, etc.) are not steered by the Mardan Eins ability; only Mardan Garayan, Baron Garayan, and Umadakara should be affected
 - [ ] **Bait Detection** - Confirm bait detection works when switching bait multiple times in same fishing session.
 
-### Fishing Quests
+</details>
+
+<details>
+<summary>Fishing Quests</summary>
 
 - [ ] **Pike (Norune, area 0)** — Accept a count quest or size-range quest from Pike; catch the required fish and confirm the quest completes (state byte → 2) and the dialogue reflects completion
 - [ ] **Pao (Matataki Waterfall, area 1)** — Same as above for Pao's quest
 - [ ] **Sam (Area 19)** — Complete one of Sam's quests; confirm the multi-quest counter increments and, after the required number, the post-loop queens-quest trigger fires
 - [ ] **Devia (Area 3)** — Accept and complete Devia's quest; confirm normal count/size completion flow
 
-### PINE Connection Recovery
+</details>
+
+<details>
+<summary>PINE Connection Recovery</summary>
 
 - [ ] **Graceful disconnect** — While the mod is running and connected to PCSX2, close the emulator (or stop emulation). Confirm the mod does not crash and logs `[PINE] Stream closed — emulator disconnected.` or `[PINE] IO error — connection lost:`
 
-### Weapon Stat Changes
+</details>
+
+<details>
+<summary>Weapon Stat Changes</summary>
 
 - [ ] **Bone Slingshot / Hardshooter** — Confirm each has a 50% chance to generate with the Fragile effect on a new game/weapon load
 - [ ] **De Sanga** — Confirm 30% chance to generate with the Drain effect
@@ -143,6 +162,8 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Heaven's Cloud base stats** — Confirm max attack 180, max magic 180, no buildup paths, third attachment slot
 - [ ] **Aga's Sword base stats** — Confirm max attack 190, no buildup paths
 - [ ] **Skunk / Blessing Gun** — Confirm Skunk is a final-form weapon (no buildup) with max attack 143, max magic 105; Blessing Gun max attack 87, max magic 80
+
+</details>
 
 </details>
 
