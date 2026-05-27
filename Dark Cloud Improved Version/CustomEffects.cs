@@ -18,6 +18,13 @@ namespace Dark_Cloud_Improved_Version
         private static Random random = new Random();
         public static Thread damageFadeoutThread = new Thread(new ThreadStart(DamageFadeout));
 
+        private static readonly HashSet<int> FrozenTunaIceEnemies = new()
+        {
+            Enemies.blizzard,   // 65
+            Enemies.sam,        // 85
+            Enemies.gemronice,  // 312
+        };
+
         private static readonly HashSet<int> CactusImmuneNameTags = new()
         {
             Enemies.masterjacket,    // 1
@@ -131,29 +138,183 @@ namespace Dark_Cloud_Improved_Version
             return acquired;
         }
 
-        public static void Evilcise() //Currently unused effect due to memes happening
+        /// <summary>
+        /// Wise Owl Sword passive: displays a message when the correct WOF floor key is picked up,
+        /// provided the player owns a Wise Owl Sword anywhere (bag, storage, or equipped).
+        /// </summary>
+        public static void WiseOwlSword()
         {
-            if (evilciseNewFloor == true)
+            const int bagItemSlots = 60;
+            ushort[] snapshot = new ushort[bagItemSlots];
+
+            for (int i = 0; i < bagItemSlots; i++)
+                snapshot[i] = Memory.ReadUShort(Addresses.firstBagItem + (2 * i));
+
+            while (Memory.ReadByte(Addresses.checkDungeon) == 1 && Player.InDungeonFloor())
             {
-                Thread.Sleep(500);
-                for (int i = 0; i < 15; i++)
+                Thread.Sleep(200);
+
+                for (int i = 0; i < bagItemSlots; i++)
                 {
-                    if (Memory.ReadByte(0x21E16BC8 + (i * 0x190)) == 8)
+                    ushort current = Memory.ReadUShort(Addresses.firstBagItem + (2 * i));
+                    if (current != snapshot[i] &&
+                        (current == Items.shinystone || current == Items.redberry || current == Items.pointychestnut))
                     {
-                        Memory.WriteUShort(0x21E16C74 + (i * 0x190), 1);
+                        if (PlayerHasWiseOwlSword())
+                            Dayuppy.DisplayMessage("You found Wise Owl's favorite!", 1, 30, 3000);
+                        break;
+                    }
+                    snapshot[i] = current;
+                }
+            }
+        }
+
+        private static bool PlayerHasWiseOwlSword()
+        {
+            if (Player.Weapon.GetCurrentWeaponId() == Items.wiseowlsword)
+                return true;
+
+            for (int i = 0; i < 10; i++)
+                if (Memory.ReadUShort(Addresses.firstBagWeapon + (0xF8 * i)) == Items.wiseowlsword)
+                    return true;
+
+            for (int i = 0; i < 30; i++)
+                if (Memory.ReadUShort(Addresses.firstStorageWeapon + (0xF8 * i)) == Items.wiseowlsword)
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Evilcise effect: Toan is cursed while equipped and immune to all other status effects.
+        /// Breaking the curse with holy water applies poison and sets HP to 1.
+        /// The curse is reapplied on each new floor.
+        /// </summary>
+        public static void Evilcise()
+        {
+            // Toan status bits: 0x02=NearDeath 0x04=Freeze 0x08=Stamina 0x10=Poison 0x20=Curse 0x40=Goo
+            const int toanStatus      = 0x21CDD814;
+            const int toanStatusTimer = 0x21CDD824;
+            const int toanHp          = 0x21CD955E;
+
+            bool penalized = false;
+            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
+
+            // Apply curse immediately on equip
+            ushort cur = Memory.ReadUShort(toanStatus);
+            Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
+            Memory.WriteUShort(toanStatusTimer, 3600);
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
+                   Player.InDungeonFloor())
+            {
+                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+                if (currentFloor != lastFloor)
+                {
+                    // New floor: clear penalty and reapply curse
+                    penalized = false;
+                    lastFloor = currentFloor;
+                    cur = Memory.ReadUShort(toanStatus);
+                    Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
+                    Memory.WriteUShort(toanStatusTimer, 3600);
+                }
+
+                if (!penalized)
+                {
+                    cur = Memory.ReadUShort(toanStatus);
+                    if ((cur & 0x20) == 0)
+                    {
+                        // Curse was removed externally (holy water) — penalize
+                        penalized = true;
+                        Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x10)); // Poison
+                        Memory.WriteUShort(toanStatusTimer, 3600);
+                        Memory.WriteUShort(toanHp, 1);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise: curse broken — poison and HP=1 applied");
+                    }
+                    else
+                    {
+                        // Curse active: strip other statuses and refresh timer
+                        Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
+                        Memory.WriteUShort(toanStatusTimer, 3600);
                     }
                 }
 
-                for (int i = 0; i < 20; i++)
+                Thread.Sleep(100);
+            }
+
+            // Strip curse on unequip or dungeon exit
+            ushort final = Memory.ReadUShort(toanStatus);
+            Memory.WriteUShort(toanStatus, (ushort)(final & ~0x20));
+        }
+
+        /// <summary>
+        /// Heaven's Cloud effect: 50% chance on hit to inflict gooey on the struck enemy.
+        /// </summary>
+        public static void HeavensCloud()
+        {
+            while (Player.Weapon.GetCurrentWeaponId() == Items.heavenscloud &&
+                   Player.InDungeonFloor())
+            {
+                int[] formerHp = ReusableFunctions.GetEnemiesHp();
+                Thread.Sleep(50);
+                int[] currentHp = ReusableFunctions.GetEnemiesHp();
+
+                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.ToanId)
                 {
-                    if (Memory.ReadUShort(0x21DD0360 + (i * 0x40)) < 40)
+                    for (int i = 0; i < 15; i++)
                     {
-                        Memory.WriteByte(0x21DD0380 + (i * 0x40), 0);
+                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
+                        {
+                            if (random.Next(100) < 50)
+                            {
+                                Memory.WriteUShort(Enemies.Enemy0.gooeyState + (Enemies.offset * i), 1);
+                            }
+                        }
                     }
                 }
 
-                evilciseNewFloor = false;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise effect activated!");
+                ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
+        }
+
+        /// <summary>
+        /// Aga's Sword: +15 defense to Toan while equipped.
+        /// </summary>
+        public static void AgasSword()
+        {
+            const int boost = 15;
+            int baseDefense = Player.Toan.GetDefense();
+            Player.Toan.SetDefense(baseDefense + boost);
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.agassword && Player.InDungeonFloor())
+            {
+                Thread.Sleep(100);
+                int current = Player.Toan.GetDefense();
+                if (current != baseDefense + boost)
+                {
+                    baseDefense = current;
+                    Player.Toan.SetDefense(baseDefense + boost);
+                }
+            }
+
+            Player.Toan.SetDefense(Player.Toan.GetDefense() - boost);
+        }
+
+        /// <summary>
+        /// Brave Ark: resists Freeze, Poison, Curse, and Goo status effects while equipped.
+        /// Clears any of those statuses within the polling interval.
+        /// </summary>
+        public static void BraveArk()
+        {
+            const int toanStatus   = 0x21CDD814;
+            const ushort resistMask = 0x04 | 0x10 | 0x20 | 0x40; // Freeze, Poison, Curse, Goo
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.braveark && Player.InDungeonFloor())
+            {
+                Thread.Sleep(100);
+                ushort status = Memory.ReadUShort(toanStatus);
+                if ((status & resistMask) != 0)
+                    Memory.WriteUShort(toanStatus, (ushort)(status & ~resistMask));
             }
         }
 
@@ -590,6 +751,70 @@ namespace Dark_Cloud_Improved_Version
             ushort thirstAttackBoost = (ushort)((currentTotalAttack / 100) * (thirstPercentage / 2));
 
             Memory.WriteUShort(0x21EA7594, (ushort)(currentTotalAttack + hpAttackBoost + thirstAttackBoost));
+        }
+
+        /// <summary>
+        /// Frozen Tuna: WHP lost heals Goro's HP (fractional losses accumulate).
+        /// On hit, 20% chance to stop all non-ice enemies and freeze Goro.
+        /// Ice enemies (Blizzard, Sam, Ice Gemron) are immune to the stop proc.
+        /// </summary>
+        public static void FrozenTuna()
+        {
+            float hpAccumulator = 0f;
+
+            while (Player.Weapon.GetCurrentWeaponId() == Items.frozentuna && Player.InDungeonFloor())
+            {
+                int[] formerHp = ReusableFunctions.GetEnemiesHp();
+                float whpBefore = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+
+                Thread.Sleep(50);
+
+                int[] currentHp  = ReusableFunctions.GetEnemiesHp();
+                float whpAfter   = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+
+                // WHP lost → heal Goro's HP
+                if (whpAfter < whpBefore)
+                {
+                    hpAccumulator += whpBefore - whpAfter;
+                    if (hpAccumulator >= 1f)
+                    {
+                        int heal = (int)hpAccumulator;
+                        ushort goroHp    = Player.Goro.GetHp();
+                        ushort goroMaxHp = Player.Goro.GetMaxHp();
+                        Player.Goro.SetHp((ushort)Math.Min(goroHp + heal, goroMaxHp));
+                        hpAccumulator -= heal;
+                    }
+                }
+
+                // On-hit 20% stop proc: all non-ice enemies stopped; Goro frozen too
+                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.GoroId)
+                {
+                    bool hitDetected = false;
+                    for (int i = 0; i < 15; i++)
+                    {
+                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
+                        {
+                            hitDetected = true;
+                            break;
+                        }
+                    }
+
+                    if (hitDetected && random.Next(100) < 20)
+                    {
+                        for (int i = 0; i < 15; i++)
+                        {
+                            if (Memory.ReadByte(Enemies.Enemy0.renderStatus + (Enemies.offset * i)) == 2 &&
+                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i))))
+                            {
+                                Memory.WriteUShort(Enemies.Enemy0.freezeTimer + (Enemies.offset * i), 300);
+                            }
+                        }
+                        Player.Goro.SetStatus("freeze", 300);
+                    }
+                }
+
+                ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
         }
 
         /// <summary>
@@ -1111,5 +1336,6 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
         }
+
     }
 }

@@ -57,7 +57,11 @@ namespace Dark_Cloud_Improved_Version
         public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
+        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
+        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
+        public static Thread braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
         public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
+        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
         public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
         public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
         public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrath));
@@ -65,6 +69,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
         public static Thread supernovaThread = new Thread(new ThreadStart(CustomEffects.Supernova));
         public static Thread starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreaker));
+        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSword));
         public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
 
@@ -84,6 +89,15 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Player.InDungeonFloor())
                 {
+                    // Evilcise curse applies immediately on equip, even from the pause menu
+                    if (Player.CurrentCharacterNum() == Player.ToanId &&
+                        Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
+                        !evilciseThread.IsAlive)
+                    {
+                        evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+                        evilciseThread.Start();
+                    }
+
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -119,6 +133,46 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
                                             chronicleSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.heavenscloud:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!heavensCloudThread.IsAlive)
+                                        {
+                                            heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
+                                            heavensCloudThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.evilcise:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!evilciseThread.IsAlive)
+                                        {
+                                            evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+                                            evilciseThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.agassword:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!agasSwordThread.IsAlive)
+                                        {
+                                            agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
+                                            agasSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.braveark:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!braveArkThread.IsAlive)
+                                        {
+                                            braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
+                                            braveArkThread.Start();
                                         }
                                         break;
 
@@ -165,6 +219,13 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
                                             tallHammerThread.Start();
+                                        }
+                                        break;
+                                    case Items.frozentuna:
+                                        if (!frozenTunaThread.IsAlive)
+                                        {
+                                            frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
+                                            frozenTunaThread.Start();
                                         }
                                         break;
                                     case Items.inferno:
@@ -304,6 +365,11 @@ namespace Dark_Cloud_Improved_Version
                     //Define event and boss floors
                     excludeFloors = GetDungeonEventFloors(currentDungeon);
 
+                    if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
+                    {
+                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSword));
+                        wiseOwlSwordThread.Start();
+                    }
 
                     //Get current Floor
                     currentFloor = Memory.ReadByte(Addresses.checkFloor);
@@ -324,6 +390,7 @@ namespace Dark_Cloud_Improved_Version
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
                             MiniBoss.miniBossRolled = false;
+                            MiniBoss.CancelPendingBoost();
 
                             //Check if player is not on an event floor and call the Mini Boss
                             if (!excludeFloors.Contains(currentFloor))
