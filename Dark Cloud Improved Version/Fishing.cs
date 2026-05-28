@@ -113,7 +113,7 @@ namespace Dark_Cloud_Improved_Version
                 fishingQuestCheck = true;
             }
             CheckFishingQuest(areaData);
-            PollSlotDynamics(areaData);
+            // PollSlotDynamics(areaData);
             SteerFishToPlayer(areaData);
         }
 

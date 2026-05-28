@@ -193,9 +193,13 @@ namespace Dark_Cloud_Improved_Version
         public static void Evilcise()
         {
             // Toan status bits: 0x02=NearDeath 0x04=Freeze 0x08=Stamina 0x10=Poison 0x20=Curse 0x40=Goo
-            const int toanStatus      = 0x21CDD814;
-            const int toanStatusTimer = 0x21CDD824;
-            const int toanHp          = 0x21CD955E;
+            const int toanStatus            = 0x21CDD814;
+            const int toanStatusTimer       = 0x21CDD824;
+            const int toanHp               = 0x21CD955E;
+            // Read Toan's equipped weapon directly so character switching doesn't break the loop
+            const int toanCurrentWeaponSlot = 0x21CDD88C;
+            const int toanWeaponSlot0Id     = 0x21CDDA58;
+            const int toanWeaponSlotSize    = 0xF8;
 
             bool penalized = false;
             byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
@@ -205,9 +209,11 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
             Memory.WriteUShort(toanStatusTimer, 3600);
 
-            while (Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
-                   Player.InDungeonFloor())
+            while (Player.InDungeonFloor())
             {
+                byte toanSlot = Memory.ReadByte(toanCurrentWeaponSlot);
+                if (Memory.ReadUShort(toanWeaponSlot0Id + toanSlot * toanWeaponSlotSize) != Items.evilcise)
+                    break;
                 byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
                 if (currentFloor != lastFloor)
                 {

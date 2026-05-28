@@ -79,6 +79,8 @@ namespace Dark_Cloud_Improved_Version
             { 6,   new[] { Items.topaz                            } }, // Dasher           → Topaz
             { 304, new[] { Items.opal                             } }, // Opar             → Opal
             { 301, new[] { Items.amethyst                         } }, // Yammich          → Amethyst
+            { 34,  new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (DBC) → Gold Bar or any gem
+            { 35,  new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (DBC)      → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> dbcWeaponBoosts = new Dictionary<int, WeaponBoostData>
@@ -106,16 +108,18 @@ namespace Dark_Cloud_Improved_Version
 
         static readonly Dictionary<ushort, int[]> wofFlavorDrops = new Dictionary<ushort, int[]>
         {
-            { 12,  new[] { Items.platehammer   } }, // Earth Digger → Plate Hammer
-            { 19,  new[] { Items.poweruppowder } }, // Friday       → Powerup Powder
+            { 12,  new[] { Items.platehammer       } }, // Earth Digger → Plate Hammer
+            { 19,  new[] { Items.autorepairpowder  } }, // Friday       → Auto Repair Powder
             { 305, new[] { Items.sapphire, Items.flamingo } }, // Haley Holey → Sapphire or Flamingo
-            { 306, new[] { Items.steelhammer   } }, // King Prickly → Steel Hammer
-            { 15,  new[] { Items.poweruppowder } }, // Monday       → Powerup Powder
-            { 20,  new[] { Items.poweruppowder } }, // Saturday     → Powerup Powder
-            { 14,  new[] { Items.poweruppowder } }, // Sunday       → Powerup Powder
-            { 18,  new[] { Items.poweruppowder } }, // Thursday     → Powerup Powder
-            { 16,  new[] { Items.poweruppowder } }, // Tuesday      → Powerup Powder
-            { 17,  new[] { Items.poweruppowder } }, // Wednesday    → Powerup Powder
+            { 306, new[] { Items.steelhammer       } }, // King Prickly → Steel Hammer
+            { 15,  new[] { Items.autorepairpowder  } }, // Monday       → Auto Repair Powder
+            { 20,  new[] { Items.autorepairpowder  } }, // Saturday     → Auto Repair Powder
+            { 14,  new[] { Items.autorepairpowder  } }, // Sunday       → Auto Repair Powder
+            { 18,  new[] { Items.autorepairpowder  } }, // Thursday     → Auto Repair Powder
+            { 16,  new[] { Items.autorepairpowder  } }, // Tuesday      → Auto Repair Powder
+            { 17,  new[] { Items.autorepairpowder  } }, // Wednesday    → Auto Repair Powder
+            { 78,  new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (WOF) → Gold Bar or any gem
+            { 79,  new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (WOF)      → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> wofWeaponBoosts = new Dictionary<int, WeaponBoostData>
@@ -147,6 +151,8 @@ namespace Dark_Cloud_Improved_Version
             { 75, new[] { Items.amethyst                            } }, // Mask of Prajna → Amethyst
             { 25, new[] { Items.steelhammer,   Items.poweruppowder  } }, // Pirate's Chariot → Steel Hammer or Powerup Powder
             { 85, new[] { Items.crystalring                         } }, // Sam            → Crystal Ring
+            { 80, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (Ship) → Gold Bar or any gem
+            { 81, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (Ship)      → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> shipWeaponBoosts = new Dictionary<int, WeaponBoostData>
@@ -177,6 +183,8 @@ namespace Dark_Cloud_Improved_Version
             { 31, new[] { Items.blessinggun                                 } }, // Mr. Blare     → Blessing Gun
             { 50, new[] { Items.revivalpowder, Items.peridot                } }, // Mummy         → Revival Powder or Peridot
             { 64, new[] { Items.opal,          Items.diamond                } }, // Steel Giant   → Opal or Diamond
+            { 36, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (SMT) → Gold Bar or any gem
+            { 37, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (SMT)      → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> sunWeaponBoosts = new Dictionary<int, WeaponBoostData>
@@ -210,6 +218,8 @@ namespace Dark_Cloud_Improved_Version
             { 33, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // Titan → any gem
             { 70, new[] { Items.peridot,     Items.garnet,     Items.topaz,   Items.diamond                                                                 } }, // Vulcan         → Peridot, Garnet, Topaz, or Diamond
             { 56, new[] { Items.topaz                                                                                                                        } }, // White Fang     → Topaz
+            { 38, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (MS)  → Gold Bar or any gem
+            { 39, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (MS)       → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> moonWeaponBoosts = new Dictionary<int, WeaponBoostData>
@@ -258,6 +268,8 @@ namespace Dark_Cloud_Improved_Version
             { 44, new[] { Items.goddessring                                  } }, // Heart       → Goddess Ring
             { 48, new[] { Items.supersteve                                   } }, // Joker       → Super Steve (no boost on flavor)
             { 47, new[] { Items.braveark                                     } }, // Spade       → Brave Ark
+            { 82, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (GoT) → Gold Bar or any gem
+            { 83, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (GoT)      → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> galWeaponBoosts = new Dictionary<int, WeaponBoostData>
@@ -310,6 +322,8 @@ namespace Dark_Cloud_Improved_Version
             { 318, new[] { Items.boneslingshot            } }, // Silver Gear    → Bone Slingshot
             { 314, new[] { Items.sun,    Items.sapphire   } }, // Wind Gemron    → Sun or Sapphire
             { 315, new[] { Items.sun,    Items.peridot    } }, // Holy Gemron    → Sun or Peridot
+            { 310, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (DS)  → Gold Bar or any gem
+            { 309, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (DS)       → any gem
         };
 
         static readonly Dictionary<int, WeaponBoostData> dsWeaponBoosts = new Dictionary<int, WeaponBoostData>
