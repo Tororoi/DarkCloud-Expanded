@@ -97,7 +97,6 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 <details>
 <summary>Custom Weapon Effects</summary>
 
-- [ ] **Evilcise** — Equip in dungeon: curse applies immediately (including from pause menu). Break curse with holy water: verify poison is applied and HP is set to 1. Change floors: verify curse is reapplied. Unequip or leave dungeon: verify curse is stripped
 - [ ] **Heaven's Cloud** — Equip in dungeon: confirm 50% gooey proc triggers on hit and does not affect other weapons
 - [ ] **Aga's Sword** — Equip in dungeon: Toan gains +15 defense. Take hits that would change defense externally: verify boost is re-applied. Unequip: verify +15 is removed
 - [ ] **Brave Ark** — Equip in dungeon: get hit with Freeze, Poison, Curse, or Goo — confirm each is cleared within the polling interval. Stamina (not in resist mask) should still apply

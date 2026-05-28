@@ -141,6 +141,19 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Returns the display name for an enemy type ID, searching all lists.
+        /// Returns "Unknown" if not found.
+        /// </summary>
+        public static string GetEnemyName(ushort typeId)
+        {
+            if (EnemyList.enemiesNormal.TryGetValue(typeId, out string name))   return name;
+            if (EnemyList.enemiesFlying.TryGetValue(typeId, out name))          return name;
+            if (EnemyList.enemiesBoss.TryGetValue(typeId, out name))            return name;
+            if (EnemyList.enemiesOverseas.TryGetValue(typeId, out name))        return name;
+            return "Unknown";
+        }
+
+        /// <summary>
         /// Returns a list of boss enemy ids.
         /// </summary>
         public static Dictionary<ushort, string> GetBossEnemies()

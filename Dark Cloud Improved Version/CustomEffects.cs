@@ -144,27 +144,93 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void WiseOwlSword()
         {
-            const int bagItemSlots = 60;
-            ushort[] snapshot = new ushort[bagItemSlots];
+            const float maxKeyDetectionRange = 300f;
 
-            for (int i = 0; i < bagItemSlots; i++)
-                snapshot[i] = Memory.ReadUShort(Addresses.firstBagItem + (2 * i));
+            byte lastFloor = 0xFF;
+            bool floorMessageSent = false;
+            int lastNearestSlot = -1;
+            bool wasOutOfRange = true;
 
             while (Memory.ReadByte(Addresses.checkDungeon) == 1 && Player.InDungeonFloor())
             {
                 Thread.Sleep(200);
 
-                for (int i = 0; i < bagItemSlots; i++)
+                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+                if (currentFloor != lastFloor)
                 {
-                    ushort current = Memory.ReadUShort(Addresses.firstBagItem + (2 * i));
-                    if (current != snapshot[i] &&
-                        (current == Items.shinystone || current == Items.redberry || current == Items.pointychestnut))
+                    lastFloor = currentFloor;
+                    floorMessageSent = false;
+                    lastNearestSlot = -1;
+                    wasOutOfRange = true;
+                }
+
+                // --- Floor entry: log key guardians for debugging (no in-game message) ---
+                if (!floorMessageSent)
+                {
+                    var keyEnemies = new List<(int slot, byte key)>();
+                    for (int e = 0; e < 15; e++)
                     {
-                        if (PlayerHasWiseOwlSword())
-                            Dayuppy.DisplayMessage("You found Wise Owl's favorite!", 1, 30, 3000);
-                        break;
+                        byte drop = Memory.ReadByte(Enemies.Enemy0.forceItemDrop + (Enemies.offset * e));
+                        if (drop == Items.shinystone || drop == Items.redberry || drop == Items.pointychestnut)
+                            keyEnemies.Add((e, drop));
                     }
-                    snapshot[i] = current;
+
+                    if (keyEnemies.Count > 0)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Floor {currentFloor} key guardians:");
+                        foreach (var (slot, key) in keyEnemies)
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"  Enemy {slot} ({Enemies.GetEnemyName(Enemies.GetFloorEnemyId(slot))}): forceItemDrop = {key}");
+
+                        floorMessageSent = true;
+                    }
+                }
+
+                // --- Proximity detection: alert when nearest enemy within range has a key ---
+                if (!PlayerHasWiseOwlSword()) continue;
+
+                int nearestSlot = -1;
+                float nearestDist = maxKeyDetectionRange;
+
+                for (int e = 0; e < 15; e++)
+                {
+                    if (Enemies.GetFloorEnemyId(e) == 0) continue;
+                    if (Memory.ReadInt(Enemies.Enemy0.hp + (Enemies.offset * e)) <= 0) continue;
+
+                    float dist = Memory.ReadFloat(Enemies.Enemy0.distanceToPlayer + (Enemies.offset * e));
+                    if (dist > 0f && dist < nearestDist)
+                    {
+                        nearestDist = dist;
+                        nearestSlot = e;
+                    }
+                }
+
+                if (nearestSlot == -1)
+                {
+                    // No enemy within detection range — reset so the alert re-fires when one approaches
+                    if (!wasOutOfRange) { wasOutOfRange = true; lastNearestSlot = -1; }
+                    continue;
+                }
+
+                // Re-check if the nearest enemy changed or player was previously out of range
+                bool shouldCheck = nearestSlot != lastNearestSlot || wasOutOfRange;
+                lastNearestSlot = nearestSlot;
+                wasOutOfRange = false;
+
+                if (!shouldCheck) continue;
+
+                byte nearestDrop = Memory.ReadByte(Enemies.Enemy0.forceItemDrop + (Enemies.offset * nearestSlot));
+                string hint = nearestDrop switch
+                {
+                    Items.shinystone      => "Wise Owl senses something shiny nearby...",
+                    Items.redberry        => "Wise Owl senses something sweet nearby...",
+                    Items.pointychestnut  => "Wise Owl senses something pointy nearby...",
+                    _                     => null
+                };
+
+                if (hint != null)
+                {
+                    Dayuppy.DisplayMessage(hint, 1, 40, 3000);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {Enemies.GetEnemyName(Enemies.GetFloorEnemyId(nearestSlot))} (slot {nearestSlot}, dist {nearestDist:F1}, key {nearestDrop})");
                 }
             }
         }
