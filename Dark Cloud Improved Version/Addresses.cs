@@ -389,5 +389,24 @@
 
         public const int assignEditInit = 0x201F74B4; //when character is being selected, the game jumps to a function located in this address. We change this function to jal EditInit to reload map
 
+        //Fishing
+        /// <summary>Base address of the first fish slot for each fishing area. Slots are stride 0x2410 bytes apart.</summary>
+        public const int fishSlotStride      = 0x2410;
+        public const int fishSlotBase_Norune    = 0x214798D0; // Area 0 — Norune Village,    4 slots
+        public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall, 5 slots
+        public const int fishSlotBase_Area3     = 0x213C3150; // Area 3 — location TBD,       4 slots
+        public const int fishSlotBase_Area19    = 0x20DE0710; // Area 19 — location TBD,      5 slots
+
+        /// <summary>
+        /// Address of the lui instruction that sets the fish detection (bite) radius.
+        /// Owned by PNACH — do not write here via PINE. Set <see cref="fishRangeBoostFlag"/> instead.
+        /// </summary>
+        public const int fishDetectionRadiusPatch = 0x20240364;
+        /// <summary>
+        /// Reserved flag byte read by the PNACH conditional: 1 = boosted radius, 0 = normal.
+        /// Write via PINE; PNACH patches <see cref="fishDetectionRadiusPatch"/> in response.
+        /// </summary>
+        public const int fishRangeBoostFlag = 0x21F10038;
+
     }
 }

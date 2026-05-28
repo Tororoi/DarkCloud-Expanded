@@ -92,44 +92,67 @@ namespace Dark_Cloud_Improved_Version
         private static byte OpWrite16 => _altWriteOpcodes ? (byte)0x05 : (byte)0x09;
         private static byte OpWrite32 => _altWriteOpcodes ? (byte)0x06 : (byte)0x0A;
         private static byte OpWrite64 => _altWriteOpcodes ? (byte)0x07 : (byte)0x0B;
+        private static void DisconnectStream()
+        {
+            _stream?.Close();
+            _socket?.Close();
+            _stream = null;
+            _socket = null;
+        }
+
         private static byte[] SendBatch(byte[] packet)
         {
             lock (_lock)
             {
-                if (_stream == null) throw new InvalidOperationException("PINE not connected.");
-                _stream.Write(packet, 0, packet.Length);
-                var lenBuf = new byte[4];
-                ReadFully(lenBuf, 0, 4);
-                int respLen = BitConverter.ToInt32(lenBuf, 0) - 4;
-                if (respLen <= 0) return Array.Empty<byte>();
-                var resp = new byte[respLen];
-                ReadFully(resp, 0, respLen);
-                // resp[0] is the per-command error code: 0x00 = IPC_OK, 0xFF = IPC_FAIL
-                if (resp[0] != 0)
+                if (_stream == null) return Array.Empty<byte>();
+                try
                 {
-                    byte opcode = packet.Length > 4 ? packet[4] : (byte)0;
-                    bool isWrite = (opcode >= 0x04 && opcode <= 0x07) || (opcode >= 0x08 && opcode <= 0x0B);
-                    if (isWrite)
+                    _stream.Write(packet, 0, packet.Length);
+                    var lenBuf = new byte[4];
+                    ReadFully(lenBuf, 0, 4);
+                    int respLen = BitConverter.ToInt32(lenBuf, 0) - 4;
+                    if (respLen <= 0) return Array.Empty<byte>();
+                    var resp = new byte[respLen];
+                    ReadFully(resp, 0, respLen);
+                    // resp[0] is the per-command error code: 0x00 = IPC_OK, 0xFF = IPC_FAIL
+                    if (resp[0] != 0)
                     {
-                        _writeFailCount++;
-                        if (_writeFailCount <= 3)
-                            Console.WriteLine($"PINE write fail #{_writeFailCount} (opcode 0x{opcode:X2})");
-                        if (_writeFailCount == 5)
+                        byte opcode = packet.Length > 4 ? packet[4] : (byte)0;
+                        bool isWrite = (opcode >= 0x04 && opcode <= 0x07) || (opcode >= 0x08 && opcode <= 0x0B);
+                        if (isWrite)
                         {
-                            Console.WriteLine("Multiple PINE write failures. PCSX2 may be paused or this build doesn't support writes.");
-                            ModWindow.PineWritesFailing();
+                            _writeFailCount++;
+                            if (_writeFailCount <= 3)
+                                Console.WriteLine($"PINE write fail #{_writeFailCount} (opcode 0x{opcode:X2})");
+                            if (_writeFailCount == 5)
+                            {
+                                Console.WriteLine("Multiple PINE write failures. PCSX2 may be paused or this build doesn't support writes.");
+                                ModWindow.PineWritesFailing();
+                            }
                         }
+                        else
+                        {
+                            Console.WriteLine($"PINE IPC_FAIL on read (opcode 0x{opcode:X2})");
+                        }
+                        return Array.Empty<byte>();
                     }
-                    else
-                    {
-                        Console.WriteLine($"PINE IPC_FAIL on read (opcode 0x{opcode:X2})");
-                    }
+                    if (respLen < 2) return Array.Empty<byte>();
+                    var payload = new byte[respLen - 1];
+                    Array.Copy(resp, 1, payload, 0, respLen - 1);
+                    return payload;
+                }
+                catch (EndOfStreamException)
+                {
+                    DisconnectStream();
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[PINE] Stream closed — emulator disconnected.");
                     return Array.Empty<byte>();
                 }
-                if (respLen < 2) return Array.Empty<byte>();
-                var payload = new byte[respLen - 1];
-                Array.Copy(resp, 1, payload, 0, respLen - 1);
-                return payload;
+                catch (IOException ex)
+                {
+                    DisconnectStream();
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[PINE] IO error — connection lost: {ex.Message}");
+                    return Array.Empty<byte>();
+                }
             }
         }
 
