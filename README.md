@@ -101,7 +101,6 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Aga's Sword** — Equip in dungeon: Toan gains +15 defense. Take hits that would change defense externally: verify boost is re-applied. Unequip: verify +15 is removed
 - [ ] **Brave Ark** — Equip in dungeon: get hit with Freeze, Poison, Curse, or Goo — confirm each is cleared within the polling interval. Stamina (not in resist mask) should still apply
 - [ ] **Frozen Tuna (Goro)** — Equip in dungeon: WHP loss heals Goro HP proportionally. On hit, 20% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc
-- [ ] **Wise Owl Sword** — Own a Wise Owl Sword (bag, storage, or equipped) in Wise Owl Forest: pick up a Shiny Stone, Red Berry, or Pointy Chestnut — confirm "You found Wise Owl's favorite!" message. Test with sword NOT owned: confirm no message
 
 </details>
 

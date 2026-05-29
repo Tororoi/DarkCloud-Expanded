@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -144,7 +145,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void WiseOwlSword()
         {
-            const float maxKeyDetectionRange = 300f;
+            const float maxKeyDetectionRange = 500f;
 
             byte lastFloor = 0xFF;
             bool floorMessageSent = false;
@@ -185,52 +186,55 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                // --- Proximity detection: alert when nearest enemy within range has a key ---
+                // --- Proximity detection: alert when nearest key-carrying enemy enters range ---
                 if (!PlayerHasWiseOwlSword()) continue;
 
-                int nearestSlot = -1;
-                float nearestDist = maxKeyDetectionRange;
+                int nearestKeySlot = -1;
+                float nearestKeyDist = maxKeyDetectionRange;
 
                 for (int e = 0; e < 15; e++)
                 {
                     if (Enemies.GetFloorEnemyId(e) == 0) continue;
                     if (Memory.ReadInt(Enemies.Enemy0.hp + (Enemies.offset * e)) <= 0) continue;
 
+                    byte drop = Memory.ReadByte(Enemies.Enemy0.forceItemDrop + (Enemies.offset * e));
+                    if (drop != Items.shinystone && drop != Items.redberry && drop != Items.pointychestnut) continue;
+
                     float dist = Memory.ReadFloat(Enemies.Enemy0.distanceToPlayer + (Enemies.offset * e));
-                    if (dist > 0f && dist < nearestDist)
+                    if (dist > 0f && dist < nearestKeyDist)
                     {
-                        nearestDist = dist;
-                        nearestSlot = e;
+                        nearestKeyDist = dist;
+                        nearestKeySlot = e;
                     }
                 }
 
-                if (nearestSlot == -1)
+                if (nearestKeySlot == -1)
                 {
-                    // No enemy within detection range — reset so the alert re-fires when one approaches
+                    // No key enemy within detection range — reset so the alert re-fires when one approaches
                     if (!wasOutOfRange) { wasOutOfRange = true; lastNearestSlot = -1; }
                     continue;
                 }
 
-                // Re-check if the nearest enemy changed or player was previously out of range
-                bool shouldCheck = nearestSlot != lastNearestSlot || wasOutOfRange;
-                lastNearestSlot = nearestSlot;
+                // Re-trigger only if the nearest key enemy changed or player was previously out of range
+                bool shouldCheck = nearestKeySlot != lastNearestSlot || wasOutOfRange;
+                lastNearestSlot = nearestKeySlot;
                 wasOutOfRange = false;
 
                 if (!shouldCheck) continue;
 
-                byte nearestDrop = Memory.ReadByte(Enemies.Enemy0.forceItemDrop + (Enemies.offset * nearestSlot));
+                byte nearestDrop = Memory.ReadByte(Enemies.Enemy0.forceItemDrop + (Enemies.offset * nearestKeySlot));
                 string hint = nearestDrop switch
                 {
-                    Items.shinystone      => "Wise Owl senses something shiny nearby...",
-                    Items.redberry        => "Wise Owl senses something sweet nearby...",
-                    Items.pointychestnut  => "Wise Owl senses something pointy nearby...",
+                    Items.shinystone      => "Wise Owl senses a shiny stone nearby...",
+                    Items.redberry        => "Wise Owl senses a red berry nearby...",
+                    Items.pointychestnut  => "Wise Owl senses a pointy chestnut nearby...",
                     _                     => null
                 };
 
                 if (hint != null)
                 {
                     Dayuppy.DisplayMessage(hint, 1, 40, 3000);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {Enemies.GetEnemyName(Enemies.GetFloorEnemyId(nearestSlot))} (slot {nearestSlot}, dist {nearestDist:F1}, key {nearestDrop})");
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {Enemies.GetEnemyName(Enemies.GetFloorEnemyId(nearestKeySlot))} (slot {nearestKeySlot}, dist {nearestKeyDist:F1}, key {nearestDrop})");
                 }
             }
         }
@@ -827,7 +831,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// Frozen Tuna: WHP lost heals Goro's HP (fractional losses accumulate).
-        /// On hit, 20% chance to stop all non-ice enemies and freeze Goro.
+        /// On hit, 5% chance to stop all non-ice enemies and freeze Goro for 3 seconds.
         /// Ice enemies (Blizzard, Sam, Ice Gemron) are immune to the stop proc.
         /// </summary>
         public static void FrozenTuna()
@@ -871,7 +875,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                     }
 
-                    if (hitDetected && random.Next(100) < 20)
+                    if (hitDetected && random.Next(100) < 5)
                     {
                         for (int i = 0; i < 15; i++)
                         {
@@ -881,7 +885,18 @@ namespace Dark_Cloud_Improved_Version
                                 Memory.WriteUShort(Enemies.Enemy0.freezeTimer + (Enemies.offset * i), 300);
                             }
                         }
-                        Player.Goro.SetStatus("freeze", 300);
+                        Player.Goro.SetStatus("freeze", 180); // 3 seconds at 60fps
+                        int freezeStartTick = Memory.ReadInt(Addresses.ingameTimer);
+                        Task.Run(() =>
+                        {
+                            while (Memory.ReadInt(Addresses.ingameTimer) - freezeStartTick < 180)
+                                Thread.Sleep(50);
+                            if (Player.Goro.GetStatus() == 4)
+                            {
+                                Memory.WriteUShort(Player.Goro.status, 0);
+                                Memory.WriteUShort(Player.Goro.statusTimer, 0);
+                            }
+                        });
                     }
                 }
 

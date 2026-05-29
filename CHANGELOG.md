@@ -153,7 +153,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Aga's Sword** — Grants Toan +15 defense while equipped; boost is re-applied if external changes alter defense. Removed on unequip.
 - **Brave Ark** — Polls for Freeze, Poison, Curse, and Goo status effects and clears them within the polling interval. Stamina is intentionally excluded from the resist mask.
 - **Frozen Tuna (Goro)** — WHP loss heals Goro HP proportionally. On hit, 20% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
-- **Wise Owl Sword** — While a Wise Owl Sword is in bag, storage, or equipped in Wise Owl Forest, picking up a Shiny Stone, Red Berry, or Pointy Chestnut displays "You found Wise Owl's favorite!" if it's the floor key.
+- **Wise Owl Sword** — While a Wise Owl Sword is in bag, storage, or equipped in Wise Owl Forest, a message displays when you are near an enemy carrying one of the three keys.
 - **Cactus** — Added custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
 
 ### Weapon Stat Changes
@@ -165,4 +165,152 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Aga's Sword** — Max attack 190, no buildup paths.
 - **Skunk** — Final-form weapon (no buildup), max attack 143, max magic 105.
 - **Blessing Gun** — Max attack 87, max magic 80.
+- **Choora** — Heaven's Cloud removed as a buildup path; Maneater is the only buildup target.
 - **Flamethrower weapons** — Rebalanced stats.
+
+---
+
+## Weapon Buildup Paths
+
+All buildup paths as modified by this mod. `★` marks final forms (no further buildup).
+
+---
+
+### Toan
+
+> **Mod changes:** Kitchen Knife has no buildup paths. Choora builds up to Maneater only. Heaven's Cloud and Aga's Sword are terminal weapons.
+
+```
+Baselard
+  ├─ Sax ─────┐
+  └─ Shamshir ─┴─ Dusack ─┬─ Brave Ark → Dark Cloud → 7th Heaven ★
+                           └─ 7 Branch Sword → Atlamillia Sword → Chronicle Sword ★
+
+Gladius
+  ├─ Small Sword → Tsukikage → Heaven's Cloud ★
+  └─ Chopper ─┬─ Choora → Maneater → Atlamillia Sword → Chronicle Sword ★
+               └─ Dusack ─┬─ Brave Ark → Dark Cloud → 7th Heaven ★
+                           └─ 7 Branch Sword → Atlamillia Sword → Chronicle Sword ★
+
+Crysknife
+  ├─ Small Sword → Tsukikage → Heaven's Cloud ★
+  └─ Sandbreaker → Antique Sword → Brave Ark → Dark Cloud → 7th Heaven ★
+
+Buster Sword → Claymore → Cross Hinder → Big Bang → Sword of Zeus ★
+
+Wise Owl Sword → Lamb's Sword → Atlamillia Sword → Chronicle Sword ★
+
+Bone Rapier → Evilcise → Drainseeker → Dark Cloud → 7th Heaven ★
+
+Kitchen Knife ★
+
+Sun Sword → Big Bang → Sword of Zeus ★
+
+Macho Sword
+  ├─ Aga's Sword ★
+  └─ Cross Hinder → Big Bang → Sword of Zeus ★
+
+Serpent Sword
+  ├─ Tsukikage → Heaven's Cloud ★
+  └─ Evilcise → Drainseeker → Dark Cloud → 7th Heaven ★
+
+Mardan Eins → Mardan Twei → Arise Mardan ★
+
+Chronicle 2 ★
+```
+
+---
+
+### Goro
+
+> **Mod changes:** Big Bucks Hammer builds up to Magical Hammer only (direct Gaia Hammer path removed). Frozen Tuna is a terminal weapon.
+
+```
+Steel Hammer → Plate Hammer → Magical Hammer ─┬─ Gaia Hammer ─┐
+                                               └─ Last Judgement ┴─ Tall Hammer ★
+
+Trial Hammer → Gaia Hammer → Tall Hammer ★
+
+Big Bucks Hammer → Magical Hammer ─┬─ Gaia Hammer ─┐
+                                    └─ Last Judgement ┴─ Tall Hammer ★
+
+Turtle Shell ─┬─ Magical Hammer ─┬─ Gaia Hammer ─┐
+              │                   └─ Last Judgement ┴─ Tall Hammer ★
+              └─ Battle Axe → Satan's Axe → Inferno ★
+
+Battle Axe → Satan's Axe → Inferno ★
+
+Frozen Tuna ★
+```
+
+---
+
+### Ruby
+
+> **Mod changes:** Thorn Armlet now builds to Destruction Ring only (was Platinum Ring). Pocklekul gains a second path to Thorn Armlet. Bandit's Ring paths changed to Crystal Ring and Thorn Armlet only.
+
+```
+Platinum Ring ─┬─ Crystal Ring ─┬─ Goddess Ring → Athena's Armlet → Secret Armlet ★
+               │                └─ Satan's Ring → Mobius Ring ★
+               └─ Fairy Ring → Destruction Ring → Mobius Ring ★
+
+Thorn Armlet → Destruction Ring → Mobius Ring ★
+
+Pocklekul ─┬─ Fairy Ring → Destruction Ring → Mobius Ring ★
+            └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
+
+Bandit's Ring ─┬─ Crystal Ring ─┬─ Goddess Ring → Athena's Armlet → Secret Armlet ★
+               │                └─ Satan's Ring → Mobius Ring ★
+               └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
+```
+
+---
+
+### Ungaga
+
+```
+Javelin ─┬─ Desanga ─┐
+          └─ Partisan ┴─ Cactus → Terra Sword → Babel Spear ★
+
+Halberd → Scorpion ─┬─ Mirage ─┬─ Terra Sword → Babel Spear ★
+                    │           └─ Hercules' Wrath ★
+                    └─ Cactus → Terra Sword → Babel Spear ★
+
+5 Foot Nail ─┬─ Scorpion ─┬─ Mirage ─┬─ Terra Sword → Babel Spear ★
+             │             │           └─ Hercules' Wrath ★
+             │             └─ Cactus → Terra Sword → Babel Spear ★
+             └─ Partisan → Cactus → Terra Sword → Babel Spear ★
+```
+
+---
+
+### Osmond
+
+> **Mod changes:** Skunk is a terminal weapon.
+
+```
+Jackal ─┬─ Blessing Gun → Skunk ★
+         └─ Swallow → G Crusher → Star Breaker ★
+
+Snail ─┬─ Blessing Gun → Skunk ★
+        └─ Hexa Blaster → Supernova ★
+```
+
+---
+
+### Xiao
+
+> **Mod changes:** Bandit Slingshot builds up to Double Impact only (Hardshooter path removed).
+
+```
+Steel Slingshot → Hardshooter ─┬─ Double Impact ─┬─ Divine Beast Title → Angel Shooter → Angel Gear ★
+                                └─ Matador ────────┘
+
+Bone Slingshot → Flamingo → Dragon's Y → Divine Beast Title → Angel Shooter → Angel Gear ★
+
+Bandit Slingshot → Double Impact → Divine Beast Title → Angel Shooter → Angel Gear ★
+
+Steve → Super Steve ★
+
+Angel Shooter → Angel Gear ★
+```

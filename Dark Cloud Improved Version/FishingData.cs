@@ -305,22 +305,22 @@ namespace Dark_Cloud_Improved_Version
                 FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
             },
         };
-        internal static readonly AreaFishData Area19 = new AreaFishData
+        internal static readonly AreaFishData Queens = new AreaFishData
         {
-            Id = 19, Name = "Area19",
-            SlotBase = Addresses.fishSlotBase_Area19, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
+            Id = 19, Name = "Queens",
+            SlotBase = Addresses.fishSlotBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
         };
-        internal static readonly AreaFishData Area3 = new AreaFishData
+        internal static readonly AreaFishData MuskaLacka = new AreaFishData
         {
-            Id = 3, Name = "Area3",
-            SlotBase = Addresses.fishSlotBase_Area3, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
+            Id = 3, Name = "Muska Lacka",
+            SlotBase = Addresses.fishSlotBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
         };
 
         private static readonly Dictionary<int, AreaFishData> ById;
         static FishingAreaDatabase()
         {
-            AreaFishData[] allAreas = { Norune, MatatakiWaterfall, Area19, Area3 };
+            AreaFishData[] allAreas = { Norune, MatatakiWaterfall, Queens, MuskaLacka };
             ById = new Dictionary<int, AreaFishData>(allAreas.Length);
             foreach (AreaFishData area in allAreas) ById[area.Id] = area;
         }

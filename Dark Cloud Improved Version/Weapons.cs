@@ -3385,6 +3385,8 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((speed + (weaponoffset * (Items.chopper - daggerid))), 60); //Speed set to 60
 
                 //Choora
+                Memory.WriteUInt((buildup +     (weaponoffset * (Items.choora - daggerid))), 0); //Remove Heaven's Cloud buildup path (lower 32 bits)
+                Memory.WriteUInt((buildup + 4 + (weaponoffset * (Items.choora - daggerid))), 1); //Build-up to Maneater only (upper 32 bits, bit 32)
                 Memory.WriteUShort((whp + (weaponoffset * (Items.choora - daggerid))), 57);      //Whp set to 57
                 Memory.WriteUShort((attack + (weaponoffset * (Items.choora - daggerid))), 45);   //Attack set to 45
                 Memory.WriteUShort((speed + (weaponoffset * (Items.choora - daggerid))), 70);    //Speed set to 70
@@ -3511,7 +3513,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((attack + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 30);      //Attack set to 30
                 Memory.WriteUShort((maxattack + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 50);   //Max Attack set to 50
                 Memory.WriteUShort((magic + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 20);       //Magic set to 20
-                Memory.WriteInt((buildup + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 8200);      //Sets build-up branches to both Crystal Ring and Thorn Armlet
+                Memory.WriteInt((buildup + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 8200);      //Sets build-up branches to both Crystal Ring and Thorn Armlet (test that it still builds up to pocklekul)
 
                 //Platinum Ring
                 Memory.WriteUShort((attack + (rubyoffset + (weaponoffset * (Items.platinumring - goldringid)))), 23); //Attack set to 23
