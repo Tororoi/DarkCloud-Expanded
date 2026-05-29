@@ -393,9 +393,17 @@
         /// <summary>Base address of the first fish slot for each fishing area. Slots are stride 0x2410 bytes apart.</summary>
         public const int fishSlotStride      = 0x2410;
         public const int fishSlotBase_Norune    = 0x214798D0; // Area 0 — Norune Village,    4 slots
-        public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall, 5 slots
+        public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall + Peanut Pond, 5 slots (shared)
         public const int fishSlotBase_MuskaLacka     = 0x213C3150; // Area 3 — location TBD,       4 slots
         public const int fishSlotBase_Queens    = 0x20DE0710; // Area 19 — location TBD,      5 slots
+
+        /// <summary>
+        /// Index of the fishing trigger NPC/object that activated the current fishing session,
+        /// within the area's object table. Set when townMode transitions to 16 (fishing).
+        /// Used to distinguish sub-spots that share the same area ID.
+        /// Confirmed values: Norune=4, PeanutPond=11, MatatakiWaterfall=13, Queens=-1 (unset).
+        /// </summary>
+        public const int fishingTriggerIndex = 0x202A1F64;
 
         /// <summary>
         /// Address of the lui instruction that sets the fish detection (bite) radius.

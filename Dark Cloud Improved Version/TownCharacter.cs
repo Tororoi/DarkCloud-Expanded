@@ -901,7 +901,7 @@ namespace Dark_Cloud_Improved_Version
 
                     if (fishingActive == true)
                     {
-                        Fishing.InitFishingSession(currentArea);
+                        Fishing.InitFishingSession(ResolveFishingSpot(currentArea));
                         if (checkFishing == 0)
                         {
                             fishingActive = false;
@@ -1462,6 +1462,17 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByte(currentAddress, value1[0]);
                 currentAddress += 0x00000001;
             }
+        }
+        // Matataki Waterfall (trigger index 13) and Peanut Pond (trigger index 11) share area ID 1.
+        // fishingTriggerIndex holds the object-table index of the rod NPC that activated fishing,
+        // confirmed stable across multiple sessions at each spot.
+        private static int ResolveFishingSpot(int areaId)
+        {
+            if (areaId != 1) return areaId;
+            int triggerIndex = Memory.ReadInt(Addresses.fishingTriggerIndex);
+            return triggerIndex == FishingAreaDatabase.MatatakiWaterfall.TriggerIndex
+                ? FishingAreaDatabase.MatatakiWaterfall.Id
+                : FishingAreaDatabase.PeanutPond.Id;
         }
     }
 }

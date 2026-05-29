@@ -62,6 +62,8 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
+            int triggerIdx = Memory.ReadInt(Addresses.fishingTriggerIndex);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[FishSession] triggerIndex={triggerIdx}");
         }
 
         /// <summary>
@@ -583,7 +585,8 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void SteerFishToPlayer(AreaFishData areaData)
         {
-            bool isMatataki = areaData.Id == FishingAreaDatabase.MatatakiWaterfall.Id;
+            bool isMatataki = areaData.Id == FishingAreaDatabase.MatatakiWaterfall.Id ||
+                              areaData.Id == FishingAreaDatabase.PeanutPond.Id;
             if (!hasMardanSword && !isMatataki) return;
 
             float playerX = Memory.ReadFloat(Addresses.positionX);
