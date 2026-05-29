@@ -140,7 +140,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Wise Owl Sword passive: displays a message when the correct WOF floor key is picked up,
+        /// Ability Name: Wise Owl Always Knows (Wise Owl Sword)
+        /// Wise Owl Sword passive: displays a message when an enemy holding a WOF key is nearby,
         /// provided the player owns a Wise Owl Sword anywhere (bag, storage, or equipped).
         /// </summary>
         public static void WiseOwlSword()
@@ -256,6 +257,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Jealous Soul (Evilcise)
         /// Evilcise effect: Toan is cursed while equipped and immune to all other status effects.
         /// Breaking the curse with holy water applies poison and sets HP to 1.
         /// The curse is reapplied on each new floor.
@@ -324,6 +326,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Heightened Perception (Heaven's Cloud)
         /// Heaven's Cloud effect: 50% chance on hit to inflict gooey on the struck enemy.
         /// </summary>
         public static void HeavensCloud()
@@ -354,6 +357,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Defensive Legacy (Aga's Sword)
         /// Aga's Sword: +15 defense to Toan while equipped.
         /// </summary>
         public static void AgasSword()
@@ -377,6 +381,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Hero's Courage (Brave Ark)
         /// Brave Ark: resists Freeze, Poison, Curse, and Goo status effects while equipped.
         /// Clears any of those statuses within the polling interval.
         /// </summary>
@@ -830,39 +835,67 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Frozen Tuna: WHP lost heals Goro's HP (fractional losses accumulate).
+        /// Ability Name: Cold Storage (Frozen Tuna)
+        /// Frozen Tuna: WHP lost builds a healing pool. When Goro takes damage the pool
+        /// drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; the pool is
+        /// preserved until the next hit. Pool resets on weapon repair or weapon switch.
         /// On hit, 5% chance to stop all non-ice enemies and freeze Goro for 3 seconds.
         /// Ice enemies (Blizzard, Sam, Ice Gemron) are immune to the stop proc.
         /// </summary>
         public static void FrozenTuna()
         {
-            float hpAccumulator = 0f;
+            float storedHealing = 0f; // HP banked from WHP losses
+            float healFraction  = 0f; // sub-integer carry for 1 HP/500ms drain
+            bool  healActive    = false;
 
             while (Player.Weapon.GetCurrentWeaponId() == Items.frozentuna && Player.InDungeonFloor())
             {
-                int[] formerHp = ReusableFunctions.GetEnemiesHp();
-                float whpBefore = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+                int[] formerHp      = ReusableFunctions.GetEnemiesHp();
+                float whpBefore     = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+                ushort goroHpBefore = Player.Goro.GetHp();
 
                 Thread.Sleep(50);
 
                 int[] currentHp  = ReusableFunctions.GetEnemiesHp();
                 float whpAfter   = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
+                ushort goroHp    = Player.Goro.GetHp();
+                ushort goroMaxHp = Player.Goro.GetMaxHp();
 
-                // WHP lost → heal Goro's HP
+                // WHP lost → bank into healing pool (2 HP per 1 WHP lost)
                 if (whpAfter < whpBefore)
+                    storedHealing += (whpBefore - whpAfter) * 2f;
+
+                // WHP repaired → reset everything
+                if (whpAfter > whpBefore)
                 {
-                    hpAccumulator += whpBefore - whpAfter;
-                    if (hpAccumulator >= 1f)
+                    storedHealing = 0f;
+                    healFraction  = 0f;
+                    healActive    = false;
+                }
+
+                // Goro took damage → activate pool drain if pool has anything
+                if (goroHp < goroHpBefore && storedHealing > 0f)
+                    healActive = true;
+
+                // Drain pool at 1 HP per 500ms (0.1 HP per 50ms tick) while below max
+                if (healActive && storedHealing > 0f && goroHp < goroMaxHp)
+                {
+                    float drain    = Math.Min(0.1f, storedHealing);
+                    storedHealing -= drain;
+                    healFraction  += drain;
+
+                    int intHeal = (int)healFraction;
+                    if (intHeal > 0)
                     {
-                        int heal = (int)hpAccumulator;
-                        ushort goroHp    = Player.Goro.GetHp();
-                        ushort goroMaxHp = Player.Goro.GetMaxHp();
-                        Player.Goro.SetHp((ushort)Math.Min(goroHp + heal, goroMaxHp));
-                        hpAccumulator -= heal;
+                        Player.Goro.SetHp((ushort)Math.Min(goroHp + intHeal, goroMaxHp));
+                        healFraction -= intHeal;
                     }
                 }
 
-                // On-hit 20% stop proc: all non-ice enemies stopped; Goro frozen too
+                if (storedHealing <= 0f)
+                    healActive = false;
+
+                // On-hit 5% stop proc: all non-ice enemies stopped; Goro frozen too
                 if (ReusableFunctions.GetDamageSourceCharacterID() == Player.GoroId)
                 {
                     bool hitDetected = false;
@@ -1158,23 +1191,21 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Absorb (Cactus)
         /// Cactus: on hit, restore Ungaga's thirst scaled by damage dealt.
         /// 100 damage = 10.0 thirst units = 1 visible water drop.
         /// Rock, metal, and undead types are immune.
         /// </summary>
         public static void Cactus()
         {
-            while ((Player.Weapon.GetCurrentWeaponId() == Items.cactus ||
-                    Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot) && // TEMP: test
+            while (Player.Weapon.GetCurrentWeaponId() == Items.cactus ||
                    Player.InDungeonFloor())
             {
                 int[] former = ReusableFunctions.GetEnemiesHp();
                 Thread.Sleep(50);
                 int[] current = ReusableFunctions.GetEnemiesHp();
 
-                bool isBoneSlingshot = Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot;
-                int expectedSource = isBoneSlingshot ? Player.XiaoId : Player.UngagaId;
-                if (ReusableFunctions.GetDamageSourceCharacterID() != expectedSource)
+                if (ReusableFunctions.GetDamageSourceCharacterID() != Player.UngagaId)
                 {
                     ReusableFunctions.ClearRecentDamageAndDamageSource();
                     continue;
@@ -1189,8 +1220,8 @@ namespace Dark_Cloud_Improved_Version
                     if (CactusImmuneNameTags.Contains(nameTag))
                         continue;
 
-                    float curThirst = isBoneSlingshot ? Player.Xiao.GetThirst() : Player.Ungaga.GetThirst();
-                    float maxThirst = isBoneSlingshot ? Player.Xiao.GetMaxThirst() : Player.Ungaga.GetMaxThirst();
+                    float curThirst = Player.Ungaga.GetThirst();
+                    float maxThirst = Player.Ungaga.GetMaxThirst();
                     if (maxThirst > 0 && curThirst >= maxThirst)
                         break;
 
@@ -1198,8 +1229,7 @@ namespace Dark_Cloud_Improved_Version
                     float newThirst = (maxThirst > 0)
                         ? Math.Min(curThirst + gain, maxThirst)
                         : curThirst + gain;
-                    if (isBoneSlingshot) Player.Xiao.SetThirst(newThirst);
-                    else Player.Ungaga.SetThirst(newThirst);
+                    Player.Ungaga.SetThirst(newThirst);
                     break;
                 }
 

@@ -161,7 +161,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Wise Owl Sword** — While a Wise Owl Sword is owned, a message displays when you are near an enemy carrying one of the three keys in Wise Owl Forest.
 
 **Goro**
-- **Frozen Tuna** — WHP loss heals Goro HP proportionally. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
+- **Frozen Tuna** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
 
 **Ungaga**
 - **Cactus** — Custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
