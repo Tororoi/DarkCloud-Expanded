@@ -585,19 +585,19 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void SteerFishToPlayer(AreaFishData areaData)
         {
-            bool isMatataki = areaData.Id == FishingAreaDatabase.MatatakiWaterfall.Id ||
-                              areaData.Id == FishingAreaDatabase.PeanutPond.Id;
-            if (!hasMardanSword && !isMatataki) return;
+            bool hasPassiveSteering = areaData.Id == FishingAreaDatabase.MatatakiWaterfall.Id ||
+                                      areaData.Id == FishingAreaDatabase.QueensHarbor.Id;
+            if (!hasMardanSword && !hasPassiveSteering) return;
 
             float playerX = Memory.ReadFloat(Addresses.positionX);
             float playerY = Memory.ReadFloat(Addresses.positionY);
 
-            // Rebalance Matataki Waterfall fishing so fish are nudged toward the player without being perfectly locked on, which would feel unnatural and reduce challenge.
-            if (isMatataki)
+            // Nudge all fish toward the player every 10 seconds to keep them within reach without locking them on perfectly.
+            if (hasPassiveSteering)
             {
                 for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
                 {
-                    if ((DateTime.UtcNow - _lastMatatakiSteerTime[slotIndex]).TotalSeconds < 11.0) continue;
+                    if ((DateTime.UtcNow - _lastMatatakiSteerTime[slotIndex]).TotalSeconds < 10.0) continue;
                     _lastMatatakiSteerTime[slotIndex] = DateTime.UtcNow;
 
                     int s = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
@@ -610,7 +610,7 @@ namespace Dark_Cloud_Improved_Version
                     float angle = (float)Math.Atan2(dy, dx);
                     Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[Steer/Matataki] slot={slotIndex} fish={fishArray[slotIndex]} angle={angle:F2}");
+                        $"[Steer/Passive] slot={slotIndex} fish={fishArray[slotIndex]} angle={angle:F2}");
                 }
             }
 

@@ -27,7 +27,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 ### Fishing
 
 - **Fishing quest system** — Refactored fishing quest tracking. Tracks fishing quests for Pike (Norune, area 0), Pao (Matataki Waterfall, area 1), Sam (Area 19), and Devia (Area 3). Supports count quests and size-range quests; monitors quest state byte and fires the Sam post-loop queens-quest trigger after the required number of completions.
-- **Fish steering** — Passive fish-steering loop at Matataki Waterfall points all fish toward the player roughly every 11 seconds. Mardan Eins ownership adds a separate steering pass for Garayan and Umadakara fish at an interval weighted by bait affinity.
+- **Fish steering** — Passive fish-steering loop at Matataki Waterfall and Queens Harbor nudges all fish toward the player every 10 seconds. Mardan Eins ownership adds a separate steering pass for Garayan and Umadakara fish at an interval weighted by bait affinity.
 - **Mardan Sword rework** — Detects all Mardan swords from bag and storage (not only equipped). FP multipliers: Eins 1.2×, Twei 1.5×, Arise 2×. Mardan Twei and Arise Mardan trigger a second independent Garayan fish roll. Arise Mardan scales fish size at an increasing factor gradually toward the species max size.
 
 ### Miniboss System
