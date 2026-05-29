@@ -152,7 +152,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Heaven's Cloud** — 50% chance to apply Gooey on hit.
 - **Aga's Sword** — Grants Toan +15 defense while equipped; boost is re-applied if external changes alter defense. Removed on unequip.
 - **Brave Ark** — Polls for Freeze, Poison, Curse, and Goo status effects and clears them within the polling interval. Stamina is intentionally excluded from the resist mask.
-- **Frozen Tuna (Goro)** — WHP loss heals Goro HP proportionally. On hit, 20% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
+- **Frozen Tuna (Goro)** — WHP loss heals Goro HP proportionally. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
 - **Wise Owl Sword** — While a Wise Owl Sword is in bag, storage, or equipped in Wise Owl Forest, a message displays when you are near an enemy carrying one of the three keys.
 - **Cactus** — Added custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
 
@@ -160,12 +160,15 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 - **Bone Slingshot / Hardshooter** — 50% chance to generate with the Fragile effect.
 - **De Sanga** — 30% chance to generate with the Drain effect.
-- **Frozen Tuna** — Max attack 100, max MP 678, Stop effect, no buildup paths.
+- **Frozen Tuna** — Max attack 100, max MP 678, Stop effect, no buildup paths, third attachment slot.
 - **Heaven's Cloud** — Max attack 180, max magic 180, no buildup paths, third attachment slot.
 - **Aga's Sword** — Max attack 190, no buildup paths.
 - **Skunk** — Final-form weapon (no buildup), max attack 143, max magic 105.
 - **Blessing Gun** — Max attack 87, max magic 80.
+- **Jackal** - No buildup to Blessing Gun.
+- **Snail** - No buildup to Blessing Gun.
 - **Choora** — Heaven's Cloud removed as a buildup path; Maneater is the only buildup target.
+- **Thorn Armlet** — Stone Breaker and Beast Buster set to 20. 50% chance to generate with the Poison effect.
 - **Flamethrower weapons** — Rebalanced stats.
 
 ---
@@ -221,6 +224,23 @@ Chronicle 2 ★
 
 ---
 
+### Xiao
+
+```
+Steel Slingshot → Hardshooter ─┬─ Double Impact ─┬─ Divine Beast Title → Angel Shooter → Angel Gear ★
+                                └─ Matador ────────┘
+
+Bone Slingshot → Flamingo → Dragon's Y → Divine Beast Title → Angel Shooter → Angel Gear ★
+
+Bandit Slingshot ─┬─ Hardshooter ─┬─ Double Impact ─┬─ Divine Beast Title → Angel Shooter → Angel Gear ★
+                  │               └─ Matador ────────┘
+                  └─ Double Impact → Divine Beast Title → Angel Shooter → Angel Gear ★
+
+Steve → Super Steve ★
+```
+
+---
+
 ### Goro
 
 > **Mod changes:** Big Bucks Hammer builds up to Magical Hammer only (direct Gaia Hammer path removed). Frozen Tuna is a terminal weapon.
@@ -247,21 +267,18 @@ Frozen Tuna ★
 
 ### Ruby
 
-> **Mod changes:** Thorn Armlet now builds to Destruction Ring only (was Platinum Ring). Pocklekul gains a second path to Thorn Armlet. Bandit's Ring paths changed to Crystal Ring and Thorn Armlet only.
+> **Mod changes:** Thorn Armlet now builds to Destruction Ring only (was Platinum Ring). Pocklekul gains a second path to Thorn Armlet.
 
 ```
 Platinum Ring ─┬─ Crystal Ring ─┬─ Goddess Ring → Athena's Armlet → Secret Armlet ★
                │                └─ Satan's Ring → Mobius Ring ★
                └─ Fairy Ring → Destruction Ring → Mobius Ring ★
 
-Thorn Armlet → Destruction Ring → Mobius Ring ★
-
-Pocklekul ─┬─ Fairy Ring → Destruction Ring → Mobius Ring ★
-            └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
-
 Bandit's Ring ─┬─ Crystal Ring ─┬─ Goddess Ring → Athena's Armlet → Secret Armlet ★
                │                └─ Satan's Ring → Mobius Ring ★
-               └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
+               ├─ Goddess Ring → Athena's Armlet → Secret Armlet ★
+               └─ Pocklekul ─┬─ Fairy Ring → Destruction Ring → Mobius Ring ★
+                              └─ Thorn Armlet → Destruction Ring → Mobius Ring ★
 ```
 
 ---
@@ -286,31 +303,12 @@ Halberd → Scorpion ─┬─ Mirage ─┬─ Terra Sword → Babel Spear ★
 
 ### Osmond
 
-> **Mod changes:** Skunk is a terminal weapon.
+> **Mod changes:** Skunk is a terminal weapon. Jackal and Snail no longer build up to Blessing Gun; Blessing Gun is a standalone starting weapon.
 
 ```
-Jackal ─┬─ Blessing Gun → Skunk ★
-         └─ Swallow → G Crusher → Star Breaker ★
+Jackal → Swallow → G Crusher → Star Breaker ★
 
-Snail ─┬─ Blessing Gun → Skunk ★
-        └─ Hexa Blaster → Supernova ★
-```
+Snail → Hexa Blaster → Supernova ★
 
----
-
-### Xiao
-
-> **Mod changes:** Bandit Slingshot builds up to Double Impact only (Hardshooter path removed).
-
-```
-Steel Slingshot → Hardshooter ─┬─ Double Impact ─┬─ Divine Beast Title → Angel Shooter → Angel Gear ★
-                                └─ Matador ────────┘
-
-Bone Slingshot → Flamingo → Dragon's Y → Divine Beast Title → Angel Shooter → Angel Gear ★
-
-Bandit Slingshot → Double Impact → Divine Beast Title → Angel Shooter → Angel Gear ★
-
-Steve → Super Steve ★
-
-Angel Shooter → Angel Gear ★
+Blessing Gun → Skunk ★
 ```

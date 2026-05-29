@@ -3385,8 +3385,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((speed + (weaponoffset * (Items.chopper - daggerid))), 60); //Speed set to 60
 
                 //Choora
-                Memory.WriteUInt((buildup +     (weaponoffset * (Items.choora - daggerid))), 0); //Remove Heaven's Cloud buildup path (lower 32 bits)
-                Memory.WriteUInt((buildup + 4 + (weaponoffset * (Items.choora - daggerid))), 1); //Build-up to Maneater only (upper 32 bits, bit 32)
+                Memory.WriteUInt((buildup + (weaponoffset * (Items.choora - daggerid))), 2147483648); //Build-up to Maneater only
                 Memory.WriteUShort((whp + (weaponoffset * (Items.choora - daggerid))), 57);      //Whp set to 57
                 Memory.WriteUShort((attack + (weaponoffset * (Items.choora - daggerid))), 45);   //Attack set to 45
                 Memory.WriteUShort((speed + (weaponoffset * (Items.choora - daggerid))), 70);    //Speed set to 70
@@ -3459,7 +3458,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((fire + (xiaooffset + (weaponoffset * (Items.woodenslingshot - woodenid)))), 4);   //Fire set to 4
 
                 //Bandit Slingshot
-                Memory.WriteUInt((buildup + (xiaooffset + (weaponoffset * (Items.banditslingshot - woodenid)))), 128); //Sets build-up to Double Impact only
+                // Memory.WriteUInt((buildup + (xiaooffset + (weaponoffset * (Items.banditslingshot - woodenid)))), 128); //Sets build-up to Double Impact only
 
                 //Bone Slingshot
                 Memory.WriteUShort((attack + (xiaooffset + (weaponoffset * (Items.boneslingshot - woodenid)))), 11);    //Attack set to 11
@@ -3490,6 +3489,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((maxattack + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 100); //Max attack set to 100
                 Memory.WriteUShort((maxmagic  + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 678); //Max MP set to 678
                 Memory.WriteByte  ((effect    + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 64);  //Stop
+                Memory.WriteUShort((synth4    + (gorooffset + (weaponoffset * (Items.frozentuna - malletid)))), 1);   //Adds a 3rd regular attachment slot
 
                 //Gaia Hammer
                 Memory.WriteUShort((endurance + (gorooffset + (weaponoffset * (Items.gaiahammer - malletid)))), 25); //Endurance set to 25
@@ -3513,7 +3513,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((attack + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 30);      //Attack set to 30
                 Memory.WriteUShort((maxattack + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 50);   //Max Attack set to 50
                 Memory.WriteUShort((magic + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 20);       //Magic set to 20
-                Memory.WriteInt((buildup + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 8200);      //Sets build-up branches to both Crystal Ring and Thorn Armlet (test that it still builds up to pocklekul)
+                // Memory.WriteInt((buildup + (rubyoffset + (weaponoffset * (Items.banditsring - goldringid)))), 8200);      //Sets build-up branches to both Crystal Ring and Thorn Armlet
 
                 //Platinum Ring
                 Memory.WriteUShort((attack + (rubyoffset + (weaponoffset * (Items.platinumring - goldringid)))), 23); //Attack set to 23
@@ -3525,7 +3525,10 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort((buildup + (rubyoffset + (weaponoffset * (Items.pocklekul - goldringid)))), 8256);   //Sets build-up branches to both Fairy Ring and Thorn Armlet
 
                 //Thorn Armlet
-                Memory.WriteUShort((maxmagic + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 65);  //Max Magic set to 65
+                Memory.WriteUShort((maxattack + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 90);   //Max Attack set to 90
+                Memory.WriteUShort((maxmagic + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 72);  //Max Magic set to 72
+                Memory.WriteUShort((stone + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 20);     //Stone Breaker set to 20
+                Memory.WriteUShort((beast + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 20);     //Beast Buster set to 20
                 Memory.WriteUShort((buildup + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 128);  //Sets build-up branches to Destruction Ring
 
                 //Athenas Armlet
@@ -3571,12 +3574,20 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteUShort((maxattack + (osmondoffset + (weaponoffset * (osmondweaponid - machinegunid)))), (ushort)(CurrWeaponMaxAttack + 15)); //Adds +15 Max Attack to the current weapon being looped through
                 }
 
-                Memory.WriteUShort((buildup + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 0);       //No buildup paths (final form)
+                //Jackal
+                Memory.WriteUShort((buildup + (osmondoffset + (weaponoffset * (Items.jackal - machinegunid)))), 4096);    //Build-up to Swallow only
 
+                //Snail
+                Memory.WriteUShort((buildup + (osmondoffset + (weaponoffset * (Items.snail - machinegunid)))), 256);     //Build-up to Hexa Blaster only
+
+                //Blessing Gun
                 Memory.WriteUShort((maxattack + (osmondoffset + (weaponoffset * (Items.blessinggun - machinegunid)))), 87);   //Blessing Gun max attack set to 87
                 Memory.WriteUShort((maxmagic  + (osmondoffset + (weaponoffset * (Items.blessinggun - machinegunid)))), 80);   //Blessing Gun max magic set to 80
+
+                //Skunk
                 Memory.WriteUShort((maxattack + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 143);        //Skunk max attack set to 143
                 Memory.WriteUShort((maxmagic  + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 105);         //Skunk max magic set to 105
+                Memory.WriteUShort((buildup + (osmondoffset + (weaponoffset * (Items.skunk - machinegunid)))), 0);       //No buildup paths (final form)
 
 
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished applying new weapon changes!");
@@ -3804,6 +3815,21 @@ namespace Dark_Cloud_Improved_Version
                 else
                 {
                     Memory.WriteByte((effect2 + (rubyoffset + (weaponoffset * (Items.satansring - goldringid)))), 0);
+                }
+
+                /*********************
+                 *   Thorn Armlet   *
+                 *********************/
+
+                attributeRoll = rnd.Next(100);
+
+                if (attributeRoll < 50)
+                {
+                    Memory.WriteByte((effect + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 32); //Poison
+                }
+                else
+                {
+                    Memory.WriteByte((effect + (rubyoffset + (weaponoffset * (Items.thornarmlet - goldringid)))), 0);
                 }
 
                 /*********************
