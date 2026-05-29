@@ -878,6 +878,83 @@ namespace Dark_Cloud_Improved_Version
             public const int locationCoordinateY = Enemy0.locationCoordinateY + (offset * EnemyMultiplier);
         }
 
+        // ── Research tools ──────────────────────────────────────────────────────
+        private static DateTime _lastEnemyPollTime = DateTime.MinValue;
+        private static readonly Dictionary<int, int[]> _enemySlotSnapshots = new Dictionary<int, int[]>();
+
+        internal static void DumpEnemySlot(int slotIndex)
+        {
+            int slotBase = Enemy0.visible + (offset * slotIndex);
+            ushort nameId = Memory.ReadUShort(Enemy0.nameTag + (offset * slotIndex));
+            string name = GetEnemyName(nameId);
+            Console.WriteLine($"[EnemyDump] slot={slotIndex} {name} (id={nameId}) base=0x{slotBase:X8}");
+            for (int off = 0; off < 0x190; off += 4)
+            {
+                int raw = Memory.ReadInt(slotBase + off);
+                float asFloat = Memory.ReadFloat(slotBase + off);
+                Console.WriteLine($"[EnemyDump] slot={slotIndex} +0x{off:X3}  raw=0x{raw:X8}  int={raw,-12}  float={asFloat:F4}");
+            }
+        }
+
+        internal static void DumpAllActiveEnemySlots()
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                int status = Memory.ReadInt(Enemy0.renderStatus + (offset * i));
+                if (status != -1 && status != 0)
+                    DumpEnemySlot(i);
+            }
+        }
+
+        internal static void PollEnemyDynamics()
+        {
+            if ((DateTime.UtcNow - _lastEnemyPollTime).TotalSeconds < 1.0) return;
+            _lastEnemyPollTime = DateTime.UtcNow;
+
+            int    charNum     = Player.CurrentCharacterNum();
+            string charName    = Player.GetCharacterName(charNum);
+            ushort playerHp, playerMaxHp;
+            int    playerDef;
+            switch (charNum)
+            {
+                case Player.XiaoId:   playerHp = Player.Xiao.GetHp();   playerMaxHp = Player.Xiao.GetMaxHp();   playerDef = Player.Xiao.GetDefense();   break;
+                case Player.GoroId:   playerHp = Player.Goro.GetHp();   playerMaxHp = Player.Goro.GetMaxHp();   playerDef = Player.Goro.GetDefense();   break;
+                case Player.RubyId:   playerHp = Player.Ruby.GetHp();   playerMaxHp = Player.Ruby.GetMaxHp();   playerDef = Player.Ruby.GetDefense();   break;
+                case Player.UngagaId: playerHp = Player.Ungaga.GetHp(); playerMaxHp = Player.Ungaga.GetMaxHp(); playerDef = Player.Ungaga.GetDefense(); break;
+                case Player.OsmondId: playerHp = Player.Osmond.GetHp(); playerMaxHp = Player.Osmond.GetMaxHp(); playerDef = Player.Osmond.GetDefense(); break;
+                default:              playerHp = Player.Toan.GetHp();   playerMaxHp = Player.Toan.GetMaxHp();   playerDef = Player.Toan.GetDefense();   break;
+            }
+            Console.WriteLine($"[EnemyPoll] player={charName} hp={playerHp}/{playerMaxHp}  def={playerDef}");
+
+            const int wordCount = 0x190 / 4;
+            for (int i = 0; i < 16; i++)
+            {
+                int slotBase = Enemy0.visible + (offset * i);
+                int status = Memory.ReadInt(slotBase);
+                if (status == -1 || status == 0) continue;
+
+                int[] current = new int[wordCount];
+                for (int w = 0; w < wordCount; w++)
+                    current[w] = Memory.ReadInt(slotBase + w * 4);
+
+                if (_enemySlotSnapshots.TryGetValue(i, out int[] prev))
+                {
+                    ushort nameId = Memory.ReadUShort(Enemy0.nameTag + (offset * i));
+                    string name = GetEnemyName(nameId);
+                    for (int w = 0; w < wordCount; w++)
+                    {
+                        if (current[w] != prev[w])
+                        {
+                            int off = w * 4;
+                            float asFloat = BitConverter.ToSingle(BitConverter.GetBytes(current[w]), 0);
+                            Console.WriteLine($"[EnemyPoll] slot={i} {name} +0x{off:X3}  0x{prev[w]:X8} -> 0x{current[w]:X8}  (int:{current[w]}  float:{asFloat:F4})");
+                        }
+                    }
+                }
+                _enemySlotSnapshots[i] = current;
+            }
+        }
+
         internal class Digger
         {
             public const int maxJumpDistance = 0x213F3D70;

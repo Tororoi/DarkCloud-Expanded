@@ -101,6 +101,7 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
+                    // Enemies.PollEnemyDynamics();  // uncomment for live change detection
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -725,6 +726,7 @@ namespace Dark_Cloud_Improved_Version
                 monstersDead[i] = false;
             }
 
+            // Enemies.DumpAllActiveEnemySlots();  // uncomment to dump slot bytes on floor load
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 
