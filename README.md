@@ -108,9 +108,12 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 <details>
 <summary>Miniboss System</summary>
 
+- [ ] **Per-enemy spawn logic** — Confirm rate of spawn is approximately 1 miniboss per floor, but possible for no or multiple minibosses to appear.
+- [ ] **Backfloor spawn** — Confirm minibosses may spawn in backfloor.
+- [ ] **Miniboss persistence** — Confirm Miniboss will not respawn via returning from backfloors if already killed. Confirm Miniboss still spawns as same enemy type if not killed before going to backfloor then returning.
 - [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 4× the base enemy values (up from 3×)
-- [ ] **Flavor rare drops (5%)** — Each dungeon has per-enemy rare drops; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
-- [ ] **Flavor common drops (30%)** — Verify themed items drop from the correct enemies per dungeon
+- [ ] **Flavor rare loot (5%)** — Each dungeon has per-enemy rare loot; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
+- [ ] **Flavor common loot (30%)** — Verify themed items drop from the correct enemies per dungeon
 - [ ] **Weapon stat boosts on pickup** — When a miniboss drops a boosted weapon (e.g., Gladius in DBC, Frozen Tuna in Moon Sea), pick it up and confirm the preset stats are written to the weapon slot
 - [ ] **Boost monitor cancels on floor change** — Do not pick up the weapon drop; advance to the next floor and confirm no orphaned boost thread is running
 
