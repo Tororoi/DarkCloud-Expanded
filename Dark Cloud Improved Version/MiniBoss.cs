@@ -12,184 +12,257 @@ namespace Dark_Cloud_Improved_Version
         public const int enemyZeroHeight = 0x21E18534; //Enemy Height multiplier
         public const int enemyZeroDepth = 0x21E18538;  //Enemy Depth multiplier
         public const int scaleOffset = 0x3510;         //Offset for size
-        public static int enemyNumber = 0;
+        public static List<int> miniBossEnemyNumbers = new List<int>();
         public static bool miniBossRolled = false;
         const int varOffset = 0x190;            //Offset for attributes
         const float scaleSize = 1.5F;           //Sets the total size of the miniboss
-        const int enemyHPMult = 5;              //Miniboss HP multiplier
-        const int enemyABSMult = 5;             //Miniboss ABS multiplier
+        const int enemyHPMult = 4;              //Miniboss HP multiplier
+        const int enemyABSMult = 4;             //Miniboss ABS multiplier
         const int enemyItemResistMulti = 10;    //Miniboss Item Resistance multiplier %
-        const int enemyGoldMult = 5;            //Miniboss Gilda Drop multiplier
-        const int enemyDropChance = 100;        //Miniboss Drop chance % (0 - 100)
+        const int enemyGoldMult = 4;            //Miniboss Gilda Loot multiplier
+        const int enemyLootChance = 100;        //Miniboss Loot chance % (0 - 100)
         const byte staminaTimer = 79;           //Miniboss Stamina Timer (Currently 79 on the 3rd byte is roughly 1 day)
 
         static Dictionary<ushort, string> nonKeyEnemies = Enemies.GetFlyingEnemies();
 
-        /// <summary>
-        /// Picks and transforms an enemy on the current floor to become a Champion (Miniboss).
-        /// </summary>
-        /// <param name="skipFirstRoll">To skip the spawning chance roll.</param>
-        /// <param name="dungeon">The number of the current dungeon.</param>
-        /// <param name="floor">The number of the current floor.</param>
-        /// <returns></returns>
-        public static bool MiniBossSpawn(bool skipFirstRoll = false, byte dungeon = 255, byte floor = 255)
+        public class MiniBossSnapshot
         {
-            //Rolls for a 30% chance to spawn the miniboss
-            if (rnd.Next(100) <= 30 || skipFirstRoll)
-            {
-
-                if (skipFirstRoll == false)
-                {
-                    Thread.Sleep(200);
-                }
-
-                //Choose the enemy to convert into mini boss
-                enemyNumber = rnd.Next(Enemies.GetFloorEnemiesIds().Count);
-
-                //Check if the chosen enemy has an ID
-                if (Enemies.GetFloorEnemyId(enemyNumber) > 0)
-                {
-                    //Check if chosen enemy is flying type
-                    if (!nonKeyEnemies.ContainsKey(Enemies.GetFloorEnemyId(enemyNumber)))
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +   "\nEnemyNumber rolled after flying check: " + Enemies.GetFloorEnemyId(enemyNumber) + "" +
-                                                                                    "\nIs flying enemy: " + nonKeyEnemies.ContainsKey(Enemies.GetFloorEnemyId(enemyNumber)) +
-                                                                                    "\nChosen miniboss ID: " + Enemies.GetFloorEnemyId(enemyNumber) + "\n");
-
-                        //Check if chosen enemy has the key
-                        if (Enemies.EnemyHasKey(enemyNumber, dungeon))
-                        {
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "The Key has landed on the mini boss!");
-
-                            int newEnemyNumber;
-
-                            //Get the enemy key ID
-                            ushort KeyId = Memory.ReadUShort(Enemies.Enemy0.forceItemDrop + (varOffset * enemyNumber));
-
-                            //Re-roll for a different enemy that does not hold the key (due to Wise Owl) and is non flying
-                            do { newEnemyNumber = rnd.Next(Enemies.GetFloorEnemiesIds().Count); } while (newEnemyNumber == enemyNumber &&
-                                                                                                                Enemies.EnemyHasKey(newEnemyNumber, dungeon) &&
-                                                                                                                nonKeyEnemies.ContainsKey(Enemies.GetFloorEnemyId(newEnemyNumber)));
-
-                            //Remove the key from the original enemy
-                            Memory.WriteUShort(Enemies.Enemy0.forceItemDrop + (varOffset * enemyNumber), 0);
-
-                            //Set the key onto a new enemy
-                            Memory.WriteUShort(Enemies.Enemy0.forceItemDrop + (varOffset * newEnemyNumber), KeyId);
-                        }
-
-                        //  == Get base values from the chosen enemy ==
-                        int startBossHP = Memory.ReadInt(Enemies.Enemy0.hp + (varOffset * enemyNumber));
-                        int startAbs = Memory.ReadInt(Enemies.Enemy0.abs + (varOffset * enemyNumber));
-                        int startGold = Memory.ReadInt(Enemies.Enemy0.minGoldDrop + (varOffset * enemyNumber));
-
-                        // === Set mini boss new stats ===
-                        Memory.WriteFloat(enemyZeroWidth + (scaleOffset * enemyNumber), scaleSize);                         //Scales Width
-                        Memory.WriteFloat(enemyZeroHeight + (scaleOffset * enemyNumber), scaleSize);                        //Scales Height
-                        Memory.WriteFloat(enemyZeroDepth + (scaleOffset * enemyNumber), scaleSize);                         //Scales Depth
-                        Memory.WriteInt(Enemies.Enemy0.hp + (varOffset * enemyNumber), (startBossHP * enemyHPMult));        //Changes Enemy HP
-                        Memory.WriteInt(Enemies.Enemy0.maxHp + (varOffset * enemyNumber), (startBossHP * enemyHPMult));     //Changes MaxHP
-                        Memory.WriteInt(Enemies.Enemy0.abs + (varOffset * enemyNumber), (startAbs * enemyABSMult));         //Changes ABS reward
-                        Memory.WriteInt(Enemies.Enemy0.itemResistance + (varOffset * enemyNumber), enemyItemResistMulti);   //Changes the enemies item resistance
-                        Memory.WriteInt(Enemies.Enemy0.minGoldDrop + (varOffset * enemyNumber), startGold * enemyGoldMult); //Changes the enemies gilda drop amount
-                        Memory.WriteInt(Enemies.Enemy0.dropChance + (varOffset * enemyNumber), enemyDropChance);            //Changes the enemies drop chance
-                        Memory.WriteByte(Enemies.Enemy0.staminaTimer + (varOffset * enemyNumber) + 0x2, staminaTimer);      //Changes the enemies stamina timer
-
-
-                        // === Set mini boss new item ===
-
-                        int[] weaponTable = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
-                        ushort enemyTypeId = Enemies.GetFloorEnemyId(enemyNumber);
-
-                        //Check for enemy-specific flavor drops before standard rolls
-                        if (!TryApplyFlavorDrop(enemyTypeId, dungeon, enemyNumber))
-                        {
-                            //Roll first for the backfloor key
-                            if (rnd.Next(100) < 35)
-                            {
-                                WriteDropItem(Dungeon.GetDungeonBackFloorKey(dungeon), enemyNumber);
-                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with backfloor key!");
-                            }
-                            //If backfloor key roll fails, roll for weapon
-                            else if (rnd.Next(100) < 15)
-                            {
-                                WriteDropItem(weaponTable[rnd.Next(weaponTable.Length)], enemyNumber);
-                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with weapon!");
-                            }
-                            //If weapon roll fails, roll for attachments
-                            else if (rnd.Next(100) < 80)
-                            {
-                                if (rnd.Next(100) < 60) WriteDropItem(attachmentsTableLucky[rnd.Next(attachmentsTableLucky.Length)], enemyNumber);
-                                else WriteDropItem(attachmentsTableUnlucky[rnd.Next(attachmentsTableUnlucky.Length)], enemyNumber);
-                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with attachment!");
-                            }
-                            else //If previous rolls fail, default to items
-                            {
-                                if (rnd.Next(100) < 60) WriteDropItem(itemTableLucky[rnd.Next(itemTableLucky.Length)], enemyNumber);
-                                else WriteDropItem(itemTableUnlucky[rnd.Next(itemTableUnlucky.Length)], enemyNumber);
-                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with item!");
-                            }
-                        }
-
-                        miniBossRolled = true;
-                        return true;
-                    }
-                    //Retry if landing on a flying enemy
-                    else { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + " Miniboss landed on flying enemy!"); MiniBossSpawn(true, dungeon, floor); return true; }
-                }
-                //Retry if landing on a enemy with ID 0
-                else { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Chosen enemy ID must not be 0!"); MiniBossSpawn(true, dungeon, floor); return true; }
-            }
-            else
-            {
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Failed to roll for Mini Boss!");
-                miniBossRolled = false;
-            }
-
-            return false;
+            public int Slot;
+            public ushort TypeId;
         }
 
         /// <summary>
-        /// Rolls for and applies a dungeon-specific flavor drop to the miniboss.
-        /// Checks flavorRare (5%) first, then flavorDrop (30%).
-        /// Returns true if a special drop was applied.
+        /// Picks and transforms enemies on the current floor into Champions (Minibosses).
+        /// Each eligible enemy (non-flying, non-zero ID, no forced item drop) has a
+        /// 1-in-(15 minus ineligible count) chance of being chosen. All winners are transformed.
         /// </summary>
-        private static bool TryApplyFlavorDrop(ushort enemyTypeId, byte dungeon, int enemyNum)
+        public static bool MiniBossSpawn(byte dungeon = 255, byte floor = 255)
         {
-            Dictionary<ushort, int[]> rareDrops;
-            Dictionary<ushort, int[]> flavorDrops;
-            Dictionary<int, WeaponBoostData> rareBoosts;
-            Dictionary<int, WeaponBoostData> flavorBoosts;
+            Thread.Sleep(200);
+
+            // Count all enemies ineligible to become a miniboss (ID 0, flying, or has a forced item drop)
+            int ineligibleCount = 0;
+            List<ushort> allIds = Enemies.GetFloorEnemiesIds();
+            for (int i = 0; i < allIds.Count; i++)
+            {
+                ushort id = allIds[i];
+                ushort dropVal = Memory.ReadUShort(Enemies.Enemy0.forceItemDrop + (varOffset * i));
+                if (id == 0 || nonKeyEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
+                    ineligibleCount++;
+            }
+
+            int denominator = Math.Max(1, 15 - ineligibleCount);
+
+            // Roll 1-in-denominator for each eligible enemy; all winners become minibosses
+            List<int> winners = new List<int>();
+            for (int i = 0; i < allIds.Count; i++)
+            {
+                ushort id = allIds[i];
+                if (id == 0) continue;
+                if (nonKeyEnemies.ContainsKey(id)) continue;
+                ushort dropVal = Memory.ReadUShort(Enemies.Enemy0.forceItemDrop + (varOffset * i));
+                if (dropVal != 0 && dropVal != 65535) continue;
+                if (rnd.Next(denominator) == 0)
+                    winners.Add(i);
+            }
+
+            if (winners.Count == 0)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Failed to roll for Mini Boss!");
+                miniBossRolled = false;
+                return false;
+            }
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                "\nIneligible count: " + ineligibleCount +
+                "\nDenominator (1-in-N): " + denominator +
+                "\nWinners: " + winners.Count + "\n");
+
+            foreach (int slot in winners)
+                ApplyToSlot(slot, dungeon, floor);
+
+            miniBossRolled = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Applies miniboss stat multipliers and rolls loot for a single enemy slot.
+        /// Also registers the slot in miniBossEnemyNumbers.
+        /// </summary>
+        private static void ApplyToSlot(int slot, byte dungeon, byte floor)
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                "\nApplying miniboss to slot: " + slot +
+                "\nEnemy ID: " + Enemies.GetFloorEnemyId(slot) + "\n");
+
+            // Eligibility filtering should prevent a key-holder from ever being chosen.
+            // This block should be unreachable — log a warning if it fires.
+            if (Enemies.EnemyHasKey(slot, dungeon))
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
+
+            int startBossHP = Memory.ReadInt(Enemies.Enemy0.hp + (varOffset * slot));
+            int startAbs    = Memory.ReadInt(Enemies.Enemy0.abs + (varOffset * slot));
+            int startGold   = Memory.ReadInt(Enemies.Enemy0.minGoldDrop + (varOffset * slot));
+
+            Memory.WriteFloat(enemyZeroWidth  + (scaleOffset * slot), scaleSize);
+            Memory.WriteFloat(enemyZeroHeight + (scaleOffset * slot), scaleSize);
+            Memory.WriteFloat(enemyZeroDepth  + (scaleOffset * slot), scaleSize);
+            Memory.WriteInt(Enemies.Enemy0.hp           + (varOffset * slot), startBossHP * enemyHPMult);
+            Memory.WriteInt(Enemies.Enemy0.maxHp        + (varOffset * slot), startBossHP * enemyHPMult);
+            Memory.WriteInt(Enemies.Enemy0.abs          + (varOffset * slot), startAbs * enemyABSMult);
+            Memory.WriteInt(Enemies.Enemy0.itemResistance + (varOffset * slot), enemyItemResistMulti);
+            Memory.WriteInt(Enemies.Enemy0.minGoldDrop  + (varOffset * slot), startGold * enemyGoldMult);
+            Memory.WriteInt(Enemies.Enemy0.dropChance   + (varOffset * slot), enemyLootChance);
+            Memory.WriteByte(Enemies.Enemy0.staminaTimer + (varOffset * slot) + 0x2, staminaTimer);
+
+            int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
+            ushort enemyTypeId = Enemies.GetFloorEnemyId(slot);
+
+            if (!TryApplyFlavorLoot(enemyTypeId, dungeon, slot))
+            {
+                if (rnd.Next(100) < 35)
+                {
+                    WriteLootItem(Dungeon.GetDungeonBackFloorKey(dungeon), slot);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with backfloor key!");
+                }
+                else if (rnd.Next(100) < 15)
+                {
+                    WriteLootItem(weaponTable[rnd.Next(weaponTable.Length)], slot);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with weapon!");
+                }
+                else if (rnd.Next(100) < 80)
+                {
+                    if (rnd.Next(100) < 60) WriteLootItem(MiniBossLootTables.attachmentsTableLucky[rnd.Next(MiniBossLootTables.attachmentsTableLucky.Length)], slot);
+                    else                    WriteLootItem(MiniBossLootTables.attachmentsTableUnlucky[rnd.Next(MiniBossLootTables.attachmentsTableUnlucky.Length)], slot);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with attachment!");
+                }
+                else
+                {
+                    if (rnd.Next(100) < 60) WriteLootItem(MiniBossLootTables.itemTableLucky[rnd.Next(MiniBossLootTables.itemTableLucky.Length)], slot);
+                    else                    WriteLootItem(MiniBossLootTables.itemTableUnlucky[rnd.Next(MiniBossLootTables.itemTableUnlucky.Length)], slot);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with item!");
+                }
+            }
+
+            miniBossEnemyNumbers.Add(slot);
+        }
+
+        /// <summary>
+        /// Snapshots all currently alive minibosses, clears miniboss state, and returns the snapshot.
+        /// Returns an empty list (never null) if no minibosses are alive.
+        /// </summary>
+        public static List<MiniBossSnapshot> TakeSnapshot()
+        {
+            var snap = new List<MiniBossSnapshot>();
+            foreach (int slot in miniBossEnemyNumbers)
+            {
+                if (Memory.ReadInt(Enemies.Enemy0.hp + (varOffset * slot)) > 0)
+                    snap.Add(new MiniBossSnapshot { Slot = slot, TypeId = Enemies.GetFloorEnemyId(slot) });
+            }
+            miniBossRolled = false;
+            miniBossEnemyNumbers.Clear();
+            return snap;
+        }
+
+        /// <summary>
+        /// Restores minibosses from a previous snapshot, re-applying stats to each alive entry.
+        /// If a restored enemy was assigned the key during respawn, the key is transferred to
+        /// another non-miniboss, non-key enemy before applying stats.
+        /// </summary>
+        public static void RestoreFromSnapshot(List<MiniBossSnapshot> snapshot, byte dungeon, byte floor)
+        {
+            if (snapshot == null || snapshot.Count == 0) return;
+
+            // Build the set of slots being restored so key transfer avoids them
+            var restoredSlots = new HashSet<int>();
+            foreach (var entry in snapshot)
+            {
+                if (Enemies.GetFloorEnemyId(entry.Slot) == entry.TypeId)
+                    restoredSlots.Add(entry.Slot);
+            }
+
+            foreach (var entry in snapshot)
+            {
+                if (Enemies.GetFloorEnemyId(entry.Slot) != entry.TypeId)
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss restore: type mismatch at slot " + entry.Slot + ", skipping.");
+                    continue;
+                }
+
+                // If the respawned enemy was assigned the key, transfer it away before applying stats
+                if (Enemies.EnemyHasKey(entry.Slot, dungeon))
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss restore: key conflict at slot " + entry.Slot + ", transferring key.");
+                    ushort keyId = Memory.ReadUShort(Enemies.Enemy0.forceItemDrop + (varOffset * entry.Slot));
+                    int newSlot = -1;
+                    for (int i = 0; i < 15; i++)
+                    {
+                        if (restoredSlots.Contains(i) || i == entry.Slot) continue;
+                        if (Enemies.GetFloorEnemyId(i) == 0) continue;
+                        if (Enemies.EnemyHasKey(i, dungeon)) continue;
+                        newSlot = i;
+                        break;
+                    }
+                    if (newSlot >= 0)
+                    {
+                        Memory.WriteUShort(Enemies.Enemy0.forceItemDrop + (varOffset * entry.Slot), 0);
+                        Memory.WriteUShort(Enemies.Enemy0.forceItemDrop + (varOffset * newSlot), keyId);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Key transferred to slot " + newSlot);
+                    }
+                    else
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss restore: no valid slot found for key transfer!");
+                    }
+                }
+
+                ApplyToSlot(entry.Slot, dungeon, floor);
+            }
+
+            if (miniBossEnemyNumbers.Count > 0)
+                miniBossRolled = true;
+        }
+
+        /// <summary>
+        /// Rolls for and applies a dungeon-specific flavor loot to the miniboss.
+        /// Checks flavorRare (5%) first, then flavorLoot (30%).
+        /// Returns true if special loot was applied.
+        /// </summary>
+        private static bool TryApplyFlavorLoot(ushort enemyTypeId, byte dungeon, int enemyNum)
+        {
+            Dictionary<ushort, int[]> rareLoot;
+            Dictionary<ushort, int[]> flavorLoot;
+            Dictionary<int, MiniBossLootTables.WeaponBoostData> rareBoosts;
+            Dictionary<int, MiniBossLootTables.WeaponBoostData> flavorBoosts;
 
             switch (dungeon)
             {
-                case 0: rareDrops = dbcFlavorRareDrops;  flavorDrops = dbcFlavorDrops;  rareBoosts = dbcWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
-                case 1: rareDrops = wofFlavorRareDrops;  flavorDrops = wofFlavorDrops;  rareBoosts = wofWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
-                case 2: rareDrops = shipFlavorRareDrops; flavorDrops = shipFlavorDrops; rareBoosts = shipWeaponBoosts; flavorBoosts = emptyWeaponBoosts;        break;
-                case 3: rareDrops = sunFlavorRareDrops;  flavorDrops = sunFlavorDrops;  rareBoosts = sunWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
-                case 4: rareDrops = moonFlavorRareDrops; flavorDrops = moonFlavorDrops; rareBoosts = moonWeaponBoosts; flavorBoosts = moonFlavorWeaponBoosts;   break;
-                case 5: rareDrops = galFlavorRareDrops;  flavorDrops = galFlavorDrops;  rareBoosts = galWeaponBoosts;  flavorBoosts = galFlavorWeaponBoosts;    break;
-                case 6: rareDrops = dsFlavorRareDrops;   flavorDrops = dsFlavorDrops;   rareBoosts = dsWeaponBoosts;   flavorBoosts = dsFlavorWeaponBoosts;      break;
+                case 0: rareLoot = MiniBossLootTables.dbcFlavorRareLoot;  flavorLoot = MiniBossLootTables.dbcFlavorLoot;  rareBoosts = MiniBossLootTables.dbcWeaponBoosts;  flavorBoosts = MiniBossLootTables.emptyWeaponBoosts;        break;
+                case 1: rareLoot = MiniBossLootTables.wofFlavorRareLoot;  flavorLoot = MiniBossLootTables.wofFlavorLoot;  rareBoosts = MiniBossLootTables.wofWeaponBoosts;  flavorBoosts = MiniBossLootTables.emptyWeaponBoosts;        break;
+                case 2: rareLoot = MiniBossLootTables.shipFlavorRareLoot; flavorLoot = MiniBossLootTables.shipFlavorLoot; rareBoosts = MiniBossLootTables.shipWeaponBoosts; flavorBoosts = MiniBossLootTables.emptyWeaponBoosts;        break;
+                case 3: rareLoot = MiniBossLootTables.sunFlavorRareLoot;  flavorLoot = MiniBossLootTables.sunFlavorLoot;  rareBoosts = MiniBossLootTables.sunWeaponBoosts;  flavorBoosts = MiniBossLootTables.emptyWeaponBoosts;        break;
+                case 4: rareLoot = MiniBossLootTables.moonFlavorRareLoot; flavorLoot = MiniBossLootTables.moonFlavorLoot; rareBoosts = MiniBossLootTables.moonWeaponBoosts; flavorBoosts = MiniBossLootTables.moonFlavorWeaponBoosts;   break;
+                case 5: rareLoot = MiniBossLootTables.galFlavorRareLoot;  flavorLoot = MiniBossLootTables.galFlavorLoot;  rareBoosts = MiniBossLootTables.galWeaponBoosts;  flavorBoosts = MiniBossLootTables.galFlavorWeaponBoosts;    break;
+                case 6: rareLoot = MiniBossLootTables.dsFlavorRareLoot;   flavorLoot = MiniBossLootTables.dsFlavorLoot;   rareBoosts = MiniBossLootTables.dsWeaponBoosts;   flavorBoosts = MiniBossLootTables.dsFlavorWeaponBoosts;      break;
                 default: return false;
             }
 
-            if (rareDrops.TryGetValue(enemyTypeId, out int[] rarePool) && rnd.Next(100) < 5)
+            if (rareLoot.TryGetValue(enemyTypeId, out int[] rarePool) && rnd.Next(100) < 5)
             {
                 int rareItem = rarePool[rnd.Next(rarePool.Length)];
-                WriteDropItem(rareItem, enemyNum);
-                if (rareBoosts.TryGetValue(rareItem, out WeaponBoostData boost))
+                WriteLootItem(rareItem, enemyNum);
+                if (rareBoosts.TryGetValue(rareItem, out MiniBossLootTables.WeaponBoostData boost))
                     StartInventoryBoostMonitor(boost, enemyNum);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor rare drop!");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor rare loot!");
                 return true;
             }
 
-            if (flavorDrops.TryGetValue(enemyTypeId, out int[] flavorPool) && rnd.Next(100) < 30)
+            if (flavorLoot.TryGetValue(enemyTypeId, out int[] flavorPool) && rnd.Next(100) < 30)
             {
                 int flavorItem = flavorPool[rnd.Next(flavorPool.Length)];
-                WriteDropItem(flavorItem, enemyNum);
-                if (flavorBoosts.TryGetValue(flavorItem, out WeaponBoostData flavorBoost))
+                WriteLootItem(flavorItem, enemyNum);
+                if (flavorBoosts.TryGetValue(flavorItem, out MiniBossLootTables.WeaponBoostData flavorBoost))
                     StartInventoryBoostMonitor(flavorBoost, enemyNum);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor drop!");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor loot!");
                 return true;
             }
 
@@ -197,21 +270,21 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // Weapons start at ID 257 in Items.cs; they require a 32-bit write.
-        private static void WriteDropItem(int itemId, int enemyNum)
+        private static void WriteLootItem(int itemId, int enemyNum)
         {
-            int dropAddress = Enemies.Enemy0.forceItemDrop + (varOffset * enemyNum);
+            int lootAddress = Enemies.Enemy0.forceItemDrop + (varOffset * enemyNum);
             if (itemId >= 257)
-                Memory.WriteInt(dropAddress, itemId);
+                Memory.WriteInt(lootAddress, itemId);
             else
-                Memory.WriteUShort(dropAddress, (ushort)itemId);
+                Memory.WriteUShort(lootAddress, (ushort)itemId);
         }
 
-        private static void StartInventoryBoostMonitor(WeaponBoostData boost, int enemyNum)
+        private static void StartInventoryBoostMonitor(MiniBossLootTables.WeaponBoostData boost, int enemyNum)
         {
-            pendingBoost = boost;
-            pendingBoostActive = true;
-            boostMonitorThread = new Thread(() => InventoryBoostMonitorLoop(enemyNum)) { IsBackground = true };
-            boostMonitorThread.Start();
+            MiniBossLootTables.pendingBoost = boost;
+            MiniBossLootTables.pendingBoostActive = true;
+            MiniBossLootTables.boostMonitorThread = new Thread(() => InventoryBoostMonitorLoop(enemyNum)) { IsBackground = true };
+            MiniBossLootTables.boostMonitorThread.Start();
         }
 
         private static void InventoryBoostMonitorLoop(int enemyNum)
@@ -245,28 +318,28 @@ namespace Dark_Cloud_Improved_Version
             // inventory (e.g. from a chest) is present in the snapshot we take next.
             int hpAddress = Enemies.Enemy0.hp + (varOffset * enemyNum);
             int elapsed = 0;
-            while (pendingBoostActive && Memory.ReadInt(hpAddress) > 0 && elapsed < 300000)
+            while (MiniBossLootTables.pendingBoostActive && Memory.ReadInt(hpAddress) > 0 && elapsed < 300000)
             {
                 Thread.Sleep(250);
                 elapsed += 250;
             }
 
-            if (!pendingBoostActive) return;
+            if (!MiniBossLootTables.pendingBoostActive) return;
 
             if (elapsed >= 300000)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Weapon boost monitor timed out waiting for miniboss death.");
-                pendingBoostActive = false;
+                MiniBossLootTables.pendingBoostActive = false;
                 return;
             }
 
             // Phase 2: snapshot inventory now (post-kill), then watch until the
-            // dropped weapon is picked up or the floor changes (pendingBoostActive → false).
+            // dropped weapon is picked up or the floor changes (MiniBossLootTables.pendingBoostActive → false).
             ushort[] snapshot = new ushort[toanSlots];
             for (int i = 0; i < toanSlots; i++)
                 snapshot[i] = Memory.ReadUShort(Addresses.firstBagWeapon + (weaponOffset * i));
 
-            while (pendingBoostActive)
+            while (MiniBossLootTables.pendingBoostActive)
             {
                 Thread.Sleep(250);
 
@@ -274,53 +347,53 @@ namespace Dark_Cloud_Improved_Version
                 {
                     int slotBase = Addresses.firstBagWeapon + (weaponOffset * i);
                     ushort current = Memory.ReadUShort(slotBase);
-                    if (current == pendingBoost.WeaponId && snapshot[i] != pendingBoost.WeaponId)
+                    if (current == MiniBossLootTables.pendingBoost.WeaponId && snapshot[i] != MiniBossLootTables.pendingBoost.WeaponId)
                     {
-                        if (pendingBoost.Attack > 0)     Memory.WriteUShort(slotBase + attackOffset,    pendingBoost.Attack);
-                        if (pendingBoost.Endurance > 0)  Memory.WriteUShort(slotBase + enduranceOffset, pendingBoost.Endurance);
-                        if (pendingBoost.Speed > 0)      Memory.WriteUShort(slotBase + speedOffset,     pendingBoost.Speed);
-                        if (pendingBoost.Magic > 0)      Memory.WriteUShort(slotBase + magicOffset,     pendingBoost.Magic);
-                        if (pendingBoost.Whp > 0)      { Memory.WriteUShort(slotBase + whpMaxOffset,    pendingBoost.Whp); Memory.WriteUShort(slotBase + whpOffset, pendingBoost.Whp); }
-                        if (pendingBoost.Fire > 0)       Memory.WriteByte(slotBase + fireOffset,        pendingBoost.Fire);
-                        if (pendingBoost.Ice > 0)        Memory.WriteByte(slotBase + iceOffset,         pendingBoost.Ice);
-                        if (pendingBoost.Thunder > 0)    Memory.WriteByte(slotBase + thunderOffset,     pendingBoost.Thunder);
-                        if (pendingBoost.Wind > 0)       Memory.WriteByte(slotBase + windOffset,        pendingBoost.Wind);
-                        if (pendingBoost.Holy > 0)       Memory.WriteByte(slotBase + holyOffset,        pendingBoost.Holy);
-                        if (pendingBoost.AntiDragon > 0) Memory.WriteByte(slotBase + antiDragonOffset,  pendingBoost.AntiDragon);
-                        if (pendingBoost.AntiUndead > 0) Memory.WriteByte(slotBase + antiUndeadOffset,  pendingBoost.AntiUndead);
-                        if (pendingBoost.AntiMarine > 0) Memory.WriteByte(slotBase + antiMarineOffset,  pendingBoost.AntiMarine);
-                        if (pendingBoost.AntiRock > 0)   Memory.WriteByte(slotBase + antiRockOffset,    pendingBoost.AntiRock);
-                        if (pendingBoost.AntiPlant > 0)  Memory.WriteByte(slotBase + antiPlantOffset,   pendingBoost.AntiPlant);
-                        if (pendingBoost.AntiBeast > 0)  Memory.WriteByte(slotBase + antiBeastOffset,   pendingBoost.AntiBeast);
-                        if (pendingBoost.AntiSky > 0)    Memory.WriteByte(slotBase + antiSkyOffset,     pendingBoost.AntiSky);
-                        if (pendingBoost.AntiMimic > 0)  Memory.WriteByte(slotBase + antiMimicOffset,   pendingBoost.AntiMimic);
-                        if (pendingBoost.AntiMage > 0)   Memory.WriteByte(slotBase + antiMageOffset,    pendingBoost.AntiMage);
-                        if (pendingBoost.Special1 > 0)   Memory.WriteByte(slotBase + special1Offset,    pendingBoost.Special1);
-                        if (pendingBoost.Special2 > 0)   Memory.WriteByte(slotBase + special2Offset,    pendingBoost.Special2);
+                        if (MiniBossLootTables.pendingBoost.Attack > 0)     Memory.WriteUShort(slotBase + attackOffset,    MiniBossLootTables.pendingBoost.Attack);
+                        if (MiniBossLootTables.pendingBoost.Endurance > 0)  Memory.WriteUShort(slotBase + enduranceOffset, MiniBossLootTables.pendingBoost.Endurance);
+                        if (MiniBossLootTables.pendingBoost.Speed > 0)      Memory.WriteUShort(slotBase + speedOffset,     MiniBossLootTables.pendingBoost.Speed);
+                        if (MiniBossLootTables.pendingBoost.Magic > 0)      Memory.WriteUShort(slotBase + magicOffset,     MiniBossLootTables.pendingBoost.Magic);
+                        if (MiniBossLootTables.pendingBoost.Whp > 0)      { Memory.WriteUShort(slotBase + whpMaxOffset,    MiniBossLootTables.pendingBoost.Whp); Memory.WriteUShort(slotBase + whpOffset, MiniBossLootTables.pendingBoost.Whp); }
+                        if (MiniBossLootTables.pendingBoost.Fire > 0)       Memory.WriteByte(slotBase + fireOffset,        MiniBossLootTables.pendingBoost.Fire);
+                        if (MiniBossLootTables.pendingBoost.Ice > 0)        Memory.WriteByte(slotBase + iceOffset,         MiniBossLootTables.pendingBoost.Ice);
+                        if (MiniBossLootTables.pendingBoost.Thunder > 0)    Memory.WriteByte(slotBase + thunderOffset,     MiniBossLootTables.pendingBoost.Thunder);
+                        if (MiniBossLootTables.pendingBoost.Wind > 0)       Memory.WriteByte(slotBase + windOffset,        MiniBossLootTables.pendingBoost.Wind);
+                        if (MiniBossLootTables.pendingBoost.Holy > 0)       Memory.WriteByte(slotBase + holyOffset,        MiniBossLootTables.pendingBoost.Holy);
+                        if (MiniBossLootTables.pendingBoost.AntiDragon > 0) Memory.WriteByte(slotBase + antiDragonOffset,  MiniBossLootTables.pendingBoost.AntiDragon);
+                        if (MiniBossLootTables.pendingBoost.AntiUndead > 0) Memory.WriteByte(slotBase + antiUndeadOffset,  MiniBossLootTables.pendingBoost.AntiUndead);
+                        if (MiniBossLootTables.pendingBoost.AntiMarine > 0) Memory.WriteByte(slotBase + antiMarineOffset,  MiniBossLootTables.pendingBoost.AntiMarine);
+                        if (MiniBossLootTables.pendingBoost.AntiRock > 0)   Memory.WriteByte(slotBase + antiRockOffset,    MiniBossLootTables.pendingBoost.AntiRock);
+                        if (MiniBossLootTables.pendingBoost.AntiPlant > 0)  Memory.WriteByte(slotBase + antiPlantOffset,   MiniBossLootTables.pendingBoost.AntiPlant);
+                        if (MiniBossLootTables.pendingBoost.AntiBeast > 0)  Memory.WriteByte(slotBase + antiBeastOffset,   MiniBossLootTables.pendingBoost.AntiBeast);
+                        if (MiniBossLootTables.pendingBoost.AntiSky > 0)    Memory.WriteByte(slotBase + antiSkyOffset,     MiniBossLootTables.pendingBoost.AntiSky);
+                        if (MiniBossLootTables.pendingBoost.AntiMimic > 0)  Memory.WriteByte(slotBase + antiMimicOffset,   MiniBossLootTables.pendingBoost.AntiMimic);
+                        if (MiniBossLootTables.pendingBoost.AntiMage > 0)   Memory.WriteByte(slotBase + antiMageOffset,    MiniBossLootTables.pendingBoost.AntiMage);
+                        if (MiniBossLootTables.pendingBoost.Special1 > 0)   Memory.WriteByte(slotBase + special1Offset,    MiniBossLootTables.pendingBoost.Special1);
+                        if (MiniBossLootTables.pendingBoost.Special2 > 0)   Memory.WriteByte(slotBase + special2Offset,    MiniBossLootTables.pendingBoost.Special2);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             $"Weapon boost applied to bag slot {i}:" +
-                            (pendingBoost.Attack > 0     ? $" atk={pendingBoost.Attack}"              : "") +
-                            (pendingBoost.Endurance > 0  ? $" end={pendingBoost.Endurance}"           : "") +
-                            (pendingBoost.Speed > 0      ? $" spd={pendingBoost.Speed}"               : "") +
-                            (pendingBoost.Magic > 0      ? $" mp={pendingBoost.Magic}"                : "") +
-                            (pendingBoost.Whp > 0        ? $" whp={pendingBoost.Whp}"                 : "") +
-                            (pendingBoost.Fire > 0       ? $" fire={pendingBoost.Fire}"               : "") +
-                            (pendingBoost.Ice > 0        ? $" ice={pendingBoost.Ice}"                 : "") +
-                            (pendingBoost.Thunder > 0    ? $" thunder={pendingBoost.Thunder}"         : "") +
-                            (pendingBoost.Wind > 0       ? $" wind={pendingBoost.Wind}"               : "") +
-                            (pendingBoost.Holy > 0       ? $" holy={pendingBoost.Holy}"               : "") +
-                            (pendingBoost.AntiDragon > 0 ? $" aDragon={pendingBoost.AntiDragon}"      : "") +
-                            (pendingBoost.AntiUndead > 0 ? $" aUndead={pendingBoost.AntiUndead}"      : "") +
-                            (pendingBoost.AntiMarine > 0 ? $" aMarine={pendingBoost.AntiMarine}"      : "") +
-                            (pendingBoost.AntiRock > 0   ? $" aRock={pendingBoost.AntiRock}"          : "") +
-                            (pendingBoost.AntiPlant > 0  ? $" aPlant={pendingBoost.AntiPlant}"        : "") +
-                            (pendingBoost.AntiBeast > 0  ? $" aBeast={pendingBoost.AntiBeast}"        : "") +
-                            (pendingBoost.AntiSky > 0    ? $" aSky={pendingBoost.AntiSky}"            : "") +
-                            (pendingBoost.AntiMimic > 0  ? $" aMimic={pendingBoost.AntiMimic}"        : "") +
-                            (pendingBoost.AntiMage > 0   ? $" aMage={pendingBoost.AntiMage}"          : "") +
-                            (pendingBoost.Special1 > 0   ? $" sp1=0x{pendingBoost.Special1:X2}"       : "") +
-                            (pendingBoost.Special2 > 0   ? $" sp2=0x{pendingBoost.Special2:X2}"       : ""));
-                        pendingBoostActive = false;
+                            (MiniBossLootTables.pendingBoost.Attack > 0     ? $" atk={MiniBossLootTables.pendingBoost.Attack}"              : "") +
+                            (MiniBossLootTables.pendingBoost.Endurance > 0  ? $" end={MiniBossLootTables.pendingBoost.Endurance}"           : "") +
+                            (MiniBossLootTables.pendingBoost.Speed > 0      ? $" spd={MiniBossLootTables.pendingBoost.Speed}"               : "") +
+                            (MiniBossLootTables.pendingBoost.Magic > 0      ? $" mp={MiniBossLootTables.pendingBoost.Magic}"                : "") +
+                            (MiniBossLootTables.pendingBoost.Whp > 0        ? $" whp={MiniBossLootTables.pendingBoost.Whp}"                 : "") +
+                            (MiniBossLootTables.pendingBoost.Fire > 0       ? $" fire={MiniBossLootTables.pendingBoost.Fire}"               : "") +
+                            (MiniBossLootTables.pendingBoost.Ice > 0        ? $" ice={MiniBossLootTables.pendingBoost.Ice}"                 : "") +
+                            (MiniBossLootTables.pendingBoost.Thunder > 0    ? $" thunder={MiniBossLootTables.pendingBoost.Thunder}"         : "") +
+                            (MiniBossLootTables.pendingBoost.Wind > 0       ? $" wind={MiniBossLootTables.pendingBoost.Wind}"               : "") +
+                            (MiniBossLootTables.pendingBoost.Holy > 0       ? $" holy={MiniBossLootTables.pendingBoost.Holy}"               : "") +
+                            (MiniBossLootTables.pendingBoost.AntiDragon > 0 ? $" aDragon={MiniBossLootTables.pendingBoost.AntiDragon}"      : "") +
+                            (MiniBossLootTables.pendingBoost.AntiUndead > 0 ? $" aUndead={MiniBossLootTables.pendingBoost.AntiUndead}"      : "") +
+                            (MiniBossLootTables.pendingBoost.AntiMarine > 0 ? $" aMarine={MiniBossLootTables.pendingBoost.AntiMarine}"      : "") +
+                            (MiniBossLootTables.pendingBoost.AntiRock > 0   ? $" aRock={MiniBossLootTables.pendingBoost.AntiRock}"          : "") +
+                            (MiniBossLootTables.pendingBoost.AntiPlant > 0  ? $" aPlant={MiniBossLootTables.pendingBoost.AntiPlant}"        : "") +
+                            (MiniBossLootTables.pendingBoost.AntiBeast > 0  ? $" aBeast={MiniBossLootTables.pendingBoost.AntiBeast}"        : "") +
+                            (MiniBossLootTables.pendingBoost.AntiSky > 0    ? $" aSky={MiniBossLootTables.pendingBoost.AntiSky}"            : "") +
+                            (MiniBossLootTables.pendingBoost.AntiMimic > 0  ? $" aMimic={MiniBossLootTables.pendingBoost.AntiMimic}"        : "") +
+                            (MiniBossLootTables.pendingBoost.AntiMage > 0   ? $" aMage={MiniBossLootTables.pendingBoost.AntiMage}"          : "") +
+                            (MiniBossLootTables.pendingBoost.Special1 > 0   ? $" sp1=0x{MiniBossLootTables.pendingBoost.Special1:X2}"       : "") +
+                            (MiniBossLootTables.pendingBoost.Special2 > 0   ? $" sp2=0x{MiniBossLootTables.pendingBoost.Special2:X2}"       : ""));
+                        MiniBossLootTables.pendingBoostActive = false;
                         return;
                     }
                 }

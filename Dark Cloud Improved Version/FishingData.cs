@@ -82,7 +82,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 1, Name = "Gobbler",
             Unk004 = 19.5f, Unk008 = 8.0f,
-            EstimatedMinSize = 6.6f, MaxSize = 16.0f,
+            EstimatedMinSize = 5.0f, MaxSize = 16.0f,
             FpMin = 10, FpMax = 30,
             SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
             SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
@@ -127,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 4, Name = "Baku Baku",
             Unk004 = 28.0f, Unk008 = 8.0f,
-            EstimatedMinSize = 5.7f, MaxSize = 16.0f,
+            EstimatedMinSize = 5.0f, MaxSize = 16.0f,
             FpMin = 10, FpMax = 40,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.5f,
@@ -208,7 +208,26 @@ namespace Dark_Cloud_Improved_Version
             BaitAffPetitefish      = 0.0f,
         };
         internal static readonly FishData Umadakara = new FishData { Id =  9, Name = "Umadakara" };
-        internal static readonly FishData Tarton    = new FishData { Id = 10, Name = "Tarton" };
+        internal static readonly FishData Tarton = new FishData
+        {
+            Id = 10, Name = "Tarton",
+            Unk004 = 20.0f, Unk008 = 8.0f,
+            EstimatedMinSize = 7.0f, MaxSize = 16.0f,
+            FpMin = 40, FpMax = 80,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.5f,
+            BaitAffPrickly         = 0.5f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.5f,
+            BaitAffMinon           = 1.0f,
+            BaitAffBattan          = 0.5f,
+            BaitAffPetitefish      = 0.5f,
+        };
         internal static readonly FishData Piccoly   = new FishData { Id = 11, Name = "Piccoly" };
         internal static readonly FishData Bon       = new FishData { Id = 12, Name = "Bon" };
         internal static readonly FishData Hamahama  = new FishData { Id = 13, Name = "Hamahama" };
@@ -277,6 +296,7 @@ namespace Dark_Cloud_Improved_Version
         internal int      QuestsDoneAddr;  // Sam only: multi-quest counter (0 = not present)
         internal int      PostLoopSrc;     // Sam only: queens-quest trigger src (0 = not present)
         internal int      PostLoopDst;     // Sam only: queens-quest trigger dst
+        internal int      TriggerIndex;   // value at Addresses.fishingTriggerIndex when this spot activates; 0 = not yet confirmed
         internal byte[]   FishIds;         // naturally-spawning fish IDs; null = not yet catalogued
     }
 
@@ -286,10 +306,11 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class FishingAreaDatabase
     {
-        internal static readonly AreaFishData Norune = new AreaFishData
+        internal static readonly AreaFishData NorunePond = new AreaFishData
         {
-            Id = 0, Name = "Norune",
+            Id = 0, Name = "Norune Pond",
             SlotBase = Addresses.fishSlotBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
+            TriggerIndex = 4,
             FishIds = new byte[]
             {
                 FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
@@ -299,28 +320,43 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 1, Name = "Matataki Waterfall",
             SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+            TriggerIndex = 13,
             FishIds = new byte[]
             {
                 FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
                 FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
             },
         };
-        internal static readonly AreaFishData Area19 = new AreaFishData
+        // Synthetic ID 100 — shares slot block and quest with MatatakiWaterfall.
+        // Resolved from area ID 1 via Addresses.fishingTriggerIndex (value 11 = Peanut Pond, 13 = Waterfall).
+        internal static readonly AreaFishData PeanutPond = new AreaFishData
         {
-            Id = 19, Name = "Area19",
-            SlotBase = Addresses.fishSlotBase_Area19, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
+            Id = 100, Name = "Peanut Pond",
+            SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+            TriggerIndex = 11,
+            FishIds = new byte[]
+            {
+                FishDatabase.Tarton.Id, FishDatabase.Gobbler.Id, FishDatabase.BakuBaku.Id,
+            },
+        };
+        internal static readonly AreaFishData QueensHarbor = new AreaFishData
+        {
+            Id = 19, Name = "Queens Harbor",
+            SlotBase = Addresses.fishSlotBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
+            TriggerIndex = -1,
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
         };
-        internal static readonly AreaFishData Area3 = new AreaFishData
+        internal static readonly AreaFishData MuskaLackaOasis = new AreaFishData
         {
-            Id = 3, Name = "Area3",
-            SlotBase = Addresses.fishSlotBase_Area3, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
+            Id = 3, Name = "Muska Lacka Oasis",
+            SlotBase = Addresses.fishSlotBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
+            TriggerIndex = 0, // not yet confirmed — update after first Oasis session
         };
 
         private static readonly Dictionary<int, AreaFishData> ById;
         static FishingAreaDatabase()
         {
-            AreaFishData[] allAreas = { Norune, MatatakiWaterfall, Area19, Area3 };
+            AreaFishData[] allAreas = { NorunePond, MatatakiWaterfall, PeanutPond, QueensHarbor, MuskaLackaOasis };
             ById = new Dictionary<int, AreaFishData>(allAreas.Length);
             foreach (AreaFishData area in allAreas) ById[area.Id] = area;
         }

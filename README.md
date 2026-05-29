@@ -97,21 +97,23 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 <details>
 <summary>Custom Weapon Effects</summary>
 
-- [ ] **Evilcise** — Equip in dungeon: curse applies immediately (including from pause menu). Break curse with holy water: verify poison is applied and HP is set to 1. Change floors: verify curse is reapplied. Unequip or leave dungeon: verify curse is stripped
-- [ ] **Heaven's Cloud** — Equip in dungeon: confirm 50% gooey proc triggers on hit and does not affect other weapons
-- [ ] **Aga's Sword** — Equip in dungeon: Toan gains +15 defense. Take hits that would change defense externally: verify boost is re-applied. Unequip: verify +15 is removed
+- [ ] **Cactus** — Equip in dungeon: hit enemy and observe water absorbed at a rate of 1 drop per 100 damage.
+- [ ] **Heaven's Cloud** — Confirm 50% gooey proc triggers on hit
+- [ ] **Aga's Sword** — Equip: Confirm Toan gains +15 defense. Take hits that would change defense externally: verify boost is re-applied if given fluffy doughnut. Unequip: verify +15 is removed
 - [ ] **Brave Ark** — Equip in dungeon: get hit with Freeze, Poison, Curse, or Goo — confirm each is cleared within the polling interval. Stamina (not in resist mask) should still apply
-- [ ] **Frozen Tuna (Goro)** — Equip in dungeon: WHP loss heals Goro HP proportionally. On hit, 20% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc
-- [ ] **Wise Owl Sword** — Own a Wise Owl Sword (bag, storage, or equipped) in Wise Owl Forest: pick up a Shiny Stone, Red Berry, or Pointy Chestnut — confirm "You found Wise Owl's favorite!" message. Test with sword NOT owned: confirm no message
+- [ ] **Frozen Tuna (Goro)** — Equip in dungeon: WHP loss heals Goro HP proportionally at 2x factor from banked hp pool. On hit, 5% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc
 
 </details>
 
 <details>
 <summary>Miniboss System</summary>
 
-- [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 5× the base enemy values (up from 3×)
-- [ ] **Flavor rare drops (5%)** — Each dungeon has per-enemy rare drops; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
-- [ ] **Flavor common drops (30%)** — Verify themed items drop from the correct enemies per dungeon
+- [ ] **Per-enemy spawn logic** — Confirm rate of spawn is approximately 1 miniboss per floor, but possible for no or multiple minibosses to appear.
+- [ ] **Backfloor spawn** — Confirm minibosses may spawn in backfloor.
+- [ ] **Miniboss persistence** — Confirm Miniboss will not respawn via returning from backfloors if already killed. Confirm Miniboss still spawns as same enemy type if not killed before going to backfloor then returning.
+- [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 4× the base enemy values (up from 3×)
+- [ ] **Flavor rare loot (5%)** — Each dungeon has per-enemy rare loot; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
+- [ ] **Flavor common loot (30%)** — Verify themed items drop from the correct enemies per dungeon
 - [ ] **Weapon stat boosts on pickup** — When a miniboss drops a boosted weapon (e.g., Gladius in DBC, Frozen Tuna in Moon Sea), pick it up and confirm the preset stats are written to the weapon slot
 - [ ] **Boost monitor cancels on floor change** — Do not pick up the weapon drop; advance to the next floor and confirm no orphaned boost thread is running
 
@@ -131,7 +133,6 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 <details>
 <summary>Fishing — Fish Steering</summary>
 
-- [ ] **Matataki Waterfall (no Mardan sword)** — Fish at Matataki without any Mardan sword equipped or stored: confirm fish visibly drift toward the player's position roughly every 11 seconds and the log shows `[Steer/Matataki]` entries
 - [ ] **Mardan Eins steering** — Own Mardan Eins; cast a bait with affinity for Garayan (Poisonous Apple) or Umadakara (Carrot): confirm those fish visibly steer toward the player and `[Steer/Mardan]` appears in the log at an interval matching the affinity weight
 - [ ] **No steering for non-Garayan/Umadakara** — Confirm that common fish (Gobbler, Nonky, etc.) are not steered by the Mardan Eins ability; only Mardan Garayan, Baron Garayan, and Umadakara should be affected
 - [ ] **Bait Detection** - Confirm bait detection works when switching bait multiple times in same fishing session.
@@ -142,9 +143,9 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 <summary>Fishing Quests</summary>
 
 - [ ] **Pike (Norune, area 0)** — Accept a count quest or size-range quest from Pike; catch the required fish and confirm the quest completes (state byte → 2) and the dialogue reflects completion
-- [ ] **Pao (Matataki Waterfall, area 1)** — Same as above for Pao's quest
-- [ ] **Sam (Area 19)** — Complete one of Sam's quests; confirm the multi-quest counter increments and, after the required number, the post-loop queens-quest trigger fires
-- [ ] **Devia (Area 3)** — Accept and complete Devia's quest; confirm normal count/size completion flow
+- [ ] **Pao (Matataki, area 1)** — Same as above for Pao's quest
+- [ ] **Sam (Queens, Area 19)** — Complete one of Sam's quests; confirm the multi-quest counter increments and, after the required number, the post-loop queens-quest trigger fires
+- [ ] **Devia (Muska Lacka, Area 3)** — Accept and complete Devia's quest; confirm normal count/size completion flow
 
 </details>
 
@@ -163,7 +164,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - [ ] **Frozen Tuna base stats** — Confirm max attack 100, max MP 678, Stop effect, no buildup paths
 - [ ] **Heaven's Cloud base stats** — Confirm max attack 180, max magic 180, no buildup paths, third attachment slot
 - [ ] **Aga's Sword base stats** — Confirm max attack 190, no buildup paths
-- [ ] **Skunk / Blessing Gun** — Confirm Skunk is a final-form weapon (no buildup) with max attack 143, max magic 105; Blessing Gun max attack 87, max magic 80
+- [ ] **Skunk / Blessing Gun** — Confirm Snail and Jackal no longer buildup to Blessing Gun. Confirm Skunk is a final-form weapon (no buildup) with max attack 143, max magic 105; Blessing Gun max attack 87, max magic 80
 
 </details>
 

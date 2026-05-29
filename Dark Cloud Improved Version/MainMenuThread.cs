@@ -260,7 +260,12 @@ namespace Dark_Cloud_Improved_Version
                 if (currentFrameCounter < previousFrameCounter || currentFrameCounter > previousFrameCounter + 360 || currentFrameCounter == 0)
                 {
                     Thread.Sleep(200);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Save state detected!");
+                    if (currentFrameCounter == 0)
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Save state detected! Reason: currentFrameCounter == 0");
+                    else if (currentFrameCounter < previousFrameCounter)
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Save state detected! Reason: currentFrameCounter ({currentFrameCounter}) < previousFrameCounter ({previousFrameCounter})");
+                    else
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Save state detected! Reason: currentFrameCounter ({currentFrameCounter}) > previousFrameCounter ({previousFrameCounter}) + 360");
                     if (Player.InDungeonFloor() == true)
                         Memory.WriteInt(Addresses.dungeonDebugMenu, 151); //If we are in a dungeon, this will take us to the main menu
                     else

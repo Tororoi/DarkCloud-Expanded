@@ -40,6 +40,9 @@ namespace Dark_Cloud_Improved_Version
         public static bool mayorQuestCheck = false;
         public static bool mayorQuestActive = false;
         public static bool hasMiniBoss = false;
+        static bool wasOnBackFloor = false;
+        static List<MiniBoss.MiniBossSnapshot> normalFloorSnapshot = null;
+        static List<MiniBoss.MiniBossSnapshot> backfloorSnapshot = null;
         public static bool enemiesSpawn = false;
         public static bool doorIsOpen = false;
         public static bool magicCircleChanged = false;
@@ -390,7 +393,9 @@ namespace Dark_Cloud_Improved_Version
                             dunUsedEscapeCheck = false;
                             hasClearMessageShown = false;
                             MiniBoss.miniBossRolled = false;
-                            MiniBoss.CancelPendingBoost();
+                            MiniBossLootTables.CancelPendingBoost();
+                            normalFloorSnapshot = null;
+                            backfloorSnapshot = null;
 
                             //Check if player is not on an event floor and call the Mini Boss
                             if (!excludeFloors.Contains(currentFloor))
@@ -700,10 +705,7 @@ namespace Dark_Cloud_Improved_Version
             //There needs to be enough normal enemies to roll for the miniboss in order to avoid infinite retries
             if (numNormalEnemies > 3)
             {
-                //Initialize the mini boss thread
                 minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
-
-                //Start the next thread
                 minibossProcess.Start();
             }
             else Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not enough normal enemies in floor!");
@@ -745,7 +747,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Processing mini boss...");
 
-            hasMiniBoss = MiniBoss.MiniBossSpawn(true, currentDungeon, currentFloor);
+            hasMiniBoss = MiniBoss.MiniBossSpawn(currentDungeon, currentFloor);
 
             //If the mini boss spawned, start its warning message thread
             if (hasMiniBoss) {
@@ -1326,18 +1328,52 @@ namespace Dark_Cloud_Improved_Version
 
         public static void CheckMiniBossStamina()
         {
-            if (MiniBoss.miniBossRolled == true)
+            if (MiniBoss.miniBossRolled)
             {
-                if (Memory.ReadInt(Enemies.Enemy0.staminaTimer + (0x190 * MiniBoss.enemyNumber)) < 60)
+                foreach (int slot in MiniBoss.miniBossEnemyNumbers)
                 {
-                    Memory.WriteInt(Enemies.Enemy0.staminaTimer + (0x190 * MiniBoss.enemyNumber), 60000);
+                    if (Memory.ReadInt(Enemies.Enemy0.staminaTimer + (0x190 * slot)) < 60)
+                        Memory.WriteInt(Enemies.Enemy0.staminaTimer + (0x190 * slot), 60000);
                 }
             }
 
-            if (Memory.ReadByte(Addresses.dunBackFloorFlag) != 0)
+            bool onBackFloor = Memory.ReadByte(Addresses.dunBackFloorFlag) != 0;
+
+            if (onBackFloor && !wasOnBackFloor)
             {
-                MiniBoss.miniBossRolled = false;    //if player enters backfloor, remove miniboss stamina value
+                // Snapshot the normal floor miniboss state and switch to backfloor context
+                normalFloorSnapshot = MiniBoss.TakeSnapshot();
+                MiniBossLootTables.CancelPendingBoost();
+
+                if (backfloorSnapshot == null)
+                {
+                    // First visit: spawn a fresh backfloor miniboss
+                    minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
+                    minibossProcess.Start();
+                }
+                else if (backfloorSnapshot.Count > 0)
+                {
+                    // Subsequent visit: restore the saved backfloor minibosses
+                    var snap = backfloorSnapshot;
+                    minibossProcess = new Thread(() => { Thread.Sleep(200); MiniBoss.RestoreFromSnapshot(snap, currentDungeon, currentFloor); });
+                    minibossProcess.Start();
+                }
             }
+            else if (!onBackFloor && wasOnBackFloor)
+            {
+                // Snapshot the backfloor miniboss state and switch back to normal floor context
+                backfloorSnapshot = MiniBoss.TakeSnapshot();
+                MiniBossLootTables.CancelPendingBoost();
+
+                if (normalFloorSnapshot != null && normalFloorSnapshot.Count > 0)
+                {
+                    var snap = normalFloorSnapshot;
+                    minibossProcess = new Thread(() => { Thread.Sleep(200); MiniBoss.RestoreFromSnapshot(snap, currentDungeon, currentFloor); });
+                    minibossProcess.Start();
+                }
+            }
+
+            wasOnBackFloor = onBackFloor;
         }
 
         public static void CheckWepLvlUp()

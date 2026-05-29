@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
-    public partial class MiniBoss
+    internal static class MiniBossLootTables
     {
         internal struct WeaponBoostData
         {
@@ -35,14 +35,14 @@ namespace Dark_Cloud_Improved_Version
         // Standard loot tables (all dungeons)
         // =====================================================================
 
-        static int[] attachmentsTableLucky =
+        internal static int[] attachmentsTableLucky =
         {
             Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond,
             Items.emerald, Items.pearl, Items.ruby, Items.peridot,
             Items.sapphire, Items.opal, Items.topaz, Items.turquoise,
         };
 
-        static int[] attachmentsTableUnlucky =
+        internal static int[] attachmentsTableUnlucky =
         {
             // Elements
             Items.fire, Items.ice, Items.thunder, Items.wind, Items.holy,
@@ -54,21 +54,21 @@ namespace Dark_Cloud_Improved_Version
             Items.mimicbreaker, Items.mageslayer,
         };
 
-        static int[] itemTableLucky   = { Items.poweruppowder, Items.autorepairpowder };
-        static int[] itemTableUnlucky = { Items.staminadrink, Items.dransfeather };
+        internal static int[] itemTableLucky   = { Items.poweruppowder, Items.autorepairpowder };
+        internal static int[] itemTableUnlucky = { Items.staminadrink, Items.dransfeather };
 
         // =====================================================================
         // Dungeon 0: Divine Beast Cavern
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> dbcFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> dbcFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 1,   new[] { Items.gladius  } },   // Master Jacket → Gladius
             { 303, new[] { Items.steve    } },   // Statue Dog    → Steve
             { 301, new[] { Items.evilcise } },   // Yammich       → Evilcise
         };
 
-        static readonly Dictionary<ushort, int[]> dbcFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> dbcFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 77,  new[] { Items.diamond                          } }, // Rockanoff        → Diamond
             { 59,  new[] { Items.ruby,        Items.garnet        } }, // Dragon           → Ruby or Garnet
@@ -79,9 +79,11 @@ namespace Dark_Cloud_Improved_Version
             { 6,   new[] { Items.topaz                            } }, // Dasher           → Topaz
             { 304, new[] { Items.opal                             } }, // Opar             → Opal
             { 301, new[] { Items.amethyst                         } }, // Yammich          → Amethyst
+            { 34,  new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (DBC) → Gold Bar or any gem
+            { 35,  new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (DBC)      → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> dbcWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> dbcWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             { Items.gladius, new WeaponBoostData { WeaponId = Items.gladius, Attack = 15, Holy = 50, AntiUndead = 50 } },
         };
@@ -90,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 1: Wise Owl Forest
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> wofFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> wofFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 12,  new[] { Items.trialhammer     } },   // Earth Digger → Trial Hammer
             { 19,  new[] { Items.banditslingshot } },   // Friday       → Bandit Slingshot
@@ -104,21 +106,23 @@ namespace Dark_Cloud_Improved_Version
             { 7,   new[] { Items.lambsswordnormal} },   // Werewolf     → Lamb's Sword
         };
 
-        static readonly Dictionary<ushort, int[]> wofFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> wofFlavorLoot = new Dictionary<ushort, int[]>
         {
-            { 12,  new[] { Items.platehammer   } }, // Earth Digger → Plate Hammer
-            { 19,  new[] { Items.poweruppowder } }, // Friday       → Powerup Powder
+            { 12,  new[] { Items.platehammer       } }, // Earth Digger → Plate Hammer
+            { 19,  new[] { Items.autorepairpowder  } }, // Friday       → Auto Repair Powder
             { 305, new[] { Items.sapphire, Items.flamingo } }, // Haley Holey → Sapphire or Flamingo
-            { 306, new[] { Items.steelhammer   } }, // King Prickly → Steel Hammer
-            { 15,  new[] { Items.poweruppowder } }, // Monday       → Powerup Powder
-            { 20,  new[] { Items.poweruppowder } }, // Saturday     → Powerup Powder
-            { 14,  new[] { Items.poweruppowder } }, // Sunday       → Powerup Powder
-            { 18,  new[] { Items.poweruppowder } }, // Thursday     → Powerup Powder
-            { 16,  new[] { Items.poweruppowder } }, // Tuesday      → Powerup Powder
-            { 17,  new[] { Items.poweruppowder } }, // Wednesday    → Powerup Powder
+            { 306, new[] { Items.steelhammer       } }, // King Prickly → Steel Hammer
+            { 15,  new[] { Items.autorepairpowder  } }, // Monday       → Auto Repair Powder
+            { 20,  new[] { Items.autorepairpowder  } }, // Saturday     → Auto Repair Powder
+            { 14,  new[] { Items.autorepairpowder  } }, // Sunday       → Auto Repair Powder
+            { 18,  new[] { Items.autorepairpowder  } }, // Thursday     → Auto Repair Powder
+            { 16,  new[] { Items.autorepairpowder  } }, // Tuesday      → Auto Repair Powder
+            { 17,  new[] { Items.autorepairpowder  } }, // Wednesday    → Auto Repair Powder
+            { 78,  new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (WOF) → Gold Bar or any gem
+            { 79,  new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (WOF)      → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> wofWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> wofWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             { Items.banditslingshot,  new WeaponBoostData { WeaponId = Items.banditslingshot,  Attack = 35, Wind = 40, AntiMimic = 40 } },
             { Items.lambsswordnormal, new WeaponBoostData { WeaponId = Items.lambsswordnormal, Attack = 60, Magic = 30, Whp = 99 } },
@@ -128,7 +132,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 2: Shipwreck
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> shipFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> shipFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 26, new[] { Items.serpentsword } },   // Auntie Medu    → Serpent Sword
             { 27, new[] { Items.goldbullion  } },   // Captain        → Gold Bar
@@ -136,7 +140,7 @@ namespace Dark_Cloud_Improved_Version
             { 75, new[] { Items.smallsword   } },   // Mask of Prajna → Small Sword
         };
 
-        static readonly Dictionary<ushort, int[]> shipFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> shipFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 26, new[] { Items.turquoise,     Items.garnet         } }, // Auntie Medu    → Turquoise or Garnet
             { 27, new[] { Items.flamingo                            } }, // Captain        → Flamingo
@@ -147,10 +151,13 @@ namespace Dark_Cloud_Improved_Version
             { 75, new[] { Items.amethyst                            } }, // Mask of Prajna → Amethyst
             { 25, new[] { Items.steelhammer,   Items.poweruppowder  } }, // Pirate's Chariot → Steel Hammer or Powerup Powder
             { 85, new[] { Items.crystalring                         } }, // Sam            → Crystal Ring
+            { 80, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (Ship) → Gold Bar or any gem
+            { 81, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (Ship)      → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> shipWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> shipWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
+            { Items.dusack,     new WeaponBoostData { WeaponId = Items.dusack,     Special1 = 0x80 } },
             { Items.smallsword, new WeaponBoostData { WeaponId = Items.smallsword, Attack = 40, Thunder = 40, AntiMage = 40 } },
         };
 
@@ -158,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 3: Sun & Moon
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> sunFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> sunFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 73, new[] { Items.dragonsy                       } }, // Blue Dragon → Dragon's Y
             { 32, new[] { Items.cactus                         } }, // Dune        → Cactus
@@ -167,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
             { 64, new[] { Items.platinumring                   } }, // Steel Giant → Platinum Ring
         };
 
-        static readonly Dictionary<ushort, int[]> sunFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> sunFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 73, new[] { Items.amethyst, Items.aquamarine, Items.turquoise } }, // Blue Dragon   → Amethyst, Aquamarine, or Turquoise
             { 49, new[] { Items.poweruppowder                               } }, // Bomber Head   → Powerup Powder
@@ -177,9 +184,11 @@ namespace Dark_Cloud_Improved_Version
             { 31, new[] { Items.blessinggun                                 } }, // Mr. Blare     → Blessing Gun
             { 50, new[] { Items.revivalpowder, Items.peridot                } }, // Mummy         → Revival Powder or Peridot
             { 64, new[] { Items.opal,          Items.diamond                } }, // Steel Giant   → Opal or Diamond
+            { 36, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (SMT) → Gold Bar or any gem
+            { 37, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (SMT)      → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> sunWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> sunWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             { Items.platinumring, new WeaponBoostData { WeaponId = Items.platinumring, Attack = 30, Ice = 40, AntiRock = 40, Special2 = 0x02 } },
         };
@@ -188,7 +197,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 4: Moon Sea
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> moonFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> moonFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 76, new[] { Items.tsukikage, Items.mirage  } },  // Crescent Baron → Tsukikage or Mirage
             { 62, new[] { Items.satansring               } },  // Hell Pockle    → Satan's Ring
@@ -199,7 +208,7 @@ namespace Dark_Cloud_Improved_Version
             { 56, new[] { Items.desanga                  } },  // White Fang     → De Sanga
         };
 
-        static readonly Dictionary<ushort, int[]> moonFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> moonFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 40, new[] { Items.swallow,      Items.fivefootnail                                                                                             } }, // Arthur         → Swallow or 5 Foot Nail
             { 76, new[] { Items.pearl                                                                                                                        } }, // Crescent Baron → Pearl
@@ -210,9 +219,11 @@ namespace Dark_Cloud_Improved_Version
             { 33, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // Titan → any gem
             { 70, new[] { Items.peridot,     Items.garnet,     Items.topaz,   Items.diamond                                                                 } }, // Vulcan         → Peridot, Garnet, Topaz, or Diamond
             { 56, new[] { Items.topaz                                                                                                                        } }, // White Fang     → Topaz
+            { 38, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (MS)  → Gold Bar or any gem
+            { 39, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (MS)       → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> moonWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> moonWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             // Frozen Tuna: BigBucks (sp1 0x02) + Fragile (sp2 0x01)
             { Items.frozentuna,  new WeaponBoostData { WeaponId = Items.frozentuna,  Whp = 99, Endurance = 99, Ice = 99, AntiMarine = 99, Special1 = 0x02, Special2 = 0x01 } },
@@ -222,19 +233,19 @@ namespace Dark_Cloud_Improved_Version
             { Items.desanga,     new WeaponBoostData { WeaponId = Items.desanga,     Special2 = 0x04 } },
         };
 
-        static readonly Dictionary<int, WeaponBoostData> moonFlavorWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> moonFlavorWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             // Pocklekul: Bandit (Steal) ability                       Special1: 0x80 = Steal
             { Items.pocklekul, new WeaponBoostData { WeaponId = Items.pocklekul, Special1 = 0x80 } },
         };
 
-        static readonly Dictionary<int, WeaponBoostData> emptyWeaponBoosts = new Dictionary<int, WeaponBoostData>();
+        internal static readonly Dictionary<int, WeaponBoostData> emptyWeaponBoosts = new Dictionary<int, WeaponBoostData>();
 
         // =====================================================================
         // Dungeon 5: Gallery of Time
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> galFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> galFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 74, new[] { Items.dragonsy      } },  // Black Dragon → Dragon's Y
             { 45, new[] { Items.cactus        } },  // Club         → Cactus
@@ -245,7 +256,7 @@ namespace Dark_Cloud_Improved_Version
             { 47, new[] { Items.darkcloud     } },  // Spade        → Dark Cloud (weapon)
         };
 
-        static readonly Dictionary<ushort, int[]> galFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> galFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 43, new[] { Items.drainseeker                                  } }, // Alexander   → Drain Seeker
             { 69, new[] { Items.trialhammer                                  } }, // Billy       → Trial Hammer (+ Thunder boost)
@@ -258,9 +269,11 @@ namespace Dark_Cloud_Improved_Version
             { 44, new[] { Items.goddessring                                  } }, // Heart       → Goddess Ring
             { 48, new[] { Items.supersteve                                   } }, // Joker       → Super Steve (no boost on flavor)
             { 47, new[] { Items.braveark                                     } }, // Spade       → Brave Ark
+            { 82, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (GoT) → Gold Bar or any gem
+            { 83, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (GoT)      → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> galWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> galWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             // Dragon's Y: 40 thunder, 40 anti-beast, 40 anti-sky (flying)
             { Items.dragonsy,     new WeaponBoostData { WeaponId = Items.dragonsy,     Thunder = 40, AntiBeast = 40, AntiSky = 40 } },
@@ -278,7 +291,7 @@ namespace Dark_Cloud_Improved_Version
             { Items.darkcloud,    new WeaponBoostData { WeaponId = Items.darkcloud,    Whp = 99, Fire = 40, Holy = 40, AntiMage = 30, Special1 = 0x40, Special2 = 0x04 } },
         };
 
-        static readonly Dictionary<int, WeaponBoostData> galFlavorWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> galFlavorWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             // Trial Hammer (Billy flavor): 50 thunder (Lightning)
             { Items.trialhammer, new WeaponBoostData { WeaponId = Items.trialhammer, Thunder = 50 } },
@@ -288,7 +301,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 6: Demon Shaft
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> dsFlavorRareDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> dsFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 311, new[] { Items.satansring      } }, // Fire Gemron    → Satan's Ring
             { 308, new[] { Items.machosword      } }, // Nikapous        → Macho Sword
@@ -300,7 +313,7 @@ namespace Dark_Cloud_Improved_Version
             { 315, new[] { Items.goddessring     } }, // Holy Gemron     → Goddess Ring
         };
 
-        static readonly Dictionary<ushort, int[]> dsFlavorDrops = new Dictionary<ushort, int[]>
+        internal static readonly Dictionary<ushort, int[]> dsFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 311, new[] { Items.sun,    Items.ruby       } }, // Fire Gemron    → Sun or Ruby
             { 319, new[] { Items.matador, Items.bonerapier } }, // Hornhead      → Matador or Bone Rapier
@@ -310,9 +323,11 @@ namespace Dark_Cloud_Improved_Version
             { 318, new[] { Items.boneslingshot            } }, // Silver Gear    → Bone Slingshot
             { 314, new[] { Items.sun,    Items.sapphire   } }, // Wind Gemron    → Sun or Sapphire
             { 315, new[] { Items.sun,    Items.peridot    } }, // Holy Gemron    → Sun or Peridot
+            { 310, new[] { Items.goldbullion, Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise } }, // King Mimic (DS)  → Gold Bar or any gem
+            { 309, new[] { Items.garnet, Items.amethyst, Items.aquamarine, Items.diamond, Items.emerald, Items.pearl, Items.ruby, Items.peridot, Items.sapphire, Items.opal, Items.topaz, Items.turquoise }                    }, // Mimic (DS)       → any gem
         };
 
-        static readonly Dictionary<int, WeaponBoostData> dsWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> dsWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             // Crystal Ring: 50 ice
             { Items.crystalring,  new WeaponBoostData { WeaponId = Items.crystalring,  Ice = 50 } },
@@ -322,7 +337,7 @@ namespace Dark_Cloud_Improved_Version
             { Items.heavenscloud, new WeaponBoostData { WeaponId = Items.heavenscloud, Wind = 50 } },
         };
 
-        static readonly Dictionary<int, WeaponBoostData> dsFlavorWeaponBoosts = new Dictionary<int, WeaponBoostData>
+        internal static readonly Dictionary<int, WeaponBoostData> dsFlavorWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
             // Bishop Q flavor Flamingo: AbsUp (sp2 0x20)
             { Items.flamingo, new WeaponBoostData { WeaponId = Items.flamingo, Special2 = 0x20 } },
@@ -332,9 +347,9 @@ namespace Dark_Cloud_Improved_Version
         // Pending inventory boost state
         // =====================================================================
 
-        static volatile bool pendingBoostActive = false;
-        static WeaponBoostData pendingBoost;
-        static Thread boostMonitorThread;
+        internal static volatile bool pendingBoostActive = false;
+        internal static WeaponBoostData pendingBoost;
+        internal static Thread boostMonitorThread;
 
         public static void CancelPendingBoost() => pendingBoostActive = false;
     }

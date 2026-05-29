@@ -98,7 +98,7 @@
         public const int dungDoorType = 0x21D56770;             //Tells us the type of door when interacting with X or Square
         public const int checkFloor = 0x21CD954E;               //Tells the current floor player is on, updates when entering the floor
         public const int checkDungeon = 0x202A3594;             //Tells what dungeon we are in. DBC = 0, Wise Owl = 1 etc.
-        
+
         ///<summary>
         ///     1 = Walking Mode
         /// <br>2 = On Menu</br>
@@ -134,7 +134,7 @@
         public const int circleSpawn3 = 0x21DD56E0;
         public const int circleEffect3 = 0x21DD56E4;
 
-        public const int backfloorcircleSpawn1 = 0x21DE61B0;     
+        public const int backfloorcircleSpawn1 = 0x21DE61B0;
         public const int backfloorcircleEffect1 = 0x21DE61B4;
         public const int backfloorcircleSpawn2 = 0x21DE61D0;
         public const int backfloorcircleEffect2 = 0x21DE61D4;
@@ -233,7 +233,7 @@
         public const int firstBagWeapon = 0x21CDDA58;
         public const int firstBagAttachment = 0x21CE1A48;
 
-        public const int firstStorageItem = 0x21CE21E8; 
+        public const int firstStorageItem = 0x21CE21E8;
         public const int firstStorageWeapon = 0x21CE22D8;
         public const int firstStorageAttachment = 0x21CE3FE8;
 
@@ -315,7 +315,7 @@
 
         public const int functionEntryPoint = 0x201F61F4; //jal BattleMenuDraw__Fv
         public const int functionEntryPoint2 = 0x201FA8BC; //jal DrawWeaponElemTag__FiiP11WEAPON_HAVEiii
-        
+
         public static byte[] functionOverride = { 28, 234, 7, 12 }; //jal DrawWeaponElemTag__FiiP11WEAPON_HAVEiii
         public static byte[] functionBGMPlay = { 204, 102, 5, 12 };
         public static byte[] functionBGMStop = { 232, 102, 5, 12 };
@@ -393,9 +393,17 @@
         /// <summary>Base address of the first fish slot for each fishing area. Slots are stride 0x2410 bytes apart.</summary>
         public const int fishSlotStride      = 0x2410;
         public const int fishSlotBase_Norune    = 0x214798D0; // Area 0 — Norune Village,    4 slots
-        public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall, 5 slots
-        public const int fishSlotBase_Area3     = 0x213C3150; // Area 3 — location TBD,       4 slots
-        public const int fishSlotBase_Area19    = 0x20DE0710; // Area 19 — location TBD,      5 slots
+        public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall + Peanut Pond, 5 slots (shared)
+        public const int fishSlotBase_MuskaLacka     = 0x213C3150; // Area 3 — location TBD,       4 slots
+        public const int fishSlotBase_Queens    = 0x20DE0710; // Area 19 — location TBD,      5 slots
+
+        /// <summary>
+        /// Index of the fishing trigger NPC/object that activated the current fishing session,
+        /// within the area's object table. Set when townMode transitions to 16 (fishing).
+        /// Used to distinguish sub-spots that share the same area ID.
+        /// Confirmed values: Norune=4, PeanutPond=11, MatatakiWaterfall=13, Queens=-1 (unset).
+        /// </summary>
+        public const int fishingTriggerIndex = 0x202A1F64;
 
         /// <summary>
         /// Address of the lui instruction that sets the fish detection (bite) radius.
