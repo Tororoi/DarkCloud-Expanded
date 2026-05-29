@@ -19,8 +19,8 @@ namespace Dark_Cloud_Improved_Version
         const int enemyHPMult = 5;              //Miniboss HP multiplier
         const int enemyABSMult = 5;             //Miniboss ABS multiplier
         const int enemyItemResistMulti = 10;    //Miniboss Item Resistance multiplier %
-        const int enemyGoldMult = 5;            //Miniboss Gilda Drop multiplier
-        const int enemyDropChance = 100;        //Miniboss Drop chance % (0 - 100)
+        const int enemyGoldMult = 5;            //Miniboss Gilda Loot multiplier
+        const int enemyLootChance = 100;        //Miniboss Loot chance % (0 - 100)
         const byte staminaTimer = 79;           //Miniboss Stamina Timer (Currently 79 on the 3rd byte is roughly 1 day)
 
         static Dictionary<ushort, string> nonKeyEnemies = Enemies.GetFlyingEnemies();
@@ -92,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteInt(Enemies.Enemy0.abs + (varOffset * enemyNumber), (startAbs * enemyABSMult));         //Changes ABS reward
                         Memory.WriteInt(Enemies.Enemy0.itemResistance + (varOffset * enemyNumber), enemyItemResistMulti);   //Changes the enemies item resistance
                         Memory.WriteInt(Enemies.Enemy0.minGoldDrop + (varOffset * enemyNumber), startGold * enemyGoldMult); //Changes the enemies gilda drop amount
-                        Memory.WriteInt(Enemies.Enemy0.dropChance + (varOffset * enemyNumber), enemyDropChance);            //Changes the enemies drop chance
+                        Memory.WriteInt(Enemies.Enemy0.dropChance + (varOffset * enemyNumber), enemyLootChance);            //Changes the enemies drop chance
                         Memory.WriteByte(Enemies.Enemy0.staminaTimer + (varOffset * enemyNumber) + 0x2, staminaTimer);      //Changes the enemies stamina timer
 
 
@@ -101,32 +101,32 @@ namespace Dark_Cloud_Improved_Version
                         int[] weaponTable = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
                         ushort enemyTypeId = Enemies.GetFloorEnemyId(enemyNumber);
 
-                        //Check for enemy-specific flavor drops before standard rolls
-                        if (!TryApplyFlavorDrop(enemyTypeId, dungeon, enemyNumber))
+                        //Check for enemy-specific flavor loot before standard rolls
+                        if (!TryApplyFlavorLoot(enemyTypeId, dungeon, enemyNumber))
                         {
                             //Roll first for the backfloor key
                             if (rnd.Next(100) < 35)
                             {
-                                WriteDropItem(Dungeon.GetDungeonBackFloorKey(dungeon), enemyNumber);
+                                WriteLootItem(Dungeon.GetDungeonBackFloorKey(dungeon), enemyNumber);
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with backfloor key!");
                             }
                             //If backfloor key roll fails, roll for weapon
                             else if (rnd.Next(100) < 15)
                             {
-                                WriteDropItem(weaponTable[rnd.Next(weaponTable.Length)], enemyNumber);
+                                WriteLootItem(weaponTable[rnd.Next(weaponTable.Length)], enemyNumber);
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with weapon!");
                             }
                             //If weapon roll fails, roll for attachments
                             else if (rnd.Next(100) < 80)
                             {
-                                if (rnd.Next(100) < 60) WriteDropItem(attachmentsTableLucky[rnd.Next(attachmentsTableLucky.Length)], enemyNumber);
-                                else WriteDropItem(attachmentsTableUnlucky[rnd.Next(attachmentsTableUnlucky.Length)], enemyNumber);
+                                if (rnd.Next(100) < 60) WriteLootItem(attachmentsTableLucky[rnd.Next(attachmentsTableLucky.Length)], enemyNumber);
+                                else WriteLootItem(attachmentsTableUnlucky[rnd.Next(attachmentsTableUnlucky.Length)], enemyNumber);
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with attachment!");
                             }
                             else //If previous rolls fail, default to items
                             {
-                                if (rnd.Next(100) < 60) WriteDropItem(itemTableLucky[rnd.Next(itemTableLucky.Length)], enemyNumber);
-                                else WriteDropItem(itemTableUnlucky[rnd.Next(itemTableUnlucky.Length)], enemyNumber);
+                                if (rnd.Next(100) < 60) WriteLootItem(itemTableLucky[rnd.Next(itemTableLucky.Length)], enemyNumber);
+                                else WriteLootItem(itemTableUnlucky[rnd.Next(itemTableUnlucky.Length)], enemyNumber);
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with item!");
                             }
                         }
@@ -150,46 +150,46 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Rolls for and applies a dungeon-specific flavor drop to the miniboss.
-        /// Checks flavorRare (5%) first, then flavorDrop (30%).
-        /// Returns true if a special drop was applied.
+        /// Rolls for and applies a dungeon-specific flavor loot to the miniboss.
+        /// Checks flavorRare (5%) first, then flavorLoot (30%).
+        /// Returns true if special loot was applied.
         /// </summary>
-        private static bool TryApplyFlavorDrop(ushort enemyTypeId, byte dungeon, int enemyNum)
+        private static bool TryApplyFlavorLoot(ushort enemyTypeId, byte dungeon, int enemyNum)
         {
-            Dictionary<ushort, int[]> rareDrops;
-            Dictionary<ushort, int[]> flavorDrops;
+            Dictionary<ushort, int[]> rareLoot;
+            Dictionary<ushort, int[]> flavorLoot;
             Dictionary<int, WeaponBoostData> rareBoosts;
             Dictionary<int, WeaponBoostData> flavorBoosts;
 
             switch (dungeon)
             {
-                case 0: rareDrops = dbcFlavorRareDrops;  flavorDrops = dbcFlavorDrops;  rareBoosts = dbcWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
-                case 1: rareDrops = wofFlavorRareDrops;  flavorDrops = wofFlavorDrops;  rareBoosts = wofWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
-                case 2: rareDrops = shipFlavorRareDrops; flavorDrops = shipFlavorDrops; rareBoosts = shipWeaponBoosts; flavorBoosts = emptyWeaponBoosts;        break;
-                case 3: rareDrops = sunFlavorRareDrops;  flavorDrops = sunFlavorDrops;  rareBoosts = sunWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
-                case 4: rareDrops = moonFlavorRareDrops; flavorDrops = moonFlavorDrops; rareBoosts = moonWeaponBoosts; flavorBoosts = moonFlavorWeaponBoosts;   break;
-                case 5: rareDrops = galFlavorRareDrops;  flavorDrops = galFlavorDrops;  rareBoosts = galWeaponBoosts;  flavorBoosts = galFlavorWeaponBoosts;    break;
-                case 6: rareDrops = dsFlavorRareDrops;   flavorDrops = dsFlavorDrops;   rareBoosts = dsWeaponBoosts;   flavorBoosts = dsFlavorWeaponBoosts;      break;
+                case 0: rareLoot = dbcFlavorRareLoot;  flavorLoot = dbcFlavorLoot;  rareBoosts = dbcWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
+                case 1: rareLoot = wofFlavorRareLoot;  flavorLoot = wofFlavorLoot;  rareBoosts = wofWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
+                case 2: rareLoot = shipFlavorRareLoot; flavorLoot = shipFlavorLoot; rareBoosts = shipWeaponBoosts; flavorBoosts = emptyWeaponBoosts;        break;
+                case 3: rareLoot = sunFlavorRareLoot;  flavorLoot = sunFlavorLoot;  rareBoosts = sunWeaponBoosts;  flavorBoosts = emptyWeaponBoosts;        break;
+                case 4: rareLoot = moonFlavorRareLoot; flavorLoot = moonFlavorLoot; rareBoosts = moonWeaponBoosts; flavorBoosts = moonFlavorWeaponBoosts;   break;
+                case 5: rareLoot = galFlavorRareLoot;  flavorLoot = galFlavorLoot;  rareBoosts = galWeaponBoosts;  flavorBoosts = galFlavorWeaponBoosts;    break;
+                case 6: rareLoot = dsFlavorRareLoot;   flavorLoot = dsFlavorLoot;   rareBoosts = dsWeaponBoosts;   flavorBoosts = dsFlavorWeaponBoosts;      break;
                 default: return false;
             }
 
-            if (rareDrops.TryGetValue(enemyTypeId, out int[] rarePool) && rnd.Next(100) < 5)
+            if (rareLoot.TryGetValue(enemyTypeId, out int[] rarePool) && rnd.Next(100) < 5)
             {
                 int rareItem = rarePool[rnd.Next(rarePool.Length)];
-                WriteDropItem(rareItem, enemyNum);
+                WriteLootItem(rareItem, enemyNum);
                 if (rareBoosts.TryGetValue(rareItem, out WeaponBoostData boost))
                     StartInventoryBoostMonitor(boost, enemyNum);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor rare drop!");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor rare loot!");
                 return true;
             }
 
-            if (flavorDrops.TryGetValue(enemyTypeId, out int[] flavorPool) && rnd.Next(100) < 30)
+            if (flavorLoot.TryGetValue(enemyTypeId, out int[] flavorPool) && rnd.Next(100) < 30)
             {
                 int flavorItem = flavorPool[rnd.Next(flavorPool.Length)];
-                WriteDropItem(flavorItem, enemyNum);
+                WriteLootItem(flavorItem, enemyNum);
                 if (flavorBoosts.TryGetValue(flavorItem, out WeaponBoostData flavorBoost))
                     StartInventoryBoostMonitor(flavorBoost, enemyNum);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor drop!");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss rolled with flavor loot!");
                 return true;
             }
 
@@ -197,13 +197,13 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // Weapons start at ID 257 in Items.cs; they require a 32-bit write.
-        private static void WriteDropItem(int itemId, int enemyNum)
+        private static void WriteLootItem(int itemId, int enemyNum)
         {
-            int dropAddress = Enemies.Enemy0.forceItemDrop + (varOffset * enemyNum);
+            int lootAddress = Enemies.Enemy0.forceItemDrop + (varOffset * enemyNum);
             if (itemId >= 257)
-                Memory.WriteInt(dropAddress, itemId);
+                Memory.WriteInt(lootAddress, itemId);
             else
-                Memory.WriteUShort(dropAddress, (ushort)itemId);
+                Memory.WriteUShort(lootAddress, (ushort)itemId);
         }
 
         private static void StartInventoryBoostMonitor(WeaponBoostData boost, int enemyNum)

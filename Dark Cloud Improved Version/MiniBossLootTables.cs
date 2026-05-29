@@ -61,14 +61,14 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 0: Divine Beast Cavern
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> dbcFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> dbcFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 1,   new[] { Items.gladius  } },   // Master Jacket → Gladius
             { 303, new[] { Items.steve    } },   // Statue Dog    → Steve
             { 301, new[] { Items.evilcise } },   // Yammich       → Evilcise
         };
 
-        static readonly Dictionary<ushort, int[]> dbcFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> dbcFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 77,  new[] { Items.diamond                          } }, // Rockanoff        → Diamond
             { 59,  new[] { Items.ruby,        Items.garnet        } }, // Dragon           → Ruby or Garnet
@@ -92,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 1: Wise Owl Forest
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> wofFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> wofFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 12,  new[] { Items.trialhammer     } },   // Earth Digger → Trial Hammer
             { 19,  new[] { Items.banditslingshot } },   // Friday       → Bandit Slingshot
@@ -106,7 +106,7 @@ namespace Dark_Cloud_Improved_Version
             { 7,   new[] { Items.lambsswordnormal} },   // Werewolf     → Lamb's Sword
         };
 
-        static readonly Dictionary<ushort, int[]> wofFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> wofFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 12,  new[] { Items.platehammer       } }, // Earth Digger → Plate Hammer
             { 19,  new[] { Items.autorepairpowder  } }, // Friday       → Auto Repair Powder
@@ -132,7 +132,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 2: Shipwreck
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> shipFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> shipFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 26, new[] { Items.serpentsword } },   // Auntie Medu    → Serpent Sword
             { 27, new[] { Items.goldbullion  } },   // Captain        → Gold Bar
@@ -140,7 +140,7 @@ namespace Dark_Cloud_Improved_Version
             { 75, new[] { Items.smallsword   } },   // Mask of Prajna → Small Sword
         };
 
-        static readonly Dictionary<ushort, int[]> shipFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> shipFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 26, new[] { Items.turquoise,     Items.garnet         } }, // Auntie Medu    → Turquoise or Garnet
             { 27, new[] { Items.flamingo                            } }, // Captain        → Flamingo
@@ -157,6 +157,7 @@ namespace Dark_Cloud_Improved_Version
 
         static readonly Dictionary<int, WeaponBoostData> shipWeaponBoosts = new Dictionary<int, WeaponBoostData>
         {
+            { Items.dusack,     new WeaponBoostData { WeaponId = Items.dusack,     Special1 = 0x80 } },
             { Items.smallsword, new WeaponBoostData { WeaponId = Items.smallsword, Attack = 40, Thunder = 40, AntiMage = 40 } },
         };
 
@@ -164,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 3: Sun & Moon
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> sunFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> sunFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 73, new[] { Items.dragonsy                       } }, // Blue Dragon → Dragon's Y
             { 32, new[] { Items.cactus                         } }, // Dune        → Cactus
@@ -173,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
             { 64, new[] { Items.platinumring                   } }, // Steel Giant → Platinum Ring
         };
 
-        static readonly Dictionary<ushort, int[]> sunFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> sunFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 73, new[] { Items.amethyst, Items.aquamarine, Items.turquoise } }, // Blue Dragon   → Amethyst, Aquamarine, or Turquoise
             { 49, new[] { Items.poweruppowder                               } }, // Bomber Head   → Powerup Powder
@@ -196,7 +197,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 4: Moon Sea
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> moonFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> moonFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 76, new[] { Items.tsukikage, Items.mirage  } },  // Crescent Baron → Tsukikage or Mirage
             { 62, new[] { Items.satansring               } },  // Hell Pockle    → Satan's Ring
@@ -207,7 +208,7 @@ namespace Dark_Cloud_Improved_Version
             { 56, new[] { Items.desanga                  } },  // White Fang     → De Sanga
         };
 
-        static readonly Dictionary<ushort, int[]> moonFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> moonFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 40, new[] { Items.swallow,      Items.fivefootnail                                                                                             } }, // Arthur         → Swallow or 5 Foot Nail
             { 76, new[] { Items.pearl                                                                                                                        } }, // Crescent Baron → Pearl
@@ -244,7 +245,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 5: Gallery of Time
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> galFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> galFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 74, new[] { Items.dragonsy      } },  // Black Dragon → Dragon's Y
             { 45, new[] { Items.cactus        } },  // Club         → Cactus
@@ -255,7 +256,7 @@ namespace Dark_Cloud_Improved_Version
             { 47, new[] { Items.darkcloud     } },  // Spade        → Dark Cloud (weapon)
         };
 
-        static readonly Dictionary<ushort, int[]> galFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> galFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 43, new[] { Items.drainseeker                                  } }, // Alexander   → Drain Seeker
             { 69, new[] { Items.trialhammer                                  } }, // Billy       → Trial Hammer (+ Thunder boost)
@@ -300,7 +301,7 @@ namespace Dark_Cloud_Improved_Version
         // Dungeon 6: Demon Shaft
         // =====================================================================
 
-        static readonly Dictionary<ushort, int[]> dsFlavorRareDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> dsFlavorRareLoot = new Dictionary<ushort, int[]>
         {
             { 311, new[] { Items.satansring      } }, // Fire Gemron    → Satan's Ring
             { 308, new[] { Items.machosword      } }, // Nikapous        → Macho Sword
@@ -312,7 +313,7 @@ namespace Dark_Cloud_Improved_Version
             { 315, new[] { Items.goddessring     } }, // Holy Gemron     → Goddess Ring
         };
 
-        static readonly Dictionary<ushort, int[]> dsFlavorDrops = new Dictionary<ushort, int[]>
+        static readonly Dictionary<ushort, int[]> dsFlavorLoot = new Dictionary<ushort, int[]>
         {
             { 311, new[] { Items.sun,    Items.ruby       } }, // Fire Gemron    → Sun or Ruby
             { 319, new[] { Items.matador, Items.bonerapier } }, // Hornhead      → Matador or Bone Rapier
