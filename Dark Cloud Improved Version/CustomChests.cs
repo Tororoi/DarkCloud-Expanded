@@ -99,11 +99,23 @@ namespace Dark_Cloud_Improved_Version
 
         static Random rnd = new Random();
 
+        /// <summary>
+        /// Returns the shared backfloor loot table used across all dungeons (DBC through Gallery).
+        /// </summary>
+        /// <returns>Array of item IDs that can appear in backfloor chests.</returns>
         public static int[] GetBackFloorItems()
         {
             return BackfloorItems;
         }
 
+        /// <summary>
+        /// Returns the weapon loot table for the given dungeon and floor half.
+        /// Each dungeon splits into a first and second half at a floor threshold (floors 1–8/9 vs 9/10+),
+        /// with later floors offering higher-tier weapons.
+        /// </summary>
+        /// <param name="dungeon">Dungeon index (0 = DBC, 1 = Wise Owl, 2 = Shipwreck, 3 = Sun &amp; Moon, 4 = Moon Sea, 5 = Gallery, 6 = Demon Shaft).</param>
+        /// <param name="floor">Current floor number, used to select first or second half table.</param>
+        /// <returns>Array of weapon IDs for the matching dungeon/floor half, or null for an unrecognized dungeon.</returns>
         public static int[] GetDungeonWeaponsTable(byte dungeon, byte floor)
         {
             switch (dungeon)
@@ -134,6 +146,30 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Randomizes the loot in all chests on the current floor when a new floor is entered.
+        /// Selects dungeon/floor-appropriate item and weapon tables, then writes item IDs directly to memory
+        /// for each of the 8 normal chests and 7 backfloor chests.
+        ///
+        /// Big-chest threshold (item vs. weapon): base 880 + (15 * dungeon). A roll below the threshold
+        /// spawns an item; at or above spawns a weapon. Chronicle 2 reduces this threshold
+        /// (bigChestChance = 2 * base - 1000), shifting the odds toward weapons.
+        ///
+        /// Special cases:
+        /// - Chests with an ID &lt;= 40 are skipped to avoid overwriting mimic spawns.
+        /// - On locked-door floors the game natively places the door key in the first chest (detected by
+        ///   reading item ID 233 there). The start offset is chosen to skip past that chest so the key
+        ///   is never overwritten. Separately, if the player has an active Map (233) or Magical Crystal (234)
+        ///   side-quest reward, loop slots 0 and 1 are conditionally reserved for those items; all other
+        ///   slots randomize normally.
+        /// - Item 178 (Powerup Powder) has an 80% re-roll chance in normal chests unless Chronicle 2 is held.
+        ///   Backfloor chests always apply the re-roll regardless of Chronicle 2.
+        /// - If a side-quest item roll succeeded this floor (<see cref="RollItemQuest"/>), that item
+        ///   is guaranteed to appear in the first available backfloor chest.
+        /// </summary>
+        /// <param name="currentDungeon">Dungeon index (0–6).</param>
+        /// <param name="currentFloor">Current floor number, used to select the correct loot half and address area.</param>
+        /// <param name="chronicle2">True if the player possesses Chronicle 2; modifies item/weapon odds and Powerup Powder eligibility.</param>
         public static void ChestRandomizer(int currentDungeon, int currentFloor, bool chronicle2)
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Custom chests activated");
@@ -576,6 +612,18 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Randomizes the clown vendor's big box and small box reward pools when a clown spawns.
+        /// Independently rolls for the big box and small box, each choosing between a dungeon-specific
+        /// weapon table (favourable) and the common item table (unfavourable).
+        ///
+        /// Without Chronicle 2: each box has a 50% chance of the weapon table.
+        /// With Chronicle 2: luckyTableChance is set to 0, guaranteeing the weapon table for both boxes.
+        ///
+        /// Handles regular floors and backfloors separately, writing results to the appropriate
+        /// memory address areas populated by <see cref="ChestRandomizer"/>.
+        /// </summary>
+        /// <param name="chronicle2">True if the player possesses Chronicle 2; forces weapon table rolls for both boxes.</param>
         public static void ClownRandomizer(bool chronicle2)
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Clown spawned!");
@@ -711,6 +759,15 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Rolls a chance to guarantee a side-quest item appears in a backfloor chest this floor.
+        /// If the random roll exceeds <paramref name="currentItemChance"/> and the player does not
+        /// already own the item, sets <c>itemQuestSpawn = true</c> so <see cref="ChestRandomizer"/>
+        /// will place the item in the first available backfloor chest slot.
+        /// Called from inside <see cref="ChestRandomizer"/> once per dungeon that has an active fetch quest.
+        /// </summary>
+        /// <param name="itemQuestID">Item ID of the side-quest reward to potentially spawn.</param>
+        /// <param name="currentItemChance">Roll threshold (0–100); item spawns only when the random roll exceeds this value. Defaults to 66 (~33% chance).</param>
         public static void RollItemQuest(byte itemQuestID, byte currentItemChance = 66)
         {
             int secretItemChance = rnd.Next(0, 100);

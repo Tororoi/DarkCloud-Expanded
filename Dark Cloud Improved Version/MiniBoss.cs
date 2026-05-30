@@ -79,7 +79,7 @@ namespace Dark_Cloud_Improved_Version
                 "\nWinners: " + winners.Count + "\n");
 
             foreach (int slot in winners)
-                ApplyToSlot(slot, dungeon, floor);
+                ApplyMiniBossToSlot(slot, dungeon, floor);
 
             miniBossRolled = true;
             return true;
@@ -89,7 +89,7 @@ namespace Dark_Cloud_Improved_Version
         /// Applies miniboss stat multipliers and rolls loot for a single enemy slot.
         /// Also registers the slot in miniBossEnemyNumbers.
         /// </summary>
-        private static void ApplyToSlot(int slot, byte dungeon, byte floor)
+        private static void ApplyMiniBossToSlot(int slot, byte dungeon, byte floor)
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 "\nApplying miniboss to slot: " + slot +
@@ -98,7 +98,7 @@ namespace Dark_Cloud_Improved_Version
             // Eligibility filtering should prevent a key-holder from ever being chosen.
             // This block should be unreachable — log a warning if it fires.
             if (Enemies.EnemyHasKey(slot, dungeon))
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyMiniBossToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
 
             int startBossHP = Memory.ReadInt(Enemies.Enemy0.hp + (varOffset * slot));
             int startAbs    = Memory.ReadInt(Enemies.Enemy0.abs + (varOffset * slot));
@@ -215,7 +215,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                ApplyToSlot(entry.Slot, dungeon, floor);
+                ApplyMiniBossToSlot(entry.Slot, dungeon, floor);
             }
 
             if (miniBossEnemyNumbers.Count > 0)

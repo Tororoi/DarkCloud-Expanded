@@ -101,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
-                    // Enemies.PollEnemyDynamics();  // uncomment for live change detection
+                    Enemies.PollEnemyDynamics();  // uncomment for live change detection
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -704,6 +704,10 @@ namespace Dark_Cloud_Improved_Version
             //Check if there are more than 3 normal enemies in the floor
             //This is to account for the Wise Owl 3 keys
             //There needs to be enough normal enemies to roll for the miniboss in order to avoid infinite retries
+            // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
+            // Enemies.DumpModelScaleTable();       // model/render scale research — uncomment to investigate width/height/depth table
+            Enemies.LogEnemySpawns();
+
             if (numNormalEnemies > 3)
             {
                 minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
@@ -726,7 +730,9 @@ namespace Dark_Cloud_Improved_Version
                 monstersDead[i] = false;
             }
 
-            // Enemies.DumpAllActiveEnemySlots();  // uncomment to dump slot bytes on floor load
+            // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
+            minibossProcess?.Join(2000);
+            Enemies.ApplyTestModifications();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 

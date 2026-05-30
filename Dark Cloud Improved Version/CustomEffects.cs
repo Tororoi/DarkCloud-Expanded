@@ -105,6 +105,16 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Checks if the player has Chronicle 2 equipped or in inventory and sets acquired to true if so.
+        /// When possessed, Chronicle 2 affects dungeon loot in two ways:
+        ///   1. The clown vendor always rolls from the weapon table instead of having a 50% chance of non-weapon items.
+        ///   2. Powerup Powder is allowed to appear in chests normally; without Chronicle 2 it has an 80% chance to be re-rolled.
+        /// It also adjusts the big-chest spawn threshold based on the current dungeon.
+        /// Checks weapon slots 0–9 first, then scans up to 30 storage slots starting at 0x21CE22D8.
+        /// </summary>
+        /// <param name="acquired"></param>
+        /// <returns></returns>
         public static bool CheckChronicle2(bool acquired)
         {
             acquired = false;
@@ -913,7 +923,7 @@ namespace Dark_Cloud_Improved_Version
                         for (int i = 0; i < 15; i++)
                         {
                             if (Memory.ReadByte(Enemies.Enemy0.renderStatus + (Enemies.offset * i)) == 2 &&
-                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i))))
+                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.enemyTypeId + (Enemies.offset * i))))
                             {
                                 Memory.WriteUShort(Enemies.Enemy0.freezeTimer + (Enemies.offset * i), 300);
                             }
@@ -1216,8 +1226,8 @@ namespace Dark_Cloud_Improved_Version
                     if (former[i] <= 0 || current[i] >= former[i])
                         continue;
 
-                    int nameTag = Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i));
-                    if (CactusImmuneNameTags.Contains(nameTag))
+                    int enemyTypeId = Memory.ReadUShort(Enemies.Enemy0.enemyTypeId + (Enemies.offset * i));
+                    if (CactusImmuneNameTags.Contains(enemyTypeId))
                         continue;
 
                     float curThirst = Player.Ungaga.GetThirst();
