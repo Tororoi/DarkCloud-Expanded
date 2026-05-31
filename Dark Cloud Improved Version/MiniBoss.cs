@@ -40,6 +40,8 @@ namespace Dark_Cloud_Improved_Version
         {
             Thread.Sleep(200);
 
+            miniBossEnemyNumbers.Clear();
+
             // Count all enemies ineligible to become a miniboss (ID 0, flying, or has a forced item drop)
             int ineligibleCount = 0;
             List<ushort> allIds = Enemies.GetFloorEnemiesIds();
@@ -100,7 +102,7 @@ namespace Dark_Cloud_Improved_Version
             if (Enemies.EnemyHasKey(slot, dungeon))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyMiniBossToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
 
-            int startBossHP = Memory.ReadInt(Enemies.Enemy0.hp + (varOffset * slot));
+            int startBossHP = Memory.ReadInt(Enemies.Enemy0.maxHp + (varOffset * slot));
             int startAbs    = Memory.ReadInt(Enemies.Enemy0.abs + (varOffset * slot));
             int startGold   = Memory.ReadInt(Enemies.Enemy0.minGoldDrop + (varOffset * slot));
 

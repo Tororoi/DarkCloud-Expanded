@@ -898,14 +898,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Research tools ──────────────────────────────────────────────────────
-        private static DateTime _lastEnemyPollTime = DateTime.MinValue;
         private static readonly Dictionary<int, int[]> _enemySlotSnapshots = new Dictionary<int, int[]>();
-
-        // Enemies to test ranged-specific modifications on — expand as testing reveals more
-        private static readonly HashSet<ushort> _rangedEnemyIds = new HashSet<ushort>
-        {
-            25, // Pirate's Chariot
-        };
 
         internal static void DumpEnemySlot(int slotIndex)
         {
@@ -940,6 +933,11 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void LogEnemySpawns()
         {
+            byte dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            byte floor   = Memory.ReadByte(Addresses.checkFloor);
+            string dungeonName = DungeonDatabase.TryGetValue(dungeon, out DungeonData dd) ? dd.Name : $"dungeon{dungeon}";
+            Console.WriteLine($"[EnemyInfo] {dungeonName} (id={dungeon}) floor={floor + 1}");
+
             for (int i = 0; i < 16; i++)
             {
                 int slotBase = Enemy0.visible + (offset * i);
@@ -973,8 +971,15 @@ namespace Dark_Cloud_Improved_Version
                 float reticleW = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleWidth);
                 float reticleH = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleHeight);
 
+                int   scaleBase = ModelScaleOffsets.ModelBase + ModelScaleOffsets.ModelStride * i;
+                float unk020    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.Unk020);
+                float unk024    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.Unk024);
+                float unk028    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.Unk028);
+                int   dataSize  = Memory.ReadInt  (scaleBase + ModelScaleOffsets.DataSize);
+                int   animCount = Memory.ReadInt  (scaleBase + ModelScaleOffsets.AnimCount);
+
                 Console.WriteLine($"[EnemyInfo] slot={i} {name} (id={nameId}) hp={maxHp} abs={abs} gold={minGold} drop={dropChance}% | type={res1} fire={fire} ice={ice} thun={thun} wind={wind} holy={holy}");
-                Console.WriteLine($"[EnemyInfo] slot={i} {name} scale={scale:F1} 090={u90a}/{u90b} steal=0x{stealId:X3} itemRes={irA}/{irB} reticle={reticleW:F2}x{reticleH:F2}");
+                Console.WriteLine($"[EnemyInfo] slot={i} {name} scale={scale:F1} 090={u90a}/{u90b} steal=0x{stealId:X3} itemRes={irA}/{irB} reticle={reticleW:F2}x{reticleH:F2} | unk020={unk020:F1} unk024={unk024:F1} unk028={unk028:F1} dataSize={dataSize} animCount={animCount}");
             }
         }
 
@@ -999,7 +1004,7 @@ namespace Dark_Cloud_Improved_Version
 
                 int scaleBase = modelBase + modelStride * i;
                 Console.WriteLine($"[ModelScale] slot={i} {name} (id={nameId}) base=0x{scaleBase:X8}{tag}");
-                for (int off = 0; off < 0x20; off += 4)
+                for (int off = 0; off < 0x3510; off += 4)
                 {
                     int raw = Memory.ReadInt(scaleBase + off);
                     float asFloat = Memory.ReadFloat(scaleBase + off);
@@ -1008,36 +1013,67 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        private static readonly HashSet<int> _exhaustedSlots = new HashSet<int>();
+        private static readonly HashSet<int> _activationLoggedSlots = [];
+
+        internal static void ResetPollState()
+        {
+            _enemySlotSnapshots.Clear();
+            _exhaustedSlots.Clear();
+            _activationLoggedSlots.Clear();
+            _flashTimerSnapshot.Clear();
+        }
+
         internal static void PollEnemyDynamics()
         {
-            if ((DateTime.UtcNow - _lastEnemyPollTime).TotalSeconds < 1.0) return;
-            _lastEnemyPollTime = DateTime.UtcNow;
-
-            int    charNum     = Player.CurrentCharacterNum();
-            string charName    = Player.GetCharacterName(charNum);
-            ushort playerHp, playerMaxHp;
-            int    playerDef;
-            switch (charNum)
-            {
-                case Player.XiaoId:   playerHp = Player.Xiao.GetHp();   playerMaxHp = Player.Xiao.GetMaxHp();   playerDef = Player.Xiao.GetDefense();   break;
-                case Player.GoroId:   playerHp = Player.Goro.GetHp();   playerMaxHp = Player.Goro.GetMaxHp();   playerDef = Player.Goro.GetDefense();   break;
-                case Player.RubyId:   playerHp = Player.Ruby.GetHp();   playerMaxHp = Player.Ruby.GetMaxHp();   playerDef = Player.Ruby.GetDefense();   break;
-                case Player.UngagaId: playerHp = Player.Ungaga.GetHp(); playerMaxHp = Player.Ungaga.GetMaxHp(); playerDef = Player.Ungaga.GetDefense(); break;
-                case Player.OsmondId: playerHp = Player.Osmond.GetHp(); playerMaxHp = Player.Osmond.GetMaxHp(); playerDef = Player.Osmond.GetDefense(); break;
-                default:              playerHp = Player.Toan.GetHp();   playerMaxHp = Player.Toan.GetMaxHp();   playerDef = Player.Toan.GetDefense();   break;
-            }
-            Console.WriteLine($"[EnemyPoll] player={charName} hp={playerHp}/{playerMaxHp}  def={playerDef}");
-
             const int wordCount = 0x190 / 4;
+            const float maxDistance = 50.0f;
+
+            bool anyChanges = false;
+
             for (int i = 0; i < 16; i++)
             {
+                if (_exhaustedSlots.Contains(i)) continue;
+
                 int slotBase = Enemy0.visible + (offset * i);
                 int status = Memory.ReadInt(slotBase);
                 if (status == -1 || status == 0) continue;
 
+                float dist = Memory.ReadFloat(slotBase + EnemySlotOffsets.DistanceToPlayer);
+                if (dist > maxDistance) continue;
+
                 int[] current = new int[wordCount];
                 for (int w = 0; w < wordCount; w++)
                     current[w] = Memory.ReadInt(slotBase + w * 4);
+
+                int hp = Memory.ReadInt(slotBase + EnemySlotOffsets.Hp);
+                if (hp <= 0)
+                    _exhaustedSlots.Add(i);
+
+                if (status == 2 && !_activationLoggedSlots.Contains(i))
+                {
+                    _activationLoggedSlots.Add(i);
+                    ushort actNameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    string actName   = GetEnemyName(actNameId);
+                    string actMbTag  = MiniBoss.miniBossEnemyNumbers.Contains(i) ? " [MINIBOSS]" : "";
+                    float  F(int w)  => BitConverter.ToSingle(BitConverter.GetBytes(current[w]), 0);
+                    int    typePtr   = current[0x04C / 4];
+                    float  moveBlend = F(0x080 / 4);
+                    float  facingX   = F(0x060 / 4);
+                    float  facingY   = F(0x064 / 4);
+                    float  facingZ   = F(0x068 / 4);
+                    float  targetX   = F(0x070 / 4);
+                    float  targetZ   = F(0x074 / 4);
+                    float  targetY   = F(0x078 / 4);
+                    int    aiState   = current[0x0EC / 4];
+                    float  aiSpeed   = F(0x0F0 / 4);
+                    float  rangeX    = F(0x140 / 4);
+                    float  rangeY    = F(0x144 / 4);
+                    float  rangeZ    = F(0x148 / 4);
+                    float  aggro     = F(0x14C / 4);
+                    Console.WriteLine($"[EnemyActivation] slot={i} {actName}{actMbTag} typePtr=0x{typePtr:X8} moveBlend={moveBlend:F2} facing=({facingX:F4},{facingY:F4},{facingZ:F4})");
+                    Console.WriteLine($"[EnemyActivation] slot={i} {actName}{actMbTag} target=({targetX:F1},{targetZ:F1},{targetY:F1}) aiState=0x{aiState:X8} aiSpeed={aiSpeed:F4} aggroRange={aggro:F1} behaviorRange=({rangeX:F1},{rangeY:F1},{rangeZ:F1})");
+                }
 
                 if (_enemySlotSnapshots.TryGetValue(i, out int[] prev))
                 {
@@ -1049,6 +1085,20 @@ namespace Dark_Cloud_Improved_Version
                     {
                         if (current[w] != prev[w])
                         {
+                            if (!anyChanges)
+                            {
+                                anyChanges = true;
+                                float px = Memory.ReadFloat(Player.dunPositionX);
+                                float py = Memory.ReadFloat(Player.dunPositionY);
+                                float pz = Memory.ReadFloat(Player.dunPositionZ);
+                                int charId = Memory.ReadByte(Player.currentCharacter);
+                                string charName = Player.GetCharacterName(charId) ?? "Unknown";
+                                ushort charHp = Player.Toan.GetHp();
+                                int lastDmg = Memory.ReadInt(Player.mostRecentDamage);
+                                int dmgSrc = Memory.ReadInt(Player.damageSource);
+                                int animId = Memory.ReadInt(Player.animationId);
+                                Console.WriteLine($"[PlayerState] {charName} hp={charHp} pos=({px:F1},{py:F1},{pz:F1}) anim={animId} lastDmg={lastDmg} dmgSrc={dmgSrc}");
+                            }
                             int off = w * 4;
                             float asFloat = BitConverter.ToSingle(BitConverter.GetBytes(current[w]), 0);
                             Console.WriteLine($"[EnemyPoll] slot={i} {name}{mbTag} +0x{off:X3}  0x{prev[w]:X8} -> 0x{current[w]:X8}  (int:{current[w]}  float:{asFloat:F4})");
@@ -1059,6 +1109,11 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        private static DateTime _lastSlotWriteTime = DateTime.MinValue;
+        private static int _slotWriteCycle = 0;
+
+        private static readonly float[] _decayRateTestValues = [ 0.0f, 0.1f, 0.5f, 1.0f, 5.0f ];
+
         internal static void ApplyTestModifications()
         {
             for (int i = 0; i < 16; i++)
@@ -1068,14 +1123,63 @@ namespace Dark_Cloud_Improved_Version
                 if (status == -1 || status == 0) continue;
                 if (MiniBoss.miniBossEnemyNumbers.Contains(i)) continue;
 
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashColorRed,   255.0f);
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashColorGreen, 255.0f);
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashColorBlue,  255.0f);
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashDecayRate,  0.016f);
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashTimer,      1.0f);
+                Memory.WriteInt(slotBase + EnemySlotOffsets.FlashActivation,   1);
+
                 ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
                 string name = GetEnemyName(nameId);
+                Console.WriteLine($"[TestMod] slot={i} {name}  flash set: decayRate=0.016 timer=1.0");
+            }
+        }
 
-                // Test Unk090: set low=2, high=0 for all enemies — probing attack mode index behaviour
-                int unk090Before = Memory.ReadInt(slotBase + EnemySlotOffsets.Unk090);
-                Memory.WriteInt(slotBase + EnemySlotOffsets.Unk090, 0x00000002); // low=2, high=0
+        private static readonly Dictionary<int, float> _flashTimerSnapshot = [];
 
-                Console.WriteLine($"[TestMod] slot={i} {name}  Unk090 0x{unk090Before:X8}→0x00000002");
+        private static DateTime _lastFlashTriggerTime = DateTime.MinValue;
+
+        internal static void MonitorFlashTimer()
+        {
+            bool triggerFlash = (DateTime.UtcNow - _lastFlashTriggerTime).TotalSeconds >= 3.0;
+            if (triggerFlash) _lastFlashTriggerTime = DateTime.UtcNow;
+
+            for (int i = 0; i < 16; i++)
+            {
+                int slotBase = Enemy0.visible + (offset * i);
+                int status = Memory.ReadInt(slotBase);
+                if (status == -1 || status == 0) continue;
+
+                if (triggerFlash)
+                {
+                    Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashColorRed,   255.0f);
+                    Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashColorGreen, 255.0f);
+                    Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashColorBlue,  255.0f);
+                    // FlashTimer is engine-owned and always reset to 1.0; FlashDecayRate controls duration: 1.0/rate frames.
+                    // At 30fps: 0.016 ≈ 2s, 0.08 ≈ 12 frames (natural hit flash).
+                    Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashDecayRate, 0.016f);
+                    Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashTimer,        1.0f);
+                    Memory.WriteInt(slotBase + EnemySlotOffsets.FlashActivation,   1);
+                    _flashTimerSnapshot[i] = 1.0f;
+                    ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    string name = GetEnemyName(nameId);
+                    Console.WriteLine($"[FlashTimer] slot={i} {name}  flash set: decayRate=0.016 timer=1.0");
+                    continue;
+                }
+
+                float duration = Memory.ReadFloat(slotBase + EnemySlotOffsets.FlashDecayRate);
+                float timer    = Memory.ReadFloat(slotBase + EnemySlotOffsets.FlashTimer);
+                int   active   = Memory.ReadInt(slotBase + EnemySlotOffsets.FlashActivation);
+
+                _flashTimerSnapshot.TryGetValue(i, out float prevTimer);
+                if (Math.Abs(timer - prevTimer) > 0.0001f)
+                {
+                    ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    string name = GetEnemyName(nameId);
+                    Console.WriteLine($"[FlashTimer] slot={i} {name}  active={active}  decayRate={duration:F4}  flashTimer={timer:F4}");
+                    _flashTimerSnapshot[i] = timer;
+                }
             }
         }
 

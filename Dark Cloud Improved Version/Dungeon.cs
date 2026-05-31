@@ -101,7 +101,8 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
-                    Enemies.PollEnemyDynamics();  // uncomment for live change detection
+                    // Enemies.PollEnemyDynamics();
+                    // Enemies.MonitorFlashTimer();
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -689,6 +690,16 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
 
+            // The sentinel wrote 1 to Enemy14.hp before enemies spawned.
+            // If the game had already set HP before we wrote the sentinel (or if it timed out),
+            // slot 14's HP is stuck at 1. maxHp was never touched, so restore from it.
+            if (Memory.ReadInt(Enemies.Enemy14.renderStatus) > 0)
+            {
+                int e14MaxHp = Memory.ReadInt(Enemies.Enemy14.maxHp);
+                if (e14MaxHp > 0)
+                    Memory.WriteInt(Enemies.Enemy14.hp, e14MaxHp);
+            }
+
             //Set the flag to true
             if(Memory.ReadByte(Enemies.Enemy0.renderStatus) > 0) enemiesSpawn = true;
 
@@ -705,7 +716,7 @@ namespace Dark_Cloud_Improved_Version
             //This is to account for the Wise Owl 3 keys
             //There needs to be enough normal enemies to roll for the miniboss in order to avoid infinite retries
             // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
-            // Enemies.DumpModelScaleTable();       // model/render scale research — uncomment to investigate width/height/depth table
+            // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             Enemies.LogEnemySpawns();
 
             if (numNormalEnemies > 3)
@@ -732,7 +743,8 @@ namespace Dark_Cloud_Improved_Version
 
             // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
             minibossProcess?.Join(2000);
-            Enemies.ApplyTestModifications();
+            // Enemies.ApplyTestModifications();
+            Enemies.ResetPollState();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 

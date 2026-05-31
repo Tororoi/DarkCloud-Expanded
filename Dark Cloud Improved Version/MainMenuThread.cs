@@ -15,6 +15,7 @@ namespace Dark_Cloud_Improved_Version
         public static int PID_attempts = 0;
         public static int currentFrameCounter = 0;
         public static int previousFrameCounter = 0;
+        public static int previousMode = -1;
         public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript));
         public static Thread changesThread = new Thread(new ThreadStart(ApplyNewChanges));
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread));
@@ -159,6 +160,9 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByte(0x21F10024, 1); //mod's flag for PNACH
                 currentFrameCounter = Memory.ReadInt(0x202A2400);
                 int currentMode = Memory.ReadByte(Addresses.mode);
+                if (currentMode != previousMode && previousMode != -1)
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Mode changed: {previousMode} -> {currentMode}");
+                previousMode = currentMode;
                 if (currentFrameCounter > 0)
                 {
                     if (ingame == false)
@@ -257,7 +261,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
                 
-                if (currentFrameCounter < previousFrameCounter || currentFrameCounter > previousFrameCounter + 360 || currentFrameCounter == 0)
+                if (currentFrameCounter < previousFrameCounter || currentFrameCounter > previousFrameCounter + 720 || currentFrameCounter == 0)
                 {
                     Thread.Sleep(200);
                     if (currentFrameCounter == 0)

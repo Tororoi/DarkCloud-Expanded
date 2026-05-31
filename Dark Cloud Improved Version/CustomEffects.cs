@@ -283,13 +283,18 @@ namespace Dark_Cloud_Improved_Version
             const int toanWeaponSlot0Id     = 0x21CDDA58;
             const int toanWeaponSlotSize    = 0xF8;
 
-            bool penalized = false;
-            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
+            bool penalized    = false;
+            bool wasNearDeath = false;
+            byte lastFloor    = Memory.ReadByte(Addresses.checkFloor);
 
-            // Apply curse immediately on equip
+            // Apply curse immediately on equip, but not while in NearDeath
             ushort cur = Memory.ReadUShort(toanStatus);
-            Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
-            Memory.WriteUShort(toanStatusTimer, 3600);
+            wasNearDeath = (cur & 0x02) != 0;
+            if (!wasNearDeath)
+            {
+                Memory.WriteUShort(toanStatus,      (ushort)(cur | 0x20));
+                Memory.WriteUShort(toanStatusTimer, 3600);
+            }
 
             while (Player.InDungeonFloor())
             {
@@ -299,22 +304,40 @@ namespace Dark_Cloud_Improved_Version
                 byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
                 if (currentFloor != lastFloor)
                 {
-                    // New floor: clear penalty and reapply curse
-                    penalized = false;
-                    lastFloor = currentFloor;
+                    // New floor: clear penalty/NearDeath tracking and reapply curse
+                    penalized    = false;
+                    wasNearDeath = false;
+                    lastFloor    = currentFloor;
                     cur = Memory.ReadUShort(toanStatus);
                     Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
                     Memory.WriteUShort(toanStatusTimer, 3600);
                 }
 
-                if (!penalized)
+                cur = Memory.ReadUShort(toanStatus);
+                bool nearDeath = (cur & 0x02) != 0;
+
+                if (nearDeath)
                 {
-                    cur = Memory.ReadUShort(toanStatus);
+                    // NearDeath state: suspend curse effect, don't penalize
+                    wasNearDeath = true;
+                }
+                else if (wasNearDeath)
+                {
+                    // Recovered from NearDeath: reapply curse only if holy water wasn't used this floor
+                    wasNearDeath = false;
+                    if (!penalized)
+                    {
+                        Memory.WriteUShort(toanStatus,      (ushort)(cur | 0x20));
+                        Memory.WriteUShort(toanStatusTimer, 3600);
+                    }
+                }
+                else if (!penalized)
+                {
                     if ((cur & 0x20) == 0)
                     {
                         // Curse was removed externally (holy water) — penalize
                         penalized = true;
-                        Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x10)); // Poison
+                        Memory.WriteUShort(toanStatus,      (ushort)(cur | 0x10)); // Poison
                         Memory.WriteUShort(toanStatusTimer, 3600);
                         Memory.WriteUShort(toanHp, 1);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise: curse broken — poison and HP=1 applied");
