@@ -149,6 +149,8 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 21.0f, Unk008 = 10.0f,
             EstimatedMinSize = 5.0f, MaxSize = 16.0f,
             FpMin = 200, FpMax = 400,
+            SpawnWeightMorning = 0.04f, SpawnWeightAfternoon = 0.02f,
+            SpawnWeightDusk = 0.05f, SpawnWeightNight = 0.03f,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -231,15 +233,80 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FishData Piccoly   = new FishData { Id = 11, Name = "Piccoly" };
         internal static readonly FishData Bon       = new FishData { Id = 12, Name = "Bon" };
         internal static readonly FishData Hamahama  = new FishData { Id = 13, Name = "Hamahama" };
-        internal static readonly FishData Negie     = new FishData { Id = 14, Name = "Negie" };
-        internal static readonly FishData Den       = new FishData { Id = 15, Name = "Den" };
-        internal static readonly FishData Heela     = new FishData { Id = 16, Name = "Heela" };
+        internal static readonly FishData Negie = new FishData
+        {
+            Id = 14, Name = "Negie",
+            Unk004 = 21.0f, Unk008 = 8.0f,
+            EstimatedMinSize = 4.6f, MaxSize = 16.0f,
+            FpMin = 15, FpMax = 40,
+            SpawnWeightMorning = 0.30f, SpawnWeightAfternoon = 0.40f,
+            SpawnWeightDusk = 0.36f, SpawnWeightNight = 0.49f,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 1.0f,
+            BaitAffMinon           = 0.5f,
+            BaitAffBattan          = 0.5f,
+            BaitAffPetitefish      = 0.0f,
+        };
+        internal static readonly FishData Den = new FishData
+        {
+            Id = 15, Name = "Den",
+            Unk004 = 20.0f, Unk008 = 8.0f,
+            EstimatedMinSize = 4.0f, MaxSize = 20.0f,
+            FpMin = 20, FpMax = 40,
+            SpawnWeightMorning = 0.33f, SpawnWeightAfternoon = 0.31f,
+            SpawnWeightDusk = 0.30f, SpawnWeightNight = 0.27f,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.5f,
+            BaitAffMinon           = 1.0f,
+            BaitAffBattan          = 0.5f,
+            BaitAffPetitefish      = 0.0f,
+        };
+        internal static readonly FishData Heela = new FishData
+        {
+            Id = 16, Name = "Heela",
+            Unk004 = 20.0f, Unk008 = 8.0f,
+            EstimatedMinSize = 6.2285f, MaxSize = 14.0f,
+            FpMin = 20, FpMax = 40,
+            SpawnWeightMorning = 0.35f, SpawnWeightAfternoon = 0.27f,
+            SpawnWeightDusk = 0.29f, SpawnWeightNight = 0.21f,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.5f,
+            BaitAffMinon           = 0.5f,
+            BaitAffBattan          = 1.0f,
+            BaitAffPetitefish      = 1.0f,
+        };
         internal static readonly FishData BaronGarayan = new FishData
         {
             Id = 17, Name = "Baron Garayan",
             Unk004 = 21.0f, Unk008 = 10.0f,
             EstimatedMinSize = 5.0f, MaxSize = 30.0f,
             FpMin = 600, FpMax = 1000,
+            SpawnWeightMorning = 0.008f, SpawnWeightAfternoon = 0.004f,
+            SpawnWeightDusk = 0.010f, SpawnWeightNight = 0.006f,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -350,7 +417,12 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 3, Name = "Muska Lacka Oasis",
             SlotBase = Addresses.fishSlotBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
-            TriggerIndex = 0, // not yet confirmed — update after first Oasis session
+            TriggerIndex = 5,
+            FishIds = new byte[]
+            {
+                FishDatabase.Negie.Id, FishDatabase.Den.Id, FishDatabase.Heela.Id,
+                FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
+            },
         };
 
         private static readonly Dictionary<int, AreaFishData> ById;

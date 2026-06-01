@@ -16,11 +16,32 @@ namespace Dark_Cloud_Improved_Version
     {
         private static ModWindow instance;
 
+        private readonly DispatcherTimer _fishStatusTimer;
+
         public ModWindow()
         {
             InitializeComponent();
             instance = this;
             UserModeLaunch();
+
+            _fishStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _fishStatusTimer.Tick += (_, _) => UpdateFishFarmerStatus();
+            _fishStatusTimer.Start();
+        }
+
+        private void UpdateFishFarmerStatus()
+        {
+            string status = FishDataFarmer.IsRunning ? "Running" :
+                            FishDataFarmer.Enabled   ? "Armed"   : "Stopped";
+            Label_FishFarmer_Status.Text = $"Status: {status}";
+
+            Label_FishFarmer_Sessions.Text =
+                $"Sessions: {FishDataFarmer.SessionCount}   Queue: {FishDataFarmer.PendingCount}";
+
+            int[] p = TownCharacter.FishProbe;
+            Label_FishFarmer_Probe.Text =
+                $"708={p[0]:X8}  714={p[1]:X8}  3E20={p[2]:X8}  3E24={p[3]:X8}  3E28={p[4]:X8}";
+            Label_FishFarmer_Survey.Text = FishDataFarmer.GetSurveyText();
         }
 
         public static Thread townThread = new Thread(new ThreadStart(TownCharacter.MainScript)) { IsBackground = true };
@@ -539,6 +560,31 @@ namespace Dark_Cloud_Improved_Version
                     debugThread.Start();
                 CBox_DebugThread.IsEnabled = false;
             }
+        }
+
+        private void DEV_Page1_Btn_FishFarmer_Toggle(object sender, RoutedEventArgs e)
+        {
+            if (FishDataFarmer.IsRunning)
+            {
+                FishDataFarmer.Stop();
+                Btn_FishFarmer_Toggle.Content = "Arm";
+            }
+            else if (FishDataFarmer.Enabled)
+            {
+                FishDataFarmer.Enabled = false;
+                Btn_FishFarmer_Toggle.Content = "Arm";
+            }
+            else
+            {
+                FishDataFarmer.Enabled = true;
+                Btn_FishFarmer_Toggle.Content = "Disarm";
+            }
+        }
+
+        private void DEV_Page1_Btn_FishFarmer_Stop(object sender, RoutedEventArgs e)
+        {
+            FishDataFarmer.Stop();
+            Btn_FishFarmer_Toggle.Content = "Arm";
         }
 
         #endregion

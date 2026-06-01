@@ -410,6 +410,7 @@ namespace Dark_Cloud_Improved_Version
                 float size     = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 int   fpMin    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMin);
                 int   fpMax    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMax);
+                FishDataFarmer.RecordSlot(fishId, currentTod, size);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[FishInfo] area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) " +
                     $"unk004={unk004:F1} unk008={unk008:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +

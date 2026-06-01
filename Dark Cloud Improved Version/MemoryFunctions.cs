@@ -20,6 +20,7 @@ namespace Dark_Cloud_Improved_Version
         private static NetworkStream _stream;
         private static readonly object _lock = new object();
 
+
         public static void Connect(int slot = 0)
         {
             _stream?.Close();
@@ -98,6 +99,11 @@ namespace Dark_Cloud_Improved_Version
             _socket?.Close();
             _stream = null;
             _socket = null;
+        }
+
+        internal static void WriteIntFast(long address, int value)
+        {
+            SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
         }
 
         private static byte[] SendBatch(byte[] packet)
