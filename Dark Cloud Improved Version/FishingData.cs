@@ -149,8 +149,10 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 21.0f, Unk008 = 10.0f,
             EstimatedMinSize = 5.0f, MaxSize = 16.0f,
             FpMin = 200, FpMax = 400,
-            SpawnWeightMorning = 0.04f, SpawnWeightAfternoon = 0.02f,
-            SpawnWeightDusk = 0.05f, SpawnWeightNight = 0.03f,
+            SpawnWeightMorning   = 0.04f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  8slots(H1=5,H2=3,pk=0) [324 total]
+            SpawnWeightAfternoon = 0.02f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  6slots(H1=0,H2=6,pk=0) [324 total]
+            SpawnWeightDusk      = 0.05f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 25slots(H1=13,H2=12,pk=2) [324 total]
+            SpawnWeightNight     = 0.03f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 7slots(H1=5,H2=2,pk=0) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -239,8 +241,10 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 21.0f, Unk008 = 8.0f,
             EstimatedMinSize = 4.6f, MaxSize = 16.0f,
             FpMin = 15, FpMax = 40,
-            SpawnWeightMorning = 0.30f, SpawnWeightAfternoon = 0.40f,
-            SpawnWeightDusk = 0.36f, SpawnWeightNight = 0.49f,
+            SpawnWeightMorning   = 0.34f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  78slots(H1=42,H2=36,pk=2) [324 total]
+            SpawnWeightAfternoon = 0.40f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  83slots(H1=42,H2=41,pk=7) [324 total]
+            SpawnWeightDusk      = 0.39f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 161slots(H1=68,H2=93,pk=7) [324 total]
+            SpawnWeightNight     = 0.41f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 175slots(H1=74,H2=101,pk=15) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -261,8 +265,10 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 20.0f, Unk008 = 8.0f,
             EstimatedMinSize = 4.0f, MaxSize = 20.0f,
             FpMin = 20, FpMax = 40,
-            SpawnWeightMorning = 0.33f, SpawnWeightAfternoon = 0.31f,
-            SpawnWeightDusk = 0.30f, SpawnWeightNight = 0.27f,
+            SpawnWeightMorning   = 0.37f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  84slots(H1=39,H2=45,pk=1) [324 total]
+            SpawnWeightAfternoon = 0.26f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  55slots(H1=24,H2=31,pk=3) [324 total]
+            SpawnWeightDusk      = 0.26f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 107slots(H1=54,H2=53,pk=13) [324 total]
+            SpawnWeightNight     = 0.28f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 120slots(H1=57,H2=63,pk=7) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -281,10 +287,12 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 16, Name = "Heela",
             Unk004 = 20.0f, Unk008 = 8.0f,
-            EstimatedMinSize = 6.2285f, MaxSize = 14.0f,
+            EstimatedMinSize = 5.9053f, MaxSize = 14.0f,
             FpMin = 20, FpMax = 40,
-            SpawnWeightMorning = 0.35f, SpawnWeightAfternoon = 0.27f,
-            SpawnWeightDusk = 0.29f, SpawnWeightNight = 0.21f,
+            SpawnWeightMorning   = 0.27f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  63slots(H1=32,H2=31,pk=1) [324 total]
+            SpawnWeightAfternoon = 0.32f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  67slots(H1=30,H2=37,pk=6) [324 total]
+            SpawnWeightDusk      = 0.31f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 128slots(H1=56,H2=72,pk=5) [324 total]
+            SpawnWeightNight     = 0.28f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 119slots(H1=54,H2=65,pk=10) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -305,8 +313,10 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 21.0f, Unk008 = 10.0f,
             EstimatedMinSize = 5.0f, MaxSize = 30.0f,
             FpMin = 600, FpMax = 1000,
-            SpawnWeightMorning = 0.008f, SpawnWeightAfternoon = 0.004f,
-            SpawnWeightDusk = 0.010f, SpawnWeightNight = 0.006f,
+            SpawnWeightMorning   = 0.008f, // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  3slots(H1=2,H2=1,pk=0) [324 total]
+            SpawnWeightAfternoon = 0.004f, // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  1slots(H1=0,H2=1,pk=0) [324 total]
+            SpawnWeightDusk      = 0.010f, // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 3slots(H1=1,H2=2,pk=1) [324 total]
+            SpawnWeightNight     = 0.006f, // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 3slots(H1=2,H2=1,pk=0) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,

@@ -399,7 +399,10 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void LogFishSession(int areaId, int slotBase, int slotCount)
         {
-            TimeOfDay currentTod = GetCurrentTimeOfDay();
+            float todFloat = Memory.ReadFloat(Addresses.timeofDayWrite);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[FishSession] area={areaId} slots={slotCount} tod={todFloat:F2}");
+            FishDataFarmer.RecordSession(todFloat);
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 int slotStart  = slotBase + slotIndex * Addresses.fishSlotStride;
@@ -410,11 +413,11 @@ namespace Dark_Cloud_Improved_Version
                 float size     = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 int   fpMin    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMin);
                 int   fpMax    = Memory.ReadInt(slotStart + FishSlotOffsets.FpMax);
-                FishDataFarmer.RecordSlot(fishId, currentTod, size);
+                FishDataFarmer.RecordSlot(fishId, todFloat, size);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[FishInfo] area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) " +
                     $"unk004={unk004:F1} unk008={unk008:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +
-                    $"size={size:F4} ({(int)(size*10)}cm) fp={fpMin}-{fpMax} tod={currentTod}");
+                    $"size={size:F4} ({(int)(size*10)}cm) fp={fpMin}-{fpMax}");
                 // bait affinity table — values are bite-likelihood weights (0.0=never, 1.0=normal)
                 float affEvy      = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffEvy);
                 float affMimi     = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMimi);
