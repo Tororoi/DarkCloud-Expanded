@@ -19,11 +19,6 @@ namespace Dark_Cloud_Improved_Version
         internal int?   FpMin;              // +0x010; Doesn't exactly correspond to FP gain, but is strongly correlated and may be a base FP value before modifiers.
         internal int?   FpMax;              // +0x014; Same as above.
         internal float? EstimatedMinSize;   // observed gameplay minimum (×10 = cm); null = not yet observed
-        // Relative spawn weight per time period. 0.0 = never; equal values = uniform chance.
-        internal float? SpawnWeightMorning;
-        internal float? SpawnWeightAfternoon;
-        internal float? SpawnWeightDusk;
-        internal float? SpawnWeightNight;
         // Bait affinity table (+0x018–+0x048): 13 floats, 4 bytes each.
         // 0.0 = never bites; 1.0 = normal; No observed values above 1.0 and setting a high value does not appear to increase catch rate, so values above 1.0 may be clamped in the game code.
         internal float? BaitAffEvy;
@@ -77,15 +72,32 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class FishDatabase
     {
-        internal static readonly FishData Bobo      = new FishData { Id =  0, Name = "Bobo" };
+        internal static readonly FishData Bobo = new FishData
+        {
+            Id = 0, Name = "Bobo",
+            Unk004 = 17.0f, Unk008 = 10.0f,
+            EstimatedMinSize = 7.2945f, MaxSize = 20.0f,
+            FpMin = 20, FpMax = 50,
+            BaitAffEvy             = 1.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.0f,
+            BaitAffBattan          = 0.0f,
+            BaitAffPetitefish      = 0.0f,
+        };
         internal static readonly FishData Gobbler   = new FishData
         {
             Id = 1, Name = "Gobbler",
             Unk004 = 19.5f, Unk008 = 8.0f,
             EstimatedMinSize = 5.0f, MaxSize = 16.0f,
             FpMin = 10, FpMax = 30,
-            SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-            SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
@@ -104,10 +116,8 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 2, Name = "Nonky",
             Unk004 = 25.5f, Unk008 = 8.0f,
-            EstimatedMinSize = 4.6f, MaxSize = 19.0f,
+            EstimatedMinSize = 4.0000f, MaxSize = 19.0f,
             FpMin = 8, FpMax = 25,
-            SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-            SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
@@ -122,7 +132,26 @@ namespace Dark_Cloud_Improved_Version
             BaitAffBattan          = 0.5f,
             BaitAffPetitefish      = 0.0f,
         };
-        internal static readonly FishData Kaiji     = new FishData { Id =  3, Name = "Kaiji" };
+        internal static readonly FishData Kaiji = new FishData
+        {
+            Id = 3, Name = "Kaiji",
+            Unk004 = 35.4f, Unk008 = 12.0f,
+            EstimatedMinSize = 9.0039f, MaxSize = 24.0f,
+            FpMin = 30, FpMax = 60,
+            BaitAffEvy             = 0.5f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.0f,
+            BaitAffBattan          = 0.0f,
+            BaitAffPetitefish      = 1.0f,
+        };
         internal static readonly FishData BakuBaku  = new FishData
         {
             Id = 4, Name = "Baku Baku",
@@ -149,10 +178,6 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 21.0f, Unk008 = 10.0f,
             EstimatedMinSize = 5.0f, MaxSize = 16.0f,
             FpMin = 200, FpMax = 400,
-            SpawnWeightMorning   = 0.04f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  8slots(H1=5,H2=3,pk=0) [324 total]
-            SpawnWeightAfternoon = 0.02f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  6slots(H1=0,H2=6,pk=0) [324 total]
-            SpawnWeightDusk      = 0.05f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 25slots(H1=13,H2=12,pk=2) [324 total]
-            SpawnWeightNight     = 0.03f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 7slots(H1=5,H2=2,pk=0) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -171,10 +196,8 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 6, Name = "Gummy",
             Unk004 = 20.0f, Unk008 = 6.0f,
-            EstimatedMinSize = 4.9f, MaxSize = 12.0f,
+            EstimatedMinSize = 3.5784f, MaxSize = 12.0f,
             FpMin = 15, FpMax = 40,
-            SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-            SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 1.0f,
             BaitAffPrickly         = 0.5f,
@@ -193,10 +216,8 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 7, Name = "Niler",
             Unk004 = 20.0f, Unk008 = 6.0f,
-            EstimatedMinSize = 5.3f, MaxSize = 10.0f,
+            EstimatedMinSize = 4.2954f, MaxSize = 10.0f,
             FpMin = 20, FpMax = 50,
-            SpawnWeightMorning = 0.25f, SpawnWeightAfternoon = 0.25f,
-            SpawnWeightDusk = 0.25f, SpawnWeightNight = 0.25f,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 1.0f,
@@ -211,12 +232,31 @@ namespace Dark_Cloud_Improved_Version
             BaitAffBattan          = 0.5f,
             BaitAffPetitefish      = 0.0f,
         };
-        internal static readonly FishData Umadakara = new FishData { Id =  9, Name = "Umadakara" };
+        internal static readonly FishData Umadakara = new FishData
+        {
+            Id = 9, Name = "Umadakara",
+            Unk004 = 21.0f, Unk008 = 8.0f,
+            EstimatedMinSize = 5.5702f, MaxSize = 16.0f,
+            FpMin = 100, FpMax = 200,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.0f,
+            BaitAffGooeypeach      = 0.0f,
+            BaitAffBombnuts        = 0.0f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.0f,
+            BaitAffCarrot          = 1.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.0f,
+            BaitAffBattan          = 0.0f,
+            BaitAffPetitefish      = 0.0f,
+        };
         internal static readonly FishData Tarton = new FishData
         {
             Id = 10, Name = "Tarton",
             Unk004 = 20.0f, Unk008 = 8.0f,
-            EstimatedMinSize = 7.0f, MaxSize = 16.0f,
+            EstimatedMinSize = 4.5092f, MaxSize = 16.0f,
             FpMin = 40, FpMax = 80,
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.5f,
@@ -232,19 +272,72 @@ namespace Dark_Cloud_Improved_Version
             BaitAffBattan          = 0.5f,
             BaitAffPetitefish      = 0.5f,
         };
-        internal static readonly FishData Piccoly   = new FishData { Id = 11, Name = "Piccoly" };
-        internal static readonly FishData Bon       = new FishData { Id = 12, Name = "Bon" };
-        internal static readonly FishData Hamahama  = new FishData { Id = 13, Name = "Hamahama" };
+        internal static readonly FishData Piccoly = new FishData
+        {
+            Id = 11, Name = "Piccoly",
+            Unk004 = 20.0f, Unk008 = 6.0f,
+            EstimatedMinSize = 4.5388f, MaxSize = 12.0f,
+            FpMin = 20, FpMax = 40,
+            BaitAffEvy             = 1.0f,
+            BaitAffMimi            = 0.5f,
+            BaitAffPrickly         = 0.5f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.5f,
+            BaitAffBattan          = 0.5f,
+            BaitAffPetitefish      = 0.0f,
+        };
+        internal static readonly FishData Bon = new FishData
+        {
+            Id = 12, Name = "Bon",
+            Unk004 = 15.0f, Unk008 = 6.0f,
+            EstimatedMinSize = 4.0435f, MaxSize = 12.0f,
+            FpMin = 10, FpMax = 30,
+            BaitAffEvy             = 1.0f,
+            BaitAffMimi            = 0.5f,
+            BaitAffPrickly         = 0.5f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.5f,
+            BaitAffBattan          = 0.5f,
+            BaitAffPetitefish      = 0.0f,
+        };
+        internal static readonly FishData Hamahama = new FishData
+        {
+            Id = 13, Name = "Hamahama",
+            Unk004 = 21.0f, Unk008 = 10.0f,
+            EstimatedMinSize = 7.3150f, MaxSize = 20.0f,
+            FpMin = 35, FpMax = 70,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.2f,
+            BaitAffGooeypeach      = 0.2f,
+            BaitAffBombnuts        = 0.2f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.2f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.0f,
+            BaitAffBattan          = 0.0f,
+            BaitAffPetitefish      = 1.0f,
+        };
         internal static readonly FishData Negie = new FishData
         {
             Id = 14, Name = "Negie",
             Unk004 = 21.0f, Unk008 = 8.0f,
             EstimatedMinSize = 4.6f, MaxSize = 16.0f,
             FpMin = 15, FpMax = 40,
-            SpawnWeightMorning   = 0.34f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  78slots(H1=42,H2=36,pk=2) [324 total]
-            SpawnWeightAfternoon = 0.40f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  83slots(H1=42,H2=41,pk=7) [324 total]
-            SpawnWeightDusk      = 0.39f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 161slots(H1=68,H2=93,pk=7) [324 total]
-            SpawnWeightNight     = 0.41f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 175slots(H1=74,H2=101,pk=15) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -265,10 +358,6 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 20.0f, Unk008 = 8.0f,
             EstimatedMinSize = 4.0f, MaxSize = 20.0f,
             FpMin = 20, FpMax = 40,
-            SpawnWeightMorning   = 0.37f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  84slots(H1=39,H2=45,pk=1) [324 total]
-            SpawnWeightAfternoon = 0.26f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  55slots(H1=24,H2=31,pk=3) [324 total]
-            SpawnWeightDusk      = 0.26f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 107slots(H1=54,H2=53,pk=13) [324 total]
-            SpawnWeightNight     = 0.28f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 120slots(H1=57,H2=63,pk=7) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -289,10 +378,6 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 20.0f, Unk008 = 8.0f,
             EstimatedMinSize = 5.9053f, MaxSize = 14.0f,
             FpMin = 20, FpMax = 40,
-            SpawnWeightMorning   = 0.27f,  // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  63slots(H1=32,H2=31,pk=1) [324 total]
-            SpawnWeightAfternoon = 0.32f,  // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  67slots(H1=30,H2=37,pk=6) [324 total]
-            SpawnWeightDusk      = 0.31f,  // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 128slots(H1=56,H2=72,pk=5) [324 total]
-            SpawnWeightNight     = 0.28f,  // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 119slots(H1=54,H2=65,pk=10) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -313,10 +398,6 @@ namespace Dark_Cloud_Improved_Version
             Unk004 = 21.0f, Unk008 = 10.0f,
             EstimatedMinSize = 5.0f, MaxSize = 30.0f,
             FpMin = 600, FpMax = 1000,
-            SpawnWeightMorning   = 0.008f, // Muska Lacka: M=59sess(H1=30,H2=29,pk=1)  3slots(H1=2,H2=1,pk=0) [324 total]
-            SpawnWeightAfternoon = 0.004f, // Muska Lacka: A=53sess(H1=24,H2=29,pk=4)  1slots(H1=0,H2=1,pk=0) [324 total]
-            SpawnWeightDusk      = 0.010f, // Muska Lacka: D=106sess(H1=48,H2=58,pk=7) 3slots(H1=1,H2=2,pk=1) [324 total]
-            SpawnWeightNight     = 0.006f, // Muska Lacka: N=106sess(H1=48,H2=58,pk=8) 3slots(H1=2,H2=1,pk=0) [324 total]
             BaitAffEvy             = 0.0f,
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
@@ -375,6 +456,9 @@ namespace Dark_Cloud_Improved_Version
         internal int      PostLoopDst;     // Sam only: queens-quest trigger dst
         internal int      TriggerIndex;   // value at Addresses.fishingTriggerIndex when this spot activates; 0 = not yet confirmed
         internal byte[]   FishIds;         // naturally-spawning fish IDs; null = not yet catalogued
+        // Per-fish spawn weights for this area. fishId → float[4] = [Morning, Afternoon, Dusk, Night].
+        // 0.0 = never; values represent relative probability within this area and time period.
+        internal Dictionary<byte, float[]> SpawnWeights;
     }
 
     /// <summary>
@@ -392,6 +476,37 @@ namespace Dark_Cloud_Improved_Version
             {
                 FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
             },
+            SpawnWeights = new Dictionary<byte, float[]>
+            {
+                [FishDatabase.Gobbler.Id] = new float[]
+                {
+                    0.26f,  // M=157sess(H1=70,H2=87,pk=11)  160slots(H1=74,H2=86,pk=7) [703 total]
+                    0.25f,  // A=158sess(H1=72,H2=86,pk=12)  155slots(H1=59,H2=96,pk=12) [703 total]
+                    0.25f,  // D=208sess(H1=93,H2=115,pk=15) 210slots(H1=94,H2=116,pk=17) [703 total]
+                    0.22f,  // N=180sess(H1=93,H2=87,pk=11)  156slots(H1=84,H2=72,pk=11) [703 total]
+                },
+                [FishDatabase.Nonky.Id] = new float[]
+                {
+                    0.25f,  // M=157sess(H1=70,H2=87,pk=11)  158slots(H1=82,H2=76,pk=16) [703 total]
+                    0.25f,  // A=158sess(H1=72,H2=86,pk=12)  160slots(H1=82,H2=78,pk=14) [703 total]
+                    0.23f,  // D=208sess(H1=93,H2=115,pk=15) 188slots(H1=82,H2=106,pk=9) [703 total]
+                    0.27f,  // N=180sess(H1=93,H2=87,pk=11)  196slots(H1=95,H2=101,pk=16) [703 total]
+                },
+                [FishDatabase.Gummy.Id] = new float[]
+                {
+                    0.26f,  // M=157sess(H1=70,H2=87,pk=11)  162slots(H1=68,H2=94,pk=10) [703 total]
+                    0.25f,  // A=158sess(H1=72,H2=86,pk=12)  158slots(H1=82,H2=76,pk=8) [703 total]
+                    0.28f,  // D=208sess(H1=93,H2=115,pk=15) 235slots(H1=110,H2=125,pk=22) [703 total]
+                    0.27f,  // N=180sess(H1=93,H2=87,pk=11)  191slots(H1=107,H2=84,pk=12) [703 total]
+                },
+                [FishDatabase.Niler.Id] = new float[]
+                {
+                    0.24f,  // M=157sess(H1=70,H2=87,pk=11)  148slots(H1=56,H2=92,pk=11) [703 total]
+                    0.25f,  // A=158sess(H1=72,H2=86,pk=12)  159slots(H1=65,H2=94,pk=14) [703 total]
+                    0.24f,  // D=208sess(H1=93,H2=115,pk=15) 199slots(H1=86,H2=113,pk=12) [703 total]
+                    0.25f,  // N=180sess(H1=93,H2=87,pk=11)  177slots(H1=86,H2=91,pk=5) [703 total]
+                },
+            },
         };
         internal static readonly AreaFishData MatatakiWaterfall = new AreaFishData
         {
@@ -402,6 +517,44 @@ namespace Dark_Cloud_Improved_Version
             {
                 FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
                 FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
+            },
+            SpawnWeights = new Dictionary<byte, float[]>
+            {
+                [FishDatabase.Nonky.Id] = new float[]
+                {
+                    0.36f,   // M=53sess(H1=24,H2=29,pk=4)  95slots(H1=52,H2=43,pk=7) [174 total]
+                    0.30f,   // A=21sess(H1=21,H2=0,pk=0)   31slots(H1=31,H2=0,pk=0) [174 total]
+                    0.28f,   // D=48sess(H1=19,H2=29,pk=4)  66slots(H1=24,H2=42,pk=10) [174 total]
+                    0.32f,   // N=52sess(H1=23,H2=29,pk=3)  82slots(H1=36,H2=46,pk=4) [174 total]
+                },
+                [FishDatabase.BakuBaku.Id] = new float[]
+                {
+                    0.30f,   // M=53sess(H1=24,H2=29,pk=4)  79slots(H1=30,H2=49,pk=6) [174 total]
+                    0.29f,   // A=21sess(H1=21,H2=0,pk=0)   30slots(H1=30,H2=0,pk=0) [174 total]
+                    0.38f,   // D=48sess(H1=19,H2=29,pk=4)  92slots(H1=36,H2=56,pk=3) [174 total]
+                    0.33f,   // N=52sess(H1=23,H2=29,pk=3)  85slots(H1=33,H2=52,pk=6) [174 total]
+                },
+                [FishDatabase.Gummy.Id] = new float[]
+                {
+                    0.29f,   // M=53sess(H1=24,H2=29,pk=4)  78slots(H1=34,H2=44,pk=7) [174 total]
+                    0.42f,   // A=21sess(H1=21,H2=0,pk=0)   44slots(H1=44,H2=0,pk=0) [174 total]
+                    0.28f,   // D=48sess(H1=19,H2=29,pk=4)  68slots(H1=27,H2=41,pk=6) [174 total]
+                    0.32f,   // N=52sess(H1=23,H2=29,pk=3)  83slots(H1=40,H2=43,pk=4) [174 total]
+                },
+                [FishDatabase.MardanGarayan.Id] = new float[]
+                {
+                    0.05f,   // M=53sess(H1=24,H2=29,pk=4)  12slots(H1=4,H2=8,pk=0) [174 total]
+                    0.00f,   // A=21sess(H1=21,H2=0,pk=0)   0slots [174 total]
+                    0.04f,   // D=48sess(H1=19,H2=29,pk=4)  10slots(H1=6,H2=4,pk=0) [174 total]
+                    0.04f,   // N=52sess(H1=23,H2=29,pk=3)  9slots(H1=5,H2=4,pk=1) [174 total]
+                },
+                [FishDatabase.BaronGarayan.Id] = new float[]
+                {
+                    0.004f,  // M=53sess(H1=24,H2=29,pk=4)  1slots(H1=0,H2=1,pk=0) [174 total]
+                    0.000f,  // A=21sess(H1=21,H2=0,pk=0)   0slots [174 total]
+                    0.017f,  // D=48sess(H1=19,H2=29,pk=4)  4slots(H1=2,H2=2,pk=1) [174 total]
+                    0.004f,  // N=52sess(H1=23,H2=29,pk=3)  1slots(H1=1,H2=0,pk=0) [174 total]
+                },
             },
         };
         // Synthetic ID 100 — shares slot block and quest with MatatakiWaterfall.
@@ -414,14 +567,89 @@ namespace Dark_Cloud_Improved_Version
             FishIds = new byte[]
             {
                 FishDatabase.Tarton.Id, FishDatabase.Gobbler.Id, FishDatabase.BakuBaku.Id,
+                FishDatabase.Umadakara.Id,
+            },
+            SpawnWeights = new Dictionary<byte, float[]>
+            {
+                [FishDatabase.Gobbler.Id] = new float[]
+                {
+                    0.32f,  // M=53sess(H1=24,H2=29,pk=4)  85slots(H1=36,H2=49,pk=6) [244 total]
+                    0.40f,  // A=52sess(H1=23,H2=29,pk=3)  103slots(H1=42,H2=61,pk=5) [244 total]
+                    0.39f,  // D=86sess(H1=46,H2=40,pk=8)  168slots(H1=95,H2=73,pk=20) [244 total]
+                    0.30f,  // N=53sess(H1=24,H2=29,pk=4)  79slots(H1=33,H2=46,pk=8) [244 total]
+                },
+                [FishDatabase.BakuBaku.Id] = new float[]
+                {
+                    0.38f,  // M=53sess(H1=24,H2=29,pk=4)  101slots(H1=47,H2=54,pk=8) [244 total]
+                    0.33f,  // A=52sess(H1=23,H2=29,pk=3)  85slots(H1=33,H2=52,pk=4) [244 total]
+                    0.34f,  // D=86sess(H1=46,H2=40,pk=8)  147slots(H1=78,H2=69,pk=11) [244 total]
+                    0.38f,  // N=53sess(H1=24,H2=29,pk=4)  101slots(H1=44,H2=57,pk=8) [244 total]
+                },
+                [FishDatabase.Umadakara.Id] = new float[]
+                {
+                    0.10f,  // M=53sess(H1=24,H2=29,pk=4)  27slots(H1=13,H2=14,pk=1) [244 total]
+                    0.10f,  // A=52sess(H1=23,H2=29,pk=3)  26slots(H1=10,H2=16,pk=4) [244 total]
+                    0.10f,  // D=86sess(H1=46,H2=40,pk=8)  45slots(H1=23,H2=22,pk=3) [244 total]
+                    0.08f,  // N=53sess(H1=24,H2=29,pk=4)  21slots(H1=12,H2=9,pk=1) [244 total]
+                },
+                [FishDatabase.Tarton.Id] = new float[]
+                {
+                    0.20f,  // M=53sess(H1=24,H2=29,pk=4)  52slots(H1=24,H2=28,pk=5) [244 total]
+                    0.18f,  // A=52sess(H1=23,H2=29,pk=3)  46slots(H1=30,H2=16,pk=2) [244 total]
+                    0.16f,  // D=86sess(H1=46,H2=40,pk=8)  70slots(H1=34,H2=36,pk=6) [244 total]
+                    0.24f,  // N=53sess(H1=24,H2=29,pk=4)  64slots(H1=31,H2=33,pk=3) [244 total]
+                },
             },
         };
         internal static readonly AreaFishData QueensHarbor = new AreaFishData
         {
             Id = 19, Name = "Queens Harbor",
             SlotBase = Addresses.fishSlotBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
-            TriggerIndex = -1,
+            TriggerIndex = 5,
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
+            FishIds = new byte[]
+            {
+                FishDatabase.Bobo.Id, FishDatabase.Kaiji.Id, FishDatabase.Piccoly.Id,
+                FishDatabase.Bon.Id, FishDatabase.Hamahama.Id,
+            },
+            SpawnWeights = new Dictionary<byte, float[]>
+            {
+                [FishDatabase.Bobo.Id] = new float[]
+                {
+                    0.24f,  // M=58sess(H1=29,H2=29,pk=4)  71slots(H1=35,H2=36,pk=5) [160 total]
+                    0.23f,  // A=16sess(H1=16,H2=0,pk=0)   18slots(H1=18,H2=0,pk=0) [160 total]
+                    0.20f,  // D=27sess(H1=0,H2=27,pk=0)   27slots(H1=0,H2=27,pk=0) [160 total]
+                    0.21f,  // N=59sess(H1=29,H2=30,pk=4)  63slots(H1=32,H2=31,pk=6) [160 total]
+                },
+                [FishDatabase.Kaiji.Id] = new float[]
+                {
+                    0.17f,  // M=58sess(H1=29,H2=29,pk=4)  48slots(H1=23,H2=25,pk=4) [160 total]
+                    0.19f,  // A=16sess(H1=16,H2=0,pk=0)   15slots(H1=15,H2=0,pk=0) [160 total]
+                    0.22f,  // D=27sess(H1=0,H2=27,pk=0)   29slots(H1=0,H2=29,pk=0) [160 total]
+                    0.18f,  // N=59sess(H1=29,H2=30,pk=4)  53slots(H1=28,H2=25,pk=1) [160 total]
+                },
+                [FishDatabase.Piccoly.Id] = new float[]
+                {
+                    0.21f,  // M=58sess(H1=29,H2=29,pk=4)  60slots(H1=28,H2=32,pk=2) [160 total]
+                    0.19f,  // A=16sess(H1=16,H2=0,pk=0)   15slots(H1=15,H2=0,pk=0) [160 total]
+                    0.23f,  // D=27sess(H1=0,H2=27,pk=0)   31slots(H1=0,H2=31,pk=0) [160 total]
+                    0.21f,  // N=59sess(H1=29,H2=30,pk=4)  63slots(H1=35,H2=28,pk=6) [160 total]
+                },
+                [FishDatabase.Bon.Id] = new float[]
+                {
+                    0.16f,  // M=58sess(H1=29,H2=29,pk=4)  47slots(H1=26,H2=21,pk=4) [160 total]
+                    0.29f,  // A=16sess(H1=16,H2=0,pk=0)   23slots(H1=23,H2=0,pk=0) [160 total]
+                    0.19f,  // D=27sess(H1=0,H2=27,pk=0)   25slots(H1=0,H2=25,pk=0) [160 total]
+                    0.17f,  // N=59sess(H1=29,H2=30,pk=4)  49slots(H1=16,H2=33,pk=3) [160 total]
+                },
+                [FishDatabase.Hamahama.Id] = new float[]
+                {
+                    0.22f,  // M=58sess(H1=29,H2=29,pk=4)  64slots(H1=33,H2=31,pk=5) [160 total]
+                    0.11f,  // A=16sess(H1=16,H2=0,pk=0)   9slots(H1=9,H2=0,pk=0) [160 total]
+                    0.17f,  // D=27sess(H1=0,H2=27,pk=0)   23slots(H1=0,H2=23,pk=0) [160 total]
+                    0.23f,  // N=59sess(H1=29,H2=30,pk=4)  67slots(H1=34,H2=33,pk=4) [160 total]
+                },
+            },
         };
         internal static readonly AreaFishData MuskaLackaOasis = new AreaFishData
         {
@@ -432,6 +660,44 @@ namespace Dark_Cloud_Improved_Version
             {
                 FishDatabase.Negie.Id, FishDatabase.Den.Id, FishDatabase.Heela.Id,
                 FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
+            },
+            SpawnWeights = new Dictionary<byte, float[]>
+            {
+                [FishDatabase.Negie.Id] = new float[]
+                {
+                    0.34f,  // M=67sess(H1=38,H2=29,pk=1)  90slots(H1=54,H2=36,pk=2) [436 total]
+                    0.39f,  // A=53sess(H1=24,H2=29,pk=4)  83slots(H1=42,H2=41,pk=7) [436 total]
+                    0.39f,  // D=157sess(H1=69,H2=88,pk=11) 243slots(H1=105,H2=138,pk=13) [436 total]
+                    0.41f,  // N=159sess(H1=72,H2=87,pk=12) 258slots(H1=111,H2=147,pk=20) [436 total]
+                },
+                [FishDatabase.Den.Id] = new float[]
+                {
+                    0.34f,  // M=67sess(H1=38,H2=29,pk=1)  90slots(H1=45,H2=45,pk=1) [436 total]
+                    0.26f,  // A=53sess(H1=24,H2=29,pk=4)  55slots(H1=24,H2=31,pk=3) [436 total]
+                    0.26f,  // D=157sess(H1=69,H2=88,pk=11) 161slots(H1=72,H2=89,pk=18) [436 total]
+                    0.27f,  // N=159sess(H1=72,H2=87,pk=12) 170slots(H1=80,H2=90,pk=9) [436 total]
+                },
+                [FishDatabase.Heela.Id] = new float[]
+                {
+                    0.29f,  // M=67sess(H1=38,H2=29,pk=1)  77slots(H1=46,H2=31,pk=1) [436 total]
+                    0.32f,  // A=53sess(H1=24,H2=29,pk=4)  67slots(H1=30,H2=37,pk=6) [436 total]
+                    0.30f,  // D=157sess(H1=69,H2=88,pk=11) 189slots(H1=83,H2=106,pk=9) [436 total]
+                    0.31f,  // N=159sess(H1=72,H2=87,pk=12) 195slots(H1=89,H2=106,pk=18) [436 total]
+                },
+                [FishDatabase.MardanGarayan.Id] = new float[]
+                {
+                    0.030f,  // M=67sess(H1=38,H2=29,pk=1)  8slots(H1=5,H2=3,pk=0) [436 total]
+                    0.028f,  // A=53sess(H1=24,H2=29,pk=4)  6slots(H1=0,H2=6,pk=0) [436 total]
+                    0.045f,  // D=157sess(H1=69,H2=88,pk=11) 28slots(H1=15,H2=13,pk=3) [436 total]
+                    0.016f,  // N=159sess(H1=72,H2=87,pk=12) 10slots(H1=6,H2=4,pk=1) [436 total]
+                },
+                [FishDatabase.BaronGarayan.Id] = new float[]
+                {
+                    0.011f,  // M=67sess(H1=38,H2=29,pk=1)  3slots(H1=2,H2=1,pk=0) [436 total]
+                    0.005f,  // A=53sess(H1=24,H2=29,pk=4)  1slots(H1=0,H2=1,pk=0) [436 total]
+                    0.011f,  // D=157sess(H1=69,H2=88,pk=11) 7slots(H1=1,H2=6,pk=1) [436 total]
+                    0.005f,  // N=159sess(H1=72,H2=87,pk=12) 3slots(H1=2,H2=1,pk=0) [436 total]
+                },
             },
         };
 

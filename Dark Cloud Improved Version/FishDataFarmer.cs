@@ -38,6 +38,7 @@ namespace Dark_Cloud_Improved_Version
 
         // 0x21D33E28 — fishing phase state machine
         private const int FishPhase_BaitScreen   = 0x00000000;
+        private const int FishPhase_Walking      = 0x00000002;
         private const int FishPhase_Casting      = 0x00000004;
         private const int FishPhase_HookInWater  = 0x00000005;
         private const int FishPhase_DraggingHook = 0x0000000D; // moving Toan to drag hook
