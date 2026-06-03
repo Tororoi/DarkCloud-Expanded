@@ -114,6 +114,42 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly BaitTableEntry Unknown14       = new BaitTableEntry(0x2026AEF4); // default  40.0f, id=0 — purpose unknown
     }
 
+    /// <summary>
+    /// Fish model filename pointer array in EE RAM. Discovered 2026-06-03 via ScanForFishTable.
+    /// 18 uint32 entries at stride 4 (one per fish ID 0–17). Each raw pointer P gives the EE
+    /// string address as (0x20000000 + P). The string is 16 bytes, null-padded ASCII,
+    /// formatted "chara/f{id+1:D2}a.chr" (ID 0 → "chara/f01a.chr", ID 17 → "chara/f18a.chr").
+    /// Fish ID 8 has no FishDatabase entry but does have a model file ("chara/f09a.chr"),
+    /// suggesting a cut or unused species.
+    /// </summary>
+    internal static class FishModelTable
+    {
+        /// <summary>EE RAM address of the first pointer entry (fish ID 0).</summary>
+        internal const int PointerArrayBase = 0x20296570;
+        internal const int Stride           = 4;
+        internal const int Count            = 18;
+        /// <summary>Value subtracted from each raw uint32 pointer to get the EE string address.</summary>
+        internal const long PtrBias         = 0x20000000L;
+
+        /// <summary>Returns the EE RAM address of the pointer for <paramref name="fishId"/>,
+        /// or -1 if out of range.</summary>
+        internal static int PointerAddrForId(int fishId) =>
+            (uint)fishId < Count ? PointerArrayBase + fishId * Stride : -1;
+    }
+
+    /// <summary>
+    /// Shared shadow/silhouette model used by all fish species. Not in the FishModelTable
+    /// pointer array (which covers only f01a–f18a). EE RAM string address not yet located.
+    /// Discovered 2026-06-03 via DATA.HED scan.
+    /// </summary>
+    internal static class FishShadowModel
+    {
+        internal const string Filename      = "chara/f00s.chr";
+        /// <summary>Byte offset of f00s.chr inside DATA.DAT (Dark Cloud USA disc).</summary>
+        internal const int    DataDatOffset = 0x0031D800;
+        internal const int    DataDatSize   = 109_296;
+    }
+
     /// <summary>Addresses and state values for the fishing-related state machines.</summary>
     internal static class FishingState
     {
@@ -318,6 +354,26 @@ namespace Dark_Cloud_Improved_Version
             BaitAffBattan          = 0.5f,
             BaitAffPetitefish      = 0.0f,
         };
+        internal static readonly FishData MissingFish = new FishData
+        {
+            Id = 8, Name = "Missing Fish",
+            Unk004 = 0.0f, Unk008 = 0.0f,
+            EstimatedMinSize = 0.0f, MaxSize = 0.0f,
+            FpMin = 0, FpMax = 0,
+            BaitAffEvy             = 0.0f,
+            BaitAffMimi            = 0.0f,
+            BaitAffPrickly         = 0.0f,
+            BaitAffThrobbingCherry = 0.0f,
+            BaitAffGooeypeach      = 0.0f,
+            BaitAffBombnuts        = 0.0f,
+            BaitAffPoisonousApple  = 0.0f,
+            BaitAffMellowBanana    = 0.0f,
+            BaitAffCarrot          = 0.0f,
+            BaitAffPotatoCake      = 0.0f,
+            BaitAffMinon           = 0.0f,
+            BaitAffBattan          = 0.0f,
+            BaitAffPetitefish      = 0.0f,
+        };
         internal static readonly FishData Umadakara = new FishData
         {
             Id = 9, Name = "Umadakara",
@@ -504,7 +560,7 @@ namespace Dark_Cloud_Improved_Version
         static FishDatabase()
         {
             FishData[] allFish = {
-                Bobo, Gobbler, Nonky, Kaiji, BakuBaku, Gummy, Niler,
+                Bobo, Gobbler, Nonky, Kaiji, BakuBaku, Gummy, Niler, MissingFish,
                 Umadakara, Tarton, Piccoly, Bon, Hamahama, Negie, Den, Heela,
                 MardanGarayan, BaronGarayan,
             };

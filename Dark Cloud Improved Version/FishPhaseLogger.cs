@@ -45,11 +45,19 @@ namespace Dark_Cloud_Improved_Version
         internal static bool ForceApproach = false;
         internal static bool WriteNoticeRadius = false;
         internal const  float NoticeRadiusOverride = 100.0f;
-        internal static bool ScanSpeciesTable = true;
+        internal static bool ScanFishTable = true;
+
+        // When true, overwrites every slot's fish ID byte with ForcedFishId at session start.
+        internal static bool ForceSlotFishId = false;
+        internal static byte ForcedFishId    = 8;
+
+        // Writes the model pointer for ForcedModelIndex into all 18 FishModelTable entries.
+        internal static bool ForceModelPointers  = false;
+        internal static int  ForcedModelIndex    = 8;
 
         private static Thread _thread;
         private static volatile bool _running;
-        private static volatile bool _speciesScanDone = false; // reset to false to re-run scan
+        private static volatile bool _fishTableScanDone = false;
         private static int _slotBase;
         private static int _slotCount;
 
@@ -60,6 +68,36 @@ namespace Dark_Cloud_Improved_Version
             Stop();
             _slotBase  = slotBase;
             _slotCount = slotCount;
+
+            if (ForceSlotFishId)
+            {
+                for (int i = 0; i < slotCount; i++)
+                {
+                    int s        = slotBase + i * Addresses.fishSlotStride;
+                    int wordAddr = s & ~3;
+                    int byteOff  = s & 3;
+                    float[] wf   = Memory.ReadFloatBatch(wordAddr, 1);
+                    byte[]  wb   = BitConverter.GetBytes(wf[0]);
+                    wb[byteOff]  = ForcedFishId;
+                    Memory.WriteInt(wordAddr, (int)BitConverter.ToUInt32(wb, 0));
+                }
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[ForceSlotFishId] wrote id={ForcedFishId} to {slotCount} slot(s)");
+            }
+
+            if (ForceModelPointers)
+            {
+                int ptrBase  = FishModelTable.PointerArrayBase;
+                int srcAddr  = ptrBase + ForcedModelIndex * FishModelTable.Stride;
+                float[] srcW = Memory.ReadFloatBatch(srcAddr, 1);
+                uint srcPtr  = BitConverter.ToUInt32(BitConverter.GetBytes(srcW[0]), 0);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[ForceModel] index={ForcedModelIndex} ptr=0x{srcPtr:X8} → writing to all {FishModelTable.Count} entries");
+                for (int i = 0; i < FishModelTable.Count; i++)
+                    Memory.WriteInt(ptrBase + i * FishModelTable.Stride, (int)srcPtr);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[ForceModel] done");
+            }
+
             _running   = true;
             _thread    = new Thread(Run) { IsBackground = true, Name = "FishPhaseLogger" };
             _thread.Start();
@@ -79,6 +117,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Run()
         {
+            // Per-frame phase/slot polling disabled — session-start writes in OnSessionStart
+            // are sufficient for current investigation. Re-enable by removing this return.
+            return;
+#pragma warning disable CS0162
             int frame     = 0;
             int lastPhase = -1;
             var lastAiState = new int[_slotCount];
@@ -129,10 +171,10 @@ namespace Dark_Cloud_Improved_Version
                         for (int i = 0; i < _slotCount; i++) { stableFrames[i] = 0; prevHdg[i] = float.NaN; lastAiState[i] = -2; }
                         lastStableCount = 0;
 
-                        if (ScanSpeciesTable && !_speciesScanDone)
+                        if (ScanFishTable && !_fishTableScanDone)
                         {
-                            _speciesScanDone = true;
-                            new Thread(ScanFor25f) { IsBackground = true, Name = "SpeciesTableScan" }.Start();
+                            _fishTableScanDone = true;
+                            new Thread(ScanForFishTable) { IsBackground = true, Name = "FishTableScan" }.Start();
                         }
                     }
 
@@ -300,6 +342,7 @@ namespace Dark_Cloud_Improved_Version
 
                 Thread.Sleep(16);
             }
+#pragma warning restore CS0162
         }
 
         // ── Delta-scan methodology ────────────────────────────────────────────────
@@ -338,19 +381,29 @@ namespace Dark_Cloud_Improved_Version
             return sb.ToString();
         }
 
-        private static void ScanFor25f()
+        private static void ScanForFishTable()
         {
-            const long  scanStart = 0x20000000L;
-            const long  scanEnd   = 0x22000000L;
-            const int   batchSize = 1024;
-            const float target    = 25.0f;
-            const float tol       = 0.01f;
+            // Baron Garayan has the only MaxSize=30.0f among all 18 species.
+            // Validate each hit using adjacent known values from FishDatabase:
+            //   Unk004=21.0f at MaxSize-8, Unk008=10.0f at MaxSize-4
+            //   FpMin=600 at MaxSize+4,    FpMax=1000 at MaxSize+8
+            // (offsets mirror the fish slot layout: Unk004@0x004, Unk008@0x008,
+            //  MaxSize@0x00C, FpMin@0x010, FpMax@0x014)
+            const long  scanStart  = 0x20000000L;
+            const long  scanEnd    = 0x22000000L;
+            const int   batchSize  = 1024;
+            const float target     = 30.0f;
+            const float tol        = 0.01f;
+            const float unk004Val  = 21.0f;
+            const float unk008Val  = 10.0f;
+            const uint  fpMinVal   = 600;
+            const uint  fpMaxVal   = 1000;
 
             long totalBatches = ((scanEnd - scanStart) / 4 + batchSize - 1) / batchSize;
             var hits = new System.Collections.Generic.List<int>();
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[SpeciesScan] scanning EE RAM for {target}f (0x{BitConverter.ToUInt32(BitConverter.GetBytes(target), 0):X8})...");
+                "[FishTableScan] scanning EE RAM for Baron Garayan MaxSize=30.0f...");
 
             for (long b = 0; b < totalBatches && _running; b++)
             {
@@ -363,85 +416,211 @@ namespace Dark_Cloud_Improved_Version
             }
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[SpeciesScan] {hits.Count} hit(s) total");
+                $"[FishTableScan] {hits.Count} hit(s) — validating against Baron Garayan signature...");
 
-            // Cluster analysis: find groups of 3+ addresses with a consistent stride.
-            // A species table would appear as N entries equally spaced in memory.
-            hits.Sort();
-            for (int i = 0; i < hits.Count - 2; i++)
+            foreach (int hit in hits)
             {
-                int stride = hits[i + 1] - hits[i];
-                if (stride < 4) continue;
-                int len = 2;
-                while (i + len < hits.Count && hits[i + len] - hits[i + len - 1] == stride)
-                    len++;
-                if (len >= 3)
+                const int half = 8;
+                float[] w = Memory.ReadFloatBatch(hit - half * 4, half * 2);
+
+                bool hasUnk004 = Math.Abs(w[half - 2] - unk004Val) < tol;
+                bool hasUnk008 = Math.Abs(w[half - 1] - unk008Val) < tol;
+                uint rawFpMin  = BitConverter.ToUInt32(BitConverter.GetBytes(w[half + 1]), 0);
+                uint rawFpMax  = BitConverter.ToUInt32(BitConverter.GetBytes(w[half + 2]), 0);
+                bool hasFpMin  = rawFpMin == fpMinVal;
+                bool hasFpMax  = rawFpMax == fpMaxVal;
+                int  score     = (hasUnk004 ? 1 : 0) + (hasUnk008 ? 1 : 0) + (hasFpMin ? 1 : 0) + (hasFpMax ? 1 : 0);
+
+                if (score < 2) continue;
+
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[FishTableScan] candidate 0x{(uint)hit:X8} score={score}/4 " +
+                    $"(unk004={hasUnk004} unk008={hasUnk008} fpMin={hasFpMin} fpMax={hasFpMax})");
+
+                // Dump 16 words before through 32 words after the MaxSize hit,
+                // 8 words per line, hit marked with [].
+                const int pre  = 16;
+                const int post = 32;
+                float[] wide = Memory.ReadFloatBatch(hit - pre * 4, pre + post);
+                for (int row = 0; row < (pre + post); row += 8)
                 {
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[SpeciesScan] cluster base=0x{(uint)hits[i]:X8} stride=0x{stride:X4} ({stride}) count={len}");
-
-                    // Dump surrounding context for each entry: 16 bytes before the hit
-                    // (2 extra entries worth) through the end of the stride.
-                    int dumpWords = Math.Max(stride / 4, 4); // at least 4 DWORDs
-                    for (int e = 0; e < len; e++)
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append($"[FishTableScan]   0x{(uint)(hit - pre * 4 + row * 4):X8}:");
+                    for (int k = row; k < row + 8 && k < wide.Length; k++)
                     {
-                        long entryBase = hits[i + e] - 16; // 16 bytes of pre-context (2 entries)
-                        int  words     = dumpWords + 4;    // +4 for the pre-context
-                        float[] data = Memory.ReadFloatBatch(entryBase, words);
-                        var sb = new System.Text.StringBuilder();
-                        for (int w = 0; w < words; w++)
-                        {
-                            uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(data[w]), 0);
-                            if (w == 4) { sb.Append($"[{raw:X8}={data[w]:F1}f]"); }      // hit (shifted by 2 extra pre-words)
-                            else if (w == 5) { sb.Append($" id={raw}({BaitName(raw)})"); }
-                            else { sb.Append($" {raw:X8}"); }
-                        }
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[SpeciesScan]   e{e} 0x{(uint)hits[i+e]:X8}: {sb}");
+                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(wide[k]), 0);
+                        sb.Append(k == pre ? $" [{raw:X8}]" : $"  {raw:X8}");
                     }
-
-                    // Write distinct values: 2 entries before cluster, all cluster entries, 1 after.
-                    // evy (193) is likely the entry 2 strides before cluster (0x2026AE8C); mimi is 1 stride before.
-                    // Values: e=-2→98, e=-1→99(mimi), e=0→100, ..., e=10→110, e=11→111(post).
-                    for (int e = -2; e <= len; e++)
-                    {
-                        int  addr     = hits[i] + e * stride;
-                        float writeVal = 98.0f + (e + 2); // -2→98, -1→99, 0→100, ..., 11→111
-                        Memory.WriteFloat(addr, writeVal);
-                    }
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[SpeciesScan] wrote 98..{97 + len + 3}f to {len + 3} entries (cluster + 3 border entries)");
-
-                    // Patch the trailing id=0 (bare-hook) entry's item ID to cheese (155)
-                    // to test whether the game will treat a non-bait item as valid bait.
-                    Memory.WriteInt(BaitNoticeRadiusTable.Unknown14.Id, 155);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        "[SpeciesScan] patched no-bait entry item id → 155 (cheese)");
-
-                    i += len - 1;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
                 }
+
+                // Search ±512 bytes around MaxSize for Baron Garayan's known MinSize=5.0f (observed in slot).
+                // Two plausible encodings: raw float (0x40A00000) or integer 5 (0x00000005).
+                const int searchWords = 128; // 512 bytes each direction
+                float[] region = Memory.ReadFloatBatch(hit - searchWords * 4, searchWords * 2);
+                bool foundMinSize = false;
+                for (int k = 0; k < region.Length; k++)
+                {
+                    uint   raw        = BitConverter.ToUInt32(BitConverter.GetBytes(region[k]), 0);
+                    int    byteOffset = (k - searchWords) * 4;
+                    string which      = null;
+                    if      (Math.Abs(region[k] - 5.0f)  < tol) which = "5.0f";
+                    else if (Math.Abs(region[k] - 50.0f) < tol) which = "50.0f";
+                    else if (raw == 5u)                           which = "int5";
+                    else if (raw == 50u)                          which = "int50";
+                    if (which != null)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"[FishTableScan] {which} at MaxSize{(byteOffset >= 0 ? "+" : "")}{byteOffset} " +
+                            $"(0x{(uint)(hit + byteOffset):X8})");
+                        foundMinSize = true;
+                    }
+                }
+                if (!foundMinSize)
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        "[FishTableScan] MinSize not found within ±512 bytes (checked 5.0f/50.0f/int5/int50)");
+
+                // Follow the pointer array that sits immediately after the species table.
+                // Table base = Baron Garayan entry base − 17×stride; entry base = MaxSize − 8.
+                // Pointer array = table_end + 0x10 bytes padding = hit + 0x50.
+                int ptrBase = hit + 0x50;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[FishTableScan] following pointer array at 0x{(uint)ptrBase:X8}...");
+                float[] ptrWords = Memory.ReadFloatBatch(ptrBase, 32);
+                for (int p = 0; p < 32; p++)
+                {
+                    uint ptr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrWords[p]), 0);
+                    if (ptr == 0) continue;
+                    long targetAddr = 0x20000000L + ptr;
+                    float[] tgt = Memory.ReadFloatBatch(targetAddr, 8);
+                    var sb = new System.Text.StringBuilder();
+                    for (int t = 0; t < 8; t++)
+                    {
+                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(tgt[t]), 0);
+                        sb.Append($"  {raw:X8}");
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[FishTableScan]   ptr[{p}] →0x{ptr:X8}:{sb}");
+                }
+
+                // Scan 1024 bytes immediately before the species table base (entry 0 start).
+                // The ±512-byte MinSize search above is centered on Baron Garayan's entry (ID 17),
+                // so it reaches back only to ~entry 9 — the pre-table region is uncharted.
+                int tableBase   = hit - 0x008 - 17 * 0x48; // = species table entry 0 start
+                const int adjWords = 256;                   // 256 words = 1024 bytes per region
+                int preStart    = tableBase - adjWords * 4;
+                int ptrArrayEnd = ptrBase   + FishModelTable.Count * FishModelTable.Stride;
+
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[FishTableScan] pre-table  0x{(uint)preStart:X8}–0x{(uint)tableBase:X8}:");
+                float[] preReg = Memory.ReadFloatBatch(preStart, adjWords);
+                for (int row = 0; row < adjWords; row += 8)
+                {
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append($"[FishTableScan]   0x{(uint)(preStart + row * 4):X8}:");
+                    for (int k = row; k < row + 8 && k < preReg.Length; k++)
+                    {
+                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(preReg[k]), 0);
+                        sb.Append($"  {raw:X8}");
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                }
+
+                // Print the 192-byte packed-byte section (tableBase-0x160) as individual bytes,
+                // 12 per row → 16 rows. Hypothesis: spawn weights per fish per area×time.
+                // (16 fish × 12 bytes = 192 if IDs 8 and 17 are excluded)
+                const int byteSecLen = 192;
+                int byteSecBase = tableBase - 0x160;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[FishTableScan] byte-section 0x{(uint)byteSecBase:X8} ({byteSecLen}b, 12/row):");
+                float[] bsWords = Memory.ReadFloatBatch(byteSecBase, byteSecLen / 4);
+                byte[] bsBytes = new byte[byteSecLen];
+                for (int i = 0; i < byteSecLen / 4; i++)
+                {
+                    byte[] wb = BitConverter.GetBytes(bsWords[i]);
+                    bsBytes[i*4+0] = wb[0]; bsBytes[i*4+1] = wb[1];
+                    bsBytes[i*4+2] = wb[2]; bsBytes[i*4+3] = wb[3];
+                }
+                for (int row = 0; row < byteSecLen; row += 12)
+                {
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append($"[FishTableScan]   row{row/12:D2}:");
+                    for (int k = row; k < row + 12 && k < bsBytes.Length; k++)
+                        sb.Append($" {bsBytes[k]:X2}");
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                }
+
+
+                // Follow the pointer stored at tableBase - 0x90 (observed: 0x0029F6E0).
+                int ptrFieldAddr = tableBase - 0x90;
+                float[] ptrFw = Memory.ReadFloatBatch(ptrFieldAddr, 1);
+                uint rawFollowPtr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrFw[0]), 0);
+                if (rawFollowPtr != 0 && rawFollowPtr < 0x02200000u)
+                {
+                    long followTarget = 0x20000000L + rawFollowPtr;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[FishTableScan] ptr@0x{(uint)ptrFieldAddr:X8}=0x{rawFollowPtr:X8} → 0x{(uint)followTarget:X8}:");
+                    float[] fd = Memory.ReadFloatBatch(followTarget, 64);
+                    for (int row = 0; row < 64; row += 8)
+                    {
+                        var sb = new System.Text.StringBuilder();
+                        sb.Append($"[FishTableScan]   0x{(uint)(followTarget + row * 4):X8}:");
+                        for (int k = row; k < row + 8 && k < fd.Length; k++)
+                        {
+                            uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(fd[k]), 0);
+                            sb.Append($"  {raw:X8}");
+                        }
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                    }
+                }
+
+                // Scan 512 bytes immediately after the pointer array (first uncharted region post-table).
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[FishTableScan] post-ptr   0x{(uint)ptrArrayEnd:X8}–0x{(uint)(ptrArrayEnd + adjWords * 4):X8}:");
+                float[] postReg = Memory.ReadFloatBatch(ptrArrayEnd, adjWords);
+                for (int row = 0; row < adjWords; row += 8)
+                {
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append($"[FishTableScan]   0x{(uint)(ptrArrayEnd + row * 4):X8}:");
+                    for (int k = row; k < row + 8 && k < postReg.Length; k++)
+                    {
+                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(postReg[k]), 0);
+                        sb.Append($"  {raw:X8}");
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                }
+
+                // Search both adjacent regions for Baron Garayan's known MinSize.
+                bool foundAdj = false;
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    float[] reg     = pass == 0 ? preReg : postReg;
+                    int     regBase = pass == 0 ? preStart : ptrArrayEnd;
+                    string  label   = pass == 0 ? "pre-table" : "post-ptr";
+                    for (int k = 0; k < reg.Length; k++)
+                    {
+                        uint   raw   = BitConverter.ToUInt32(BitConverter.GetBytes(reg[k]), 0);
+                        int    addr  = regBase + k * 4;
+                        string which = null;
+                        if      (Math.Abs(reg[k] - 5.0f)  < tol) which = "5.0f";
+                        else if (Math.Abs(reg[k] - 50.0f) < tol) which = "50.0f";
+                        else if (raw == 5u)                        which = "int5";
+                        else if (raw == 50u)                       which = "int50";
+                        if (which != null)
+                        {
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                                $"[FishTableScan] MinSize candidate {which} at 0x{(uint)addr:X8} ({label})");
+                            foundAdj = true;
+                        }
+                    }
+                }
+                if (!foundAdj)
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        "[FishTableScan] MinSize not found in adjacent regions");
             }
 
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SpeciesScan] done");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishTableScan] done");
         }
-
-        private static string BaitName(uint id) => id switch
-        {
-            166 => "throbbingcherry",
-            167 => "gooeypeach",
-            168 => "bombnuts",
-            169 => "poisonousapple",
-            170 => "mellowbanana",
-            186 => "carrot",
-            187 => "potatocake",
-            188 => "minon",
-            189 => "battan",
-            190 => "petitefish",
-            193 => "evy",
-            197 => "mimi",
-            199 => "prickly",
-            _   => $"?{id}",
-        };
 
         private static string PhaseLabel(int phase) => phase switch
         {
