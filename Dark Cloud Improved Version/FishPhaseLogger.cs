@@ -18,9 +18,9 @@ namespace Dark_Cloud_Improved_Version
     ///   +0x074  Heading         (float, radians)
     ///   +0x080  speed           (float)
     ///   +0x084  curVel          (float)
-    ///   +0x090  posY            (float, AI/patrol position)
-    ///   +0x094  posZ            (float)
-    ///   +0x098  posX            (float)
+    ///   +0x090  aimY            (float, AI/patrol position)
+    ///   +0x094  aimZ            (float)
+    ///   +0x098  aimX            (float)
     ///   +0x0B0  LivePosY        (float, rendered position)
     ///   +0x0B4  LivePosZ        (float)
     ///   +0x0B8  LivePosX        (float)
@@ -42,10 +42,14 @@ namespace Dark_Cloud_Improved_Version
     internal static class FishPhaseLogger
     {
         internal static bool Enabled = true;
-        internal static bool AutoCatch = false;
+        internal static bool ForceApproach = false;
+        internal static bool WriteNoticeRadius = true;
+        internal const  float NoticeRadiusOverride = 100.0f;
+        internal static bool ScanSpeciesTable = true;
 
         private static Thread _thread;
         private static volatile bool _running;
+        private static volatile bool _speciesScanDone = false;
         private static int _slotBase;
         private static int _slotCount;
 
@@ -88,8 +92,15 @@ namespace Dark_Cloud_Improved_Version
             var stableHdg    = new float[_slotCount];
             var stableLpX    = new float[_slotCount];
             var stableLpY    = new float[_slotCount];
+            var stableLpZ    = new float[_slotCount];
+            var stablePosZ   = new float[_slotCount]; // hook Z depth (from AI destination, not fish live pos)
             int lastStableCount = 0;
             for (int i = 0; i < _slotCount; i++) prevHdg[i] = float.NaN;
+
+            // Per-slot AI target pos; used by NoticeRange to reference established hook position
+            var slotAimX = new float[_slotCount];
+            var slotAimY = new float[_slotCount];
+            var slotAimZ = new float[_slotCount];
 
             while (_running)
             {
@@ -100,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"[FishPhase] phase={phase:X2} ({PhaseLabel(phase)})");
 
-                    if (AutoCatch && phase == FishingState.Phase_HookInWater)
+                    if (ForceApproach && phase == FishingState.Phase_HookInWater)
                     {
                         for (int i = 0; i < _slotCount; i++)
                         {
@@ -108,14 +119,21 @@ namespace Dark_Cloud_Improved_Version
                             Memory.WriteInt(s + FishSlotOffsets.AiState, FishingState.FishAiState_Approaching);
                             Memory.WriteInt(s + FishSlotOffsets.AiStateTimer, 0xFF);
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                $"[AutoCatch] hook in water -> wrote Approaching + timer=0xFF to s={i}");
+                                $"[ForceApproach] hook in water -> wrote Approaching + timer=0xFF to s={i}");
                         }
                     }
 
+
                     if (phase == FishingState.Phase_HookInWater)
                     {
-                        for (int i = 0; i < _slotCount; i++) { stableFrames[i] = 0; prevHdg[i] = float.NaN; }
+                        for (int i = 0; i < _slotCount; i++) { stableFrames[i] = 0; prevHdg[i] = float.NaN; lastAiState[i] = -2; }
                         lastStableCount = 0;
+
+                        if (ScanSpeciesTable && !_speciesScanDone)
+                        {
+                            _speciesScanDone = true;
+                            new Thread(ScanFor25f) { IsBackground = true, Name = "SpeciesTableScan" }.Start();
+                        }
                     }
 
                     lastPhase = phase;
@@ -132,11 +150,14 @@ namespace Dark_Cloud_Improved_Version
                         byte  id      = Memory.ReadByte(s);
                         int   aiState = Memory.ReadInt(s + FishSlotOffsets.AiState);
                         float hdg     = Memory.ReadFloat(s + FishSlotOffsets.Heading);
-                        float spd     = Memory.ReadFloat(s + 0x080);
-                        float vel     = Memory.ReadFloat(s + 0x084);
-                        float posX    = Memory.ReadFloat(s + 0x098);
-                        float posY    = Memory.ReadFloat(s + 0x090);
-                        float posZ    = Memory.ReadFloat(s + 0x094);
+                        float spd     = Memory.ReadFloat(s + FishSlotOffsets.Speed);
+                        float vel     = Memory.ReadFloat(s + FishSlotOffsets.Velocity);
+                        float aimX    = Memory.ReadFloat(s + FishSlotOffsets.AiTargetX);
+                        float aimY    = Memory.ReadFloat(s + FishSlotOffsets.AiTargetY);
+                        float aimZ    = Memory.ReadFloat(s + FishSlotOffsets.AiTargetZ);
+                        slotAimX[i] = aimX;
+                        slotAimY[i] = aimY;
+                        slotAimZ[i] = aimZ;
                         float lpX     = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
                         float lpY     = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
                         float lpZ     = Memory.ReadFloat(s + FishSlotOffsets.LivePosZ);
@@ -150,7 +171,10 @@ namespace Dark_Cloud_Improved_Version
                         string g05C = ReadHex(s, 0x05C, 1);
                         string g06C = ReadHex(s, 0x06C, 2);
                         string g078 = ReadHex(s, 0x078, 2);
-                        string g088 = ReadHex(s, 0x088, 2);
+                        int   unk088 = Memory.ReadInt(s + FishSlotOffsets.Unk088);
+                        float nr     = Memory.ReadFloat(s + FishSlotOffsets.NoticeRadius);
+                        if (WriteNoticeRadius)
+                            Memory.WriteFloat(s + FishSlotOffsets.NoticeRadius, NoticeRadiusOverride);
                         string g09C = ReadHex(s, 0x09C, 5);
                         string g0BC = ReadHex(s, 0x0BC, 8);
 
@@ -162,12 +186,14 @@ namespace Dark_Cloud_Improved_Version
                                 stableFrames[i]++;
                                 if (stableFrames[i] >= 10)
                                 {
-                                    stableHdg[i] = hdg;
-                                    stableLpX[i] = lpX;
-                                    stableLpY[i] = lpY;
+                                    stableHdg[i]  = hdg;
+                                    stableLpX[i]  = lpX;
+                                    stableLpY[i]  = lpY;
+                                    stableLpZ[i]  = lpZ;
+                                    stablePosZ[i] = aimZ; // hook depth
                                     if (stableFrames[i] == 10)
                                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                            $"[HookTriang] s={i} {FishDatabase.GetName(id)} heading stable: live=({lpX:F2},{lpY:F2}) hdg={hdg:F4}");
+                                            $"[HookTriang] s={i} {FishDatabase.GetName(id)} heading stable: live=({lpX:F2},{lpY:F2},{lpZ:F2}) hookZ={aimZ:F2} hdg={hdg:F4}");
                                 }
                             }
                             else
@@ -185,17 +211,46 @@ namespace Dark_Cloud_Improved_Version
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                                 $"[FishPhase] f={frame:D5} s={i} {FishDatabase.GetName(id)} aiState {lastAiState[i]:X8} -> {aiState:X8}");
+
+                            // Log notice-range distance when a fish naturally transitions to Approaching.
+                            // Requires another slot to already be approaching/nibbling so the hook
+                            // position is established — avoids reading AiTarget at the same frame
+                            // the game writes it (which may not yet be stable).
+                            if (aiState == FishingState.FishAiState_Approaching
+                             && lastAiState[i] != FishingState.FishAiState_Approaching
+                             && lastAiState[i] != -2)
+                            {
+                                int refSlot = -1;
+                                for (int j = 0; j < _slotCount; j++)
+                                {
+                                    if (j != i && (lastAiState[j] == FishingState.FishAiState_Approaching
+                                                || lastAiState[j] == FishingState.FishAiState_Nibbling))
+                                    { refSlot = j; break; }
+                                }
+                                if (refSlot >= 0)
+                                {
+                                    float hkX = slotAimX[refSlot], hkY = slotAimY[refSlot], hkZ = slotAimZ[refSlot];
+                                    float dx = lpX - hkX, dy = lpY - hkY, dz = lpZ - hkZ;
+                                    float dist3d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                                    float dist2d = (float)Math.Sqrt(dx * dx + dy * dy);
+                                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                                        $"[NoticeRange] s={i} {FishDatabase.GetName(id)} " +
+                                        $"dist3d={dist3d:F2} dist2d={dist2d:F2} " +
+                                        $"fish=({lpX:F2},{lpY:F2},{lpZ:F2}) hook=({hkX:F2},{hkY:F2},{hkZ:F2}) [ref=s{refSlot}]");
+                                }
+                            }
+
                             lastAiState[i] = aiState;
                         }
 
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             $"[FishPhase] f={frame:D5} ph={phase:X2} s={i} {FishDatabase.GetName(id)} " +
                             $"ai={aiState:X8} hdg={hdg:F3} spd={spd:F3} vel={vel:F3} " +
-                            $"pos=({posX:F1},{posY:F1},{posZ:F1}) live=({lpX:F1},{lpY:F1},{lpZ:F1}) " +
+                            $"aim=({aimX:F1},{aimY:F1},{aimZ:F1}) live=({lpX:F1},{lpY:F1},{lpZ:F1}) " +
                             $"u054={u054:X8} u058={u058:X8} " +
                             $"b150={b150:F3} b154={b154:F3} b158={b158:F3} " +
                             $"g04C=[{g04C}] g05C=[{g05C}] g06C=[{g06C}] " +
-                            $"g078=[{g078}] g088=[{g088}] g09C=[{g09C}] g0BC=[{g0BC}]");
+                            $"g078=[{g078}] u088={unk088:X8} nr={nr:F1} g09C=[{g09C}] g0BC=[{g0BC}]");
                     }
 
                     // Triangulate hook position when 2+ slots have stable headings
@@ -226,8 +281,16 @@ namespace Dark_Cloud_Improved_Version
                         }
                         if (pairs > 0)
                         {
+                            float estX = sumX / pairs, estY = sumY / pairs;
+                            // Use AI destination Z (hook depth) not fish live Z
+                            float estZ = 0; int zc = 0;
+                            for (int i = 0; i < _slotCount; i++)
+                                if (stableFrames[i] >= 10) { estZ += stablePosZ[i]; zc++; }
+                            estZ /= zc;
+
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                $"[HookTriang] estimated hook=({sumX / pairs:F2},{sumY / pairs:F2}) from {pairs} vector pair(s) ({stableCount} stable slots)");
+                                $"[HookTriang] estimated hook=({estX:F2},{estY:F2},{estZ:F2}) from {pairs} vector pair(s) ({stableCount} stable slots)");
+
                         }
                         lastStableCount = stableCount;
                     }
@@ -239,6 +302,31 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // ── Delta-scan methodology ────────────────────────────────────────────────
+        // Goal: locate an unknown PS2 EE RAM address that stores a known float triplet
+        //       (e.g. hook landing position) without any prior knowledge of the address.
+        //
+        // How it works (two-cast approach):
+        //   Cast 1 — hook lands at position P1. Scan all 32 MB of EE RAM
+        //            (0x20000000–0x21FFFFFF via PINE). Record every address where
+        //            3 consecutive floats match P1 in any of the 6 XYZ orderings
+        //            within ±tol. These are "candidates."
+        //
+        //   Cast 2 — hook lands at a DIFFERENT position P2 (move ≥3 units away so
+        //            values that changed are meaningful). Re-read only the candidate
+        //            addresses. Any address whose 3 floats now match P2 is CONFIRMED.
+        //            Addresses that held P1 by coincidence won't also hold P2.
+        //
+        // Efficiency: ReadFloatBatch packs 1024 Read32 PINE commands into one socket
+        //   round-trip. PCSX2 v2.7.x responds with [1 status byte][N × 4 data bytes]
+        //   (fmtB). At ~0.12 ms per round-trip, 8192 batches scan all 32 MB in ~1 s.
+        //   ReadByteArray (1 byte per round-trip) would take ~74 hours for the same range.
+        //
+        // Findings for Dark Cloud fishing (Muska Lacka, 2026-03-06):
+        //   The hook landing position is stored ONLY in each active fish slot's AiTarget
+        //   field (YZX ordering, stride 0x2410 apart). There is no separate hook entity
+        //   position anywhere in EE RAM. AiTarget is the authoritative source.
+        // ─────────────────────────────────────────────────────────────────────────────
         private static string ReadHex(int slotStart, int offset, int count)
         {
             var sb = new System.Text.StringBuilder(count * 9);
@@ -248,6 +336,54 @@ namespace Dark_Cloud_Improved_Version
                 sb.Append(Memory.ReadInt(slotStart + offset + i * 4).ToString("X8"));
             }
             return sb.ToString();
+        }
+
+        private static void ScanFor25f()
+        {
+            const long  scanStart = 0x20000000L;
+            const long  scanEnd   = 0x22000000L;
+            const int   batchSize = 1024;
+            const float target    = 25.0f;
+            const float tol       = 0.01f;
+
+            long totalBatches = ((scanEnd - scanStart) / 4 + batchSize - 1) / batchSize;
+            var hits = new System.Collections.Generic.List<int>();
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[SpeciesScan] scanning EE RAM for {target}f (0x{BitConverter.ToUInt32(BitConverter.GetBytes(target), 0):X8})...");
+
+            for (long b = 0; b < totalBatches && _running; b++)
+            {
+                long  addr  = scanStart + b * batchSize * 4;
+                int   count = (int)Math.Min(batchSize, (scanEnd - addr) / 4);
+                float[] fs  = Memory.ReadFloatBatch(addr, count);
+                for (int i = 0; i < count; i++)
+                    if (Math.Abs(fs[i] - target) < tol)
+                        hits.Add((int)(addr + i * 4));
+            }
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[SpeciesScan] {hits.Count} hit(s) total");
+
+            // Cluster analysis: find groups of 3+ addresses with a consistent stride.
+            // A species table would appear as N entries equally spaced in memory.
+            hits.Sort();
+            for (int i = 0; i < hits.Count - 2; i++)
+            {
+                int stride = hits[i + 1] - hits[i];
+                if (stride < 4) continue; // skip duplicate/adjacent bytes
+                int len = 2;
+                while (i + len < hits.Count && hits[i + len] - hits[i + len - 1] == stride)
+                    len++;
+                if (len >= 3)
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[SpeciesScan] cluster base=0x{(uint)hits[i]:X8} stride=0x{stride:X4} ({stride}) count={len}");
+                    i += len - 1;
+                }
+            }
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SpeciesScan] done");
         }
 
         private static string PhaseLabel(int phase) => phase switch
