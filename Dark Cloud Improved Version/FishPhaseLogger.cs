@@ -43,13 +43,13 @@ namespace Dark_Cloud_Improved_Version
     {
         internal static bool Enabled = true;
         internal static bool ForceApproach = false;
-        internal static bool WriteNoticeRadius = true;
+        internal static bool WriteNoticeRadius = false;
         internal const  float NoticeRadiusOverride = 100.0f;
         internal static bool ScanSpeciesTable = true;
 
         private static Thread _thread;
         private static volatile bool _running;
-        private static volatile bool _speciesScanDone = false;
+        private static volatile bool _speciesScanDone = false; // reset to false to re-run scan
         private static int _slotBase;
         private static int _slotCount;
 
@@ -371,7 +371,7 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < hits.Count - 2; i++)
             {
                 int stride = hits[i + 1] - hits[i];
-                if (stride < 4) continue; // skip duplicate/adjacent bytes
+                if (stride < 4) continue;
                 int len = 2;
                 while (i + len < hits.Count && hits[i + len] - hits[i + len - 1] == stride)
                     len++;
@@ -379,12 +379,69 @@ namespace Dark_Cloud_Improved_Version
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"[SpeciesScan] cluster base=0x{(uint)hits[i]:X8} stride=0x{stride:X4} ({stride}) count={len}");
+
+                    // Dump surrounding context for each entry: 16 bytes before the hit
+                    // (2 extra entries worth) through the end of the stride.
+                    int dumpWords = Math.Max(stride / 4, 4); // at least 4 DWORDs
+                    for (int e = 0; e < len; e++)
+                    {
+                        long entryBase = hits[i + e] - 16; // 16 bytes of pre-context (2 entries)
+                        int  words     = dumpWords + 4;    // +4 for the pre-context
+                        float[] data = Memory.ReadFloatBatch(entryBase, words);
+                        var sb = new System.Text.StringBuilder();
+                        for (int w = 0; w < words; w++)
+                        {
+                            uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(data[w]), 0);
+                            if (w == 4) { sb.Append($"[{raw:X8}={data[w]:F1}f]"); }      // hit (shifted by 2 extra pre-words)
+                            else if (w == 5) { sb.Append($" id={raw}({BaitName(raw)})"); }
+                            else { sb.Append($" {raw:X8}"); }
+                        }
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"[SpeciesScan]   e{e} 0x{(uint)hits[i+e]:X8}: {sb}");
+                    }
+
+                    // Write distinct values: 2 entries before cluster, all cluster entries, 1 after.
+                    // evy (193) is likely the entry 2 strides before cluster (0x2026AE8C); mimi is 1 stride before.
+                    // Values: e=-2→98, e=-1→99(mimi), e=0→100, ..., e=10→110, e=11→111(post).
+                    for (int e = -2; e <= len; e++)
+                    {
+                        int  addr     = hits[i] + e * stride;
+                        float writeVal = 98.0f + (e + 2); // -2→98, -1→99, 0→100, ..., 11→111
+                        Memory.WriteFloat(addr, writeVal);
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[SpeciesScan] wrote 98..{97 + len + 3}f to {len + 3} entries (cluster + 3 border entries)");
+
+                    // Patch the trailing id=0 (bare-hook) entry's item ID to cheese (155)
+                    // to test whether the game will treat a non-bait item as valid bait.
+                    Memory.WriteInt(BaitNoticeRadiusTable.Unknown14.Id, 155);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        "[SpeciesScan] patched no-bait entry item id → 155 (cheese)");
+
                     i += len - 1;
                 }
             }
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SpeciesScan] done");
         }
+
+        private static string BaitName(uint id) => id switch
+        {
+            166 => "throbbingcherry",
+            167 => "gooeypeach",
+            168 => "bombnuts",
+            169 => "poisonousapple",
+            170 => "mellowbanana",
+            186 => "carrot",
+            187 => "potatocake",
+            188 => "minon",
+            189 => "battan",
+            190 => "petitefish",
+            193 => "evy",
+            197 => "mimi",
+            199 => "prickly",
+            _   => $"?{id}",
+        };
 
         private static string PhaseLabel(int phase) => phase switch
         {

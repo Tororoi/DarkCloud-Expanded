@@ -75,6 +75,45 @@ namespace Dark_Cloud_Improved_Version
         internal const int LivePosX            = 0x0B8;
     }
 
+    /// <summary>One entry in <see cref="BaitNoticeRadiusTable"/>. Fields are EE RAM addresses.</summary>
+    internal readonly struct BaitTableEntry
+    {
+        /// <summary>EE RAM address of the float notice-radius field.</summary>
+        internal readonly int Radius;
+        /// <summary>EE RAM address of the uint32 item-ID field (always Radius + 4).</summary>
+        internal readonly int Id;
+        internal BaitTableEntry(int radiusAddr) { Radius = radiusAddr; Id = radiusAddr + 4; }
+    }
+
+    /// <summary>
+    /// Bait notice-radius table in EE RAM. Each entry is (float radius, uint32 itemId) at stride 8,
+    /// in the same order as the bait affinity fields in <see cref="FishSlotOffsets"/>.
+    /// The game copies entry.Radius into each fish slot's <see cref="FishSlotOffsets.NoticeRadius"/>
+    /// every frame, keyed by the equipped bait's item ID.
+    /// Confirmed via ScanFor25f cluster dump (2026-06-03). Bait validity is enforced elsewhere —
+    /// writing a non-bait item ID into an entry's Id address has no effect on the bait screen.
+    /// </summary>
+    internal static class BaitNoticeRadiusTable
+    {
+        internal const int TableBase = 0x2026AE8C;
+        internal const int Stride    = 8;
+
+        internal static readonly BaitTableEntry Evy             = new BaitTableEntry(0x2026AE8C); // default 128.0f, id=193
+        internal static readonly BaitTableEntry Mimi            = new BaitTableEntry(0x2026AE94); // default  50.0f, id=197
+        internal static readonly BaitTableEntry Prickly         = new BaitTableEntry(0x2026AE9C); // default  25.0f, id=199
+        internal static readonly BaitTableEntry ThrobbingCherry = new BaitTableEntry(0x2026AEA4); // default  25.0f, id=166
+        internal static readonly BaitTableEntry Gooeypeach      = new BaitTableEntry(0x2026AEAC); // default  25.0f, id=167
+        internal static readonly BaitTableEntry Bombnuts        = new BaitTableEntry(0x2026AEB4); // default  25.0f, id=168
+        internal static readonly BaitTableEntry PoisonousApple  = new BaitTableEntry(0x2026AEBC); // default  25.0f, id=169
+        internal static readonly BaitTableEntry MellowBanana    = new BaitTableEntry(0x2026AEC4); // default  25.0f, id=170
+        internal static readonly BaitTableEntry Carrot          = new BaitTableEntry(0x2026AECC); // default  25.0f, id=186
+        internal static readonly BaitTableEntry PotatoCake      = new BaitTableEntry(0x2026AED4); // default  25.0f, id=187
+        internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEDC); // default  25.0f, id=188
+        internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE4); // default  25.0f, id=189
+        internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEEC); // default  25.0f, id=190
+        internal static readonly BaitTableEntry Unknown14       = new BaitTableEntry(0x2026AEF4); // default  40.0f, id=0 — purpose unknown
+    }
+
     /// <summary>Addresses and state values for the fishing-related state machines.</summary>
     internal static class FishingState
     {
