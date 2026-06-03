@@ -938,6 +938,7 @@ namespace Dark_Cloud_Improved_Version
                             fishingActive = false;
                             Fishing.ResetSession();
                             FishDataFarmer.OnSessionEnded();
+                            FishPhaseLogger.OnSessionEnd();
                         }
                     }
 
@@ -1495,9 +1496,8 @@ namespace Dark_Cloud_Improved_Version
                 currentAddress += 0x00000001;
             }
         }
-        // Matataki Waterfall (trigger index 13) and Peanut Pond (trigger index 11) share area ID 1.
-        // fishingTriggerIndex holds the object-table index of the rod NPC that activated fishing,
-        // confirmed stable across multiple sessions at each spot.
+        // Matataki Waterfall and Peanut Pond both have game area ID 1.
+        // Resolved via player Y position: Waterfall ≈ Y=720, Peanut Pond ≈ Y=-1103. Split at Y=0.
         private static string FormatButtons(int mask)
         {
             if (mask == 0) return "none";
@@ -1518,8 +1518,8 @@ namespace Dark_Cloud_Improved_Version
         private static int ResolveFishingSpot(int areaId)
         {
             if (areaId != 1) return areaId;
-            int triggerIndex = Memory.ReadInt(Addresses.fishingTriggerIndex);
-            return triggerIndex == FishingAreaDatabase.MatatakiWaterfall.TriggerIndex
+            float playerY = Memory.ReadFloat(Addresses.positionY);
+            return playerY >= 0f
                 ? FishingAreaDatabase.MatatakiWaterfall.Id
                 : FishingAreaDatabase.PeanutPond.Id;
         }

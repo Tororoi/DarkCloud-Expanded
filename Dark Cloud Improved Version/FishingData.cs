@@ -57,6 +57,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int BaitAffMinon           = 0x040;
         internal const int BaitAffBattan          = 0x044;
         internal const int BaitAffPetitefish      = 0x048;
+        internal const int AiState             = 0x050; // fish AI behavior state (see FishingState.FishAiState_*)
+        internal const int AiStateTimer        = 0x058; // countdown timer for current AI state; underflows to FFFFFFFF to trigger state transition
         internal const int Size                = 0x060;
         internal const int ScaleX              = 0x064;
         internal const int ScaleY              = 0x068;
@@ -64,6 +66,44 @@ namespace Dark_Cloud_Improved_Version
         internal const int LivePosY            = 0x0B0;
         internal const int LivePosZ            = 0x0B4;
         internal const int LivePosX            = 0x0B8;
+    }
+
+    /// <summary>Addresses and state values for the fishing-related state machines.</summary>
+    internal static class FishingState
+    {
+        // Addresses
+        internal const int FishingStateAddr  = 0x21D19714; // 0 = not fishing, 1 = session active
+        internal const int TriggerIndexAddr  = 0x202A1F64; // game writes active fishing trigger here; not reliable for area identification
+        internal const int Addr708           = 0x21D19708; // overworld / dialog state machine
+        internal const int PhaseAddr         = 0x21D33E28; // fishing phase state machine
+
+        // Addr708 state values
+        internal const int State708_QuitDialog  = 0x00000085; // "Continue fishing" / "Quit fishing" dialog
+        internal const int State708_BaitScreen  = 0x00000086; // bait selection screen open
+        internal const int State708_Overworld   = 0x0000000C; // back in overworld
+
+        // FishSlotOffsets.AiState values — confirmed via phase logger datamining
+        internal const int FishAiState_Dormant     = unchecked((int)0xFFFFFFFF); // not participating this cast; fish far from hook
+        internal const int FishAiState_Approaching = 6;  // swimming toward the hook at slow speed (~0.1)
+        internal const int FishAiState_Nibbling    = 7;  // arrived at hook, stationary, nibbling bait
+        internal const int FishAiState_Unk08       = 8;  // observed briefly during approach before going dormant; purpose unknown
+        internal const int FishAiState_Patrolling  = 9;  // fast patrol movement (>0.3 spd), farther from hook
+        internal const int FishAiState_Hooked      = 11; // fish is on the hook, being reeled in
+
+        // PhaseAddr state values
+        internal const int Phase_Idle          = 0x00000000; // default/idle phase; bait screen is Addr708=State708_BaitScreen
+        internal const int Phase_Walking       = 0x00000002;
+        internal const int Phase_Casting       = 0x00000004;
+        internal const int Phase_HookInWater   = 0x00000005;
+        internal const int Phase_NibblePull    = 0x00000006; // player pulled rod while fish was nibbling
+        internal const int Phase_Uncasting     = 0x00000007; // X cancel while rod out
+        internal const int Phase_HoldingFish   = 0x00000008; // measurements shown
+        internal const int Phase_ThrowingBack  = 0x00000009; // landing animation
+        internal const int Phase_PullingOut    = 0x0000000A; // fish leaving water
+        internal const int Phase_ReelingIn     = 0x0000000C;
+        internal const int Phase_DraggingHook  = 0x0000000D; // moving Toan to drag hook
+        internal const int Phase_IdleTapping   = 0x0000000E; // Toan tapping foot idle animation
+        internal const int Phase_IdleCrouching = 0x0000000F; // Toan crouching idle animation
     }
 
     /// <summary>
@@ -454,7 +494,6 @@ namespace Dark_Cloud_Improved_Version
         internal int      QuestsDoneAddr;  // Sam only: multi-quest counter (0 = not present)
         internal int      PostLoopSrc;     // Sam only: queens-quest trigger src (0 = not present)
         internal int      PostLoopDst;     // Sam only: queens-quest trigger dst
-        internal int      TriggerIndex;   // value at Addresses.fishingTriggerIndex when this spot activates; 0 = not yet confirmed
         internal byte[]   FishIds;         // naturally-spawning fish IDs; null = not yet catalogued
         // Per-fish spawn weights for this area. fishId → float[4] = [Morning, Afternoon, Dusk, Night].
         // 0.0 = never; values represent relative probability within this area and time period.
@@ -471,7 +510,6 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 0, Name = "Norune Pond",
             SlotBase = Addresses.fishSlotBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
-            TriggerIndex = 4,
             FishIds = new byte[]
             {
                 FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
@@ -512,7 +550,6 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 1, Name = "Matataki Waterfall",
             SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
-            TriggerIndex = 13,
             FishIds = new byte[]
             {
                 FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
@@ -558,12 +595,11 @@ namespace Dark_Cloud_Improved_Version
             },
         };
         // Synthetic ID 100 — shares slot block and quest with MatatakiWaterfall.
-        // Resolved from area ID 1 via Addresses.fishingTriggerIndex (value 11 = Peanut Pond, 13 = Waterfall).
+        // Resolved from area ID 1 via player Y position: Peanut Pond ≈ Y=-1103, Waterfall ≈ Y=720. Split at Y=0.
         internal static readonly AreaFishData PeanutPond = new AreaFishData
         {
             Id = 100, Name = "Peanut Pond",
             SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
-            TriggerIndex = 11,
             FishIds = new byte[]
             {
                 FishDatabase.Tarton.Id, FishDatabase.Gobbler.Id, FishDatabase.BakuBaku.Id,
@@ -605,7 +641,6 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 19, Name = "Queens Harbor",
             SlotBase = Addresses.fishSlotBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
-            TriggerIndex = 5,
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
             FishIds = new byte[]
             {
@@ -655,7 +690,6 @@ namespace Dark_Cloud_Improved_Version
         {
             Id = 3, Name = "Muska Lacka Oasis",
             SlotBase = Addresses.fishSlotBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
-            TriggerIndex = 5,
             FishIds = new byte[]
             {
                 FishDatabase.Negie.Id, FishDatabase.Den.Id, FishDatabase.Heela.Id,

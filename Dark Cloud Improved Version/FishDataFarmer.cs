@@ -27,29 +27,10 @@ namespace Dark_Cloud_Improved_Version
         private const int Circle   = 32;
         private const int DPadDown = 16384;
 
-        private const int ButtonAddr        = 0x21CBC544;
-        private const int FishingStateAddr  = 0x21D19714;
-        private const int TriggerIndexAddr  = 0x202A1F64; // game writes active fishing trigger here
-        private const int MuskaLackaTrigger = 5;
+        private const int ButtonAddr = 0x21CBC544;
 
-        private const int Addr708             = 0x21D19708;
-        private const int State708_QuitDialog = 0x00000085; // quit dialog open
-        private const int State708_Overworld  = 0x0000000C; // back in overworld
-
-        // 0x21D33E28 — fishing phase state machine
-        private const int FishPhase_BaitScreen   = 0x00000000;
-        private const int FishPhase_Walking      = 0x00000002;
-        private const int FishPhase_Casting      = 0x00000004;
-        private const int FishPhase_HookInWater  = 0x00000005;
-        private const int FishPhase_DraggingHook = 0x0000000D; // moving Toan to drag hook
-        private const int FishPhase_Uncasting    = 0x00000007; // X cancel while rod out
-        private const int FishPhase_ReelingIn    = 0x0000000C;
-        private const int FishPhase_PullingOut   = 0x0000000A; // fish leaving water
-        private const int FishPhase_HoldingFish  = 0x00000008; // measurements shown
-        private const int FishPhase_ThrowingBack = 0x00000009; // landing animation
-
-        private static bool QuitDialogOpen() => Memory.ReadInt(Addr708) == State708_QuitDialog;
-        private static bool InOverworld()    => Memory.ReadInt(Addr708) == State708_Overworld;
+        private static bool QuitDialogOpen() => Memory.ReadInt(FishingState.Addr708) == FishingState.State708_QuitDialog;
+        private static bool InOverworld()    => Memory.ReadInt(FishingState.Addr708) == FishingState.State708_Overworld;
 
         // Survey data — accumulated for the lifetime of the run, reset on each Start().
         // Slot counts: fishId → [Morning_H1, Morning_H2, Morning_Peak, ..., Night_Peak]
@@ -269,7 +250,7 @@ namespace Dark_Cloud_Improved_Version
                         // No signal after 10 s. Check state: if still in fishing (e.g. O was
                         // delivered too late and auto-cast fired), force an exit first.
                         if (!_running) break;
-                        if (Memory.ReadByte(FishingStateAddr) == 1)
+                        if (Memory.ReadByte(FishingState.FishingStateAddr) == 1)
                             ExitFishing();
                         ReenterFishing();
                         continue;
@@ -286,7 +267,7 @@ namespace Dark_Cloud_Improved_Version
 
                     // If ExitFishing's two-attempt recovery still couldn't get out of fishing,
                     // stop rather than send re-entry X presses into the bait screen.
-                    if (Memory.ReadByte(FishingStateAddr) == 1)
+                    if (Memory.ReadByte(FishingState.FishingStateAddr) == 1)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             "[FishFarmer] Could not exit fishing — stopping to prevent unwanted cast");
@@ -389,9 +370,6 @@ namespace Dark_Cloud_Improved_Version
         private static void ReenterFishing()
         {
             _sessionActive = false;
-
-            // TriggerIndex write goes through the queue so it doesn't block the logic thread.
-            EnqueueWrite(() => Memory.WriteIntFast(TriggerIndexAddr, MuskaLackaTrigger));
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 "[FishFarmer] Queuing re-entry: X → X");

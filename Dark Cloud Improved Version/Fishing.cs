@@ -62,8 +62,13 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
-            int triggerIdx = Memory.ReadInt(Addresses.fishingTriggerIndex);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[FishSession] triggerIndex={triggerIdx}");
+            // fishingTriggerIndex is not a reliable area identifier — observed values are inconsistent.
+            // Area disambiguation (e.g. Peanut Pond vs Matataki Waterfall) uses player position instead.
+            float posX = Memory.ReadFloat(Addresses.positionX);
+            float posY = Memory.ReadFloat(Addresses.positionY);
+            float posZ = Memory.ReadFloat(Addresses.positionZ);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[FishSession] playerPos=({posX:F2},{posY:F2},{posZ:F2})");
         }
 
         /// <summary>
@@ -112,6 +117,7 @@ namespace Dark_Cloud_Improved_Version
                 // Arise Mardan ability: scale fish sizes up to set scale factor, with curve based on the fish's original size. Must be done after all rolling and bonuses so the boost is applied to final sizes.
                 if (mardanSwordId == Items.arisemardan)
                     ScaleFishSizes(areaData.SlotBase, areaData.SlotCount);
+                FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
                 fishingQuestCheck = true;
             }
             CheckFishingQuest(areaData);
@@ -613,8 +619,8 @@ namespace Dark_Cloud_Improved_Version
 
                     float angle = (float)Math.Atan2(dy, dx);
                     Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[Steer/Passive] slot={slotIndex} fish={fishArray[slotIndex]} angle={angle:F2}");
+                    // Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    //     $"[Steer/Passive] slot={slotIndex} fish={fishArray[slotIndex]} angle={angle:F2}");
                 }
             }
 
@@ -655,9 +661,9 @@ namespace Dark_Cloud_Improved_Version
 
                 float angle = (float)Math.Atan2(dy, dx);
                 Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Steer/Mardan] slot={slotIndex} fish={fishId} " +
-                    $"aff={affinity:F2} interval={interval:F1}s angle={angle:F2}");
+                // Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                //     $"[Steer/Mardan] slot={slotIndex} fish={fishId} " +
+                //     $"aff={affinity:F2} interval={interval:F1}s angle={angle:F2}");
             }
         }
 
