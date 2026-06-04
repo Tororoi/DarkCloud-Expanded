@@ -709,15 +709,45 @@ namespace Dark_Cloud_Improved_Version
             GetCurrentTimeOfDay(Memory.ReadFloat(Addresses.timeofDayWrite));
 
         // ---- Game formula simulations ----
-        // Pure reimplementations of confirmed ELF logic, used for pre-write calculation and testing.
-        // No memory I/O. See ELF VAs in each summary for the authoritative source.
+        // Pure reimplementations of confirmed ELF logic for pre-write calculation and testing.
+        // No memory I/O. See ELF VAs in each method summary for the authoritative source.
+        //
+        // Size RNG call chain (ELF load segment, base VA 0x00100000):
+        //
+        //   0x001046F8  lcgRand       — glibc-compatible LCG integer PRNG (standard rand() constants)
+        //                               state  = (state × 1_103_515_245 + 12_345) & 0xFFFF_FFFF
+        //                               return   state & 0x7FFF_FFFF   // 31-bit output, range [0, 2_147_483_647]
+        //                               Seed stored at *(0x0024FDEC) + 88  (game-state struct, field offset 0x58).
+        //                               Key instructions: MULT $v1,$v1,$a0 (R5900 writes lower 32b to rd);
+        //                               ADDIU $v1,12345; AND $v0,$v1,0x7FFFFFFF; SW in delay slot saves full state.
+        //
+        //   0x00123CB0  baseRng       — converts one lcgRand result to float [0, 1)
+        //                               r = lcgRand()                  // always non-negative (31-bit mask)
+        //                               return CVT.S.W(r) / 2_147_483_648.0f
+        //                               Division constant: LUI 0x4F00 → 0x4F000000 = 2^31 as float.
+        //
+        //   0x00123CF0  fishSizeRng   — Irwin-Hall(12) centred at zero; called once per slot init
+        //                               float sum = 0;
+        //                               for (int i = 0; i < 12; i++) sum += baseRng();  // 12 sequential JALs
+        //                               return sum - 6.0f   // 0x40C00000 = 6.0f subtracted at end
+        //                               Distribution: range (−6, 6), mean = 0, std ≈ 1, closely approximates N(0,1).
+        //
+        //   0x00240D60  slot init     — applies the rngRoll from fishSizeRng to produce the final size:
+        //     0x00240D70 JAL 0x00123CF0        call fishSizeRng → $f0 = rngRoll
+        //     0x00240D80 MTC1 $zero, $f1       $f1 = 0.0f
+        //     0x00240D88 C.OLT.S $f0, $f1      condition = (rngRoll < 0.0f)
+        //     0x00240D90 BC1T  0x00240DCC      if < 0 → divisor = 8.0f (0x41000000); else → divisor = 4.0f (0x40800000)
+        //                               size = baseSize + rngRoll × (maxSize − baseSize) / divisor
+        //     0x00240DFC/0x00240E0C C.OLT.S    clamp: floor = 0.5 × baseSize (0x3F000000), ceiling = maxSize
+        //                               Asymmetric slope: positive rolls push size up at 2× the rate negative rolls push it down.
 
         /// <summary>
         /// Simulates the game's slot-init size roll (ELF 0x00240D60).
-        /// Starts at <see cref="FishData.BaseSize"/>, applies an asymmetric RNG offset
-        /// (÷4 upward, ÷8 downward), clamps to [0.5×BaseSize, MaxSize], then derives both scale values.
-        /// The game RNG source is unknown; this uses <see cref="Rng"/> with a uniform [-1, 1] range
-        /// as a close approximation of the observed size distribution.
+        /// Reproduces the full confirmed RNG chain: 12 × LCG-normalised uniform draws summed and
+        /// centred (Irwin-Hall(12) − 6), then applied asymmetrically: positive rolls use divisor 4,
+        /// negative rolls use divisor 8 (BC1T branch at 0x00240D90). Result clamped to
+        /// [0.5×BaseSize, MaxSize], then both scale floats are derived.
+        /// See the "Size RNG call chain" comment above for full ELF addresses and instruction traces.
         /// </summary>
         /// <param name="fish">Species data supplying BaseSize, ScaleDivisor, and MaxSize.</param>
         /// <param name="size">Resulting size (×10 = display cm).</param>
@@ -729,14 +759,22 @@ namespace Dark_Cloud_Improved_Version
             float maxSize      = fish.MaxSize       ?? 0f;
             float scaleDivisor = fish.ScaleDivisor  ?? 0f;
 
-            float rngRoll = (float)(Rng.NextDouble() * 2.0 - 1.0);
+            // fishSizeRng (0x00123CF0): 12 draws from baseRng (0x00123CB0), each Uniform[0,1),
+            // summed and shifted → Irwin-Hall(12)−6, range (−6, 6), mean=0, std≈1.
+            float rngRoll = 0f;
+            for (int i = 0; i < 12; i++) rngRoll += (float)Rng.NextDouble();
+            rngRoll -= 6f;
 
+            // Asymmetric application (0x00240D88 C.OLT.S / 0x00240D90 BC1T):
+            // positive roll → ÷4 (steeper slope toward maxSize)
+            // negative roll → ÷8 (shallower slope toward floor)
             size = baseSize;
             if (rngRoll >= 0f)
                 size += rngRoll * (maxSize - baseSize) / 4f;
             else
                 size += rngRoll * (maxSize - baseSize) / 8f;
 
+            // Clamp: floor = 0.5×baseSize (0x3F000000), ceiling = maxSize
             float floor = 0.5f * baseSize;
             if (size < floor)   size = floor;
             if (size > maxSize) size = maxSize;
