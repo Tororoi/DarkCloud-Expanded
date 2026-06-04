@@ -1159,14 +1159,14 @@ namespace Dark_Cloud_Improved_Version
         {
             if (circlePressed == false)
             {
-                if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.Circle)
+                if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)
                 {
                     circlePressed = true;
                 }
             }
             else
             {
-                if (Memory.ReadUShort(Addresses.buttonInputs) != (ushort)CheatCodes.InputBuffer.Button.Circle)
+                if (Memory.ReadUShort(Addresses.buttonInputs) != (ushort)Button.Circle)
                 {
                     currentGilda = Memory.ReadUShort(Addresses.gilda);
                     Memory.WriteUShort(Addresses.dungeonDebugMenu, 170);
@@ -1178,7 +1178,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static void CheckActiveItems()
         {
-            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.Square && (Memory.ReadByte(0x21D5676D) > 0 && Memory.ReadInt(0x21D56770) == -1) )
+            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Square && (Memory.ReadByte(0x21D5676D) > 0 && Memory.ReadInt(0x21D56770) == -1) )
             {
                 int currentSlot = Memory.ReadInt(0x202A3598);
                 int currentActiveItem = 0x21CDD8AC + (0x2 * currentSlot);

@@ -185,22 +185,16 @@
                      FontWeight="SemiBold"
                      Margin="46,28,0,0"
                      VerticalAlignment="Top" HorizontalAlignment="Left"/>
-          <TextBlock Text="Arm the farmer, then start the first fishing session manually. It will auto-cycle from there."
+          <TextBlock Text="Enable the farmer, then start the first fishing session manually. It will auto-cycle from there."
                      Margin="46,52,0,0" Width="414" Height="36"
                      VerticalAlignment="Top" HorizontalAlignment="Left"
                      TextWrapping="Wrap" FontWeight="Normal"/>
-          <Button x:Name="Btn_FishFarmer_Toggle" Content="Arm"
+          <Button x:Name="Btn_FishFarmer_Toggle" Content="Start"
                   Width="100" Height="28"
                   Margin="46,95,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
                   Click="DEV_Page1_Btn_FishFarmer_Toggle"/>
-          <Button x:Name="Btn_FishFarmer_Stop" Content="Stop"
-                  Width="100" Height="28"
-                  Margin="160,95,0,0"
-                  VerticalAlignment="Top" HorizontalAlignment="Left"
-                  FontWeight="Normal"
-                  Click="DEV_Page1_Btn_FishFarmer_Stop"/>
 
           <!-- Live status -->
           <TextBlock x:Name="Label_FishFarmer_Status"

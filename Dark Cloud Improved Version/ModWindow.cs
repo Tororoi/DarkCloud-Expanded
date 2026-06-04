@@ -32,7 +32,7 @@ namespace Dark_Cloud_Improved_Version
         private void UpdateFishFarmerStatus()
         {
             string status = FishDataFarmer.IsRunning ? "Running" :
-                            FishDataFarmer.Enabled   ? "Armed"   : "Stopped";
+                            FishDataFarmer.Enabled   ? "Waiting" : "Stopped";
             Label_FishFarmer_Status.Text = $"Status: {status}";
 
             Label_FishFarmer_Sessions.Text =
@@ -564,27 +564,8 @@ namespace Dark_Cloud_Improved_Version
 
         private void DEV_Page1_Btn_FishFarmer_Toggle(object sender, RoutedEventArgs e)
         {
-            if (FishDataFarmer.IsRunning)
-            {
-                FishDataFarmer.Stop();
-                Btn_FishFarmer_Toggle.Content = "Arm";
-            }
-            else if (FishDataFarmer.Enabled)
-            {
-                FishDataFarmer.Enabled = false;
-                Btn_FishFarmer_Toggle.Content = "Arm";
-            }
-            else
-            {
-                FishDataFarmer.Enabled = true;
-                Btn_FishFarmer_Toggle.Content = "Disarm";
-            }
-        }
-
-        private void DEV_Page1_Btn_FishFarmer_Stop(object sender, RoutedEventArgs e)
-        {
-            FishDataFarmer.Stop();
-            Btn_FishFarmer_Toggle.Content = "Arm";
+            FishDataFarmer.Toggle();
+            Btn_FishFarmer_Toggle.Content = (FishDataFarmer.Enabled || FishDataFarmer.IsRunning) ? "Stop" : "Start";
         }
 
         #endregion

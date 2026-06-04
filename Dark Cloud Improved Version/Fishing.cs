@@ -215,17 +215,17 @@ namespace Dark_Cloud_Improved_Version
         internal static void RollFishSlots(int areaBase, int slotCount, byte targetFishId, float baronChance = 0f)
         {
             float timeOfDay = Memory.ReadFloat(Addresses.timeofDayWrite);
-            int pct;
-            if      (timeOfDay >= 2.5f && timeOfDay < 5.5f)  pct = 5; // Dusk
-            else if (timeOfDay >= 5.5f && timeOfDay < 8.5f)  pct = 3; // Night
-            else if (timeOfDay >= 8.5f && timeOfDay < 11.5f) pct = 4; // Morning
-            else                                              pct = 2; // Afternoon
+            int spawnPercent;
+            if      (timeOfDay >= 2.5f && timeOfDay < 5.5f)  spawnPercent = 5; // Dusk
+            else if (timeOfDay >= 5.5f && timeOfDay < 8.5f)  spawnPercent = 3; // Night
+            else if (timeOfDay >= 8.5f && timeOfDay < 11.5f) spawnPercent = 4; // Morning
+            else                                              spawnPercent = 2; // Afternoon
 
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
                     fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
-                if (Rng.Next(100) < pct)
+                if (Rng.Next(100) < spawnPercent)
                 {
                     int slotStart = areaBase + (Addresses.fishSlotStride * slotIndex);
                     byte originalId = Memory.ReadByte(slotStart);
@@ -347,8 +347,8 @@ namespace Dark_Cloud_Improved_Version
                 float maxSize = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
                 float range   = maxSize - floor;
 
-                float t          = range > 0f ? Math.Max(0f, originalSize - floor) / range : 0f;
-                float multiplier = 1f + (scaleFactor - 1f) * t * t;
+                float normalizedPosition = range > 0f ? Math.Max(0f, originalSize - floor) / range : 0f;
+                float multiplier = 1f + (scaleFactor - 1f) * normalizedPosition * normalizedPosition;
                 float scaledSize = originalSize * multiplier;
 
                 float scaleRatio = scaledSize / originalSize;
@@ -417,15 +417,15 @@ namespace Dark_Cloud_Improved_Version
                     if ((DateTime.UtcNow - _lastMatatakiSteerTime[slotIndex]).TotalSeconds < 10.0) continue;
                     _lastMatatakiSteerTime[slotIndex] = DateTime.UtcNow;
 
-                    int s = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
-                    float fishX = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
-                    float fishY = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
-                    float dx = playerX - fishX;
-                    float dy = playerY - fishY;
-                    if (dx == 0f && dy == 0f) continue;
+                    int slotAddr = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                    float fishX = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosX);
+                    float fishY = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosY);
+                    float deltaX = playerX - fishX;
+                    float deltaY = playerY - fishY;
+                    if (deltaX == 0f && deltaY == 0f) continue;
 
-                    float angle = (float)Math.Atan2(dy, dx);
-                    Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
+                    float angle = (float)Math.Atan2(deltaY, deltaX);
+                    Memory.WriteFloat(slotAddr + FishSlotOffsets.Heading, angle);
                     // Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     //     $"[Steer/Passive] slot={slotIndex} fish={fishArray[slotIndex]} angle={angle:F2}");
                 }
@@ -451,23 +451,23 @@ namespace Dark_Cloud_Improved_Version
                     fishId != FishDatabase.BaronGarayan.Id  &&
                     fishId != FishDatabase.Umadakara.Id) continue;
 
-                int s = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                int slotAddr = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
 
-                float affinity = baitOffset >= 0 ? Memory.ReadFloat(s + baitOffset) : 0f;
+                float affinity = baitOffset >= 0 ? Memory.ReadFloat(slotAddr + baitOffset) : 0f;
                 if (affinity <= 0f) continue;
 
                 double interval = baseSecs / affinity;
                 if ((DateTime.UtcNow - _lastSteerTime[slotIndex]).TotalSeconds < interval) continue;
                 _lastSteerTime[slotIndex] = DateTime.UtcNow;
 
-                float fishX = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
-                float fishY = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
-                float dx = playerX - fishX;
-                float dy = playerY - fishY;
-                if (dx == 0f && dy == 0f) continue;
+                float fishX = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosX);
+                float fishY = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosY);
+                float deltaX = playerX - fishX;
+                float deltaY = playerY - fishY;
+                if (deltaX == 0f && deltaY == 0f) continue;
 
-                float angle = (float)Math.Atan2(dy, dx);
-                Memory.WriteFloat(s + FishSlotOffsets.Heading, angle);
+                float angle = (float)Math.Atan2(deltaY, deltaX);
+                Memory.WriteFloat(slotAddr + FishSlotOffsets.Heading, angle);
                 // Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 //     $"[Steer/Mardan] slot={slotIndex} fish={fishId} " +
                 //     $"aff={affinity:F2} interval={interval:F1}s angle={angle:F2}");
@@ -634,19 +634,19 @@ namespace Dark_Cloud_Improved_Version
             if (!hasMardanSword) return;
             // Brief delay to let the game finish writing slot data before we overwrite FP values.
             Thread.Sleep(300);
-            int addr = slotBase + FishSlotOffsets.BaseFp;
+            int fpAddr = slotBase + FishSlotOffsets.BaseFp;
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
                     fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
                 {
-                    addr += Addresses.fishSlotStride;
+                    fpAddr += Addresses.fishSlotStride;
                     continue;
                 }
-                Memory.WriteInt(addr, (int)(Memory.ReadInt(addr) * mardanMultiplier));
-                addr += 4;
-                Memory.WriteInt(addr, (int)(Memory.ReadInt(addr) * mardanMultiplier));
-                addr += Addresses.fishSlotStride - 4;
+                Memory.WriteInt(fpAddr, (int)(Memory.ReadInt(fpAddr) * mardanMultiplier));
+                fpAddr += 4;
+                Memory.WriteInt(fpAddr, (int)(Memory.ReadInt(fpAddr) * mardanMultiplier));
+                fpAddr += Addresses.fishSlotStride - 4;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!");
             }
         }
@@ -654,16 +654,18 @@ namespace Dark_Cloud_Improved_Version
         // ---- Utilities ----
 
         /// <summary>
-        /// Reads the in-game time float and maps it to the corresponding <see cref="TimeOfDay"/> period.
+        /// Maps the in-game time float to the corresponding <see cref="TimeOfDay"/> period.
         /// </summary>
-        internal static TimeOfDay GetCurrentTimeOfDay()
+        internal static TimeOfDay GetCurrentTimeOfDay(float timeValue)
         {
-            float t = Memory.ReadFloat(Addresses.timeofDayWrite);
-            if      (t >= 2.5f && t < 5.5f)  return TimeOfDay.Dusk;
-            else if (t >= 5.5f && t < 8.5f)  return TimeOfDay.Night;
-            else if (t >= 8.5f && t < 11.5f) return TimeOfDay.Morning;
-            else                              return TimeOfDay.Afternoon;
+            if      (timeValue >= 2.5f && timeValue < 5.5f)  return TimeOfDay.Dusk;
+            else if (timeValue >= 5.5f && timeValue < 8.5f)  return TimeOfDay.Night;
+            else if (timeValue >= 8.5f && timeValue < 11.5f) return TimeOfDay.Morning;
+            else                                              return TimeOfDay.Afternoon;
         }
+
+        internal static TimeOfDay GetCurrentTimeOfDay() =>
+            GetCurrentTimeOfDay(Memory.ReadFloat(Addresses.timeofDayWrite));
 
         // ---- Game formula simulations ----
         // Pure reimplementations of confirmed ELF logic, used for pre-write calculation and testing.
@@ -686,13 +688,13 @@ namespace Dark_Cloud_Improved_Version
             float maxSize      = fish.MaxSize       ?? 0f;
             float scaleDivisor = fish.ScaleDivisor  ?? 0f;
 
-            float rng = (float)(Rng.NextDouble() * 2.0 - 1.0);
+            float rngRoll = (float)(Rng.NextDouble() * 2.0 - 1.0);
 
             size = baseSize;
-            if (rng >= 0f)
-                size += rng * (maxSize - baseSize) / 4f;
+            if (rngRoll >= 0f)
+                size += rngRoll * (maxSize - baseSize) / 4f;
             else
-                size += rng * (maxSize - baseSize) / 8f;
+                size += rngRoll * (maxSize - baseSize) / 8f;
 
             float floor = 0.5f * baseSize;
             if (size < floor)   size = floor;

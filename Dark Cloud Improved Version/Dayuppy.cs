@@ -543,8 +543,8 @@ namespace Dark_Cloud_Improved_Version
                     case 22:    //Combat - Strafing Backwards
                     case 33:    //Combat - Strafing Blocking
                         {
-                            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.DPad_Up ||
-                                Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.DPad_Down ||
+                            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.DPad_Up ||
+                                Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.DPad_Down ||
                                 Memory.ReadUShort(Addresses.buttonInputs) == 4104 ||    //DPad_Up + R1
                                 Memory.ReadUShort(Addresses.buttonInputs) == 16392      //DPad_Down + R1
                                 )
@@ -583,7 +583,7 @@ namespace Dark_Cloud_Improved_Version
                                         elementSelected = Memory.ReadByte(currentWepElemAddr);
                                         int weaponElemAmount = currentWepElemAddr + 0x00000001;
                                         bool validElement = false;
-                                        if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.DPad_Up ||
+                                        if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.DPad_Up ||
                                             Memory.ReadUShort(Addresses.buttonInputs) == 4104)  //DPad_Up + R1
                                         {
                                             while (validElement == false)
@@ -637,7 +637,7 @@ namespace Dark_Cloud_Improved_Version
                                                 }
                                             }
                                         }
-                                        else if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.DPad_Down ||
+                                        else if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.DPad_Down ||
                                                 Memory.ReadUShort(Addresses.buttonInputs) == 16392) //DPad_Down + R1
                                         {
                                             while (validElement == false)

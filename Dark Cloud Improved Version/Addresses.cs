@@ -1,4 +1,6 @@
-﻿namespace Dark_Cloud_Improved_Version
+﻿using System;
+
+namespace Dark_Cloud_Improved_Version
 {
     class Addresses
     {
@@ -299,12 +301,7 @@
         public const int dungeonDebugMenu = 0x202A35EC;
 
         //Inputs
-        public const int buttonInputs = 0x21CBC544; //Two-byte Bitfield
-
-        //Square = 128        Cross = 64      Circle = 32       Triangle = 16
-        //DPadLeft = 32768        DPadDown = 16384      DPadRight = 8192       DPadUP = 4096
-        //Select = 256     L3 = 512      R3 = 1024      Start = 2048
-        //L1 = 4        L2 = 1      R1 = 8      R2 = 2
+        public const int buttonInputs = 0x21CBC544; //Two-byte Bitfield — bitmask values defined in Button enum
 
         public const int LeftAnalogInputX = 0x21CBC5E0; //Byte
         public const int LeftAnalogInputY = 0x21CBC54C;
@@ -417,5 +414,28 @@
         /// </summary>
         public const int fishRangeBoostFlag = 0x21F10038;
 
+    }
+
+    [Flags]
+    public enum Button : ushort
+    {
+        None       = 0b_0000000000000000,
+        L2         = 0b_0000000000000001,
+        R2         = 0b_0000000000000010,
+        L1         = 0b_0000000000000100,
+        R1         = 0b_0000000000001000,
+        Triangle   = 0b_0000000000010000,
+        Circle     = 0b_0000000000100000,
+        Cross      = 0b_0000000001000000,
+        Square     = 0b_0000000010000000,
+        Select     = 0b_0000000100000000,
+        L3         = 0b_0000001000000000,
+        R3         = 0b_0000010000000000,
+        Start      = 0b_0000100000000000,
+        DPad_Up    = 0b_0001000000000000,
+        DPad_Right = 0b_0010000000000000,
+        DPad_Down  = 0b_0100000000000000,
+        DPad_Left  = 0b_1000000000000000,
+        All        = 0b_1111111111111111,
     }
 }

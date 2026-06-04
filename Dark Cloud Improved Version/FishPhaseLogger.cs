@@ -128,53 +128,53 @@ namespace Dark_Cloud_Improved_Version
                 {
                     for (int i = 0; i < _slotCount; i++)
                     {
-                        int s = _slotBase + i * Addresses.fishSlotStride;
+                        int slotAddr = _slotBase + i * Addresses.fishSlotStride;
 
-                        byte  id      = Memory.ReadByte(s);
-                        int   aiState = Memory.ReadInt(s   + FishSlotOffsets.AiState);
-                        float hdg     = Memory.ReadFloat(s + FishSlotOffsets.Heading);
-                        float spd     = Memory.ReadFloat(s + FishSlotOffsets.Speed);
-                        float vel     = Memory.ReadFloat(s + FishSlotOffsets.Velocity);
-                        float aimX    = Memory.ReadFloat(s + FishSlotOffsets.AiTargetX);
-                        float aimY    = Memory.ReadFloat(s + FishSlotOffsets.AiTargetY);
-                        float aimZ    = Memory.ReadFloat(s + FishSlotOffsets.AiTargetZ);
-                        slotAimX[i] = aimX;
-                        slotAimY[i] = aimY;
-                        slotAimZ[i] = aimZ;
-                        float lpX     = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
-                        float lpY     = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
-                        float lpZ     = Memory.ReadFloat(s + FishSlotOffsets.LivePosZ);
-                        int   u054    = Memory.ReadInt(s   + FishSlotOffsets.Unk054);
-                        int   u058    = Memory.ReadInt(s   + FishSlotOffsets.AiStateTimer);
-                        float b150    = Memory.ReadFloat(s + FishSlotOffsets.Unk150);
-                        float b154    = Memory.ReadFloat(s + FishSlotOffsets.Unk154);
-                        float b158    = Memory.ReadFloat(s + FishSlotOffsets.Unk158);
+                        byte  fishId       = Memory.ReadByte(slotAddr);
+                        int   aiState      = Memory.ReadInt(slotAddr   + FishSlotOffsets.AiState);
+                        float heading      = Memory.ReadFloat(slotAddr + FishSlotOffsets.Heading);
+                        float speed        = Memory.ReadFloat(slotAddr + FishSlotOffsets.Speed);
+                        float velocity     = Memory.ReadFloat(slotAddr + FishSlotOffsets.Velocity);
+                        float aiTargetX    = Memory.ReadFloat(slotAddr + FishSlotOffsets.AiTargetX);
+                        float aiTargetY    = Memory.ReadFloat(slotAddr + FishSlotOffsets.AiTargetY);
+                        float aiTargetZ    = Memory.ReadFloat(slotAddr + FishSlotOffsets.AiTargetZ);
+                        slotAimX[i] = aiTargetX;
+                        slotAimY[i] = aiTargetY;
+                        slotAimZ[i] = aiTargetZ;
+                        float livePosX     = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosX);
+                        float livePosY     = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosY);
+                        float livePosZ     = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosZ);
+                        int   unk054       = Memory.ReadInt(slotAddr   + FishSlotOffsets.Unk054);
+                        int   aiStateTimer = Memory.ReadInt(slotAddr   + FishSlotOffsets.AiStateTimer);
+                        float unk150       = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk150);
+                        float unk154       = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk154);
+                        float unk158       = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk158);
 
-                        string g04C  = ReadHex(s, 0x04C, 1);
-                        string g05C  = ReadHex(s, 0x05C, 1);
-                        string g06C  = ReadHex(s, 0x06C, 2);
-                        string g078  = ReadHex(s, 0x078, 2);
-                        int   unk088 = Memory.ReadInt(s   + FishSlotOffsets.Unk088);
-                        float nr     = Memory.ReadFloat(s + FishSlotOffsets.NoticeRadius);
-                        string g09C  = ReadHex(s, 0x09C, 5);
-                        string g0BC  = ReadHex(s, 0x0BC, 8);
+                        string g04C  = ReadHex(slotAddr, 0x04C, 1);
+                        string g05C  = ReadHex(slotAddr, 0x05C, 1);
+                        string g06C  = ReadHex(slotAddr, 0x06C, 2);
+                        string g078  = ReadHex(slotAddr, 0x078, 2);
+                        int   unk088 = Memory.ReadInt(slotAddr   + FishSlotOffsets.Unk088);
+                        float detectionRadius = Memory.ReadFloat(slotAddr + FishSlotOffsets.NoticeRadius);
+                        string g09C  = ReadHex(slotAddr, 0x09C, 5);
+                        string g0BC  = ReadHex(slotAddr, 0x0BC, 8);
 
                         // Heading stability tracking
                         if (aiState == FishingState.FishAiState_Approaching && !float.IsNaN(prevHdg[i]))
                         {
-                            if (Math.Abs(hdg - prevHdg[i]) < 0.02f)
+                            if (Math.Abs(heading - prevHdg[i]) < 0.02f)
                             {
                                 stableFrames[i]++;
                                 if (stableFrames[i] >= 10)
                                 {
-                                    stableHdg[i]  = hdg;
-                                    stableLpX[i]  = lpX;
-                                    stableLpY[i]  = lpY;
-                                    stableLpZ[i]  = lpZ;
-                                    stablePosZ[i] = aimZ; // hook depth
+                                    stableHdg[i]  = heading;
+                                    stableLpX[i]  = livePosX;
+                                    stableLpY[i]  = livePosY;
+                                    stableLpZ[i]  = livePosZ;
+                                    stablePosZ[i] = aiTargetZ; // hook depth
                                     if (stableFrames[i] == 10)
                                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                            $"[HookTriang] s={i} {FishDatabase.GetName(id)} heading stable: live=({lpX:F2},{lpY:F2},{lpZ:F2}) hookZ={aimZ:F2} hdg={hdg:F4}");
+                                            $"[HookTriang] s={i} {FishDatabase.GetName(fishId)} heading stable: live=({livePosX:F2},{livePosY:F2},{livePosZ:F2}) hookZ={aiTargetZ:F2} hdg={heading:F4}");
                                 }
                             }
                             else
@@ -186,12 +186,12 @@ namespace Dark_Cloud_Improved_Version
                         {
                             stableFrames[i] = 0;
                         }
-                        prevHdg[i] = aiState == FishingState.FishAiState_Approaching ? hdg : float.NaN;
+                        prevHdg[i] = aiState == FishingState.FishAiState_Approaching ? heading : float.NaN;
 
                         if (aiState != lastAiState[i])
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                $"[FishPhase] f={frame:D5} s={i} {FishDatabase.GetName(id)} aiState {lastAiState[i]:X8} -> {aiState:X8}");
+                                $"[FishPhase] f={frame:D5} s={i} {FishDatabase.GetName(fishId)} aiState {lastAiState[i]:X8} -> {aiState:X8}");
 
                             // Log notice-range distance when a fish naturally transitions to Approaching.
                             // Requires another slot to already be approaching/nibbling so the hook
@@ -210,14 +210,14 @@ namespace Dark_Cloud_Improved_Version
                                 }
                                 if (refSlot >= 0)
                                 {
-                                    float hkX = slotAimX[refSlot], hkY = slotAimY[refSlot], hkZ = slotAimZ[refSlot];
-                                    float dx = lpX - hkX, dy = lpY - hkY, dz = lpZ - hkZ;
-                                    float dist3d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                                    float dist2d = (float)Math.Sqrt(dx * dx + dy * dy);
+                                    float hookX = slotAimX[refSlot], hookY = slotAimY[refSlot], hookZ = slotAimZ[refSlot];
+                                    float deltaX = livePosX - hookX, deltaY = livePosY - hookY, deltaZ = livePosZ - hookZ;
+                                    float dist3d = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+                                    float dist2d = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
                                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                        $"[NoticeRange] s={i} {FishDatabase.GetName(id)} " +
+                                        $"[NoticeRange] s={i} {FishDatabase.GetName(fishId)} " +
                                         $"dist3d={dist3d:F2} dist2d={dist2d:F2} " +
-                                        $"fish=({lpX:F2},{lpY:F2},{lpZ:F2}) hook=({hkX:F2},{hkY:F2},{hkZ:F2}) [ref=s{refSlot}]");
+                                        $"fish=({livePosX:F2},{livePosY:F2},{livePosZ:F2}) hook=({hookX:F2},{hookY:F2},{hookZ:F2}) [ref=s{refSlot}]");
                                 }
                             }
 
@@ -225,13 +225,13 @@ namespace Dark_Cloud_Improved_Version
                         }
 
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[FishPhase] f={frame:D5} ph={phase:X2} s={i} {FishDatabase.GetName(id)} " +
-                            $"ai={aiState:X8} hdg={hdg:F3} spd={spd:F3} vel={vel:F3} " +
-                            $"aim=({aimX:F1},{aimY:F1},{aimZ:F1}) live=({lpX:F1},{lpY:F1},{lpZ:F1}) " +
-                            $"u054={u054:X8} u058={u058:X8} " +
-                            $"b150={b150:F3} b154={b154:F3} b158={b158:F3} " +
+                            $"[FishPhase] f={frame:D5} ph={phase:X2} s={i} {FishDatabase.GetName(fishId)} " +
+                            $"ai={aiState:X8} hdg={heading:F3} spd={speed:F3} vel={velocity:F3} " +
+                            $"aim=({aiTargetX:F1},{aiTargetY:F1},{aiTargetZ:F1}) live=({livePosX:F1},{livePosY:F1},{livePosZ:F1}) " +
+                            $"u054={unk054:X8} u058={aiStateTimer:X8} " +
+                            $"b150={unk150:F3} b154={unk154:F3} b158={unk158:F3} " +
                             $"g04C=[{g04C}] g05C=[{g05C}] g06C=[{g06C}] " +
-                            $"g078=[{g078}] u088={unk088:X8} nr={nr:F1} g09C=[{g09C}] g0BC=[{g0BC}]");
+                            $"g078=[{g078}] u088={unk088:X8} dr={detectionRadius:F1} g09C=[{g09C}] g0BC=[{g0BC}]");
                     }
 
                     // Triangulate hook position when 2+ slots have stable headings
@@ -249,26 +249,26 @@ namespace Dark_Cloud_Improved_Version
                             for (int b = a + 1; b < _slotCount; b++)
                             {
                                 if (stableFrames[b] < 10) continue;
-                                float cos1 = (float)Math.Cos(stableHdg[a]), sin1 = (float)Math.Sin(stableHdg[a]);
-                                float cos2 = (float)Math.Cos(stableHdg[b]), sin2 = (float)Math.Sin(stableHdg[b]);
-                                float denom = cos1 * sin2 - sin1 * cos2;
+                                float cosA = (float)Math.Cos(stableHdg[a]), sinA = (float)Math.Sin(stableHdg[a]);
+                                float cosB = (float)Math.Cos(stableHdg[b]), sinB = (float)Math.Sin(stableHdg[b]);
+                                float denom = cosA * sinB - sinA * cosB;
                                 if (Math.Abs(denom) < 0.01f) continue; // parallel vectors
-                                float t1 = ((stableLpX[b] - stableLpX[a]) * sin2 - (stableLpY[b] - stableLpY[a]) * cos2) / denom;
-                                if (t1 < 0) continue; // intersection behind fish
-                                sumX += stableLpX[a] + t1 * cos1;
-                                sumY += stableLpY[a] + t1 * sin1;
+                                float intersectionParam = ((stableLpX[b] - stableLpX[a]) * sinB - (stableLpY[b] - stableLpY[a]) * cosB) / denom;
+                                if (intersectionParam < 0) continue; // intersection behind fish
+                                sumX += stableLpX[a] + intersectionParam * cosA;
+                                sumY += stableLpY[a] + intersectionParam * sinA;
                                 pairs++;
                             }
                         }
                         if (pairs > 0)
                         {
-                            float estX = sumX / pairs, estY = sumY / pairs;
-                            float estZ = 0; int zc = 0;
+                            float estimatedX = sumX / pairs, estimatedY = sumY / pairs;
+                            float estimatedZ = 0; int zCount = 0;
                             for (int i = 0; i < _slotCount; i++)
-                                if (stableFrames[i] >= 10) { estZ += stablePosZ[i]; zc++; }
-                            estZ /= zc;
+                                if (stableFrames[i] >= 10) { estimatedZ += stablePosZ[i]; zCount++; }
+                            estimatedZ /= zCount;
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                $"[HookTriang] estimated hook=({estX:F2},{estY:F2},{estZ:F2}) from {pairs} vector pair(s) ({stableCount} stable slots)");
+                                $"[HookTriang] estimated hook=({estimatedX:F2},{estimatedY:F2},{estimatedZ:F2}) from {pairs} vector pair(s) ({stableCount} stable slots)");
                         }
                         lastStableCount = stableCount;
                     }
@@ -344,7 +344,7 @@ namespace Dark_Cloud_Improved_Version
                 float size         = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 int   fpMin        = Memory.ReadInt(slotStart   + FishSlotOffsets.BaseFp);
                 int   fpMax        = Memory.ReadInt(slotStart   + FishSlotOffsets.MaxFp);
-                FishDataFarmer.RecordSlot(fishId, todFloat, size);
+                FishDataFarmer.RecordSlot(fishId, todFloat);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[FishInfo] area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) " +
                     $"scaleDivisor={scaleDivisor:F1} baseSize={baseSize:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +
@@ -410,31 +410,31 @@ namespace Dark_Cloud_Improved_Version
                 $"[Player] pos=({playerX:F1},{playerY:F2},{playerZ:F1})");
             for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
             {
-                int s        = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
-                byte fishId  = Memory.ReadByte(s);
-                float hdg    = Memory.ReadFloat(s + FishSlotOffsets.Heading);
-                float spd    = Memory.ReadFloat(s + FishSlotOffsets.Speed);
-                float curVel = Memory.ReadFloat(s + FishSlotOffsets.Velocity);
-                float posX   = Memory.ReadFloat(s + FishSlotOffsets.AiTargetX);
-                float posY   = Memory.ReadFloat(s + FishSlotOffsets.AiTargetY);
-                float posZ   = Memory.ReadFloat(s + FishSlotOffsets.AiTargetZ);
-                float fishPosX = Memory.ReadFloat(s + FishSlotOffsets.LivePosX);
-                float fishPosY = Memory.ReadFloat(s + FishSlotOffsets.LivePosY);
-                float fishPosZ = Memory.ReadFloat(s + FishSlotOffsets.LivePosZ);
-                float b150   = Memory.ReadFloat(s + FishSlotOffsets.Unk150);
-                float b154   = Memory.ReadFloat(s + FishSlotOffsets.Unk154);
-                float b158   = Memory.ReadFloat(s + FishSlotOffsets.Unk158);
-                float scl0   = Memory.ReadFloat(s + FishSlotOffsets.Unk130);
-                float scl1   = Memory.ReadFloat(s + FishSlotOffsets.Unk134);
-                float scl2   = Memory.ReadFloat(s + FishSlotOffsets.Unk138);
-                int unk054   = Memory.ReadInt(s  + FishSlotOffsets.Unk054);
-                int unk058   = Memory.ReadInt(s  + FishSlotOffsets.AiStateTimer);
+                int slotAddr     = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                byte fishId      = Memory.ReadByte(slotAddr);
+                float heading    = Memory.ReadFloat(slotAddr + FishSlotOffsets.Heading);
+                float speed      = Memory.ReadFloat(slotAddr + FishSlotOffsets.Speed);
+                float velocity   = Memory.ReadFloat(slotAddr + FishSlotOffsets.Velocity);
+                float aiTargetX  = Memory.ReadFloat(slotAddr + FishSlotOffsets.AiTargetX);
+                float aiTargetY  = Memory.ReadFloat(slotAddr + FishSlotOffsets.AiTargetY);
+                float aiTargetZ  = Memory.ReadFloat(slotAddr + FishSlotOffsets.AiTargetZ);
+                float fishPosX   = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosX);
+                float fishPosY   = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosY);
+                float fishPosZ   = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosZ);
+                float unk150     = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk150);
+                float unk154     = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk154);
+                float unk158     = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk158);
+                float scale130   = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk130);
+                float scale134   = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk134);
+                float scale138   = Memory.ReadFloat(slotAddr + FishSlotOffsets.Unk138);
+                int unk054       = Memory.ReadInt(slotAddr  + FishSlotOffsets.Unk054);
+                int unk058       = Memory.ReadInt(slotAddr  + FishSlotOffsets.AiStateTimer);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[SlotWatch] slot={slotIndex} {FishDatabase.GetName(fishId)} " +
-                    $"hdg={hdg:F3} spd={spd:F3} curVel={curVel:F3} " +
-                    $"pos=({posX:F1},{posY:F2},{posZ:F1}) fishPos=({fishPosX:F1},{fishPosY:F1},{fishPosZ:F1}) " +
-                    $"b150={b150:F2} b154={b154:F2} b158={b158:F2} " +
-                    $"unk054={unk054} unk058={unk058} scl=({scl0:F4},{scl1:F4},{scl2:F4})");
+                    $"hdg={heading:F3} spd={speed:F3} curVel={velocity:F3} " +
+                    $"pos=({aiTargetX:F1},{aiTargetY:F2},{aiTargetZ:F1}) fishPos=({fishPosX:F1},{fishPosY:F1},{fishPosZ:F1}) " +
+                    $"b150={unk150:F2} b154={unk154:F2} b158={unk158:F2} " +
+                    $"unk054={unk054} unk058={unk058} scl=({scale130:F4},{scale134:F4},{scale138:F4})");
             }
         }
 
@@ -487,13 +487,13 @@ namespace Dark_Cloud_Improved_Version
         // ─────────────────────────────────────────────────────────────────────────────
         private static string ReadHex(int slotStart, int offset, int count)
         {
-            var sb = new System.Text.StringBuilder(count * 9);
+            var builder = new System.Text.StringBuilder(count * 9);
             for (int i = 0; i < count; i++)
             {
-                if (i > 0) sb.Append(' ');
-                sb.Append(Memory.ReadInt(slotStart + offset + i * 4).ToString("X8"));
+                if (i > 0) builder.Append(' ');
+                builder.Append(Memory.ReadInt(slotStart + offset + i * 4).ToString("X8"));
             }
-            return sb.ToString();
+            return builder.ToString();
         }
 
         private static void ScanForFishTable()
@@ -524,9 +524,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 long  addr  = scanStart + b * batchSize * 4;
                 int   count = (int)Math.Min(batchSize, (scanEnd - addr) / 4);
-                float[] fs  = Memory.ReadFloatBatch(addr, count);
+                float[] floatBatch = Memory.ReadFloatBatch(addr, count);
                 for (int i = 0; i < count; i++)
-                    if (Math.Abs(fs[i] - target) < tol)
+                    if (Math.Abs(floatBatch[i] - target) < tol)
                         hits.Add((int)(addr + i * 4));
             }
 
@@ -535,13 +535,13 @@ namespace Dark_Cloud_Improved_Version
 
             foreach (int hit in hits)
             {
-                const int half = 8;
-                float[] w = Memory.ReadFloatBatch(hit - half * 4, half * 2);
+                const int halfWindowSize = 8;
+                float[] windowWords = Memory.ReadFloatBatch(hit - halfWindowSize * 4, halfWindowSize * 2);
 
-                bool hasScaleDivisor = Math.Abs(w[half - 2] - unk004Val) < tol;
-                bool hasBaseSize = Math.Abs(w[half - 1] - unk008Val) < tol;
-                uint rawBaseFp  = BitConverter.ToUInt32(BitConverter.GetBytes(w[half + 1]), 0);
-                uint rawMaxFp  = BitConverter.ToUInt32(BitConverter.GetBytes(w[half + 2]), 0);
+                bool hasScaleDivisor = Math.Abs(windowWords[halfWindowSize - 2] - unk004Val) < tol;
+                bool hasBaseSize = Math.Abs(windowWords[halfWindowSize - 1] - unk008Val) < tol;
+                uint rawBaseFp  = BitConverter.ToUInt32(BitConverter.GetBytes(windowWords[halfWindowSize + 1]), 0);
+                uint rawMaxFp  = BitConverter.ToUInt32(BitConverter.GetBytes(windowWords[halfWindowSize + 2]), 0);
                 bool hasBaseFp  = rawBaseFp == fpMinVal;
                 bool hasMaxFp  = rawMaxFp == fpMaxVal;
                 int  score     = (hasScaleDivisor ? 1 : 0) + (hasBaseSize ? 1 : 0) + (hasBaseFp ? 1 : 0) + (hasMaxFp ? 1 : 0);
@@ -556,17 +556,17 @@ namespace Dark_Cloud_Improved_Version
                 // 8 words per line, hit marked with [].
                 const int pre  = 16;
                 const int post = 32;
-                float[] wide = Memory.ReadFloatBatch(hit - pre * 4, pre + post);
+                float[] dumpWords = Memory.ReadFloatBatch(hit - pre * 4, pre + post);
                 for (int row = 0; row < (pre + post); row += 8)
                 {
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append($"[FishTableScan]   0x{(uint)(hit - pre * 4 + row * 4):X8}:");
-                    for (int k = row; k < row + 8 && k < wide.Length; k++)
+                    var rowBuilder = new System.Text.StringBuilder();
+                    rowBuilder.Append($"[FishTableScan]   0x{(uint)(hit - pre * 4 + row * 4):X8}:");
+                    for (int k = row; k < row + 8 && k < dumpWords.Length; k++)
                     {
-                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(wide[k]), 0);
-                        sb.Append(k == pre ? $" [{raw:X8}]" : $"  {raw:X8}");
+                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(dumpWords[k]), 0);
+                        rowBuilder.Append(k == pre ? $" [{raw:X8}]" : $"  {raw:X8}");
                     }
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + rowBuilder);
                 }
 
                 // Search ±512 bytes around MaxSize for Baron Garayan's known MinSize=5.0f (observed in slot).
@@ -607,15 +607,15 @@ namespace Dark_Cloud_Improved_Version
                     uint ptr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrWords[p]), 0);
                     if (ptr == 0) continue;
                     long targetAddr = 0x20000000L + ptr;
-                    float[] tgt = Memory.ReadFloatBatch(targetAddr, 8);
-                    var sb = new System.Text.StringBuilder();
+                    float[] targetWords = Memory.ReadFloatBatch(targetAddr, 8);
+                    var rowBuilder = new System.Text.StringBuilder();
                     for (int t = 0; t < 8; t++)
                     {
-                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(tgt[t]), 0);
-                        sb.Append($"  {raw:X8}");
+                        uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(targetWords[t]), 0);
+                        rowBuilder.Append($"  {raw:X8}");
                     }
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[FishTableScan]   ptr[{p}] →0x{ptr:X8}:{sb}");
+                        $"[FishTableScan]   ptr[{p}] →0x{ptr:X8}:{rowBuilder}");
                 }
 
                 // Scan 1024 bytes immediately before the species table base (entry 0 start).
@@ -631,14 +631,14 @@ namespace Dark_Cloud_Improved_Version
                 float[] preReg = Memory.ReadFloatBatch(preStart, adjWords);
                 for (int row = 0; row < adjWords; row += 8)
                 {
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append($"[FishTableScan]   0x{(uint)(preStart + row * 4):X8}:");
+                    var rowBuilder = new System.Text.StringBuilder();
+                    rowBuilder.Append($"[FishTableScan]   0x{(uint)(preStart + row * 4):X8}:");
                     for (int k = row; k < row + 8 && k < preReg.Length; k++)
                     {
                         uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(preReg[k]), 0);
-                        sb.Append($"  {raw:X8}");
+                        rowBuilder.Append($"  {raw:X8}");
                     }
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + rowBuilder);
                 }
 
                 // Print the 192-byte packed-byte section (tableBase-0x160) as individual bytes,
@@ -658,33 +658,33 @@ namespace Dark_Cloud_Improved_Version
                 }
                 for (int row = 0; row < byteSecLen; row += 12)
                 {
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append($"[FishTableScan]   row{row/12:D2}:");
+                    var rowBuilder = new System.Text.StringBuilder();
+                    rowBuilder.Append($"[FishTableScan]   row{row/12:D2}:");
                     for (int k = row; k < row + 12 && k < bsBytes.Length; k++)
-                        sb.Append($" {bsBytes[k]:X2}");
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                        rowBuilder.Append($" {bsBytes[k]:X2}");
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + rowBuilder);
                 }
 
                 // Follow the pointer stored at tableBase - 0x90 (observed: 0x0029F6E0).
                 int ptrFieldAddr = tableBase - 0x90;
-                float[] ptrFw = Memory.ReadFloatBatch(ptrFieldAddr, 1);
-                uint rawFollowPtr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrFw[0]), 0);
+                float[] ptrFieldWords = Memory.ReadFloatBatch(ptrFieldAddr, 1);
+                uint rawFollowPtr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrFieldWords[0]), 0);
                 if (rawFollowPtr != 0 && rawFollowPtr < 0x02200000u)
                 {
                     long followTarget = 0x20000000L + rawFollowPtr;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"[FishTableScan] ptr@0x{(uint)ptrFieldAddr:X8}=0x{rawFollowPtr:X8} → 0x{(uint)followTarget:X8}:");
-                    float[] fd = Memory.ReadFloatBatch(followTarget, 64);
+                    float[] followData = Memory.ReadFloatBatch(followTarget, 64);
                     for (int row = 0; row < 64; row += 8)
                     {
-                        var sb = new System.Text.StringBuilder();
-                        sb.Append($"[FishTableScan]   0x{(uint)(followTarget + row * 4):X8}:");
-                        for (int k = row; k < row + 8 && k < fd.Length; k++)
+                        var rowBuilder = new System.Text.StringBuilder();
+                        rowBuilder.Append($"[FishTableScan]   0x{(uint)(followTarget + row * 4):X8}:");
+                        for (int k = row; k < row + 8 && k < followData.Length; k++)
                         {
-                            uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(fd[k]), 0);
-                            sb.Append($"  {raw:X8}");
+                            uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(followData[k]), 0);
+                            rowBuilder.Append($"  {raw:X8}");
                         }
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + rowBuilder);
                     }
                 }
 
@@ -694,36 +694,36 @@ namespace Dark_Cloud_Improved_Version
                 float[] postReg = Memory.ReadFloatBatch(ptrArrayEnd, adjWords);
                 for (int row = 0; row < adjWords; row += 8)
                 {
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append($"[FishTableScan]   0x{(uint)(ptrArrayEnd + row * 4):X8}:");
+                    var rowBuilder = new System.Text.StringBuilder();
+                    rowBuilder.Append($"[FishTableScan]   0x{(uint)(ptrArrayEnd + row * 4):X8}:");
                     for (int k = row; k < row + 8 && k < postReg.Length; k++)
                     {
                         uint raw = BitConverter.ToUInt32(BitConverter.GetBytes(postReg[k]), 0);
-                        sb.Append($"  {raw:X8}");
+                        rowBuilder.Append($"  {raw:X8}");
                     }
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + rowBuilder);
                 }
 
                 // Search both adjacent regions for Baron Garayan's known MinSize.
                 bool foundAdj = false;
                 for (int pass = 0; pass < 2; pass++)
                 {
-                    float[] reg     = pass == 0 ? preReg : postReg;
-                    int     regBase = pass == 0 ? preStart : ptrArrayEnd;
-                    string  label   = pass == 0 ? "pre-table" : "post-ptr";
-                    for (int k = 0; k < reg.Length; k++)
+                    float[] adjacentRegion = pass == 0 ? preReg : postReg;
+                    int     regBase        = pass == 0 ? preStart : ptrArrayEnd;
+                    string  label          = pass == 0 ? "pre-table" : "post-ptr";
+                    for (int k = 0; k < adjacentRegion.Length; k++)
                     {
-                        uint   raw   = BitConverter.ToUInt32(BitConverter.GetBytes(reg[k]), 0);
-                        int    addr  = regBase + k * 4;
+                        uint   raw      = BitConverter.ToUInt32(BitConverter.GetBytes(adjacentRegion[k]), 0);
+                        int    wordAddr = regBase + k * 4;
                         string which = null;
-                        if      (Math.Abs(reg[k] - 5.0f)  < tol) which = "5.0f";
-                        else if (Math.Abs(reg[k] - 50.0f) < tol) which = "50.0f";
-                        else if (raw == 5u)                        which = "int5";
-                        else if (raw == 50u)                       which = "int50";
+                        if      (Math.Abs(adjacentRegion[k] - 5.0f)  < tol) which = "5.0f";
+                        else if (Math.Abs(adjacentRegion[k] - 50.0f) < tol) which = "50.0f";
+                        else if (raw == 5u)                                   which = "int5";
+                        else if (raw == 50u)                                  which = "int50";
                         if (which != null)
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                $"[FishTableScan] MinSize candidate {which} at 0x{(uint)addr:X8} ({label})");
+                                $"[FishTableScan] MinSize candidate {which} at 0x{(uint)wordAddr:X8} ({label})");
                             foundAdj = true;
                         }
                     }

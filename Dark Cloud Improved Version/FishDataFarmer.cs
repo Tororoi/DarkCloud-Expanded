@@ -7,9 +7,9 @@ using System.Threading;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Automated fishing data collection loop. Toggle with L3 while standing next to a fishing
-    /// sign — the first manual session arms the loop, which then handles all subsequent entry
-    /// and exit automatically. Press L3 again at any time to stop.
+    /// Automated fishing data collection loop. Toggle via the mod window — the first manual
+    /// session arms the loop, which then handles all subsequent entry and exit automatically.
+    /// Toggle again at any time to stop.
     /// </summary>
     internal static class FishDataFarmer
     {
@@ -22,28 +22,21 @@ namespace Dark_Cloud_Improved_Version
         // Set by OnSessionEnded (TownCharacter's thread) when FishingState drops to 0.
         private static volatile bool _fishingEnded = false;
 
-        // PS2 controller bitmask constants (from TASThread.cs comments)
-        private const int Cross    = 64;
-        private const int Circle   = 32;
-        private const int DPadDown = 16384;
-
-        private const int ButtonAddr = 0x21CBC544;
-
         private static bool QuitDialogOpen() => Memory.ReadInt(FishingState.OverworldStateAddr) == FishingState.OverworldState_QuitDialog;
         private static bool InOverworld()    => Memory.ReadInt(FishingState.OverworldStateAddr) == FishingState.OverworldState_Overworld;
 
         // Survey data — accumulated for the lifetime of the run, reset on each Start().
-        // Slot counts: fishId → [Morning_H1, Morning_H2, Morning_Peak, ..., Night_Peak]
-        // Session counts: same 12-bucket layout, species-agnostic — tracks how many sessions
-        //   fell in each sub-bucket (denominator for spawn-rate calculation).
-        // H1/H2 split at the period midpoint; Peak = 0.2-unit window centered there, overlapping each half by 0.1.
-        private static readonly Dictionary<byte, int[]> _counts = new Dictionary<byte, int[]>();
-        private static readonly Dictionary<byte, float> _minSize = new Dictionary<byte, float>();
-        private static readonly int[] _sessionBuckets = new int[12];
-        private const int Morning_H1   = 0,  Morning_H2   = 1,  Morning_Peak   = 2;
-        private const int Afternoon_H1 = 3,  Afternoon_H2 = 4,  Afternoon_Peak = 5;
-        private const int Dusk_H1      = 6,  Dusk_H2      = 7,  Dusk_Peak      = 8;
-        private const int Night_H1     = 9,  Night_H2     = 10, Night_Peak     = 11;
+        // Slot counts: fishId → per-TimeOfDay counts keyed by TimeOfDay
+        // Session counts: same layout, species-agnostic — tracks how many sessions fell in
+        //   each period (denominator for spawn-rate calculation).
+        private static readonly ConcurrentDictionary<byte, Dictionary<TimeOfDay, int>> _counts = new();
+        private static readonly Dictionary<TimeOfDay, int> _sessionBuckets = new()
+        {
+            [TimeOfDay.Morning]   = 0,
+            [TimeOfDay.Afternoon] = 0,
+            [TimeOfDay.Dusk]      = 0,
+            [TimeOfDay.Night]     = 0,
+        };
         private static int _sessionCount;
         private static DateTime _lastSummaryTime;
 
@@ -51,18 +44,20 @@ namespace Dark_Cloud_Improved_Version
         // blocks on a PINE write. Each queue item is an Action (a write or a sleep). Items
         // execute in order, preserving hold times and inter-button gaps even when PINE is slow.
         private static readonly BlockingCollection<Action> _writeQueue = new();
-        private static int _pendingCount = 0; // items enqueued but not yet executed
+        private static int _pendingCount = 0; // items enqueued or currently executing
 
         internal static bool IsRunning => _running;
         internal static bool IsPressingButton => _pendingCount > 0;
         internal static int PendingCount => _pendingCount;
         internal static int SessionCount => _sessionCount;
 
+        // ---- Writer infrastructure ----
+
         static FishDataFarmer()
         {
             // Writer thread lives for the lifetime of the process (background, won't block exit).
-            var t = new Thread(WriterLoop) { IsBackground = true, Name = "FishFarmer-Writer" };
-            t.Start();
+            var writerThread = new Thread(WriterLoop) { IsBackground = true, Name = "FishFarmer-Writer" };
+            writerThread.Start();
         }
 
         private static void WriterLoop()
@@ -91,32 +86,39 @@ namespace Dark_Cloud_Improved_Version
         // Gap sleeps are skipped when _running is false so Stop() drains quickly.
         private static void Enqueue(int button, int holdMs = 50, int gapMs = 0)
         {
-            EnqueueWrite(() => Memory.WriteIntFast(ButtonAddr, button));
+            EnqueueWrite(() => Memory.WriteIntFast(Addresses.buttonInputs, button));
             EnqueueWrite(() => Thread.Sleep(holdMs));
-            EnqueueWrite(() => Memory.WriteIntFast(ButtonAddr, 0));
+            EnqueueWrite(() => Memory.WriteIntFast(Addresses.buttonInputs, 0));
             if (gapMs > 0)
                 EnqueueWrite(() => { if (_running) Thread.Sleep(gapMs); });
         }
 
+        // ---- Lifecycle ----
+
         /// <summary>
-        /// Cycles through armed → running → stopped states on each L3 press.
+        /// Toggles the farmer on or off. When enabled, the first manual session starts the loop.
         /// </summary>
         internal static void Toggle()
         {
-            if (_running)
-            {
+            if (Enabled || _running)
                 Stop();
-            }
-            else if (Enabled)
-            {
-                Enabled = false;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishFarmer] Disarmed");
-            }
             else
             {
                 Enabled = true;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishFarmer] Armed — start the first session manually to begin auto-farming");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishFarmer] Enabled — start a session to begin auto-farming");
             }
+        }
+
+        /// <summary>
+        /// Stops farming immediately and drains any pending controller writes.
+        /// </summary>
+        internal static void Stop()
+        {
+            Enabled = false;
+            _running = false;
+            // Drain pending queue items so the writer exits after its current action.
+            while (_writeQueue.TryTake(out _))
+                Interlocked.Decrement(ref _pendingCount);
         }
 
         /// <summary>
@@ -131,23 +133,16 @@ namespace Dark_Cloud_Improved_Version
             _fishingEnded = false; // clear any stale exit signal from a previous session
             if (_running) return;
             _counts.Clear();
-            _minSize.Clear();
-            Array.Clear(_sessionBuckets, 0, _sessionBuckets.Length);
+            _sessionBuckets[TimeOfDay.Morning]   = 0;
+            _sessionBuckets[TimeOfDay.Afternoon] = 0;
+            _sessionBuckets[TimeOfDay.Dusk]      = 0;
+            _sessionBuckets[TimeOfDay.Night]     = 0;
             _sessionCount = 0;
             _lastSummaryTime = DateTime.UtcNow;
             _running = true;
             _thread = new Thread(Run) { IsBackground = true, Name = "FishDataFarmer" };
             _thread.Start();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishFarmer] Started");
-        }
-
-        internal static void Stop()
-        {
-            Enabled = false;
-            _running = false;
-            // Drain pending queue items so the writer exits after its current action.
-            while (_writeQueue.TryTake(out _))
-                Interlocked.Decrement(ref _pendingCount);
         }
 
         /// <summary>
@@ -158,20 +153,7 @@ namespace Dark_Cloud_Improved_Version
             _fishingEnded = true;
         }
 
-        // Returns (baseIdx, secondHalf, peak) for a tod float.
-        // baseIdx: 0=Morning, 3=Afternoon, 6=Dusk, 9=Night.
-        // Peak = 0.2-unit window centered on the period midpoint, overlapping each half by 0.1.
-        private static (int baseIdx, bool secondHalf, bool peak) ClassifyTod(float t)
-        {
-            if (t >= 8.5f && t < 11.5f) // Morning, mid=10.0
-                return (Morning_H1, t >= 10.0f, t >= 9.9f && t < 10.1f);
-            if (t >= 5.5f && t < 8.5f)  // Night, mid=7.0
-                return (Night_H1, t >= 7.0f, t >= 6.9f && t < 7.1f);
-            if (t >= 2.5f && t < 5.5f)  // Dusk, mid=4.0
-                return (Dusk_H1, t >= 4.0f, t >= 3.9f && t < 4.1f);
-            // Afternoon (wraps 11.5→12→0→2.5), mid=1.0; second half is the non-wrapping segment
-            return (Afternoon_H1, t >= 1.0f && t < 2.5f, t >= 0.9f && t < 1.1f);
-        }
+        // ---- Survey recording ----
 
         /// <summary>
         /// Called once per session from Fishing.LogFishSession before the slot loop.
@@ -180,57 +162,64 @@ namespace Dark_Cloud_Improved_Version
         internal static void RecordSession(float todFloat)
         {
             if (!_running) return;
-            var (periodStart, secondHalf, peak) = ClassifyTod(todFloat);
-            _sessionBuckets[periodStart + (secondHalf ? 1 : 0)]++;
-            if (peak) _sessionBuckets[periodStart + 2]++;
+            TimeOfDay timeOfDay = Fishing.GetCurrentTimeOfDay(todFloat);
+            lock (_sessionBuckets) _sessionBuckets[timeOfDay]++;
         }
 
         /// <summary>
-        /// Called from Fishing.LogFishSession for every slot in each session.
+        /// Called from FishPhaseLogger for every slot in each session.
         /// Only records slots with a known fish ID; silently ignores Unknown entries.
         /// </summary>
-        internal static void RecordSlot(byte fishId, float todFloat, float size)
+        internal static void RecordSlot(byte fishId, float todFloat)
         {
             if (!_running) return;
             if (!FishDatabase.TryGetValue(fishId, out _)) return;
-
-            if (!_counts.TryGetValue(fishId, out int[] c))
+            TimeOfDay timeOfDay = Fishing.GetCurrentTimeOfDay(todFloat);
+            var todCounts = _counts.GetOrAdd(fishId, _ => new Dictionary<TimeOfDay, int>
             {
-                c = new int[12];
-                _counts[fishId] = c;
-            }
-            var (baseIdx, secondHalf, peak) = ClassifyTod(todFloat);
-            c[baseIdx + (secondHalf ? 1 : 0)]++;
-            if (peak) c[baseIdx + 2]++;
-
-            if (!_minSize.TryGetValue(fishId, out float cur) || size < cur)
-                _minSize[fishId] = size;
+                [TimeOfDay.Morning]   = 0,
+                [TimeOfDay.Afternoon] = 0,
+                [TimeOfDay.Dusk]      = 0,
+                [TimeOfDay.Night]     = 0,
+            });
+            lock (todCounts) todCounts[timeOfDay]++;
         }
 
+        /// <summary>
+        /// Returns a formatted summary of accumulated slot and session counts, suitable for UI display.
+        /// </summary>
         internal static string GetSurveyText()
         {
-            if (_counts.Count == 0) return "–";
-            var sb = new System.Text.StringBuilder();
-            int[] s = _sessionBuckets;
-            int mSess = s[Morning_H1]   + s[Morning_H2];
-            int aSess = s[Afternoon_H1] + s[Afternoon_H2];
-            int dSess = s[Dusk_H1]      + s[Dusk_H2];
-            int nSess = s[Night_H1]     + s[Night_H2];
-            sb.AppendLine($"M={mSess}(H1={s[Morning_H1]},H2={s[Morning_H2]},pk={s[Morning_Peak]}) A={aSess}(H1={s[Afternoon_H1]},H2={s[Afternoon_H2]},pk={s[Afternoon_Peak]})");
-            sb.AppendLine($"D={dSess}(H1={s[Dusk_H1]},H2={s[Dusk_H2]},pk={s[Dusk_Peak]}) N={nSess}(H1={s[Night_H1]},H2={s[Night_H2]},pk={s[Night_Peak]})");
-            sb.AppendLine("─────────────────────────────");
-            foreach (byte id in _counts.Keys.OrderBy(k => k))
+            if (_counts.IsEmpty) return "–";
+            var builder = new System.Text.StringBuilder();
+            int morningSessionCount, afternoonSessionCount, duskSessionCount, nightSessionCount;
+            lock (_sessionBuckets)
             {
-                int[] counts = _counts[id];
-                int morning   = counts[Morning_H1]   + counts[Morning_H2];
-                int afternoon = counts[Afternoon_H1] + counts[Afternoon_H2];
-                int dusk      = counts[Dusk_H1]      + counts[Dusk_H2];
-                int night     = counts[Night_H1]     + counts[Night_H2];
-                _minSize.TryGetValue(id, out float minSize);
-                sb.AppendLine($"{FishDatabase.GetName(id)}: {morning + afternoon + dusk + night}  min={(int)(minSize * 10)}cm  M={morning} A={afternoon} D={dusk} N={night}");
+                morningSessionCount   = _sessionBuckets[TimeOfDay.Morning];
+                afternoonSessionCount = _sessionBuckets[TimeOfDay.Afternoon];
+                duskSessionCount      = _sessionBuckets[TimeOfDay.Dusk];
+                nightSessionCount     = _sessionBuckets[TimeOfDay.Night];
             }
-            return sb.ToString().TrimEnd();
+            builder.AppendLine($"Sessions: M={morningSessionCount} A={afternoonSessionCount} D={duskSessionCount} N={nightSessionCount}");
+            builder.AppendLine("─────────────────────────────");
+            foreach (byte fishId in _counts.Keys.OrderBy(k => k))
+            {
+                if (!_counts.TryGetValue(fishId, out var todCounts)) continue;
+                int morning, afternoon, dusk, night;
+                lock (todCounts)
+                {
+                    morning   = todCounts[TimeOfDay.Morning];
+                    afternoon = todCounts[TimeOfDay.Afternoon];
+                    dusk      = todCounts[TimeOfDay.Dusk];
+                    night     = todCounts[TimeOfDay.Night];
+                }
+                int total = morning + afternoon + dusk + night;
+                builder.AppendLine($"{FishDatabase.GetName(fishId)}: {total}  M={morning} A={afternoon} D={dusk} N={night}");
+            }
+            return builder.ToString().TrimEnd();
         }
+
+        // ---- Farming loop ----
 
         private static void Run()
         {
@@ -292,7 +281,7 @@ namespace Dark_Cloud_Improved_Version
                 // Drain queue before the synchronous write-zero so no enqueued write fires after it.
                 while (_writeQueue.TryTake(out _))
                     Interlocked.Decrement(ref _pendingCount);
-                Memory.WriteIntFast(ButtonAddr, 0);
+                Memory.WriteIntFast(Addresses.buttonInputs, 0);
                 LogSurvey();
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishFarmer] Stopped");
             }
@@ -325,7 +314,7 @@ namespace Dark_Cloud_Improved_Version
 
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[FishFarmer] Queuing O (attempt {oAttempt}) → waiting for quit dialog");
-                Enqueue(Circle, holdMs: 50, gapMs: 0);
+                Enqueue((int)Button.Circle, holdMs: 50, gapMs: 0);
 
                 if (!WaitUntil(QuitDialogOpen, timeoutMs: 2000))
                     continue;
@@ -341,8 +330,8 @@ namespace Dark_Cloud_Improved_Version
                             "[FishFarmer] Quit dialog open → Down → X");
 
                     Thread.Sleep(200); // give dialog time to become interactive before pressing
-                    Enqueue(DPadDown, holdMs: 50, gapMs: 200);
-                    Enqueue(Cross,    holdMs: 50, gapMs: 0);
+                    Enqueue((int)Button.DPad_Down, holdMs: 50, gapMs: 200);
+                    Enqueue((int)Button.Cross,     holdMs: 50, gapMs: 0);
 
                     if (WaitUntil(() => _fishingEnded || InOverworld(), timeoutMs: 4000))
                     {
@@ -364,8 +353,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Queues TriggerIndex restore and X → X to interact with the fishing sign.
-        /// Waits up to 15 s for TownCharacter to signal the session started.
+        /// Queues X → X to interact with the fishing sign.
+        /// Waits up to 5 s for TownCharacter to signal the session started.
         /// </summary>
         private static void ReenterFishing()
         {
@@ -373,43 +362,20 @@ namespace Dark_Cloud_Improved_Version
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 "[FishFarmer] Queuing re-entry: X → X");
-            Enqueue(Cross, holdMs: 50, gapMs: 150); // interact with sign
-            Enqueue(Cross, holdMs: 50, gapMs: 150);   // confirm fishing
+            Enqueue((int)Button.Cross, holdMs: 50, gapMs: 150); // interact with sign
+            Enqueue((int)Button.Cross, holdMs: 50, gapMs: 150); // confirm fishing
 
             if (!WaitUntil(() => _sessionActive, timeoutMs: 5000))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     "[FishFarmer] Warning: session not signalled after re-entry");
         }
 
+        // ---- Utilities ----
+
         private static void LogSurvey()
         {
-            int[] s = _sessionBuckets;
-            int mSess = s[Morning_H1]   + s[Morning_H2];
-            int aSess = s[Afternoon_H1] + s[Afternoon_H2];
-            int dSess = s[Dusk_H1]      + s[Dusk_H2];
-            int nSess = s[Night_H1]     + s[Night_H2];
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[FishSurvey] {_sessionCount} sessions  " +
-                $"M={mSess}(H1={s[Morning_H1]},H2={s[Morning_H2]},pk={s[Morning_Peak]}) " +
-                $"A={aSess}(H1={s[Afternoon_H1]},H2={s[Afternoon_H2]},pk={s[Afternoon_Peak]}) " +
-                $"D={dSess}(H1={s[Dusk_H1]},H2={s[Dusk_H2]},pk={s[Dusk_Peak]}) " +
-                $"N={nSess}(H1={s[Night_H1]},H2={s[Night_H2]},pk={s[Night_Peak]})");
-            foreach (byte id in _counts.Keys.OrderBy(k => k))
-            {
-                int[] counts  = _counts[id];
-                int morning   = counts[Morning_H1]   + counts[Morning_H2];
-                int afternoon = counts[Afternoon_H1] + counts[Afternoon_H2];
-                int dusk      = counts[Dusk_H1]      + counts[Dusk_H2];
-                int night     = counts[Night_H1]     + counts[Night_H2];
-                _minSize.TryGetValue(id, out float minSize);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[FishSurvey] {FishDatabase.GetName(id)}(id={id}) " +
-                    $"M={morning}(H1={counts[Morning_H1]},H2={counts[Morning_H2]},pk={counts[Morning_Peak]}) " +
-                    $"A={afternoon}(H1={counts[Afternoon_H1]},H2={counts[Afternoon_H2]},pk={counts[Afternoon_Peak]}) " +
-                    $"D={dusk}(H1={counts[Dusk_H1]},H2={counts[Dusk_H2]},pk={counts[Dusk_Peak]}) " +
-                    $"N={night}(H1={counts[Night_H1]},H2={counts[Night_H2]},pk={counts[Night_Peak]}) " +
-                    $"total={morning + afternoon + dusk + night} minSize={minSize:F4}({(int)(minSize * 10)}cm)");
-            }
+                $"[FishSurvey] {_sessionCount} sessions\n{GetSurveyText()}");
         }
 
         private static bool WaitUntil(Func<bool> condition, int timeoutMs)

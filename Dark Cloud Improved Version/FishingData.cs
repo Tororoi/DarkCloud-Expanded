@@ -423,13 +423,13 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Looks up a fish by its numeric ID. Returns false if the species has no confirmed data entry.
         /// </summary>
-        internal static bool TryGetValue(byte id, out FishData data) => ById.TryGetValue(id, out data);
+        internal static bool TryGetValue(byte fishId, out FishData data) => ById.TryGetValue(fishId, out data);
 
         /// <summary>
         /// Returns the display name for a fish ID, or <c>"Unknown(N)"</c> if the ID has no entry.
         /// </summary>
-        internal static string GetName(byte id) =>
-            TryGetValue(id, out FishData fish) ? fish.Name : $"Unknown({id})";
+        internal static string GetName(byte fishId) =>
+            TryGetValue(fishId, out FishData fish) ? fish.Name : $"Unknown({fishId})";
     }
 
     /// <summary>
@@ -615,9 +615,9 @@ namespace Dark_Cloud_Improved_Version
         {
             int pick = Fishing.Rng.Next(4);
             int i = 0;
-            byte last = 0;
-            foreach (byte id in weights.Keys) { if (i++ == pick) return id; last = id; }
-            return last;
+            byte lastFishId = 0;
+            foreach (byte fishId in weights.Keys) { if (i++ == pick) return fishId; lastFishId = fishId; }
+            return lastFishId;
         }
 
         // VA 0x001A8BD4: random % 3; outcomes 0/1/2 each map to one fish.
@@ -625,9 +625,9 @@ namespace Dark_Cloud_Improved_Version
         {
             int pick = Fishing.Rng.Next(3);
             int i = 0;
-            byte last = 0;
-            foreach (byte id in weights.Keys) { if (i++ == pick) return id; last = id; }
-            return last;
+            byte lastFishId = 0;
+            foreach (byte fishId in weights.Keys) { if (i++ == pick) return fishId; lastFishId = fishId; }
+            return lastFishId;
         }
 
         // VA 0x001A8B00+: random % 100 checked against sequential cumulative thresholds.
@@ -635,14 +635,14 @@ namespace Dark_Cloud_Improved_Version
         {
             int roll = Fishing.Rng.Next(100);
             float cumulative = 0f;
-            byte last = 0;
-            foreach (var kvp in weights)
+            byte lastFishId = 0;
+            foreach (var weightEntry in weights)
             {
-                cumulative += kvp.Value * 100f;
-                if (roll < cumulative) return kvp.Key;
-                last = kvp.Key;
+                cumulative += weightEntry.Value * 100f;
+                if (roll < cumulative) return weightEntry.Key;
+                lastFishId = weightEntry.Key;
             }
-            return last;
+            return lastFishId;
         }
 
         // Rare-fish pre-check wrapper (Matataki Waterfall and Muska Lacka Oasis).
