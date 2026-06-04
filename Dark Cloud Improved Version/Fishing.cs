@@ -130,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
             for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
             {
                 if (Memory.ReadByte(slotAddr) == 255 && !fishCaught[slotIndex] &&
-                    Memory.ReadByte(FishingState.FishCatchConfirmAddr) == FishingState.FishCatchConfirm_Active)
+                    Memory.ReadByte(FishingAddresses.FishCatchConfirm) == FishingState.FishCatchConfirm_Active)
                 {
                     fishCaught[slotIndex] = true;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -196,7 +196,7 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="caughtFishId">Fish ID of the species that was just caught.</param>
         internal static void FishAcquiredFlag(byte caughtFishId)
         {
-            Memory.WriteByte(FishingState.AcquiredFlagsBase + caughtFishId, 1);
+            Memory.WriteByte(FishingAddresses.AcquiredFlagsBase + caughtFishId, 1);
         }
 
         // ---- Slot initialization ----
@@ -483,7 +483,7 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
                 Memory.WriteInt(slotBase + slotIndex * FishSlotOffsets.Stride + FishSlotOffsets.AiState,
-                    FishingState.FishAiState_Approaching);
+                    FishSlotState.AiState_Approaching);
         }
 
         // ---- Bait ----
@@ -509,7 +509,7 @@ namespace Dark_Cloud_Improved_Version
         internal static int GetCurrentBaitId()
         {
             // Read as ushort: this address doubles as a cast-event register (0xFFFF = no active cast).
-            ushort baitSlotRaw = Memory.ReadUShort(FishingState.OverworldStateAddr);
+            ushort baitSlotRaw = Memory.ReadUShort(FishingAddresses.OverworldState);
             if (baitSlotRaw == _lastBaitSlot) return _cachedBaitId;
             _lastBaitSlot = baitSlotRaw;
             // 0xFFFF means the cast-event register cleared — bait may still be in water, so keep the

@@ -1,42 +1,42 @@
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Addresses and state values for the fishing-related state machines.
+    /// EE RAM addresses for the fishing-related state machines.
     /// </summary>
-    internal static class FishingState
+    internal static class FishingAddresses
     {
-        // Addresses
-        internal const int ActiveAddr         = 0x21D19714; // 0 = not fishing, 1 = session active
+        internal const int Active            = 0x21D19714; // 0 = not fishing, 1 = session active
         /// <summary>
         /// Index of the fishing trigger NPC/object that activated the current fishing session,
         /// within the area's object table. Set when townMode transitions to 16 (fishing).
         /// Used to distinguish sub-spots that share the same area ID.
         /// Confirmed values: Norune=4, PeanutPond=11, MatatakiWaterfall=13, Queens=-1 (unset), Muska Lacka=5.
         /// </summary>
-        internal const int TriggerIndexAddr   = 0x202A1F64;
-        internal const int FishCatchConfirmAddr = 0x202A26E8; // byte; checked after slot clears (0xFF) to confirm fish was actually landed
-        internal const int OverworldStateAddr = 0x21D19708; // overworld / dialog state machine
-        internal const int PhaseAddr          = 0x21D33E28; // fishing phase state machine
-        internal const int AcquiredFlagsBase  = 0x21CE4439; // 18 bytes, one per fish species ID (0–17)
+        internal const int TriggerIndex      = 0x202A1F64;
+        internal const int FishCatchConfirm  = 0x202A26E8; // byte; checked after slot clears (0xFF) to confirm fish was actually landed
+        internal const int OverworldState    = 0x21D19708; // overworld / dialog state machine
+        internal const int WalkSpeed         = 0x21D33E20; // Toan walking speed while fishing
+        internal const int CastAnimGate      = 0x21D33E24; // 2 during cast/uncast animations; may gate player inputs
+        internal const int Phase             = 0x21D33E28; // fishing phase state machine
+        internal const int AcquiredFlagsBase = 0x21CE4439; // 18 bytes, one per fish species ID (0–17)
+    }
 
-        // FishCatchConfirmAddr values — read by game after rod pull to confirm catch and trigger success dialog; not a general-purpose state machine
+    /// <summary>
+    /// State values for the fishing-related state machines.
+    /// </summary>
+    internal static class FishingState
+    {
+        // FishingAddresses.FishCatchConfirm values — read by game after rod pull to confirm catch and trigger success dialog; not a general-purpose state machine
         internal const int FishCatchConfirm_Active = 12;
 
-        // OverworldStateAddr state values
+        // FishingAddresses.OverworldState values
+        internal const int OverworldState_Fishing     = unchecked((int)0xFFFFFFFF); // default while fishing (cast out, no dialog)
         internal const int OverworldState_QuitDialog  = 0x00000085; // "Continue fishing" / "Quit fishing" dialog
         internal const int OverworldState_BaitScreen  = 0x00000086; // bait selection screen open
         internal const int OverworldState_Overworld   = 0x0000000C; // back in overworld
 
-        // FishSlotOffsets.AiState values — confirmed via phase logger datamining
-        internal const int FishAiState_Dormant     = unchecked((int)0xFFFFFFFF); // not participating this cast; fish far from hook
-        internal const int FishAiState_Approaching = 6;  // swimming toward the hook at slow speed (~0.1)
-        internal const int FishAiState_Nibbling    = 7;  // arrived at hook, stationary, nibbling bait
-        internal const int FishAiState_Unk08       = 8;  // observed briefly during approach before going dormant; purpose unknown
-        internal const int FishAiState_Patrolling  = 9;  // fast patrol movement (>0.3 spd), farther from hook
-        internal const int FishAiState_Hooked      = 11; // fish is on the hook, being reeled in
-
-        // PhaseAddr state values
-        internal const int Phase_Idle          = 0x00000000; // default/idle phase; bait screen is OverworldStateAddr=OverworldState_BaitScreen
+        // FishingAddresses.Phase values
+        internal const int Phase_Idle          = 0x00000000; // default/idle phase; bait screen is FishingAddresses.OverworldState = OverworldState_BaitScreen
         internal const int Phase_Walking       = 0x00000002;
         internal const int Phase_Casting       = 0x00000004;
         internal const int Phase_HookInWater   = 0x00000005;
@@ -228,7 +228,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int BaitAffPetitefish      = 0x048;
 
         // ---- AI behavior state ----
-        internal const int AiState             = 0x050;  // int; current behavior (see FishingState.FishAiState_*)
+        internal const int AiState             = 0x050;  // int; current behavior (see FishSlotState.AiState_*)
         internal const int Unk054              = 0x054;  // unknown
         internal const int AiStateTimer        = 0x058;  // uint; read-only — countdown managed by game state machine; underflows to 0xFFFFFFFF to trigger transition
 
@@ -261,5 +261,18 @@ namespace Dark_Cloud_Improved_Version
         internal const int Unk150              = 0x150;  // float; purpose unknown
         internal const int Unk154              = 0x154;  // float; purpose unknown
         internal const int Unk158              = 0x158;  // float; purpose unknown
+    }
+
+    /// <summary>
+    /// State values for <see cref="FishSlotOffsets.AiState"/>. Confirmed via phase logger datamining.
+    /// </summary>
+    internal static class FishSlotState
+    {
+        internal const int AiState_Dormant     = unchecked((int)0xFFFFFFFF); // not participating this cast; fish far from hook
+        internal const int AiState_Approaching = 6;  // swimming toward the hook at slow speed (~0.1)
+        internal const int AiState_Nibbling    = 7;  // arrived at hook, stationary, nibbling bait
+        internal const int AiState_Unk08       = 8;  // observed briefly during approach before going dormant; purpose unknown
+        internal const int AiState_Patrolling  = 9;  // fast patrol movement (>0.3 spd), farther from hook
+        internal const int AiState_Hooked      = 11; // fish is on the hook, being reeled in
     }
 }

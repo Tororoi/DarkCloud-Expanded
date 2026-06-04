@@ -917,13 +917,12 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Fishing.InitFishingSession(ResolveFishingSpot(currentArea));
 
-                        // Probe addresses around FishingState.ActiveAddr to discover fishing sub-states.
-                        // Logs only when any value changes so output stays manageable.
-                        int p0 = Memory.ReadInt(0x21D19708); // baitSlot / state (FFFF=bait, 85=quit dialog, 0C=overworld)
-                        int p1 = Memory.ReadInt(0x21D19714); // FishingState word
-                        int p2 = Memory.ReadInt(0x21D33E20); // walking speed during fishing
-                        int p3 = Memory.ReadInt(0x21D33E24); // 2 during cast/uncast animations (may gate inputs)
-                        int p4 = Memory.ReadInt(0x21D33E28); // fishing phase (0=bait screen, 2=walking, 4=casting, 5=hook in water, 7=uncasting, 9=throw back, A=pulling out, C=reeling in, D=dragging hook)
+                        // Probe fishing sub-state addresses. Logs only when any value changes so output stays manageable.
+                        int p0 = Memory.ReadInt(FishingAddresses.OverworldState);
+                        int p1 = Memory.ReadInt(FishingAddresses.Active);
+                        int p2 = Memory.ReadInt(FishingAddresses.WalkSpeed);
+                        int p3 = Memory.ReadInt(FishingAddresses.CastAnimGate);
+                        int p4 = Memory.ReadInt(FishingAddresses.Phase);
                         if (p0 != FishProbe[0] || p1 != FishProbe[1] || p2 != FishProbe[2] ||
                             p3 != FishProbe[3] || p4 != FishProbe[4])
                         {
@@ -1498,22 +1497,8 @@ namespace Dark_Cloud_Improved_Version
         }
         // Matataki Waterfall and Peanut Pond both have game area ID 1.
         // Resolved via player Y position: Waterfall ≈ Y=720, Peanut Pond ≈ Y=-1103. Split at Y=0.
-        private static string FormatButtons(int mask)
-        {
-            if (mask == 0) return "none";
-            var parts = new System.Collections.Generic.List<string>();
-            (int bit, string name)[] map =
-            {
-                (0x0001, "L2"), (0x0002, "R2"), (0x0004, "L1"), (0x0008, "R1"),
-                (0x0010, "Triangle"), (0x0020, "Circle"), (0x0040, "Cross"), (0x0080, "Square"),
-                (0x0100, "Select"), (0x0200, "L3"), (0x0400, "R3"), (0x0800, "Start"),
-                (0x1000, "DPadUp"), (0x2000, "DPadRight"), (0x4000, "DPadDown"), (0x8000, "DPadLeft"),
-            };
-            foreach (var (bit, name) in map)
-                if ((mask & bit) != 0) { parts.Add(name); mask &= ~bit; }
-            if (mask != 0) parts.Add($"0x{mask:X}");
-            return string.Join("+", parts);
-        }
+        private static string FormatButtons(int mask) =>
+            mask == 0 ? "none" : ((Button)(ushort)mask).ToString();
 
         private static int ResolveFishingSpot(int areaId)
         {

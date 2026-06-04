@@ -22,8 +22,8 @@ namespace Dark_Cloud_Improved_Version
         // Set by OnSessionEnded (TownCharacter's thread) when FishingState drops to 0.
         private static volatile bool _fishingEnded = false;
 
-        private static bool QuitDialogOpen() => Memory.ReadInt(FishingState.OverworldStateAddr) == FishingState.OverworldState_QuitDialog;
-        private static bool InOverworld()    => Memory.ReadInt(FishingState.OverworldStateAddr) == FishingState.OverworldState_Overworld;
+        private static bool QuitDialogOpen() => Memory.ReadInt(FishingAddresses.OverworldState) == FishingState.OverworldState_QuitDialog;
+        private static bool InOverworld()    => Memory.ReadInt(FishingAddresses.OverworldState) == FishingState.OverworldState_Overworld;
 
         // Survey data — accumulated for the lifetime of the run, reset on each Start().
         // Slot counts: fishId → per-TimeOfDay counts keyed by TimeOfDay
@@ -239,7 +239,7 @@ namespace Dark_Cloud_Improved_Version
                         // No signal after 10 s. Check state: if still in fishing (e.g. O was
                         // delivered too late and auto-cast fired), force an exit first.
                         if (!_running) break;
-                        if (Memory.ReadByte(FishingState.ActiveAddr) == 1)
+                        if (Memory.ReadByte(FishingAddresses.Active) == 1)
                             ExitFishing();
                         ReenterFishing();
                         continue;
@@ -256,7 +256,7 @@ namespace Dark_Cloud_Improved_Version
 
                     // If ExitFishing's two-attempt recovery still couldn't get out of fishing,
                     // stop rather than send re-entry X presses into the bait screen.
-                    if (Memory.ReadByte(FishingState.ActiveAddr) == 1)
+                    if (Memory.ReadByte(FishingAddresses.Active) == 1)
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             "[FishFarmer] Could not exit fishing — stopping to prevent unwanted cast");

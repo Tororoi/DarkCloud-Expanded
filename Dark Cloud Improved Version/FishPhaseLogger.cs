@@ -106,7 +106,7 @@ namespace Dark_Cloud_Improved_Version
 
             while (_running)
             {
-                int phase = Memory.ReadInt(FishingState.PhaseAddr);
+                int phase = Memory.ReadInt(FishingAddresses.Phase);
 
                 if (phase != lastPhase)
                 {
@@ -160,7 +160,7 @@ namespace Dark_Cloud_Improved_Version
                         string g0BC  = ReadHex(slotAddr, 0x0BC, 8);
 
                         // Heading stability tracking
-                        if (aiState == FishingState.FishAiState_Approaching && !float.IsNaN(prevHdg[i]))
+                        if (aiState == FishSlotState.AiState_Approaching && !float.IsNaN(prevHdg[i]))
                         {
                             if (Math.Abs(heading - prevHdg[i]) < 0.02f)
                             {
@@ -182,11 +182,11 @@ namespace Dark_Cloud_Improved_Version
                                 stableFrames[i] = 0;
                             }
                         }
-                        else if (aiState != FishingState.FishAiState_Approaching)
+                        else if (aiState != FishSlotState.AiState_Approaching)
                         {
                             stableFrames[i] = 0;
                         }
-                        prevHdg[i] = aiState == FishingState.FishAiState_Approaching ? heading : float.NaN;
+                        prevHdg[i] = aiState == FishSlotState.AiState_Approaching ? heading : float.NaN;
 
                         if (aiState != lastAiState[i])
                         {
@@ -197,15 +197,15 @@ namespace Dark_Cloud_Improved_Version
                             // Requires another slot to already be approaching/nibbling so the hook
                             // position is established — avoids reading AiTarget at the same frame
                             // the game writes it (which may not yet be stable).
-                            if (aiState == FishingState.FishAiState_Approaching
-                             && lastAiState[i] != FishingState.FishAiState_Approaching
+                            if (aiState == FishSlotState.AiState_Approaching
+                             && lastAiState[i] != FishSlotState.AiState_Approaching
                              && lastAiState[i] != -2)
                             {
                                 int refSlot = -1;
                                 for (int j = 0; j < _slotCount; j++)
                                 {
-                                    if (j != i && (lastAiState[j] == FishingState.FishAiState_Approaching
-                                                || lastAiState[j] == FishingState.FishAiState_Nibbling))
+                                    if (j != i && (lastAiState[j] == FishSlotState.AiState_Approaching
+                                                || lastAiState[j] == FishSlotState.AiState_Nibbling))
                                     { refSlot = j; break; }
                                 }
                                 if (refSlot >= 0)
