@@ -120,10 +120,13 @@ namespace Dark_Cloud_Improved_Version
     internal readonly struct BaitTableEntry
     {
         /// <summary>EE RAM address of the float notice-radius field.</summary>
-        internal readonly int Radius;
+        internal readonly int   Radius;
         /// <summary>EE RAM address of the uint32 item-ID field (always Radius + 4).</summary>
-        internal readonly int Id;
-        internal BaitTableEntry(int radiusAddr) { Radius = radiusAddr; Id = radiusAddr + 4; }
+        internal readonly int   Id;
+        /// <summary>Original game value. Stored here because writes to EE RAM persist and the
+        /// table is not restored on re-entry, so we can't read back the default.</summary>
+        internal readonly float DefaultRadius;
+        internal BaitTableEntry(int radiusAddr, float defaultRadius) { Radius = radiusAddr; Id = radiusAddr + 4; DefaultRadius = defaultRadius; }
     }
 
     /// <summary>
@@ -139,20 +142,20 @@ namespace Dark_Cloud_Improved_Version
         internal const int TableBase = 0x2026AE8C;
         internal const int Stride    = 8;
 
-        internal static readonly BaitTableEntry Evy             = new BaitTableEntry(0x2026AE8C); // default 128.0f, id=193
-        internal static readonly BaitTableEntry Mimi            = new BaitTableEntry(0x2026AE94); // default  50.0f, id=197
-        internal static readonly BaitTableEntry Prickly         = new BaitTableEntry(0x2026AE9C); // default  25.0f, id=199
-        internal static readonly BaitTableEntry ThrobbingCherry = new BaitTableEntry(0x2026AEA4); // default  25.0f, id=166
-        internal static readonly BaitTableEntry Gooeypeach      = new BaitTableEntry(0x2026AEAC); // default  25.0f, id=167
-        internal static readonly BaitTableEntry Bombnuts        = new BaitTableEntry(0x2026AEB4); // default  25.0f, id=168
-        internal static readonly BaitTableEntry PoisonousApple  = new BaitTableEntry(0x2026AEBC); // default  25.0f, id=169
-        internal static readonly BaitTableEntry MellowBanana    = new BaitTableEntry(0x2026AEC4); // default  25.0f, id=170
-        internal static readonly BaitTableEntry Carrot          = new BaitTableEntry(0x2026AECC); // default  25.0f, id=186
-        internal static readonly BaitTableEntry PotatoCake      = new BaitTableEntry(0x2026AED4); // default  25.0f, id=187
-        internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEDC); // default  25.0f, id=188
-        internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE4); // default  25.0f, id=189
-        internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEEC); // default  25.0f, id=190
-        internal static readonly BaitTableEntry Unknown14       = new BaitTableEntry(0x2026AEF4); // default  40.0f, id=0 — purpose unknown
+        internal static readonly BaitTableEntry Evy             = new BaitTableEntry(0x2026AE8C, 128.0f); // id=193
+        internal static readonly BaitTableEntry Mimi            = new BaitTableEntry(0x2026AE94,  50.0f); // id=197
+        internal static readonly BaitTableEntry Prickly         = new BaitTableEntry(0x2026AE9C,  25.0f); // id=199
+        internal static readonly BaitTableEntry ThrobbingCherry = new BaitTableEntry(0x2026AEA4,  25.0f); // id=166
+        internal static readonly BaitTableEntry Gooeypeach      = new BaitTableEntry(0x2026AEAC,  25.0f); // id=167
+        internal static readonly BaitTableEntry Bombnuts        = new BaitTableEntry(0x2026AEB4,  25.0f); // id=168
+        internal static readonly BaitTableEntry PoisonousApple  = new BaitTableEntry(0x2026AEBC,  25.0f); // id=169
+        internal static readonly BaitTableEntry MellowBanana    = new BaitTableEntry(0x2026AEC4,  25.0f); // id=170
+        internal static readonly BaitTableEntry Carrot          = new BaitTableEntry(0x2026AECC,  25.0f); // id=186
+        internal static readonly BaitTableEntry PotatoCake      = new BaitTableEntry(0x2026AED4,  25.0f); // id=187
+        internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEDC,  25.0f); // id=188
+        internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE4,  25.0f); // id=189
+        internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEEC,  25.0f); // id=190
+        internal static readonly BaitTableEntry Unknown14       = new BaitTableEntry(0x2026AEF4,  40.0f); // id=0 — purpose unknown
     }
 
     /// <summary>

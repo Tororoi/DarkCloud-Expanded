@@ -98,6 +98,7 @@ namespace Dark_Cloud_Improved_Version
                     slotAddr += Addresses.fishSlotStride;
                     fishCaught[slotIndex] = false;
                 }
+
                 if (Memory.ReadByte(areaData.QuestBase) == 1)
                 {
                     questActive[areaData.QuestBase] = true;
@@ -438,6 +439,59 @@ namespace Dark_Cloud_Improved_Version
                              fish.BaseFp ?? 0, fish.MaxFp ?? 0);
 
         // ---- End game formula simulations ----
+
+        // ---- Bait notice-radius writes ----
+
+        /// <summary>
+        /// Writes a scaled notice radius for <paramref name="bait"/> into the EE RAM table.
+        /// Multiplies <see cref="BaitTableEntry.DefaultRadius"/> rather than reading the current
+        /// in-RAM value, because previous writes persist across re-entries and the game never
+        /// restores the table from ROM at runtime.
+        /// </summary>
+        internal static void SetBaitNoticeRadius(BaitTableEntry bait, float multiplier)
+        {
+            Memory.WriteFloat(bait.Radius, bait.DefaultRadius * multiplier);
+        }
+
+        // ---- End bait notice-radius writes ----
+
+        // ---- Fish model pointer writes ----
+        // The model pointer array may or may not be restored by the game on area reload, so the
+        // original pointer is snapshotted lazily on the first redirect and used for restore.
+
+        private static readonly int[] _originalModelPointers = new int[FishModelTable.Count];
+        private static readonly bool[] _modelPointerCached   = new bool[FishModelTable.Count];
+
+        /// <summary>
+        /// Redirects the model table pointer for <paramref name="fishId"/> to the shared shadow model.
+        /// Snapshots the original pointer the first time it is called for a given ID so
+        /// <see cref="RestoreFishModel"/> can recover it without a live read.
+        /// </summary>
+        internal static void SetFishModelToShadow(byte fishId)
+        {
+            int ptrAddr = FishModelTable.PointerAddrForId(fishId);
+            if (ptrAddr == -1) return;
+            if (!_modelPointerCached[fishId])
+            {
+                _originalModelPointers[fishId] = Memory.ReadInt(ptrAddr);
+                _modelPointerCached[fishId]    = true;
+            }
+            Memory.WriteInt(ptrAddr, (int)(FishShadowModel.EeRamStringAddr - FishModelTable.PtrBias));
+        }
+
+        /// <summary>
+        /// Restores the model table pointer for <paramref name="fishId"/> to the value snapshotted
+        /// by the first call to <see cref="SetFishModelToShadow"/> for that ID.
+        /// No-ops if the pointer was never redirected in this session.
+        /// </summary>
+        internal static void RestoreFishModel(byte fishId)
+        {
+            int ptrAddr = FishModelTable.PointerAddrForId(fishId);
+            if (ptrAddr == -1 || !_modelPointerCached[fishId]) return;
+            Memory.WriteInt(ptrAddr, _originalModelPointers[fishId]);
+        }
+
+        // ---- End fish model pointer writes ----
 
         /// <summary>
         /// Writes <c>0xFF</c> to the fish ID byte of each selected slot, marking it as caught/empty.
