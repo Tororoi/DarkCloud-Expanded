@@ -917,7 +917,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Fishing.InitFishingSession(ResolveFishingSpot(currentArea));
 
-                        // Probe addresses around FishingStateAddr to discover fishing sub-states.
+                        // Probe addresses around FishingState.ActiveAddr to discover fishing sub-states.
                         // Logs only when any value changes so output stays manageable.
                         int p0 = Memory.ReadInt(0x21D19708); // baitSlot / state (FFFF=bait, 85=quit dialog, 0C=overworld)
                         int p1 = Memory.ReadInt(0x21D19714); // FishingState word

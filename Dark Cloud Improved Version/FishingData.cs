@@ -23,14 +23,14 @@ namespace Dark_Cloud_Improved_Version
         internal float? MaxSize;             // +0x00C; ×10 = display cm. Max size cap and FP upper-bound anchor.
         internal int?   BaseFp;              // +0x010; FP reward at exactly base size (Size = BaseSize); scales proportionally for smaller fish.
         internal int?   MaxFp;              // +0x014; FP reward at maximum size (Size = MaxSize).
-        internal float? MinSize;            // +0x000; 0.5 × BaseSize — the size floor enforced by ELF slot init (0x00240D60)
+        internal float? MinSize;            // 0.5 × BaseSize — the size floor enforced by ELF slot init (0x00240D60); not stored in slot
         // Bait affinity table (+0x018–+0x048): 13 floats, 4 bytes each.
         // 0.0 = never bites; 1.0 = normal; No observed values above 1.0 and setting a high value does not appear to increase catch rate, so values above 1.0 may be clamped in the game code.
         internal float? BaitAffEvy;
         internal float? BaitAffMimi;
         internal float? BaitAffPrickly;
         internal float? BaitAffThrobbingCherry;
-        internal float? BaitAffGooeypeach;
+        internal float? BaitAffGooeyPeach;
         internal float? BaitAffBombnuts;
         internal float? BaitAffPoisonousApple;
         internal float? BaitAffMellowBanana;
@@ -70,7 +70,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int BaitAffMimi            = 0x01C;
         internal const int BaitAffPrickly         = 0x020;
         internal const int BaitAffThrobbingCherry = 0x024;
-        internal const int BaitAffGooeypeach      = 0x028;
+        internal const int BaitAffGooeyPeach      = 0x028;
         internal const int BaitAffBombnuts        = 0x02C;
         internal const int BaitAffPoisonousApple  = 0x030;
         internal const int BaitAffMellowBanana    = 0x034;
@@ -87,8 +87,8 @@ namespace Dark_Cloud_Improved_Version
 
         // ---- Size and render scale ----
         internal const int Size                = 0x060;  // float; ×10 = display cm
-        internal const int ScaleModel              = 0x064;  // float; Size / ScaleDivisor (ELF 0x00240D60)
-        internal const int ScaleFixed              = 0x068;  // float; Size / 25.0 (ELF 0x00240D60; constant divisor)
+        internal const int ScaleModel          = 0x064;  // float; Size / ScaleDivisor (ELF 0x00240D60)
+        internal const int ScaleFixed          = 0x068;  // float; Size / 25.0 (ELF 0x00240D60; constant divisor)
 
         // ---- Movement ----
         internal const int Heading             = 0x074;  // float; current facing angle (radians)
@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly BaitTableEntry Mimi            = new BaitTableEntry(0x2026AE94,  50.0f); // id=197
         internal static readonly BaitTableEntry Prickly         = new BaitTableEntry(0x2026AE9C,  25.0f); // id=199
         internal static readonly BaitTableEntry ThrobbingCherry = new BaitTableEntry(0x2026AEA4,  25.0f); // id=166
-        internal static readonly BaitTableEntry Gooeypeach      = new BaitTableEntry(0x2026AEAC,  25.0f); // id=167
+        internal static readonly BaitTableEntry GooeyPeach      = new BaitTableEntry(0x2026AEAC,  25.0f); // id=167
         internal static readonly BaitTableEntry Bombnuts        = new BaitTableEntry(0x2026AEB4,  25.0f); // id=168
         internal static readonly BaitTableEntry PoisonousApple  = new BaitTableEntry(0x2026AEBC,  25.0f); // id=169
         internal static readonly BaitTableEntry MellowBanana    = new BaitTableEntry(0x2026AEC4,  25.0f); // id=170
@@ -184,7 +184,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int BaitAffMimi            = 0x18;
         internal const int BaitAffPrickly         = 0x1C;
         internal const int BaitAffThrobbingCherry = 0x20;
-        internal const int BaitAffGooeypeach      = 0x24;
+        internal const int BaitAffGooeyPeach      = 0x24;
         internal const int BaitAffBombnuts        = 0x28;
         internal const int BaitAffPoisonousApple  = 0x2C;
         internal const int BaitAffMellowBanana    = 0x30;
@@ -249,15 +249,15 @@ namespace Dark_Cloud_Improved_Version
     internal static class FishingState
     {
         // Addresses
-        internal const int FishingStateAddr  = 0x21D19714; // 0 = not fishing, 1 = session active
+        internal const int ActiveAddr         = 0x21D19714; // 0 = not fishing, 1 = session active
         internal const int TriggerIndexAddr  = 0x202A1F64; // game writes active fishing trigger here; not reliable for area identification
-        internal const int Addr708           = 0x21D19708; // overworld / dialog state machine
+        internal const int OverworldStateAddr = 0x21D19708; // overworld / dialog state machine
         internal const int PhaseAddr         = 0x21D33E28; // fishing phase state machine
 
-        // Addr708 state values
-        internal const int State708_QuitDialog  = 0x00000085; // "Continue fishing" / "Quit fishing" dialog
-        internal const int State708_BaitScreen  = 0x00000086; // bait selection screen open
-        internal const int State708_Overworld   = 0x0000000C; // back in overworld
+        // OverworldStateAddr state values
+        internal const int OverworldState_QuitDialog  = 0x00000085; // "Continue fishing" / "Quit fishing" dialog
+        internal const int OverworldState_BaitScreen  = 0x00000086; // bait selection screen open
+        internal const int OverworldState_Overworld   = 0x0000000C; // back in overworld
 
         // FishSlotOffsets.AiState values — confirmed via phase logger datamining
         internal const int FishAiState_Dormant     = unchecked((int)0xFFFFFFFF); // not participating this cast; fish far from hook
@@ -268,7 +268,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int FishAiState_Hooked      = 11; // fish is on the hook, being reeled in
 
         // PhaseAddr state values
-        internal const int Phase_Idle          = 0x00000000; // default/idle phase; bait screen is Addr708=State708_BaitScreen
+        internal const int Phase_Idle          = 0x00000000; // default/idle phase; bait screen is OverworldStateAddr=OverworldState_BaitScreen
         internal const int Phase_Walking       = 0x00000002;
         internal const int Phase_Casting       = 0x00000004;
         internal const int Phase_HookInWater   = 0x00000005;
@@ -299,7 +299,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -319,7 +319,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -339,7 +339,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -359,7 +359,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -379,7 +379,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -399,7 +399,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.0f,
-            BaitAffGooeypeach      = 0.0f,
+            BaitAffGooeyPeach      = 0.0f,
             BaitAffBombnuts        = 0.0f,
             BaitAffPoisonousApple  = 1.0f,
             BaitAffMellowBanana    = 0.0f,
@@ -419,7 +419,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 1.0f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -439,7 +439,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 1.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -459,7 +459,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.0f,
-            BaitAffGooeypeach      = 0.0f,
+            BaitAffGooeyPeach      = 0.0f,
             BaitAffBombnuts        = 0.0f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.0f,
@@ -479,7 +479,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.0f,
-            BaitAffGooeypeach      = 0.0f,
+            BaitAffGooeyPeach      = 0.0f,
             BaitAffBombnuts        = 0.0f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.0f,
@@ -499,7 +499,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -519,7 +519,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -539,7 +539,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.5f,
             BaitAffPrickly         = 0.5f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -559,7 +559,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -579,7 +579,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -599,7 +599,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -619,7 +619,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.2f,
-            BaitAffGooeypeach      = 0.2f,
+            BaitAffGooeyPeach      = 0.2f,
             BaitAffBombnuts        = 0.2f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.2f,
@@ -639,7 +639,7 @@ namespace Dark_Cloud_Improved_Version
             BaitAffMimi            = 0.0f,
             BaitAffPrickly         = 0.0f,
             BaitAffThrobbingCherry = 0.0f,
-            BaitAffGooeypeach      = 0.0f,
+            BaitAffGooeyPeach      = 0.0f,
             BaitAffBombnuts        = 0.0f,
             BaitAffPoisonousApple  = 0.0f,
             BaitAffMellowBanana    = 0.0f,
@@ -655,9 +655,9 @@ namespace Dark_Cloud_Improved_Version
         static FishDatabase()
         {
             FishData[] allFish = {
-                Bobo, Gobbler, Nonky, Kaiji, BakuBaku, Gummy, Niler, MissingFish,
-                Umadakara, Tarton, Piccoly, Bon, Hamahama, Negie, Den, Heela,
-                MardanGarayan, BaronGarayan,
+                Bobo, Gobbler, Nonky, Kaiji, BakuBaku, MardanGarayan, Gummy, Niler,
+                MissingFish, Umadakara, Tarton, Piccoly, Bon, Hamahama, Negie, Den,
+                Heela, BaronGarayan,
             };
             ById = new Dictionary<byte, FishData>(allFish.Length);
             foreach (FishData fish in allFish) ById[fish.Id] = fish;

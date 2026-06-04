@@ -354,7 +354,7 @@ namespace Dark_Cloud_Improved_Version
                 float affMimi     = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMimi);
                 float affPrickly  = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPrickly);
                 float affCherry   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffThrobbingCherry);
-                float affPeach    = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffGooeypeach);
+                float affPeach    = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffGooeyPeach);
                 float affBombnuts = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBombnuts);
                 float affPoison   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPoisonousApple);
                 float affBanana   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMellowBanana);

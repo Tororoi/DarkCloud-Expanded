@@ -183,8 +183,8 @@ namespace Dark_Cloud_Improved_Version
             if (fishData.BaitAffThrobbingCherry.HasValue)
                 Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffThrobbingCherry,
                     fishData.BaitAffThrobbingCherry.Value);
-            if (fishData.BaitAffGooeypeach.HasValue)
-                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffGooeypeach, fishData.BaitAffGooeypeach.Value);
+            if (fishData.BaitAffGooeyPeach.HasValue)
+                Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffGooeyPeach, fishData.BaitAffGooeyPeach.Value);
             if (fishData.BaitAffBombnuts.HasValue)
                 Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffBombnuts, fishData.BaitAffBombnuts.Value);
             if (fishData.BaitAffPoisonousApple.HasValue)
@@ -601,7 +601,7 @@ namespace Dark_Cloud_Improved_Version
             Items.mimi            => FishSlotOffsets.BaitAffMimi,
             Items.prickly         => FishSlotOffsets.BaitAffPrickly,
             Items.throbbingcherry => FishSlotOffsets.BaitAffThrobbingCherry,
-            Items.gooeypeach      => FishSlotOffsets.BaitAffGooeypeach,
+            Items.gooeypeach      => FishSlotOffsets.BaitAffGooeyPeach,
             Items.bombnuts        => FishSlotOffsets.BaitAffBombnuts,
             Items.poisonousapple  => FishSlotOffsets.BaitAffPoisonousApple,
             Items.mellowbanana    => FishSlotOffsets.BaitAffMellowBanana,
