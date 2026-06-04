@@ -24,7 +24,6 @@ namespace Dark_Cloud_Improved_Version
         private static float mardanMultiplier = 1f;
 
         // Per-session quest state
-        internal static bool fishingQuestCheck = false;
         internal static bool[] fishCaught = new bool[6];
         // Keyed by QuestBase address so multiple quest givers can be active simultaneously.
         private static readonly Dictionary<int, bool> questActive = new Dictionary<int, bool>();
@@ -35,6 +34,11 @@ namespace Dark_Cloud_Improved_Version
         private static readonly DateTime[] _lastSteerTime         = new DateTime[5];
         private static readonly DateTime[] _lastMatatakiSteerTime = new DateTime[5];
 
+        // Cached fishing area ID for the current session. Set on first InitFishingSession call,
+        // cleared in ResetSession. Matataki area ID 1 is ambiguous (Waterfall vs Peanut Pond)
+        // and is resolved via player Y position on first entry.
+        private static int _fishingAreaId = -1;
+
         // Fish model pointer cache — snapshotted lazily on first redirect
         private static readonly int[]  _originalModelPointers = new int[FishModelTable.Count];
         private static readonly bool[] _modelPointerCached    = new bool[FishModelTable.Count];
@@ -42,75 +46,49 @@ namespace Dark_Cloud_Improved_Version
         // ---- Session lifecycle ----
 
         /// <summary>
-        /// Called when the player enters a fishing area. Resets quest state and snapshots the bag inventory.
+        /// Called when the player enters a fishing area. Resolves and caches the area, sets up all
+        /// per-session state, and starts sub-system listeners.
         /// </summary>
-        internal static void OnSessionStart()
+        internal static void OnSessionStart(int currentAreaId)
         {
-            fishingQuestCheck = false;
+            _fishingAreaId = ResolveFishingSpot(currentAreaId);
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
-            // fishingTriggerIndex is not a reliable area identifier — observed values are inconsistent.
-            // Area disambiguation (e.g. Peanut Pond vs Matataki Waterfall) uses player position instead.
-            float posX = Memory.ReadFloat(Addresses.positionX);
-            float posY = Memory.ReadFloat(Addresses.positionY);
-            float posZ = Memory.ReadFloat(Addresses.positionZ);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[FishSession] playerPos=({posX:F2},{posY:F2},{posZ:F2})");
+            if (FishingAreaDatabase.TryGetValue(_fishingAreaId, out AreaFishData areaData))
+            {
+                InitSlots(areaData);
+                InitQuestState(areaData);
+                FishPhaseLogger.LogFishSession(_fishingAreaId, areaData.SlotBase, areaData.SlotCount);
+                ActivateMardanSwordAbilities(areaData);
+                FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
+            }
+            FishDataFarmer.OnSessionDetected();
         }
 
         /// <summary>
-        /// Resets per-session bait detection state and restores the native detection radius patch if it was boosted.
+        /// Resets per-session bait detection state and clears all sub-system listeners.
         /// </summary>
         internal static void ResetSession()
         {
             _bagSnapshot = null;
             _lastBaitSlot = 0xFFFF;
             _cachedBaitId = 0;
+            _fishingAreaId = -1;
+            FishDataFarmer.OnSessionEnded();
+            FishPhaseLogger.OnSessionEnd();
         }
 
         // ---- Per-tick entry point ----
 
         /// <summary>
-        /// Called from TownCharacter every fishing tick. On the first call, reads slot data, activates the active
-        /// quest, rolls slots, applies Mardan bonuses, and scales fish sizes. Every tick delegates to
-        /// <see cref="CheckFishingQuest"/> and <see cref="SteerFishToPlayer"/>.
+        /// Called from TownCharacter on every fishing tick. Delegates to per-tick catch scanning
+        /// and fish steering. All session initialization is done in <see cref="OnSessionStart"/>.
         /// </summary>
-        /// <param name="areaId">Area ID used to look up the <see cref="AreaFishData"/> configuration.</param>
-        internal static void InitFishingSession(int areaId)
+        internal static void OnFishingTick()
         {
-            if (!FishingAreaDatabase.TryGetValue(areaId, out AreaFishData areaData)) return;
-            if (!fishingQuestCheck)
-            {
-                int slotAddr = areaData.SlotBase;
-                for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
-                {
-                    fishArray[slotIndex] = Memory.ReadByte(slotAddr);
-                    slotAddr += FishSlotOffsets.Stride;
-                    fishCaught[slotIndex] = false;
-                }
-
-                if (Memory.ReadByte(areaData.QuestBase) == 1)
-                {
-                    questActive[areaData.QuestBase] = true;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"Currently on {areaData.GiverName}s quest");
-                    minFishSize = Memory.ReadByte(areaData.QuestBase + 5);
-                    maxFishSize = Memory.ReadByte(areaData.QuestBase + 6);
-                }
-                // Mardan Twei ability: reroll slots to spawn additional Mardan or Baron Garayan with the native chances.
-                if (mardanSwordId == Items.mardantwei || mardanSwordId == Items.arisemardan)
-                    RollFishSlots(areaData.SlotBase, areaData.SlotCount, FishDatabase.MardanGarayan.Id, 0.2f);
-                // Apply the Mardan sword FP boost to all non-Garayan fish. Must be done after rolling so bonus applies to new spawns.
-                ApplyMardanBonus(areaData.SlotBase, areaData.SlotCount);
-                // FishPhaseLogger.GiveBaitForTesting();
-                FishPhaseLogger.LogFishSession(areaId, areaData.SlotBase, areaData.SlotCount);
-                // Arise Mardan ability: scale fish sizes up. Must be done after rolling and bonuses so the boost applies to final sizes.
-                if (mardanSwordId == Items.arisemardan)
-                    ScaleFishSizes(areaData.SlotBase, areaData.SlotCount, 2f);
-                FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
-                fishingQuestCheck = true;
-            }
+            if (_fishingAreaId == -1) return;
+            if (!FishingAreaDatabase.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
             CheckFishingQuest(areaData);
             // FishPhaseLogger.PollSlotDynamics(areaData);
             SteerFishToPlayer(areaData);
@@ -119,7 +97,21 @@ namespace Dark_Cloud_Improved_Version
         // ---- Quest ----
 
         /// <summary>
-        /// Catch scan that runs every tick after the session is initialized by <see cref="InitFishingSession"/>.
+        /// Activates the area quest if its state byte is 1, storing the target size range.
+        /// Called once per session from <see cref="OnSessionStart"/> after <see cref="InitSlots"/>.
+        /// </summary>
+        private static void InitQuestState(AreaFishData areaData)
+        {
+            if (Memory.ReadByte(areaData.QuestBase) != 1) return;
+            questActive[areaData.QuestBase] = true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"Currently on {areaData.GiverName}s quest");
+            minFishSize = Memory.ReadByte(areaData.QuestBase + 5);
+            maxFishSize = Memory.ReadByte(areaData.QuestBase + 6);
+        }
+
+        /// <summary>
+        /// Catch scan that runs every tick after the session is initialized by <see cref="OnSessionStart"/>.
         /// Detects newly caught fish (slot ID → 0xFF), fires <see cref="FishAcquiredFlag"/>, and evaluates
         /// count-fish or size-range quest completion. Also mirrors the Sam post-loop trigger when active.
         /// </summary>
@@ -200,6 +192,22 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ---- Slot initialization ----
+
+        /// <summary>
+        /// Snapshots initial slot fish IDs into <see cref="fishArray"/> and resets <see cref="fishCaught"/>.
+        /// <see cref="fishArray"/> is read by both <see cref="CheckFishingQuest"/> (catch detection) and
+        /// <see cref="RollFishSlots"/> (Garayan slot filtering), so this must run before either.
+        /// </summary>
+        private static void InitSlots(AreaFishData areaData)
+        {
+            int slotAddr = areaData.SlotBase;
+            for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
+            {
+                fishArray[slotIndex] = Memory.ReadByte(slotAddr);
+                slotAddr += FishSlotOffsets.Stride;
+                fishCaught[slotIndex] = false;
+            }
+        }
 
         /// <summary>
         /// Rerolls each non-Garayan slot to <paramref name="targetFishId"/>, writing full slot data via
@@ -626,6 +634,24 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Applies all Mardan sword session abilities in order: Twei slot reroll, FP boost, Arise size scaling.
+        /// Must be called after <see cref="InitQuestState"/> so <see cref="fishArray"/> reflects any rerolled slots.
+        /// No-ops when <see cref="hasMardanSword"/> is false.
+        /// </summary>
+        private static void ActivateMardanSwordAbilities(AreaFishData areaData)
+        {
+            if (!hasMardanSword) return;
+            // Mardan Twei ability: reroll slots to spawn additional Mardan or Baron Garayan with the native chances.
+            if (mardanSwordId == Items.mardantwei || mardanSwordId == Items.arisemardan)
+                RollFishSlots(areaData.SlotBase, areaData.SlotCount, FishDatabase.MardanGarayan.Id, 0.2f);
+            // Apply the Mardan sword FP boost to all non-Garayan fish. Must be done after rolling so bonus applies to new spawns.
+            ApplyMardanBonus(areaData.SlotBase, areaData.SlotCount);
+            // Arise Mardan ability: scale fish sizes up. Must be done after rolling and bonuses so the boost applies to final sizes.
+            if (mardanSwordId == Items.arisemardan)
+                ScaleFishSizes(areaData.SlotBase, areaData.SlotCount, 2f);
+        }
+
+        /// <summary>
         /// Multiplies the FP reward range (BaseFp/MaxFp) of every non-Garayan slot by <c>mardanMultiplier</c>.
         /// No-ops if the player does not own a Mardan sword.
         /// </summary>
@@ -652,6 +678,21 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ---- Utilities ----
+
+        // Matataki Waterfall and Peanut Pond both have game area ID 1.
+        // Resolved via player Y position: Waterfall ≈ Y=720, Peanut Pond ≈ Y=-1103. Split at Y=0.
+        private static int ResolveFishingSpot(int areaId)
+        {
+            float playerX = Memory.ReadFloat(Addresses.positionX);
+            float playerY = Memory.ReadFloat(Addresses.positionY);
+            float playerZ = Memory.ReadFloat(Addresses.positionZ);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[FishSession] playerPos=({playerX:F2},{playerY:F2},{playerZ:F2})");
+            if (areaId != 1) return areaId;
+            return playerY >= 0f
+                ? FishingAreaDatabase.MatatakiWaterfall.Id
+                : FishingAreaDatabase.PeanutPond.Id;
+        }
 
         /// <summary>
         /// Maps the in-game time float to the corresponding <see cref="TimeOfDay"/> period.

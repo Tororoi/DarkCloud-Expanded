@@ -156,7 +156,7 @@ namespace Dark_Cloud_Improved_Version
         // ---- Survey recording ----
 
         /// <summary>
-        /// Called once per session from Fishing.LogFishSession before the slot loop.
+        /// Called once per session from FishPhaseLogger.LogFishSession before the slot loop.
         /// Increments the session bucket for the current tod float, independent of species.
         /// </summary>
         internal static void RecordSession(float todFloat)

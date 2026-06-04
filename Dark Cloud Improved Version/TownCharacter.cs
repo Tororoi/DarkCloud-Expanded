@@ -905,17 +905,16 @@ namespace Dark_Cloud_Improved_Version
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Input] Player buttons: {FormatButtons(buttonRead)}");
                     _prevButtonRead = buttonRead;
 
-                    int checkFishing = Memory.ReadByte(0x21D19714); //checks if player has entered fishing mode
-                    if (fishingActive == false & checkFishing == 1)
+                    int checkFishing = Memory.ReadByte(FishingAddresses.Active);
+                    if (fishingActive == false && checkFishing == 1)
                     {
                         fishingActive = true;
-                        Fishing.OnSessionStart();
-                        FishDataFarmer.OnSessionDetected();
+                        Fishing.OnSessionStart(currentArea);
                     }
 
                     if (fishingActive == true)
                     {
-                        Fishing.InitFishingSession(ResolveFishingSpot(currentArea));
+                        Fishing.OnFishingTick();
 
                         // Probe fishing sub-state addresses. Logs only when any value changes so output stays manageable.
                         int p0 = Memory.ReadInt(FishingAddresses.OverworldState);
@@ -936,8 +935,6 @@ namespace Dark_Cloud_Improved_Version
                         {
                             fishingActive = false;
                             Fishing.ResetSession();
-                            FishDataFarmer.OnSessionEnded();
-                            FishPhaseLogger.OnSessionEnd();
                         }
                     }
 
@@ -1495,18 +1492,7 @@ namespace Dark_Cloud_Improved_Version
                 currentAddress += 0x00000001;
             }
         }
-        // Matataki Waterfall and Peanut Pond both have game area ID 1.
-        // Resolved via player Y position: Waterfall ≈ Y=720, Peanut Pond ≈ Y=-1103. Split at Y=0.
         private static string FormatButtons(int mask) =>
             mask == 0 ? "none" : ((Button)(ushort)mask).ToString();
-
-        private static int ResolveFishingSpot(int areaId)
-        {
-            if (areaId != 1) return areaId;
-            float playerY = Memory.ReadFloat(Addresses.positionY);
-            return playerY >= 0f
-                ? FishingAreaDatabase.MatatakiWaterfall.Id
-                : FishingAreaDatabase.PeanutPond.Id;
-        }
     }
 }

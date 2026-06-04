@@ -333,6 +333,7 @@ namespace Dark_Cloud_Improved_Version
             float todFloat = Memory.ReadFloat(Addresses.timeofDayWrite);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[FishSession] area={areaId} slots={slotCount} tod={todFloat:F2}");
+            // GiveBaitForTesting();
             FishDataFarmer.RecordSession(todFloat);
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
