@@ -10,29 +10,10 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class Fishing
     {
-        /// <summary>
-        /// Returns the display name for a bait item ID, or <c>"Unknown(N)"</c> if the ID is unrecognised.
-        /// </summary>
-        internal static string GetBaitName(int id) => id switch
-        {
-            Items.throbbingcherry => "ThrobbingCherry",
-            Items.gooeypeach      => "GooeyPeach",
-            Items.bombnuts        => "BombNuts",
-            Items.poisonousapple  => "PoisonousApple",
-            Items.mellowbanana    => "MellowBanana",
-            Items.carrot          => "Carrot",
-            Items.potatocake      => "PotatoCake",
-            Items.minon           => "Minon",
-            Items.battan          => "Battan",
-            Items.petitefish      => "PetiteFish",
-            Items.evy             => "Evy",
-            Items.mimi            => "Mimi",
-            Items.prickly         => "Prickly",
-            _                     => $"Unknown({id})",
-        };
-
         internal static readonly Random Rng = new Random();
         internal static byte[] fishArray = new byte[5];
+
+        // Bait detection
         private static ushort[] _bagSnapshot = null;
         private static ushort _lastBaitSlot = 0xFFFF;
         private static int _cachedBaitId = 0;
@@ -48,9 +29,17 @@ namespace Dark_Cloud_Improved_Version
         // Keyed by QuestBase address so multiple quest givers can be active simultaneously.
         private static readonly Dictionary<int, bool> questActive = new Dictionary<int, bool>();
         private static int minFishSize = 0;
-        private static readonly DateTime[] _lastSteerTime        = new DateTime[5];
-        private static readonly DateTime[] _lastMatatakiSteerTime = new DateTime[5];
         private static int maxFishSize = 0;
+
+        // Fish steering — per-slot timestamps for heading writes
+        private static readonly DateTime[] _lastSteerTime         = new DateTime[5];
+        private static readonly DateTime[] _lastMatatakiSteerTime = new DateTime[5];
+
+        // Fish model pointer cache — snapshotted lazily on first redirect
+        private static readonly int[]  _originalModelPointers = new int[FishModelTable.Count];
+        private static readonly bool[] _modelPointerCached    = new bool[FishModelTable.Count];
+
+        // ---- Session lifecycle ----
 
         /// <summary>
         /// Called when the player enters a fishing area. Resets quest state and snapshots the bag inventory.
@@ -80,13 +69,15 @@ namespace Dark_Cloud_Improved_Version
             _cachedBaitId = 0;
         }
 
+        // ---- Per-tick entry point ----
+
         /// <summary>
         /// Called from TownCharacter every fishing tick. On the first call, reads slot data, activates the active
         /// quest, rolls slots, applies Mardan bonuses, and scales fish sizes. Every tick delegates to
-        /// <see cref="CheckFishingQuest"/>.
+        /// <see cref="CheckFishingQuest"/> and <see cref="SteerFishToPlayer"/>.
         /// </summary>
-        /// <param name="area">Area ID used to look up the <see cref="AreaFishData"/> configuration.</param>
-        public static void InitFishingSession(int areaId)
+        /// <param name="areaId">Area ID used to look up the <see cref="AreaFishData"/> configuration.</param>
+        internal static void InitFishingSession(int areaId)
         {
             if (!FishingAreaDatabase.TryGetValue(areaId, out AreaFishData areaData)) return;
             if (!fishingQuestCheck)
@@ -110,13 +101,13 @@ namespace Dark_Cloud_Improved_Version
                 // Mardan Twei ability: reroll slots to spawn additional Mardan or Baron Garayan with the native chances.
                 if (mardanSwordId == Items.mardantwei || mardanSwordId == Items.arisemardan)
                     RollFishSlots(areaData.SlotBase, areaData.SlotCount, FishDatabase.MardanGarayan.Id, 0.2f);
-                // Apply the Mardan sword FP boost to all non-Garayan fish in the area. Must be done after rolling so bonus applies to new spawns.
+                // Apply the Mardan sword FP boost to all non-Garayan fish. Must be done after rolling so bonus applies to new spawns.
                 ApplyMardanBonus(areaData.SlotBase, areaData.SlotCount);
                 // FishPhaseLogger.GiveBaitForTesting();
                 FishPhaseLogger.LogFishSession(areaId, areaData.SlotBase, areaData.SlotCount);
-                // Arise Mardan ability: scale fish sizes up to set scale factor, with curve based on the fish's original size. Must be done after all rolling and bonuses so the boost is applied to final sizes.
+                // Arise Mardan ability: scale fish sizes up. Must be done after rolling and bonuses so the boost applies to final sizes.
                 if (mardanSwordId == Items.arisemardan)
-                    ScaleFishSizes(areaData.SlotBase, areaData.SlotCount);
+                    ScaleFishSizes(areaData.SlotBase, areaData.SlotCount, 2f);
                 FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
                 fishingQuestCheck = true;
             }
@@ -125,28 +116,135 @@ namespace Dark_Cloud_Improved_Version
             SteerFishToPlayer(areaData);
         }
 
+        // ---- Quest ----
+
         /// <summary>
-        /// Multiplies the FP reward range (BaseFp/MaxFp) of every non-Garayan slot by <c>mardanMultiplier</c>.
-        /// No-ops if the player does not own a Mardan sword.
+        /// Catch scan that runs every tick after the session is initialized by <see cref="InitFishingSession"/>.
+        /// Detects newly caught fish (slot ID → 0xFF), fires <see cref="FishAcquiredFlag"/>, and evaluates
+        /// count-fish or size-range quest completion. Also mirrors the Sam post-loop trigger when active.
         /// </summary>
-        private static void ApplyMardanBonus(int slotBase, int slotCount)
+        private static void CheckFishingQuest(AreaFishData areaData)
         {
-            if (!hasMardanSword) return;
-            Thread.Sleep(300);
-            int addr = slotBase + FishSlotOffsets.BaseFp;
+            questActive.TryGetValue(areaData.QuestBase, out bool isQuestActive);
+            int slotAddr = areaData.SlotBase;
+            for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
+            {
+                if (Memory.ReadByte(slotAddr) == 255 && !fishCaught[slotIndex] &&
+                    Memory.ReadByte(FishingState.FishCatchConfirmAddr) == FishingState.FishCatchConfirm_Active)
+                {
+                    fishCaught[slotIndex] = true;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} " +
+                        $"({FishDatabase.GetName(fishArray[slotIndex])})");
+                    FishAcquiredFlag(fishArray[slotIndex]);
+                    if (isQuestActive)
+                    {
+                        if (Memory.ReadByte(areaData.QuestBase + 1) == 0) // count quest
+                        {
+                            if (fishArray[slotIndex] == Memory.ReadByte(areaData.QuestBase + 3))
+                            {
+                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
+                                byte fishRemaining = Memory.ReadByte(areaData.QuestBase + 4);
+                                if (--fishRemaining == 0)
+                                {
+                                    CompleteQuest(areaData);
+                                    questActive[areaData.QuestBase] = false;
+                                    isQuestActive = false;
+                                }
+                                else
+                                {
+                                    Memory.WriteByte(areaData.QuestBase + 4, fishRemaining);
+                                }
+                            }
+                        }
+                        else // size quest
+                        {
+                            int catchSize = (int)Math.Floor(Memory.ReadFloat(slotAddr + FishSlotOffsets.Size) * 10);
+                            if (minFishSize <= catchSize && maxFishSize >= catchSize)
+                            {
+                                CompleteQuest(areaData);
+                                questActive[areaData.QuestBase] = false;
+                                isQuestActive = false;
+                            }
+                        }
+                    }
+                }
+                slotAddr += Addresses.fishSlotStride;
+            }
+            if (areaData.PostLoopSrc != 0 && Memory.ReadByte(areaData.PostLoopSrc) == 1)
+                Memory.WriteByte(areaData.PostLoopDst, 1);
+        }
+
+        /// <summary>
+        /// Marks the quest complete (state byte → 2) in game memory and increments the Sam
+        /// multi-quest counter if the area tracks one.
+        /// </summary>
+        private static void CompleteQuest(AreaFishData areaData)
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
+            Memory.WriteByte(areaData.QuestBase, 2);
+            if (areaData.QuestsDoneAddr != 0)
+            {
+                byte questsDone = Memory.ReadByte(areaData.QuestsDoneAddr);
+                if (questsDone < 4) Memory.WriteByte(areaData.QuestsDoneAddr, ++questsDone);
+            }
+        }
+
+        /// <summary>
+        /// Sets the fish-acquired flag byte for <paramref name="caughtFishId"/> in the mod memory region.
+        /// </summary>
+        /// <param name="caughtFishId">Fish ID of the species that was just caught.</param>
+        internal static void FishAcquiredFlag(byte caughtFishId)
+        {
+            Memory.WriteByte(Addresses.fishAcquiredFlagsBase + caughtFishId, 1);
+        }
+
+        // ---- Slot initialization ----
+
+        /// <summary>
+        /// Rerolls each non-Garayan slot to <paramref name="targetFishId"/>, writing full slot data via
+        /// <see cref="WriteSlotData"/>. Garayan slots are left untouched.
+        /// </summary>
+        /// <param name="areaBase">Base address of the area's first fish slot.</param>
+        /// <param name="slotCount">Number of slots to iterate.</param>
+        /// <param name="targetFishId">Fish ID to write into each eligible slot.</param>
+        /// <param name="baronChance">
+        /// Probability [0, 1] that a rerolled slot becomes Baron Garayan instead of <paramref name="targetFishId"/>.
+        /// Use 0.2f for the Mardan Twei feature to match native Garayan spawn ratios.
+        /// </param>
+        internal static void RollFishSlots(int areaBase, int slotCount, byte targetFishId, float baronChance = 0f)
+        {
+            float timeOfDay = Memory.ReadFloat(Addresses.timeofDayWrite);
+            int pct;
+            if      (timeOfDay >= 2.5f && timeOfDay < 5.5f)  pct = 5; // Dusk
+            else if (timeOfDay >= 5.5f && timeOfDay < 8.5f)  pct = 3; // Night
+            else if (timeOfDay >= 8.5f && timeOfDay < 11.5f) pct = 4; // Morning
+            else                                              pct = 2; // Afternoon
+
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
-                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
+                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
+                if (Rng.Next(100) < pct)
                 {
-                    addr += Addresses.fishSlotStride;
-                    continue;
+                    int slotStart = areaBase + (Addresses.fishSlotStride * slotIndex);
+                    byte originalId = Memory.ReadByte(slotStart);
+                    byte newId = (baronChance > 0f && Rng.NextDouble() < baronChance)
+                        ? FishDatabase.BaronGarayan.Id : targetFishId;
+                    if (!FishDatabase.TryGetValue(newId, out FishData fishData))
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"[RollFishSlots] No FishData for id={newId}, skipping slot {slotIndex}");
+                        continue;
+                    }
+                    fishArray[slotIndex] = newId;
+                    WriteSlotData(slotStart, newId, fishData);
+                    float size = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[RollFishSlots] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) " +
+                        $"→ {FishDatabase.GetName(newId)} (id={newId}) " +
+                        $"size={size:F4} ({(int)(size*10)}cm) tod={timeOfDay:F2}");
                 }
-                Memory.WriteInt(addr, (int)(Memory.ReadInt(addr) * mardanMultiplier));
-                addr += 4;
-                Memory.WriteInt(addr, (int)(Memory.ReadInt(addr) * mardanMultiplier));
-                addr += Addresses.fishSlotStride - 4;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!");
             }
         }
 
@@ -203,66 +301,39 @@ namespace Dark_Cloud_Improved_Version
             if (fishData.BaitAffPetitefish.HasValue)
                 Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffPetitefish, fishData.BaitAffPetitefish.Value);
             float scaleDivisor = fishData.ScaleDivisor ?? 0f;
-            Memory.WriteFloat(slotStart + FishSlotOffsets.Size,   size);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.Size,      size);
             Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleModel, scaleDivisor > 0f ? size / scaleDivisor : 0f);
             Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed, size / 25f);
         }
 
         /// <summary>
-        /// Rerolls each non-Garayan slot to <paramref name="targetFishId"/>, writing full slot data via
-        /// <see cref="WriteSlotData"/>. Garayan slots are left untouched.
+        /// Writes <c>0xFF</c> to the fish ID byte of each selected slot, marking it as caught/empty.
         /// </summary>
-        /// <param name="areaBase">Base address of the area's first fish slot.</param>
-        /// <param name="slotCount">Number of slots to iterate.</param>
-        /// <param name="targetFishId">Fish ID to write into each eligible slot.</param>
-        /// <param name="baronChance">
-        /// Probability [0, 1] that a rerolled slot becomes Baron Garayan instead of <paramref name="targetFishId"/>.
-        /// Use 0.2f for the Mardan Twei feature to match native Garayan spawn ratios.
-        /// </param>
-        internal static void RollFishSlots(int areaBase, int slotCount, byte targetFishId, float baronChance = 0f)
+        /// <param name="slotBase">Base address of the area's first slot.</param>
+        /// <param name="slotCount">Total number of slots in the area.</param>
+        /// <param name="slotMask">Bitmask of slot indices to clear, e.g. <c>0b0110</c> clears slots 1 and 2.</param>
+        internal static void DespawnFishSlots(int slotBase, int slotCount, int slotMask)
         {
-            float timeOfDay = Memory.ReadFloat(Addresses.timeofDayWrite);
-            int pct;
-            if      (timeOfDay >= 2.5f && timeOfDay < 5.5f)  pct = 5; // Dusk
-            else if (timeOfDay >= 5.5f && timeOfDay < 8.5f)  pct = 3; // Night
-            else if (timeOfDay >= 8.5f && timeOfDay < 11.5f) pct = 4; // Morning
-            else                                              pct = 2; // Afternoon
-
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
-                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
-                // TEST: force reroll on every non-Garayan slot
-                if (Rng.Next(100) < pct)
-                {
-                    int slotStart = areaBase + (Addresses.fishSlotStride * slotIndex);
-                    byte originalId = Memory.ReadByte(slotStart);
-                    byte newId = (baronChance > 0f && Rng.NextDouble() < baronChance)
-                        ? FishDatabase.BaronGarayan.Id : targetFishId;
-                    if (!FishDatabase.TryGetValue(newId, out FishData fishData))
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[RollFishSlots] No FishData for id={newId}, skipping slot {slotIndex}");
-                        continue;
-                    }
-                    fishArray[slotIndex] = newId;
-                    WriteSlotData(slotStart, newId, fishData);
-                    float size = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[RollFishSlots] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) " +
-                        $"→ {FishDatabase.GetName(newId)} (id={newId}) " +
-                        $"size={size:F4} ({(int)(size*10)}cm) tod={timeOfDay:F2}");
-                }
+                if ((slotMask & (1 << slotIndex)) == 0) continue;
+                int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
+                byte originalId = Memory.ReadByte(slotStart);
+                Memory.WriteByte(slotStart, 0xFF);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[Despawn] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) cleared");
             }
         }
 
-        /// <summary>
-        /// Doubles the size and scale of every fish slot in the area. Logs original vs scaled values per slot.
-        /// </summary>
-        private const float SizeScaleFactor       = 2f;
-        private const float SizeScaleFloorDefault = 5.0f;
+        // ---- Aesthetics ----
 
-        internal static void ScaleFishSizes(int slotBase, int slotCount)
+        /// <summary>
+        /// Scales each fish slot's size by a curve-based multiplier: 1× at the floor rising to
+        /// <paramref name="scaleFactor"/>× at max size (quadratic in normalized position).
+        /// Fish near their minimum size get almost no boost; only near-max rolls approach the full factor.
+        /// Logs original vs scaled values per slot.
+        /// </summary>
+        internal static void ScaleFishSizes(int slotBase, int slotCount, float scaleFactor)
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
@@ -271,21 +342,17 @@ namespace Dark_Cloud_Improved_Version
                 float originalSize = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 if (originalSize <= 0f) continue;
 
-                float floor = FishDatabase.TryGetValue(fishId, out FishData fishData) &&
-                    fishData.MinSize.HasValue
-                    ? fishData.MinSize.Value
-                    : SizeScaleFloorDefault;
+                float floor = FishDatabase.TryGetValue(fishId, out FishData fishData) && fishData.MinSize.HasValue
+                    ? fishData.MinSize.Value : 0f;
                 float maxSize = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
                 float range   = maxSize - floor;
 
-                // Multiplier scales from 1× at the floor up to SizeScaleFactor× at max size.
-                // Fish that rolled small get almost no boost; only near-max rolls approach the full factor.
                 float t          = range > 0f ? Math.Max(0f, originalSize - floor) / range : 0f;
-                float multiplier = 1f + (SizeScaleFactor - 1f) * t * t;
+                float multiplier = 1f + (scaleFactor - 1f) * t * t;
                 float scaledSize = originalSize * multiplier;
 
                 float scaleRatio = scaledSize / originalSize;
-                Memory.WriteFloat(slotStart + FishSlotOffsets.Size,   scaledSize);
+                Memory.WriteFloat(slotStart + FishSlotOffsets.Size,      scaledSize);
                 Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleModel,
                     Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleModel) * scaleRatio);
                 Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed,
@@ -296,171 +363,6 @@ namespace Dark_Cloud_Improved_Version
                     $"({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
             }
         }
-
-        /// <summary>
-        /// Snapshots the bag inventory item IDs before any bait is cast so that
-        /// <see cref="DetectBaitFromInventory"/> can identify which bait was consumed by slot disappearance.
-        /// Must be called at session start.
-        /// </summary>
-        private static void TakeBagSnapshot()
-        {
-            int slotCount = (Addresses.firstBagWeapon - Addresses.firstBagItem) / 2;
-            _bagSnapshot = new ushort[slotCount];
-            for (int bagSlot = 0; bagSlot < slotCount; bagSlot++)
-                _bagSnapshot[bagSlot] = Memory.ReadUShort(Addresses.firstBagItem + bagSlot * 2);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BagSnapshot] taken ({slotCount} slots)");
-        }
-
-        /// <summary>
-        /// Compares the current bag against the snapshot taken by <see cref="TakeBagSnapshot"/> and returns
-        /// the item ID of the first slot that transitioned from non-zero to zero (i.e., the bait that was cast).
-        /// Returns 0 if no slot changed or no snapshot exists.
-        /// </summary>
-        private static int DetectBaitFromInventory()
-        {
-            if (_bagSnapshot == null) return 0;
-            for (int bagSlot = 0; bagSlot < _bagSnapshot.Length; bagSlot++)
-            {
-                if (_bagSnapshot[bagSlot] != 0 && Memory.ReadUShort(Addresses.firstBagItem + bagSlot * 2) == 0)
-                    return _bagSnapshot[bagSlot];
-            }
-            return 0;
-        }
-
-        /// <summary>
-        /// Returns the item ID of the bait currently selected, caching the result until the bait slot register changes.
-        /// Returns 0 when no bait is equipped (bait slot register is 0xFFFF).
-        /// </summary>
-        internal static int GetCurrentBaitId()
-        {
-            ushort baitSlotRaw = Memory.ReadUShort(0x21D19708);
-            if (baitSlotRaw == _lastBaitSlot) return _cachedBaitId;
-            _lastBaitSlot = baitSlotRaw;
-            // 0xFFFF means the cast-event register cleared — bait may still be in water, so keep the
-            // last known ID rather than resetting to 0. Only a new cast (non-0xFFFF) can update the ID.
-            if (baitSlotRaw != 0xFFFF)
-            {
-                int detected = DetectBaitFromInventory();
-                if (detected != 0) _cachedBaitId = detected;
-            }
-            return _cachedBaitId;
-        }
-
-        /// <summary>
-        /// Forces all fish slots into the Approaching AI state, directing them toward the hook.
-        /// Useful for testing bite behaviour without waiting for natural AI transitions.
-        /// The game will override the state on its next AI tick, so call repeatedly if needed.
-        /// </summary>
-        internal static void ForceApproach(int slotBase, int slotCount)
-        {
-            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
-                Memory.WriteInt(slotBase + slotIndex * Addresses.fishSlotStride + FishSlotOffsets.AiState,
-                    FishingState.FishAiState_Approaching);
-        }
-
-        /// <summary>
-        /// Reads the in-game time float and maps it to the corresponding <see cref="TimeOfDay"/> period.
-        /// </summary>
-        internal static TimeOfDay GetCurrentTimeOfDay()
-        {
-            float t = Memory.ReadFloat(Addresses.timeofDayWrite);
-            if      (t >= 2.5f && t < 5.5f)  return TimeOfDay.Dusk;
-            else if (t >= 5.5f && t < 8.5f)  return TimeOfDay.Night;
-            else if (t >= 8.5f && t < 11.5f) return TimeOfDay.Morning;
-            else                              return TimeOfDay.Afternoon;
-        }
-
-        // ---- Game formula simulations ----
-        // Pure reimplementations of confirmed ELF logic, used for pre-write calculation and testing.
-        // No memory I/O. See ELF VAs in each summary for the authoritative source.
-
-        /// <summary>
-        /// Simulates the game's slot-init size roll (ELF 0x00240D60).
-        /// Starts at <see cref="FishData.BaseSize"/>, applies an asymmetric RNG offset
-        /// (÷4 upward, ÷8 downward), clamps to [0.5×BaseSize, MaxSize], then derives both scale values.
-        /// The game RNG source is unknown; this uses <see cref="Rng"/> with a uniform [-1, 1] range
-        /// as a close approximation of the observed size distribution.
-        /// </summary>
-        /// <param name="fish">Species data supplying BaseSize, ScaleDivisor, and MaxSize.</param>
-        /// <param name="size">Resulting size (×10 = display cm).</param>
-        /// <param name="scaleX">slot+0x064: Size / ScaleDivisor.</param>
-        /// <param name="scaleY">slot+0x068: Size / 25.0.</param>
-        internal static void SimulateSlotInit(FishData fish, out float size, out float scaleX, out float scaleY)
-        {
-            float baseSize     = fish.BaseSize      ?? 0f;
-            float maxSize      = fish.MaxSize       ?? 0f;
-            float scaleDivisor = fish.ScaleDivisor  ?? 0f;
-
-            float rng = (float)(Rng.NextDouble() * 2.0 - 1.0);
-
-            size = baseSize;
-            if (rng >= 0f)
-                size += rng * (maxSize - baseSize) / 4f;
-            else
-                size += rng * (maxSize - baseSize) / 8f;
-
-            float floor = 0.5f * baseSize;
-            if (size < floor)   size = floor;
-            if (size > maxSize) size = maxSize;
-
-            scaleX = scaleDivisor > 0f ? size / scaleDivisor : 0f;
-            scaleY = size / 25f;
-        }
-
-        /// <summary>
-        /// Simulates the game's FP reward formula (ELF 0x00240E80).
-        /// Two-segment piecewise linear: below BaseSize, FP scales from 0 up to BaseFp;
-        /// above BaseSize, FP scales from BaseFp up to MaxFp at MaxSize.
-        /// Truncates to integer, matching the game's float→int conversion.
-        /// </summary>
-        /// <param name="size">Fish size as stored in the slot (×10 = display cm).</param>
-        /// <param name="baseSize">BaseSize field: base size and lower FP anchor.</param>
-        /// <param name="maxSize">MaxSize field: maximum size and upper FP anchor.</param>
-        /// <param name="fpMin">BaseFp: FP reward at exactly BaseSize.</param>
-        /// <param name="fpMax">MaxFp: FP reward at exactly MaxSize.</param>
-        internal static int SimulateFpReward(float size, float baseSize, float maxSize, int fpMin, int fpMax)
-        {
-            float reward;
-            if (size < baseSize)
-                reward = baseSize > 0f ? fpMin * size / baseSize : 0f;
-            else
-                reward = (maxSize - baseSize) > 0f
-                    ? fpMin + (fpMax - fpMin) * (size - baseSize) / (maxSize - baseSize)
-                    : fpMin;
-            return (int)reward;
-        }
-
-        /// <summary>
-        /// Convenience overload of <see cref="SimulateFpReward(float,float,float,int,int)"/>
-        /// that reads all parameters from a <see cref="FishData"/> record.
-        /// </summary>
-        internal static int SimulateFpReward(FishData fish, float size) =>
-            SimulateFpReward(size, fish.BaseSize ?? 0f, fish.MaxSize ?? 0f,
-                             fish.BaseFp ?? 0, fish.MaxFp ?? 0);
-
-        // ---- End game formula simulations ----
-
-        // ---- Bait notice-radius writes ----
-
-        /// <summary>
-        /// Writes a scaled notice radius for <paramref name="bait"/> into the EE RAM table.
-        /// Multiplies <see cref="BaitTableEntry.DefaultRadius"/> rather than reading the current
-        /// in-RAM value, because previous writes persist across re-entries and the game never
-        /// restores the table from ROM at runtime.
-        /// </summary>
-        internal static void SetBaitNoticeRadius(BaitTableEntry bait, float multiplier)
-        {
-            Memory.WriteFloat(bait.Radius, bait.DefaultRadius * multiplier);
-        }
-
-        // ---- End bait notice-radius writes ----
-
-        // ---- Fish model pointer writes ----
-        // The model pointer array may or may not be restored by the game on area reload, so the
-        // original pointer is snapshotted lazily on the first redirect and used for restore.
-
-        private static readonly int[] _originalModelPointers = new int[FishModelTable.Count];
-        private static readonly bool[] _modelPointerCached   = new bool[FishModelTable.Count];
 
         /// <summary>
         /// Redirects the model table pointer for <paramref name="fishId"/> to the shared shadow model.
@@ -491,26 +393,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(ptrAddr, _originalModelPointers[fishId]);
         }
 
-        // ---- End fish model pointer writes ----
-
-        /// <summary>
-        /// Writes <c>0xFF</c> to the fish ID byte of each selected slot, marking it as caught/empty.
-        /// </summary>
-        /// <param name="slotBase">Base address of the area's first slot.</param>
-        /// <param name="slotCount">Total number of slots in the area.</param>
-        /// <param name="slotMask">Bitmask of slot indices to clear, e.g. <c>0b0110</c> clears slots 1 and 2.</param>
-        internal static void DespawnFishSlots(int slotBase, int slotCount, int slotMask)
-        {
-            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
-            {
-                if ((slotMask & (1 << slotIndex)) == 0) continue;
-                int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
-                byte originalId = Memory.ReadByte(slotStart);
-                Memory.WriteByte(slotStart, 0xFF);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Despawn] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) cleared");
-            }
-        }
+        // ---- Fish behavior ----
 
         /// <summary>
         /// Writes the player's world position into every fish slot's patrol waypoint once per second,
@@ -592,6 +475,70 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Forces all fish slots into the Approaching AI state, directing them toward the hook.
+        /// Useful for testing bite behaviour without waiting for natural AI transitions.
+        /// The game will override the state on its next AI tick, so call repeatedly if needed.
+        /// </summary>
+        internal static void ForceApproach(int slotBase, int slotCount)
+        {
+            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
+                Memory.WriteInt(slotBase + slotIndex * Addresses.fishSlotStride + FishSlotOffsets.AiState,
+                    FishingState.FishAiState_Approaching);
+        }
+
+        // ---- Bait ----
+
+        /// <summary>
+        /// Snapshots the bag inventory item IDs before any bait is cast so that
+        /// <see cref="DetectBaitFromInventory"/> can identify which bait was consumed by slot disappearance.
+        /// Must be called at session start.
+        /// </summary>
+        private static void TakeBagSnapshot()
+        {
+            int slotCount = (Addresses.firstBagWeapon - Addresses.firstBagItem) / 2;
+            _bagSnapshot = new ushort[slotCount];
+            for (int bagSlot = 0; bagSlot < slotCount; bagSlot++)
+                _bagSnapshot[bagSlot] = Memory.ReadUShort(Addresses.firstBagItem + bagSlot * 2);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[BagSnapshot] taken ({slotCount} slots)");
+        }
+
+        /// <summary>
+        /// Returns the item ID of the bait currently selected, caching the result until the bait slot register changes.
+        /// Returns 0 when no bait is equipped (bait slot register is 0xFFFF).
+        /// </summary>
+        internal static int GetCurrentBaitId()
+        {
+            // Read as ushort: this address doubles as a cast-event register (0xFFFF = no active cast).
+            ushort baitSlotRaw = Memory.ReadUShort(FishingState.OverworldStateAddr);
+            if (baitSlotRaw == _lastBaitSlot) return _cachedBaitId;
+            _lastBaitSlot = baitSlotRaw;
+            // 0xFFFF means the cast-event register cleared — bait may still be in water, so keep the
+            // last known ID rather than resetting to 0. Only a new cast (non-0xFFFF) can update the ID.
+            if (baitSlotRaw != 0xFFFF)
+            {
+                int detected = DetectBaitFromInventory();
+                if (detected != 0) _cachedBaitId = detected;
+            }
+            return _cachedBaitId;
+        }
+
+        /// <summary>
+        /// Compares the current bag against the snapshot taken by <see cref="TakeBagSnapshot"/> and returns
+        /// the item ID of the first slot that transitioned from non-zero to zero (i.e., the bait that was cast).
+        /// Returns 0 if no slot changed or no snapshot exists.
+        /// </summary>
+        private static int DetectBaitFromInventory()
+        {
+            if (_bagSnapshot == null) return 0;
+            for (int bagSlot = 0; bagSlot < _bagSnapshot.Length; bagSlot++)
+            {
+                if (_bagSnapshot[bagSlot] != 0 && Memory.ReadUShort(Addresses.firstBagItem + bagSlot * 2) == 0)
+                    return _bagSnapshot[bagSlot];
+            }
+            return 0;
+        }
+
+        /// <summary>
         /// Maps a bait item ID to its <see cref="FishSlotOffsets"/> bait-affinity field offset.
         /// Returns -1 for unknown bait IDs.
         /// </summary>
@@ -614,13 +561,17 @@ namespace Dark_Cloud_Improved_Version
         };
 
         /// <summary>
-        /// Sets the fish-acquired flag byte for <paramref name="caughtFishId"/> in the mod memory region.
+        /// Writes a scaled notice radius for <paramref name="bait"/> into the EE RAM table.
+        /// Multiplies <see cref="BaitTableEntry.DefaultRadius"/> rather than reading the current
+        /// in-RAM value, because previous writes persist across re-entries and the game never
+        /// restores the table from ROM at runtime.
         /// </summary>
-        /// <param name="caughtFishId">Fish ID of the species that was just caught.</param>
-        public static void FishAcquiredFlag(byte caughtFishId)
+        internal static void SetBaitDetectionRadius(BaitTableEntry bait, float multiplier)
         {
-            Memory.WriteByte(0x21CE4439 + caughtFishId, 1);
+            Memory.WriteFloat(bait.Radius, bait.DefaultRadius * multiplier);
         }
+
+        // ---- Mardan ----
 
         /// <summary>
         /// Scans the bag (10 slots) and storage (30 slots) for any Mardan-series fishing rod.
@@ -628,7 +579,7 @@ namespace Dark_Cloud_Improved_Version
         /// <c>mardanMultiplier</c> used by <see cref="ApplyMardanBonus"/>.
         /// Arise Mardan takes priority over Twei, which takes priority over Eins.
         /// </summary>
-        public static void CheckMardanSword()
+        internal static void CheckMardanSword()
         {
             int foundWeaponId = 0;
 
@@ -675,74 +626,111 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Marks the quest complete (state byte → 2) in game memory and increments the Sam
-        /// multi-quest counter if the area tracks one.
+        /// Multiplies the FP reward range (BaseFp/MaxFp) of every non-Garayan slot by <c>mardanMultiplier</c>.
+        /// No-ops if the player does not own a Mardan sword.
         /// </summary>
-        private static void CompleteQuest(AreaFishData areaData)
+        private static void ApplyMardanBonus(int slotBase, int slotCount)
         {
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
-            Memory.WriteByte(areaData.QuestBase, 2);
-            if (areaData.QuestsDoneAddr != 0)
+            if (!hasMardanSword) return;
+            // Brief delay to let the game finish writing slot data before we overwrite FP values.
+            Thread.Sleep(300);
+            int addr = slotBase + FishSlotOffsets.BaseFp;
+            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                byte questsDone = Memory.ReadByte(areaData.QuestsDoneAddr);
-                if (questsDone < 4) Memory.WriteByte(areaData.QuestsDoneAddr, ++questsDone);
+                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
+                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
+                {
+                    addr += Addresses.fishSlotStride;
+                    continue;
+                }
+                Memory.WriteInt(addr, (int)(Memory.ReadInt(addr) * mardanMultiplier));
+                addr += 4;
+                Memory.WriteInt(addr, (int)(Memory.ReadInt(addr) * mardanMultiplier));
+                addr += Addresses.fishSlotStride - 4;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!");
             }
         }
 
+        // ---- Utilities ----
+
         /// <summary>
-        /// Catch scan that runs every tick after the session is initialized by <see cref="InitFishingSession"/>.
-        /// Detects newly caught fish (slot ID → 0xFF), fires <see cref="FishAcquiredFlag"/>, and evaluates
-        /// count-fish or size-range quest completion. Also mirrors the Sam post-loop trigger when active.
+        /// Reads the in-game time float and maps it to the corresponding <see cref="TimeOfDay"/> period.
         /// </summary>
-        private static void CheckFishingQuest(AreaFishData areaData)
+        internal static TimeOfDay GetCurrentTimeOfDay()
         {
-            questActive.TryGetValue(areaData.QuestBase, out bool isQuestActive);
-            int slotAddr = areaData.SlotBase;
-            for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
-            {
-                if (Memory.ReadByte(slotAddr) == 255 && !fishCaught[slotIndex] && Memory.ReadByte(0x202A26E8) == 12)
-                {
-                    fishCaught[slotIndex] = true;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} " +
-                        $"({FishDatabase.GetName(fishArray[slotIndex])})");
-                    FishAcquiredFlag(fishArray[slotIndex]);
-                    if (isQuestActive)
-                    {
-                        if (Memory.ReadByte(areaData.QuestBase + 1) == 0) // count quest
-                        {
-                            if (fishArray[slotIndex] == Memory.ReadByte(areaData.QuestBase + 3))
-                            {
-                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
-                                byte fishRemaining = Memory.ReadByte(areaData.QuestBase + 4);
-                                if (--fishRemaining == 0)
-                                {
-                                    CompleteQuest(areaData);
-                                    questActive[areaData.QuestBase] = false;
-                                    isQuestActive = false;
-                                }
-                                else
-                                {
-                                    Memory.WriteByte(areaData.QuestBase + 4, fishRemaining);
-                                }
-                            }
-                        }
-                        else // size quest
-                        {
-                            int catchSize = (int)Math.Floor(Memory.ReadFloat(slotAddr + FishSlotOffsets.Size) * 10);
-                            if (minFishSize <= catchSize && maxFishSize >= catchSize)
-                            {
-                                CompleteQuest(areaData);
-                                questActive[areaData.QuestBase] = false;
-                                isQuestActive = false;
-                            }
-                        }
-                    }
-                }
-                slotAddr += Addresses.fishSlotStride;
-            }
-            if (areaData.PostLoopSrc != 0 && Memory.ReadByte(areaData.PostLoopSrc) == 1)
-                Memory.WriteByte(areaData.PostLoopDst, 1);
+            float t = Memory.ReadFloat(Addresses.timeofDayWrite);
+            if      (t >= 2.5f && t < 5.5f)  return TimeOfDay.Dusk;
+            else if (t >= 5.5f && t < 8.5f)  return TimeOfDay.Night;
+            else if (t >= 8.5f && t < 11.5f) return TimeOfDay.Morning;
+            else                              return TimeOfDay.Afternoon;
         }
+
+        // ---- Game formula simulations ----
+        // Pure reimplementations of confirmed ELF logic, used for pre-write calculation and testing.
+        // No memory I/O. See ELF VAs in each summary for the authoritative source.
+
+        /// <summary>
+        /// Simulates the game's slot-init size roll (ELF 0x00240D60).
+        /// Starts at <see cref="FishData.BaseSize"/>, applies an asymmetric RNG offset
+        /// (÷4 upward, ÷8 downward), clamps to [0.5×BaseSize, MaxSize], then derives both scale values.
+        /// The game RNG source is unknown; this uses <see cref="Rng"/> with a uniform [-1, 1] range
+        /// as a close approximation of the observed size distribution.
+        /// </summary>
+        /// <param name="fish">Species data supplying BaseSize, ScaleDivisor, and MaxSize.</param>
+        /// <param name="size">Resulting size (×10 = display cm).</param>
+        /// <param name="scaleModel">slot+0x064: Size / ScaleDivisor.</param>
+        /// <param name="scaleFixed">slot+0x068: Size / 25.0.</param>
+        internal static void SimulateSlotInit(FishData fish, out float size, out float scaleModel, out float scaleFixed)
+        {
+            float baseSize     = fish.BaseSize      ?? 0f;
+            float maxSize      = fish.MaxSize       ?? 0f;
+            float scaleDivisor = fish.ScaleDivisor  ?? 0f;
+
+            float rng = (float)(Rng.NextDouble() * 2.0 - 1.0);
+
+            size = baseSize;
+            if (rng >= 0f)
+                size += rng * (maxSize - baseSize) / 4f;
+            else
+                size += rng * (maxSize - baseSize) / 8f;
+
+            float floor = 0.5f * baseSize;
+            if (size < floor)   size = floor;
+            if (size > maxSize) size = maxSize;
+
+            scaleModel = scaleDivisor > 0f ? size / scaleDivisor : 0f;
+            scaleFixed = size / 25f;
+        }
+
+        /// <summary>
+        /// Simulates the game's FP reward formula (ELF 0x00240E80).
+        /// Two-segment piecewise linear: below BaseSize, FP scales from 0 up to BaseFp;
+        /// above BaseSize, FP scales from BaseFp up to MaxFp at MaxSize.
+        /// Truncates to integer, matching the game's float→int conversion.
+        /// </summary>
+        /// <param name="size">Fish size as stored in the slot (×10 = display cm).</param>
+        /// <param name="baseSize">BaseSize field: base size and lower FP anchor.</param>
+        /// <param name="maxSize">MaxSize field: maximum size and upper FP anchor.</param>
+        /// <param name="fpMin">BaseFp: FP reward at exactly BaseSize.</param>
+        /// <param name="fpMax">MaxFp: FP reward at exactly MaxSize.</param>
+        internal static int SimulateFpReward(float size, float baseSize, float maxSize, int fpMin, int fpMax)
+        {
+            float reward;
+            if (size < baseSize)
+                reward = baseSize > 0f ? fpMin * size / baseSize : 0f;
+            else
+                reward = (maxSize - baseSize) > 0f
+                    ? fpMin + (fpMax - fpMin) * (size - baseSize) / (maxSize - baseSize)
+                    : fpMin;
+            return (int)reward;
+        }
+
+        /// <summary>
+        /// Convenience overload of <see cref="SimulateFpReward(float,float,float,int,int)"/>
+        /// that reads all parameters from a <see cref="FishData"/> record.
+        /// </summary>
+        internal static int SimulateFpReward(FishData fish, float size) =>
+            SimulateFpReward(size, fish.BaseSize ?? 0f, fish.MaxSize ?? 0f,
+                             fish.BaseFp ?? 0, fish.MaxFp ?? 0);
     }
 }

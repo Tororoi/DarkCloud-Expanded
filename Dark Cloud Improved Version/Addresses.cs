@@ -396,6 +396,7 @@
         public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall + Peanut Pond, 5 slots (shared)
         public const int fishSlotBase_MuskaLacka     = 0x213C3150; // Area 3 — location TBD,       4 slots
         public const int fishSlotBase_Queens    = 0x20DE0710; // Area 19 — location TBD,      5 slots
+        public const int fishAcquiredFlagsBase  = 0x21CE4439; // 18 bytes, one per fish species ID (0–17)
 
         /// <summary>
         /// Index of the fishing trigger NPC/object that activated the current fishing session,

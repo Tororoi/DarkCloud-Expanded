@@ -8,8 +8,12 @@ namespace Dark_Cloud_Improved_Version
         // Addresses
         internal const int ActiveAddr         = 0x21D19714; // 0 = not fishing, 1 = session active
         internal const int TriggerIndexAddr  = 0x202A1F64; // game writes active fishing trigger here; not reliable for area identification
+        internal const int FishCatchConfirmAddr   = 0x202A26E8; // byte; checked after slot clears (0xFF) to confirm fish was actually landed
         internal const int OverworldStateAddr = 0x21D19708; // overworld / dialog state machine
         internal const int PhaseAddr         = 0x21D33E28; // fishing phase state machine
+
+        // FishCatchConfirmAddr values — read by game after rod pull to confirm catch and trigger success dialog; not a general-purpose state machine
+        internal const int FishCatchConfirm_Active = 12;
 
         // OverworldStateAddr state values
         internal const int OverworldState_QuitDialog  = 0x00000085; // "Continue fishing" / "Quit fishing" dialog
@@ -41,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// One entry in <see cref="BaitNoticeRadiusTable"/>. Fields are EE RAM addresses.
+    /// One entry in <see cref="BaitDetectionRadiusTable"/>. Fields are EE RAM addresses.
     /// </summary>
     internal readonly struct BaitTableEntry
     {
@@ -63,7 +67,7 @@ namespace Dark_Cloud_Improved_Version
     /// Confirmed via ScanFor25f cluster dump (2026-06-03). Bait validity is enforced elsewhere —
     /// writing a non-bait item ID into an entry's Id address has no effect on the bait screen.
     /// </summary>
-    internal static class BaitNoticeRadiusTable
+    internal static class BaitDetectionRadiusTable
     {
         internal const int TableBase = 0x2026AE8C;
         internal const int Stride    = 8;
@@ -149,7 +153,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int MaxSize             = 0x08;  // float; ×10 = display cm
         internal const int BaseFp               = 0x0C;  // int; base FP value — modifier role unconfirmed
         internal const int MaxFp               = 0x10;  // int; base FP value — modifier role unconfirmed
-        // Bait affinity floats — same order as BaitNoticeRadiusTable and FishSlotOffsets.BaitAff*
+        // Bait affinity floats — same order as BaitDetectionRadiusTable and FishSlotOffsets.BaitAff*
         // 0.0 = never bites; 1.0 = normal; values above 1.0 may be clamped by game code
         internal const int BaitAffEvy             = 0x14;
         internal const int BaitAffMimi            = 0x18;
@@ -194,7 +198,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int MaxSize             = 0x00C;  // float; ×10 = display cm; maximum size cap and FP upper bound (ELF 0x00240D60, 0x00240E80)
         internal const int BaseFp               = 0x010;  // int; FP reward when Size = BaseSize (base size); scales down proportionally below BaseSize (ELF 0x00240E80)
         internal const int MaxFp               = 0x014;  // int; FP reward when Size = MaxSize (ELF 0x00240E80)
-        // Bait affinity floats — 13 entries matching BaitNoticeRadiusTable order
+        // Bait affinity floats — 13 entries matching BaitDetectionRadiusTable order
         // 0.0 = never bites; 1.0 = normal; values above 1.0 may be clamped by game code
         internal const int BaitAffEvy             = 0x018;
         internal const int BaitAffMimi            = 0x01C;
@@ -225,7 +229,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int Speed               = 0x080;  // float; current movement speed
         internal const int Velocity            = 0x084;  // float; ramps up as fish accelerates
         internal const int Unk088              = 0x088;  // int; small value (3–10); consistently 4 during Approaching/Nibbling — purpose unknown
-        internal const int NoticeRadius        = 0x08C;  // float; read-only — overwritten every frame from BaitNoticeRadiusTable; 3D radius within which fish transitions Dormant→Approaching
+        internal const int NoticeRadius        = 0x08C;  // float; read-only — overwritten every frame from BaitDetectionRadiusTable; 3D radius within which fish transitions Dormant→Approaching
 
         // ---- AI target position ----
         internal const int AiTargetY           = 0x090;  // float; destination Y; converges to hook Y while Approaching
