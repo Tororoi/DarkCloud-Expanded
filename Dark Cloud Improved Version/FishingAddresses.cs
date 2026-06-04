@@ -7,10 +7,17 @@ namespace Dark_Cloud_Improved_Version
     {
         // Addresses
         internal const int ActiveAddr         = 0x21D19714; // 0 = not fishing, 1 = session active
-        internal const int TriggerIndexAddr  = 0x202A1F64; // game writes active fishing trigger here; not reliable for area identification
-        internal const int FishCatchConfirmAddr   = 0x202A26E8; // byte; checked after slot clears (0xFF) to confirm fish was actually landed
+        /// <summary>
+        /// Index of the fishing trigger NPC/object that activated the current fishing session,
+        /// within the area's object table. Set when townMode transitions to 16 (fishing).
+        /// Used to distinguish sub-spots that share the same area ID.
+        /// Confirmed values: Norune=4, PeanutPond=11, MatatakiWaterfall=13, Queens=-1 (unset), Muska Lacka=5.
+        /// </summary>
+        internal const int TriggerIndexAddr   = 0x202A1F64;
+        internal const int FishCatchConfirmAddr = 0x202A26E8; // byte; checked after slot clears (0xFF) to confirm fish was actually landed
         internal const int OverworldStateAddr = 0x21D19708; // overworld / dialog state machine
-        internal const int PhaseAddr         = 0x21D33E28; // fishing phase state machine
+        internal const int PhaseAddr          = 0x21D33E28; // fishing phase state machine
+        internal const int AcquiredFlagsBase  = 0x21CE4439; // 18 bytes, one per fish species ID (0–17)
 
         // FishCatchConfirmAddr values — read by game after rod pull to confirm catch and trigger success dialog; not a general-purpose state machine
         internal const int FishCatchConfirm_Active = 12;
@@ -177,12 +184,18 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>
     /// Field offsets within a single fish slot, relative to the slot's base address.
-    /// Slot stride is 0x2410; per-area base addresses are in <see cref="Addresses"/> (fishSlotBase_*).
+    /// Per-area base addresses and slot stride are also in this class (AreaBase_*, Stride).
     /// All fields confirmed via slot dump analysis unless noted otherwise.
     /// </summary>
     internal static class FishSlotOffsets
     {
         internal const int Stride = 0x2410;
+
+        // Per-area base addresses of the first fish slot
+        internal const int AreaBase_Norune     = 0x214798D0; // Area 0 — Norune Village, 4 slots
+        internal const int AreaBase_Matataki   = 0x214D9910; // Area 1 — Matataki Waterfall + Peanut Pond, 5 slots (shared)
+        internal const int AreaBase_MuskaLacka = 0x213C3150; // Area 3 — 4 slots
+        internal const int AreaBase_Queens     = 0x20DE0710; // Area 19 — 5 slots
 
         // ---- Species identity + static data ----
         // Written by the game from FishSpeciesTable each time a fish spawns.

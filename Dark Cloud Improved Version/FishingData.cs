@@ -496,7 +496,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly AreaFishData NorunePond = new AreaFishData
         {
             Id = 0, Name = "Norune Pond",
-            SlotBase = Addresses.fishSlotBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
+            SlotBase = FishSlotOffsets.AreaBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
             FishIds = new byte[]
             {
                 FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
@@ -515,7 +515,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly AreaFishData MatatakiWaterfall = new AreaFishData
         {
             Id = 1, Name = "Matataki Waterfall",
-            SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+            SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
             FishIds = new byte[]
             {
                 FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
@@ -542,7 +542,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly AreaFishData PeanutPond = new AreaFishData
         {
             Id = 100, Name = "Peanut Pond",
-            SlotBase = Addresses.fishSlotBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+            SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
             FishIds = new byte[]
             {
                 FishDatabase.Tarton.Id, FishDatabase.Gobbler.Id, FishDatabase.BakuBaku.Id,
@@ -562,7 +562,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly AreaFishData QueensHarbor = new AreaFishData
         {
             Id = 19, Name = "Queens Harbor",
-            SlotBase = Addresses.fishSlotBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
+            SlotBase = FishSlotOffsets.AreaBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
             FishIds = new byte[]
             {
@@ -584,7 +584,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly AreaFishData MuskaLackaOasis = new AreaFishData
         {
             Id = 3, Name = "Muska Lacka Oasis",
-            SlotBase = Addresses.fishSlotBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
+            SlotBase = FishSlotOffsets.AreaBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
             FishIds = new byte[]
             {
                 FishDatabase.Negie.Id, FishDatabase.Den.Id, FishDatabase.Heela.Id,

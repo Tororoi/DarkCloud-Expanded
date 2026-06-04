@@ -128,7 +128,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     for (int i = 0; i < _slotCount; i++)
                     {
-                        int slotAddr = _slotBase + i * Addresses.fishSlotStride;
+                        int slotAddr = _slotBase + i * FishSlotOffsets.Stride;
 
                         byte  fishId       = Memory.ReadByte(slotAddr);
                         int   aiState      = Memory.ReadInt(slotAddr   + FishSlotOffsets.AiState);
@@ -336,7 +336,7 @@ namespace Dark_Cloud_Improved_Version
             FishDataFarmer.RecordSession(todFloat);
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                int slotStart  = slotBase + slotIndex * Addresses.fishSlotStride;
+                int slotStart  = slotBase + slotIndex * FishSlotOffsets.Stride;
                 byte fishId    = Memory.ReadByte(slotStart);
                 float scaleDivisor = Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleDivisor);
                 float baseSize     = Memory.ReadFloat(slotStart + FishSlotOffsets.BaseSize);
@@ -379,7 +379,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void TestSlotField(int slotBase, int slotCount, int offset, int value)
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
-                Memory.WriteInt(slotBase + slotIndex * Addresses.fishSlotStride + offset, value);
+                Memory.WriteInt(slotBase + slotIndex * FishSlotOffsets.Stride + offset, value);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[FieldTest] offset=0x{offset:X3} int={value} written to {slotCount} slots");
         }
@@ -390,7 +390,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void TestSlotField(int slotBase, int slotCount, int offset, float value)
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
-                Memory.WriteFloat(slotBase + slotIndex * Addresses.fishSlotStride + offset, value);
+                Memory.WriteFloat(slotBase + slotIndex * FishSlotOffsets.Stride + offset, value);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"[FieldTest] offset=0x{offset:X3} float={value} written to {slotCount} slots");
         }
@@ -410,7 +410,7 @@ namespace Dark_Cloud_Improved_Version
                 $"[Player] pos=({playerX:F1},{playerY:F2},{playerZ:F1})");
             for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
             {
-                int slotAddr     = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                int slotAddr     = areaData.SlotBase + slotIndex * FishSlotOffsets.Stride;
                 byte fishId      = Memory.ReadByte(slotAddr);
                 float heading    = Memory.ReadFloat(slotAddr + FishSlotOffsets.Heading);
                 float speed      = Memory.ReadFloat(slotAddr + FishSlotOffsets.Speed);
@@ -446,7 +446,7 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
+                int slotStart = slotBase + slotIndex * FishSlotOffsets.Stride;
                 byte fishId = Memory.ReadByte(slotStart);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[SlotDump] slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) base=0x{slotStart:X8}");

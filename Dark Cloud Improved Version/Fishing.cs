@@ -86,7 +86,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
                 {
                     fishArray[slotIndex] = Memory.ReadByte(slotAddr);
-                    slotAddr += Addresses.fishSlotStride;
+                    slotAddr += FishSlotOffsets.Stride;
                     fishCaught[slotIndex] = false;
                 }
 
@@ -169,7 +169,7 @@ namespace Dark_Cloud_Improved_Version
                         }
                     }
                 }
-                slotAddr += Addresses.fishSlotStride;
+                slotAddr += FishSlotOffsets.Stride;
             }
             if (areaData.PostLoopSrc != 0 && Memory.ReadByte(areaData.PostLoopSrc) == 1)
                 Memory.WriteByte(areaData.PostLoopDst, 1);
@@ -196,7 +196,7 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="caughtFishId">Fish ID of the species that was just caught.</param>
         internal static void FishAcquiredFlag(byte caughtFishId)
         {
-            Memory.WriteByte(Addresses.fishAcquiredFlagsBase + caughtFishId, 1);
+            Memory.WriteByte(FishingState.AcquiredFlagsBase + caughtFishId, 1);
         }
 
         // ---- Slot initialization ----
@@ -227,7 +227,7 @@ namespace Dark_Cloud_Improved_Version
                     fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
                 if (Rng.Next(100) < spawnPercent)
                 {
-                    int slotStart = areaBase + (Addresses.fishSlotStride * slotIndex);
+                    int slotStart = areaBase + (FishSlotOffsets.Stride * slotIndex);
                     byte originalId = Memory.ReadByte(slotStart);
                     byte newId = (baronChance > 0f && Rng.NextDouble() < baronChance)
                         ? FishDatabase.BaronGarayan.Id : targetFishId;
@@ -317,7 +317,7 @@ namespace Dark_Cloud_Improved_Version
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 if ((slotMask & (1 << slotIndex)) == 0) continue;
-                int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
+                int slotStart = slotBase + slotIndex * FishSlotOffsets.Stride;
                 byte originalId = Memory.ReadByte(slotStart);
                 Memory.WriteByte(slotStart, 0xFF);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -337,7 +337,7 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                int slotStart = slotBase + slotIndex * Addresses.fishSlotStride;
+                int slotStart = slotBase + slotIndex * FishSlotOffsets.Stride;
                 byte fishId = Memory.ReadByte(slotStart);
                 float originalSize = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 if (originalSize <= 0f) continue;
@@ -417,7 +417,7 @@ namespace Dark_Cloud_Improved_Version
                     if ((DateTime.UtcNow - _lastMatatakiSteerTime[slotIndex]).TotalSeconds < 10.0) continue;
                     _lastMatatakiSteerTime[slotIndex] = DateTime.UtcNow;
 
-                    int slotAddr = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                    int slotAddr = areaData.SlotBase + slotIndex * FishSlotOffsets.Stride;
                     float fishX = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosX);
                     float fishY = Memory.ReadFloat(slotAddr + FishSlotOffsets.LivePosY);
                     float deltaX = playerX - fishX;
@@ -451,7 +451,7 @@ namespace Dark_Cloud_Improved_Version
                     fishId != FishDatabase.BaronGarayan.Id  &&
                     fishId != FishDatabase.Umadakara.Id) continue;
 
-                int slotAddr = areaData.SlotBase + slotIndex * Addresses.fishSlotStride;
+                int slotAddr = areaData.SlotBase + slotIndex * FishSlotOffsets.Stride;
 
                 float affinity = baitOffset >= 0 ? Memory.ReadFloat(slotAddr + baitOffset) : 0f;
                 if (affinity <= 0f) continue;
@@ -482,7 +482,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void ForceApproach(int slotBase, int slotCount)
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
-                Memory.WriteInt(slotBase + slotIndex * Addresses.fishSlotStride + FishSlotOffsets.AiState,
+                Memory.WriteInt(slotBase + slotIndex * FishSlotOffsets.Stride + FishSlotOffsets.AiState,
                     FishingState.FishAiState_Approaching);
         }
 
@@ -640,13 +640,13 @@ namespace Dark_Cloud_Improved_Version
                 if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
                     fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
                 {
-                    fpAddr += Addresses.fishSlotStride;
+                    fpAddr += FishSlotOffsets.Stride;
                     continue;
                 }
                 Memory.WriteInt(fpAddr, (int)(Memory.ReadInt(fpAddr) * mardanMultiplier));
                 fpAddr += 4;
                 Memory.WriteInt(fpAddr, (int)(Memory.ReadInt(fpAddr) * mardanMultiplier));
-                fpAddr += Addresses.fishSlotStride - 4;
+                fpAddr += FishSlotOffsets.Stride - 4;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mardan did its thing!");
             }
         }
