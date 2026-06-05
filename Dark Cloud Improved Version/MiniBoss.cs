@@ -118,9 +118,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteByte(Enemies.Enemy0.staminaTimer + (varOffset * slot) + 0x2, staminaTimer);
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
-            ushort enemyTypeId = Enemies.GetFloorEnemyId(slot);
+            ushort enemySpeciesId = Enemies.GetFloorEnemyId(slot);
 
-            if (!TryApplyFlavorLoot(enemyTypeId, dungeon, slot))
+            if (!TryApplyFlavorLoot(enemySpeciesId, dungeon, slot))
             {
                 if (rnd.Next(100) < 35)
                 {
@@ -229,7 +229,7 @@ namespace Dark_Cloud_Improved_Version
         /// Checks flavorRare (5%) first, then flavorLoot (30%).
         /// Returns true if special loot was applied.
         /// </summary>
-        private static bool TryApplyFlavorLoot(ushort enemyTypeId, byte dungeon, int enemyNum)
+        private static bool TryApplyFlavorLoot(ushort enemySpeciesId, byte dungeon, int enemyNum)
         {
             Dictionary<ushort, int[]> rareLoot;
             Dictionary<ushort, int[]> flavorLoot;
@@ -248,7 +248,7 @@ namespace Dark_Cloud_Improved_Version
                 default: return false;
             }
 
-            if (rareLoot.TryGetValue(enemyTypeId, out int[] rarePool) && rnd.Next(100) < 5)
+            if (rareLoot.TryGetValue(enemySpeciesId, out int[] rarePool) && rnd.Next(100) < 5)
             {
                 int rareItem = rarePool[rnd.Next(rarePool.Length)];
                 WriteLootItem(rareItem, enemyNum);
@@ -258,7 +258,7 @@ namespace Dark_Cloud_Improved_Version
                 return true;
             }
 
-            if (flavorLoot.TryGetValue(enemyTypeId, out int[] flavorPool) && rnd.Next(100) < 30)
+            if (flavorLoot.TryGetValue(enemySpeciesId, out int[] flavorPool) && rnd.Next(100) < 30)
             {
                 int flavorItem = flavorPool[rnd.Next(flavorPool.Length)];
                 WriteLootItem(flavorItem, enemyNum);

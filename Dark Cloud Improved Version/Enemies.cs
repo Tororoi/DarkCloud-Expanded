@@ -23,8 +23,9 @@ namespace Dark_Cloud_Improved_Version
         public const int monday = 15;
         public const int tuesday = 16;
         public const int wednesday = 17;
-        public const int friday = 18;
-        public const int saturday = 19;
+        public const int thursday = 18;
+        public const int friday = 19;
+        public const int saturday = 20;
         public const int witchhellza = 21;
         public const int witchillza = 22;
         public const int gunny = 23;
@@ -141,7 +142,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Returns the display name for an enemy type ID, searching all lists.
+        /// Returns the display name for an enemy species ID, searching all lists.
         /// Returns "Unknown" if not found.
         /// </summary>
         public static string GetEnemyName(ushort typeId)
@@ -173,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
                 return ushort.MinValue;
             }
 
-            return Memory.ReadUShort(Enemy0.enemyTypeId + (offset * enemyFloorNum));
+            return Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * enemyFloorNum));
         }
 
         /// <summary>
@@ -185,7 +186,7 @@ namespace Dark_Cloud_Improved_Version
 
             for (int i = 0; i < 15; i++)
             {
-                Ids.Add(Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i)));
+                Ids.Add(Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i)));
             }
 
             return Ids;
@@ -356,7 +357,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = 0x21E16BC0;
             public const int hp = 0x21E16BC4;
             public const int drop = 0x21E16C40;
-            public const int enemyTypeId = 0x21E16BE2;
+            public const int enemySpeciesId = 0x21E16BE2;
             public const int minGoldDrop = 0x21E16BD4;      //Minimum value gold can drop
             public const int dropChance = 0x21E16BD8;       // 0 = 0% | 100 = 100%
             public const int forceItemDrop = 0x21E16C40;    //Default value is 65535 ...
@@ -417,7 +418,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -449,7 +450,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -481,7 +482,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -514,7 +515,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -547,7 +548,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -580,7 +581,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -613,7 +614,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -646,7 +647,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -679,7 +680,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -712,7 +713,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -745,7 +746,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -778,7 +779,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -811,7 +812,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -844,7 +845,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -877,7 +878,7 @@ namespace Dark_Cloud_Improved_Version
             public const int maxHp = Enemy0.maxHp + (offset * EnemyMultiplier);
             public const int hp = Enemy0.hp + (offset * EnemyMultiplier);
             public const int drop = Enemy0.drop + (offset * EnemyMultiplier);
-            public const int enemyTypeId = Enemy0.enemyTypeId + (offset * EnemyMultiplier);
+            public const int enemySpeciesId = Enemy0.enemySpeciesId + (offset * EnemyMultiplier);
             public const int minGoldDrop = Enemy0.minGoldDrop + (offset * EnemyMultiplier);
             public const int dropChance = Enemy0.dropChance + (offset * EnemyMultiplier);
             public const int forceItemDrop = Enemy0.forceItemDrop + (offset * EnemyMultiplier);
@@ -903,7 +904,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void DumpEnemySlot(int slotIndex)
         {
             int slotBase = Enemy0.visible + (offset * slotIndex);
-            ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * slotIndex));
+            ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * slotIndex));
             string name = GetEnemyName(nameId);
             bool isMiniboss = MiniBoss.miniBossEnemyNumbers.Contains(slotIndex);
             string tag = isMiniboss ? " [MINIBOSS - DATA INVALID FOR DATABASE]" : "";
@@ -945,7 +946,7 @@ namespace Dark_Cloud_Improved_Version
                 if (status == -1 || status == 0) continue;
                 if (MiniBoss.miniBossEnemyNumbers.Contains(i)) continue;
 
-                ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                 string name = GetEnemyName(nameId);
 
                 int maxHp      = Memory.ReadInt(slotBase + EnemySlotOffsets.MaxHp);
@@ -997,7 +998,7 @@ namespace Dark_Cloud_Improved_Version
                 int status = Memory.ReadInt(slotBase);
                 if (status == -1 || status == 0) continue;
 
-                ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                 string name = GetEnemyName(nameId);
                 bool isMiniboss = MiniBoss.miniBossEnemyNumbers.Contains(i);
                 string tag = isMiniboss ? " [MINIBOSS]" : "";
@@ -1053,11 +1054,11 @@ namespace Dark_Cloud_Improved_Version
                 if (status == 2 && !_activationLoggedSlots.Contains(i))
                 {
                     _activationLoggedSlots.Add(i);
-                    ushort actNameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    ushort actNameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                     string actName   = GetEnemyName(actNameId);
                     string actMbTag  = MiniBoss.miniBossEnemyNumbers.Contains(i) ? " [MINIBOSS]" : "";
                     float  F(int w)  => BitConverter.ToSingle(BitConverter.GetBytes(current[w]), 0);
-                    int    typePtr   = current[0x04C / 4];
+                    int    speciesPtr   = current[0x04C / 4];
                     float  moveBlend = F(0x080 / 4);
                     float  facingX   = F(0x060 / 4);
                     float  facingY   = F(0x064 / 4);
@@ -1071,13 +1072,13 @@ namespace Dark_Cloud_Improved_Version
                     float  rangeY    = F(0x144 / 4);
                     float  rangeZ    = F(0x148 / 4);
                     float  aggro     = F(0x14C / 4);
-                    Console.WriteLine($"[EnemyActivation] slot={i} {actName}{actMbTag} typePtr=0x{typePtr:X8} moveBlend={moveBlend:F2} facing=({facingX:F4},{facingY:F4},{facingZ:F4})");
+                    Console.WriteLine($"[EnemyActivation] slot={i} {actName}{actMbTag} speciesPtr=0x{speciesPtr:X8} moveBlend={moveBlend:F2} facing=({facingX:F4},{facingY:F4},{facingZ:F4})");
                     Console.WriteLine($"[EnemyActivation] slot={i} {actName}{actMbTag} target=({targetX:F1},{targetZ:F1},{targetY:F1}) aiState=0x{aiState:X8} aiSpeed={aiSpeed:F4} aggroRange={aggro:F1} behaviorRange=({rangeX:F1},{rangeY:F1},{rangeZ:F1})");
                 }
 
                 if (_enemySlotSnapshots.TryGetValue(i, out int[] prev))
                 {
-                    ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                     string name = GetEnemyName(nameId);
                     bool isMiniboss = MiniBoss.miniBossEnemyNumbers.Contains(i);
                     string mbTag = isMiniboss ? " [MINIBOSS]" : "";
@@ -1130,7 +1131,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashTimer,      1.0f);
                 Memory.WriteInt(slotBase + EnemySlotOffsets.FlashActivation,   1);
 
-                ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                 string name = GetEnemyName(nameId);
                 Console.WriteLine($"[TestMod] slot={i} {name}  flash set: decayRate=0.016 timer=1.0");
             }
@@ -1162,7 +1163,7 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteFloat(slotBase + EnemySlotOffsets.FlashTimer,        1.0f);
                     Memory.WriteInt(slotBase + EnemySlotOffsets.FlashActivation,   1);
                     _flashTimerSnapshot[i] = 1.0f;
-                    ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                     string name = GetEnemyName(nameId);
                     Console.WriteLine($"[FlashTimer] slot={i} {name}  flash set: decayRate=0.016 timer=1.0");
                     continue;
@@ -1175,7 +1176,7 @@ namespace Dark_Cloud_Improved_Version
                 _flashTimerSnapshot.TryGetValue(i, out float prevTimer);
                 if (Math.Abs(timer - prevTimer) > 0.0001f)
                 {
-                    ushort nameId = Memory.ReadUShort(Enemy0.enemyTypeId + (offset * i));
+                    ushort nameId = Memory.ReadUShort(Enemy0.enemySpeciesId + (offset * i));
                     string name = GetEnemyName(nameId);
                     Console.WriteLine($"[FlashTimer] slot={i} {name}  active={active}  decayRate={duration:F4}  flashTimer={timer:F4}");
                     _flashTimerSnapshot[i] = timer;

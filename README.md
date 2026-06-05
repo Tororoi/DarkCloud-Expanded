@@ -110,7 +110,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 
 - [ ] **Per-enemy spawn logic** — Confirm rate of spawn is approximately 1 miniboss per floor, but possible for no or multiple minibosses to appear.
 - [ ] **Backfloor spawn** — Confirm minibosses may spawn in backfloor.
-- [ ] **Miniboss persistence** — Confirm Miniboss will not respawn via returning from backfloors if already killed. Confirm Miniboss still spawns as same enemy type if not killed before going to backfloor then returning.
+- [ ] **Miniboss persistence** — Confirm Miniboss will not respawn via returning from backfloors if already killed. Confirm Miniboss still spawns as same enemy species if not killed before going to backfloor then returning.
 - [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 4× the base enemy values (up from 3×)
 - [ ] **Flavor rare loot (5%)** — Each dungeon has per-enemy rare loot; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
 - [ ] **Flavor common loot (30%)** — Verify themed items drop from the correct enemies per dungeon

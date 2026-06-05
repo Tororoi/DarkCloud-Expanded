@@ -946,7 +946,7 @@ namespace Dark_Cloud_Improved_Version
                         for (int i = 0; i < 15; i++)
                         {
                             if (Memory.ReadByte(Enemies.Enemy0.renderStatus + (Enemies.offset * i)) == 2 &&
-                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.enemyTypeId + (Enemies.offset * i))))
+                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.enemySpeciesId + (Enemies.offset * i))))
                             {
                                 Memory.WriteUShort(Enemies.Enemy0.freezeTimer + (Enemies.offset * i), 300);
                             }
@@ -1249,8 +1249,8 @@ namespace Dark_Cloud_Improved_Version
                     if (former[i] <= 0 || current[i] >= former[i])
                         continue;
 
-                    int enemyTypeId = Memory.ReadUShort(Enemies.Enemy0.enemyTypeId + (Enemies.offset * i));
-                    if (CactusImmuneNameTags.Contains(enemyTypeId))
+                    int enemySpeciesId = Memory.ReadUShort(Enemies.Enemy0.enemySpeciesId + (Enemies.offset * i));
+                    if (CactusImmuneNameTags.Contains(enemySpeciesId))
                         continue;
 
                     float curThirst = Player.Ungaga.GetThirst();
