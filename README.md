@@ -178,3 +178,14 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - **"PNACH File not active!"** — The PNACH file is missing from PCSX2's cheats folder, or cheats are not enabled. See the [Install the PNACH file](#install-the-pnach-file) section above.
 - **Flatpak PCSX2 on Linux** — The Flatpak sandbox may block the PINE port. Run `flatpak override --user --share=network net.pcsx2.PCSX2` to allow it.
 - **macOS firewall prompt** — Allow the mod to accept incoming connections when macOS asks.
+
+---
+
+## Fishing Simulator
+
+**[Dark Cloud Fishing Simulator](https://script.google.com/macros/s/AKfycbyoi6I-9LdJea1EaUaPxLiYE68pKb-Zyk7tnHnPhnHrD0pULEpdaHC7dJTz_k121EFZRQ/exec)**
+
+Tool for simulating Dark Cloud fishing sessions. No account or setup required — open it in any browser.
+
+- Lists the static data values for all fish species, including size ranges, bait affinities and spawn weights
+- Uses the game's native RNG and size calculation methods to generate size distribution charts across session and per-species simulation modes, and includes an FP calculator for exact reward lookups
