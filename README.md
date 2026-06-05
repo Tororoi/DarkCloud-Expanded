@@ -183,7 +183,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 
 ## Fishing Simulator
 
-**[Dark Cloud Fishing Simulator](https://script.google.com/macros/s/AKfycbyoi6I-9LdJea1EaUaPxLiYE68pKb-Zyk7tnHnPhnHrD0pULEpdaHC7dJTz_k121EFZRQ/exec)**
+**[Dark Cloud Fishing Simulator](https://script.google.com/macros/s/AKfycbwtFbtbH3h0z_jjyyXnIf3i7Hi08fxosvnIa0PXw9o2qthstTo7MB2RC2dF1nOf74_P7Q/exec)**
 
 Tool for simulating Dark Cloud fishing sessions. No account or setup required — open it in any browser.
 
