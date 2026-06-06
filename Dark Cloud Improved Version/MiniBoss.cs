@@ -14,7 +14,7 @@ namespace Dark_Cloud_Improved_Version
         public const int scaleOffset = 0x3510;         //Offset for size
         public static List<int> miniBossEnemyNumbers = new List<int>();
         public static bool miniBossRolled = false;
-        const int varOffset = 0x190;            //Offset for attributes
+
         const float scaleSize = 1.5F;           //Sets the total size of the miniboss
         const int enemyHPMult = 4;              //Miniboss HP multiplier
         const int enemyABSMult = 4;             //Miniboss ABS multiplier
@@ -48,7 +48,7 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < allIds.Count; i++)
             {
                 ushort id = allIds[i];
-                ushort dropVal = Memory.ReadUShort(EnemySlots.Enemy0.forceItemDrop + (varOffset * i));
+                ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (id == 0 || nonKeyEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
                     ineligibleCount++;
             }
@@ -62,7 +62,7 @@ namespace Dark_Cloud_Improved_Version
                 ushort id = allIds[i];
                 if (id == 0) continue;
                 if (nonKeyEnemies.ContainsKey(id)) continue;
-                ushort dropVal = Memory.ReadUShort(EnemySlots.Enemy0.forceItemDrop + (varOffset * i));
+                ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (dropVal != 0 && dropVal != 65535) continue;
                 if (rnd.Next(denominator) == 0)
                     winners.Add(i);
@@ -102,20 +102,20 @@ namespace Dark_Cloud_Improved_Version
             if (EnemySlots.EnemyHasKey(slot, dungeon))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyMiniBossToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
 
-            int startBossHP = Memory.ReadInt(EnemySlots.Enemy0.maxHp + (varOffset * slot));
-            int startAbs    = Memory.ReadInt(EnemySlots.Enemy0.abs + (varOffset * slot));
-            int startGold   = Memory.ReadInt(EnemySlots.Enemy0.minGoldDrop + (varOffset * slot));
+            int startBossHP = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MaxHp));
+            int startAbs    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs));
+            int startGold   = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop));
 
             Memory.WriteFloat(enemyZeroWidth  + (scaleOffset * slot), scaleSize);
             Memory.WriteFloat(enemyZeroHeight + (scaleOffset * slot), scaleSize);
             Memory.WriteFloat(enemyZeroDepth  + (scaleOffset * slot), scaleSize);
-            Memory.WriteInt(EnemySlots.Enemy0.hp           + (varOffset * slot), startBossHP * enemyHPMult);
-            Memory.WriteInt(EnemySlots.Enemy0.maxHp        + (varOffset * slot), startBossHP * enemyHPMult);
-            Memory.WriteInt(EnemySlots.Enemy0.abs          + (varOffset * slot), startAbs * enemyABSMult);
-            Memory.WriteInt(EnemySlots.Enemy0.itemResistance + (varOffset * slot), enemyItemResistMulti);
-            Memory.WriteInt(EnemySlots.Enemy0.minGoldDrop  + (varOffset * slot), startGold * enemyGoldMult);
-            Memory.WriteInt(EnemySlots.Enemy0.dropChance   + (varOffset * slot), enemyLootChance);
-            Memory.WriteByte(EnemySlots.Enemy0.staminaTimer + (varOffset * slot) + 0x2, staminaTimer);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp),           startBossHP * enemyHPMult);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MaxHp),        startBossHP * enemyHPMult);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs),          startAbs * enemyABSMult);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ItemResistance), enemyItemResistMulti);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop),  startGold * enemyGoldMult);
+            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.DropChance),   enemyLootChance);
+            Memory.WriteByte(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.StaminaTimer) + 0x2, staminaTimer);
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
             ushort enemySpeciesId = EnemySlots.GetFloorEnemyId(slot);
@@ -158,7 +158,7 @@ namespace Dark_Cloud_Improved_Version
             var snap = new List<MiniBossSnapshot>();
             foreach (int slot in miniBossEnemyNumbers)
             {
-                if (Memory.ReadInt(EnemySlots.Enemy0.hp + (varOffset * slot)) > 0)
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0)
                     snap.Add(new MiniBossSnapshot { Slot = slot, TypeId = EnemySlots.GetFloorEnemyId(slot) });
             }
             miniBossRolled = false;
@@ -195,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
                 if (EnemySlots.EnemyHasKey(entry.Slot, dungeon))
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss restore: key conflict at slot " + entry.Slot + ", transferring key.");
-                    ushort keyId = Memory.ReadUShort(EnemySlots.Enemy0.forceItemDrop + (varOffset * entry.Slot));
+                    ushort keyId = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(entry.Slot, EnemySlotOffsets.ForceItemDrop));
                     int newSlot = -1;
                     for (int i = 0; i < 15; i++)
                     {
@@ -207,8 +207,8 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (newSlot >= 0)
                     {
-                        Memory.WriteUShort(EnemySlots.Enemy0.forceItemDrop + (varOffset * entry.Slot), 0);
-                        Memory.WriteUShort(EnemySlots.Enemy0.forceItemDrop + (varOffset * newSlot), keyId);
+                        Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(entry.Slot, EnemySlotOffsets.ForceItemDrop), 0);
+                        Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(newSlot, EnemySlotOffsets.ForceItemDrop), keyId);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Key transferred to slot " + newSlot);
                     }
                     else
@@ -274,7 +274,7 @@ namespace Dark_Cloud_Improved_Version
         // Weapons start at ID 257 in Items.cs; they require a 32-bit write.
         private static void WriteLootItem(int itemId, int enemyNum)
         {
-            int lootAddress = EnemySlots.Enemy0.forceItemDrop + (varOffset * enemyNum);
+            int lootAddress = EnemyAddresses.FloorSlots.SlotAddr(enemyNum, EnemySlotOffsets.ForceItemDrop);
             if (itemId >= 257)
                 Memory.WriteInt(lootAddress, itemId);
             else
@@ -318,7 +318,7 @@ namespace Dark_Cloud_Improved_Version
 
             // Phase 1: wait for the miniboss to die so any weapon already in
             // inventory (e.g. from a chest) is present in the snapshot we take next.
-            int hpAddress = EnemySlots.Enemy0.hp + (varOffset * enemyNum);
+            int hpAddress = EnemyAddresses.FloorSlots.SlotAddr(enemyNum, EnemySlotOffsets.Hp);
             int elapsed = 0;
             while (MiniBossLootTables.pendingBoostActive && Memory.ReadInt(hpAddress) > 0 && elapsed < 300000)
             {

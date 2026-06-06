@@ -148,51 +148,17 @@ namespace Dark_Cloud_Improved_Version
 
         public static int[] GetEnemiesHp()
         {
-            //Save every enemy's HP on the current floor
-            int[] EnemiesHP = { Memory.ReadUShort(EnemySlots.Enemy0.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy1.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy2.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy3.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy4.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy5.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy6.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy7.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy8.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy9.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy10.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy11.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy12.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy13.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy14.hp),
-                                Memory.ReadUShort(EnemySlots.Enemy15.hp)
-            };
-
+            int[] EnemiesHP = new int[EnemyAddresses.FloorSlots.Count];
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+                EnemiesHP[i] = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp));
             return EnemiesHP;
         }
 
         public static float[] GetEnemiesDistance()
         {
-
-            //Save every current distance
-            float[] distance = { Memory.ReadFloat(EnemySlots.Enemy0.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy1.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy2.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy3.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy4.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy5.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy6.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy7.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy8.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy9.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy10.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy11.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy12.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy13.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy14.distanceToPlayer),
-                                Memory.ReadFloat(EnemySlots.Enemy15.distanceToPlayer),
-
-            };
-
+            float[] distance = new float[EnemyAddresses.FloorSlots.Count];
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+                distance[i] = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.DistanceToPlayer));
             return distance;
         }
 
@@ -226,25 +192,8 @@ namespace Dark_Cloud_Improved_Version
             //Go through the enemies hit list and store the ones who died
             foreach (int enemy in enemiesHit)
             {
-                switch (enemy)
-                {
-                    case 0: if (Memory.ReadUShort(EnemySlots.Enemy0.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 1: if (Memory.ReadUShort(EnemySlots.Enemy1.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 2: if (Memory.ReadUShort(EnemySlots.Enemy2.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 3: if (Memory.ReadUShort(EnemySlots.Enemy3.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 4: if (Memory.ReadUShort(EnemySlots.Enemy4.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 5: if (Memory.ReadUShort(EnemySlots.Enemy5.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 6: if (Memory.ReadUShort(EnemySlots.Enemy6.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 7: if (Memory.ReadUShort(EnemySlots.Enemy7.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 8: if (Memory.ReadUShort(EnemySlots.Enemy8.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 9: if (Memory.ReadUShort(EnemySlots.Enemy9.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 10: if (Memory.ReadUShort(EnemySlots.Enemy10.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 11: if (Memory.ReadUShort(EnemySlots.Enemy11.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 12: if (Memory.ReadUShort(EnemySlots.Enemy12.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 13: if (Memory.ReadUShort(EnemySlots.Enemy13.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 14: if (Memory.ReadUShort(EnemySlots.Enemy14.hp) == 0) enemyKilled.Add(enemy); break;
-                    default: break;
-                }
+                if (Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(enemy, EnemySlotOffsets.Hp)) == 0)
+                    enemyKilled.Add(enemy);
             }
 
             return enemyKilled;
@@ -256,8 +205,8 @@ namespace Dark_Cloud_Improved_Version
 
             for(int i = 0; i < 15; i++)
             {
-                if(Memory.ReadInt(EnemySlots.Enemy0.hp + (EnemySlots.offset * i)) == 0 &&
-                    Memory.ReadByte(EnemySlots.Enemy0.renderStatus + (EnemySlots.offset * i)) == 255) {
+                if(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp)) == 0 &&
+                    Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.RenderStatus)) == 255) {
 
                     count++;
                 }

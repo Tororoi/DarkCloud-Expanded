@@ -403,7 +403,7 @@ namespace Dark_Cloud_Improved_Version
                             if (!excludeFloors.Contains(currentFloor))
                             {
                                 //Initialize the spawns check
-                                Memory.WriteInt(EnemySlots.Enemy14.hp, 1);
+                                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp), 1);
                                 spawnsCheck = new Thread(new ThreadStart(CheckSpawns));
                                 spawnsCheck.Start();
 
@@ -674,7 +674,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 //Listens for the enemy render address value to change, from 0 or 10 seconds have passed
                 //We use the enemy render value here because enemies spawn after chests
-                while (Memory.ReadByte(EnemySlots.Enemy14.renderStatus) == 255 && ms < 10000)
+                while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.RenderStatus)) == 255 && ms < 10000)
                 {
                     Thread.Sleep(100);
                     ms += 100;
@@ -685,7 +685,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 //Listens for the enemy hp address value to change, from 0 or 10 seconds have passed
                 //We use the enemy render value here because enemies spawn after chests
-                while (Memory.ReadByte(EnemySlots.Enemy14.hp) == 1 && ms < 10000)
+                while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp)) == 1 && ms < 10000)
                 {
                     Thread.Sleep(100);
                     ms += 100;
@@ -696,15 +696,15 @@ namespace Dark_Cloud_Improved_Version
             // The sentinel wrote 1 to Enemy14.hp before enemies spawned.
             // If the game had already set HP before we wrote the sentinel (or if it timed out),
             // slot 14's HP is stuck at 1. maxHp was never touched, so restore from it.
-            if (Memory.ReadInt(EnemySlots.Enemy14.renderStatus) > 0)
+            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.RenderStatus)) > 0)
             {
-                int e14MaxHp = Memory.ReadInt(EnemySlots.Enemy14.maxHp);
+                int e14MaxHp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.MaxHp));
                 if (e14MaxHp > 0)
-                    Memory.WriteInt(EnemySlots.Enemy14.hp, e14MaxHp);
+                    Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp), e14MaxHp);
             }
 
             //Set the flag to true
-            if(Memory.ReadByte(EnemySlots.Enemy0.renderStatus) > 0) enemiesSpawn = true;
+            if(Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.RenderStatus)) > 0) enemiesSpawn = true;
 
             //Get all the current floor enemy ids
             List<ushort> enemyFloorIds = EnemySlots.GetFloorEnemiesIds();
@@ -1355,8 +1355,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 foreach (int slot in MiniBoss.miniBossEnemyNumbers)
                 {
-                    if (Memory.ReadInt(EnemySlots.Enemy0.staminaTimer + (0x190 * slot)) < 60)
-                        Memory.WriteInt(EnemySlots.Enemy0.staminaTimer + (0x190 * slot), 60000);
+                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.StaminaTimer)) < 60)
+                        Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.StaminaTimer), 60000);
                 }
             }
 

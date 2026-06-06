@@ -228,9 +228,9 @@ namespace Dark_Cloud_Improved_Version
 
                         randomItem = GetRandomLoot(FilterLootTable(itemTable));
 
-                        Memory.Write(EnemySlots.Enemy0.drop, BitConverter.GetBytes(randomItem));
+                        Memory.Write(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.ForceItemDrop), BitConverter.GetBytes(randomItem));
 
-                        currentAddress = EnemySlots.Enemy0.drop;
+                        currentAddress = EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.ForceItemDrop);
 
                         for (int i = 0; i < 16; i++)
                         {
