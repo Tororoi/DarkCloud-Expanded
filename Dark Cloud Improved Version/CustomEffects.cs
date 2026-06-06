@@ -105,6 +105,16 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Checks if the player has Chronicle 2 equipped or in inventory and sets acquired to true if so.
+        /// When possessed, Chronicle 2 affects dungeon loot in two ways:
+        ///   1. The clown vendor always rolls from the weapon table instead of having a 50% chance of non-weapon items.
+        ///   2. Powerup Powder is allowed to appear in chests normally; without Chronicle 2 it has an 80% chance to be re-rolled.
+        /// It also adjusts the big-chest spawn threshold based on the current dungeon.
+        /// Checks weapon slots 0–9 first, then scans up to 30 storage slots starting at 0x21CE22D8.
+        /// </summary>
+        /// <param name="acquired"></param>
+        /// <returns></returns>
         public static bool CheckChronicle2(bool acquired)
         {
             acquired = false;
@@ -273,13 +283,18 @@ namespace Dark_Cloud_Improved_Version
             const int toanWeaponSlot0Id     = 0x21CDDA58;
             const int toanWeaponSlotSize    = 0xF8;
 
-            bool penalized = false;
-            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
+            bool penalized    = false;
+            bool wasNearDeath = false;
+            byte lastFloor    = Memory.ReadByte(Addresses.checkFloor);
 
-            // Apply curse immediately on equip
+            // Apply curse immediately on equip, but not while in NearDeath
             ushort cur = Memory.ReadUShort(toanStatus);
-            Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
-            Memory.WriteUShort(toanStatusTimer, 3600);
+            wasNearDeath = (cur & 0x02) != 0;
+            if (!wasNearDeath)
+            {
+                Memory.WriteUShort(toanStatus,      (ushort)(cur | 0x20));
+                Memory.WriteUShort(toanStatusTimer, 3600);
+            }
 
             while (Player.InDungeonFloor())
             {
@@ -289,22 +304,40 @@ namespace Dark_Cloud_Improved_Version
                 byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
                 if (currentFloor != lastFloor)
                 {
-                    // New floor: clear penalty and reapply curse
-                    penalized = false;
-                    lastFloor = currentFloor;
+                    // New floor: clear penalty/NearDeath tracking and reapply curse
+                    penalized    = false;
+                    wasNearDeath = false;
+                    lastFloor    = currentFloor;
                     cur = Memory.ReadUShort(toanStatus);
                     Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x20));
                     Memory.WriteUShort(toanStatusTimer, 3600);
                 }
 
-                if (!penalized)
+                cur = Memory.ReadUShort(toanStatus);
+                bool nearDeath = (cur & 0x02) != 0;
+
+                if (nearDeath)
                 {
-                    cur = Memory.ReadUShort(toanStatus);
+                    // NearDeath state: suspend curse effect, don't penalize
+                    wasNearDeath = true;
+                }
+                else if (wasNearDeath)
+                {
+                    // Recovered from NearDeath: reapply curse only if holy water wasn't used this floor
+                    wasNearDeath = false;
+                    if (!penalized)
+                    {
+                        Memory.WriteUShort(toanStatus,      (ushort)(cur | 0x20));
+                        Memory.WriteUShort(toanStatusTimer, 3600);
+                    }
+                }
+                else if (!penalized)
+                {
                     if ((cur & 0x20) == 0)
                     {
                         // Curse was removed externally (holy water) — penalize
                         penalized = true;
-                        Memory.WriteUShort(toanStatus,      (ushort)((cur & 0x02) | 0x10)); // Poison
+                        Memory.WriteUShort(toanStatus,      (ushort)(cur | 0x10)); // Poison
                         Memory.WriteUShort(toanStatusTimer, 3600);
                         Memory.WriteUShort(toanHp, 1);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise: curse broken — poison and HP=1 applied");
@@ -913,7 +946,7 @@ namespace Dark_Cloud_Improved_Version
                         for (int i = 0; i < 15; i++)
                         {
                             if (Memory.ReadByte(Enemies.Enemy0.renderStatus + (Enemies.offset * i)) == 2 &&
-                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i))))
+                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(Enemies.Enemy0.enemySpeciesId + (Enemies.offset * i))))
                             {
                                 Memory.WriteUShort(Enemies.Enemy0.freezeTimer + (Enemies.offset * i), 300);
                             }
@@ -1216,8 +1249,8 @@ namespace Dark_Cloud_Improved_Version
                     if (former[i] <= 0 || current[i] >= former[i])
                         continue;
 
-                    int nameTag = Memory.ReadUShort(Enemies.Enemy0.nameTag + (Enemies.offset * i));
-                    if (CactusImmuneNameTags.Contains(nameTag))
+                    int enemySpeciesId = Memory.ReadUShort(Enemies.Enemy0.enemySpeciesId + (Enemies.offset * i));
+                    if (CactusImmuneNameTags.Contains(enemySpeciesId))
                         continue;
 
                     float curThirst = Player.Ungaga.GetThirst();

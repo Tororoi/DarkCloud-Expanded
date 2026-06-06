@@ -101,6 +101,8 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
+                    // Enemies.PollEnemyDynamics();
+                    // Enemies.MonitorFlashTimer();
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -438,7 +440,10 @@ namespace Dark_Cloud_Improved_Version
 
                 }
                 //Used to reset the floor data when going back to dungeon
-                else prevFloor = 200;
+                else
+                {
+                    prevFloor = 200;
+                }
 
                 if (Memory.ReadByte(Addresses.dungeonMode) == 4) //Check if in floor selection menu
                 {
@@ -688,6 +693,16 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
 
+            // The sentinel wrote 1 to Enemy14.hp before enemies spawned.
+            // If the game had already set HP before we wrote the sentinel (or if it timed out),
+            // slot 14's HP is stuck at 1. maxHp was never touched, so restore from it.
+            if (Memory.ReadInt(Enemies.Enemy14.renderStatus) > 0)
+            {
+                int e14MaxHp = Memory.ReadInt(Enemies.Enemy14.maxHp);
+                if (e14MaxHp > 0)
+                    Memory.WriteInt(Enemies.Enemy14.hp, e14MaxHp);
+            }
+
             //Set the flag to true
             if(Memory.ReadByte(Enemies.Enemy0.renderStatus) > 0) enemiesSpawn = true;
 
@@ -703,6 +718,10 @@ namespace Dark_Cloud_Improved_Version
             //Check if there are more than 3 normal enemies in the floor
             //This is to account for the Wise Owl 3 keys
             //There needs to be enough normal enemies to roll for the miniboss in order to avoid infinite retries
+            // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
+            // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
+            Enemies.LogEnemySpawns();
+
             if (numNormalEnemies > 3)
             {
                 minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
@@ -725,6 +744,10 @@ namespace Dark_Cloud_Improved_Version
                 monstersDead[i] = false;
             }
 
+            // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
+            minibossProcess?.Join(2000);
+            // Enemies.ApplyTestModifications();
+            Enemies.ResetPollState();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 
@@ -1139,14 +1162,14 @@ namespace Dark_Cloud_Improved_Version
         {
             if (circlePressed == false)
             {
-                if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.Circle)
+                if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)
                 {
                     circlePressed = true;
                 }
             }
             else
             {
-                if (Memory.ReadUShort(Addresses.buttonInputs) != (ushort)CheatCodes.InputBuffer.Button.Circle)
+                if (Memory.ReadUShort(Addresses.buttonInputs) != (ushort)Button.Circle)
                 {
                     currentGilda = Memory.ReadUShort(Addresses.gilda);
                     Memory.WriteUShort(Addresses.dungeonDebugMenu, 170);
@@ -1158,7 +1181,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static void CheckActiveItems()
         {
-            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)CheatCodes.InputBuffer.Button.Square && (Memory.ReadByte(0x21D5676D) > 0 && Memory.ReadInt(0x21D56770) == -1) )
+            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Square && (Memory.ReadByte(0x21D5676D) > 0 && Memory.ReadInt(0x21D56770) == -1) )
             {
                 int currentSlot = Memory.ReadInt(0x202A3598);
                 int currentActiveItem = 0x21CDD8AC + (0x2 * currentSlot);

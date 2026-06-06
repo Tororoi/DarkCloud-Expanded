@@ -40,6 +40,8 @@ namespace Dark_Cloud_Improved_Version
         {
             Thread.Sleep(200);
 
+            miniBossEnemyNumbers.Clear();
+
             // Count all enemies ineligible to become a miniboss (ID 0, flying, or has a forced item drop)
             int ineligibleCount = 0;
             List<ushort> allIds = Enemies.GetFloorEnemiesIds();
@@ -79,7 +81,7 @@ namespace Dark_Cloud_Improved_Version
                 "\nWinners: " + winners.Count + "\n");
 
             foreach (int slot in winners)
-                ApplyToSlot(slot, dungeon, floor);
+                ApplyMiniBossToSlot(slot, dungeon, floor);
 
             miniBossRolled = true;
             return true;
@@ -89,7 +91,7 @@ namespace Dark_Cloud_Improved_Version
         /// Applies miniboss stat multipliers and rolls loot for a single enemy slot.
         /// Also registers the slot in miniBossEnemyNumbers.
         /// </summary>
-        private static void ApplyToSlot(int slot, byte dungeon, byte floor)
+        private static void ApplyMiniBossToSlot(int slot, byte dungeon, byte floor)
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 "\nApplying miniboss to slot: " + slot +
@@ -98,9 +100,9 @@ namespace Dark_Cloud_Improved_Version
             // Eligibility filtering should prevent a key-holder from ever being chosen.
             // This block should be unreachable — log a warning if it fires.
             if (Enemies.EnemyHasKey(slot, dungeon))
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyMiniBossToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
 
-            int startBossHP = Memory.ReadInt(Enemies.Enemy0.hp + (varOffset * slot));
+            int startBossHP = Memory.ReadInt(Enemies.Enemy0.maxHp + (varOffset * slot));
             int startAbs    = Memory.ReadInt(Enemies.Enemy0.abs + (varOffset * slot));
             int startGold   = Memory.ReadInt(Enemies.Enemy0.minGoldDrop + (varOffset * slot));
 
@@ -116,9 +118,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteByte(Enemies.Enemy0.staminaTimer + (varOffset * slot) + 0x2, staminaTimer);
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
-            ushort enemyTypeId = Enemies.GetFloorEnemyId(slot);
+            ushort enemySpeciesId = Enemies.GetFloorEnemyId(slot);
 
-            if (!TryApplyFlavorLoot(enemyTypeId, dungeon, slot))
+            if (!TryApplyFlavorLoot(enemySpeciesId, dungeon, slot))
             {
                 if (rnd.Next(100) < 35)
                 {
@@ -215,7 +217,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                ApplyToSlot(entry.Slot, dungeon, floor);
+                ApplyMiniBossToSlot(entry.Slot, dungeon, floor);
             }
 
             if (miniBossEnemyNumbers.Count > 0)
@@ -227,7 +229,7 @@ namespace Dark_Cloud_Improved_Version
         /// Checks flavorRare (5%) first, then flavorLoot (30%).
         /// Returns true if special loot was applied.
         /// </summary>
-        private static bool TryApplyFlavorLoot(ushort enemyTypeId, byte dungeon, int enemyNum)
+        private static bool TryApplyFlavorLoot(ushort enemySpeciesId, byte dungeon, int enemyNum)
         {
             Dictionary<ushort, int[]> rareLoot;
             Dictionary<ushort, int[]> flavorLoot;
@@ -246,7 +248,7 @@ namespace Dark_Cloud_Improved_Version
                 default: return false;
             }
 
-            if (rareLoot.TryGetValue(enemyTypeId, out int[] rarePool) && rnd.Next(100) < 5)
+            if (rareLoot.TryGetValue(enemySpeciesId, out int[] rarePool) && rnd.Next(100) < 5)
             {
                 int rareItem = rarePool[rnd.Next(rarePool.Length)];
                 WriteLootItem(rareItem, enemyNum);
@@ -256,7 +258,7 @@ namespace Dark_Cloud_Improved_Version
                 return true;
             }
 
-            if (flavorLoot.TryGetValue(enemyTypeId, out int[] flavorPool) && rnd.Next(100) < 30)
+            if (flavorLoot.TryGetValue(enemySpeciesId, out int[] flavorPool) && rnd.Next(100) < 30)
             {
                 int flavorItem = flavorPool[rnd.Next(flavorPool.Length)];
                 WriteLootItem(flavorItem, enemyNum);

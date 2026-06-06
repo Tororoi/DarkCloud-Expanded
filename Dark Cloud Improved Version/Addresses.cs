@@ -1,4 +1,6 @@
-﻿namespace Dark_Cloud_Improved_Version
+﻿using System;
+
+namespace Dark_Cloud_Improved_Version
 {
     class Addresses
     {
@@ -299,12 +301,7 @@
         public const int dungeonDebugMenu = 0x202A35EC;
 
         //Inputs
-        public const int buttonInputs = 0x21CBC544; //Two-byte Bitfield
-
-        //Square = 128        Cross = 64      Circle = 32       Triangle = 16
-        //DPadLeft = 32768        DPadDown = 16384      DPadRight = 8192       DPadUP = 4096
-        //Select = 256     L3 = 512      R3 = 1024      Start = 2048
-        //L1 = 4        L2 = 1      R1 = 8      R2 = 2
+        public const int buttonInputs = 0x21CBC544; //Two-byte Bitfield — bitmask values defined in Button enum
 
         public const int LeftAnalogInputX = 0x21CBC5E0; //Byte
         public const int LeftAnalogInputY = 0x21CBC54C;
@@ -389,22 +386,6 @@
 
         public const int assignEditInit = 0x201F74B4; //when character is being selected, the game jumps to a function located in this address. We change this function to jal EditInit to reload map
 
-        //Fishing
-        /// <summary>Base address of the first fish slot for each fishing area. Slots are stride 0x2410 bytes apart.</summary>
-        public const int fishSlotStride      = 0x2410;
-        public const int fishSlotBase_Norune    = 0x214798D0; // Area 0 — Norune Village,    4 slots
-        public const int fishSlotBase_Matataki  = 0x214D9910; // Area 1 — Matataki Waterfall + Peanut Pond, 5 slots (shared)
-        public const int fishSlotBase_MuskaLacka     = 0x213C3150; // Area 3 — location TBD,       4 slots
-        public const int fishSlotBase_Queens    = 0x20DE0710; // Area 19 — location TBD,      5 slots
-
-        /// <summary>
-        /// Index of the fishing trigger NPC/object that activated the current fishing session,
-        /// within the area's object table. Set when townMode transitions to 16 (fishing).
-        /// Used to distinguish sub-spots that share the same area ID.
-        /// Confirmed values: Norune=4, PeanutPond=11, MatatakiWaterfall=13, Queens=-1 (unset).
-        /// </summary>
-        public const int fishingTriggerIndex = 0x202A1F64;
-
         /// <summary>
         /// Address of the lui instruction that sets the fish detection (bite) radius.
         /// Owned by PNACH — do not write here via PINE. Set <see cref="fishRangeBoostFlag"/> instead.
@@ -416,5 +397,28 @@
         /// </summary>
         public const int fishRangeBoostFlag = 0x21F10038;
 
+    }
+
+    [Flags]
+    public enum Button : ushort
+    {
+        None       = 0b_0000000000000000,
+        L2         = 0b_0000000000000001,
+        R2         = 0b_0000000000000010,
+        L1         = 0b_0000000000000100,
+        R1         = 0b_0000000000001000,
+        Triangle   = 0b_0000000000010000,
+        Circle     = 0b_0000000000100000,
+        Cross      = 0b_0000000001000000,
+        Square     = 0b_0000000010000000,
+        Select     = 0b_0000000100000000,
+        L3         = 0b_0000001000000000,
+        R3         = 0b_0000010000000000,
+        Start      = 0b_0000100000000000,
+        DPad_Up    = 0b_0001000000000000,
+        DPad_Right = 0b_0010000000000000,
+        DPad_Down  = 0b_0100000000000000,
+        DPad_Left  = 0b_1000000000000000,
+        All        = 0b_1111111111111111,
     }
 }

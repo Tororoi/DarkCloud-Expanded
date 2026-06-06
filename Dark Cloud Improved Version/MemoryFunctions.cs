@@ -20,6 +20,7 @@ namespace Dark_Cloud_Improved_Version
         private static NetworkStream _stream;
         private static readonly object _lock = new object();
 
+
         public static void Connect(int slot = 0)
         {
             _stream?.Close();
@@ -98,6 +99,11 @@ namespace Dark_Cloud_Improved_Version
             _socket?.Close();
             _stream = null;
             _socket = null;
+        }
+
+        internal static void WriteIntFast(long address, int value)
+        {
+            SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
         }
 
         private static byte[] SendBatch(byte[] packet)
@@ -266,6 +272,76 @@ namespace Dark_Cloud_Improved_Version
             for (long i = 0; i < numBytes; i++)
                 result[i] = ReadByte(address + i);
             return result;
+        }
+
+        // Reads <count> consecutive 32-bit floats starting at <startAddr> in one PINE
+        // round-trip. Packs N Read32 commands into a single socket packet.
+        //
+        // PCSX2 v2.7.x batch response format (confirmed empirically):
+        //   [uint32 total_len][0x00 status][float_0][float_1]...[float_N-1]
+        //   i.e. one shared status byte followed by N×4 data bytes — NOT N×(status+data).
+        // The parser handles both formats so it degrades gracefully if PCSX2 changes.
+        internal static float[] ReadFloatBatch(long startAddr, int count)
+        {
+            int pktLen = 4 + count * 5; // header(4) + N*(opcode(1)+addr(4))
+            var pkt = new byte[pktLen];
+            BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+            for (int i = 0; i < count; i++)
+            {
+                int off = 4 + i * 5;
+                pkt[off] = 0x02; // Read32
+                BitConverter.GetBytes(PhysAddr(startAddr + (long)i * 4)).CopyTo(pkt, off + 1);
+            }
+
+            lock (_lock)
+            {
+                if (_stream == null) return new float[count];
+                try
+                {
+                    _stream.Write(pkt, 0, pkt.Length);
+                    var lenBuf = new byte[4];
+                    ReadFully(lenBuf, 0, 4);
+                    int respLen = BitConverter.ToInt32(lenBuf, 0) - 4;
+                    if (respLen <= 0) return new float[count];
+                    var resp = new byte[respLen];
+                    ReadFully(resp, 0, respLen);
+
+                    var results = new float[count];
+                    if (respLen >= count * 5)
+                    {
+                        // fmtA: N × (status_byte + 4_data_bytes)
+                        for (int i = 0; i < count; i++)
+                        {
+                            int off = i * 5;
+                            if (resp[off] == 0)
+                                results[i] = BitConverter.ToSingle(resp, off + 1);
+                        }
+                    }
+                    else if (respLen >= 1 + count * 4 && resp[0] == 0)
+                    {
+                        // fmtB (PCSX2 v2.7.x): single status byte + N × 4_data_bytes
+                        for (int i = 0; i < count; i++)
+                            results[i] = BitConverter.ToSingle(resp, 1 + i * 4);
+                    }
+                    else if (respLen >= 5 && resp[0] == 0)
+                    {
+                        results[0] = BitConverter.ToSingle(resp, 1);
+                    }
+                    return results;
+                }
+                catch (EndOfStreamException)
+                {
+                    DisconnectStream();
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[PINE] Stream closed — emulator disconnected.");
+                    return new float[count];
+                }
+                catch (IOException ex)
+                {
+                    DisconnectStream();
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[PINE] IO error — connection lost: {ex.Message}");
+                    return new float[count];
+                }
+            }
         }
 
         internal static ushort ReadUShort(long address)

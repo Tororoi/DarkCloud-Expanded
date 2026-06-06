@@ -46,6 +46,11 @@ namespace Dark_Cloud_Improved_Version
         static bool itsfinishedOptionFlag = false;
         static bool isSideQuestDialogueActive = false;
         static bool fishingActive = false;
+        static bool _prevL3 = false;
+        static int _prevButtonRead = 0;
+        // Fishing sub-state probe — tracks 5 addresses for state detection.
+        // Also read by ModWindow for the live status panel.
+        internal static readonly int[] FishProbe = new int[5];
         public static bool queensQuest = false;
         static bool currentlyInShop = false;
         static bool shopDataCleared = false;
@@ -892,16 +897,40 @@ namespace Dark_Cloud_Improved_Version
                         changingLocation = false;
                     }
 
-                    int checkFishing = Memory.ReadByte(0x21D19714); //checks if player has entered fishing mode
-                    if (fishingActive == false & checkFishing == 1)
+                    int buttonRead = Memory.ReadInt(0x21CBC544);
+                    bool l3Down = (buttonRead & 512) != 0;
+                    if (l3Down && !_prevL3) FishDataFarmer.Toggle();
+                    _prevL3 = l3Down;
+                    if (buttonRead != _prevButtonRead && !FishDataFarmer.IsPressingButton)
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Input] Player buttons: {FormatButtons(buttonRead)}");
+                    _prevButtonRead = buttonRead;
+
+                    int checkFishing = Memory.ReadByte(FishingAddresses.Active);
+                    if (fishingActive == false && checkFishing == 1)
                     {
                         fishingActive = true;
-                        Fishing.OnSessionStart();
+                        Fishing.OnSessionStart(currentArea);
                     }
 
                     if (fishingActive == true)
                     {
-                        Fishing.InitFishingSession(ResolveFishingSpot(currentArea));
+                        Fishing.OnFishingTick();
+
+                        // Probe fishing sub-state addresses. Logs only when any value changes so output stays manageable.
+                        int p0 = Memory.ReadInt(FishingAddresses.OverworldState);
+                        int p1 = Memory.ReadInt(FishingAddresses.Active);
+                        int p2 = Memory.ReadInt(FishingAddresses.WalkSpeed);
+                        int p3 = Memory.ReadInt(FishingAddresses.CastAnimGate);
+                        int p4 = Memory.ReadInt(FishingAddresses.Phase);
+                        if (p0 != FishProbe[0] || p1 != FishProbe[1] || p2 != FishProbe[2] ||
+                            p3 != FishProbe[3] || p4 != FishProbe[4])
+                        {
+                            FishProbe[0] = p0; FishProbe[1] = p1; FishProbe[2] = p2;
+                            FishProbe[3] = p3; FishProbe[4] = p4;
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                                $"[FishProbe] 708={p0:X8} 714={p1:X8} 3E20={p2:X8} 3E24={p3:X8} 3E28={p4:X8}");
+                        }
+
                         if (checkFishing == 0)
                         {
                             fishingActive = false;
@@ -1463,16 +1492,7 @@ namespace Dark_Cloud_Improved_Version
                 currentAddress += 0x00000001;
             }
         }
-        // Matataki Waterfall (trigger index 13) and Peanut Pond (trigger index 11) share area ID 1.
-        // fishingTriggerIndex holds the object-table index of the rod NPC that activated fishing,
-        // confirmed stable across multiple sessions at each spot.
-        private static int ResolveFishingSpot(int areaId)
-        {
-            if (areaId != 1) return areaId;
-            int triggerIndex = Memory.ReadInt(Addresses.fishingTriggerIndex);
-            return triggerIndex == FishingAreaDatabase.MatatakiWaterfall.TriggerIndex
-                ? FishingAreaDatabase.MatatakiWaterfall.Id
-                : FishingAreaDatabase.PeanutPond.Id;
-        }
+        private static string FormatButtons(int mask) =>
+            mask == 0 ? "none" : ((Button)(ushort)mask).ToString();
     }
 }

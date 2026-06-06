@@ -110,7 +110,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 
 - [ ] **Per-enemy spawn logic** — Confirm rate of spawn is approximately 1 miniboss per floor, but possible for no or multiple minibosses to appear.
 - [ ] **Backfloor spawn** — Confirm minibosses may spawn in backfloor.
-- [ ] **Miniboss persistence** — Confirm Miniboss will not respawn via returning from backfloors if already killed. Confirm Miniboss still spawns as same enemy type if not killed before going to backfloor then returning.
+- [ ] **Miniboss persistence** — Confirm Miniboss will not respawn via returning from backfloors if already killed. Confirm Miniboss still spawns as same enemy species if not killed before going to backfloor then returning.
 - [ ] **Stat multipliers** — Kill a miniboss and confirm HP, ABS reward, and Gilda drop are roughly 4× the base enemy values (up from 3×)
 - [ ] **Flavor rare loot (5%)** — Each dungeon has per-enemy rare loot; verify correct items drop (e.g., Evilcise from Yammich in DBC, Bandit Slingshot from Days of the Week enemies in WOF)
 - [ ] **Flavor common loot (30%)** — Verify themed items drop from the correct enemies per dungeon
@@ -178,3 +178,14 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 - **"PNACH File not active!"** — The PNACH file is missing from PCSX2's cheats folder, or cheats are not enabled. See the [Install the PNACH file](#install-the-pnach-file) section above.
 - **Flatpak PCSX2 on Linux** — The Flatpak sandbox may block the PINE port. Run `flatpak override --user --share=network net.pcsx2.PCSX2` to allow it.
 - **macOS firewall prompt** — Allow the mod to accept incoming connections when macOS asks.
+
+---
+
+## Fishing Simulator
+
+**[Dark Cloud Fishing Simulator](https://script.google.com/macros/s/AKfycbwtFbtbH3h0z_jjyyXnIf3i7Hi08fxosvnIa0PXw9o2qthstTo7MB2RC2dF1nOf74_P7Q/exec)**
+
+Tool for simulating Dark Cloud fishing sessions. No account or setup required — open it in any browser.
+
+- Lists the static data values for all fish species, including size ranges, bait affinities and spawn weights
+- Uses the game's native RNG and size calculation methods to generate size distribution charts across session and per-species simulation modes, and includes an FP calculator for exact reward lookups

@@ -10,29 +10,6 @@ namespace Dark_Cloud_Improved_Version
         public static byte[] attachmentValues = new byte[32];
         internal class InputBuffer
         {
-            [Flags]
-            public enum Button
-            {
-                None        = 0b_0000000000000000,
-                L2          = 0b_0000000000000001,
-                R2          = 0b_0000000000000010,
-                L1          = 0b_0000000000000100,
-                R1          = 0b_0000000000001000,
-                Triangle    = 0b_0000000000010000,
-                Circle      = 0b_0000000000100000,
-                Cross       = 0b_0000000001000000,
-                Square      = 0b_0000000010000000,
-                Select      = 0b_0000000100000000,
-                L3          = 0b_0000001000000000,
-                R3          = 0b_0000010000000000,
-                Start       = 0b_0000100000000000,
-                DPad_Up     = 0b_0001000000000000,
-                DPad_Right  = 0b_0010000000000000,
-                DPad_Down   = 0b_0100000000000000,
-                DPad_Left   = 0b_1000000000000000,
-                All         = 0b_1111111111111111
-            }
-
             public static int index = 0;
             public static bool firstDebugCheatActive = false;
             
