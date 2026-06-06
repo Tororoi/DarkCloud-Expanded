@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static byte[] ItemTbl2 = Memory.ReadByteArray(Addresses.ItemTbl2, 304);         //Shipwreck 1-8
         private static byte[] ItemTbl2_1 = Memory.ReadByteArray(Addresses.ItemTbl2_1, 308);     //Shipwreck 10-17
-            
+
         private static byte[] ItemTbl3 = Memory.ReadByteArray(Addresses.ItemTbl3, 316);         //Sun and Moon 1-8
         private static byte[] ItemTbl3_1 = Memory.ReadByteArray(Addresses.ItemTbl3_1, 336);     //Unknown
         private static byte[] ItemTbl3_2 = Memory.ReadByteArray(Addresses.ItemTbl3_2, 336);     //Unknown
@@ -98,7 +98,7 @@ namespace Dark_Cloud_Improved_Version
             int roll2 = random.Next(dropRate); //Re-roll based on the drop rate of the item
 
             if (roll2 == dropRate - 1) //Random will never reach the max value, so decrement by one
-                return lootTable[randomItem]; 
+                return lootTable[randomItem];
 
             else
                 return GetRandomLoot(lootTable); //Re-run the function
@@ -228,9 +228,9 @@ namespace Dark_Cloud_Improved_Version
 
                         randomItem = GetRandomLoot(FilterLootTable(itemTable));
 
-                        Memory.Write(Enemies.Enemy0.drop, BitConverter.GetBytes(randomItem));
+                        Memory.Write(EnemySlots.Enemy0.drop, BitConverter.GetBytes(randomItem));
 
-                        currentAddress = Enemies.Enemy0.drop;
+                        currentAddress = EnemySlots.Enemy0.drop;
 
                         for (int i = 0; i < 16; i++)
                         {
@@ -360,7 +360,7 @@ namespace Dark_Cloud_Improved_Version
                             backfloorItemTable = ItemTbl12_1;
 
                             break;
-                    }  
+                    }
 
                     if (currentFloor != prevFloor)  //checking if player has entered a new floor
                     {
@@ -458,7 +458,7 @@ namespace Dark_Cloud_Improved_Version
                             if (checkItemID > 40)
                             {
                                 chestSize = random.Next(25);
-                                
+
                                 if (chestSize != 0)
                                 {
                                     randomItem = GetRandomLoot(FilterLootTable(backfloorItemTable));
@@ -525,7 +525,7 @@ namespace Dark_Cloud_Improved_Version
             while (true)
             {
                 int currentCharacter = Player.CurrentCharacterNum();
-                
+
                 //Check for character animations
                 switch (Memory.ReadByte(0x21DC4484))
                 {
@@ -705,7 +705,7 @@ namespace Dark_Cloud_Improved_Version
                                             {
 
                                                 Memory.WriteByte(currentWepElemAddr, elementSelected); //Set element in HUD for weapon
-                                                Memory.WriteByte(0x21EA75A6, elementSelected); //Set element 
+                                                Memory.WriteByte(0x21EA75A6, elementSelected); //Set element
                                                                                                  //elemSwitching = true;
 
                                                 if (currentCharacter == 3)
@@ -784,7 +784,7 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] bytes;
             int addressPointer = Memory.ReadInt(0x202A2DDC);
-            
+
             addressPointer += 0x20000000;
 
             switch (currentElem)
@@ -840,7 +840,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Returns true if no message is being displayed on screen, await a set amount of time if it is. 
+        /// Returns true if no message is being displayed on screen, await a set amount of time if it is.
         /// </summary>
         /// <param name="timeout">Set a timeout in miliseconds (Default is 8 seconds)</param>
         /// <returns></returns>
@@ -896,7 +896,7 @@ namespace Dark_Cloud_Improved_Version
 
             //'     =     "     !     ?     #     &     +     -     *     (     )    @     |     ^
             0x27, 0x3D, 0x22, 0x21, 0x3F, 0x23, 0x26, 0x2B, 0x2D, 0x2A, 0x28, 0x29, 0x40, 0x7C, 0x5E,
-            
+
             //<     >     {    }     [     ]
             0x3C, 0x3E, 0x7B, 0x7D, 0x5B, 0x5D,
 
@@ -919,7 +919,7 @@ namespace Dark_Cloud_Improved_Version
 
             //'     =     "     !     ?     #     &     +     -     *     (     )     @    |     ^
             0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x61, 0x62, 0x63, 0x64, 0xFF, //Just needed for detection, doesn't matter what this is
-            
+
             //<     >     {    }     [      ]
             0x65, 0x66, 0x67, 0x68, 0x69, 0x6A,
 
@@ -930,11 +930,11 @@ namespace Dark_Cloud_Improved_Version
               0x8,       0x6,
             };
 
-            
+
             //Initialize outputMessage to 0xFD
             for (int i = 0; i < outputMessage.Length; i++)
             {
-                outputMessage[i] = 0xFD;  
+                outputMessage[i] = 0xFD;
             }
 
             //Initialize current dungeonMessage to nothing
@@ -1083,7 +1083,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] function2OriginalOpcode = Memory.ReadByteArray(Addresses.functionEntryPoint2, 4);
 
             Memory.WriteByteArray(Addresses.functionEntryPoint, Addresses.functionOverride);
-            Memory.WriteByteArray(Addresses.functionEntryPoint2, function); 
+            Memory.WriteByteArray(Addresses.functionEntryPoint2, function);
         }
 
         public static void TestElementFunctionStuff()
@@ -1130,7 +1130,7 @@ namespace Dark_Cloud_Improved_Version
             Poison      =   0b_00100000,   // 32
             Stop        =   0b_01000000,   // 64
             Steal       =   0b_10000000,   // 128
-            All         =   0b_11111111,   // 254      
+            All         =   0b_11111111,   // 254
         }
 
         [Flags]
@@ -1143,13 +1143,13 @@ namespace Dark_Cloud_Improved_Version
             Heal        =   0b_00001000,   // 8
             Critical    =   0b_00010000,   // 16
             AbsUp       =   0b_00100000,   // 32
-            All         =   0b_00111111,   // 63 
+            All         =   0b_00111111,   // 63
         }
 
         static void CheckSpecials1()
         {
             Specials1 special1 = (Specials1)Memory.ReadByte(Player.Toan.WeaponSlot0.special1); //Pull our value from the memory and cast it to our enumerated Specials type
-            
+
             if (special1.HasFlag(Specials1.Unknown))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Weapon Slot 0 has Unknown Ability");
 
@@ -1210,7 +1210,7 @@ namespace Dark_Cloud_Improved_Version
             File.WriteAllBytes("memtextures\\MemTexture" + (resultIndex).ToString() + ".tm2", texture);
 
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished writing textures to disk.");
-        } 
+        }
 
         public static void Testing()
         {
@@ -1250,14 +1250,14 @@ namespace Dark_Cloud_Improved_Version
 
             //CheckSpecials1();
             //TestBitField(special1, special2);
-            //Memory.WriteUShort(Enemies.Enemy13.hp, 1000); 
+            //Memory.WriteUShort(EnemySlots.Enemy13.hp, 1000);
 
-            //printItemTableNames(ItemTbl6);      
+            //printItemTableNames(ItemTbl6);
 
             elementSwapThread.Start(); //Start thread
             cheatCodeThread.Start();
             //dayChestThread.Start();
-            //dayEnemyThread.Start();  
+            //dayEnemyThread.Start();
 
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
@@ -1337,7 +1337,7 @@ namespace Dark_Cloud_Improved_Version
                 //            {
                 //                godMode = true;
                 //                DisplayMessage("God Mode activated.             \n                          \nYou are now invincible to enemy damage.      ");
-                //            }           
+                //            }
                 //        }
                 //    }
                 //}

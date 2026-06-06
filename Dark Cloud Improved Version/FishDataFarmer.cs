@@ -173,7 +173,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void RecordSlot(byte fishId, float todFloat)
         {
             if (!_running) return;
-            if (!FishDatabase.TryGetValue(fishId, out _)) return;
+            if (!Fish.TryGetValue(fishId, out _)) return;
             TimeOfDay timeOfDay = Fishing.GetCurrentTimeOfDay(todFloat);
             var todCounts = _counts.GetOrAdd(fishId, _ => new Dictionary<TimeOfDay, int>
             {
@@ -214,7 +214,7 @@ namespace Dark_Cloud_Improved_Version
                     night     = todCounts[TimeOfDay.Night];
                 }
                 int total = morning + afternoon + dusk + night;
-                builder.AppendLine($"{FishDatabase.GetName(fishId)}: {total}  M={morning} A={afternoon} D={dusk} N={night}");
+                builder.AppendLine($"{Fish.GetName(fishId)}: {total}  M={morning} A={afternoon} D={dusk} N={night}");
             }
             return builder.ToString().TrimEnd();
         }
