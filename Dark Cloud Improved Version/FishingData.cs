@@ -44,7 +44,7 @@ namespace Dark_Cloud_Improved_Version
     /// Static repository of per-species <see cref="FishData"/> records, keyed by fish ID.
     /// All confirmed entries are sourced from natural slot dumps with no mod writes active.
     /// </summary>
-    internal static class FishDatabase
+    internal static class Fish
     {
         internal static readonly FishData Bobo = new FishData
         {
@@ -409,7 +409,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Dynamic lookup by fish ID — built from each entry's Id field so no hardcoded keys.
         private static readonly Dictionary<byte, FishData> ById;
-        static FishDatabase()
+        static Fish()
         {
             FishData[] allFish = {
                 Bobo, Gobbler, Nonky, Kaiji, BakuBaku, MardanGarayan, Gummy, Niler,
@@ -480,7 +480,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// Selects a fish species ID for one slot, replicating the spawner at ELF VA 0x001A8960.
-        /// Assigned per area in <see cref="FishingAreaDatabase"/>; each implementation calls the
+        /// Assigned per area in <see cref="FishingAreas"/>; each implementation calls the
         /// appropriate mechanism function (and rare pre-check wrapper where applicable).
         /// Call once per slot; consumes one RNG value normally, two if the rare pre-check fires.
         /// </summary>
@@ -491,7 +491,7 @@ namespace Dark_Cloud_Improved_Version
     /// Static repository of per-area <see cref="AreaFishData"/> records, keyed by area ID.
     /// Add a named entry here to support a new fishing area.
     /// </summary>
-    internal static class FishingAreaDatabase
+    internal static class FishingAreas
     {
         internal static readonly AreaFishData NorunePond = new AreaFishData
         {
@@ -499,14 +499,14 @@ namespace Dark_Cloud_Improved_Version
             SlotBase = FishSlotOffsets.AreaBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
             FishIds = new byte[]
             {
-                FishDatabase.Gobbler.Id, FishDatabase.Nonky.Id, FishDatabase.Gummy.Id, FishDatabase.Niler.Id,
+                Fish.Gobbler.Id, Fish.Nonky.Id, Fish.Gummy.Id, Fish.Niler.Id,
             },
             CommonWeights = new Dictionary<byte, float>
             {
-                [FishDatabase.Gobbler.Id] = 0.25f,
-                [FishDatabase.Nonky.Id]   = 0.25f,
-                [FishDatabase.Gummy.Id]   = 0.25f,
-                [FishDatabase.Niler.Id]   = 0.25f,
+                [Fish.Gobbler.Id] = 0.25f,
+                [Fish.Nonky.Id]   = 0.25f,
+                [Fish.Gummy.Id]   = 0.25f,
+                [Fish.Niler.Id]   = 0.25f,
             },
             RareDivisors = null,
             RareSplits   = null,
@@ -518,21 +518,21 @@ namespace Dark_Cloud_Improved_Version
             SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
             FishIds = new byte[]
             {
-                FishDatabase.Gummy.Id, FishDatabase.Nonky.Id, FishDatabase.BakuBaku.Id,
-                FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
+                Fish.Gummy.Id, Fish.Nonky.Id, Fish.BakuBaku.Id,
+                Fish.MardanGarayan.Id, Fish.BaronGarayan.Id,
             },
             CommonWeights = new Dictionary<byte, float>
             {
-                [FishDatabase.Nonky.Id]    = 1f / 3f,  // random%3 == 0
-                [FishDatabase.BakuBaku.Id] = 1f / 3f,  // random%3 == 1
-                [FishDatabase.Gummy.Id]    = 1f / 3f,  // random%3 == 2
+                [Fish.Nonky.Id]    = 1f / 3f,  // random%3 == 0
+                [Fish.BakuBaku.Id] = 1f / 3f,  // random%3 == 1
+                [Fish.Gummy.Id]    = 1f / 3f,  // random%3 == 2
             },
             // Rare-fish trigger: random % $s0 == 0. $s0 values inferred from empirical rates.
             RareDivisors = new int[] { 25, 35, 20, 50 },   // [Morning, Afternoon, Dusk, Night]
             RareSplits = new Dictionary<byte, float>
             {
-                [FishDatabase.MardanGarayan.Id] = 4f / 5f,  // new_random % 5 != 0
-                [FishDatabase.BaronGarayan.Id]  = 1f / 5f,  // new_random % 5 == 0
+                [Fish.MardanGarayan.Id] = 4f / 5f,  // new_random % 5 != 0
+                [Fish.BaronGarayan.Id]  = 1f / 5f,  // new_random % 5 == 0
             },
             SpawnFish = time => SpawnWithRareCheck(MatatakiWaterfall.RareDivisors, time,  // ThreeWayEqualMod3 (VA 0x001A8BD4)
                 () => SpawnThreeWayEqualMod3(MatatakiWaterfall.CommonWeights)),
@@ -545,15 +545,15 @@ namespace Dark_Cloud_Improved_Version
             SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
             FishIds = new byte[]
             {
-                FishDatabase.Tarton.Id, FishDatabase.Gobbler.Id, FishDatabase.BakuBaku.Id,
-                FishDatabase.Umadakara.Id,
+                Fish.Tarton.Id, Fish.Gobbler.Id, Fish.BakuBaku.Id,
+                Fish.Umadakara.Id,
             },
             CommonWeights = new Dictionary<byte, float>
             {
-                [FishDatabase.Gobbler.Id]   = 0.35f,  // random%100 < 35
-                [FishDatabase.BakuBaku.Id]  = 0.35f,  // 35 ≤ random%100 < 70
-                [FishDatabase.Umadakara.Id] = 0.10f,  // 70 ≤ random%100 < 80
-                [FishDatabase.Tarton.Id]    = 0.20f,  // 80 ≤ random%100 < 100
+                [Fish.Gobbler.Id]   = 0.35f,  // random%100 < 35
+                [Fish.BakuBaku.Id]  = 0.35f,  // 35 ≤ random%100 < 70
+                [Fish.Umadakara.Id] = 0.10f,  // 70 ≤ random%100 < 80
+                [Fish.Tarton.Id]    = 0.20f,  // 80 ≤ random%100 < 100
             },
             RareDivisors = null,
             RareSplits   = null,
@@ -566,16 +566,16 @@ namespace Dark_Cloud_Improved_Version
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
             FishIds = new byte[]
             {
-                FishDatabase.Bobo.Id, FishDatabase.Kaiji.Id, FishDatabase.Piccoly.Id,
-                FishDatabase.Bon.Id, FishDatabase.Hamahama.Id,
+                Fish.Bobo.Id, Fish.Kaiji.Id, Fish.Piccoly.Id,
+                Fish.Bon.Id, Fish.Hamahama.Id,
             },
             CommonWeights = new Dictionary<byte, float>
             {
-                [FishDatabase.Bobo.Id]     = 0.20f,  // random%100 < 20
-                [FishDatabase.Kaiji.Id]    = 0.20f,  // 20 ≤ random%100 < 40
-                [FishDatabase.Piccoly.Id]  = 0.20f,  // 40 ≤ random%100 < 60
-                [FishDatabase.Bon.Id]      = 0.20f,  // 60 ≤ random%100 < 80
-                [FishDatabase.Hamahama.Id] = 0.20f,  // 80 ≤ random%100 < 100
+                [Fish.Bobo.Id]     = 0.20f,  // random%100 < 20
+                [Fish.Kaiji.Id]    = 0.20f,  // 20 ≤ random%100 < 40
+                [Fish.Piccoly.Id]  = 0.20f,  // 40 ≤ random%100 < 60
+                [Fish.Bon.Id]      = 0.20f,  // 60 ≤ random%100 < 80
+                [Fish.Hamahama.Id] = 0.20f,  // 80 ≤ random%100 < 100
             },
             RareDivisors = null,
             RareSplits   = null,
@@ -587,21 +587,21 @@ namespace Dark_Cloud_Improved_Version
             SlotBase = FishSlotOffsets.AreaBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
             FishIds = new byte[]
             {
-                FishDatabase.Negie.Id, FishDatabase.Den.Id, FishDatabase.Heela.Id,
-                FishDatabase.MardanGarayan.Id, FishDatabase.BaronGarayan.Id,
+                Fish.Negie.Id, Fish.Den.Id, Fish.Heela.Id,
+                Fish.MardanGarayan.Id, Fish.BaronGarayan.Id,
             },
             CommonWeights = new Dictionary<byte, float>
             {
-                [FishDatabase.Negie.Id] = 0.40f,  // random%100 < 40
-                [FishDatabase.Den.Id]   = 0.30f,  // 40 ≤ random%100 < 70
-                [FishDatabase.Heela.Id] = 0.30f,  // 70 ≤ random%100 < 100
+                [Fish.Negie.Id] = 0.40f,  // random%100 < 40
+                [Fish.Den.Id]   = 0.30f,  // 40 ≤ random%100 < 70
+                [Fish.Heela.Id] = 0.30f,  // 70 ≤ random%100 < 100
             },
             // Rare-fish trigger: random % $s0 == 0. $s0 values inferred from empirical rates.
             RareDivisors = new int[] { 25, 35, 20, 50 },   // [Morning, Afternoon, Dusk, Night]
             RareSplits = new Dictionary<byte, float>
             {
-                [FishDatabase.MardanGarayan.Id] = 4f / 5f,  // new_random % 5 != 0
-                [FishDatabase.BaronGarayan.Id]  = 1f / 5f,  // new_random % 5 == 0
+                [Fish.MardanGarayan.Id] = 4f / 5f,  // new_random % 5 != 0
+                [Fish.BaronGarayan.Id]  = 1f / 5f,  // new_random % 5 == 0
             },
             SpawnFish = time => SpawnWithRareCheck(MuskaLackaOasis.RareDivisors, time,    // RandomMod100 (VA 0x001A8CF0)
                 () => SpawnRandomMod100(MuskaLackaOasis.CommonWeights)),
@@ -652,13 +652,13 @@ namespace Dark_Cloud_Improved_Version
         {
             if (Fishing.Rng.Next(rareDivisors[(int)time]) == 0)
                 return Fishing.Rng.Next(5) == 0
-                    ? FishDatabase.BaronGarayan.Id
-                    : FishDatabase.MardanGarayan.Id;
+                    ? Fish.BaronGarayan.Id
+                    : Fish.MardanGarayan.Id;
             return commonSpawn();
         }
 
         private static readonly Dictionary<int, AreaFishData> ById;
-        static FishingAreaDatabase()
+        static FishingAreas()
         {
             AreaFishData[] allAreas = { NorunePond, MatatakiWaterfall, PeanutPond, QueensHarbor, MuskaLackaOasis };
             ById = new Dictionary<int, AreaFishData>(allAreas.Length);

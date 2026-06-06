@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    class Enemies
+    class EnemySlots
     {
         public const int offset = 0x190;        //Offset between floor enemies
         public const int tableOffset = 0x9C;    //Offset between table enemies
@@ -936,7 +936,7 @@ namespace Dark_Cloud_Improved_Version
         {
             byte dungeon = Memory.ReadByte(Addresses.checkDungeon);
             byte floor   = Memory.ReadByte(Addresses.checkFloor);
-            string dungeonName = DungeonDatabase.TryGetValue(dungeon, out DungeonData dd) ? dd.Name : $"dungeon{dungeon}";
+            string dungeonName = Dungeons.TryGetValue(dungeon, out DungeonData dd) ? dd.Name : $"dungeon{dungeon}";
             Console.WriteLine($"[EnemyInfo] {dungeonName} (id={dungeon}) floor={floor + 1}");
 
             for (int i = 0; i < 16; i++)

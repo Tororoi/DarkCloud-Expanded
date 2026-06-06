@@ -174,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
                                     stablePosZ[i] = aiTargetZ; // hook depth
                                     if (stableFrames[i] == 10)
                                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                            $"[HookTriang] s={i} {FishDatabase.GetName(fishId)} heading stable: live=({livePosX:F2},{livePosY:F2},{livePosZ:F2}) hookZ={aiTargetZ:F2} hdg={heading:F4}");
+                                            $"[HookTriang] s={i} {Fish.GetName(fishId)} heading stable: live=({livePosX:F2},{livePosY:F2},{livePosZ:F2}) hookZ={aiTargetZ:F2} hdg={heading:F4}");
                                 }
                             }
                             else
@@ -191,7 +191,7 @@ namespace Dark_Cloud_Improved_Version
                         if (aiState != lastAiState[i])
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                $"[FishPhase] f={frame:D5} s={i} {FishDatabase.GetName(fishId)} aiState {lastAiState[i]:X8} -> {aiState:X8}");
+                                $"[FishPhase] f={frame:D5} s={i} {Fish.GetName(fishId)} aiState {lastAiState[i]:X8} -> {aiState:X8}");
 
                             // Log notice-range distance when a fish naturally transitions to Approaching.
                             // Requires another slot to already be approaching/nibbling so the hook
@@ -215,7 +215,7 @@ namespace Dark_Cloud_Improved_Version
                                     float dist3d = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
                                     float dist2d = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
                                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                                        $"[NoticeRange] s={i} {FishDatabase.GetName(fishId)} " +
+                                        $"[NoticeRange] s={i} {Fish.GetName(fishId)} " +
                                         $"dist3d={dist3d:F2} dist2d={dist2d:F2} " +
                                         $"fish=({livePosX:F2},{livePosY:F2},{livePosZ:F2}) hook=({hookX:F2},{hookY:F2},{hookZ:F2}) [ref=s{refSlot}]");
                                 }
@@ -225,7 +225,7 @@ namespace Dark_Cloud_Improved_Version
                         }
 
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[FishPhase] f={frame:D5} ph={phase:X2} s={i} {FishDatabase.GetName(fishId)} " +
+                            $"[FishPhase] f={frame:D5} ph={phase:X2} s={i} {Fish.GetName(fishId)} " +
                             $"ai={aiState:X8} hdg={heading:F3} spd={speed:F3} vel={velocity:F3} " +
                             $"aim=({aiTargetX:F1},{aiTargetY:F1},{aiTargetZ:F1}) live=({livePosX:F1},{livePosY:F1},{livePosZ:F1}) " +
                             $"u054={unk054:X8} u058={aiStateTimer:X8} " +
@@ -347,7 +347,7 @@ namespace Dark_Cloud_Improved_Version
                 int   fpMax        = Memory.ReadInt(slotStart   + FishSlotOffsets.MaxFp);
                 FishDataFarmer.RecordSlot(fishId, todFloat);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[FishInfo] area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) " +
+                    $"[FishInfo] area={areaId} slot={slotIndex} {Fish.GetName(fishId)} (id={fishId}) " +
                     $"scaleDivisor={scaleDivisor:F1} baseSize={baseSize:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +
                     $"size={size:F4} ({(int)(size*10)}cm) fp={fpMin}-{fpMax}");
                 // bait affinity table — values are bite-likelihood weights (0.0=never, 1.0=normal)
@@ -365,7 +365,7 @@ namespace Dark_Cloud_Improved_Version
                 float affBattan   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBattan);
                 float affPetite   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPetitefish);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[BaitAff]  area={areaId} slot={slotIndex} {FishDatabase.GetName(fishId)} " +
+                    $"[BaitAff]  area={areaId} slot={slotIndex} {Fish.GetName(fishId)} " +
                     $"Evy={affEvy:F2} Mimi={affMimi:F2} Prickly={affPrickly:F2} " +
                     $"Cherry={affCherry:F2} Peach={affPeach:F2} " +
                     $"Bomb={affBombnuts:F2} Poison={affPoison:F2} Banana={affBanana:F2} Carrot={affCarrot:F2} " +
@@ -431,7 +431,7 @@ namespace Dark_Cloud_Improved_Version
                 int unk054       = Memory.ReadInt(slotAddr  + FishSlotOffsets.Unk054);
                 int unk058       = Memory.ReadInt(slotAddr  + FishSlotOffsets.AiStateTimer);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SlotWatch] slot={slotIndex} {FishDatabase.GetName(fishId)} " +
+                    $"[SlotWatch] slot={slotIndex} {Fish.GetName(fishId)} " +
                     $"hdg={heading:F3} spd={speed:F3} curVel={velocity:F3} " +
                     $"pos=({aiTargetX:F1},{aiTargetY:F2},{aiTargetZ:F1}) fishPos=({fishPosX:F1},{fishPosY:F1},{fishPosZ:F1}) " +
                     $"b150={unk150:F2} b154={unk154:F2} b158={unk158:F2} " +
@@ -450,7 +450,7 @@ namespace Dark_Cloud_Improved_Version
                 int slotStart = slotBase + slotIndex * FishSlotOffsets.Stride;
                 byte fishId = Memory.ReadByte(slotStart);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SlotDump] slot={slotIndex} {FishDatabase.GetName(fishId)} (id={fishId}) base=0x{slotStart:X8}");
+                    $"[SlotDump] slot={slotIndex} {Fish.GetName(fishId)} (id={fishId}) base=0x{slotStart:X8}");
                 for (int offset = 0; offset < 0x200; offset += 4)
                 {
                     int rawValue   = Memory.ReadInt(slotStart + offset);
@@ -500,7 +500,7 @@ namespace Dark_Cloud_Improved_Version
         private static void ScanForFishTable()
         {
             // Baron Garayan has the only MaxSize=30.0f among all 18 species.
-            // Validate each hit using adjacent known values from FishDatabase:
+            // Validate each hit using adjacent known values from Fish:
             //   ScaleDivisor=21.0f at MaxSize-8, BaseSize=10.0f at MaxSize-4
             //   BaseFp=600 at MaxSize+4,    MaxFp=1000 at MaxSize+8
             // (offsets mirror the fish slot layout: ScaleDivisor@0x004, BaseSize@0x008,

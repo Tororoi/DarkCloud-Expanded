@@ -100,7 +100,7 @@ namespace Dark_Cloud_Improved_Version
     /// 18 uint32 entries at stride 4 (one per fish ID 0–17). Each raw pointer P gives the EE
     /// string address as (0x20000000 + P). The string is 16 bytes, null-padded ASCII,
     /// formatted "chara/f{id+1:D2}a.chr" (ID 0 → "chara/f01a.chr", ID 17 → "chara/f18a.chr").
-    /// Fish ID 8 has no FishDatabase entry but does have a model file ("chara/f09a.chr"),
+    /// Fish ID 8 has no Fish entry but does have a model file ("chara/f09a.chr"),
     /// suggesting a cut or unused species.
     /// </summary>
     internal static class FishModelTable
@@ -200,7 +200,7 @@ namespace Dark_Cloud_Improved_Version
         // ---- Species identity + static data ----
         // Written by the game from FishSpeciesTable each time a fish spawns.
         // Slot writes are effective for the current session; modify FishSpeciesTable to persist across spawns.
-        internal const int SpeciesId           = 0x000;  // byte; fish species ID (indexes FishDatabase)
+        internal const int SpeciesId           = 0x000;  // byte; fish species ID (indexes Fish)
         // ELF 0x00240D60 (slot init, runs once): Calls RNG → Size = BaseSize, then ±= RNG*(MaxSize-BaseSize)/4 or /8,
         // clamped to [0.5*BaseSize, MaxSize]. ScaleModel = Size/ScaleDivisor; slot+0x68 = Size/25.
         // ELF 0x00240E80 (FP reward): if Size < BaseSize → FP = BaseFp*Size/BaseSize;

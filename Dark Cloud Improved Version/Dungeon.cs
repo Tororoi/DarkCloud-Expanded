@@ -101,8 +101,8 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
-                    // Enemies.PollEnemyDynamics();
-                    // Enemies.MonitorFlashTimer();
+                    // EnemySlots.PollEnemyDynamics();
+                    // EnemySlots.MonitorFlashTimer();
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -403,7 +403,7 @@ namespace Dark_Cloud_Improved_Version
                             if (!excludeFloors.Contains(currentFloor))
                             {
                                 //Initialize the spawns check
-                                Memory.WriteInt(Enemies.Enemy14.hp, 1);
+                                Memory.WriteInt(EnemySlots.Enemy14.hp, 1);
                                 spawnsCheck = new Thread(new ThreadStart(CheckSpawns));
                                 spawnsCheck.Start();
 
@@ -472,9 +472,9 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         /// <param name="dungeon">The dungeon id:
         /// <br>0 = Divine Beast Cave</br>
-        /// <br>1 = Wise Owl</br>
+        /// <br>1 = Wise Owl Forest</br>
         /// <br>2 = Shipwreck</br>
-        /// <br>3 = Sun and Moon</br>
+        /// <br>3 = Sun and Moon Temple</br>
         /// <br>4 = Moon Sea</br>
         /// <br>5 = Gallery of Time</br>
         /// <br>6 = Demon Shaft</br></param>
@@ -674,7 +674,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 //Listens for the enemy render address value to change, from 0 or 10 seconds have passed
                 //We use the enemy render value here because enemies spawn after chests
-                while (Memory.ReadByte(Enemies.Enemy14.renderStatus) == 255 && ms < 10000)
+                while (Memory.ReadByte(EnemySlots.Enemy14.renderStatus) == 255 && ms < 10000)
                 {
                     Thread.Sleep(100);
                     ms += 100;
@@ -685,7 +685,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 //Listens for the enemy hp address value to change, from 0 or 10 seconds have passed
                 //We use the enemy render value here because enemies spawn after chests
-                while (Memory.ReadByte(Enemies.Enemy14.hp) == 1 && ms < 10000)
+                while (Memory.ReadByte(EnemySlots.Enemy14.hp) == 1 && ms < 10000)
                 {
                     Thread.Sleep(100);
                     ms += 100;
@@ -696,31 +696,31 @@ namespace Dark_Cloud_Improved_Version
             // The sentinel wrote 1 to Enemy14.hp before enemies spawned.
             // If the game had already set HP before we wrote the sentinel (or if it timed out),
             // slot 14's HP is stuck at 1. maxHp was never touched, so restore from it.
-            if (Memory.ReadInt(Enemies.Enemy14.renderStatus) > 0)
+            if (Memory.ReadInt(EnemySlots.Enemy14.renderStatus) > 0)
             {
-                int e14MaxHp = Memory.ReadInt(Enemies.Enemy14.maxHp);
+                int e14MaxHp = Memory.ReadInt(EnemySlots.Enemy14.maxHp);
                 if (e14MaxHp > 0)
-                    Memory.WriteInt(Enemies.Enemy14.hp, e14MaxHp);
+                    Memory.WriteInt(EnemySlots.Enemy14.hp, e14MaxHp);
             }
 
             //Set the flag to true
-            if(Memory.ReadByte(Enemies.Enemy0.renderStatus) > 0) enemiesSpawn = true;
+            if(Memory.ReadByte(EnemySlots.Enemy0.renderStatus) > 0) enemiesSpawn = true;
 
             //Get all the current floor enemy ids
-            List<ushort> enemyFloorIds = Enemies.GetFloorEnemiesIds();
+            List<ushort> enemyFloorIds = EnemySlots.GetFloorEnemiesIds();
 
             //Calculate the amount of non-flying enemies in the floor
             foreach (ushort enemy in enemyFloorIds)
             {
-                if (Enemies.GetNormalEnemies().ContainsKey(enemy)) numNormalEnemies++;
+                if (EnemySlots.GetNormalEnemies().ContainsKey(enemy)) numNormalEnemies++;
             }
 
             //Check if there are more than 3 normal enemies in the floor
             //This is to account for the Wise Owl 3 keys
             //There needs to be enough normal enemies to roll for the miniboss in order to avoid infinite retries
-            // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
-            // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
-            Enemies.LogEnemySpawns();
+            // EnemySlots.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
+            // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
+            EnemySlots.LogEnemySpawns();
 
             if (numNormalEnemies > 3)
             {
@@ -746,8 +746,8 @@ namespace Dark_Cloud_Improved_Version
 
             // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
             minibossProcess?.Join(2000);
-            // Enemies.ApplyTestModifications();
-            Enemies.ResetPollState();
+            // EnemySlots.ApplyTestModifications();
+            EnemySlots.ResetPollState();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 
@@ -1355,8 +1355,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 foreach (int slot in MiniBoss.miniBossEnemyNumbers)
                 {
-                    if (Memory.ReadInt(Enemies.Enemy0.staminaTimer + (0x190 * slot)) < 60)
-                        Memory.WriteInt(Enemies.Enemy0.staminaTimer + (0x190 * slot), 60000);
+                    if (Memory.ReadInt(EnemySlots.Enemy0.staminaTimer + (0x190 * slot)) < 60)
+                        Memory.WriteInt(EnemySlots.Enemy0.staminaTimer + (0x190 * slot), 60000);
                 }
             }
 

@@ -179,7 +179,7 @@
       </TabItem>
 
       <!-- Tools tab -->
-      <!-- <TabItem Header="Tools">
+      <TabItem Header="Tools" IsVisible="False">
         <Panel>
           <TextBlock Text="Fish Data Farmer"
                      FontWeight="SemiBold"
@@ -196,7 +196,6 @@
                   FontWeight="Normal"
                   Click="DEV_Page1_Btn_FishFarmer_Toggle"/>
 
-          <!-- Live status -->
           <TextBlock x:Name="Label_FishFarmer_Status"
                      Text="Status: –"
                      Margin="46,138,0,0"
@@ -220,7 +219,7 @@
                      FontWeight="Normal" FontFamily="Courier New"
                      TextWrapping="Wrap"/>
         </Panel>
-      </TabItem> -->
+      </TabItem>
 
     </TabControl>
 

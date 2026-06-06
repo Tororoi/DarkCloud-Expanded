@@ -872,34 +872,12 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// A contiguous range of dungeon floors that shares a single enemy spawn pool.
-    /// </summary>
-    internal struct FloorPool
-    {
-        internal int      StartFloor;
-        internal int      EndFloor;
-        internal ushort[] EnemyIds;  // null = pool not yet catalogued from a dump
-    }
-
-    /// <summary>
-    /// Dungeon metadata with per-range enemy pools.
-    /// Pools are ordered by StartFloor. Each covers a distinct, non-overlapping floor range.
-    /// </summary>
-    internal struct DungeonData
-    {
-        internal byte       Id;
-        internal string     Name;
-        internal int        TotalFloors;  // 0 = unconfirmed
-        internal FloorPool[] Pools;       // ordered by StartFloor
-    }
-
-    /// <summary>
-    /// Default stats per enemy species. Named static fields mirror the FishDatabase pattern.
+    /// Default stats per enemy species. Named static fields mirror the Fish pattern.
     /// Populated from unmodified floor dumps — null fields are unconfirmed.
     /// Never populate defaults from miniboss slot data; minibosses share the same species ID
     /// as their normal counterpart but have different stats.
     /// </summary>
-    internal static class EnemyDatabase
+    internal static class Enemies
     {
         // ── Divine Beast Cave (dungeon 0) ─────────────────────────────────────
 
@@ -993,7 +971,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Wise Owl Forest (dungeon 1) ───────────────────────────────────────
 
-        // confirmed from clean dump 2026-05-30, WO game fl.5/fl.10; spans both pools
+        // confirmed from clean dump 2026-05-30, WOF game fl.5/fl.10; spans both pools
         // from static table 2026-06-04
         internal static readonly EnemyDefaults FliFli = new EnemyDefaults {
             Id=8, TableIndex=5, Name="FliFli",            MaxHp=120, Abs=3,  MinGoldDrop=7,  DropChance=30,
@@ -1008,7 +986,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=167, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=21.0f, ModelUnk028=60.0f, ModelDataSize=474,  ModelAnimCount=7, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.7/fl.14; spans both pools
+        // confirmed from clean dump 2026-05-30, WOF game fl.7/fl.14; spans both pools
         internal static readonly EnemyDefaults Sunday = new EnemyDefaults {
             Id=14, TableIndex=10, Name="Sunday",           MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
@@ -1016,7 +994,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=170, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1454, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.7
+        // confirmed from clean dump 2026-05-30, WOF game fl.7
         internal static readonly EnemyDefaults Monday = new EnemyDefaults {
             Id=15, TableIndex=11, Name="Monday",           MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
@@ -1024,7 +1002,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=146, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.7
+        // confirmed from clean dump 2026-05-30, WOF game fl.7
         internal static readonly EnemyDefaults Tuesday = new EnemyDefaults {
             Id=16, TableIndex=12, Name="Tuesday",          MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
@@ -1032,7 +1010,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=151, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1427, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.5/fl.7
+        // confirmed from clean dump 2026-05-30, WOF game fl.5/fl.7
         internal static readonly EnemyDefaults Wednesday = new EnemyDefaults {
             Id=17, TableIndex=13, Name="Wednesday",        MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
@@ -1047,7 +1025,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.5
+        // confirmed from clean dump 2026-05-30, WOF game fl.5
         internal static readonly EnemyDefaults Friday = new EnemyDefaults {
             Id=19, TableIndex=15, Name="Friday",           MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
@@ -1062,7 +1040,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
             StealItemId=148, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.7/fl.14/fl.16; spans both pools
+        // confirmed from clean dump 2026-05-30, WOF game fl.7/fl.14/fl.16; spans both pools
         internal static readonly EnemyDefaults WitchIllza = new EnemyDefaults {
             Id=22, TableIndex=18, Name="Witch Illza",      MaxHp=120, Abs=3,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Mage, FireRes=90,  IceRes=90,  ThunderRes=90,  WindRes=90,  HolyRes=100,
@@ -1070,7 +1048,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=169, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=868,  ModelAnimCount=18, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.5
+        // confirmed from clean dump 2026-05-30, WOF game fl.5
         internal static readonly EnemyDefaults MimicWOF = new EnemyDefaults {
             Id=79, TableIndex=71, Name="Mimic (Wise Owl Forest)", MaxHp=90,  Abs=3,  MinGoldDrop=6,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1078,7 +1056,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=914,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.5/fl.10; spans both pools
+        // confirmed from clean dump 2026-05-30, WOF game fl.5/fl.10; spans both pools
         internal static readonly EnemyDefaults HaleyHoley = new EnemyDefaults {
             Id=305, TableIndex=99, Name="Haley Holey",     MaxHp=50,  Abs=3,  MinGoldDrop=7,  DropChance=40,
             Category=EnemyCategory.Plant, FireRes=140, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1086,7 +1064,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.0f, ReticleHeight=1.1f, StealItemId=186, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1046, ModelAnimCount=19, AttackPower=189, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.14/fl.16
+        // confirmed from clean dump 2026-05-30, WOF game fl.14/fl.16
         internal static readonly EnemyDefaults Werewolf = new EnemyDefaults {
             Id=7, TableIndex=4,  Name="Werewolf",         MaxHp=180, Abs=12, MinGoldDrop=15, DropChance=50,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
@@ -1094,7 +1072,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=174, ItemResA=90,  ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1111, ModelAnimCount=19, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.10
+        // confirmed from clean dump 2026-05-30, WOF game fl.10
         internal static readonly EnemyDefaults Hornet = new EnemyDefaults {
             Id=9, TableIndex=6,  Name="Hornet",           MaxHp=60,  Abs=3,  MinGoldDrop=7,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=120, ThunderRes=100, WindRes=120, HolyRes=100,
@@ -1102,7 +1080,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.2f, ReticleHeight=1.2f, StealItemId=151, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.14/fl.16
+        // confirmed from clean dump 2026-05-30, WOF game fl.14/fl.16
         internal static readonly EnemyDefaults Halloween = new EnemyDefaults {
             Id=10, TableIndex=7, Name="Halloween",        MaxHp=150, Abs=3,  MinGoldDrop=7,  DropChance=40,
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1110,7 +1088,7 @@ namespace Dark_Cloud_Improved_Version
             ReticleWidth=1.3f, ReticleHeight=1.3f, StealItemId=168, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=850,  ModelAnimCount=18, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from clean dump 2026-05-30, WO game fl.10/fl.16
+        // confirmed from clean dump 2026-05-30, WOF game fl.10/fl.16
         internal static readonly EnemyDefaults EarthDigger = new EnemyDefaults {
             Id=12, TableIndex=9, Name="Earth Digger",     MaxHp=120, Abs=3,  MinGoldDrop=7,  DropChance=30,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=80,  WindRes=80,  HolyRes=100,
@@ -1704,7 +1682,7 @@ namespace Dark_Cloud_Improved_Version
 
         // DS boss — confirmed from EnemySpeciesTable scan 2026-06-05: tbl_165 is BlackKnight (id=221, hp=50000, BOSS, code=c22a).
         // tbl_166 is a garbage/padding row (hp=0, empty code) — not a valid spawn entry.
-        // tbl_164 is KingMimicDS boss tier (id=310, hp=40000, code=c21a); used in DHC floor 100 pool alongside BlackKnight.
+        // tbl_164 is KingMimicDS boss tier (id=310, hp=40000, code=c21a); used in DS floor 100 pool alongside BlackKnight.
         internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
             Id=221, TableIndex=165, Name="Black Knight",    MaxHp=50000, Abs=5,  MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1884,20 +1862,20 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicDSEnhancedThrice = new EnemyDefaults {
             Id=310, TableIndex=164, Name="King Mimic (Demon Shaft) (Enhanced x3)", MaxHp=40000, AttackPower=181, Category=EnemyCategory.Mimic };
         // tbl_165 = BlackKnight — see BlackKnight field above
-        // tbl_166 = garbage/padding row (hp=0, empty code); present in DHC floor 100 binary pool
-        internal static readonly EnemyDefaults DHC166 = new EnemyDefaults {
-            Id=0, TableIndex=166, Name="(DHC padding tbl_166)", MaxHp=0, AttackPower=0 };
+        // tbl_166 = garbage/padding row (hp=0, empty code); present in DS floor 100 binary pool
+        internal static readonly EnemyDefaults DS166 = new EnemyDefaults {
+            Id=0, TableIndex=166, Name="(DS padding tbl_166)", MaxHp=0, AttackPower=0 };
 
         // ── Lookup by species ID ──────────────────────────────────────────────────
         internal static readonly Dictionary<ushort, EnemyDefaults> Defaults;
-        static EnemyDatabase()
+        static Enemies()
         {
             EnemyDefaults[] all =
             {
                 // DBC
                 SkeletonSoldier, MasterJacket, Statue, Dasher, CaveBat, MimicDBC,
                 Ghost, Dragon, KingMimicDBC, Rockanoff, StatueDog,
-                // WO
+                // WOF
                 CannibalPlant, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday,
                 WitchIllza, WitchHellza, MimicWOF, HaleyHoley,
                 Werewolf, Hornet, Halloween, EarthDigger, KingMimicWOF,
@@ -1936,142 +1914,4 @@ namespace Dark_Cloud_Improved_Version
         }
     }
 
-    /// <summary>
-    /// Per-dungeon metadata repository, keyed by dungeon ID byte.
-    /// Dungeon IDs: 0=Divine Beast Cave, 1=Wise Owl, 2=Shipwreck,
-    ///              3=Sun and Moon, 4=Moon Sea, 5=Gallery of Time, 6=Demon Shaft.
-    /// </summary>
-    internal static class DungeonDatabase
-    {
-        // All floor ranges and enemy splits are estimates from game knowledge unless noted.
-        // Update StartFloor/EndFloor and move IDs between pools as confirmed from dump sessions.
-
-        internal static readonly DungeonData DivineBeastCave = new DungeonData
-        {
-            Id = 0, Name = "Divine Beast Cave", TotalFloors = 15,
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,  EndFloor=7,  EnemyIds=new ushort[]  // confirmed game fl.5, fl.6
-                {
-                    EnemyDatabase.SkeletonSoldier.Id, EnemyDatabase.Statue.Id,  EnemyDatabase.Dasher.Id,
-                    EnemyDatabase.MimicDBC.Id,        EnemyDatabase.CaveBat.Id, EnemyDatabase.StatueDog.Id,
-                } },
-                new FloorPool { StartFloor=8,  EndFloor=8,  EnemyIds=null },  // special floor; no enemies
-                new FloorPool { StartFloor=9,  EndFloor=14, EnemyIds=new ushort[]  // confirmed game fl.10, fl.12, fl.14
-                {
-                    EnemyDatabase.MasterJacket.Id, EnemyDatabase.Statue.Id,  EnemyDatabase.Dasher.Id,
-                    EnemyDatabase.Ghost.Id,        EnemyDatabase.Dragon.Id,  EnemyDatabase.CaveBat.Id,
-                    EnemyDatabase.Rockanoff.Id,
-                } },
-                new FloorPool { StartFloor=15, EndFloor=15, EnemyIds=null },  // boss floor; needs dump
-            },
-        };
-
-        internal static readonly DungeonData WiseOwl = new DungeonData
-        {
-            Id = 1, Name = "Wise Owl Forest", TotalFloors = 17,
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,  EndFloor=8,  EnemyIds=new ushort[]  // confirmed game fl.5, fl.7
-                {
-                    EnemyDatabase.CannibalPlant.Id, EnemyDatabase.Sunday.Id,    EnemyDatabase.Monday.Id,
-                    EnemyDatabase.Tuesday.Id,       EnemyDatabase.Wednesday.Id, EnemyDatabase.Friday.Id,
-                    EnemyDatabase.WitchIllza.Id,    EnemyDatabase.MimicWOF.Id,   EnemyDatabase.HaleyHoley.Id,
-                } },
-                new FloorPool { StartFloor=9,  EndFloor=9,  EnemyIds=null },  // special floor; no enemies
-                new FloorPool { StartFloor=10, EndFloor=16, EnemyIds=new ushort[]  // confirmed game fl.10, fl.14, fl.16; EndFloor estimated
-                {
-                    EnemyDatabase.Werewolf.Id,      EnemyDatabase.Hornet.Id,      EnemyDatabase.Halloween.Id,
-                    EnemyDatabase.CannibalPlant.Id, EnemyDatabase.EarthDigger.Id, EnemyDatabase.Sunday.Id,
-                    EnemyDatabase.WitchIllza.Id,    EnemyDatabase.HaleyHoley.Id,
-                } },
-                new FloorPool { StartFloor=17, EndFloor=17, EnemyIds=null },  // boss floor; needs dump
-            },
-        };
-
-        internal static readonly DungeonData Shipwreck = new DungeonData
-        {
-            Id = 2, Name = "Shipwreck", TotalFloors = 18,
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,  EndFloor=8,  EnemyIds=new ushort[]  // confirmed game fl.3, fl.8
-                {
-                    EnemyDatabase.Gyon.Id,      EnemyDatabase.Captain.Id,   EnemyDatabase.Corcea.Id,
-                    EnemyDatabase.CursedRose.Id, EnemyDatabase.MimicSW.Id,
-                } },
-                new FloorPool { StartFloor=9,  EndFloor=9,  EnemyIds=null },  // special floor; no enemies
-                new FloorPool { StartFloor=10, EndFloor=17, EnemyIds=new ushort[]  // confirmed game fl.10, fl.14, fl.16, fl.17; EndFloor estimated
-                {
-                    EnemyDatabase.Gunny.Id,         EnemyDatabase.PiratesChariot.Id, EnemyDatabase.AuntieMedu.Id,
-                    EnemyDatabase.Captain.Id,       EnemyDatabase.MaskOfPrajna.Id,   EnemyDatabase.Sam.Id,
-                    EnemyDatabase.KingMimicSW.Id,
-                } },
-                new FloorPool { StartFloor=18, EndFloor=18, EnemyIds=null },  // boss floor; needs dump
-            },
-        };
-
-        internal static readonly DungeonData SunAndMoon = new DungeonData
-        {
-            Id = 3, Name = "Sun and Moon Temple", TotalFloors = 13,  // estimated
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,  EndFloor=6,  EnemyIds=new ushort[]  // confirmed game fl.1–6
-                {
-                    EnemyDatabase.Mummy.Id,       EnemyDatabase.Phantom.Id,  EnemyDatabase.BomberHead.Id,
-                    EnemyDatabase.MimicSMT.Id, EnemyDatabase.Golem.Id,
-                } },
-                new FloorPool { StartFloor=7,  EndFloor=12, EnemyIds=new ushort[]  // confirmed game fl.7; EndFloor estimated
-                {
-                    EnemyDatabase.Mummy.Id,       EnemyDatabase.Phantom.Id,      EnemyDatabase.BomberHead.Id,
-                    EnemyDatabase.MimicSMT.Id, EnemyDatabase.Golem.Id,        EnemyDatabase.CrabbyHermit.Id,
-                } },
-                new FloorPool { StartFloor=13, EndFloor=13, EnemyIds=null },  // boss floor; needs dump
-            },
-        };
-
-        internal static readonly DungeonData MoonSea = new DungeonData
-        {
-            Id = 4, Name = "Moon Sea", TotalFloors = 10,
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,  EndFloor=4,  EnemyIds=new ushort[]{ 38, 39, 49, 50, 52 } },      // estimated
-                new FloorPool { StartFloor=5,  EndFloor=9,  EnemyIds=new ushort[]{ 54, 55, 56, 57, 59 } },       // estimated
-                new FloorPool { StartFloor=10, EndFloor=10, EnemyIds=null },                                       // boss floor; needs dump
-            },
-        };
-
-        internal static readonly DungeonData GalleryOfTime = new DungeonData
-        {
-            Id = 5, Name = "Gallery of Time", TotalFloors = 10,
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,  EndFloor=4,  EnemyIds=new ushort[]{ 62, 63, 64, 65, 66, 67, 69 } },        // estimated
-                new FloorPool { StartFloor=5,  EndFloor=9,  EnemyIds=new ushort[]{ 70, 71, 72, 73, 74, 76, 77, 82, 83 } }, // estimated
-                new FloorPool { StartFloor=10, EndFloor=10, EnemyIds=null },                                                // boss floor; needs dump
-            },
-        };
-
-        internal static readonly DungeonData DemonShaft = new DungeonData
-        {
-            Id = 6, Name = "Demon Shaft", TotalFloors = 100,
-            Pools = new FloorPool[]
-            {
-                new FloorPool { StartFloor=1,   EndFloor=25,  EnemyIds=null },  // needs dump
-                new FloorPool { StartFloor=26,  EndFloor=50,  EnemyIds=null },  // needs dump
-                new FloorPool { StartFloor=51,  EndFloor=75,  EnemyIds=null },  // needs dump
-                new FloorPool { StartFloor=76,  EndFloor=99,  EnemyIds=null },  // needs dump
-                new FloorPool { StartFloor=100, EndFloor=100, EnemyIds=null },  // boss floor; needs dump
-            },
-        };
-
-        private static readonly Dictionary<byte, DungeonData> ById;
-        static DungeonDatabase()
-        {
-            DungeonData[] all = { DivineBeastCave, WiseOwl, Shipwreck, SunAndMoon, MoonSea, GalleryOfTime, DemonShaft };
-            ById = new Dictionary<byte, DungeonData>(all.Length);
-            foreach (DungeonData d in all) ById[d.Id] = d;
-        }
-
-        internal static bool TryGetValue(byte dungeonId, out DungeonData data) => ById.TryGetValue(dungeonId, out data);
-    }
 }

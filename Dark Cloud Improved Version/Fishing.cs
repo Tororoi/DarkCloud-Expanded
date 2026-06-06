@@ -55,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
-            if (FishingAreaDatabase.TryGetValue(_fishingAreaId, out AreaFishData areaData))
+            if (FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData))
             {
                 InitSlots(areaData);
                 InitQuestState(areaData);
@@ -88,7 +88,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void OnFishingTick()
         {
             if (_fishingAreaId == -1) return;
-            if (!FishingAreaDatabase.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
+            if (!FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
             CheckFishingQuest(areaData);
             // FishPhaseLogger.PollSlotDynamics(areaData);
             SteerFishToPlayer(areaData);
@@ -127,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
                     fishCaught[slotIndex] = true;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} " +
-                        $"({FishDatabase.GetName(fishArray[slotIndex])})");
+                        $"({Fish.GetName(fishArray[slotIndex])})");
                     FishAcquiredFlag(fishArray[slotIndex]);
                     if (isQuestActive)
                     {
@@ -231,15 +231,15 @@ namespace Dark_Cloud_Improved_Version
 
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
-                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id) continue;
+                if (fishArray[slotIndex] == Fish.MardanGarayan.Id ||
+                    fishArray[slotIndex] == Fish.BaronGarayan.Id) continue;
                 if (Rng.Next(100) < spawnPercent)
                 {
                     int slotStart = areaBase + (FishSlotOffsets.Stride * slotIndex);
                     byte originalId = Memory.ReadByte(slotStart);
                     byte newId = (baronChance > 0f && Rng.NextDouble() < baronChance)
-                        ? FishDatabase.BaronGarayan.Id : targetFishId;
-                    if (!FishDatabase.TryGetValue(newId, out FishData fishData))
+                        ? Fish.BaronGarayan.Id : targetFishId;
+                    if (!Fish.TryGetValue(newId, out FishData fishData))
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             $"[RollFishSlots] No FishData for id={newId}, skipping slot {slotIndex}");
@@ -249,8 +249,8 @@ namespace Dark_Cloud_Improved_Version
                     WriteSlotData(slotStart, newId, fishData);
                     float size = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[RollFishSlots] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) " +
-                        $"→ {FishDatabase.GetName(newId)} (id={newId}) " +
+                        $"[RollFishSlots] slot={slotIndex} {Fish.GetName(originalId)} (id={originalId}) " +
+                        $"→ {Fish.GetName(newId)} (id={newId}) " +
                         $"size={size:F4} ({(int)(size*10)}cm) tod={timeOfDay:F2}");
                 }
             }
@@ -329,7 +329,7 @@ namespace Dark_Cloud_Improved_Version
                 byte originalId = Memory.ReadByte(slotStart);
                 Memory.WriteByte(slotStart, 0xFF);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Despawn] slot={slotIndex} {FishDatabase.GetName(originalId)} (id={originalId}) cleared");
+                    $"[Despawn] slot={slotIndex} {Fish.GetName(originalId)} (id={originalId}) cleared");
             }
         }
 
@@ -350,7 +350,7 @@ namespace Dark_Cloud_Improved_Version
                 float originalSize = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 if (originalSize <= 0f) continue;
 
-                float floor = FishDatabase.TryGetValue(fishId, out FishData fishData) && fishData.MinSize.HasValue
+                float floor = Fish.TryGetValue(fishId, out FishData fishData) && fishData.MinSize.HasValue
                     ? fishData.MinSize.Value : 0f;
                 float maxSize = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
                 float range   = maxSize - floor;
@@ -366,7 +366,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed,
                     Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleFixed) * scaleRatio);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SizeScale] slot={slotIndex} {FishDatabase.GetName(fishId)} " +
+                    $"[SizeScale] slot={slotIndex} {Fish.GetName(fishId)} " +
                     $"floor={floor:F1} max={maxSize:F1} orig={originalSize:F4} scaled={scaledSize:F4} " +
                     $"({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
             }
@@ -410,8 +410,8 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void SteerFishToPlayer(AreaFishData areaData)
         {
-            bool hasPassiveSteering = areaData.Id == FishingAreaDatabase.MatatakiWaterfall.Id ||
-                                      areaData.Id == FishingAreaDatabase.QueensHarbor.Id;
+            bool hasPassiveSteering = areaData.Id == FishingAreas.MatatakiWaterfall.Id ||
+                                      areaData.Id == FishingAreas.QueensHarbor.Id;
             if (!hasMardanSword && !hasPassiveSteering) return;
 
             float playerX = Memory.ReadFloat(Addresses.positionX);
@@ -455,9 +455,9 @@ namespace Dark_Cloud_Improved_Version
             for (int slotIndex = 0; slotIndex < areaData.SlotCount; slotIndex++)
             {
                 byte fishId = fishArray[slotIndex];
-                if (fishId != FishDatabase.MardanGarayan.Id &&
-                    fishId != FishDatabase.BaronGarayan.Id  &&
-                    fishId != FishDatabase.Umadakara.Id) continue;
+                if (fishId != Fish.MardanGarayan.Id &&
+                    fishId != Fish.BaronGarayan.Id  &&
+                    fishId != Fish.Umadakara.Id) continue;
 
                 int slotAddr = areaData.SlotBase + slotIndex * FishSlotOffsets.Stride;
 
@@ -643,7 +643,7 @@ namespace Dark_Cloud_Improved_Version
             if (!hasMardanSword) return;
             // Mardan Twei ability: reroll slots to spawn additional Mardan or Baron Garayan with the native chances.
             if (mardanSwordId == Items.mardantwei || mardanSwordId == Items.arisemardan)
-                RollFishSlots(areaData.SlotBase, areaData.SlotCount, FishDatabase.MardanGarayan.Id, 0.2f);
+                RollFishSlots(areaData.SlotBase, areaData.SlotCount, Fish.MardanGarayan.Id, 0.2f);
             // Apply the Mardan sword FP boost to all non-Garayan fish. Must be done after rolling so bonus applies to new spawns.
             ApplyMardanBonus(areaData.SlotBase, areaData.SlotCount);
             // Arise Mardan ability: scale fish sizes up. Must be done after rolling and bonuses so the boost applies to final sizes.
@@ -663,8 +663,8 @@ namespace Dark_Cloud_Improved_Version
             int fpAddr = slotBase + FishSlotOffsets.BaseFp;
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                if (fishArray[slotIndex] == FishDatabase.MardanGarayan.Id ||
-                    fishArray[slotIndex] == FishDatabase.BaronGarayan.Id)
+                if (fishArray[slotIndex] == Fish.MardanGarayan.Id ||
+                    fishArray[slotIndex] == Fish.BaronGarayan.Id)
                 {
                     fpAddr += FishSlotOffsets.Stride;
                     continue;
@@ -690,8 +690,8 @@ namespace Dark_Cloud_Improved_Version
                 $"[FishSession] playerPos=({playerX:F2},{playerY:F2},{playerZ:F2})");
             if (areaId != 1) return areaId;
             return playerY >= 0f
-                ? FishingAreaDatabase.MatatakiWaterfall.Id
-                : FishingAreaDatabase.PeanutPond.Id;
+                ? FishingAreas.MatatakiWaterfall.Id
+                : FishingAreas.PeanutPond.Id;
         }
 
         /// <summary>

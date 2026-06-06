@@ -31,7 +31,7 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(100);
                 continue;
             }
-            
+
             return true;
         }
 
@@ -149,22 +149,22 @@ namespace Dark_Cloud_Improved_Version
         public static int[] GetEnemiesHp()
         {
             //Save every enemy's HP on the current floor
-            int[] EnemiesHP = { Memory.ReadUShort(Enemies.Enemy0.hp),
-                                Memory.ReadUShort(Enemies.Enemy1.hp),
-                                Memory.ReadUShort(Enemies.Enemy2.hp),
-                                Memory.ReadUShort(Enemies.Enemy3.hp),
-                                Memory.ReadUShort(Enemies.Enemy4.hp),
-                                Memory.ReadUShort(Enemies.Enemy5.hp),
-                                Memory.ReadUShort(Enemies.Enemy6.hp),
-                                Memory.ReadUShort(Enemies.Enemy7.hp),
-                                Memory.ReadUShort(Enemies.Enemy8.hp),
-                                Memory.ReadUShort(Enemies.Enemy9.hp),
-                                Memory.ReadUShort(Enemies.Enemy10.hp),
-                                Memory.ReadUShort(Enemies.Enemy11.hp),
-                                Memory.ReadUShort(Enemies.Enemy12.hp),
-                                Memory.ReadUShort(Enemies.Enemy13.hp),
-                                Memory.ReadUShort(Enemies.Enemy14.hp),
-                                Memory.ReadUShort(Enemies.Enemy15.hp)
+            int[] EnemiesHP = { Memory.ReadUShort(EnemySlots.Enemy0.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy1.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy2.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy3.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy4.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy5.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy6.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy7.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy8.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy9.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy10.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy11.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy12.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy13.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy14.hp),
+                                Memory.ReadUShort(EnemySlots.Enemy15.hp)
             };
 
             return EnemiesHP;
@@ -174,22 +174,22 @@ namespace Dark_Cloud_Improved_Version
         {
 
             //Save every current distance
-            float[] distance = { Memory.ReadFloat(Enemies.Enemy0.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy1.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy2.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy3.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy4.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy5.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy6.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy7.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy8.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy9.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy10.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy11.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy12.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy13.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy14.distanceToPlayer),
-                                Memory.ReadFloat(Enemies.Enemy15.distanceToPlayer),
+            float[] distance = { Memory.ReadFloat(EnemySlots.Enemy0.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy1.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy2.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy3.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy4.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy5.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy6.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy7.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy8.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy9.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy10.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy11.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy12.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy13.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy14.distanceToPlayer),
+                                Memory.ReadFloat(EnemySlots.Enemy15.distanceToPlayer),
 
             };
 
@@ -228,21 +228,21 @@ namespace Dark_Cloud_Improved_Version
             {
                 switch (enemy)
                 {
-                    case 0: if (Memory.ReadUShort(Enemies.Enemy0.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 1: if (Memory.ReadUShort(Enemies.Enemy1.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 2: if (Memory.ReadUShort(Enemies.Enemy2.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 3: if (Memory.ReadUShort(Enemies.Enemy3.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 4: if (Memory.ReadUShort(Enemies.Enemy4.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 5: if (Memory.ReadUShort(Enemies.Enemy5.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 6: if (Memory.ReadUShort(Enemies.Enemy6.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 7: if (Memory.ReadUShort(Enemies.Enemy7.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 8: if (Memory.ReadUShort(Enemies.Enemy8.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 9: if (Memory.ReadUShort(Enemies.Enemy9.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 10: if (Memory.ReadUShort(Enemies.Enemy10.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 11: if (Memory.ReadUShort(Enemies.Enemy11.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 12: if (Memory.ReadUShort(Enemies.Enemy12.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 13: if (Memory.ReadUShort(Enemies.Enemy13.hp) == 0) enemyKilled.Add(enemy); break;
-                    case 14: if (Memory.ReadUShort(Enemies.Enemy14.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 0: if (Memory.ReadUShort(EnemySlots.Enemy0.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 1: if (Memory.ReadUShort(EnemySlots.Enemy1.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 2: if (Memory.ReadUShort(EnemySlots.Enemy2.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 3: if (Memory.ReadUShort(EnemySlots.Enemy3.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 4: if (Memory.ReadUShort(EnemySlots.Enemy4.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 5: if (Memory.ReadUShort(EnemySlots.Enemy5.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 6: if (Memory.ReadUShort(EnemySlots.Enemy6.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 7: if (Memory.ReadUShort(EnemySlots.Enemy7.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 8: if (Memory.ReadUShort(EnemySlots.Enemy8.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 9: if (Memory.ReadUShort(EnemySlots.Enemy9.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 10: if (Memory.ReadUShort(EnemySlots.Enemy10.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 11: if (Memory.ReadUShort(EnemySlots.Enemy11.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 12: if (Memory.ReadUShort(EnemySlots.Enemy12.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 13: if (Memory.ReadUShort(EnemySlots.Enemy13.hp) == 0) enemyKilled.Add(enemy); break;
+                    case 14: if (Memory.ReadUShort(EnemySlots.Enemy14.hp) == 0) enemyKilled.Add(enemy); break;
                     default: break;
                 }
             }
@@ -256,8 +256,8 @@ namespace Dark_Cloud_Improved_Version
 
             for(int i = 0; i < 15; i++)
             {
-                if(Memory.ReadInt(Enemies.Enemy0.hp + (Enemies.offset * i)) == 0 &&
-                    Memory.ReadByte(Enemies.Enemy0.renderStatus + (Enemies.offset * i)) == 255) {
+                if(Memory.ReadInt(EnemySlots.Enemy0.hp + (EnemySlots.offset * i)) == 0 &&
+                    Memory.ReadByte(EnemySlots.Enemy0.renderStatus + (EnemySlots.offset * i)) == 255) {
 
                     count++;
                 }
