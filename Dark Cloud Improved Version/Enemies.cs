@@ -80,8 +80,8 @@ namespace Dark_Cloud_Improved_Version
         public const int maskofprajna = 75;
         public const int crescentbaron = 76;
         public const int rockanoff = 77;
-        public const int kingmimicwo = 78;  //Wise Owl
-        public const int mimicwo = 79;      //Wise Owl
+        public const int kingMimicWOF = 78;  //Wise Owl
+        public const int MimicWOF = 79;      //Wise Owl
         public const int kingmimicsw = 80;  //Shipwreck
         public const int mimicsw = 81;      //Shipwreck
         public const int kingmimicgot = 82; //Gallery of Time
