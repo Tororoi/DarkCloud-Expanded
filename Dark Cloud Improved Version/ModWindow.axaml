@@ -179,7 +179,7 @@
       </TabItem>
 
       <!-- Tools tab -->
-      <TabItem Header="Tools">
+      <!-- <TabItem Header="Tools">
         <Panel>
           <TextBlock Text="Fish Data Farmer"
                      FontWeight="SemiBold"
@@ -220,7 +220,7 @@
                      FontWeight="Normal" FontFamily="Courier New"
                      TextWrapping="Wrap"/>
         </Panel>
-      </TabItem>
+      </TabItem> -->
 
     </TabControl>
 
