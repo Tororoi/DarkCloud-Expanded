@@ -53,14 +53,6 @@ namespace Dark_Cloud_Improved_Version
     // The boss floor (last front slot) has no back floor.
     // DBC is unique: its descriptor (slot 0) is non-empty and has an associated back-floor slot.
     //
-    // FLOOR COUNT CORRECTIONS vs. Dungeon.cs GetDungeonEventFloors()
-    // ----------------------------------------------------------------
-    //   WO  : code says 16  -> actual boss slot = floor 17  (off by 1)
-    //   SW  : code says 17  -> actual boss slot = floor 18  (off by 1)
-    //   SMT : code says 17  -> actual boss slot = floor 18  (off by 1)
-    //   MS  : code says 14  -> actual boss slot = floor 15  (off by 1)
-    //   DHC : code says 99  -> actual boss slot = floor 100 (off by 1)
-    //
     // TABLEINDEX RESOLUTION (EnemySpeciesTable scan 2026-06-05)
     // ----------------------------------------------------------
     // Valid table range confirmed: tbl_0–165.  tbl_166+ is garbage (hp=0, empty code).

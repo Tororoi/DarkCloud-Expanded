@@ -553,22 +553,22 @@ namespace Dark_Cloud_Improved_Version
                     floors.Add(3); floors.Add(7); floors.Add(14); break;
                 //Wise Owl
                 case 1:
-                    floors.Add(8); floors.Add(17); break;
+                    floors.Add(8); floors.Add(16); break;
                 //Shipwreck
                 case 2:
-                    floors.Add(8); floors.Add(18); break;
+                    floors.Add(8); floors.Add(17); break;
                 //Sun&Moon
                 case 3:
-                    floors.Add(8); floors.Add(18); break;
+                    floors.Add(8); floors.Add(17); break;
                 //Moon Sea
                 case 4:
-                    floors.Add(7); floors.Add(15); break;
+                    floors.Add(7); floors.Add(14); break;
                 //Gallery
                 case 5:
                     floors.Add(24); break;
                 //Demon Shaft
                 case 6:
-                    floors.Add(100); break;
+                    floors.Add(99); break;
                 default:
                     break;
             }
