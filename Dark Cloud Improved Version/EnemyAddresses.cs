@@ -162,22 +162,31 @@ namespace Dark_Cloud_Improved_Version
     /// Static enemy species table embedded in SCUS_971.11.
     /// Each record is a spawn template; the engine reads fields from here and writes them into a
     /// live enemy slot at spawn time. The static table layout differs from EnemySlotOffsets —
-    /// resistances live at the start of each record as individual ushorts, not as packed ints at
+    /// resistances live near the middle of each record as individual ushorts, not as packed ints at
     /// the slot's 0x028. Do not assume field offsets match the slot.
     ///
-    /// Confirmed from ELF binary analysis 2026-06-05:
-    ///   ELF file offset 0x17FC54, stride 0x9C (156 bytes).
-    ///   RAM = 0x00100000 + (0x17FC54 − 0x100) = 0x0027FB54.
-    ///   EIDs are NOT stored sequentially — use dc_enemies.json TableIndex to locate a record.
-    ///   MaxHp is at +0x098 (end of record), not +0x020 as in the live slot.
+    /// Confirmed from ELF binary analysis 2026-06-05 (offsets corrected 2026-06-06):
+    ///   ELF file offset 0x17FC00, stride 0x9C (156 bytes).
+    ///   RAM = 0x00100000 + (0x17FC00 − 0x100) = 0x0027FB00.
+    ///   EIDs are NOT stored sequentially — use EnemyDefaults.TableIndex to locate a record.
+    ///   The game engine looks up a record via: entry_ptr = TableBase + TableIndex * Stride.
+    ///   (TableIndex is the sequential packed index, not the EID. See EnemyDefaults.TableIndex.)
+    ///
+    ///   Record layout: 0x000–0x04F = model code header (do not write); 0x050–0x09B = data fields.
+    ///   Each record stores the EID of its enemy at +0x07C (EnemySpeciesId field).
+    ///
+    ///   PREVIOUS BUG (now fixed): ElfOffset was erroneously set to 0x17FC54 (0x54 bytes past the
+    ///   true record start), causing all field offsets to be 0x54 too low. MaxHp at 0x098 and
+    ///   EnemyCode at 0x048 were reading from the NEXT sequential record (one stride ahead), not
+    ///   the current one. All offsets below reflect the corrected true-record-start base.
     /// </summary>
     internal static class EnemySpeciesTable
     {
         // ── Table geometry ────────────────────────────────────────────────────
-        internal const int ElfOffset  = 0x17FC54;          // byte offset within SCUS_971.11 file
-        // RAM = seg.vaddr + (ElfOffset - seg.file_offset) = 0x00100000 + (0x17FC54 - 0x100) = 0x0027FB54
+        internal const int ElfOffset  = 0x17FC00;          // byte offset within SCUS_971.11 file (true record-0 start)
+        // RAM = seg.vaddr + (ElfOffset - seg.file_offset) = 0x00100000 + (0x17FC00 - 0x100) = 0x0027FB00
         // Confirmed from ELF program header: LOAD seg file=0x100..0x1A2480, vaddr=0x00100000
-        internal const int TableBase  = 0x0027FB54;        // confirmed RAM address
+        internal const int TableBase  = 0x0027FB00;        // confirmed RAM address of record 0
         internal const int Stride     = 0x9C;              // bytes per record (156)
 
         /// <summary>RAM address of the template record at the given physical table index (from extracted data).</summary>
@@ -189,80 +198,77 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>RAM address of a field for an enemy whose TableIndex is known.</summary>
         internal static int FieldAddress(EnemyDefaults e, int fieldOffset) => RecordAddress(e.TableIndex.Value) + fieldOffset;
 
-        // ── Field offsets within each record ─────────────────────────────────
-        // NOTE: these differ from EnemySlotOffsets. The static record starts with
-        // six individual resistance ushorts; the slot packs them into three ints at 0x028.
+        // ── Model code header (0x000–0x04F) — do not write ───────────────────
+        // The first 80 bytes of each record are a model/asset header. Only the two code
+        // fields are meaningful for regular enemies; everything else is zero-padding.
+        // Multi-form and boss entries may store additional variant codes in 0x010–0x03F.
+        internal const int ModelCode     = 0x000; // char[4] — 4-char ASCII model identifier (e.g. "e52a"); do not write
+        internal const int ModelCodeCopy = 0x040; // char[4] — duplicate of ModelCode at 0x040; do not write
 
-        // Elemental resistances — individual ushorts at record start.
+        // ── Data fields (0x050–0x09B) ─────────────────────────────────────────
+        // These are the fields copied to or referenced by the live enemy slot at spawn time.
+
+        internal const int MaxHp      = 0x050; // int    — max HP; copied to slot MaxHp (0x020) at spawn
+
+        // Elemental resistances — individual ushorts starting at 0x054.
         // Scale (read as signed short): 0=immune, <0=absorbs (heals enemy), 100=neutral, >100=weak.
         // Absorb uses two's-complement encoding: e.g. -50 stored as 0xFFCE=65486u.
         // Only two enemies absorb: IceQueen absorbs ice (-50), eid=70 absorbs fire (-50).
-        internal const int Category   = 0x000; // ushort — enemy category (0=dragon,1=undead,2=marine,3=rock,4=plant,5=beast,6=sky,7=metal,8=mimic,9=mage)
-        internal const int FireRes    = 0x002; // short  — fire resistance
-        internal const int IceRes     = 0x004; // short  — ice resistance
-        internal const int ThunderRes = 0x006; // short  — thunder resistance
-        internal const int WindRes    = 0x008; // short  — wind resistance
-        internal const int HolyRes    = 0x00A; // short  — holy resistance
+        internal const int Category   = 0x054; // ushort — enemy category (0=dragon,1=undead,2=marine,3=rock,4=plant,5=beast,6=sky,7=metal,8=mimic,9=mage)
+        internal const int FireRes    = 0x056; // short  — fire resistance
+        internal const int IceRes     = 0x058; // short  — ice resistance
+        internal const int ThunderRes = 0x05A; // short  — thunder resistance
+        internal const int WindRes    = 0x05C; // short  — wind resistance
+        internal const int HolyRes    = 0x05E; // short  — holy resistance
 
-        // +0x00C: float — enemy-specific float that varies from 2.0 to 45.0; not constant.
-        // Likely a base interaction radius or aggro sphere used at spawn. Not the same as EntityScale.
-        internal const int Unk00C     = 0x00C; // float  — enemy-specific (e.g. Skeleton=6.0, Werewolf=7.5, Gunny=5.0)
+        // +0x060: CONFIRMED entity/collision radius. Varies 2.0–45.0 per enemy species. Copied to
+        // slot EntityScale (0x044) and EntityScaleCopy (0x048) at spawn. Earlier analysis
+        // mistakenly labeled this field Unk00C and assigned EntityScale to the 1.0f constant at
+        // 0x098; this is the corrected placement.
+        internal const int EntityScale = 0x060; // float  — entity/collision radius copied to slot at spawn
 
-        // +0x010/+0x012: loaded into the live slot's Unk090 (0x090) low/high ushorts at spawn.
+        // +0x064/+0x066: loaded into the live slot's Unk090 (0x090) low/high ushorts at spawn.
         // Low ushort: observed values 0–5; non-zero for enemies with ranged/special AI.
         // High ushort: non-zero only for ranged enemies (Gunny=20, Pirate's Chariot=30); may be max shoot range in world units.
-        internal const int Unk010     = 0x010; // ushort — copied to slot Unk090 low  at spawn
-        internal const int Unk012     = 0x012; // ushort — copied to slot Unk090 high at spawn; non-zero on ranged enemies
+        internal const int Unk010     = 0x064; // ushort — copied to slot Unk090 low  at spawn
+        internal const int Unk012     = 0x066; // ushort — copied to slot Unk090 high at spawn; non-zero on ranged enemies
 
-        internal const int Unk014     = 0x014; // ushort — 65535 for most enemies; non-zero for some (values 0,2,3,11); purpose unknown
-        internal const int Unk016     = 0x016; // ushort — 65535 for all observed valid enemies
+        internal const int Unk014     = 0x068; // ushort — 65535 for most enemies; non-zero for some (values 0,2,3,11); purpose unknown
+        internal const int Unk016     = 0x06A; // ushort — 65535 for all observed valid enemies
 
-        internal const int Abs        = 0x018; // int    — XP rewarded to the player on kill; written to slot Abs (0x0B0) at spawn
-        internal const int MinGoldDrop= 0x01C; // int    — minimum gold dropped on death; written to slot MinGoldDrop (0x034) at spawn
-        internal const int DropChance = 0x020; // int    — item drop chance (0–100); written to slot DropChance (0x038) at spawn
-        internal const int Unk024     = 0x024; // int    — ranges 0–70; purpose unknown
+        internal const int Abs        = 0x06C; // int    — XP rewarded to the player on kill; written to slot Abs (0x0B0) at spawn
+        internal const int MinGoldDrop= 0x070; // int    — minimum gold dropped on death; written to slot MinGoldDrop (0x034) at spawn
+        internal const int DropChance = 0x074; // int    — item drop chance (0–100); written to slot DropChance (0x038) at spawn
+        internal const int Unk024     = 0x078; // int    — ranges 0–70; purpose unknown
 
-        internal const int EnemySpeciesId    = 0x028; // ushort — enemy species ID (matches EnemyDefaults.Id)
-        // +0x02A: 2 bytes padding (always 0)
+        internal const int EnemySpeciesId    = 0x07C; // ushort — enemy species ID stored in table (matches EnemyDefaults.Id); used by engine to verify record ownership
+        // +0x07E: 2 bytes padding (always 0)
 
-        internal const int StealItemId= 0x02C; // ushort — item ID for steal mechanic; 65535 if none
-        internal const int StealFlag  = 0x02E; // ushort — 1 if enemy has a steal item, 0 if not
+        internal const int StealItemId= 0x080; // ushort — item ID for steal mechanic; 65535 if none
+        internal const int StealFlag  = 0x082; // ushort — 1 if enemy has a steal item, 0 if not
 
-        internal const int ItemResA   = 0x030; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance
-        internal const int ItemResB   = 0x032; // ushort — item resistance B
+        internal const int ItemResA   = 0x084; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance
+        internal const int ItemResB   = 0x086; // ushort — item resistance B
 
-        // +0x034: base melee attack power. Regular enemies: 82–200. Bosses: 65535 (sentinel; use
+        // +0x088: base melee attack power. Regular enemies: 82–200. Bosses: 65535 (sentinel; use
         // only behavior-script attacks). 0 if enemy has no melee attack (e.g. pure-projectile flyers).
-        // +0x036–+0x040: six elemental attack-output multipliers in the same element order as the
+        // +0x08A–+0x094: six elemental attack-output multipliers in the same element order as the
         // resistance fields: [fire, ice, thunder, wind, holy, unknown(dark?)]. Scale: 100=neutral,
         // >100=enemy's primary attack element, <100=reduced output of that element.
         // Example: thunder-beast eid=12 → [50,50,120,50,50,50] (strong thunder, weak others).
-        // Example: sky eid=60      → [100,150,100,100,100,100] (strong ice or wind — unconfirmed).
         // Bosses (atk=65535) all have these at 0; pure-projectile enemies may have them at 0 too.
-        internal const int AttackPower    = 0x034; // ushort — base melee attack power; 82–200 normal; 0 no melee; 65535 boss
-        internal const int ElemAtkFire    = 0x036; // ushort — fire    attack multiplier (100=neutral)
-        internal const int ElemAtkIce     = 0x038; // ushort — ice     attack multiplier
-        internal const int ElemAtkThunder = 0x03A; // ushort — thunder attack multiplier (spike for rock/beast/metal/mimic categories)
-        internal const int ElemAtkWind    = 0x03C; // ushort — wind    attack multiplier
-        internal const int ElemAtkHoly    = 0x03E; // ushort — holy    attack multiplier
-        internal const int ElemAtkDark    = 0x040; // ushort — dark(?) attack multiplier; 20 for some physical types
-        internal const int Unk042         = 0x042; // ushort — 0 for all observed valid enemies
+        internal const int AttackPower    = 0x088; // ushort — base melee attack power; 82–200 normal; 0 no melee; 65535 boss
+        internal const int ElemAtkFire    = 0x08A; // ushort — fire    attack multiplier (100=neutral)
+        internal const int ElemAtkIce     = 0x08C; // ushort — ice     attack multiplier
+        internal const int ElemAtkThunder = 0x08E; // ushort — thunder attack multiplier (spike for rock/beast/metal/mimic categories)
+        internal const int ElemAtkWind    = 0x090; // ushort — wind    attack multiplier
+        internal const int ElemAtkHoly    = 0x092; // ushort — holy    attack multiplier
+        internal const int ElemAtkDark    = 0x094; // ushort — dark(?) attack multiplier; 20 for some physical types
+        internal const int Unk042         = 0x096; // ushort — 0 for all observed valid enemies
 
-        internal const int EntityScale= 0x044; // float  — CONFIRMED entity/collision radius copied to slot at spawn
-
-        // +0x048: 4-char ASCII type code embedded in ELF (e.g. "e06a", "c14a"). Do not write.
-        internal const int EnemyCode  = 0x048; // char[4] — primary identifier code
-
-        // +0x04C–+0x087: mostly zero for regular enemies. Multi-form and boss entries store
-        // additional variant code strings here (e.g. "c14b"/"c14c" at +0x058/+0x068). Do not write.
-
-        // +0x088: duplicate of EnemyCode; same 4-char value. Do not write.
-        internal const int EnemyCodeCopy = 0x088; // char[4] — copy of EnemyCode
-
-        internal const int Unk090     = 0x090; // int    — 0 for all observed valid enemies; purpose unknown
-        internal const int Unk094     = 0x094; // int    — 0 for all observed valid enemies; purpose unknown
-
-        internal const int MaxHp      = 0x098; // int    — max HP; copied to slot MaxHp (0x020) at spawn
+        // +0x098: constant 1.0f for all observed enemies. Purpose unknown; do not use as EntityScale.
+        // (Earlier analysis mistakenly labeled this EntityScale; the true EntityScale is at 0x060.)
+        internal const int Unk098         = 0x098; // float  — constant 1.0f; purpose unknown
     }
 
     /// <summary>

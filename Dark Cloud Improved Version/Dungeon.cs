@@ -721,6 +721,7 @@ namespace Dark_Cloud_Improved_Version
             // EnemySlots.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
             // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             EnemySlots.LogEnemySpawns();
+            EnemySlots.LogFloorDataForTileMapSearch();
 
             if (numNormalEnemies > 3)
             {
@@ -1160,6 +1161,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FloorSelectionScreen()
         {
+            EnemySlots.RedirectDasherToGyonModel();
             if (circlePressed == false)
             {
                 if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)

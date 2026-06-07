@@ -2,6 +2,106 @@ using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // DUNGEON RUNTIME MEMORY MAP (PCSX2 addresses, PS2 = addr − 0x20000000)
+    // Investigation via LogFloorDataForTileMapSearch() — 2026-06-06 pass 1 (13 regions).
+    // Goal: locate the walkable tile map for valid enemy spawn-position selection.
+    // ──────────────────────────────────────────────────────────────────────────────────────────
+    //
+    // CONFIRMED: MIPS/VU EXECUTABLE CODE (never changes, eliminated as data candidates)
+    //   0x201C7000 — dun.bin code segment 1 (MIPS VU microcode)
+    //   0x201DC000 — dun.bin code segment 2 (MIPS VU microcode)
+    //
+    // CONFIRMED: UNALLOCATED / ZERO PADDING (no data loaded here)
+    //   0x20980000, 0x20990000, 0x21CD0000
+    //
+    // CONFIRMED: ASSET STRING TABLE (changes per dungeon, not per floor)
+    //   0x20930000 — room type / room shape asset strings
+    //   0x20940000 — actor model paths, animation names (in_door, cdoor, ndoor_on/off,
+    //                urac01.chr … urac18.chr, c04bjump.chr, chr1_3, chr1_4, u03_top, etc.)
+    //
+    // CONFIRMED: SHIFT-JIS DIALOGUE / ITEM NAMES
+    //   0x21CC0000 — encoded text used by UI (FD-prefixed character codes + FF 01/02 delimiters)
+    //
+    // CONFIRMED: AI / SCRIPTED EVENT PARAMETER TABLES (changes per floor)
+    //   0x20920000 — AI script parameter stream: type-tagged 4-byte values (tag 02=float,
+    //                tag 03=int) alternating with float parameters for enemy behavior scripts.
+    //                Contains world-space radii and trigger distances (e.g. 22.24, 3.58, 17.09,
+    //                111.3 world units).  Distinct count 45 (DBC) vs 12 (WOF) — content varies.
+    //   0x20928000 — Continuation / second half of AI script parameters.  Floats here are in
+    //                range 107–304 world units (DBC F1), consistent with encounter radii.
+    //
+    // CONFIRMED: TELEPORT COST TABLE (19 entries, static per dungeon)
+    //   0x21DD0000–0x21DD011F — 19 records × 16 bytes:
+    //     [0] int  : item_id (-1 for most floors, 44 = escape item for boss floor)
+    //     [1] int  : 0
+    //     [2] float: gald cost to warp to that floor (DBC range: ~2481–4857, increasing)
+    //     [3] int  : 0
+    //   All 18 first entries have item_id = -1.  Entry 18 has item_id = 44 (escape item).
+    //
+    // *** KEY FIND *** ROOM LAYOUT GRID (changes per floor)
+    //   0x21DD0130–0x21DD018F — 24 consecutive 4-byte integers, values 0–11, then zeros.
+    //   These are room type codes for a 4×6 (or 6×4) procedural layout grid.
+    //   Room type values 0–11 correspond to room shapes (dead end, straight, L-turn,
+    //   T-junction, 4-way, etc.).  The grid differs between dungeons and between floors
+    //   of the same dungeon.  DBC F1 example: [9,10,3,4,3,7,3,3,8,2,4,4,1,11,3,4,2,0,4,3].
+    //   WOF F0 example: [11,7,4,3,5,5,4,4,7,0,3,3,11,1,4,3,3,11,3,3,0,3,3,3].
+    //   This is the room-level connectivity map, NOT per-tile walkability.
+    //
+    // CONFIRMED: PER-ROOM CHEST / ITEM SPAWN TABLE (changes per floor and per visit state)
+    //   0x21DE0000 — 32+ entries × 16 bytes:
+    //     [0] int  : item_id (room/chest item ID; -1 = empty or padding slot; 44 = special)
+    //     [1] int  : secondary flag (0 or small int; role unclear)
+    //     [2] float: -1.0 on freshly-entered floors (DBC F0, WOF F0); populated float on
+    //                visited floors (DBC F1: values 545–2155, then a second decreasing set).
+    //                Float likely encodes a chest's Y or path-distance world coordinate.
+    //     [3] int  : 0 or 1 (rare flag; possibly "visited" or "required")
+    //   WOF F0 has non-(-1) item_ids but still -1.0 floats — suggests the float is assigned
+    //   lazily by a pathfinding pass that runs after initial spawn logging.
+    //
+    // CONFIRMED: ENEMY INSTANCE DATA (fills in after enemies actually spawn)
+    //   0x21E16800 — base of the live enemy instance block; begins with model name string
+    //                (e.g. "e101a", "e17a"), then per-instance stat words.  All zeros on
+    //                DBC F0 (captured pre-spawn); populated by DBC F1 and WOF F0.
+    //
+    // NOT FOUND: WALKABLE TILE MAP
+    //   None of the 13 scanned regions contains a 2D byte grid with walkable/wall values.
+    //   The collision tile map is computed at runtime from the loaded .mds room meshes and
+    //   lives in a dynamically-allocated buffer whose address has not been identified.
+    //   The 'map' / 'miniMap' constants at 0x202A359C / 0x202A35B0 are display flags,
+    //   not pointers to tile data.
+    //
+    // PASS 2 RESULTS (2026-06-06)
+    //   Gap regions (0x20948000–0x20978000): all zeros — unallocated.  Tile map is not here.
+    //   Pointer sniff (0x202A355C–0x202A35FC): 9 pointers found, all constant across floors
+    //   and dungeons.  Targets fall in two groups:
+    //     0x202A3574–357C → 0x2036E650/0x2036EF10/0x20373090 — renderer/scripting tables
+    //     0x202A35D0–35E8 → 0x21EC7940–0x21F00110 — audio/physics engine tables (upper RAM)
+    //   None point to a tile map.
+    //
+    //   CONCLUSION: the walkable tile map is computed at runtime from the loaded .mds meshes
+    //   and lives in a dynamically-allocated buffer at an address that varies each run.
+    //   Tile-map scanning is not feasible without hooking the mesh-to-nav-grid conversion.
+    //
+    // *** KEY FIND *** CHEST SPAWN TABLE (changes per floor; confirmed 2026-06-06)
+    //   Base: firstChest = 0x21DD0260 (entity ID field of slot 0).
+    //   Count address: firstChest − 0x30 = 0x21DD0230 (int; observed 5–6 chests per floor).
+    //   Stride: 0x40 bytes between consecutive chest slots.
+    //   SlotBase(i) = firstChest + i × 0x40
+    //
+    //   Field offsets relative to SlotBase(i):
+    //     −0x20 : active flag (int)  — 1 = alive (unopened), 0 = empty/looted
+    //     −0x10 : world X (float32) — confirmed world-scale (500–2000 range, matches enemy coords)
+    //     −0x08 : world Y (float32) — confirmed world-scale
+    //     +0x00 : entity ID (int)   — firstChest (0x21DD0260) is this field for slot 0
+    //     +0x08 : chest size (int)  — firstChestSize (0x21DD0268) is this field for slot 0
+    //
+    //   The engine always places chests on walkable tiles.  Active chest world positions are
+    //   therefore a reliable source of valid floor coordinates without needing the tile map —
+    //   usable as teleport targets for FixModelRedirectSpawnPositions().
+    //   See ChestsAddresses.cs for the typed address constants.
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+
     // Enemy spawn pool data extracted from ELF /tmp/SCUS_971.11, file offset 0x1861D0.
     //
     // BINARY FORMAT (spawn pool table)

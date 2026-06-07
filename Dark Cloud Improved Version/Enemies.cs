@@ -76,6 +76,43 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Research tools ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Set true before entering a WOF floor to overwrite up to 5 active enemy slots with
+        /// EnemySpeciesId=54 (Killer Snake) on the next CheckSpawns call. Clears itself after one use.
+        /// </summary>
+        internal static bool ForceKillerSnakeActive = true;
+
+        /// <summary>
+        /// Overwrites EnemySpeciesId in up to 5 active non-miniboss slots to 54 (Killer Snake),
+        /// then calls DumpEnemySlot on each so the full slot layout is logged. Invoke from a WOF
+        /// floor to observe what the engine does with eid=54 in a live slot.
+        /// </summary>
+        internal static void ForceKillerSnakeSlots()
+        {
+            Console.WriteLine("[ForceKS] Overwriting up to 5 active slots → EnemySpeciesId=54...");
+            int replaced = 0;
+            for (int i = 0; i < 16 && replaced < 5; i++)
+            {
+                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                int status = Memory.ReadInt(slotBase + EnemySlotOffsets.RenderStatus);
+                if (status <= 0) continue;
+                if (MiniBoss.miniBossEnemyNumbers.Contains(i)) continue;
+
+                ushort oldId = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
+                Memory.WriteUShort(slotBase + EnemySlotOffsets.EnemySpeciesId, 54);
+                Console.WriteLine($"[ForceKS] slot={i} id={oldId}→54");
+                replaced++;
+            }
+            Console.WriteLine($"[ForceKS] {replaced} slot(s) set to eid=54. Full dumps follow:");
+            for (int i = 0; i < 16; i++)
+            {
+                int status = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.RenderStatus));
+                if (status > 0 && !MiniBoss.miniBossEnemyNumbers.Contains(i))
+                    DumpEnemySlot(i);
+            }
+        }
+
         private static readonly Dictionary<int, int[]> _enemySlotSnapshots = new Dictionary<int, int[]>();
 
         internal static void DumpEnemySlot(int slotIndex)
@@ -359,6 +396,242 @@ namespace Dark_Cloud_Improved_Version
                     _flashTimerSnapshot[i] = timer;
                 }
             }
+        }
+
+        /// <summary>
+        /// Writes Gyon's model code into Dasher's species table entry (both ModelCode and
+        /// ModelCodeCopy) so the engine loads Gyon's mesh for any Dasher spawn.
+        /// </summary>
+        internal static void RedirectDasherToGyonModel()
+        {
+            byte[] code  = System.Text.Encoding.ASCII.GetBytes(Enemies.MinotaurJoe.ModelCode);
+            int entityId = Enemies.MinotaurJoe.Id;
+            // float entityScale = Memory.ReadFloat(EnemySpeciesTable.FieldAddress(Enemies.Dran.TableIndex.Value, EnemySpeciesTable.EntityScale));
+            int modelAddr     = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.ModelCode);
+            int copyAddr = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.ModelCodeCopy);
+            int entityScaleAddr = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.EntityScale);
+            int entityIdAddr = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.EnemySpeciesId);
+            Memory.WriteInt(entityIdAddr, entityId);
+            Memory.WriteByteArray(modelAddr,     code);
+            Memory.WriteByteArray(copyAddr, code);
+            // Memory.WriteFloat(entityScaleAddr, entityScale);
+            Console.WriteLine($"[ModelRedirect] Dasher species table model → {Enemies.Dran.ModelCode} (was {Enemies.Dasher.ModelCode})");
+        }
+
+        /// <summary>
+        /// Corrects the world position of any boss-model slot that was displaced by the
+        /// model-redirect spawn logic (which sets position to the boss arena origin instead
+        /// of a floor spawn point). Targets any slot whose species ID appears in
+        /// <see cref="Enemies.BossEnemies"/>, since <see cref="RedirectDasherToGyonModel"/>
+        /// now writes the redirected boss's own ID into the patched species table entry.
+        ///
+        /// Teleports displaced slots to a random active chest position — chests are guaranteed
+        /// to be on walkable tiles, making them a reliable source of valid floor coordinates
+        /// without needing the tile map. Falls back to the player's dungeon position if no
+        /// active chests are found on the current floor.
+        ///
+        /// The Z (elevation) component is sourced from the mean of non-boss active slots, or
+        /// the player's Z, since the chest table does not store elevation.
+        ///
+        /// Call this a few frames after floor entry, after enemy slots have settled.
+        /// </summary>
+        internal static void FixModelRedirectSpawnPositions()
+        {
+            const float displacedThreshold = 300.0f;
+
+            // Collect active chest positions — guaranteed walkable floor locations.
+            int rawCount = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            int chestCount = Math.Min(rawCount, 16); // guard against corrupted count
+            var activeChests = new List<(float x, float y)>();
+            for (int c = 0; c < chestCount; c++)
+            {
+                int activeFlag = Memory.ReadInt(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.ActiveFlag));
+                if (activeFlag != 1) continue;
+                float cx = Memory.ReadFloat(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.WorldX));
+                float cy = Memory.ReadFloat(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.WorldY));
+                activeChests.Add((cx, cy));
+            }
+
+            // Build reference elevation from non-boss, non-miniboss active slots.
+            // The chest table has no Z/height, so we derive it from peers.
+            float sumZ = 0;
+            int zCount = 0;
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+            {
+                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                if (Memory.ReadInt(slotBase) <= 0) continue;
+                if (MiniBoss.miniBossEnemyNumbers.Contains(i)) continue;
+                ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
+                if (Enemies.BossEnemies.ContainsKey(id)) continue;
+                sumZ += Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
+                zCount++;
+            }
+            float refZ = zCount > 0
+                ? sumZ / zCount
+                : Memory.ReadFloat(Player.dunPositionZ);
+
+            var rng = new Random();
+
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+            {
+                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                if (Memory.ReadInt(slotBase) <= 0) continue;
+                ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
+                if (!Enemies.BossEnemies.ContainsKey(id)) continue;
+
+                float x = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
+                float y = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);
+
+                float targetX, targetY;
+                if (activeChests.Count > 0)
+                {
+                    var chest = activeChests[rng.Next(activeChests.Count)];
+                    targetX = chest.x;
+                    targetY = chest.y;
+                }
+                else
+                {
+                    targetX = Memory.ReadFloat(Player.dunPositionX);
+                    targetY = Memory.ReadFloat(Player.dunPositionY);
+                }
+
+                float dx = x - targetX, dy = y - targetY;
+                float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (dist <= displacedThreshold) continue;
+
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationX, targetX);
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationY, targetY);
+                Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationZ, refZ);
+                Console.WriteLine($"[ModelRedirect] slot={i} id={id} position corrected ({x:F1},{y:F1}) → ({targetX:F1},{targetY:F1}), dist was {dist:F1}");
+            }
+        }
+
+        /// <summary>
+        /// Scans candidate memory regions for walkable tile-map data and writes a hex dump
+        /// to tilemap_search.txt alongside the player and enemy world positions for each floor.
+        /// Pass 2 adds the unscanned 0x2094-0x2097 gap, post-enemy areas, and a pointer sniff
+        /// of the dungeon variable block (0x202A355C-0x202A35FC) to follow any PS2-native
+        /// RAM pointers into regions we haven't covered yet.
+        /// </summary>
+        internal static void LogFloorDataForTileMapSearch()
+        {
+            string logPath = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "tilemap_search.txt");
+
+            using var w = System.IO.File.AppendText(logPath);
+
+            byte dun = Memory.ReadByte(Addresses.checkDungeon);
+            byte fl  = Memory.ReadByte(Addresses.checkFloor);
+            float px = Memory.ReadFloat(Player.dunPositionX);
+            float py = Memory.ReadFloat(Player.dunPositionY);
+            float pz = Memory.ReadFloat(Player.dunPositionZ);
+
+            w.WriteLine();
+            w.WriteLine($"=== Dun={dun} Floor={fl} @ {DateTime.Now:HH:mm:ss} Player=({px:F2},{py:F2},{pz:F2}) ===");
+
+            for (int i = 0; i < 16; i++)
+            {
+                int sBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                if (Memory.ReadInt(sBase) <= 0) continue;
+                float ex = Memory.ReadFloat(sBase + EnemySlotOffsets.LocationX);
+                float ey = Memory.ReadFloat(sBase + EnemySlotOffsets.LocationY);
+                float ez = Memory.ReadFloat(sBase + EnemySlotOffsets.LocationZ);
+                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
+                w.WriteLine($"  Slot[{i:D2}] species={eid:D3} X={ex:F2} Y={ey:F2} Z={ez:F2}");
+            }
+
+            // Pointer sniff: read every 4-byte word in the dungeon variable block.
+            // Values in PS2 native RAM range (0x00100000–0x01FFFFFF) are pointers —
+            // add 0x20000000 to get the PCSX2 address. These are the candidates most
+            // likely to point at dynamically-allocated tile-map buffers.
+            w.WriteLine("\n-- Pointer sniff 0x202A355C–0x202A35FC --");
+            var ptrTargets = new List<uint>();
+            for (int addr = 0x202A355C; addr <= 0x202A35FC; addr += 4)
+            {
+                uint v = (uint)Memory.ReadInt(addr);
+                bool isNativePtr  = v is >= 0x00100000 and <= 0x01FFFFFF;
+                bool isCachedPtr  = v is >= 0x80100000 and <= 0x81FFFFFF;
+                if (isNativePtr || isCachedPtr)
+                {
+                    uint pcsx2 = (v & 0x01FFFFFFu) + 0x20000000u;
+                    w.WriteLine($"  [0x{addr:X8}] = 0x{v:X8}  → PCSX2: 0x{pcsx2:X8}  <-- POINTER");
+                    ptrTargets.Add(pcsx2);
+                }
+                else
+                {
+                    w.WriteLine($"  [0x{addr:X8}] = 0x{v:X8}");
+                }
+            }
+
+            // Regions to scan — drop confirmed-useless areas (VU code at 201C7/201DC,
+            // all-zero blocks at 20980/20990/21CD0). 0x21DD0000 gets 1024 B (64 rows)
+            // to capture the full room-layout grid beyond offset 0x130.
+            int[] regions = {
+                // Dungeon AI event scripts (change per floor)
+                0x20920000, 0x20928000,
+                // Asset string table (changes per dungeon)
+                0x20940000,
+                // THE UNSCANNED GAP — most likely location for MPD tile/nav data
+                0x20948000, 0x20950000, 0x20958000,
+                0x20960000, 0x20968000, 0x20970000, 0x20978000,
+                // Dialogue / item name text
+                0x21CC0000,
+                // Teleport cost table + room layout grid (64 rows = 1024 B)
+                0x21DD0000,
+                // Per-room chest spawn data
+                0x21DE0000,
+                // Enemy instance data + two pages immediately after
+                0x21E16800, 0x21E18000, 0x21E20000,
+            };
+
+            // Also dump any pointer targets from the sniff that aren't already covered
+            var covered = new HashSet<uint>();
+            foreach (int r in regions) covered.Add((uint)r);
+            foreach (uint pt in ptrTargets)
+            {
+                uint aligned = pt & 0xFFFF8000u; // round down to 32 KB boundary
+                if (covered.Add(aligned) && covered.Add(aligned + 0x8000))
+                    regions = [.. regions, (int)aligned];
+            }
+
+            foreach (int rBase in regions)
+            {
+                int rowCount = (rBase == 0x21DD0000) ? 64 : 32;
+                int size = rowCount * 16;
+                var buf = new byte[size];
+                for (int row = 0; row < rowCount; row++)
+                    for (int col = 0; col < 4; col++)
+                    {
+                        int v = Memory.ReadInt(rBase + row * 16 + col * 4);
+                        buf[row * 16 + col * 4]     = (byte)(v & 0xFF);
+                        buf[row * 16 + col * 4 + 1] = (byte)((v >> 8)  & 0xFF);
+                        buf[row * 16 + col * 4 + 2] = (byte)((v >> 16) & 0xFF);
+                        buf[row * 16 + col * 4 + 3] = (byte)((v >> 24) & 0xFF);
+                    }
+
+                int score = 0;
+                for (int row = 0; row < rowCount; row++)
+                {
+                    bool small = true;
+                    for (int col = 0; col < 16; col++)
+                        if (buf[row * 16 + col] > 15) { small = false; break; }
+                    if (small) score++;
+                }
+
+                HashSet<byte> distinct = [..buf];
+
+                w.WriteLine($"\n-- 0x{rBase:X8} [tile-score={score}/{rowCount}, distinct={distinct.Count}] --");
+                for (int row = 0; row < rowCount; row++)
+                {
+                    w.Write($"  {rBase + row * 16:X8}: ");
+                    for (int col = 0; col < 16; col++)
+                        w.Write($"{buf[row * 16 + col]:X2} ");
+                    w.WriteLine();
+                }
+            }
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[TileMap] Logged Dun={dun} Floor={fl} → {logPath}");
         }
 
         internal class Digger
