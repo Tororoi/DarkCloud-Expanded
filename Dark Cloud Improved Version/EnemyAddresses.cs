@@ -42,7 +42,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int EnemySpeciesId    = 0x042; // ushort — enemy species ID; used to look up name, stats, and model data
         internal const int EntityScale       = 0x044; // float — CONFIRMED entity/collision radius; enemy-specific (6.0–8.0); does not affect attack hitbox
         internal const int EntityScaleCopy   = 0x048; // float — copy of EntityScale set at spawn; secondary reference
-        internal const int SpeciesDataPtr    = 0x04C; // int   — pointer to shared enemy-species behavior data; identical across all slots of the same species (e.g. all Pirate's Chariots = 0x01C05140)
+        // SpeciesDataPtr is a PS2-native pointer (0x00xxxxxx range) to the loaded c16a/stb behavior
+        // block for this species. All slots of the same species share one block (e.g. every Pirate's
+        // Chariot = 0x01C05140). The block begins with a MIPS function pointer table; the on-death
+        // callback is believed to sit at a low word index within that table. Nulling the relevant
+        // pointer prevents the boss-defeat sequence from firing without touching the species table.
+        // Add 0x20000000 to convert the PS2-native pointer to a PCSX2-readable address.
+        // See LogBossSlotSpeciesDataPtrs() in Enemies.cs for live-dump diagnostic.
+        internal const int SpeciesDataPtr    = 0x04C; // int   — PS2-native ptr to loaded species behavior block (shared across all slots of same species)
         internal const int AiStateCounter    = 0x050; // int   — AI substate tick counter; small value oscillating ~6–25; updates each game frame; not monotonically increasing
 
         // ── Facing Direction (3D unit vector, updated each frame as enemy turns) ──
@@ -257,7 +264,15 @@ namespace Dark_Cloud_Improved_Version
         // >100=enemy's primary attack element, <100=reduced output of that element.
         // Example: thunder-beast eid=12 → [50,50,120,50,50,50] (strong thunder, weak others).
         // Bosses (atk=65535) all have these at 0; pure-projectile enemies may have them at 0 too.
-        internal const int AttackPower    = 0x088; // ushort — base melee attack power; 82–200 normal; 0 no melee; 65535 boss
+        //
+        // IMPORTANT — AttackPower = 65535 does NOT drive the boss-defeat sequence by itself.
+        // It is a sentinel that signals "boss-class enemy" to the engine (no melee damage), but the
+        // defeat callback that triggers the exit cutscene lives in the SpeciesDataPtr behavior block.
+        // ModelCodeCopy (0x040) determines which behavior script the engine dispatches; that script
+        // contains the on-death hook pointer that ultimately calls the defeat function at ELF 0x0F5DF0.
+        // Writing 150 to AttackPower on a redirected boss slot prevents melee one-shots but does NOT
+        // prevent the defeat sequence from firing — the callback is loaded independently of this field.
+        internal const int AttackPower    = 0x088; // ushort — base melee attack power; 82–200 normal; 0 no melee; 65535 boss (sentinel only, see block comment)
         internal const int ElemAtkFire    = 0x08A; // ushort — fire    attack multiplier (100=neutral)
         internal const int ElemAtkIce     = 0x08C; // ushort — ice     attack multiplier
         internal const int ElemAtkThunder = 0x08E; // ushort — thunder attack multiplier (spike for rock/beast/metal/mimic categories)
@@ -321,6 +336,64 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// Global state variables written by the boss-defeat function at ELF 0x0F5DF0.
+    ///
+    /// The game uses r28 (gp = PS2-native 0x01E00000) as the global data pointer.
+    /// All addresses below are PCSX2 (= PS2-native + 0x20000000).
+    ///
+    /// Write order observed in the function (abbreviated):
+    ///   1. 0x21DF94D8 — receives arg1 (boss slot pointer); first write in function
+    ///   2. 0x21DF94E0 / 0x21DF9500 / 0x21DF94F8 / 0x21DF9510 / 0x21DF94EC / 0x21DF94F4 — dungeon exit state struct
+    ///   3. jal BGM transition (PS2=0x0022BA00) — audio state changes before any C# poll can react
+    ///   4. 0x21DF881C — dungeonClear flag (Dungeon.cs already resets this, but too late)
+    ///   5. 0x21DF94E4 — written four separate times by the function
+    ///   6. 0x21DF94FC — written to 1; likely the "boss defeated / trigger exit" flag
+    ///   7. 0x21DF94E8 — cleared to 0
+    ///   8. 0x21DF9504 — cleared to 0
+    ///   9. 0x21D90408 — secondary write (r1 = 0x01D90000; base is separate from gp block)
+    ///
+    /// Key insight: all nine writes above happen inside a single MIPS frame.  No C# poller
+    /// (even at 50 ms / ~3 frames) can observe and undo them before the engine processes the
+    /// exit sequence.  The only reliable prevention is to null the on-death callback pointer
+    /// inside the SpeciesDataPtr behavior block BEFORE the boss dies.
+    ///
+    /// The "boss defeated" exit trigger is believed to be <see cref="BossDefeatedFlag"/> (0x21DF94FC),
+    /// since it is the only field explicitly set to 1 rather than copied from a computed value.
+    /// Resetting DungeonClear alone is insufficient.
+    /// </summary>
+    internal static class BossDefeatState
+    {
+        // All addresses are PCSX2 (PS2-native + 0x20000000).
+
+        // ── Boss slot state cluster (gp − 0x6B28 .. gp − 0x6AEC) ────────────────
+        // This block is a contiguous struct. The full span is 0x21DF94D8–0x21DF9510.
+        internal const int BossSlotPtr      = 0x21DF94D8; // arg1 passed in; first value written
+        internal const int ExitState0       = 0x21DF94E0; // dungeon exit state field
+        internal const int ExitStateE4      = 0x21DF94E4; // written four times with computed values
+        internal const int ExitStateEC      = 0x21DF94EC; // dungeon exit state field
+        internal const int ExitStateF4      = 0x21DF94F4; // dungeon exit state field
+        internal const int ExitStateF8      = 0x21DF94F8; // dungeon exit state field
+        internal const int ExitState00      = 0x21DF9500; // dungeon exit state field
+        internal const int ExitState04      = 0x21DF9504; // cleared to 0
+        internal const int ExitState10      = 0x21DF9510; // dungeon exit state field
+
+        // ── "Boss defeated" / exit trigger ──────────────────────────────────────
+        // Written to 1 (literal addiu r2,r0,1) late in the function; believed to be the
+        // primary flag the engine polls to start the exit/ending sequence.
+        // Resetting only DungeonClear (0x21DF881C) is NOT sufficient — this field must also
+        // be kept at 0 to prevent the exit from triggering on non-boss floors.
+        internal const int BossDefeatedFlag = 0x21DF94FC; // int — 0=normal, 1=boss defeated (triggers exit)
+
+        // ── DungeonClear (separate gp block) ────────────────────────────────────
+        // Written by the same defeat function.  Dungeon.cs already polls and resets this,
+        // but the reset races against the engine reading it in the same or next frame.
+        internal const int DungeonClear     = 0x21DF881C; // int — 0=in progress, nonzero=cleared (already handled by Dungeon.cs)
+
+        // ── Secondary write (different base: r1 = 0x01D90000) ───────────────────
+        internal const int Secondary0408    = 0x21D90408; // int — written near function end; purpose unknown
+    }
+
+    /// <summary>
     /// Addresses and field offsets for the behavior script table.
     /// Each 0x70-byte record describes a special attack or movement behavior pattern.
     /// 34 entries total; a parallel pointer array at <see cref="PointerArray"/> references
@@ -333,8 +406,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int Base         = 0x0027EB90; // confirmed RAM address
         internal const int Stride       = 0x70;       // bytes per record (112)
         internal const int Count        = 34;
-        // Array of 9 RAM pointers referencing entries [25]–[33]; sits immediately before the enemy species table.
-        internal const int PointerArray = 0x0027FBD4;
+        // Full 34-entry pointer array — one RAM pointer per BST entry in index order [0]–[33].
+        // Located in the gap between BST end (ELF 0x17FB70) and species table (ELF 0x17FC00).
+        // PREVIOUS (WRONG): 0x0027FBD4 — that lands inside the species table.
+        // Corrected (ELF 0x17FB70 → RAM 0x00100000 + (0x17FB70 - 0x100)): 0x0027FA70.
+        // Use: ptr = ReadInt(PointerArray + index * 4); then write Enabled=0 at ptr + 0x14.
+        internal const int PointerArray = 0x0027FA70;
 
         internal static int RecordAddress(int index) => Base + index * Stride;
         internal static int FieldAddress(int index, int fieldOffset) => RecordAddress(index) + fieldOffset;

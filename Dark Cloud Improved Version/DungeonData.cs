@@ -102,6 +102,70 @@ namespace Dark_Cloud_Improved_Version
     //   See ChestsAddresses.cs for the typed address constants.
     // ══════════════════════════════════════════════════════════════════════════════════════════
 
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // BOSS DEFEAT CUTSCENE MECHANISM (ELF analysis — 2026-06-07)
+    // Goal: understand what triggers the boss defeat cutscene so we can suppress it when a
+    //       redirected boss (RedirectEnemyModel) dies on a regular non-boss floor.
+    // ──────────────────────────────────────────────────────────────────────────────────────────
+    //
+    // GP REGISTER VALUE
+    //   The ELF's $gp register is 0x21E00000 (PCSX2).  Confirmed by back-solving from the known
+    //   dungeonClear address: sw v0, -30692(gp) stores to 0x21DF881C → gp = 0x21E00000.
+    //
+    // KEY ADDRESS: dungeonClear = 0x21DF881C  (gp − 30692, i.e. gp − 0x77E4)
+    //   Already declared in Addresses.cs.  Holds 0xFFFFFFF1 (= −15) when the dungeon is
+    //   considered cleared.  Normal in-dungeon value is something else (sample on floor entry).
+    //
+    // KEY ADDRESS: dungeonClearSource = 0x21DF8698  (gp − 31080, i.e. gp − 0x7968)
+    //   The word that is READ and then written to dungeonClear when the boss defeat fires.
+    //   Contains the "cleared" sentinel value (0xFFFFFFF1) once dungeon state is initialised.
+    //
+    // THE ONE WRITE (ELF offset 0x0F5E38, kseg0 0x801F5D38, PCSX2 0x201F5D38)
+    //   There is exactly ONE sw instruction that writes to dungeonClear in the entire ELF:
+    //     sw v0, −30692(gp)          ; stores dungeonClearSource value → dungeonClear
+    //   It sits inside a "begin dungeon end sequence" function at ELF 0x0F5DF0 that also:
+    //     • copies dungeon exit struct fields to GP-relative globals
+    //     • calls audio fade/stop functions (jal 0x012B560, jal 0x012B920)
+    //   Original instruction bytes (little-endian): 1C 88 82 AF
+    //   NOP bytes: 00 00 00 00
+    //
+    // STATE MACHINE (ELF 0x072DD0 – 0x073028 function; dispatch table at kseg0 ~0x802A*)
+    //   The dungeon combat loop is a switch on *[gp − 28820] (PCSX2 0x21DF8F6C), which we
+    //   call battleState.  One specific case of that switch (reached when the game's combat
+    //   manager detects the boss enemy HP reached 0) calls the boss defeat function:
+    //     ELF 0x072F10 – 0x072F20 (the "boss defeated" case):
+    //       addiu a1, zero, 1
+    //       jal   0x01F5CF0          ; = ELF 0x0F5DF0, the dungeon-end function above
+    //       beq   zero, zero, …      ; unconditional jump to function epilogue
+    //   The jal has only ONE call site — this case in the switch.
+    //
+    // HOW THE BUG MANIFESTS
+    //   RedirectEnemyModel() writes MinotaurJoe.Id (or another boss ID) into Dasher's
+    //   EnemySpeciesId species-table field so that the enemy's in-game name is correct.
+    //   When the redirected enemy dies, the combat manager's boss-HP check reads that species
+    //   ID, recognises a boss, transitions battleState to the defeat case, and the cutscene
+    //   fires regardless of which floor the player is on.
+    //
+    // FIX OPTIONS
+    //
+    //   Option A — C# monitor (no MIPS patching; simplest):
+    //     On floor entry, snapshot dungeonClear (0x21DF881C).
+    //     When a boss is redirected to a regular floor, start a tight-polling thread (~50 ms).
+    //     If dungeonClear changes away from the snapshot value AND checkFloor (0x21CD954E)
+    //     does not equal the current dungeon's canonical boss floor → write the snapshot back.
+    //     Boss floors: DBC=14, WOF=17, SW=18, SMT=18, MS=15, GoT=special, DS=100.
+    //     Risk: ~50 ms race window before the state machine advances past the write.
+    //
+    //   Option B — Runtime MIPS NOP patch via PINE:
+    //     Write 0x00000000 to PCSX2 address 0x201F5D38 to silence the dungeonClear store.
+    //     Apply the patch when a boss redirect is active on a non-boss floor; restore the
+    //     original word (0xAF829D1C... verify: sw v0, −30692(gp) = 0xAF82_881C → bytes
+    //     1C 88 82 AF) when back on a normal floor or redirect is cleared.
+    //     This is race-free and surgical — only the clear is suppressed, not the whole
+    //     cutscene sequence — so audio/rendering calls still run but the flag is never set.
+    //     Note: 0xAF82881C in little-endian = bytes 1C 88 82 AF.
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+
     // Enemy spawn pool data extracted from ELF /tmp/SCUS_971.11, file offset 0x1861D0.
     //
     // BINARY FORMAT (spawn pool table)

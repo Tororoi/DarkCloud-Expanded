@@ -28,6 +28,13 @@ namespace Dark_Cloud_Improved_Version
         static bool PPowdermenuOpen = false;
         static bool circlePressed = false;
         static bool hasClearMessageShown = false;
+
+        private static readonly EnemyDefaults[] _bossSpecies = {
+            Enemies.IceArrow, Enemies.Dran, Enemies.IceQueen, Enemies.MasterUtan,
+            Enemies.KingsCurse, Enemies.MinotaurJoe, Enemies.DarkGenie, Enemies.DarkGenieForm2,
+            Enemies.RightHand, Enemies.LeftHand, Enemies.WineKeg, Enemies.UnknownPhase100,
+            Enemies.BlackKnight,
+        };
         static byte[] wepLevelArray = new byte[10];
         public static bool monsterQuestMachoActive = false;
         public static bool monsterQuestGobActive = false;
@@ -48,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
         public static bool magicCircleChanged = false;
         public static List<byte> excludeFloors;
 
-        //THREADS
+//THREADS
         //Runs at the start of each floor
         public static Thread spawnsCheck;
         public static Thread minibossProcess;
@@ -88,6 +95,7 @@ namespace Dark_Cloud_Improved_Version
                 cheatCodeThread.Start();
                 Resources.initiateRubyMemeFix();
             }
+            EnemySlots.RedirectEnemyModel(Enemies.Dasher, Enemies.MasterUtan);
             while (true)
             {
                 if (Player.InDungeonFloor())
@@ -415,6 +423,8 @@ namespace Dark_Cloud_Improved_Version
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered an event floor!");
                             }
 
+                            SetBossDefeatAllowed(currentDungeon, currentFloor);
+
                             FixUngagaDoors(currentDungeon);
 
                             //Save current weapon
@@ -458,6 +468,7 @@ namespace Dark_Cloud_Improved_Version
                         if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not ingame anymore! Exited from Dungeon!");
+                            EnemySlots.RestoreRedirectedEnemies();
                             break;
                         }
                     }
@@ -539,6 +550,35 @@ namespace Dark_Cloud_Improved_Version
                     return Items.crystaleyeball;
                 default:
                     return byte.MaxValue;
+            }
+        }
+
+        private static void SetBossDefeatAllowed(byte dungeon, byte floor)
+        {
+            bool onBossFloor = floor == GetDungeonBossFloor(dungeon);
+            ushort atk = onBossFloor ? (ushort)65535 : (ushort)150;
+            foreach (var boss in _bossSpecies)
+            {
+                if (!boss.TableIndex.HasValue) continue;
+                int addr = EnemySpeciesTable.FieldAddress(boss.TableIndex.Value, EnemySpeciesTable.AttackPower);
+                Memory.WriteUShort(addr, atk);
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[BossGate] Boss defeat {(onBossFloor ? "ENABLED" : "SUPPRESSED")} (dun={dungeon} floor={floor})");
+        }
+
+        public static byte GetDungeonBossFloor(byte dungeon)
+        {
+            switch (dungeon)
+            {
+                case 0: return 14;   // DBC — Dran
+                case 1: return 17;   // WOF — MasterUtan
+                case 2: return 18;   // SW  — IceQueen
+                case 3: return 18;   // SMT — KingsCurse
+                case 4: return 15;   // MS  — MinotaurJoe
+                case 5: return 24;   // GoT — DarkGenie
+                case 6: return 100;  // DS
+                default: return byte.MaxValue;
             }
         }
 
@@ -749,6 +789,24 @@ namespace Dark_Cloud_Improved_Version
             minibossProcess?.Join(2000);
             // EnemySlots.ApplyTestModifications();
             EnemySlots.ResetPollState();
+            EnemySlots.FixModelRedirectSpawnPositions();
+            new Thread(() => { Thread.Sleep(3000); EnemySlots.LogBossSlotSpeciesDataPtrs(); }).Start();
+            new Thread(() =>
+            {
+                for (int sample = 1; sample <= 5; sample++)
+                {
+                    Thread.Sleep(5000);
+                    for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+                    {
+                        ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
+                        if (!Enemies.BossEnemies.ContainsKey(id)) continue;
+                        float x = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.LocationX));
+                        float y = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.LocationY));
+                        float z = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.LocationZ));
+                        Console.WriteLine($"[PosProbe] t+{sample * 5}s slot={i} id={id} pos=({x:F1},{y:F1},{z:F1})");
+                    }
+                }
+            }) { IsBackground = true }.Start();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 
@@ -1161,7 +1219,6 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FloorSelectionScreen()
         {
-            EnemySlots.RedirectDasherToGyonModel();
             if (circlePressed == false)
             {
                 if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)

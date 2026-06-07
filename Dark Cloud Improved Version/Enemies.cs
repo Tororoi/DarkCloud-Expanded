@@ -398,31 +398,110 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        private static readonly Dictionary<int, int[]> _speciesTableSnapshots = [];
+
         /// <summary>
-        /// Writes Gyon's model code into Dasher's species table entry (both ModelCode and
-        /// ModelCodeCopy) so the engine loads Gyon's mesh for any Dasher spawn.
+        /// Overwrites target's species table entry with source's model codes and all data
+        /// fields so the engine loads source's mesh and stats for any target spawn.
+        /// Snapshots the original record on first call so RestoreRedirectedEnemies() can
+        /// undo every change when the player leaves the dungeon.
         /// </summary>
-        internal static void RedirectDasherToGyonModel()
+        internal static void RedirectEnemyModel(EnemyDefaults target, EnemyDefaults source)
         {
-            byte[] code  = System.Text.Encoding.ASCII.GetBytes(Enemies.MinotaurJoe.ModelCode);
-            int entityId = Enemies.MinotaurJoe.Id;
-            // float entityScale = Memory.ReadFloat(EnemySpeciesTable.FieldAddress(Enemies.Dran.TableIndex.Value, EnemySpeciesTable.EntityScale));
-            int modelAddr     = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.ModelCode);
-            int copyAddr = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.ModelCodeCopy);
-            int entityScaleAddr = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.EntityScale);
-            int entityIdAddr = EnemySpeciesTable.FieldAddress(Enemies.Dasher.TableIndex.Value, EnemySpeciesTable.EnemySpeciesId);
-            Memory.WriteInt(entityIdAddr, entityId);
-            Memory.WriteByteArray(modelAddr,     code);
-            Memory.WriteByteArray(copyAddr, code);
-            // Memory.WriteFloat(entityScaleAddr, entityScale);
-            Console.WriteLine($"[ModelRedirect] Dasher species table model → {Enemies.Dran.ModelCode} (was {Enemies.Dasher.ModelCode})");
+            if (!target.TableIndex.HasValue || !source.TableIndex.HasValue) return;
+
+            int targetIdx  = target.TableIndex.Value;
+            int recordAddr = EnemySpeciesTable.RecordAddress(targetIdx);
+
+            // Guard: skip if redirect already applied (fires every frame during floor selection screen).
+            if (Memory.ReadUShort(recordAddr + EnemySpeciesTable.EnemySpeciesId) == source.Id) return;
+
+            // Snapshot original record before first redirect so RestoreRedirectedEnemies() can
+            // write it back verbatim. Read as raw int words — covers all field types correctly.
+            if (!_speciesTableSnapshots.ContainsKey(targetIdx))
+            {
+                const int wordCount = EnemySpeciesTable.Stride / 4;
+                int[] snapshot = new int[wordCount];
+                for (int w = 0; w < wordCount; w++)
+                    snapshot[w] = Memory.ReadInt(recordAddr + w * 4);
+                _speciesTableSnapshots[targetIdx] = snapshot;
+            }
+
+            int srcAddr = EnemySpeciesTable.RecordAddress(source.TableIndex.Value);
+
+            // ModelCode (0x000): 4-char ASCII mesh identifier (e.g. "m_ut", "e52a").
+            // Writing source's code here tells the engine to load source's visual mesh for target
+            // spawns. Writing only this field avoids the boss-spawn-at-(0,0) origin bug because
+            // the AI dispatch still reads ModelCodeCopy and loads the original behavior script.
+            // However the AI will act like the original enemy (e.g. Dasher AI with MasterUtan mesh).
+            byte[] modelCode = System.Text.Encoding.ASCII.GetBytes(source.ModelCode);
+            Memory.WriteByteArray(recordAddr + EnemySpeciesTable.ModelCode, modelCode);
+
+            // ModelCodeCopy (0x040): duplicate of ModelCode consumed by the boss AI dispatch system.
+            // The engine reads this field to select which c16a/stb behavior-script block to load for
+            // spawned instances. Writing source's code here activates source's full boss AI and attack
+            // patterns, but also triggers boss spawn logic that places the initial position at the
+            // boss arena origin (0,0). Call FixModelRedirectSpawnPositions() after floor entry to
+            // correct displaced slots when this field is written.
+            Memory.WriteByteArray(recordAddr + EnemySpeciesTable.ModelCodeCopy, modelCode);
+
+            // ── Data fields (0x050–0x09B) ─────────────────────────────────────────────────────
+            Memory.WriteInt   (recordAddr + EnemySpeciesTable.MaxHp,          Memory.ReadInt   (srcAddr + EnemySpeciesTable.MaxHp));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.Category,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.Category));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.FireRes,        Memory.ReadUShort(srcAddr + EnemySpeciesTable.FireRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.IceRes,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.IceRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ThunderRes,     Memory.ReadUShort(srcAddr + EnemySpeciesTable.ThunderRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.WindRes,        Memory.ReadUShort(srcAddr + EnemySpeciesTable.WindRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.HolyRes,        Memory.ReadUShort(srcAddr + EnemySpeciesTable.HolyRes));
+            Memory.WriteFloat (recordAddr + EnemySpeciesTable.EntityScale,    Memory.ReadFloat (srcAddr + EnemySpeciesTable.EntityScale));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk010,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk010));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk012,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk012));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk014,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk014));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk016,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk016));
+            Memory.WriteInt   (recordAddr + EnemySpeciesTable.Abs,            Memory.ReadInt   (srcAddr + EnemySpeciesTable.Abs));
+            Memory.WriteInt   (recordAddr + EnemySpeciesTable.MinGoldDrop,    Memory.ReadInt   (srcAddr + EnemySpeciesTable.MinGoldDrop));
+            Memory.WriteInt   (recordAddr + EnemySpeciesTable.DropChance,     Memory.ReadInt   (srcAddr + EnemySpeciesTable.DropChance));
+            Memory.WriteInt   (recordAddr + EnemySpeciesTable.Unk024,         Memory.ReadInt   (srcAddr + EnemySpeciesTable.Unk024));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.EnemySpeciesId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.EnemySpeciesId));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealItemId,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealItemId));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealFlag));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResA,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResA));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResB,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResB));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.AttackPower,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.AttackPower));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkFire,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkFire));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkIce,     Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkIce));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkThunder, Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkThunder));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkWind,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkWind));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkHoly,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkHoly));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkDark,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkDark));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk042,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk042));
+            Memory.WriteFloat (recordAddr + EnemySpeciesTable.Unk098,         Memory.ReadFloat (srcAddr + EnemySpeciesTable.Unk098));
+
+            Console.WriteLine($"[ModelRedirect] {target.Name} species table → {source.Name}");
+        }
+
+        /// <summary>
+        /// Restores all species table entries modified by RedirectEnemyModel to their original
+        /// values. Call when the player leaves the dungeon.
+        /// </summary>
+        internal static void RestoreRedirectedEnemies()
+        {
+            if (_speciesTableSnapshots.Count == 0) return;
+            foreach (var kvp in _speciesTableSnapshots)
+            {
+                int recordAddr = EnemySpeciesTable.RecordAddress(kvp.Key);
+                for (int w = 0; w < kvp.Value.Length; w++)
+                    Memory.WriteInt(recordAddr + w * 4, kvp.Value[w]);
+                Console.WriteLine($"[ModelRedirect] Restored species table index {kvp.Key}");
+            }
+            _speciesTableSnapshots.Clear();
         }
 
         /// <summary>
         /// Corrects the world position of any boss-model slot that was displaced by the
         /// model-redirect spawn logic (which sets position to the boss arena origin instead
         /// of a floor spawn point). Targets any slot whose species ID appears in
-        /// <see cref="Enemies.BossEnemies"/>, since <see cref="RedirectDasherToGyonModel"/>
+        /// <see cref="Enemies.BossEnemies"/>, since <see cref="RedirectEnemyModel"/>
         /// now writes the redirected boss's own ID into the patched species table entry.
         ///
         /// Teleports displaced slots to a random active chest position — chests are guaranteed
@@ -466,9 +545,11 @@ namespace Dark_Cloud_Improved_Version
                 sumZ += Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
                 zCount++;
             }
-            float refZ = zCount > 0
-                ? sumZ / zCount
-                : Memory.ReadFloat(Player.dunPositionZ);
+            float playerZ = Memory.ReadFloat(Player.dunPositionZ);
+            float avgZ    = zCount > 0 ? sumZ / zCount : 0f;
+            // At floor entry all peers may have Z=0 (not yet placed by engine), so fall back to
+            // player Z — player is at stable floor height by the time this correction runs.
+            float refZ = avgZ >= 1.0f ? avgZ : playerZ;
 
             var rng = new Random();
 
@@ -503,6 +584,40 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationY, targetY);
                 Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationZ, refZ);
                 Console.WriteLine($"[ModelRedirect] slot={i} id={id} position corrected ({x:F1},{y:F1}) → ({targetX:F1},{targetY:F1}), dist was {dist:F1}");
+            }
+        }
+
+        /// <summary>
+        /// Logs SpeciesDataPtr and surrounding words for every active boss-species slot.
+        /// Call this a few seconds after a boss spawns on a redirected floor to capture the
+        /// pointer value and the data structure it points to (which contains the defeat callback).
+        /// Look for values in the 0x001XXXXX range — those are PS2-native code pointers.
+        /// </summary>
+        internal static void LogBossSlotSpeciesDataPtrs()
+        {
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+            {
+                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                if (Memory.ReadInt(slotBase) <= 0) continue;
+                ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
+                if (!Enemies.BossEnemies.ContainsKey(id)) continue;
+
+                int rawPtr = Memory.ReadInt(slotBase + EnemySlotOffsets.SpeciesDataPtr);
+                uint pcsx2Ptr = ((uint)rawPtr & 0x1FFFFFFFu) + 0x20000000u;
+                Console.WriteLine($"[BossPtrDump] slot={i:D2} species={id} SpeciesDataPtr raw=0x{(uint)rawPtr:X8} pcsx2=0x{pcsx2Ptr:X8}");
+
+                // Dump 128 bytes (32 words) at the pointed-to address
+                Console.Write($"[BossPtrDump]   words: ");
+                for (int w = 0; w < 32; w++)
+                {
+                    int word = Memory.ReadInt((int)(pcsx2Ptr + (uint)(w * 4)));
+                    uint uword = (uint)word;
+                    // Flag values that look like PS2-native code pointers (= potential callbacks)
+                    string flag = (uword >= 0x00100000 && uword <= 0x001FFFFF) ? "*" : "";
+                    Console.Write($"[{w:D2}]=0x{uword:X8}{flag} ");
+                    if ((w & 3) == 3) Console.WriteLine();
+                }
+                Console.WriteLine();
             }
         }
 

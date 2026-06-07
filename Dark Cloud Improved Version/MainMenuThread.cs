@@ -25,7 +25,6 @@ namespace Dark_Cloud_Improved_Version
         {
             Weapons.WeaponsBalanceChanges();
             Shop.UpdateShopPrices();
-            // EnemySlots.RedirectDasherToGyonModel();
         }
 
         public static void CheckEmulatorAndGame()
