@@ -95,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                 cheatCodeThread.Start();
                 Resources.initiateRubyMemeFix();
             }
-            EnemySlots.RedirectEnemyModel(Enemies.Dasher, Enemies.MasterUtan);
+            EnemySlots.RedirectEnemyModel(Enemies.Dasher, Enemies.MinotaurJoe);
             while (true)
             {
                 if (Player.InDungeonFloor())
@@ -111,6 +111,8 @@ namespace Dark_Cloud_Improved_Version
 
                     // EnemySlots.PollEnemyDynamics();
                     // EnemySlots.MonitorFlashTimer();
+                    // EnemySlots.TeleportEnemiesDebug();        // DEBUG: remove when done
+                    EnemySlots.DumpModelTableForRenderPosition(); // DEBUG: remove when done
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
