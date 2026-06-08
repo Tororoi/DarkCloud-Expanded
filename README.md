@@ -43,6 +43,11 @@ The mod ships with a PNACH patch file (`A5C05C78.pnach`) that PCSX2 must load al
 
 After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**. The mod window will show "PNACH File not active!" if this step is missed.
 
+### Build the mod
+
+1. In the root folder, run `dotnet restore`
+2. In the root folder, run `dotnet build "Dark Cloud Improved Version.sln"`
+
 ### macOS
 
 1. Install .NET 8: `brew install --cask dotnet` (or download the installer from the link above)
