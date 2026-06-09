@@ -110,27 +110,84 @@ For each of `count` placements:
 | Bias a species to be rarer via weight | roster `Weight (+0x8)` | ❌ unused on this path |
 | Increase/decrease floor population | population count globals `0x01D564xx` | ⚠ only the global-fed `ArrangementPos` callers; clamped to a floor minimum and the walkable-tile cap; some callers use constants 8/15 baked in code |
 | Reduce a species' count (lossy) | post-spawn set extra slots' `RenderStatus (0x000) = -1` | ✅ removes them (DrawMonstor draws only `==2`); **shrinks the total** |
-| Re-skin a live slot to another species | copy its `0x3510` render object | ❌ impractical (~13.5 KB/slot over PINE; no single model pointer) |
+| Re-skin a live slot's **appearance** | copy ~16 species words from a donor slot (§5b) | ⚠ cosmetic only — model+name change, but un-hittable + wrong AI |
+| Re-skin a live slot's **behavior** (hittable + AI) | — | ❌ collision + AI are spawn-initialized engine state, not flat data |
 | Patch engine code to inject a hook | write to a recompiled code page via PINE | ❌ **crashes PCSX2** — code-patching is off the table |
 
 ---
 
 ## 5. Bosses on regular floors (investigation, parked)
 
-- Spawning a boss species directly via the roster **black-screens the floor load**. The gate is the
-  **record INDEX**, not the record's field values — regularizing `AttackPower`/`ModelCodeCopy`/`EnemySpeciesId`
-  on a boss index still hung; spawning a boss's **mesh through a regular carrier index** (e.g. Dasher,
-  TableIndex 3, with the boss's `ModelCode` copied into Dasher's record) **loads fine**.
-- A roster-spawned boss's AI is **arena-scripted**: its `SpeciesDataPtr` (slot `0x4C`) behavior block holds
-  **hardcoded arena world coordinates**, so on a normal floor it freezes / soft-locks. `ModelCodeCopy`
-  (`0x040`) selects the AI dispatch and is **bound at spawn** — changing it afterward does nothing; nulling
-  `SpeciesDataPtr (0x4C)` afterward also doesn't recover it.
-- Conclusion: boss mesh on a normal floor is achievable (carrier-index trick, regular AI); a fully-working
-  boss (real AI + defeat behavior + valid positions) needs **behavior-script-table** work — a future task.
+What actually happens when you put a boss in a normal floor's roster (corrected after deeper testing):
+
+- A boss in a **mixed** roster (e.g. `20,83`) **loads fine** — but the boss spawns at the **origin (0,0)**
+  (displaced) and is **frozen** (its AI is arena-scripted and has nothing valid to do on a normal floor).
+- The earlier "boss black-screens the load" was **not** an index/field gate — it was the **spawn-once retry
+  trap**: bosses ship with `SpawnCap = 2` (spawn-once, §3), so a *single-species* boss roster is an
+  all-once pool that `ArrangementPos` can never fill → it retries ~65000× and hangs. (The single-species
+  roster path now forces `SpawnCap = 0` to avoid this.) Regularizing `AttackPower`/`ModelCode`/etc. never
+  mattered for the hang — it was the pool, not the record.
+- The displacement + freeze are **script-driven** (see §5c), not field-driven. Regularizing the boss
+  attack-block (`AttackPower`, elem mults, `Unk098`, steal) does **not** fix the spawn location.
+- `ModelCodeCopy` (`0x040`) selects the behavior script and is **bound at spawn**; changing it afterward
+  does nothing, and nulling `SpeciesDataPtr (0x4C)` afterward doesn't recover it either.
+- Achievable today: boss **mesh** on a normal floor via the carrier-index trick (regular index whose
+  `ModelCode` = the boss's), which gives correct placement but **regular AI**. A fully-working boss
+  (real AI + valid position + defeat) needs editing the boss's behavior script — see §5c.
 - Note: the existing `FixModelRedirectSpawnPositions` does **not** actually relocate enemies (the reads
   look corrected but the writes don't take).
 
 ---
+
+## 5c. Boss spawn positioning is script-driven (`CRunScript` / `.stb`)
+
+Every spawned enemy runs a behavior script at spawn; the boss's does the (arena) repositioning.
+
+- `SetupViewMonstor`, at the end of spawn, calls `BtSetEventScript(...)` then
+  **`CRunScript::check_program(script, 1)` → `CRunScript::run(script, 1)`** (`0x23dff0` / `0x23de70`).
+  So each enemy runs **program label 1** (its spawn/init routine) once at spawn.
+- Programs in a `CRunScript` are keyed by a **label**, not a sequential index. Observed labels (from `run`
+  call sites): **`1` = spawn/init** (run by `SetupViewMonstor`); **`0x32`/`0x64`/`0x6e`/`0x78`** = per-frame
+  AI (run by `Step`/`MoveCheck` at `0x1ddf54`…). So the spawn routine is **separate** from the AI programs.
+- Per-slot `CRunScript` object: `MonstorUnit + slot*0x48 + 0x54DD0` (PCSX2 `0x21E4D5A0 + slot*0x48`).
+  Its program table ptr is at `[script+0x3C]`; that table has `[+0x0C]` = offset to entries,
+  `[+0x10]` = program count, entries stride 8 = `(label:int, codeOffset:int)`.
+- The scripts are real files: **`dun\monstor\<code>.stb`** (e.g. `c16a.stb` = MinotaurJoe @ data.dat
+  `0x1AFE5800`; `e03a.stb` = Skeleton). Extract from the ISO at `2622*2048 + datadatOffset`.
+  STB format: `"STB\0"` magic; program table at file `+0x40`; count at `+0x10`; entries stride 8
+  `(label, codeOffset)`.
+- Boss vs regular: **both have the same 4 program labels** (`1, 100, 110, 120`). The difference is the
+  boss's **label-1 is much bigger** (`c16a` `0xFDC` bytes vs `e03a` `0x50C`) — it does the extra arena
+  setup. So you can't just skip label-1 globally (regulars need it); you'd have to neuter the reposition
+  *command inside* the boss's label-1.
+- The arena coordinates (`685.7, 1481.2, -5.0`, seen in the boss's loaded `SpeciesDataPtr` block) are
+  **not literals in `c16a.stb`** — label-1 **reads a boss-arena spawn point from the engine/map**, which
+  resolves to `(0,0)` on a normal floor. So the fix is either (a) neuter that read/warp op in label-1, or
+  (b) supply a valid boss spawn point in the map field it reads.
+- **Both require decoding the STB script VM** (`run__10CRunScript` dispatches opcodes — likely to the
+  `_XXX__FP12RS_STACKDATA` script functions via an opcode→function table). Then apply the fix by editing
+  `c16a.stb` in `data.dat` (static; the archive is sector-mapped) — a RAM patch is timing-sensitive since
+  label-1 runs at spawn during floor load. **This is the parked next step.**
+
+---
+
+## 5b. Live slot conversion (tested, not viable for a full re-skin)
+
+Tested transplanting one spawned enemy into another species by copying render-object data slot→slot.
+
+- The `0x3510` render object is **mostly shared/instance state**: diffing two species' render objects,
+  only **16 of 3396 words differ by species** (14 are pointers into that session's loaded mesh/anim data
+  in `0x010xxxxx`; 2 are species fields). Same-species slots differ by just ~9 words (position / anim phase).
+- So copying those ~16 words (offsets `0xb4,0xbc,0xc0,0xc4,0xd4,0xd8,0x2cc,0x2d0,0x2e4,0x340,0x344,0x364,0x3c0,0x3c4,0xc40,0xc74`)
+  from a donor slot of species Y into slot X, plus `EnemySpeciesId`/`SpeciesParamPtr`, **cosmetically re-skins X to Y** (model + name), position preserved — cheap (~few dozen writes).
+- **But the converted enemy is un-hittable, can't attack, and keeps the original species' AI.** Collision
+  (slot `EntityScale`/reticle/lock-on + the per-species collision mesh) and the **AI state machine** are
+  initialized by the engine at spawn — they don't transplant via memory writes. So this is **cosmetic only**.
+- A **donor slot is required** because the 14 model words are *runtime pointers* into where the mesh loaded
+  this session — not known statically and not recomputable without re-running `SetupViewMonstor`.
+- **Conclusion:** a live slot can be *re-skinned* (appearance), not *re-bodied*. A truly functional change
+  of a live enemy's species needs re-spawning it via `SetupViewMonstor` — engine code we can't invoke
+  (PINE code-patching crashes). The conversion code was implemented, tested, and removed.
 
 ## 6. `EnemyModelInjector` API (crash-free, data-only)
 

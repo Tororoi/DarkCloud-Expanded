@@ -507,18 +507,6 @@ namespace Dark_Cloud_Improved_Version
             else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
         }
 
-        // Index test: spawn the boss's MESH through a regular carrier index (Dasher) to confirm the
-        // boss-spawn black-screen is gated by the record INDEX. Uses the TableIndex box as the boss id.
-        private void Btn_Injector_Defuse_Click(object sender, RoutedEventArgs e)
-        {
-            if (!int.TryParse(Tbox_Injector_Table.Text, out int bossTableIndex))
-            {
-                Console.WriteLine("Injector: TableIndex must be an integer (e.g. 83 = MinotaurJoe).");
-                return;
-            }
-            EnemyModelInjector.RosterIndexTest(bossTableIndex);
-        }
-
         // Post-spawn cap: keep at most 1 of the TableIndex species on the current floor, remove extras.
         private void Btn_Injector_BossAI_Click(object sender, RoutedEventArgs e)
         {

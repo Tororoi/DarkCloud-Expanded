@@ -135,12 +135,8 @@
                   Width="92" Height="26" Margin="152,327,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
                   Click="Btn_Injector_Test_Click"/>
-          <Button x:Name="Btn_Injector_Defuse" Content="Index test"
-                  Width="100" Height="26" Margin="250,327,0,0"
-                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
-                  Click="Btn_Injector_Defuse_Click"/>
           <Button x:Name="Btn_Injector_BossAI" Content="Cap TableIdx to 1"
-                  Width="130" Height="26" Margin="356,327,0,0"
+                  Width="130" Height="26" Margin="250,327,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
                   Click="Btn_Injector_BossAI_Click"/>
         </Panel>

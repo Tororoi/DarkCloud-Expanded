@@ -195,28 +195,10 @@ namespace Dark_Cloud_Improved_Version
             // (arena-origin placement + encounter/arena setup) that stalls a normal floor load (black
             // screen). Setting it to a normal value (100) makes the engine spawn it as an ordinary
             // enemy. This edits the shared species record (persists for the session, like RedirectEnemyModel).
-            long apAddr = EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.AttackPower;
-            ushort ap = Memory.ReadUShort(apAddr);
-            if (ap == 65535)
-            {
-                Memory.WriteUShort(apAddr, 100);
-                // TEST: also point ModelCodeCopy (0x040 — the code the boss AI dispatch reads) at a
-                // regular enemy that's loaded on this dungeon ("e03a" Skeleton Soldier). ModelCode
-                // (0x000) is left as the boss's, so the engine loads the boss MESH but a regular
-                // behavior script — avoiding the boss-spawn handling that black-screens the load.
-                // (Hardcoded for the test; not restored after spawn yet — that's the next step.)
-                // Confirmed the boss-spawn black-screen is gated by the record INDEX, not field values
-                // (regularizing AttackPower/ModelCodeCopy/EnemySpeciesId on a boss index still hung).
-                // Keep AttackPower->100 and ModelCodeCopy->"e03a" only because they're handy for testing.
-                Memory.WriteByteArray(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.ModelCodeCopy,
-                    System.Text.Encoding.ASCII.GetBytes("e03a"));
-                Console.WriteLine($"[EnemyInjector] roster: TableIndex {tableIndex} is boss-class — "
-                    + "AttackPower->100, ModelCodeCopy->\"e03a\" (testing aids; index still gates the load).");
-            }
-            else
-            {
-                Console.WriteLine($"[EnemyInjector] roster: TableIndex {tableIndex} AttackPower={ap} (not a boss sentinel).");
-            }
+            // A single-species roster MUST be repeatable, or ArrangementPos can't fill the floor and hangs
+            // (the spawn-once retry trap). Force SpawnCap repeatable, then regularize if it's a boss.
+            Memory.WriteInt(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.SpawnCap, 0);
+            RegularizeBossRecord(tableIndex);
 
             if (population > 0) SetPopulationTarget(population);
 
@@ -231,6 +213,16 @@ namespace Dark_Cloud_Improved_Version
         private const long PopCount6494 = 0x21D56494;
         private const long PopCount649C = 0x21D5649C;
         private const long PopCount64A0 = 0x21D564A0;
+        // De-sentinels a boss-class record's AttackPower (65535 -> 100) so it isn't treated as a melee
+        // one-shot. (The boss-spawn origin-displacement is NOT driven by the attack-block fields — tested.)
+        private static void RegularizeBossRecord(int tableIndex)
+        {
+            long rec = EnemySpeciesTable.RecordAddress(tableIndex);
+            if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
+            Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
+            Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
+        }
+
         internal static void SetPopulationTarget(int pop)
         {
             Memory.WriteInt(PopCount6494, pop);
@@ -269,6 +261,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 bool isOnce = spawnOnce != null && i < spawnOnce.Length && spawnOnce[i];
                 Memory.WriteInt(EnemySpeciesTable.RecordAddress(tableIndices[i]) + EnemySpeciesTable.SpawnCap, isOnce ? 2 : 0);
+                RegularizeBossRecord(tableIndices[i]); // normalize boss attack-block (test: fix spawn location)
             }
 
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
@@ -322,6 +315,11 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine($"[EnemyInjector] index test: roster -> carrier index {carrier} (Dasher); "
                 + $"record {carrier}.ModelCode <- record {bossTableIndex}.ModelCode (\"{code}\"). Re-enter a floor.");
         }
+
+        // NOTE: live slot conversion (transplanting a species' render-object model words from a donor slot)
+        // was tested and removed — it re-skins the model + name cosmetically but the converted enemy is
+        // un-hittable and keeps the original species' (now-buggy) AI. Collision + AI are engine state set
+        // at spawn, not flat data. See enemy-spawn-system.md §"Live slot conversion (tested, not viable)".
 
         /// <summary>
         /// Post-spawn per-species cap: keeps at most <paramref name="maxKeep"/> live enemies of the given
