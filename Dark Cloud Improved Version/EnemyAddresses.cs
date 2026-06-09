@@ -101,6 +101,18 @@ namespace Dark_Cloud_Improved_Version
         internal const int AiStatePacked     = 0x0EC; // int   — packed AI state: upper ushort = state ID, lower ushort = substep; transitions on each AI phase change
         internal const int AiSpeedParam      = 0x0F0; // float — state-dependent speed/behavior parameter; changes with AiStatePacked; −1.0 observed at first spawn initialization
 
+        // ── Species data pointer (regular enemies) ───────────────────────────
+        // +0x0FC: PS2-native pointer to a per-species data block, set at spawn and SHARED by all
+        // live slots of the same species (slots of species 3 → 0x010A5260, species 6 → 0x011D94B0, etc.;
+        // changes with the species). This is the regular-enemy analog of the boss SpeciesDataPtr (0x04C),
+        // which is 0 for non-bosses. Confirmed (savestate analysis 2026-06-09) NOT read by the per-frame
+        // DrawMonstor / Step / MoveChara / CheckDmg paths, so its exact role is unconfirmed (likely a
+        // spawn/despawn or stat/asset reference). Add 0x20000000 for the PCSX2 address.
+        // NOTE: the rendered MODEL/animation is NOT driven by this nor by any FloorSlot field — the
+        // engine draws each enemy from a separate CCharacter "render object" at
+        // (MonstorUnit + slot*0x3510 + 0x1FCD0), i.e. the ModelScaleOffsets region (see below).
+        internal const int SpeciesParamPtr   = 0x0FC; // int   — per-species data block ptr (PS2-native); shared by same-species slots; not read per-frame
+
         // ── World Position ────────────────────────────────────────────────────
         internal const int LocationX         = 0x100; // float — world X position; updated each frame as enemy moves
         internal const int LocationZ         = 0x104; // float — world Z (height/elevation); small values (8–13 observed) relative to floor
@@ -290,6 +302,15 @@ namespace Dark_Cloud_Improved_Version
     /// Offsets into the model scale table (base 0x21E18530, stride 0x3510 per slot).
     /// This table is separate from the enemy slot array and holds rendering and bounding data.
     /// All values confirmed from full-slot dumps (DBC fl.12 and Shipwreck).
+    ///
+    /// This 0x3510 region is the per-slot CCharacter "render object": for slot i it lives at
+    /// (MonstorUnit 0x21DF87D0 + i*0x3510 + 0x1FCD0), which lands at ModelBase + slot*stride for the
+    /// scale fields. It sits directly after the 16 FloorSlots (16 × 0x190 = 0x1900). DrawMonstor reads
+    /// THIS object every frame (RenderStatus==2 gate, then TextureAnime__CCharacter) — the rendered
+    /// model/animation is driven entirely from here, NOT from any EnemySlotOffsets field. The mesh /
+    /// CCharacter pointers in this block are baked once by SetupViewMonstor at spawn and are not
+    /// rewritten per frame, so a one-time copy of this block from a slot of another (already-loaded)
+    /// species visually re-skins an enemy without any code execution.
     /// </summary>
     internal static class ModelScaleOffsets
     {
@@ -333,6 +354,84 @@ namespace Dark_Cloud_Improved_Version
 
         // +0x370: animation clip cap (7–23 per enemy species); capping below true value freezes higher-index animations (attacks); Setting above true count does not change default behavior.
         internal const int AnimCount = 0x370;
+    }
+
+    /// <summary>
+    /// Per-dungeon / per-floor enemy spawn layout tables — the data that decides WHICH enemy
+    /// species (and therefore which model + AI) spawn on each floor of each dungeon.
+    ///
+    /// Confirmed from ELF binary analysis 2026-06-07 by disassembling BtLoadMonstor__Fi (dun.bin).
+    ///
+    /// Reference chain (how a dungeon floor populates its enemy slots):
+    ///   BtEnemyLayoutList    @ 0x002917B0  — 7 dungeon pointers (NORMAL floors)
+    ///   BtUraEnemyLayoutList @ 0x002917D0  — 7 dungeon pointers (URA / back floors; 裏 = "back")
+    ///       │ index by dungeon number ([gp − 0x625C])
+    ///       ▼
+    ///   BtEnemyLayout0N / BtUraEnemyLayout0N  — per-dungeon array, one 0x70-byte block per floor
+    ///       │ + floor * 0x70
+    ///       ▼
+    ///   Floor block = 9 entries × 0x0C bytes (see EnemyLayoutEntry below)
+    ///       │ for each entry whose Id (+0x4) != -1:
+    ///       ▼
+    ///   CMonstorUnit::SetupBaseModel(this, _, enemyId, 0x26, MonstorModelBuffer)  (ELF 0x001DFE90)
+    ///       │ enemyId → packed species record (EnemySpeciesTable @ 0x0027FB00) → ModelCode "eNNa"/"cNNx"
+    ///       ▼
+    ///   loads mesh into MonstorModelBuffer (PS2 0x01F066D0) and behavior/AI script into
+    ///   MonstorScriptBuffer (PS2 0x01F066E0). Both the live enemy slot array (0x21E16BA0) and the
+    ///   ModelScale table (0x21E18530) are sub-arrays of one global, MainMonstorUnit (PS2 0x01DF87D0,
+    ///   size 0x60750). BtArrengeMonstor__Fv wires each of the 16 slots to a 0x10-byte script entry.
+    ///
+    /// IMPORTANT — the Id at entry +0x4 is the game's internal enemy id (0–166), the same value as
+    /// EnemyDefaults.Id. It is NOT the physical species-table record index (use EnemyDefaults.TableIndex
+    /// for that), and the "Id N → model eNNa" convention holds for many mid-range ids but NOT all
+    /// (bosses use cNNx; several ids have no direct species record and route through event/scripted
+    /// paths — e.g. ids 53/54 Killer Snake). Always resolve via EnemySpeciesTable / EnemyData.cs.
+    ///
+    /// Full decoded rosters for all 7 dungeons (normal + Ura) are in /enemy-spawn-layout.md at repo root.
+    /// </summary>
+    internal static class BtEnemyLayout
+    {
+        // ── Master pointer tables (PS2-native = file-resident in the main ELF segment) ──
+        // PCSX2 address = native + 0x20000000.  ELF file offset = native − 0x100000 + 0x100.
+        internal const int EnemyLayoutListBase    = 0x002917B0; // 7 × 4-byte ptrs → BtEnemyLayout00..06   (normal floors)
+        internal const int UraEnemyLayoutListBase = 0x002917D0; // 7 × 4-byte ptrs → BtUraEnemyLayout00..06 (back floors)
+        internal const int DungeonCount           = 7;
+
+        // ── Floor block geometry ──
+        internal const int FloorStride = 0x70; // bytes per floor block
+        internal const int EntryStride = 0x0C; // bytes per enemy entry
+        internal const int EntriesPerFloor = 9; // max distinct species entries per floor (block tail at +0x6C, =1)
+
+        // Per-dungeon layout symbol addresses (PS2-native) and floor counts, from ELF symbol sizes.
+        // Index = dungeon number. Names are best-effort (dun\dNN*.cfg ordering); floor counts are authoritative.
+        //                                     normal       ura          floors  dungeon
+        // [0] BtEnemyLayout00 / Ura00         0x002860D0   0x00286760    15      Divine Beast Cave (d01)
+        // [1] BtEnemyLayout01 / Ura01         0x00286DF0   0x00287560    17      Wise Owl Forest (d02)
+        // [2] BtEnemyLayout02 / Ura02         0x00287CD0   0x002884B0    18      Lake Gilna / Coastal (d03)
+        // [3] BtEnemyLayout03 / Ura03         0x00288C90   0x00289470    18      Queens (d04)
+        // [4] BtEnemyLayout04 / Ura04         0x00289C50   0x0028A2E0    15      Shipwreck (d05)
+        // [5] BtEnemyLayout05 / Ura05         0x0028A970   0x0028B4D0    26      Muska Lacka / Sun & Moon (d06)
+        // [6] BtEnemyLayout06 / Ura06         0x0028C030   0x0028EBF0   100      Moon Sea + Demon Shaft (d07)
+        internal static readonly int[] LayoutBase    = { 0x002860D0, 0x00286DF0, 0x00287CD0, 0x00288C90, 0x00289C50, 0x0028A970, 0x0028C030 };
+        internal static readonly int[] UraLayoutBase = { 0x00286760, 0x00287560, 0x002884B0, 0x00289470, 0x0028A2E0, 0x0028B4D0, 0x0028EBF0 };
+        internal static readonly int[] FloorCount    = { 15, 17, 18, 18, 15, 26, 100 };
+
+        /// <summary>PCSX2 address of a floor block's first entry. Pass a base from LayoutBase/UraLayoutBase.</summary>
+        internal static int FloorAddress(int layoutBaseNative, int floor) =>
+            (layoutBaseNative + 0x20000000) + floor * FloorStride;
+
+        /// <summary>PCSX2 address of entry <paramref name="entry"/> (0–8) within a floor block.</summary>
+        internal static int EntryAddress(int layoutBaseNative, int floor, int entry) =>
+            FloorAddress(layoutBaseNative, floor) + entry * EntryStride;
+
+        // ── Entry field offsets (0x0C bytes per entry) ──
+        // +0x0: spawn count / floor population. Entry 0 commonly 3–4 (target enemy count for the floor);
+        //       other entries 1. NOT read by BtLoadMonstor — consumed by the placement/arrange code.
+        internal const int Count    = 0x0; // int   — spawn count / population
+        // +0x4: enemy id (= EnemyDefaults.Id). -1 = empty slot. This is what SetupBaseModel loads.
+        internal const int Id       = 0x4; // int   — enemy id; -1 = unused
+        // +0x8: spawn weight (percent). Active entries' weights sum to ≈100 per floor → weighted-random pick.
+        internal const int Weight   = 0x8; // int   — spawn weight %
     }
 
     /// <summary>

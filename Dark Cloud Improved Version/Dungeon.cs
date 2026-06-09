@@ -95,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                 cheatCodeThread.Start();
                 Resources.initiateRubyMemeFix();
             }
-            EnemySlots.RedirectEnemyModel(Enemies.Dasher, Enemies.MinotaurJoe);
+            // EnemySlots.RedirectEnemyModel(Enemies.Dasher, Enemies.MinotaurJoe);
             while (true)
             {
                 if (Player.InDungeonFloor())
@@ -408,6 +408,10 @@ namespace Dark_Cloud_Improved_Version
                             MiniBossLootTables.CancelPendingBoost();
                             normalFloorSnapshot = null;
                             backfloorSnapshot = null;
+
+                            // Re-apply the enemy model/AI re-skin cave + hook (the dun overlay reloads
+                            // each floor). No-op unless EnemyModelInjector.Enabled is set.
+                            EnemyModelInjector.Install();
 
                             //Check if player is not on an event floor and call the Mini Boss
                             if (!excludeFloors.Contains(currentFloor))

@@ -120,6 +120,28 @@
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
                   Click="button1_Click"/>
+
+          <!-- Experimental: dungeon spawn-roster editor -->
+          <TextBlock Text="Population per floor (0 = keep original):" Margin="46,304,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"/>
+          <TextBox x:Name="Tbox_Injector_Pop" Text="0" Width="44" Height="24"
+                   Margin="266,300,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <TextBlock Text="TableIdx:" Margin="46,332,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"/>
+          <TextBox x:Name="Tbox_Injector_Table" Text="20" Width="40" Height="24"
+                   Margin="106,328,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <Button x:Name="Btn_Injector_Test" Content="Set roster"
+                  Width="92" Height="26" Margin="152,327,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
+                  Click="Btn_Injector_Test_Click"/>
+          <Button x:Name="Btn_Injector_Defuse" Content="Index test"
+                  Width="100" Height="26" Margin="250,327,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
+                  Click="Btn_Injector_Defuse_Click"/>
+          <Button x:Name="Btn_Injector_BossAI" Content="Boss AI (MCC)"
+                  Width="130" Height="26" Margin="356,327,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
+                  Click="Btn_Injector_BossAI_Click"/>
         </Panel>
       </TabItem>
 

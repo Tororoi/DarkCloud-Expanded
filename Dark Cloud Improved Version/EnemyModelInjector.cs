@@ -1,0 +1,470 @@
+using System;
+using System.Globalization;
+using System.Threading;
+
+namespace Dark_Cloud_Improved_Version
+{
+    /// <summary>
+    /// Runtime enemy model + AI re-skin via an injected MIPS code cave.
+    ///
+    /// Lets you load ANY species into ANY of the 16 live enemy slots after a floor has loaded,
+    /// by driving the engine's own routines:
+    ///   PRELOAD (mode 1): CMonstorUnit::SetupBaseModel(this, N, tableIndex, 0x26, MonstorModelBuffer)
+    ///                     @ ELF 0x001DFE90 — loads the species mesh + 0x9C species record into
+    ///                     model block N. Does blocking disc I/O, so run it at a safe moment.
+    ///   INSTANTIATE (mode 2): free slot N (RenderStatus = -1), then
+    ///                     CMonstorUnit::SetupViewMonstor(this, N, &pos, 0) @ ELF 0x001E02B0 —
+    ///                     builds the live monster from model block N into the freed slot. No disc I/O.
+    ///
+    /// The cave polls a PARAM block each frame from a 1-instruction detour at OpA_MotionProcess
+    /// (native 0x01DB6C04). See tools/build_cave.py for the assembler source / regeneration, and
+    /// the BtEnemyLayout / EnemySpeciesTable docs in EnemyAddresses.cs for the data model.
+    ///
+    /// IMPORTANT
+    ///  • <see cref="CaveBase"/> must point at a debugger-verified FREE EE RAM region (>= 0x200 bytes).
+    ///    The default 0x01F70000 is a placeholder — verify it, then update and call <see cref="Install"/>.
+    ///  • The hook lives in the dun overlay, which reloads per floor — call <see cref="Install"/> on
+    ///    each floor load.
+    ///  • SetupViewMonstor instantiates into the FIRST slot whose RenderStatus(+0)==-1, building it
+    ///    from THAT slot's model block. Mode 2 frees only slot N, so it lands in N only if no
+    ///    lower-numbered slot is also free. On a fully-spawned floor that is automatic; otherwise
+    ///    occupy the lower free slots first, and always preload (mode 1) the SAME N you instantiate.
+    ///  • Single-unit enemies only; multi-part/bosses need extra model blocks + a behavior script.
+    /// </summary>
+    internal static class EnemyModelInjector
+    {
+        // ── Configuration ────────────────────────────────────────────────────
+        /// <summary>
+        /// Master switch. Stays FALSE until <see cref="CaveBase"/> has been verified against a known-free
+        /// RAM region with the PCSX2 debugger. While false, <see cref="Install"/> is a no-op, so the
+        /// (placeholder) cave is never written and game code is never patched. Flip to true only after
+        /// verifying the base — otherwise you risk corrupting RAM / crashing during normal play.
+        /// </summary>
+        internal static bool Enabled = false;
+
+        /// <summary>
+        /// Native PS2 base of the cave region (PARAM block is the first 0x20 bytes; code at +0x20).
+        /// MUST be RAM the game never writes. History of bad picks (and why a write breakpoint is the
+        /// only real test): 0x01F70000 was inside the active dungeon heap (garbage -> crash); 0x0027D090
+        /// looked like static padding in two dumps but the use-item/back-floor menu writes there.
+        /// 0x01400000 is buried deep inside a 3.4 MB contiguous zero block in main BSS (0x01340E20..
+        /// 0x01698CC0), zero across three states including the back-floor menu, no nonzero within
+        /// 8 KB before / 16 KB after — i.e. reserved/unused. Still: verify with a 512-byte write
+        /// breakpoint across your scenarios before trusting it.
+        /// The embedded template is assembled for 0x01F70000 and relocated to this base at runtime.
+        /// </summary>
+        internal const uint CaveBase = 0x01400000;   // deep in a 3.4 MB unused BSS block (verify w/ write bp)
+        // Runtime hook address, in the OpA_MotionProcess EPILOGUE (the single per-frame `jr ra`
+        // return path; the top of the function is first-frame init the common path skips). The dun
+        // overlay loads WITH its 0x80 file header, so symbol 0x01DB73A0 is at +0x80 = 0x01DB7420
+        // (verified against live dungeon eeMemory dumps). Main-segment call targets are unshifted.
+        internal const uint HookAddr = 0x01DB7420;   // OpA_MotionProcess epilogue; word reproduced by the cave
+        internal const uint OriginalHookWord = 0xC7BA0018; // `lwc1 $f26,0x18($sp)` — restored by Uninstall()
+
+        // PARAM block field offsets (relative to CaveBase)
+        private const int P_TRIGGER = 0x00; // write !=0 to fire; cave clears it when done
+        private const int P_MODE    = 0x04; // 1 = preload, 2 = instantiate
+        private const int P_N       = 0x08; // model-block index / live slot to free
+        private const int P_T       = 0x0C; // tableIndex (mode 1)
+        private const int P_POS     = 0x10; // float[3] position (mode 2)
+        private const int P_HEARTBEAT = 0x1C; // int — incremented by the cave every frame (diagnostic)
+        private const int MODE_PRELOAD = 1;
+        private const int MODE_INSTANTIATE = 2;
+
+        // ── Cave template (generated by tools/build_cave.py for CaveBase = 0x01F70000) ──
+        // Relocated to the configured CaveBase by BuildCave(); regenerate with the script only if
+        // you change the cave logic, hook site, or engine addresses.
+        private const string CaveTemplateHex =
+            "90ffbd270000bfaf0400a1af0800a2af0c00a3af1000a4af1400a5af1800a6af1c00a7af2000a8af2400a9af2800aaaf2c00adaf3000b0af3400b1af3800b2af104800003c00a9af124800004000a9aff701023c000042341c00498c010029251c0049ac" +
+            "0000438c300060100000000000000000000040ac04004d8c0800518c0c00528cdf01103cd0871036010001340900a1110000000000000000020001341100a11100000000000000001f000010000000000000000021200002212820022130400226000724" +
+            "f001083cd0660835a47f070c00000000000000001300001000000000000000009001033418002302124800000100013cd0e321342148210121480902ffff0a2400002aad2120000221282002f701063c1000c63400000724ac80070c0000000000000000" +
+            "4000a98f130020013c00a98f110020010000bf8f0400a18f0800a28f0c00a38f1000a48f1400a58f1800a68f1c00a78f2000a88f2400a98f2800aa8f2c00ad8f3000b08f3400b18f3800b28f7000bd271800bac70add76080000000000000000";
+
+        // Byte offsets within the cave code of the address immediates to relocate.
+        // (lui/ori pairs that load the PARAM base and the &pos pointer.)
+        private const int OFF_PARAM_HI = 0x50; // lui $v0, hi(PARAM)
+        private const int OFF_PARAM_LO = 0x54; // ori $v0, lo(PARAM)
+        private const int OFF_POS_HI   = 0x114; // lui $a2, hi(PARAM+0x10)
+        private const int OFF_POS_LO   = 0x118; // ori $a2, lo(PARAM+0x10)
+        private const uint TEMPLATE_BASE = 0x01F70000; // base the template was assembled for
+
+        // ── Install ──────────────────────────────────────────────────────────
+        /// <summary>
+        /// Writes the relocated cave and the hook detour. Call once per floor load.
+        /// No-op unless <see cref="Enabled"/> is true (so an unverified <see cref="CaveBase"/>
+        /// never patches game memory).
+        /// </summary>
+        internal static void Install()
+        {
+            if (!Enabled) return;
+            // Order matters: write the cave, fully clear PARAM, THEN arm the hook last. Otherwise the
+            // hook goes live while PARAM still holds stale/garbage trigger+mode and the cave fires
+            // SetupBaseModel/SetupViewMonstor with bad args on the next frame (instant crash).
+            // Write the cave with read-back verification + retry FIRST and only arm the hook if the
+            // cave fully landed — otherwise the hook would jump into a half-written / zeroed region
+            // (a nop-sled through BSS) and crash.
+            bool caveOk = WriteVerified(CaveBase + 0x20, BuildCave(), "cave");
+            Memory.WriteInt(CaveBase + P_TRIGGER, 0);
+            Memory.WriteInt(CaveBase + P_MODE, 0);
+            Memory.WriteInt(CaveBase + P_HEARTBEAT, 0);
+            if (!caveOk)
+            {
+                Console.WriteLine("[EnemyInjector] cave did not verify. Aborting install.");
+                return;
+            }
+            if (!EnableCodeHook)
+            {
+                // CONFIRMED: writing the `j cave` patch into the live recompiled code page at HookAddr
+                // crashes PCSX2 (PINE cannot safely modify executing EE code — the emulator disconnects).
+                // The cave is harmless on its own; we just never arm the code hook. A working trigger
+                // needs a DATA-based hook (a function pointer in writable RAM that the engine calls each
+                // frame) or driving the game's own script/spawn data — see notes in this file's header.
+                Console.WriteLine("[EnemyInjector] cave written; code hook DISABLED (PINE code-patching "
+                    + "crashes PCSX2). Injector is inert until a data-based trigger is implemented.");
+                return;
+            }
+            bool hookOk = WriteVerified(HookAddr, BuildHook(), "hook");
+            Console.WriteLine($"[EnemyInjector] install {(hookOk ? "OK" : "FAILED")}; "
+                + $"cave@0x{CaveBase + 0x20:X8}=0x{Memory.ReadUInt(CaveBase + 0x20):X8} "
+                + $"hook@0x{HookAddr:X8}=0x{Memory.ReadUInt(HookAddr):X8}");
+        }
+
+        /// <summary>
+        /// Arming the cave requires patching live EE code at <see cref="HookAddr"/>, which CRASHES PCSX2
+        /// (PINE writes to a recompiled code page take down the emulator — confirmed). Leave false until a
+        /// data-based trigger (writable per-frame function pointer / script injection) replaces the code hook.
+        /// </summary>
+        internal static bool EnableCodeHook = false;
+
+        /// <summary>Writes <paramref name="data"/> and verifies it stuck, retrying mismatched bytes. Logs the outcome.</summary>
+        private static bool WriteVerified(long addr, byte[] data, string label, int passes = 4)
+        {
+            for (int attempt = 0; attempt < passes; attempt++)
+            {
+                Memory.WriteByteArray(addr, data);
+                byte[] back = Memory.ReadByteArray(addr, data.Length);
+                int firstBad = -1, badCount = 0;
+                for (int i = 0; i < data.Length; i++)
+                    if (back[i] != data[i]) { badCount++; if (firstBad < 0) firstBad = i; }
+                if (badCount == 0)
+                {
+                    if (attempt > 0) Console.WriteLine($"[EnemyInjector] {label} verified after {attempt + 1} passes ({data.Length} B).");
+                    return true;
+                }
+                Console.WriteLine($"[EnemyInjector] {label} pass {attempt + 1}: {badCount}/{data.Length} bytes wrong "
+                    + $"(first at +0x{firstBad:X}: got 0x{back[firstBad]:X2} want 0x{data[firstBad]:X2}).");
+            }
+            return false;
+        }
+
+        /// <summary>Reads the cave's per-frame heartbeat counter. If it advances, the hook+cave are running.</summary>
+        internal static int Heartbeat() => Memory.ReadInt(CaveBase + P_HEARTBEAT);
+
+        // ── Spawn-roster editing (crash-free, pure data writes) ──────────────
+        /// <summary>
+        /// Overwrites the current dungeon's BtEnemyLayout (normal + Ura, all floors) so EVERY spawn is
+        /// the given species (by EnemyDefaults.TableIndex). The engine then loads that species' model at
+        /// floor load and spawns only it — no code execution, no hook, no crash. Takes effect on the
+        /// NEXT floor load (re-enter or descend); already-spawned enemies on the current floor are unchanged.
+        /// </summary>
+        internal static void SetSpawnRosterToSpecies(int tableIndex, int population = 0)
+        {
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            if (dungeon < 0 || dungeon >= BtEnemyLayout.DungeonCount)
+            {
+                Console.WriteLine($"[EnemyInjector] roster: not in a known dungeon (checkDungeon={dungeon}). Aborting.");
+                return;
+            }
+            int floors = BtEnemyLayout.FloorCount[dungeon];
+            int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
+            foreach (int layoutBase in bases)
+            {
+                for (int floor = 0; floor < floors; floor++)
+                {
+                    // entry 0 = this species at 100% weight.
+                    long e0 = BtEnemyLayout.EntryAddress(layoutBase, floor, 0);
+                    Memory.WriteInt(e0 + BtEnemyLayout.Id, tableIndex);
+                    Memory.WriteInt(e0 + BtEnemyLayout.Weight, 100);
+                    if (population > 0) Memory.WriteInt(e0 + BtEnemyLayout.Count, population); // entry0 count = floor population
+                    // entries 1..8 disabled so nothing else can roll.
+                    for (int e = 1; e < BtEnemyLayout.EntriesPerFloor; e++)
+                        Memory.WriteInt(BtEnemyLayout.EntryAddress(layoutBase, floor, e) + BtEnemyLayout.Id, -1);
+                }
+            }
+            // De-sentinel boss-class species before the floor spawns it. AttackPower == 65535 in the
+            // species record is the "boss-class" marker; it makes the engine run boss-spawn handling
+            // (arena-origin placement + encounter/arena setup) that stalls a normal floor load (black
+            // screen). Setting it to a normal value (100) makes the engine spawn it as an ordinary
+            // enemy. This edits the shared species record (persists for the session, like RedirectEnemyModel).
+            long apAddr = EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.AttackPower;
+            ushort ap = Memory.ReadUShort(apAddr);
+            if (ap == 65535)
+            {
+                Memory.WriteUShort(apAddr, 100);
+                // TEST: also point ModelCodeCopy (0x040 — the code the boss AI dispatch reads) at a
+                // regular enemy that's loaded on this dungeon ("e03a" Skeleton Soldier). ModelCode
+                // (0x000) is left as the boss's, so the engine loads the boss MESH but a regular
+                // behavior script — avoiding the boss-spawn handling that black-screens the load.
+                // (Hardcoded for the test; not restored after spawn yet — that's the next step.)
+                // Confirmed the boss-spawn black-screen is gated by the record INDEX, not field values
+                // (regularizing AttackPower/ModelCodeCopy/EnemySpeciesId on a boss index still hung).
+                // Keep AttackPower->100 and ModelCodeCopy->"e03a" only because they're handy for testing.
+                Memory.WriteByteArray(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.ModelCodeCopy,
+                    System.Text.Encoding.ASCII.GetBytes("e03a"));
+                Console.WriteLine($"[EnemyInjector] roster: TableIndex {tableIndex} is boss-class — "
+                    + "AttackPower->100, ModelCodeCopy->\"e03a\" (testing aids; index still gates the load).");
+            }
+            else
+            {
+                Console.WriteLine($"[EnemyInjector] roster: TableIndex {tableIndex} AttackPower={ap} (not a boss sentinel).");
+            }
+
+            Console.WriteLine($"[EnemyInjector] roster: dungeon {dungeon} ({floors} floors, normal+Ura) -> "
+                + $"TableIndex {tableIndex} on every spawn. Re-enter a floor to see it.");
+        }
+
+        /// <summary>
+        /// Sets the current dungeon's roster (normal + Ura, all floors) to a MIX of species: fills entries
+        /// 0..n-1 with the given TableIndexes at even weights (summing to 100), disables the rest. Every
+        /// distinct species in the roster gets its model loaded at floor load, so this also tests how many
+        /// different enemy models a floor can hold. Use regular (non-boss) indices — boss indices still
+        /// black-screen regardless of count.
+        /// </summary>
+        internal static void SetSpawnRosterMix(int[] tableIndices, int population = 0)
+        {
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            if (dungeon < 0 || dungeon >= BtEnemyLayout.DungeonCount)
+            {
+                Console.WriteLine($"[EnemyInjector] roster mix: not in a known dungeon (checkDungeon={dungeon}). Aborting.");
+                return;
+            }
+            int floors = BtEnemyLayout.FloorCount[dungeon];
+            int n = Math.Min(tableIndices.Length, BtEnemyLayout.EntriesPerFloor);
+            int[] w = new int[n];
+            int baseW = 100 / n, rem = 100 - baseW * n;
+            for (int i = 0; i < n; i++) w[i] = baseW + (i < rem ? 1 : 0);
+
+            int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
+            foreach (int layoutBase in bases)
+            {
+                for (int floor = 0; floor < floors; floor++)
+                {
+                    for (int e = 0; e < BtEnemyLayout.EntriesPerFloor; e++)
+                    {
+                        long ea = BtEnemyLayout.EntryAddress(layoutBase, floor, e);
+                        if (e < n)
+                        {
+                            Memory.WriteInt(ea + BtEnemyLayout.Id, tableIndices[e]);
+                            Memory.WriteInt(ea + BtEnemyLayout.Weight, w[e]);
+                        }
+                        else
+                        {
+                            Memory.WriteInt(ea + BtEnemyLayout.Id, -1);
+                        }
+                    }
+                    if (population > 0)
+                        Memory.WriteInt(BtEnemyLayout.EntryAddress(layoutBase, floor, 0) + BtEnemyLayout.Count, population);
+                }
+            }
+            Console.WriteLine($"[EnemyInjector] roster mix: dungeon {dungeon}, {n} species "
+                + $"[{string.Join(",", tableIndices[..n])}] across {floors} floors (normal+Ura). Re-enter a floor.");
+        }
+
+        /// <summary>
+        /// Index test: point the whole roster at a REGULAR enemy index (Dasher, which DBC spawns
+        /// normally and is not boss-gated), then write the boss's ModelCode into Dasher's record so the
+        /// spawned "Dashers" load the boss MESH. ModelCodeCopy is left as Dasher's, so it keeps regular
+        /// Dasher AI (no boss-spawn handling). If the floor loads with Minotaur-looking Dashers, the
+        /// record INDEX was the boss-spawn gate and smuggling the mesh through a regular index is the fix.
+        /// (This is the RedirectEnemyModel "ModelCode-only" trick driven from the roster side. Edits the
+        /// carrier's record; persists for the session.)
+        /// </summary>
+        internal static void RosterIndexTest(int bossTableIndex)
+        {
+            int carrier = Enemies.Dasher.TableIndex.Value;   // regular DBC enemy, not boss-gated
+            SetSpawnRosterToSpecies(carrier);                // make every spawn use the carrier index
+            // copy boss ModelCode (0x000) -> carrier ModelCode, so the carrier renders as the boss
+            byte[] bossCode = Memory.ReadByteArray(
+                EnemySpeciesTable.RecordAddress(bossTableIndex) + EnemySpeciesTable.ModelCode, 4);
+            Memory.WriteByteArray(
+                EnemySpeciesTable.RecordAddress(carrier) + EnemySpeciesTable.ModelCode, bossCode);
+            string code = System.Text.Encoding.ASCII.GetString(bossCode);
+            Console.WriteLine($"[EnemyInjector] index test: roster -> carrier index {carrier} (Dasher); "
+                + $"record {carrier}.ModelCode <- record {bossTableIndex}.ModelCode (\"{code}\"). Re-enter a floor.");
+        }
+
+        /// <summary>
+        /// Writes the boss's ModelCode into the carrier (Dasher) record's ModelCodeCopy (0x040) — the
+        /// field the boss-AI dispatch reads. Intended to be clicked AFTER the index test has spawned the
+        /// boss-mesh-on-Dasher enemies, to see whether the engine re-dispatches them to the boss's AI.
+        /// (ModelCodeCopy is normally consumed at spawn, so already-live instances may not pick it up;
+        /// if not, the same write done BEFORE the floor spawns will bind boss AI at spawn time instead.)
+        /// </summary>
+        internal static void SetCarrierBossAI(int bossTableIndex)
+        {
+            int carrier = Enemies.Dasher.TableIndex.Value;
+            byte[] bossCode = Memory.ReadByteArray(
+                EnemySpeciesTable.RecordAddress(bossTableIndex) + EnemySpeciesTable.ModelCode, 4);
+            Memory.WriteByteArray(
+                EnemySpeciesTable.RecordAddress(carrier) + EnemySpeciesTable.ModelCodeCopy, bossCode);
+            string code = System.Text.Encoding.ASCII.GetString(bossCode);
+            Console.WriteLine($"[EnemyInjector] carrier {carrier}.ModelCodeCopy <- \"{code}\" (boss AI dispatch). "
+                + "Existing spawns may not re-dispatch; if not, it binds on the next spawn/floor.");
+        }
+
+        /// <summary>
+        /// "Defuse" boss-class live slots: any slot whose SpeciesDataPtr (slot+0x4C) is non-zero gets it
+        /// zeroed, so the engine treats it like a regular enemy (regular enemies legitimately run with
+        /// 0x4C == 0, so the engine guards against null) instead of running the arena-bound boss behavior
+        /// script that hangs a normal floor. Returns how many slots were defused.
+        /// EXPERIMENTAL: if the floor hang is a one-time boss-intro lock fired at spawn, nulling afterward
+        /// may not un-stick it — clicking this mid-hang tells us which.
+        /// </summary>
+        internal static int DefuseBossSlots()
+        {
+            int defused = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                long ptrAddr = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.SpeciesDataPtr);
+                int sdp = Memory.ReadInt(ptrAddr);
+                if (sdp != 0)
+                {
+                    ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                    Memory.WriteInt(ptrAddr, 0);
+                    Console.WriteLine($"[EnemyInjector] defused slot {s} (species id {sid}): SpeciesDataPtr 0x{sdp:X8} -> 0");
+                    defused++;
+                }
+            }
+            Console.WriteLine($"[EnemyInjector] defuse: {defused} boss-class slot(s) nulled.");
+            return defused;
+        }
+
+        /// <summary>Returns the cave code relocated to <see cref="CaveBase"/>.</summary>
+        internal static byte[] BuildCave()
+        {
+            byte[] code = FromHex(CaveTemplateHex);
+            uint native = CaveBase & 0x1FFFFFFF;      // EE physical address the cave loads internally
+            uint paramAddr = native;
+            uint posAddr   = native + P_POS;
+
+            // Sanity-check we are patching the right instructions (catches a wrong offset / stale template).
+            ExpectImm(code, OFF_PARAM_HI, (ushort)(TEMPLATE_BASE >> 16), "lui $v0 (PARAM hi)");
+            ExpectImm(code, OFF_PARAM_LO, (ushort)(TEMPLATE_BASE & 0xFFFF), "ori $v0 (PARAM lo)");
+            ExpectImm(code, OFF_POS_HI,   (ushort)((TEMPLATE_BASE + P_POS) >> 16), "lui $a2 (pos hi)");
+            ExpectImm(code, OFF_POS_LO,   (ushort)((TEMPLATE_BASE + P_POS) & 0xFFFF), "ori $a2 (pos lo)");
+
+            PatchImm(code, OFF_PARAM_HI, (ushort)(paramAddr >> 16));
+            PatchImm(code, OFF_PARAM_LO, (ushort)(paramAddr & 0xFFFF));
+            PatchImm(code, OFF_POS_HI,   (ushort)(posAddr >> 16));
+            PatchImm(code, OFF_POS_LO,   (ushort)(posAddr & 0xFFFF));
+            return code;
+        }
+
+        /// <summary>
+        /// Restores the original instruction at the hook site, removing the detour. Call when disabling
+        /// mid-dungeon (only meaningful while the dun overlay is loaded). Safe to call repeatedly.
+        /// </summary>
+        internal static void Uninstall()
+        {
+            Memory.WriteInt(HookAddr, unchecked((int)OriginalHookWord));
+        }
+
+        /// <summary>The 4-byte `j cave` detour written at <see cref="HookAddr"/> (delay slot = original next instr).</summary>
+        internal static byte[] BuildHook()
+        {
+            uint codeStart = (CaveBase & 0x1FFFFFFF) + 0x20;
+            uint jWord = (0x02u << 26) | ((codeStart >> 2) & 0x03FFFFFF);
+            return BitConverter.GetBytes(jWord);
+        }
+
+        // ── High-level operations ────────────────────────────────────────────
+        /// <summary>
+        /// PRELOAD: load <paramref name="tableIndex"/>'s mesh + species record into model block
+        /// <paramref name="blockIndex"/>. Blocking disc I/O — call at a safe moment (e.g. floor entry).
+        /// </summary>
+        internal static void PreloadSpecies(int blockIndex, int tableIndex)
+        {
+            Memory.WriteInt(CaveBase + P_N, blockIndex);
+            Memory.WriteInt(CaveBase + P_T, tableIndex);
+            Memory.WriteInt(CaveBase + P_MODE, MODE_PRELOAD);
+            Memory.WriteInt(CaveBase + P_TRIGGER, 1);   // trigger LAST
+        }
+
+        /// <summary>
+        /// INSTANTIATE: free slot <paramref name="slot"/> and build the live monster from model
+        /// block <paramref name="slot"/> at the given position. No disc I/O. Preload the same index first.
+        /// Position floats are written in the engine's slot Location order (X, Z, Y).
+        /// </summary>
+        internal static void SpawnIntoSlot(int slot, float x, float z, float y)
+        {
+            Memory.WriteInt  (CaveBase + P_N, slot);
+            Memory.WriteFloat(CaveBase + P_POS + 0, x);
+            Memory.WriteFloat(CaveBase + P_POS + 4, z);
+            Memory.WriteFloat(CaveBase + P_POS + 8, y);
+            Memory.WriteInt  (CaveBase + P_MODE, MODE_INSTANTIATE);
+            Memory.WriteInt  (CaveBase + P_TRIGGER, 1);   // trigger LAST
+        }
+
+        /// <summary>
+        /// INSTANTIATE using the slot's CURRENT world position (copies the 12-byte Location triple
+        /// verbatim, sidestepping any float-order ambiguity). Use after the slot already held a live enemy.
+        /// </summary>
+        internal static void SpawnIntoSlotAtCurrentPos(int slot)
+        {
+            long locAddr = EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.LocationX);
+            byte[] pos = Memory.ReadByteArray(locAddr, 12); // X(0x100), Z(0x104), Y(0x108)
+            Memory.WriteInt(CaveBase + P_N, slot);
+            Memory.WriteByteArray(CaveBase + P_POS, pos);
+            Memory.WriteInt(CaveBase + P_MODE, MODE_INSTANTIATE);
+            Memory.WriteInt(CaveBase + P_TRIGGER, 1);   // trigger LAST
+        }
+
+        /// <summary>
+        /// Convenience: full re-skin of an already-spawned slot. Preloads, waits for the load to
+        /// complete, then instantiates at the slot's current position. Returns false on timeout.
+        /// </summary>
+        internal static bool ReskinSlot(int slot, int tableIndex, int loadTimeoutMs = 2000)
+        {
+            PreloadSpecies(slot, tableIndex);
+            if (!WaitTriggerClear(loadTimeoutMs)) return false;
+            SpawnIntoSlotAtCurrentPos(slot);
+            return WaitTriggerClear(loadTimeoutMs);
+        }
+
+        /// <summary>Polls until the cave clears the trigger (i.e. it fired) or the timeout elapses.</summary>
+        internal static bool WaitTriggerClear(int timeoutMs)
+        {
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalMilliseconds < timeoutMs)
+            {
+                if (Memory.ReadInt(CaveBase + P_TRIGGER) == 0) return true;
+                Thread.Sleep(8);
+            }
+            return false;
+        }
+
+        // ── Helpers ──────────────────────────────────────────────────────────
+        private static void PatchImm(byte[] code, int off, ushort imm)
+        {
+            code[off]     = (byte)(imm & 0xFF);        // little-endian low 16 bits of the instruction word
+            code[off + 1] = (byte)((imm >> 8) & 0xFF);
+        }
+
+        private static void ExpectImm(byte[] code, int off, ushort imm, string what)
+        {
+            ushort actual = (ushort)(code[off] | (code[off + 1] << 8));
+            if (actual != imm)
+                throw new InvalidOperationException(
+                    $"EnemyModelInjector cave template mismatch at 0x{off:X} ({what}): " +
+                    $"expected 0x{imm:X4}, found 0x{actual:X4}. Regenerate via tools/build_cave.py.");
+        }
+
+        private static byte[] FromHex(string hex)
+        {
+            var b = new byte[hex.Length / 2];
+            for (int i = 0; i < b.Length; i++)
+                b[i] = byte.Parse(hex.Substring(i * 2, 2), NumberStyles.HexNumber);
+            return b;
+        }
+    }
+}

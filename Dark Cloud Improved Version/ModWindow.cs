@@ -481,6 +481,49 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // Sets the current dungeon's spawn roster so every spawn is the given species (by TableIndex).
+        // Pure data writes (crash-free); takes effect when you re-enter / descend to a floor.
+        private void Btn_Injector_Test_Click(object sender, RoutedEventArgs e)
+        {
+            // Box accepts one TableIndex (single-species roster) or a comma list (multi-species mix),
+            // e.g. "20" or "20,3,6,52,30".
+            var idx = new System.Collections.Generic.List<int>();
+            foreach (string p in Tbox_Injector_Table.Text.Split(','))
+                if (int.TryParse(p.Trim(), out int v)) idx.Add(v);
+            if (idx.Count == 0)
+            {
+                Console.WriteLine("Injector: enter a TableIndex or comma list (e.g. 20 or 20,3,6,52,30).");
+                return;
+            }
+            int.TryParse(Tbox_Injector_Pop.Text, out int population); // 0 (or unparseable) = keep original
+            if (idx.Count == 1) EnemyModelInjector.SetSpawnRosterToSpecies(idx[0], population);
+            else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), population);
+        }
+
+        // Index test: spawn the boss's MESH through a regular carrier index (Dasher) to confirm the
+        // boss-spawn black-screen is gated by the record INDEX. Uses the TableIndex box as the boss id.
+        private void Btn_Injector_Defuse_Click(object sender, RoutedEventArgs e)
+        {
+            if (!int.TryParse(Tbox_Injector_Table.Text, out int bossTableIndex))
+            {
+                Console.WriteLine("Injector: TableIndex must be an integer (e.g. 83 = MinotaurJoe).");
+                return;
+            }
+            EnemyModelInjector.RosterIndexTest(bossTableIndex);
+        }
+
+        // After the index test spawns boss-mesh-on-Dasher enemies, flip the carrier's ModelCodeCopy to
+        // the boss's so the AI dispatch can (re)bind to the boss behavior. Uses the TableIndex box as boss id.
+        private void Btn_Injector_BossAI_Click(object sender, RoutedEventArgs e)
+        {
+            if (!int.TryParse(Tbox_Injector_Table.Text, out int bossTableIndex))
+            {
+                Console.WriteLine("Injector: TableIndex must be an integer (e.g. 83 = MinotaurJoe).");
+                return;
+            }
+            EnemyModelInjector.SetCarrierBossAI(bossTableIndex);
+        }
+
         private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, RoutedEventArgs e)
         {
             if (CBox_UserMode_MuteMusic.IsChecked == true)
