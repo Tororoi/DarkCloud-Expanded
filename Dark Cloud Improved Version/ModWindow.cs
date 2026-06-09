@@ -485,19 +485,26 @@ namespace Dark_Cloud_Improved_Version
         // Pure data writes (crash-free); takes effect when you re-enter / descend to a floor.
         private void Btn_Injector_Test_Click(object sender, RoutedEventArgs e)
         {
-            // Box accepts one TableIndex (single-species roster) or a comma list (multi-species mix),
-            // e.g. "20" or "20,3,6,52,30".
+            // Box accepts "20" or a comma list "20,3,6". A trailing "!" marks a species spawn-once
+            // (at most 1 per floor; the rest fill normally, total stays 15), e.g. "20!,60" = one Gyon + Cursed Roses.
             var idx = new System.Collections.Generic.List<int>();
+            var once = new System.Collections.Generic.List<bool>();
             foreach (string p in Tbox_Injector_Table.Text.Split(','))
-                if (int.TryParse(p.Trim(), out int v)) idx.Add(v);
+            {
+                string t = p.Trim();
+                bool o = t.EndsWith("!");
+                if (o) t = t.Substring(0, t.Length - 1).Trim();
+                if (!int.TryParse(t, out int v)) continue;
+                idx.Add(v); once.Add(o);
+            }
             if (idx.Count == 0)
             {
-                Console.WriteLine("Injector: enter a TableIndex or comma list (e.g. 20 or 20,3,6,52,30).");
+                Console.WriteLine("Injector: enter a TableIndex or list, e.g. 20  |  20,3,6  |  20!,60 (Gyon once)");
                 return;
             }
             int.TryParse(Tbox_Injector_Pop.Text, out int population); // 0 (or unparseable) = keep original
             if (idx.Count == 1) EnemyModelInjector.SetSpawnRosterToSpecies(idx[0], population);
-            else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), population);
+            else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
         }
 
         // Index test: spawn the boss's MESH through a regular carrier index (Dasher) to confirm the
@@ -512,16 +519,15 @@ namespace Dark_Cloud_Improved_Version
             EnemyModelInjector.RosterIndexTest(bossTableIndex);
         }
 
-        // After the index test spawns boss-mesh-on-Dasher enemies, flip the carrier's ModelCodeCopy to
-        // the boss's so the AI dispatch can (re)bind to the boss behavior. Uses the TableIndex box as boss id.
+        // Post-spawn cap: keep at most 1 of the TableIndex species on the current floor, remove extras.
         private void Btn_Injector_BossAI_Click(object sender, RoutedEventArgs e)
         {
-            if (!int.TryParse(Tbox_Injector_Table.Text, out int bossTableIndex))
+            if (!int.TryParse(Tbox_Injector_Table.Text, out int tableIndex))
             {
-                Console.WriteLine("Injector: TableIndex must be an integer (e.g. 83 = MinotaurJoe).");
+                Console.WriteLine("Injector: TableIndex must be an integer (e.g. 20 = Gyon).");
                 return;
             }
-            EnemyModelInjector.SetCarrierBossAI(bossTableIndex);
+            EnemyModelInjector.CapSpeciesOnFloor(tableIndex, 1);
         }
 
         private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, RoutedEventArgs e)

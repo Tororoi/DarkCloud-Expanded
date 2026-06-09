@@ -185,7 +185,6 @@ namespace Dark_Cloud_Improved_Version
                     long e0 = BtEnemyLayout.EntryAddress(layoutBase, floor, 0);
                     Memory.WriteInt(e0 + BtEnemyLayout.Id, tableIndex);
                     Memory.WriteInt(e0 + BtEnemyLayout.Weight, 100);
-                    if (population > 0) Memory.WriteInt(e0 + BtEnemyLayout.Count, population); // entry0 count = floor population
                     // entries 1..8 disabled so nothing else can roll.
                     for (int e = 1; e < BtEnemyLayout.EntriesPerFloor; e++)
                         Memory.WriteInt(BtEnemyLayout.EntryAddress(layoutBase, floor, e) + BtEnemyLayout.Id, -1);
@@ -219,8 +218,26 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine($"[EnemyInjector] roster: TableIndex {tableIndex} AttackPower={ap} (not a boss sentinel).");
             }
 
+            if (population > 0) SetPopulationTarget(population);
+
             Console.WriteLine($"[EnemyInjector] roster: dungeon {dungeon} ({floors} floors, normal+Ura) -> "
                 + $"TableIndex {tableIndex} on every spawn. Re-enter a floor to see it.");
+        }
+
+        // Per-floor enemy-count target globals read by CMonstorUnit::ArrangementPos (the placement loop
+        // runs this many times). They're set by the floor-select/dungeon-entry code, so write them at/after
+        // floor selection; ArrangementPos still caps the actual count at the floor's walkable spawn tiles.
+        // PCSX2 addresses (native 0x01D564xx); 0x6494/0x649C/0x64A0 are the ones used as the count arg.
+        private const long PopCount6494 = 0x21D56494;
+        private const long PopCount649C = 0x21D5649C;
+        private const long PopCount64A0 = 0x21D564A0;
+        internal static void SetPopulationTarget(int pop)
+        {
+            Memory.WriteInt(PopCount6494, pop);
+            Memory.WriteInt(PopCount649C, pop);
+            Memory.WriteInt(PopCount64A0, pop);
+            Console.WriteLine($"[EnemyInjector] population target (0x21D56494/9C/A0) <- {pop} "
+                + "(capped by walkable tiles; re-set after floor-select if it gets overwritten).");
         }
 
         /// <summary>
@@ -230,7 +247,7 @@ namespace Dark_Cloud_Improved_Version
         /// different enemy models a floor can hold. Use regular (non-boss) indices — boss indices still
         /// black-screen regardless of count.
         /// </summary>
-        internal static void SetSpawnRosterMix(int[] tableIndices, int population = 0)
+        internal static void SetSpawnRosterMix(int[] tableIndices, bool[] spawnOnce = null, int population = 0)
         {
             int dungeon = Memory.ReadByte(Addresses.checkDungeon);
             if (dungeon < 0 || dungeon >= BtEnemyLayout.DungeonCount)
@@ -240,9 +257,19 @@ namespace Dark_Cloud_Improved_Version
             }
             int floors = BtEnemyLayout.FloorCount[dungeon];
             int n = Math.Min(tableIndices.Length, BtEnemyLayout.EntriesPerFloor);
+            // Weights are unused by the spawn path (confirmed: uniform rand%count), so just split evenly.
             int[] w = new int[n];
             int baseW = 100 / n, rem = 100 - baseW * n;
             for (int i = 0; i < n; i++) w[i] = baseW + (i < rem ? 1 : 0);
+
+            // Per-species "spawn once vs repeatable" flag = EnemySpeciesTable.SpawnCap (+0x78): 0/3 = repeatable,
+            // anything else = at most one per floor (the placement loop retries, so total stays 15). Write
+            // it on the source record so the floor-load copy carries it.
+            for (int i = 0; i < n; i++)
+            {
+                bool isOnce = spawnOnce != null && i < spawnOnce.Length && spawnOnce[i];
+                Memory.WriteInt(EnemySpeciesTable.RecordAddress(tableIndices[i]) + EnemySpeciesTable.SpawnCap, isOnce ? 2 : 0);
+            }
 
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
             foreach (int layoutBase in bases)
@@ -262,12 +289,15 @@ namespace Dark_Cloud_Improved_Version
                             Memory.WriteInt(ea + BtEnemyLayout.Id, -1);
                         }
                     }
-                    if (population > 0)
-                        Memory.WriteInt(BtEnemyLayout.EntryAddress(layoutBase, floor, 0) + BtEnemyLayout.Count, population);
                 }
             }
+            if (population > 0) SetPopulationTarget(population);
+            var onceList = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < n; i++)
+                if (spawnOnce != null && i < spawnOnce.Length && spawnOnce[i]) onceList.Add(tableIndices[i]);
+            string once = onceList.Count == 0 ? "none" : string.Join(",", onceList);
             Console.WriteLine($"[EnemyInjector] roster mix: dungeon {dungeon}, {n} species "
-                + $"[{string.Join(",", tableIndices[..n])}] across {floors} floors (normal+Ura). Re-enter a floor.");
+                + $"[{string.Join(",", tableIndices[..n])}] spawn-once=[{once}] across {floors} floors. Re-enter a floor.");
         }
 
         /// <summary>
@@ -291,6 +321,33 @@ namespace Dark_Cloud_Improved_Version
             string code = System.Text.Encoding.ASCII.GetString(bossCode);
             Console.WriteLine($"[EnemyInjector] index test: roster -> carrier index {carrier} (Dasher); "
                 + $"record {carrier}.ModelCode <- record {bossTableIndex}.ModelCode (\"{code}\"). Re-enter a floor.");
+        }
+
+        /// <summary>
+        /// Post-spawn per-species cap: keeps at most <paramref name="maxKeep"/> live enemies of the given
+        /// species (by TableIndex) on the current floor and removes the rest by setting their slot
+        /// RenderStatus (0x000) to -1 — which both stops DrawMonstor (it draws only RenderStatus==2) and
+        /// halts their AI. Call after the floor has populated. The roster's weighted-random selection has
+        /// no per-species hard cap, so this enforcement pass is how you bound a specific monster to n.
+        /// </summary>
+        internal static int CapSpeciesOnFloor(int tableIndex, int maxKeep)
+        {
+            // slot's EnemySpeciesId (0x42) holds the species record's EID, not the TableIndex — resolve it.
+            ushort eid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.EnemySpeciesId);
+            int kept = 0, removed = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                int rs = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
+                if (rs < 0) continue; // already free/dead
+                ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                if (sid != eid) continue;
+                if (kept < maxKeep) { kept++; continue; }
+                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus), -1);
+                removed++;
+            }
+            Console.WriteLine($"[EnemyInjector] cap: species EID {eid} (TableIndex {tableIndex}) — kept {kept}, "
+                + $"removed {removed} (RenderStatus -> -1).");
+            return removed;
         }
 
         /// <summary>

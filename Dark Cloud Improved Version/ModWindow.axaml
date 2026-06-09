@@ -71,7 +71,8 @@
 
       <!-- Options tab -->
       <TabItem Header="Options">
-        <Panel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Panel Height="400" Width="500">
           <CheckBox x:Name="CBox_UserMode_Graphics"
                     Content="Enable Graphical Improvements (not compatible in pcsx2 v1.7)"
                     Margin="46,28,0,0"
@@ -138,11 +139,12 @@
                   Width="100" Height="26" Margin="250,327,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
                   Click="Btn_Injector_Defuse_Click"/>
-          <Button x:Name="Btn_Injector_BossAI" Content="Boss AI (MCC)"
+          <Button x:Name="Btn_Injector_BossAI" Content="Cap TableIdx to 1"
                   Width="130" Height="26" Margin="356,327,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
                   Click="Btn_Injector_BossAI_Click"/>
         </Panel>
+        </ScrollViewer>
       </TabItem>
 
       <!-- Quests tab -->

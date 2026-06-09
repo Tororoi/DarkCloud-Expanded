@@ -258,7 +258,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int Abs        = 0x06C; // int    — XP rewarded to the player on kill; written to slot Abs (0x0B0) at spawn
         internal const int MinGoldDrop= 0x070; // int    — minimum gold dropped on death; written to slot MinGoldDrop (0x034) at spawn
         internal const int DropChance = 0x074; // int    — item drop chance (0–100); written to slot DropChance (0x038) at spawn
-        internal const int Unk024     = 0x078; // int    — ranges 0–70; purpose unknown
+        // +0x078: per-species SPAWN-CAP flag, read (as a halfword) by CMonstorUnit::ArrangementPos when
+        // assigning species to floor slots. Value 0 or 3 = repeatable (may fill many slots); any other
+        // value (observed 2, 4) = spawn at most ONCE per floor — the placement loop retries so the other
+        // slots still fill (floor enemy total is unchanged). The game ships ~19/90 species flagged once.
+        // Confirmed 2026-06-09 by disassembly + the EnemyModelInjector spawn-once experiment.
+        internal const int SpawnCap   = 0x078; // int    — spawn-cap: 0/3 = repeatable, else once-per-floor
 
         internal const int EnemySpeciesId    = 0x07C; // ushort — enemy species ID stored in table (matches EnemyDefaults.Id); used by engine to verify record ownership
         // +0x07E: 2 bytes padding (always 0)
@@ -425,9 +430,12 @@ namespace Dark_Cloud_Improved_Version
             FloorAddress(layoutBaseNative, floor) + entry * EntryStride;
 
         // ── Entry field offsets (0x0C bytes per entry) ──
-        // +0x0: spawn count / floor population. Entry 0 commonly 3–4 (target enemy count for the floor);
-        //       other entries 1. NOT read by BtLoadMonstor — consumed by the placement/arrange code.
-        internal const int Count    = 0x0; // int   — spawn count / population
+        // +0x0: purpose UNCONFIRMED (entry 0 commonly 3–4, other entries 1). It is NOT the floor
+        // population: live testing (2026-06-09) showed that overwriting it (1 vs 16) does not change how
+        // many enemies spawn — the floor's enemy COUNT is fixed by its spawn-point generation at floor
+        // assembly, independent of this table. The roster only selects WHICH species fill those points
+        // (weighted by +0x8). Earlier "spawn count / population" label was wrong.
+        internal const int Count    = 0x0; // int   — UNCONFIRMED; not the population (see note above)
         // +0x4: enemy id (= EnemyDefaults.Id). -1 = empty slot. This is what SetupBaseModel loads.
         internal const int Id       = 0x4; // int   — enemy id; -1 = unused
         // +0x8: spawn weight (percent). Active entries' weights sum to ≈100 per floor → weighted-random pick.
