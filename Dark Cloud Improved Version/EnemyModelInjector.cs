@@ -205,7 +205,7 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadByte(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.ModelCode) == (byte)'c')
                 Console.WriteLine($"[EnemyInjector] WARNING: TableIndex {tableIndex} is boss-class — a single-species "
                     + "roster will spawn multiple, and multi-part bosses glitch when >1. Use a mix like \"20,83\" instead.");
-            BossScriptPatcher.Active = false; // single-species boss isn't a supported config
+            BossScriptPatcher.ArmedBoss = -1; // single-species boss isn't a supported config
 
             if (population > 0) SetPopulationTarget(population);
 
@@ -284,7 +284,7 @@ namespace Dark_Cloud_Improved_Version
             // Per-species "spawn once vs repeatable" flag = EnemySpeciesTable.SpawnCap (+0x78): 0/3 = repeatable,
             // anything else = at most one per floor (the placement loop retries, so total stays 15). Write
             // it on the source record so the floor-load copy carries it.
-            bool rosterHasC16a = false;
+            int armedBoss = -1;
             for (int i = 0; i < n; i++)
             {
                 long rec = EnemySpeciesTable.RecordAddress(tableIndices[i]);
@@ -295,12 +295,13 @@ namespace Dark_Cloud_Improved_Version
                 bool isOnce = (spawnOnce != null && i < spawnOnce.Length && spawnOnce[i]) || isBossClass;
                 Memory.WriteInt(rec + EnemySpeciesTable.SpawnCap, isOnce ? 2 : 0);
                 RegularizeBossRecord(tableIndices[i]);
-                if (tableIndices[i] == 83) rosterHasC16a = true; // MinotaurJoe needs the label-1 script patch
+                // Arm the script patch for the first boss that has a known _INITIALIZE fix (Dran/Master Utan/
+                // MinotaurJoe/c22a). Other 'c' bosses still spawn (spawn-once) but may be displaced — WIP.
+                if (armedBoss < 0 && BossScriptPatcher.IsPatchable(tableIndices[i])) armedBoss = tableIndices[i];
             }
-            // Arm/disarm the runtime script patch that lets MinotaurJoe spawn correctly on a normal floor.
-            BossScriptPatcher.Active = rosterHasC16a;
-            if (rosterHasC16a)
-                Console.WriteLine("[BossPatch] armed (TableIndex 83 in roster) — will NOP c16a label-1 _INITIALIZE in the loaded STB.");
+            BossScriptPatcher.ArmedBoss = armedBoss;
+            if (armedBoss >= 0)
+                Console.WriteLine($"[BossPatch] armed for boss {armedBoss} — will NOP its label-1 _INITIALIZE in the loaded STB.");
 
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
             foreach (int layoutBase in bases)
@@ -562,108 +563,120 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// Runtime patch that lets MinotaurJoe (c16a) spawn correctly on a normal floor. Its behavior script
-    /// (dun\monstor\c16a.stb) runs program label-1 at spawn (CMonstorUnit::SetupViewMonstor), which includes
-    /// cmd 0x24 (_INITIALIZE 0,0,0) — an arena origin-reset that, off the boss arena, displaces and locks the
-    /// boss. We NOP just that one command (5 vmcode_t records = 60 bytes at STB file +0x631C) in the loaded
-    /// copy of the STB, keeping parts/animation/attacks intact. (Multi-part bosses share one skeleton, so only
-    /// ONE instance animates — the roster code forces boss species spawn-once.)
+    /// Runtime patch that lets a boss spawn correctly on a normal floor. A boss's behavior script
+    /// (dun\monstor\&lt;code&gt;.stb) runs program label-1 at spawn (CMonstorUnit::SetupViewMonstor), and for the
+    /// bosses below that program calls cmd 0x24 (_INITIALIZE 0,0,0) — an arena origin-reset that, off the boss
+    /// arena, displaces and locks the boss. We NOP just that one command (5 vmcode_t records = 60 bytes at a
+    /// boss-specific STB file offset) in the loaded copy of the STB, keeping parts/animation/attacks intact.
+    /// (Multi-part bosses share one skeleton, so only ONE instance animates — the roster code forces boss
+    /// species spawn-once.)
     ///
-    /// The STB is reloaded each floor entry, so while a c16a boss is in the roster we re-find and re-NOP it
-    /// every dungeon-thread tick, catching the loaded STB before ArrangementPos spawns the boss. The scan is
-    /// incremental (one chunk/tick) to avoid hitches; once found, the address is cached. This touches only
-    /// loaded EE RAM — the disc/ISO is never modified. See enemy-spawn-system.md §5c.
+    /// The STB reloads each floor entry, so while a patchable boss is in the roster we re-find and re-NOP it
+    /// every dungeon-thread tick, catching the loaded STB before ArrangementPos spawns the boss. The boss is
+    /// loaded first (roster reorder), so its STB address depends only on (dungeon, floor-half); known addresses
+    /// are probed directly (instant), with a windowed scan-by-signature fallback that logs new ones. Touches
+    /// only loaded EE RAM — the disc/ISO is never modified. See enemy-spawn-system.md §5c.
     /// </summary>
     internal static class BossScriptPatcher
     {
-        internal static bool Active = false;            // set by the roster code when TableIndex 83 is present
+        // TableIndex of a patch-capable boss currently in the roster (-1 = none). Set by the roster code.
+        internal static int ArmedBoss = -1;
 
-        // c16a.stb was observed loading at 0x012770D0; scan a tight window around it so a full pass is
-        // fast (a few dozen batched reads) and catches the STB within one tick of it loading — beating the
-        // boss spawn. Widen this window if the load address drifts on other rosters.
-        private const long ScanLo = 0x01000000, ScanHi = 0x01500000;  // covers boss-first loads (varies per dungeon + floor-half)
+        // Per-boss STB layout: TableIndex -> (label-1 codeOffset [signature, read at STB+0x54], _INITIALIZE
+        // file offset to NOP). These 4 bosses run cmd 0x24 _INITIALIZE(0,0,0) in label-1; the others lack it
+        // and need their own mechanism (see §5c). Offsets extracted from each dun\monstor\<code>.stb.
+        private static (uint codeOff, int initOff) BossInfo(int tableIndex) => tableIndex switch
+        {
+            78  => (0x3AC8u, 0x419C),  // Dran        (c12a)
+            79  => (0x4484u, 0x4F48),  // Master Utan (c14a)
+            83  => (0x575Cu, 0x631C),  // MinotaurJoe (c16a)
+            166 => (0x60C0u, 0x6C20),  // c22a
+            _   => (0u, 0),
+        };
+        internal static bool IsPatchable(int tableIndex) => BossInfo(tableIndex).codeOff != 0;
+
+        private const long ScanLo = 0x01000000, ScanHi = 0x01500000;  // boss-first load window (per dungeon/half)
         private const int  ChunkWords = 8192;           // 32 KB per batched round-trip
         private const uint StbMagic = 0x00425453u;      // "STB\0"
-        private const int  InitCmdOff = 0x631C;         // cmd 0x24 (_INITIALIZE) in c16a.stb label-1
-        private const int  InitCmdLen = 60;             // 5 vmcode_t records (4 pushes + the call)
-        private const uint LabelOneCodeOff = 0x575C;    // c16a label-1 codeOffset; STB signature at file +0x54
+        private const int  InitCmdLen = 60;             // _INITIALIZE call = 5 vmcode_t records (all 4 bosses)
 
-        // With the boss loaded first (roster reorder), c16a.stb lands at an address that depends only on
-        // (dungeon, floor-half) — not the roster. So we store the known addresses per dungeon (one per half;
-        // the address shifts a little across the mid-dungeon event floor) and check each DIRECTLY every tick:
-        // instant, deterministic, no scan. No need to detect the half — we just probe both candidates.
-        // The fallback scan handles any (dungeon, half) not yet tabled and LOGS it so it can be added here.
         private static long _stbBase = -1;
 
-        private static long[] KnownC16aAddrs(int dungeon) => dungeon switch
+        // Known STB load addresses per (boss TableIndex, dungeon). Boss-first makes these roster-independent;
+        // one per floor-half (the address shifts across the mid-dungeon event floor) — we probe all candidates,
+        // so no half-detection is needed. c16a populated from testing; other bosses/dungeons fill via the scan
+        // fallback (logged). Option 2 (live heap-base read) will make these unnecessary.
+        private static long[] KnownAddrs(int tableIndex, int dungeon) => (tableIndex, dungeon) switch
         {
-            0 => new long[] { 0x011A8990, 0x011A8950 },             // Divine Beast Cave  (h1: floors 1-7, h2: floors 9+)
-            1 => new long[] { 0x013B7190, 0x013B7250 },             // Wise Owl Forest    (h1: floors 1-8, h2: floors 10+)
-            2 => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 }, // Shipwreck          (3 sections; floor 17 is special)
-            3 => new long[] { 0x01137750 },                         // Sun & Moon Temple  (early floors only; add later halves)
-            // 4 Moon Sea, 5 Gallery of Time, 6 Demon Shaft: not yet tabled — fallback scan logs them.
+            (83, 0) => new long[] { 0x011A8990, 0x011A8950 },             // c16a Divine Beast Cave
+            (83, 1) => new long[] { 0x013B7190, 0x013B7250 },             // c16a Wise Owl Forest
+            (83, 2) => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 }, // c16a Shipwreck (3 sections)
+            (83, 3) => new long[] { 0x01137750 },                         // c16a Sun & Moon Temple (early floors)
             _ => System.Array.Empty<long>(),
         };
 
         internal static void Tick()
         {
-            if (!Active) { _stbBase = -1; return; }
+            int ti = ArmedBoss;
+            if (ti < 0) { _stbBase = -1; return; }
+            var (codeOff, initOff) = BossInfo(ti);
+            if (codeOff == 0) { _stbBase = -1; return; }
             try
             {
                 int dungeon = Memory.ReadByte(Addresses.checkDungeon);
-                // 1) Known addresses for this dungeon (one per floor-half) — instant, deterministic, no scan.
-                foreach (long addr in KnownC16aAddrs(dungeon))
-                    if (IsC16a(addr)) { EnsureNopped(addr); return; }
+                // 1) Known addresses for (boss, dungeon) — instant, deterministic, no scan.
+                foreach (long addr in KnownAddrs(ti, dungeon))
+                    if (IsBossStb(addr, codeOff)) { EnsureNopped(addr, initOff, ti); return; }
                 // 2) Cached hit from a previous (untabled) relocate.
-                if (_stbBase >= 0 && IsC16a(_stbBase)) { EnsureNopped(_stbBase); return; }
-                // 3) Fallback scan for a (dungeon, half) not yet in the table; logs it so it can be tabled.
-                long hit = _stbBase >= 0 ? ScanRange(_stbBase - 0x40000, _stbBase + 0x40000) : -1;
-                if (hit < 0) hit = ScanRange(ScanLo, ScanHi);
+                if (_stbBase >= 0 && IsBossStb(_stbBase, codeOff)) { EnsureNopped(_stbBase, initOff, ti); return; }
+                // 3) Fallback scan-by-signature; logs the address so it can be tabled.
+                long hit = _stbBase >= 0 ? ScanRange(_stbBase - 0x40000, _stbBase + 0x40000, codeOff) : -1;
+                if (hit < 0) hit = ScanRange(ScanLo, ScanHi, codeOff);
                 if (hit >= 0)
                 {
                     if (hit != _stbBase)
-                        Console.WriteLine($"[BossPatch] located c16a.stb @ 0x{hit:X8} (dungeon {dungeon}) — add to KnownC16aAddrs for instant first-time patch.");
+                        Console.WriteLine($"[BossPatch] located boss {ti} STB @ 0x{hit:X8} (dungeon {dungeon}) — add to KnownAddrs for instant patch.");
                     _stbBase = hit;
-                    EnsureNopped(hit);
+                    EnsureNopped(hit, initOff, ti);
                 }
             }
             catch { /* transient PINE read; retry next tick */ }
         }
 
-        private static long ScanRange(long lo, long hi)
+        private static long ScanRange(long lo, long hi, uint codeOff)
         {
             if (lo < ScanLo) lo = ScanLo;
             if (hi > ScanHi) hi = ScanHi;
             for (long a = lo; a < hi; a += (long)ChunkWords * 4)
             {
-                long hit = ScanChunk(a);
+                long hit = ScanChunk(a, codeOff);
                 if (hit >= 0) return hit;
             }
             return -1;
         }
 
-        private static bool IsC16a(long b)
-            => Memory.ReadUInt(b) == StbMagic && (uint)Memory.ReadInt(b + 0x54) == LabelOneCodeOff;
+        private static bool IsBossStb(long b, uint codeOff)
+            => Memory.ReadUInt(b) == StbMagic && (uint)Memory.ReadInt(b + 0x54) == codeOff;
 
-        private static long ScanChunk(long start)
+        private static long ScanChunk(long start, uint codeOff)
         {
             long end = Math.Min(start + (long)ChunkWords * 4, ScanHi);
             int n = (int)((end - start) / 4);
             if (n <= 0x16) return -1;
             uint[] w = Memory.ReadUIntBatch(start, n);
-            for (int i = 0; i + 0x16 < n; i++)          // need word at +0x54 (= i+0x15) for the codeOffset check
-                if (w[i] == StbMagic && w[i + 0x15] == LabelOneCodeOff)
+            for (int i = 0; i + 0x16 < n; i++)          // word at +0x54 (= i+0x15) holds label-1's codeOffset
+                if (w[i] == StbMagic && w[i + 0x15] == codeOff)
                     return start + (long)i * 4;
             return -1;
         }
 
-        private static void EnsureNopped(long stbBase)
+        private static void EnsureNopped(long stbBase, int initOff, int tableIndex)
         {
-            long a = stbBase + InitCmdOff;
+            long a = stbBase + initOff;
             if (Memory.ReadInt(a) != 0)                                // _INITIALIZE push still present
             {
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
-                Console.WriteLine($"[BossPatch] NOPed c16a _INITIALIZE @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
+                Console.WriteLine($"[BossPatch] NOPed _INITIALIZE for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
             }
         }
     }
