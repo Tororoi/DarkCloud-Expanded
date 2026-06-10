@@ -635,7 +635,10 @@ namespace Dark_Cloud_Improved_Version
                 if (hit >= 0)
                 {
                     if (hit != _stbBase)
+                    {
                         Console.WriteLine($"[BossPatch] located boss {ti} STB @ 0x{hit:X8} (dungeon {dungeon}) — add to KnownAddrs for instant patch.");
+                        DumpAllocState(hit);   // option-2 diagnostic: derive STB address from the live allocator base
+                    }
                     _stbBase = hit;
                     EnsureNopped(hit, initOff, ti);
                 }
@@ -668,6 +671,29 @@ namespace Dark_Cloud_Improved_Version
                 if (w[i] == StbMagic && w[i + 0x15] == codeOff)
                     return start + (long)i * 4;
             return -1;
+        }
+
+        // OPTION-2 DIAGNOSTIC: dump the MonstorModelBuffer allocator (object @ 0x01F066D0: +0 base ptr,
+        // +8 current unit index, +0xC capacity) next to the located STB, so we can see whether
+        // stb == base + const (pure base read) or needs the current index. Remove once option 2 is derived.
+        private static void DumpAllocState(long stb)
+        {
+            try
+            {
+                uint[] a = Memory.ReadUIntBatch(0x21F066D0, 6);
+                long ptr = a[0] | 0x20000000L;
+                Console.WriteLine($"[BossPatch][alloc] obj@0x01F066D0: base=0x{a[0]:X8} +4=0x{a[1]:X8} cur=0x{a[2]:X8} cap=0x{a[3]:X8}"
+                    + $"  STB-base=0x{(uint)(stb - ptr):X8}  STB-deref... ");
+                // also try 0x01F066D0 as a POINTER to the allocator object
+                int objPtr = Memory.ReadInt(0x21F066D0);
+                if (objPtr > 0x01000000 && objPtr < 0x02000000)
+                {
+                    long o = objPtr | 0x20000000L;
+                    uint[] b = Memory.ReadUIntBatch(o, 4);
+                    Console.WriteLine($"[BossPatch][alloc] *obj@0x{objPtr:X8}: base=0x{b[0]:X8} +4=0x{b[1]:X8} cur=0x{b[2]:X8}  STB-base2=0x{(uint)(stb - (b[0] | 0x20000000L)):X8}");
+                }
+            }
+            catch { }
         }
 
         private static void EnsureNopped(long stbBase, int initOff, int tableIndex)
