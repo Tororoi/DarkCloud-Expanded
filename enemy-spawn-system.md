@@ -131,9 +131,10 @@ What actually happens when you put a boss in a normal floor's roster (corrected 
   attack-block (`AttackPower`, elem mults, `Unk098`, steal) does **not** fix the spawn location.
 - `ModelCodeCopy` (`0x040`) selects the behavior script and is **bound at spawn**; changing it afterward
   does nothing, and nulling `SpeciesDataPtr (0x4C)` afterward doesn't recover it either.
-- Achievable today: boss **mesh** on a normal floor via the carrier-index trick (regular index whose
-  `ModelCode` = the boss's), which gives correct placement but **regular AI**. A fully-working boss
-  (real AI + valid position + defeat) needs editing the boss's behavior script — see §5c.
+- **Solved for MinotaurJoe:** a fully-working boss (real AI, collision, attacks, animation, correct
+  position) on a normal floor is achieved by NOPing one command in its behavior script — see §5c. It must
+  be **spawn-once** (multi-part bosses share one skeleton). The carrier-index trick (regular index whose
+  `ModelCode` = the boss's) remains an alternative for boss *appearance* with regular AI.
 - Note: the existing `FixModelRedirectSpawnPositions` does **not** actually relocate enemies (the reads
   look corrected but the writes don't take).
 
@@ -164,10 +165,59 @@ Every spawned enemy runs a behavior script at spawn; the boss's does the (arena)
   **not literals in `c16a.stb`** — label-1 **reads a boss-arena spawn point from the engine/map**, which
   resolves to `(0,0)` on a normal floor. So the fix is either (a) neuter that read/warp op in label-1, or
   (b) supply a valid boss spawn point in the map field it reads.
-- **Both require decoding the STB script VM** (`run__10CRunScript` dispatches opcodes — likely to the
-  `_XXX__FP12RS_STACKDATA` script functions via an opcode→function table). Then apply the fix by editing
-  `c16a.stb` in `data.dat` (static; the archive is sector-mapped) — a RAM patch is timing-sensitive since
-  label-1 runs at spawn during floor load. **This is the parked next step.**
+- Applying any fix means editing `c16a.stb` in `data.dat` (static; the archive is sector-mapped) — a RAM
+  patch is timing-sensitive since label-1 runs at spawn during floor load.
+
+### STB script VM internals (decoded)
+
+- **`load__10CRunScript(RS_PROG_HEADER*, …)`** (`0x23ddc0`) sets `[script+0x3C]` = STB base and
+  `[script+0x40]` = STB + `[STB+0x08]` (the **code base**, `STB+0x60`). `ext_func__10CRunScript`
+  (`0x23de30`) registers the external-function table at `[script+0x04]` (count at `[script+0x00]`).
+- **STB file layout:** `"STB\0"` magic; `+0x08` = code-base offset (`0x60`); `+0x0C` = program-table
+  offset (`0x40`); `+0x10` = program count; program-table entries are 8 bytes `(label:u32, codeOffset:u32)`.
+  The program header at `STB+codeOffset` has `[+0x00]` = vmcode relative offset (vmcode array =
+  codeBase + that), `[+0x08]` = local-var count.
+- **`run__10CRunScript(label)`** (`0x23de70`) finds the program by label, then calls
+  **`exe__10CRunScript(vmcode_t*)`** (`0x23e080`).
+- **`exe` is a stack/expression VM**: `vmcode_t` stride = **`0x0C`** `{opcode:u32, operand:u32, type:u32}`;
+  `opcode < 0x1F` indexes a **31-entry jump table at `0x29FB80`**. Decoded opcodes include push const/var,
+  pop, arithmetic, **comparison** (op 14 → sub-table `0x29FB60` for codes `0x28–0x2D`), bitwise AND/OR
+  (24/25), int↔float cast (13), and **jump** (16, target = codeBase + operand).
+- **Script commands** (492 `_XXX__FP12RS_STACKDATA`) are registered in tables (e.g. `0x2DDA34`, 50 entries;
+  also `0x301654`) as 16-byte records `{fnPtr, cmdId, sig, nameHash}`. Relevant cmdIds:
+  `SetPosition=0x7C`, `SetRotation=0x78`, `_ASQ_MOVE=0xD4`, `_ASQ_ROT_MOVE=0x70`, `_INIT_CHARA=0x90`.
+- **Command calls in the bytecode:** a call is `op3` (push typed const: `operand` = kind 1=int/2=float/
+  3=strptr, the value is the third word) repeated for each arg, then **`op21` (call)** whose `operand` =
+  total stack-arg count; the **command id is the first pushed int**. (`exe` has no `jalr` because the
+  dispatch happens in the call handler via the registered table, not inline.)
+
+### Confirmed fix — MinotaurJoe (`c16a`) on a normal floor
+
+Decoding `c16a.stb` label-1 (71 calls) showed two phases: **model/anim/attack setup** (`cmd 0x88`×14 part
+loads, `0x82`/`0x86` anim, `0x83`/`0x84` attack defs) then an **arena block** (`0x74`/`0x6a` bounds,
+**`cmd 0x24` = `_INITIALIZE(0,0,0)`** at file `+0x631C`, `0x8c`×13 placements). The single command that
+breaks a normal-floor spawn is `_INITIALIZE(0,0,0)` (the origin reset / arena lock).
+
+**The fix: NOP `cmd 0x24` only** — zero its 5 `vmcode_t` records (60 bytes at STB file `+0x631C`),
+keeping parts/animation/attacks. Verified live: a single MinotaurJoe then spawns at a normal tile with
+working AI, collision, attacks, and animation.
+
+**Single-instance limit:** the boss's body parts (`0x88`×14) attach to **one shared skeleton/handle set**,
+so two instances near each other fight over it and the extras' limbs desync. Multi-part bosses must be
+**spawn-once** — the roster code force-sets `SpawnCap=2` for any `'c'`-prefix (boss) ModelCode.
+
+### Mod implementation (`BossScriptPatcher`, no ISO edit)
+
+`EnemyModelInjector.BossScriptPatcher` (armed when TableIndex 83 is in the roster) runs each dungeon-thread
+tick: it incrementally scans the dun-overlay heap (`0x01C00000–0x02000000`) for the loaded `c16a.stb`
+(signature: `"STB\0"` + label-1 codeOffset `0x575C` at `+0x54`), then writes 60 zero bytes at `+0x631C` to
+NOP `_INITIALIZE`. The STB reloads each floor entry, so it re-NOPs every tick — catching the loaded STB
+before `ArrangementPos` spawns the boss. Touches only loaded EE RAM; the disc/ISO is never modified, so
+the real boss arena fight is unaffected. (First boss-floor entry may need a re-enter if the scan finishes
+after the spawn; once the STB address is cached, subsequent entries patch in time.)
+
+The static-ISO equivalent (for testing) is a 4-byte/60-byte edit to `c16a.stb` in `data.dat` at
+`2622*2048 + 0x1AFE5800 + 0x631C` — but that also changes the real arena fight, so the RAM patch is preferred.
 
 ---
 

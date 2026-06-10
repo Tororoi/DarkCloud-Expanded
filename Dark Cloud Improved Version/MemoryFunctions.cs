@@ -344,6 +344,50 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // Reads <count> consecutive 32-bit words starting at <startAddr> in ONE PINE round-trip
+        // (batched Read32). Mirrors ReadFloatBatch. Use for fast block scans — ReadByteArray is
+        // one round-trip PER BYTE and is far too slow for large ranges.
+        internal static uint[] ReadUIntBatch(long startAddr, int count)
+        {
+            int pktLen = 4 + count * 5;
+            var pkt = new byte[pktLen];
+            BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+            for (int i = 0; i < count; i++)
+            {
+                int off = 4 + i * 5;
+                pkt[off] = 0x02; // Read32
+                BitConverter.GetBytes(PhysAddr(startAddr + (long)i * 4)).CopyTo(pkt, off + 1);
+            }
+            lock (_lock)
+            {
+                if (_stream == null) return new uint[count];
+                try
+                {
+                    _stream.Write(pkt, 0, pkt.Length);
+                    var lenBuf = new byte[4];
+                    ReadFully(lenBuf, 0, 4);
+                    int respLen = BitConverter.ToInt32(lenBuf, 0) - 4;
+                    if (respLen <= 0) return new uint[count];
+                    var resp = new byte[respLen];
+                    ReadFully(resp, 0, respLen);
+                    var results = new uint[count];
+                    if (respLen >= count * 5)                       // fmtA: N × (status + 4 data)
+                    {
+                        for (int i = 0; i < count; i++)
+                            if (resp[i * 5] == 0) results[i] = BitConverter.ToUInt32(resp, i * 5 + 1);
+                    }
+                    else if (respLen >= 1 + count * 4 && resp[0] == 0) // fmtB: status + N × 4 data
+                    {
+                        for (int i = 0; i < count; i++)
+                            results[i] = BitConverter.ToUInt32(resp, 1 + i * 4);
+                    }
+                    return results;
+                }
+                catch (EndOfStreamException) { DisconnectStream(); return new uint[count]; }
+                catch (IOException) { DisconnectStream(); return new uint[count]; }
+            }
+        }
+
         internal static ushort ReadUShort(long address)
         {
             var r = SendBatch(BuildReadPacket(0x01, address));
