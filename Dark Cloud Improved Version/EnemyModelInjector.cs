@@ -876,9 +876,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static byte[] DeathSeq(int motion)
         {
-            // _SET_MOTION(motion, 1, 2); push 0; RET — param 2 animates reliably (param 6 froze / no collapse).
+            // _SET_MOVE_CANSEL; _SET_MOTION(motion, 1, 2); push 0; RET — cancel the current motion, then play the
+            // collapse (param 2 animates). Re-issued each frame from the clobbered label-100.
             var recs = new (uint op, uint opnd, uint val)[]
-            { (3,1,0xC8),(3,1,(uint)motion),(3,1,1),(3,1,2),(0x15,4,0),(3,1,0),(0xF,0,0) };
+            { (3,1,0x22),(0x15,1,0), (3,1,0xC8),(3,1,(uint)motion),(3,1,1),(3,1,2),(0x15,4,0), (3,1,0),(0xF,0,0) };
             byte[] blk = new byte[recs.Length * 12];
             for (int i = 0; i < recs.Length; i++)
             {
