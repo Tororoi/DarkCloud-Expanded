@@ -633,7 +633,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _collapseStart = new();
         private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _deadSince = new();
         private static readonly System.Collections.Generic.Dictionary<int, float> _peakFrame = new();
-        private const int FadeMs            = 600;       // hold the down pose this long after the collapse, then remove
+        private const int FadeMs            = 1600;      // hold the down pose + fade this long after the collapse, then remove
+        private static readonly System.Collections.Generic.Dictionary<int, float[]> _palStart = new();
         private const int CollapseTimeoutMs = 6000;     // fallback: remove this long after death even if frame never reaches the end
         private const long MotionBlock = 0x3510;        // per-enemy motion block stride
         private const long MotionFrameField = 0x1FFC0;  // current PLAYING motion frame (float) @ unit + idx*0x3510 + 0x1FFC0
@@ -850,9 +851,17 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Memory.WriteByteArray(l100, HoldSeq());
                         _collapseStart[s] = System.DateTime.UtcNow;
-                        Console.WriteLine($"[BossDeath] slot {s}: collapse done peak={pk:F0} -> hold down pose {FadeMs}ms");
+                        float op0 = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity)));
+                        _palStart[s] = new[] { op0 };
+                        Console.WriteLine($"[BossDeath] slot {s}: collapse done peak={pk:F0} -> hold+fade {FadeMs}ms (opacity {op0:F0})");
                     }
                     Memory.WriteInt(frameAddr, System.BitConverter.SingleToInt32Bits(endF));   // pin the down pose
+                    // Fade: ramp Opacity (0x120, default 128) toward 0 over the hold.
+                    float t = (float)(System.DateTime.UtcNow - _collapseStart[s]).TotalMilliseconds / FadeMs;
+                    if (t > 1f) t = 1f;
+                    if (_palStart.TryGetValue(s, out var p0))
+                        Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity),
+                                        System.BitConverter.SingleToInt32Bits(p0[0] * (1f - t)));
                 }
                 bool held = _collapseStart.TryGetValue(s, out var hs) && (System.DateTime.UtcNow - hs).TotalMilliseconds > FadeMs;
                 bool timedOut = (System.DateTime.UtcNow - _deadSince[s]).TotalMilliseconds > CollapseTimeoutMs;
@@ -862,7 +871,7 @@ namespace Dark_Cloud_Improved_Version
                     int cnt = Memory.ReadInt(MainMonstorUnit + 0x4C);
                     if (cnt > 0) Memory.WriteInt(MainMonstorUnit + 0x4C, cnt - 1);
                     Console.WriteLine($"[BossDeath] slot {s}: removed ({(held ? "hold done" : "timeout")}; count {cnt}->{cnt - 1})");
-                    _peakFrame.Remove(s); _deadSince.Remove(s); _collapseStart.Remove(s);
+                    _peakFrame.Remove(s); _deadSince.Remove(s); _collapseStart.Remove(s); _palStart.Remove(s);
                 }
             }
             if (!anyDead && _label100Clobbered && _origLabel100 != null)
