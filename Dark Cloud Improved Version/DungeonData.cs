@@ -228,7 +228,7 @@ namespace Dark_Cloud_Improved_Version
     //   DS GemronThunder group: tbl_134–142 → CaveBatEnhanced–KingMimicDSEnhanced
     //   DS GemronWind group   : tbl_145–153 → AlexanderEnhanced–KingMimicDSEnhancedTwice
     //   DS GemronHoly group   : tbl_155–165 → GaciousEnhanced–DS165 (tbl_165 = BlackKnight)
-    //   DS floor 100 padding  : tbl_166     → DS166 (garbage row, present in binary)
+    //   DS floor 100 padding  : tbl_166     → BlackKnightMount (garbage row, present in binary)
     //
     // WHY PATCHING 0x002860D0 DOES NOT AFFECT IN-GAME SPAWNS
     // --------------------------------------------------------
@@ -780,7 +780,7 @@ namespace Dark_Cloud_Improved_Version
             p[99] = SP.Pool(8, SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
 
             // Floor 100 — BOSS: BlackKnight (tbl_165) + garbage padding (tbl_166, as extracted from binary)
-            p[100] = SP.Pool(1, SP.E(Enemies.DS166.TableIndex,50), SP.E(Enemies.BlackKnight.TableIndex,50));
+            p[100] = SP.Pool(1, SP.E(Enemies.BlackKnightMount.TableIndex,50), SP.E(Enemies.BlackKnight.TableIndex,50));
 
             return p;
         }

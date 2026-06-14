@@ -1351,13 +1351,15 @@ namespace Dark_Cloud_Improved_Version
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // DS boss — confirmed from EnemySpeciesTable scan 2026-06-05: tbl_165 is BlackKnight (id=221, hp=50000, BOSS, code=c22a).
-        // tbl_166 is a garbage/padding row (hp=0, empty code) — not a valid spawn entry.
-        // tbl_164 is KingMimicDS boss tier (id=310, hp=40000, code=c21a); used in DS floor 100 pool alongside BlackKnight.
         internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
             Id=221, TableIndex=165, ModelCode="c21a", Name="Black Knight",    MaxHp=50000, Abs=5,  MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=100,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50 };
+        // tbl_166 = Black Knight Mount; present in DS floor 100 binary pool
+        internal static readonly EnemyDefaults BlackKnightMount = new EnemyDefaults {
+            Id=221, TableIndex=166, ModelCode="c22a", Name="Black Knight", MaxHp=50000, AttackPower=0 };
+
 
         // ── Boss companion / phase entities ──────────────────────────────────────
         // All have id=0 (no species entity), AttackPower=65535 (boss sentinel).
@@ -1702,11 +1704,6 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=30, Unk090B=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
-
-        // tbl_165 = BlackKnight — see BlackKnight field above
-        // tbl_166 = garbage/padding row (hp=0, empty code); present in DS floor 100 binary pool
-        internal static readonly EnemyDefaults DS166 = new EnemyDefaults {
-            Id=0, TableIndex=166, ModelCode="c22a", Name="(DS padding tbl_166)", MaxHp=0, AttackPower=0 };
 
         // ── Lookup by species ID ──────────────────────────────────────────────────
         internal static readonly Dictionary<ushort, EnemyDefaults> Defaults;

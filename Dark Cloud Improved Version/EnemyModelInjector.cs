@@ -608,10 +608,16 @@ namespace Dark_Cloud_Improved_Version
         // fallback (logged). Option 2 (live heap-base read) will make these unnecessary.
         private static long[] KnownAddrs(int tableIndex, int dungeon) => (tableIndex, dungeon) switch
         {
+            // Dran
+            (78, 0) => new long[] { 0x012166D0 },
+            // Master Utan
+            (79, 0) => new long[] { 0x01211A90 },
+            // Minotaur Joe
             (83, 0) => new long[] { 0x011A8990, 0x011A8950 },             // c16a Divine Beast Cave
             (83, 1) => new long[] { 0x013B7190, 0x013B7250 },             // c16a Wise Owl Forest
             (83, 2) => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 }, // c16a Shipwreck (3 sections)
             (83, 3) => new long[] { 0x01137750 },                         // c16a Sun & Moon Temple (early floors)
+            (166, 0) =>new long[] { 0x011C3C80 },
             _ => System.Array.Empty<long>(),
         };
 
