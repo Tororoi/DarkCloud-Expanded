@@ -626,6 +626,18 @@ namespace Dark_Cloud_Improved_Version
         private const int  DyingTimerOff = 0x8;            // slot+0x8 = dying/fade countdown
         private const int  DyingFrames   = 120;            // TEMP(testing): re-asserted each tick so the boss stays collapsed (no vanish)
         private static readonly System.Collections.Generic.HashSet<int> _bossDying = new();
+        private static readonly System.Collections.Generic.Dictionary<int, int[]> _lastBlk = new();
+        private static bool _label100Clobbered = false;
+        private static byte[] _origLabel100;            // saved original AI bytecode (to restore)
+        private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _collapseStart = new();
+        private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _deadSince = new();
+        private static readonly System.Collections.Generic.Dictionary<int, float> _peakFrame = new();
+        private const int FadeMs            = 600;       // hold the down pose this long after the collapse, then remove
+        private const int CollapseTimeoutMs = 6000;     // fallback: remove this long after death even if frame never reaches the end
+        private const long MotionBlock = 0x3510;        // per-enemy motion block stride
+        private const long MotionFrameField = 0x1FFC0;  // current PLAYING motion frame (float) @ unit + idx*0x3510 + 0x1FFC0
+        // Collapse (死亡) motion frame range per boss (from info.cfg KEY list); remove when the frame reaches the end.
+        private static int CollapseEndFrame(int tableIndex) => tableIndex switch { 83 => 330, _ => 0 };
         // CRunScript context (per enemy): unit + idx*0x48 + 0x54DD0. +0x2C = current bytecode ptr (the running
         // program, set by run(ctx,label)); +0x3C = the enemy's STB base. Redirecting +0x2C is the data-only lever.
         private const long MainMonstorUnit = 0x21DF87D0;
@@ -747,73 +759,178 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
                 Console.WriteLine($"[BossPatch] NOPed _SET_POSITION for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
             }
+            DumpVtables(tableIndex);
             int rs = BossInfo(tableIndex).runScriptOff;
             int motion = CollapseMotion(tableIndex);
             if (rs != 0 && motion >= 0)
             {
-                // label-120 tail is:  push 0x6F; push 0x1FE; CALL(2)[_RUN_SCRIPT]; op0x17[discard]; push 0; RET.
-                // Rewrite the 5 records from the first push through `push 0` into a full _SET_MOTION call —
-                //   push _SET_MOTION(0xC8); push <motion>; push 1(mode); push 2(param); CALL(4) — leaving RET.
-                // _SET_MOTION reads arg0=motion index, arg1=play mode (must be 1), arg2=param; a single arg
-                // takes a no-op branch, so the multi-arg form is required to actually play the animation.
-                long rec0 = stbBase + rs - 8;                          // start of the `push 0x6F` record
-                if (Memory.ReadByte(stbBase + rs) == 0x6F)             // not yet retargeted
+                // label-120 -> _SET_MOTION(motion,1,2) so the death program plays the collapse (no cutscene).
+                long rec0 = stbBase + rs - 8;
+                if (Memory.ReadByte(stbBase + rs) == 0x6F)
                 {
                     byte[] blk = new byte[60];
-                    void Rec(int i, uint op, uint operand, uint val)
+                    void Rec(int i, uint op, uint opnd, uint val)
                     {
                         System.BitConverter.GetBytes(op).CopyTo(blk, i * 12);
-                        System.BitConverter.GetBytes(operand).CopyTo(blk, i * 12 + 4);
+                        System.BitConverter.GetBytes(opnd).CopyTo(blk, i * 12 + 4);
                         System.BitConverter.GetBytes(val).CopyTo(blk, i * 12 + 8);
                     }
-                    Rec(0, 3, 1, 0xC8);          // push int _SET_MOTION
-                    Rec(1, 3, 1, (uint)motion);  // push int motion index (collapse)
-                    Rec(2, 3, 1, 1);             // push int play-mode 1
-                    Rec(3, 3, 1, 2);             // push int param
-                    Rec(4, 0x15, 4, 0);          // CALL opnd=4
+                    Rec(0, 3, 1, 0xC8); Rec(1, 3, 1, (uint)motion); Rec(2, 3, 1, 1); Rec(3, 3, 1, 2); Rec(4, 0x15, 4, 0);
                     Memory.WriteByteArray(rec0, blk);
-                    Console.WriteLine($"[BossPatch] label-120 -> _SET_MOTION({motion},1,2) [death anim] for boss {tableIndex} @ 0x{rec0:X8}");
+                    Console.WriteLine($"[BossPatch] label-120 -> _SET_MOTION({motion},1,2) for boss {tableIndex} @ 0x{rec0:X8}");
                 }
-                CollapseDrive(tableIndex);
+                CollapseDrive(stbBase, tableIndex);
             }
-            else if (rs != 0)                                          // no known collapse motion: clean instant removal
+            else if (rs != 0)
             {
                 long r = stbBase + rs;
-                if (Memory.ReadByte(r) == 0x6F)
-                {
-                    Memory.WriteByte(r, 0x68);                         // -> _STATUS_SET_DEAD (no cutscene, no animation)
-                    Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8} (no collapse motion known)");
-                }
+                if (Memory.ReadByte(r) == 0x6F) { Memory.WriteByte(r, 0x68); Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8}"); }
             }
         }
 
-        // When a force-spawned boss reaches HP<=0, engage the engine's dying state (slot+0x8 > 0). The engine
-        // then suppresses the AI and keeps running label-120 (our _SET_MOTION collapse) each frame, so motion 9
-        // plays and holds. TEMP(testing): we re-assert the timer each tick so it never counts to 0 and the boss
-        // stays collapsed (no vanish). For the final version, set it once and let it count down (auto-removal).
-        private static void CollapseDrive(int tableIndex)
+        // Reads the STB program table to find the codeOffset (entry+4) of a label. run__CRunScript sets the
+        // running program via ctx+0x2C = STB + that codeOffset, so this is what we redirect to.
+        private static int LabelCodeOffset(long stbBase, int label)
         {
-            ushort eid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.EnemySpeciesId);
+            int tblOff = Memory.ReadInt(stbBase + 0xC);
+            int cnt = Memory.ReadInt(stbBase + 0x10);
+            for (int i = 0; i < cnt && i < 64; i++)
+            {
+                long e = stbBase + tblOff + i * 8;
+                if (Memory.ReadInt(e) == label) return Memory.ReadInt(e + 4);
+            }
+            return -1;
+        }
+
+        // PURE OBSERVATION (no writes): log every enemy slot at HP<=0 — its eid, RenderStatus, the dying timer
+        // slot+0x8, and the program pointer. Goal: compare a REGULAR enemy's death to the BOSS's. If regulars
+        // get slot+0x8 set >0 by the engine (then count down to removal) but the boss stays slot+0x8==0 with the
+        // AI running, that's the exact data difference — the engine engages the death-state for one and not the other.
+        private static void CollapseDrive(long stbBase, int tableIndex)
+        {
+            ushort bossEid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.EnemySpeciesId);
+            int motion = CollapseMotion(tableIndex);
+            int cb = Memory.ReadInt(stbBase + 0x8);
+            int coff100 = LabelCodeOffset(stbBase, 0x64);
+            if (coff100 < 0) return;
+            long l100 = stbBase + cb + Memory.ReadInt(stbBase + coff100);   // label-100 vmcode start
+
+            bool anyDead = false;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                if (sid != eid) { _bossDying.Remove(s); continue; }
                 int rstat = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
                 int hp    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
-                if (rstat == -1) { _bossDying.Remove(s); continue; }
-                if (hp > 0)      { _bossDying.Remove(s); continue; }
-                // HP<=0: engage/maintain the dying state so the engine plays the death program (motion 9) + drops AI.
-                long dying = EnemyAddresses.FloorSlots.SlotAddr(s, DyingTimerOff);
-                int was = Memory.ReadInt(dying);
-                if (was < DyingFrames) Memory.WriteInt(dying, DyingFrames);
-                int now = Memory.ReadInt(dying);
-                // DIAGNOSTIC (read-only): the per-enemy CRunScript context — confirm address (ctx+0x3c should equal
-                // the boss STB base) and see which program (ctx+0x2c bytecode ptr) the boss is running while dying.
-                long ctx = MainMonstorUnit + (long)s * CtxStride + CtxArrayOff;
-                int pc  = Memory.ReadInt(ctx + 0x2C);
-                int stb = Memory.ReadInt(ctx + 0x3C);
-                if (_bossDying.Add(s) || (Environment.TickCount & 0x3FF) < 16)
-                    Console.WriteLine($"[BossDeath] boss {tableIndex} slot {s}: HP={hp} RS={rstat} eid={sid} slot+0x8 {was}->{now} | ctx@0x{ctx:X8} pc(+2c)=0x{pc:X8} stb(+3c)=0x{stb:X8}");
+                if (sid != bossEid || rstat == -1 || hp > 0) { _collapseStart.Remove(s); _deadSince.Remove(s); continue; }
+                anyDead = true;
+                // Clobber label-100 once (save original AI first) so Step plays the collapse instead of the AI.
+                if (!_label100Clobbered)
+                {
+                    _origLabel100 ??= ReadBytes(l100, 84);
+                    Memory.WriteByteArray(l100, DeathSeq(motion));
+                    _label100Clobbered = true;
+                    Console.WriteLine($"[BossDeath] clobbered label-100 @0x{l100:X8} -> _SET_MOTION({motion},1,6);RET");
+                }
+                if (!_deadSince.ContainsKey(s)) _deadSince[s] = System.DateTime.UtcNow;
+                // GATE on the PLAYING motion frame (float): it only enters the collapse range (300-330) once the
+                // collapse actually plays, so this ignores the "finish current motion first" delay. Remove when
+                // the frame reaches the collapse's end frame (just before backstep at 340).
+                float frame = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + MotionFrameField));
+                if ((Environment.TickCount & 0x3F) < 8)
+                    Console.WriteLine($"[BossDeath] slot {s}: motionFrame={frame:F1} (collapse ends at {CollapseEndFrame(tableIndex)})");
+                int endF = CollapseEndFrame(tableIndex);
+                long frameAddr = MainMonstorUnit + (long)s * MotionBlock + MotionFrameField;
+                // Track the PEAK frame (frame loops; peak catches the first collapse reaching the end regardless
+                // of C# tick timing). Only raise peak while in the collapse range so the wrap-around is ignored.
+                float peak = frame; if (_peakFrame.TryGetValue(s, out var pv) && pv > peak) peak = pv;
+                if (frame >= 290 && frame <= endF + 5) _peakFrame[s] = peak;
+                bool collapseDone = _peakFrame.TryGetValue(s, out var pk) && pk >= endF - 4;
+                if (collapseDone)
+                {
+                    // Stop the loop and HOLD the down pose: re-clobber label-100 to no-op + pin the frame at the end.
+                    if (!_collapseStart.ContainsKey(s))
+                    {
+                        Memory.WriteByteArray(l100, HoldSeq());
+                        _collapseStart[s] = System.DateTime.UtcNow;
+                        Console.WriteLine($"[BossDeath] slot {s}: collapse done peak={pk:F0} -> hold down pose {FadeMs}ms");
+                    }
+                    Memory.WriteInt(frameAddr, System.BitConverter.SingleToInt32Bits(endF));   // pin the down pose
+                }
+                bool held = _collapseStart.TryGetValue(s, out var hs) && (System.DateTime.UtcNow - hs).TotalMilliseconds > FadeMs;
+                bool timedOut = (System.DateTime.UtcNow - _deadSince[s]).TotalMilliseconds > CollapseTimeoutMs;
+                if (held || timedOut)
+                {
+                    Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus), -1);
+                    int cnt = Memory.ReadInt(MainMonstorUnit + 0x4C);
+                    if (cnt > 0) Memory.WriteInt(MainMonstorUnit + 0x4C, cnt - 1);
+                    Console.WriteLine($"[BossDeath] slot {s}: removed ({(held ? "hold done" : "timeout")}; count {cnt}->{cnt - 1})");
+                    _peakFrame.Remove(s); _deadSince.Remove(s); _collapseStart.Remove(s);
+                }
+            }
+            if (!anyDead && _label100Clobbered && _origLabel100 != null)
+            {
+                Memory.WriteByteArray(l100, _origLabel100);             // restore AI for live/respawned bosses
+                _label100Clobbered = false;
+                Console.WriteLine("[BossDeath] restored label-100 AI (no dead boss)");
+            }
+        }
+
+        private static byte[] DeathSeq(int motion)
+        {
+            // _SET_MOTION(motion, 1, 2); push 0; RET — param 2 animates (param 6 freezes when re-issued; cancel
+            // caused a step-back). The motion loops, so removal is gated on the peak frame reaching the end.
+            var recs = new (uint op, uint opnd, uint val)[]
+            { (3,1,0xC8),(3,1,(uint)motion),(3,1,1),(3,1,2),(0x15,4,0),(3,1,0),(0xF,0,0) };
+            byte[] blk = new byte[recs.Length * 12];
+            for (int i = 0; i < recs.Length; i++)
+            {
+                System.BitConverter.GetBytes(recs[i].op).CopyTo(blk, i * 12);
+                System.BitConverter.GetBytes(recs[i].opnd).CopyTo(blk, i * 12 + 4);
+                System.BitConverter.GetBytes(recs[i].val).CopyTo(blk, i * 12 + 8);
+            }
+            return blk;
+        }
+
+        private static byte[] HoldSeq()
+        {
+            // push 0; RET  — does nothing (label-100 no-op), so the current motion holds its last pose
+            var recs = new (uint op, uint opnd, uint val)[] { (3,1,0),(0xF,0,0) };
+            byte[] blk = new byte[recs.Length * 12];
+            for (int i = 0; i < recs.Length; i++)
+            {
+                System.BitConverter.GetBytes(recs[i].op).CopyTo(blk, i * 12);
+                System.BitConverter.GetBytes(recs[i].opnd).CopyTo(blk, i * 12 + 4);
+                System.BitConverter.GetBytes(recs[i].val).CopyTo(blk, i * 12 + 8);
+            }
+            return blk;
+        }
+
+        private static byte[] ReadBytes(long addr, int len)
+        {
+            byte[] b = new byte[len];
+            for (int i = 0; i < len; i += 4)
+                System.BitConverter.GetBytes(Memory.ReadInt(addr + i)).CopyTo(b, i);
+            return b;
+        }
+
+        // READ-ONLY DIAGNOSTIC: each enemy is a CMonstorUnit object at unit + idx*0x3510 + 0x1FCD0; its vtable
+        // pointer is at obj+0xA0, and Step (death handling) is vtable[0xA0]. Logging every active slot's vtable
+        // lets us compare the boss (tableIndex's eid) against regular enemies — if the boss has a DIFFERENT
+        // vtable, it's a different subclass and that's why it skips the dying-state path. No writes.
+        private static void DumpVtables(int bossTableIndex)
+        {
+            if ((Environment.TickCount & 0x7FF) >= 48) return;         // ~once every 2s, brief window
+            ushort bossEid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(bossTableIndex) + EnemySpeciesTable.EnemySpeciesId);
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                int rs = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
+                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                if (rs == -1 || eid == 0) continue;
+                long obj = MainMonstorUnit + (long)s * 0x3510 + 0x1FCD0;
+                int vt = Memory.ReadInt(obj + 0xA0);
+                int stepFn = (vt > 0x01000000 && vt < 0x02000000) ? Memory.ReadInt((vt | 0x20000000L) + 0xA0) : 0;
+                string tag = eid == bossEid ? " <-- BOSS" : "";
+                Console.WriteLine($"[Vtable] slot {s}: eid={eid} RS={rs} obj@0x{obj:X8} vtable(+A0)=0x{vt:X8} step(vt+A0)=0x{stepFn:X8}{tag}");
             }
         }
     }

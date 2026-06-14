@@ -1302,6 +1302,20 @@ namespace Dark_Cloud_Improved_Version
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // MS boss
+
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	立ち	idle
+        // 1	30–50	歩き	walk
+        // 2	60–80	走り	run
+        // 3	140–170	飲む	drink
+        // 4	210–260	雄たけび	roar
+        // 5	180–202	攻撃1	attack 1
+        // 6	270–294	攻撃2	attack 2
+        // 7	90–105	ダメージけつ	damage (rear)
+        // 8	115–130	ダメージ顔	damage (face)
+        // 9	300–330	死亡	death
+        // 10	340–356	バックステップ	back step
+
         internal static readonly EnemyDefaults MinotaurJoe = new EnemyDefaults {
             Id=116, TableIndex=83, ModelCode="c16a", Name="Minotaur Joe",    MaxHp=2000,  Abs=50, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
