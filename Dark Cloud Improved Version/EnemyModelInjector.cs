@@ -227,7 +227,8 @@ namespace Dark_Cloud_Improved_Version
             long rec = EnemySpeciesTable.RecordAddress(tableIndex);
             if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
             Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
-            Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
+            Memory.WriteInt(rec + EnemySpeciesTable.MaxHp, 100); // TEMP test aid: weak boss for fast clear-trigger testing
+            Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100), MaxHp->100 for TableIndex {tableIndex}.");
         }
 
         internal static void SetPopulationTarget(int pop)
@@ -582,16 +583,20 @@ namespace Dark_Cloud_Improved_Version
         // TableIndex of a patch-capable boss currently in the roster (-1 = none). Set by the roster code.
         internal static int ArmedBoss = -1;
 
-        // Per-boss STB layout: TableIndex -> (label-1 codeOffset [signature, read at STB+0x54], _INITIALIZE
-        // file offset to NOP). These 4 bosses run cmd 0x24 _INITIALIZE(0,0,0) in label-1; the others lack it
-        // and need their own mechanism (see §5c). Offsets extracted from each dun\monstor\<code>.stb.
-        private static (uint codeOff, int initOff) BossInfo(int tableIndex) => tableIndex switch
+        // Per-boss STB layout: TableIndex -> (label-1 codeOffset [signature @ STB+0x54], _SET_POSITION call
+        // file offset [spawn fix — NOP], _RUN_SCRIPT cmdId-value file offset in label-120 [cutscene fix —
+        // change 0x6F->0x68 = _STATUS_SET_DEAD]). Offsets extracted from each dun\monstor\<code>.stb.
+        //   - label-1 cmd 0x24 _SET_POSITION(0,0,0): the arena origin-reset that displaces a normal-floor spawn.
+        //   - label-120 (death) cmd 0x6F _RUN_SCRIPT: launches the boss-defeat event/cutscene. Regulars call
+        //     0x68 _STATUS_SET_DEAD here instead, so retargeting it makes the boss die cleanly (no cutscene).
+        // c22a (166) has no _RUN_SCRIPT in label-120 (different death mechanism) -> runScriptOff 0, not yet fixed.
+        private static (uint codeOff, int initOff, int runScriptOff) BossInfo(int tableIndex) => tableIndex switch
         {
-            78  => (0x3AC8u, 0x419C),  // Dran        (c12a)
-            79  => (0x4484u, 0x4F48),  // Master Utan (c14a)
-            83  => (0x575Cu, 0x631C),  // MinotaurJoe (c16a)
-            166 => (0x60C0u, 0x6C20),  // c22a
-            _   => (0u, 0),
+            78  => (0x3AC8u, 0x419C, 0x3A3C),  // Dran        (c12a)
+            79  => (0x4484u, 0x4F48, 0x438C),  // Master Utan (c14a)
+            83  => (0x575Cu, 0x631C, 0x5700),  // MinotaurJoe (c16a)
+            166 => (0x60C0u, 0x6C20, 0),       // c22a (no label-120 _RUN_SCRIPT; cutscene fix TBD)
+            _   => (0u, 0, 0),
         };
         internal static bool IsPatchable(int tableIndex) => BossInfo(tableIndex).codeOff != 0;
 
@@ -625,7 +630,7 @@ namespace Dark_Cloud_Improved_Version
         {
             int ti = ArmedBoss;
             if (ti < 0) { _stbBase = -1; return; }
-            var (codeOff, initOff) = BossInfo(ti);
+            var (codeOff, initOff, _) = BossInfo(ti);
             if (codeOff == 0) { _stbBase = -1; return; }
             try
             {
@@ -702,13 +707,30 @@ namespace Dark_Cloud_Improved_Version
             catch { }
         }
 
+        // Applies both STB patches to a located boss STB:
+        //   (1) SPAWN FIX: NOP the label-1 _SET_POSITION(0,0,0) call (60 bytes) so the boss doesn't reset to
+        //       the arena origin on a normal floor.
+        //   (2) CUTSCENE FIX: in label-120 (death), change cmd 0x6F _RUN_SCRIPT -> 0x68 _STATUS_SET_DEAD, so
+        //       the boss dies exactly like a regular (self-removes, no boss-defeat event/dialogue). The call's
+        //       op21 arg count is unchanged (_STATUS_SET_DEAD ignores its args), so the stack stays balanced.
+        // Idempotent: each patch only writes if not already applied.
         private static void EnsureNopped(long stbBase, int initOff, int tableIndex)
         {
             long a = stbBase + initOff;
-            if (Memory.ReadInt(a) != 0)                                // _INITIALIZE push still present
+            if (Memory.ReadInt(a) != 0)                                // _SET_POSITION push still present
             {
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
-                Console.WriteLine($"[BossPatch] NOPed _INITIALIZE for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
+                Console.WriteLine($"[BossPatch] NOPed _SET_POSITION for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
+            }
+            int rs = BossInfo(tableIndex).runScriptOff;
+            if (rs != 0)
+            {
+                long r = stbBase + rs;
+                if (Memory.ReadByte(r) == 0x6F)                        // _RUN_SCRIPT cmdId not yet retargeted
+                {
+                    Memory.WriteByte(r, 0x68);                         // -> _STATUS_SET_DEAD (suppress defeat cutscene)
+                    Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8} (no defeat cutscene)");
+                }
             }
         }
     }

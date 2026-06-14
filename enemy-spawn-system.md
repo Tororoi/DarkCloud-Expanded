@@ -191,33 +191,81 @@ Every spawned enemy runs a behavior script at spawn; the boss's does the (arena)
   total stack-arg count; the **command id is the first pushed int**. (`exe` has no `jalr` because the
   dispatch happens in the call handler via the registered table, not inline.)
 
-### Confirmed fix — MinotaurJoe (`c16a`) on a normal floor
+### Monster STB command map
 
-Decoding `c16a.stb` label-1 (71 calls) showed two phases: **model/anim/attack setup** (`cmd 0x88`×14 part
-loads, `0x82`/`0x86` anim, `0x83`/`0x84` attack defs) then an **arena block** (`0x74`/`0x6a` bounds,
-**`cmd 0x24` = `_INITIALIZE(0,0,0)`** at file `+0x631C`, `0x8c`×13 placements). The single command that
-breaks a normal-floor spawn is `_INITIALIZE(0,0,0)` (the origin reset / arena lock).
+Monster STBs use their own command library (NOT the event library — `cmdId`s collide between libraries).
+`BtSetEventScript` registers it via `ext_func` with the table at **`0x1D8FCB0`, 256 entries** (`cmdId` =
+index → fn pointer). It's BSS (runtime-populated), so read it from a savestate's `eeMemory.bin` (native
+addr == file offset; PCSX2 `.p2s` is a zstd zip — decompress `eeMemory.bin`). Key monster commands:
+`0x24 _SET_POSITION`, `0x68 _STATUS_SET_DEAD`, `0x6B _STATUS_SET_EVENT`, `0xF0 _BOSS_FADE_OUT`,
+`0xF1 _CHECK_FADE_OUT`. (The earlier "`_INITIALIZE`" label was from the wrong library; cmd `0x24` is
+really `_SET_POSITION(0,0,0)` — the origin reset.)
 
-**The fix: NOP `cmd 0x24` only** — zero its 5 `vmcode_t` records (60 bytes at STB file `+0x631C`),
-keeping parts/animation/attacks. Verified live: a single MinotaurJoe then spawns at a normal tile with
-working AI, collision, attacks, and animation.
+### Confirmed fix — bosses on a normal floor
 
-**Single-instance limit:** the boss's body parts (`0x88`×14) attach to **one shared skeleton/handle set**,
-so two instances near each other fight over it and the extras' limbs desync. Multi-part bosses must be
-**spawn-once** — the roster code force-sets `SpawnCap=2` for any `'c'`-prefix (boss) ModelCode.
+A boss's label-1 program calls `cmd 0x24 _SET_POSITION(0,0,0)` (resets it to the arena origin). **The fix:
+NOP that one call** (its 5 `vmcode_t` records = 60 bytes) in the loaded STB, keeping parts/animation/attacks.
+Verified live: the boss spawns on a normal tile with working AI, collision, attacks, animation.
+
+Generalized to the **4 bosses whose label-1 contains `_SET_POSITION`** (others lack it / use a different
+mechanism). Per-boss `(label-1 codeOffset signature @ STB+0x54, _SET_POSITION file offset)`:
+
+| Boss | TableIndex | codeOff (sig) | `_SET_POSITION` offset |
+|--|--|--|--|
+| Dran (c12a) | 78 | `0x3AC8` | `0x419C` |
+| Master Utan (c14a) | 79 | `0x4484` | `0x4F48` |
+| MinotaurJoe (c16a) | 83 | `0x575C` | `0x631C` |
+| Black Knight Mount (c22a) | 166 | `0x60C0` | `0x6C20` |
+
+**Single-instance limit:** the boss's body parts (`cmd 0x88`×N) attach to **one shared skeleton/handle set**,
+so two instances near each other desync. The roster code force-sets `SpawnCap=2` for any `'c'`-prefix boss.
 
 ### Mod implementation (`BossScriptPatcher`, no ISO edit)
 
-`EnemyModelInjector.BossScriptPatcher` (armed when TableIndex 83 is in the roster) runs each dungeon-thread
-tick: it incrementally scans the dun-overlay heap (`0x01C00000–0x02000000`) for the loaded `c16a.stb`
-(signature: `"STB\0"` + label-1 codeOffset `0x575C` at `+0x54`), then writes 60 zero bytes at `+0x631C` to
-NOP `_INITIALIZE`. The STB reloads each floor entry, so it re-NOPs every tick — catching the loaded STB
-before `ArrangementPos` spawns the boss. Touches only loaded EE RAM; the disc/ISO is never modified, so
-the real boss arena fight is unaffected. (First boss-floor entry may need a re-enter if the scan finishes
-after the spawn; once the STB address is cached, subsequent entries patch in time.)
+`EnemyModelInjector.BossScriptPatcher` (armed via `ArmedBoss` when a patchable boss is in the roster) runs
+each dungeon-thread tick. The **roster reorders the boss first**, so its STB load address depends only on
+`(dungeon, floor-half)` — not the filler. The patcher probes **known per-(boss, dungeon) addresses** directly
+(instant; c16a tabled for dungeons 0–3, multiple per dungeon for floor-halves), with a windowed
+scan-by-signature (`"STB\0"` + the boss's codeOffset at `+0x54`) fallback that **logs** new addresses to
+add to the table. On a hit it NOPs `_SET_POSITION` (60 bytes at the boss's offset). The STB reloads each
+floor entry, so it re-applies every tick — catching it before `ArrangementPos` spawns the boss. Touches
+only loaded EE RAM; the disc/ISO is never modified, so the real arena fight is unaffected.
 
-The static-ISO equivalent (for testing) is a 4-byte/60-byte edit to `c16a.stb` in `data.dat` at
-`2622*2048 + 0x1AFE5800 + 0x631C` — but that also changes the real arena fight, so the RAM patch is preferred.
+The static-ISO equivalent (used to prove the fix) is a 60-byte edit to `<code>.stb` in `data.dat` at
+`2622*2048 + datadatOffset + initOffset` — but that also changes the real arena fight, so the RAM patch is
+preferred.
+
+### Dungeon clear on boss death (engine mechanism, not STB)
+
+Killing a force-spawned boss triggers the dungeon-clear / defeat sequence. This is **entirely engine-side** —
+`c16a.stb` has no defeat command at all (only some bosses have `_BOSS_FADE_OUT` for the death animation, and
+that's *not* the clear trigger). The full chain:
+
+```
+enemy death → CDngStatusData kill-count reaches its required threshold ([obj+0x4360])
+            → sets the boss-defeated flag [obj+0x431C] = 1
+            → combat loop checks it via GetBossDefeated() @ 0x173210 (returns [obj+0x431C])
+            → (gated by SystemMesCheck @ 0x160110: if [gp-0x7194] > 0 the clear is just DEFERRED)
+            → SetBattleState(2)  @ 0x172CD0  (the ONLY writer of battleState = gp-0x7094 = 0x01DF8F6C)
+            → battleState jump table @ 0x29A2B0, state 2 → 0x172E10 → jal 0x1F5CF0
+            → dungeon-end fn 0x1F5CF0: writes dungeonClear (0x01DF881C), sets exit flags, fades audio
+```
+
+Key addresses: `SetBattleState` `0x172CD0`; defeat call site `0x172E18` (`jal 0x1F5CF0`, the *only* caller of
+the clear fn); `SetBattleState(2)` call site `0x17B160`; boss-defeated flag in **`CDngStatusData`** at
+`[obj+0x431C]` (`obj = fn0x1581E0([gp-0x72E4])`), set by the kill-count/threshold logic at `0x1BE18C`
+(threshold `[obj+0x4360]`, per-slot data `[+0x4362]`/`[+0x4368]`).
+
+**Why prior suppression attempts failed:** (1) NOPing the lone `dungeonClear` store at `0x201F5D38` only
+kills one of several things `0x1F5CF0` does — the exit still fires from its other flag writes. (2) A C#
+frame-monitor can't intercept: the flag-set → `SetBattleState(2)` → clear all run in the **same synchronous
+frame**, so a poll-and-reset is always too late. (3) `AttackPower` gating is irrelevant — recognition is the
+`CDngStatusData` threshold, not `AttackPower`.
+
+**Promising data-only lever (to implement):** raise the required threshold `[CDngStatusData+0x4360]` while a
+force-spawned boss is on a non-boss floor, so the accumulated kill value never exceeds it → the defeated flag
+is **never set** → no clear. Suppressed at the source (no code patch, no race), and restored on the real boss
+floor. Needs the `CDngStatusData` base resolved (via `fn0x1581E0`); **next task.**
 
 ---
 
