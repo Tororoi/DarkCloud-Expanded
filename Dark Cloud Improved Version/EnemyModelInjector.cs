@@ -607,6 +607,31 @@ namespace Dark_Cloud_Improved_Version
 
         private static long _stbBase = -1;
 
+        // --- BOSS DEATH = collapse animation + clean removal -----------------------------------------
+        // The boss's defeat cutscene is its label-120 _RUN_SCRIPT(0x6F). We retarget it to _SET_MOTION(0xC8)
+        // so the boss plays its own collapse/death motion (no cutscene), then C# removes the slot like
+        // _STATUS_SET_DEAD once the animation has played (CollapseHoldMs). The collapse motion index per
+        // boss comes from its model's info.cfg KEY list (decoded from <code>.chr): for c16a/MinotaurJoe,
+        // motion 9 = 死亡 ("death"). Other bosses' indices are read the same way -> CollapseMotion().
+        private static int CollapseMotion(int tableIndex) => tableIndex switch
+        {
+            83 => 9,    // MinotaurJoe (c16a): KEY 9 = 死亡 "death" (frames 300-330)
+            _  => -1,   // unknown -> fall back to instant _STATUS_SET_DEAD (no collapse)
+        };
+        // Death state (engine, in CheckDmg/MonsterStep): an enemy is "dying" when slot+0x8 > 0. While set, the
+        // engine suppresses the AI (label-100), keeps running the death program (our label-120 _SET_MOTION) every
+        // frame, fades it (PalletStep), and removes it when the timer counts down to 0. Bosses never get this set
+        // (they trigger the defeat cutscene instead), so their AI just resumes and overrides the death motion.
+        // We engage it ourselves when the boss's HP<=0 — which also makes motion 9 stick (re-run each frame).
+        private const int  DyingTimerOff = 0x8;            // slot+0x8 = dying/fade countdown
+        private const int  DyingFrames   = 120;            // TEMP(testing): re-asserted each tick so the boss stays collapsed (no vanish)
+        private static readonly System.Collections.Generic.HashSet<int> _bossDying = new();
+        // CRunScript context (per enemy): unit + idx*0x48 + 0x54DD0. +0x2C = current bytecode ptr (the running
+        // program, set by run(ctx,label)); +0x3C = the enemy's STB base. Redirecting +0x2C is the data-only lever.
+        private const long MainMonstorUnit = 0x21DF87D0;
+        private const long CtxArrayOff     = 0x54DD0;
+        private const int  CtxStride       = 0x48;
+
         // Known STB load addresses per (boss TableIndex, dungeon). Boss-first makes these roster-independent;
         // one per floor-half (the address shifts across the mid-dungeon event floor) — we probe all candidates,
         // so no half-detection is needed. c16a populated from testing; other bosses/dungeons fill via the scan
@@ -707,12 +732,12 @@ namespace Dark_Cloud_Improved_Version
             catch { }
         }
 
-        // Applies both STB patches to a located boss STB:
+        // Applies both STB patches to a located boss STB, then services the death->collapse->removal:
         //   (1) SPAWN FIX: NOP the label-1 _SET_POSITION(0,0,0) call (60 bytes) so the boss doesn't reset to
         //       the arena origin on a normal floor.
-        //   (2) CUTSCENE FIX: in label-120 (death), change cmd 0x6F _RUN_SCRIPT -> 0x68 _STATUS_SET_DEAD, so
-        //       the boss dies exactly like a regular (self-removes, no boss-defeat event/dialogue). The call's
-        //       op21 arg count is unchanged (_STATUS_SET_DEAD ignores its args), so the stack stays balanced.
+        //   (2) DEATH FIX: in label-120 (death), change cmd 0x6F _RUN_SCRIPT(510) -> 0xC8 _SET_MOTION(collapse)
+        //       so the boss plays its own death/collapse animation instead of launching the defeat cutscene.
+        //       The call stays a 2-item op21 (cmdId + 1 arg = motion index), so the stack is balanced.
         // Idempotent: each patch only writes if not already applied.
         private static void EnsureNopped(long stbBase, int initOff, int tableIndex)
         {
@@ -723,14 +748,72 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine($"[BossPatch] NOPed _SET_POSITION for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
             }
             int rs = BossInfo(tableIndex).runScriptOff;
-            if (rs != 0)
+            int motion = CollapseMotion(tableIndex);
+            if (rs != 0 && motion >= 0)
+            {
+                // label-120 tail is:  push 0x6F; push 0x1FE; CALL(2)[_RUN_SCRIPT]; op0x17[discard]; push 0; RET.
+                // Rewrite the 5 records from the first push through `push 0` into a full _SET_MOTION call —
+                //   push _SET_MOTION(0xC8); push <motion>; push 1(mode); push 2(param); CALL(4) — leaving RET.
+                // _SET_MOTION reads arg0=motion index, arg1=play mode (must be 1), arg2=param; a single arg
+                // takes a no-op branch, so the multi-arg form is required to actually play the animation.
+                long rec0 = stbBase + rs - 8;                          // start of the `push 0x6F` record
+                if (Memory.ReadByte(stbBase + rs) == 0x6F)             // not yet retargeted
+                {
+                    byte[] blk = new byte[60];
+                    void Rec(int i, uint op, uint operand, uint val)
+                    {
+                        System.BitConverter.GetBytes(op).CopyTo(blk, i * 12);
+                        System.BitConverter.GetBytes(operand).CopyTo(blk, i * 12 + 4);
+                        System.BitConverter.GetBytes(val).CopyTo(blk, i * 12 + 8);
+                    }
+                    Rec(0, 3, 1, 0xC8);          // push int _SET_MOTION
+                    Rec(1, 3, 1, (uint)motion);  // push int motion index (collapse)
+                    Rec(2, 3, 1, 1);             // push int play-mode 1
+                    Rec(3, 3, 1, 2);             // push int param
+                    Rec(4, 0x15, 4, 0);          // CALL opnd=4
+                    Memory.WriteByteArray(rec0, blk);
+                    Console.WriteLine($"[BossPatch] label-120 -> _SET_MOTION({motion},1,2) [death anim] for boss {tableIndex} @ 0x{rec0:X8}");
+                }
+                CollapseDrive(tableIndex);
+            }
+            else if (rs != 0)                                          // no known collapse motion: clean instant removal
             {
                 long r = stbBase + rs;
-                if (Memory.ReadByte(r) == 0x6F)                        // _RUN_SCRIPT cmdId not yet retargeted
+                if (Memory.ReadByte(r) == 0x6F)
                 {
-                    Memory.WriteByte(r, 0x68);                         // -> _STATUS_SET_DEAD (suppress defeat cutscene)
-                    Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8} (no defeat cutscene)");
+                    Memory.WriteByte(r, 0x68);                         // -> _STATUS_SET_DEAD (no cutscene, no animation)
+                    Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8} (no collapse motion known)");
                 }
+            }
+        }
+
+        // When a force-spawned boss reaches HP<=0, engage the engine's dying state (slot+0x8 > 0). The engine
+        // then suppresses the AI and keeps running label-120 (our _SET_MOTION collapse) each frame, so motion 9
+        // plays and holds. TEMP(testing): we re-assert the timer each tick so it never counts to 0 and the boss
+        // stays collapsed (no vanish). For the final version, set it once and let it count down (auto-removal).
+        private static void CollapseDrive(int tableIndex)
+        {
+            ushort eid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.EnemySpeciesId);
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                if (sid != eid) { _bossDying.Remove(s); continue; }
+                int rstat = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
+                int hp    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                if (rstat == -1) { _bossDying.Remove(s); continue; }
+                if (hp > 0)      { _bossDying.Remove(s); continue; }
+                // HP<=0: engage/maintain the dying state so the engine plays the death program (motion 9) + drops AI.
+                long dying = EnemyAddresses.FloorSlots.SlotAddr(s, DyingTimerOff);
+                int was = Memory.ReadInt(dying);
+                if (was < DyingFrames) Memory.WriteInt(dying, DyingFrames);
+                int now = Memory.ReadInt(dying);
+                // DIAGNOSTIC (read-only): the per-enemy CRunScript context — confirm address (ctx+0x3c should equal
+                // the boss STB base) and see which program (ctx+0x2c bytecode ptr) the boss is running while dying.
+                long ctx = MainMonstorUnit + (long)s * CtxStride + CtxArrayOff;
+                int pc  = Memory.ReadInt(ctx + 0x2C);
+                int stb = Memory.ReadInt(ctx + 0x3C);
+                if (_bossDying.Add(s) || (Environment.TickCount & 0x3FF) < 16)
+                    Console.WriteLine($"[BossDeath] boss {tableIndex} slot {s}: HP={hp} RS={rstat} eid={sid} slot+0x8 {was}->{now} | ctx@0x{ctx:X8} pc(+2c)=0x{pc:X8} stb(+3c)=0x{stb:X8}");
             }
         }
     }
