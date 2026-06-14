@@ -628,6 +628,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly System.Collections.Generic.HashSet<int> _bossDying = new();
         private static readonly System.Collections.Generic.Dictionary<int, int[]> _lastBlk = new();
         private static bool _label100Clobbered = false;
+        private static bool _label100Held = false;
         private static byte[] _origLabel100;            // saved original AI bytecode (to restore)
         private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _collapseStart = new();
         private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _deadSince = new();
@@ -824,22 +825,19 @@ namespace Dark_Cloud_Improved_Version
                 if (sid != bossEid || rstat == -1 || hp > 0) { _collapseStart.Remove(s); _deadSince.Remove(s); continue; }
                 anyDead = true;
                 // Clobber label-100 once (save original AI first) so Step plays the collapse instead of the AI.
+                int endF = CollapseEndFrame(tableIndex);
+                long frameAddr = MainMonstorUnit + (long)s * MotionBlock + MotionFrameField;
                 if (!_label100Clobbered)
                 {
                     _origLabel100 ??= ReadBytes(l100, 84);
-                    Memory.WriteByteArray(l100, DeathSeq(motion));
+                    Memory.WriteByteArray(l100, DeathSeq(motion));                                  // label-100 -> _SET_MOTION(9,1,2)
                     _label100Clobbered = true;
-                    Console.WriteLine($"[BossDeath] clobbered label-100 @0x{l100:X8} -> _SET_MOTION({motion},1,6);RET");
+                    Console.WriteLine($"[BossDeath] clobbered label-100 @0x{l100:X8} -> _SET_MOTION({motion},1,2)");
                 }
                 if (!_deadSince.ContainsKey(s)) _deadSince[s] = System.DateTime.UtcNow;
-                // GATE on the PLAYING motion frame (float): it only enters the collapse range (300-330) once the
-                // collapse actually plays, so this ignores the "finish current motion first" delay. Remove when
-                // the frame reaches the collapse's end frame (just before backstep at 340).
-                float frame = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + MotionFrameField));
+                float frame = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(frameAddr));
                 if ((Environment.TickCount & 0x3F) < 8)
-                    Console.WriteLine($"[BossDeath] slot {s}: motionFrame={frame:F1} (collapse ends at {CollapseEndFrame(tableIndex)})");
-                int endF = CollapseEndFrame(tableIndex);
-                long frameAddr = MainMonstorUnit + (long)s * MotionBlock + MotionFrameField;
+                    Console.WriteLine($"[BossDeath] slot {s}: motionFrame={frame:F1} (collapse ends at {endF})");
                 // Track the PEAK frame (frame loops; peak catches the first collapse reaching the end regardless
                 // of C# tick timing). Only raise peak while in the collapse range so the wrap-around is ignored.
                 float peak = frame; if (_peakFrame.TryGetValue(s, out var pv) && pv > peak) peak = pv;
@@ -871,14 +869,14 @@ namespace Dark_Cloud_Improved_Version
             {
                 Memory.WriteByteArray(l100, _origLabel100);             // restore AI for live/respawned bosses
                 _label100Clobbered = false;
+                _label100Held = false;
                 Console.WriteLine("[BossDeath] restored label-100 AI (no dead boss)");
             }
         }
 
         private static byte[] DeathSeq(int motion)
         {
-            // _SET_MOTION(motion, 1, 2); push 0; RET — param 2 animates (param 6 freezes when re-issued; cancel
-            // caused a step-back). The motion loops, so removal is gated on the peak frame reaching the end.
+            // _SET_MOTION(motion, 1, 2); push 0; RET — param 2 animates reliably (param 6 froze / no collapse).
             var recs = new (uint op, uint opnd, uint val)[]
             { (3,1,0xC8),(3,1,(uint)motion),(3,1,1),(3,1,2),(0x15,4,0),(3,1,0),(0xF,0,0) };
             byte[] blk = new byte[recs.Length * 12];
