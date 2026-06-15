@@ -1266,63 +1266,199 @@ namespace Dark_Cloud_Improved_Version
         // All bosses have MinGoldDrop=0, DropChance=0, StealItemId=65535 (can't steal).
         // TableIndex values confirmed from ISO extraction 2026-06-04.
 
-        // SW boss — projectile/summon entity of Ice Queen; not a standalone fight
-        internal static readonly EnemyDefaults IceArrow = new EnemyDefaults {
-            Id=84, TableIndex=76, ModelCode="kori", Name="Ice Arrow",        MaxHp=100,   Abs=17, MinGoldDrop=0, DropChance=0,
-            Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=2.0f,  EntityScaleCopy=2.0f,  Unk090A=5,  Unk090B=0,
-            StealItemId=65535, ItemResA=70, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0 };
+        // ═══════════════════════════════════════════════════════════════════════════════════════════════
+        // BOSS MOTION LISTS — each boss's animations, decoded from its model's <code>.chr info.cfg KEY block.
+        // Source: data.dat (inside the ISO) → the .chr's first member is text info.cfg with a KEY_START…
+        // MOTION_END list, one `KEY <start>,<end>,<speed>, //<name(Shift-JIS)> <idx>` per motion. Locate the
+        // .chr via data.hed (filename @ index*80) → data.hd2 (entry @ 16 + index*32: [+0]=data.dat offset,
+        // [+4]=size, [+8]=sector). idx below = motion-table index (the `_SET_MOTION` arg); "死亡" = the
+        // death/collapse motion used by EnemyModelInjector.BossScriptPatcher.CollapseMotion. See the
+        // datadat-index-and-chr-motions note + enemy-spawn-system.md §"Boss death animation".
+        // ═══════════════════════════════════════════════════════════════════════════════════════════════
 
-        // DBC boss
+        // DBC boss. Motions: c12a.chr info.cfg @ data.dat 0x1a8d6000.
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–30	飛行	flight
+        // 1	35–55	着地	landing (touches down @50)
+        // 2	270–300	突進（離陸）	charge (takeoff)
+        // 3	200–205	突進ループ	charge loop
+        // 4	70–80	突進（着地）	charge (land @74)
+        // 5	85–95	ダメージ	damage
+        // 6	100–120	死亡	death ← collapse
+        // 7	125–145	離陸	takeoff
+        // 8	175–196	火	fire breath
+        // 9	210–215	毛繕い（入り）	grooming (enter)
+        // 10	215–225	毛繕いループ	grooming loop
+        // 11	225–240	毛繕い（戻り）	grooming (return)
+        // 12	245–265	じたじた	squirm
         internal static readonly EnemyDefaults Dran = new EnemyDefaults {
             Id=112, TableIndex=78, ModelCode="c12a", Name="Dran",            MaxHp=250,   Abs=10, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=150, ThunderRes=100, WindRes=100, HolyRes=50,
             EntityScale=45.0f, EntityScaleCopy=45.0f, Unk090A=10, Unk090B=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
-        // SW boss — ice=65486 (0xFFCE, -50 as int16) = fire-absorbing (same encoding as Vulcan's fire)
-        internal static readonly EnemyDefaults IceQueen = new EnemyDefaults {
-            Id=113, TableIndex=80, ModelCode="c13a", Name="Ice Queen",       MaxHp=700,   Abs=30, MinGoldDrop=0, DropChance=0,
-            Category=EnemyCategory.Mage, FireRes=150, IceRes=65486, ThunderRes=80, WindRes=80, HolyRes=120,
-            EntityScale=13.0f, EntityScaleCopy=13.0f, Unk090A=10, Unk090B=0,
-            StealItemId=65535, ItemResA=40, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
-
-        // WOF boss
+        // WOF boss. Motions: c14a.chr info.cfg @ data.dat 0x1ad22000.
+        // NOTE: the .chr's own labels skip 11 (…10, 12, 13, 14, 15); Idx below is the sequential table index
+        // (the _SET_MOTION arg). So verify death = 13 (sequential) vs the .chr's "14" when wiring CollapseMotion.
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	立ち	idle
+        // 1	30–50	歩き	walk
+        // 2	60–75	走り	run
+        // 3	80–96	通常攻撃	normal attack
+        // 4	110–163	ため攻撃	charge attack
+        // 5	175–230	種マシンガン	seed machinegun
+        // 6	240–257	ダメージ左足入り	damage L-leg (enter)
+        // 7	257–273	フゥフゥループ	panting loop
+        // 8	273–278	ダメージ左足戻り	damage L-leg (return)
+        // 9	285–302	ダメージ右足入り	damage R-leg (enter)
+        // 10	302–318	フゥフゥループ	panting loop
+        // 11	318–323	ダメージ右足戻り	damage R-leg (return)
+        // 12	335–349	ダメージ	damage
+        // 13	360–385	死亡	death ← collapse
+        // 14	400–420	バックステップ	back step
         internal static readonly EnemyDefaults MasterUtan = new EnemyDefaults {
             Id=114, TableIndex=79, ModelCode="c14a", Name="Master Utan",     MaxHp=700,   Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=35.0f, EntityScaleCopy=35.0f, Unk090A=12, Unk090B=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
-        // SMT boss
+        // SW boss — ice=65486 (0xFFCE, -50 as int16) = fire-absorbing (same encoding as Vulcan's fire)
+        // Motions: c13a.chr info.cfg @ data.dat 0x1a9f6800.
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	立ち	idle
+        // 1	25–45	歩き	walk
+        // 2	50–70	バックステップ	back step
+        // 3	100–120	右ステップ	right step
+        // 4	75–95	左ステップ	left step
+        // 5	10–20	ダミー	(dummy)
+        // 6	10–20	ダミー	(dummy)
+        // 7	10–20	ダミー	(dummy)
+        // 8	150–160	ダメージ1	damage 1
+        // 9	10–20	ダミー	(dummy)
+        // 10	10–20	ダミー	(dummy)
+        // 11	165–185	死亡	death ← collapse
+        // 12	185	死亡ループ	death loop
+        // 13	125–145	攻撃1	attack 1
+        // 14	10–20	ダミー	(dummy)
+        // 15	10–20	ダミー	(dummy)
+        // 16	10–20	攻撃2	attack 2
+        // 17	10–20	ダミー	(dummy)
+        // 18	10–20	ダミー	(dummy)
+        // 19	190–200	竜巻（入り）	tornado (enter)
+        // 20	205–215	竜巻（ループ）	tornado (loop)
+        // 21	216–230	竜巻（戻り）	tornado (return)
+        // 22	240–270	氷落とし	ice drop
+        // 23	280–313	機雷たつまき	mine tornado
+        // 24	320–326	バリア（入り）	barrier (enter)
+        // 25	327–335	バリア（ループ）	barrier (loop)
+        // 26	336–340	バリア（戻り）	barrier (return)
+        internal static readonly EnemyDefaults IceQueen = new EnemyDefaults {
+            Id=113, TableIndex=80, ModelCode="c13a", Name="Ice Queen",       MaxHp=700,   Abs=30, MinGoldDrop=0, DropChance=0,
+            Category=EnemyCategory.Mage, FireRes=150, IceRes=65486, ThunderRes=80, WindRes=80, HolyRes=120,
+            EntityScale=13.0f, EntityScaleCopy=13.0f, Unk090A=10, Unk090B=0,
+            StealItemId=65535, ItemResA=40, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
+
+        // SW boss — projectile/summon entity of Ice Queen; not a standalone fight.
+        // Motions: kori.chr info.cfg @ data.dat 0x1e3a8800 — 2 (projectile; no death anim).
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–30	氷出現	ice appear
+        // 1	40–55	氷破裂	ice burst
+        internal static readonly EnemyDefaults IceArrow = new EnemyDefaults {
+            Id=84, TableIndex=76, ModelCode="kori", Name="Ice Arrow",        MaxHp=100,   Abs=17, MinGoldDrop=0, DropChance=0,
+            Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=2.0f,  EntityScaleCopy=2.0f,  Unk090A=5,  Unk090B=0,
+            StealItemId=65535, ItemResA=70, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0 };
+
+        // IceQueen (SW floor 18) fight companions — all id=0, boss sentinels. Ice-attack effect entities.
+        // code=bari → baria.chr (barrier) @ data.dat 0x1e1b1000 — 0 ループ(loop) / 1 消滅(despawn) / 2 出現(appear).
+        internal static readonly EnemyDefaults IQComp101 = new EnemyDefaults {
+            Id=0, TableIndex=101, ModelCode="bari", Name="(IQ companion bari)", MaxHp=0, AttackPower=65535 };
+        // code=kori → kori.chr (ice arrow); motions documented above at IceArrow (0 ice appear / 1 ice burst).
+        internal static readonly EnemyDefaults IQComp102 = new EnemyDefaults {
+            Id=0, TableIndex=102, ModelCode="kori", Name="(IQ companion kori)", MaxHp=0, AttackPower=65535 };
+        // code=i_me → i_meteo.chr (ice meteor) @ data.dat 0x1e37a000 — 0 氷生成(ice form) / 1 ループ / 2 爆発(explode).
+        internal static readonly EnemyDefaults IQComp103 = new EnemyDefaults {
+            Id=0, TableIndex=103, ModelCode="i_me", Name="(IQ companion i_me)", MaxHp=0, AttackPower=65535 };
+        // code=i_ta → i_tatumaki.chr (ice tornado) @ data.dat 0x1e38b800 — 0 柱出現(pillar) / 1 竜巻(tornado) / 2 竜巻消える(vanish).
+        internal static readonly EnemyDefaults IQComp104 = new EnemyDefaults {
+            Id=0, TableIndex=104, ModelCode="i_ta", Name="(IQ companion i_ta)", MaxHp=0, AttackPower=65535 };
+
+        // SMT boss. Motions: c15a.chr info.cfg @ data.dat 0x1ae5c000.
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	待機	idle
+        // 1	30–50	開く	open
+        // 2	50–55	開きループ	open loop
+        // 3	55–65	閉じる	close
+        // 4	70–80	ダメージ	damage
+        // 5	90–110	死亡	death ← collapse
+        // 6	110–115	死亡ループ	death loop
         internal static readonly EnemyDefaults KingsCurse = new EnemyDefaults {
             Id=115, TableIndex=81, ModelCode="c15a", Name="King's Curse",    MaxHp=2000,  Abs=40, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=125,
             EntityScale=6.0f,  EntityScaleCopy=6.0f,  Unk090A=10, Unk090B=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
-        // MS boss
+        // Unlisted phase entity — code=c15b; not in Enemies.cs; suspected SMT King's-Curse scripted phase.
+        // Motions: c15b.chr info.cfg @ data.dat 0x1ae94000 — no "死亡" (transformation entity; no collapse).
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	立ち	idle
+        // 1	30–50	歩き	walk
+        // 2	60–95	攻撃	attack
+        // 3	115–135	出現	appear
+        // 4	140–145	ノーマル〜黒玉	normal → black-orb
+        // 5	150–155	黒玉〜ノーマル	black-orb → normal
+        // 6	160–165	ノーマル〜棺桶	normal → coffin
+        // 7	180–185	黒玉〜棺桶	black-orb → coffin
+        // 8	190–200	黒丸ループ	black-orb loop
+        // 9	165–175	棺桶ループ	coffin loop
+        internal static readonly EnemyDefaults UnknownPhase100 = new EnemyDefaults {
+            Id=100, TableIndex=82, ModelCode="c15b", Name="(phase entity 100)", MaxHp=1000, Abs=40, MinGoldDrop=0, DropChance=0,
+            Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=4.0f,  EntityScaleCopy=4.0f,  Unk090A=10, Unk090B=0,
+            StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
+        // MS boss. Motions: c16a.chr info.cfg @ data.dat 0x1aee3000.
         // Idx	Frames	Name (JP)	Meaning
         // 0	10–20	立ち	idle
         // 1	30–50	歩き	walk
         // 2	60–80	走り	run
         // 3	140–170	飲む	drink
-        // 4	210–260	雄たけび	roar
+        // 4	210–260	雄たけび	roar ← BossScriptPatcher.RoarMotion
         // 5	180–202	攻撃1	attack 1
         // 6	270–294	攻撃2	attack 2
         // 7	90–105	ダメージけつ	damage (rear)
         // 8	115–130	ダメージ顔	damage (face)
-        // 9	300–330	死亡	death
+        // 9	300–330	死亡	death ← collapse
         // 10	340–356	バックステップ	back step
-
         internal static readonly EnemyDefaults MinotaurJoe = new EnemyDefaults {
             Id=116, TableIndex=83, ModelCode="c16a", Name="Minotaur Joe",    MaxHp=2000,  Abs=50, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
             EntityScale=25.0f, EntityScaleCopy=25.0f, Unk090A=12, Unk090B=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
-        // GoT boss (final)
+        // GoT boss (final). Motions: c17a.chr info.cfg @ data.dat 0x1afed000.
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	待機	idle
+        // 1	30–38	たたみ入り	wing-fold (enter)
+        // 2	39–50	たたみループ	wing-fold (loop)
+        // 3	51–65	たたみ戻り	wing-fold (return)
+        // 4	75–81	はばたき入り	wing-flap (enter)
+        // 5	81–91	はばたきループ	wing-flap (loop)
+        // 6	91–97	はばたき戻り	wing-flap (return)
+        // 7	110–121	右攻撃	right attack
+        // 8	121–122	ループ	loop
+        // 9	122–130	戻り	return
+        // 10	145–156	左攻撃	left attack
+        // 11	156–157	ループ	loop
+        // 12	157–165	戻り	return
+        // 13	175–188	ビーム入り	beam (enter)
+        // 14	188–189	ビームループ	beam (loop)
+        // 15	188–197	ビーム戻り	beam (return)
+        // 16	210–222	ダメージ目	damage (eye)
+        // 17	230–235	ダメージ右手	damage (R hand)
+        // 18	245–250	ダメージ左手	damage (L hand)
+        // 19	260–295	死亡	death ← collapse
+        // 20	292–295	死亡ループ	death loop
         internal static readonly EnemyDefaults DarkGenie = new EnemyDefaults {
             Id=117, TableIndex=84, ModelCode="c17a", Name="Dark Genie",      MaxHp=2000,  Abs=60, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
@@ -1330,13 +1466,20 @@ namespace Dark_Cloud_Improved_Version
             StealItemId=65535, ItemResA=30, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // Dark Genie second form — not named in Enemies.cs; code=c17c; same resistance profile as hands
+        // Motions: c17b.chr info.cfg @ data.dat 0x1b0d8800 — only 2 (no death anim; defeat is scripted).
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	9–10	攻撃のかまえ	attack stance
+        // 1	20–30	ダメージ	damage
         internal static readonly EnemyDefaults DarkGenieForm2 = new EnemyDefaults {
             Id=118, TableIndex=85, ModelCode="c17b", Name="Dark Genie (form 2)", MaxHp=3200, Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=8.0f,  EntityScaleCopy=8.0f,  Unk090A=0,  Unk090B=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
-        // Dark Genie hands
+        // Dark Genie hands. Motions: c17c.chr info.cfg @ data.dat 0x1b160800 — only 2 (no death anim).
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	9–10	攻撃のかまえ	attack stance
+        // 1	20–30	ダメージ	damage
         internal static readonly EnemyDefaults RightHand = new EnemyDefaults {
             Id=119, TableIndex=86, ModelCode="c17c", Name="Right Hand",      MaxHp=3200,  Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
@@ -1345,41 +1488,20 @@ namespace Dark_Cloud_Improved_Version
 
         // Left Hand has no EID=120 record in the table; its HP (90) is stored in Right Hand's u98
         // via the off-by-one. The game spawns it using an anonymous EID=0 record at idx=87.
+        // Motions: ModelCode "c17_" has no own .chr (shares the hand model); see Right Hand (c17c) above.
         internal static readonly EnemyDefaults LeftHand = new EnemyDefaults {
             Id=120, TableIndex=87, ModelCode="c17_", Name="Left Hand",       MaxHp=90,    Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f,  EntityScaleCopy=5.0f,  Unk090A=0,  Unk090B=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };  // idx=87 is the anonymous EID=0 record
 
-        internal static readonly EnemyDefaults WineKeg = new EnemyDefaults {
-            Id=121, TableIndex=91, ModelCode="e85a", Name="Wine Keg",        MaxHp=80,    Abs=0,  MinGoldDrop=0, DropChance=0,
-            Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=7.0f,  EntityScaleCopy=7.0f,  Unk090A=0,  Unk090B=0,
-            StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
+        // These are ATTACK/EFFECT entities (projectiles, beams, barriers, summons), not standalone enemies —
+        // ModelCode is a FAMILY PREFIX, not an exact filename, and they have no "死亡": they vanish via
+        // 消滅/爆発 (despawn/explode). For these the boss-death system doesn't apply (scripted despawn).
 
-        // Unlisted phase entity — code=c16a; not in Enemies.cs; suspected SW/SM scripted phase
-        internal static readonly EnemyDefaults UnknownPhase100 = new EnemyDefaults {
-            Id=100, TableIndex=82, ModelCode="c15b", Name="(phase entity 100)", MaxHp=1000, Abs=40, MinGoldDrop=0, DropChance=0,
-            Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=4.0f,  EntityScaleCopy=4.0f,  Unk090A=10, Unk090B=0,
-            StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
-
-        // DS boss — confirmed from EnemySpeciesTable scan 2026-06-05: tbl_165 is BlackKnight (id=221, hp=50000, BOSS, code=c22a).
-        internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
-            Id=221, TableIndex=165, ModelCode="c21a", Name="Black Knight",    MaxHp=50000, Abs=5,  MinGoldDrop=0, DropChance=0,
-            Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=100,
-            StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50 };
-        // tbl_166 = Black Knight Mount; present in DS floor 100 binary pool
-        internal static readonly EnemyDefaults BlackKnightMount = new EnemyDefaults {
-            Id=221, TableIndex=166, ModelCode="c22a", Name="Black Knight", MaxHp=50000, AttackPower=0 };
-
-
-        // ── Boss companion / phase entities ──────────────────────────────────────
-        // All have id=0 (no species entity), AttackPower=65535 (boss sentinel).
-        // Not added to Defaults dictionary (id=0 is not a valid lookup key).
-
-        // Dark Genie fight companions: code=c17_ (DG phase model), unnamed
+        // Dark Genie fight companions: code=c17_ = DG attack-effect family. The prefix maps to several .chr:
+        // c17_beem.chr (発射/ループ/消滅 = launch/loop/despawn), c17_kaze.chr (wind), c17_hikari.chr (light),
+        // c17_syougeki.chr (shock). e.g. c17_beem @ data.dat 0x1b1e9000. Which TableIndex→which is unconfirmed.
         internal static readonly EnemyDefaults DGComp88 = new EnemyDefaults {
             Id=0, TableIndex=88, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535 };
         internal static readonly EnemyDefaults DGComp89 = new EnemyDefaults {
@@ -1387,22 +1509,65 @@ namespace Dark_Cloud_Improved_Version
         // code=c17_
         internal static readonly EnemyDefaults DGComp90 = new EnemyDefaults {
             Id=0, TableIndex=90, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535 };
-        // code=b3_r
+        // code=b3_r → b3_reiki.chr (霊気 "aura/spirit") @ data.dat 0x1a8c1800 — 1 motion: 0 reiki (aura).
         internal static readonly EnemyDefaults SWComp92 = new EnemyDefaults {
             Id=0, TableIndex=92, ModelCode="b3_r", Name="(SW boss companion b3_r)", MaxHp=0, AttackPower=65535 };
         // code=c17_
         internal static readonly EnemyDefaults DGComp93 = new EnemyDefaults {
             Id=0, TableIndex=93, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535 };
 
-        // IceQueen (SW floor 18) fight companions — all id=0, boss sentinels
-        internal static readonly EnemyDefaults IQComp101 = new EnemyDefaults {
-            Id=0, TableIndex=101, ModelCode="bari", Name="(IQ companion bari)", MaxHp=0, AttackPower=65535 };
-        internal static readonly EnemyDefaults IQComp102 = new EnemyDefaults {
-            Id=0, TableIndex=102, ModelCode="kori", Name="(IQ companion kori)", MaxHp=0, AttackPower=65535 };
-        internal static readonly EnemyDefaults IQComp103 = new EnemyDefaults {
-            Id=0, TableIndex=103, ModelCode="i_me", Name="(IQ companion i_me)", MaxHp=0, AttackPower=65535 };
-        internal static readonly EnemyDefaults IQComp104 = new EnemyDefaults {
-            Id=0, TableIndex=104, ModelCode="i_ta", Name="(IQ companion i_ta)", MaxHp=0, AttackPower=65535 };
+        // Motions: e85a.chr info.cfg @ data.dat 0x1ddf5000 — 2 (object; no death anim).
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	5–15	回る	spin / roll
+        // 1	20–25	落ちてる	lying fallen
+        internal static readonly EnemyDefaults WineKeg = new EnemyDefaults {
+            Id=121, TableIndex=91, ModelCode="e85a", Name="Wine Keg",        MaxHp=80,    Abs=0,  MinGoldDrop=0, DropChance=0,
+            Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=7.0f,  EntityScaleCopy=7.0f,  Unk090A=0,  Unk090B=0,
+            StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
+
+        // DS boss — confirmed from EnemySpeciesTable scan 2026-06-05: tbl_165 is BlackKnight (id=221, hp=50000, BOSS, code=c22a).
+        // Motions: c21a.chr info.cfg @ data.dat 0x1e3d5800. (c22a is the same list + motion 27; see below.)
+        // Idx	Frames	Name (JP)	Meaning
+        // 0	10–20	立ち	idle
+        // 1	25–45	歩き	walk
+        // 2	50–70	走り	run
+        // 3	75–95	バックステップ	back step
+        // 4	100–120	右ステップ	right step
+        // 5	125–145	左ステップ	left step
+        // 6	150–160	ダメージ１	damage 1
+        // 7	265–285	死亡	death ← collapse
+        // 8	285	死亡ループ	death loop
+        // 9	25–45	右歩き	right walk
+        // 10	25–45	左歩き	left walk
+        // 11	165–185	攻撃１（突進）	attack 1 (charge)
+        // 12	190–225	攻撃２（円月輪）	attack 2 (chakram)
+        // 13	230–260	攻撃３（カマイタチ）	attack 3 (wind-slash)
+        // 14	290–310	死亡後のつなぎ	post-death link
+        // 15	315–325	立ち	idle (form 2)
+        // 16	330–350	歩き	walk (form 2)
+        // 17	380–400	右ステップ	right step (form 2)
+        // 18	405–425	左ステップ	left step (form 2)
+        // 19	355–375	バックステップ	back step (form 2)
+        // 20	430–440	ダメージ１	damage 1 (form 2)
+        // 21	535–540	ガード入り	guard (enter)
+        // 22	540–550	ガードループ	guard (loop)
+        // 23	550–555	ガード戻り	guard (return)
+        // 24	510–530	攻撃１（二刀流斬りその1）	attack 1 (dual-slash A)
+        // 25	445–470	攻撃２（円月輪）	attack 2 (chakram)
+        // 26	560–585	攻撃１（二刀流斬りその2）	attack 1 (dual-slash B)
+        internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
+            Id=221, TableIndex=165, ModelCode="c21a", Name="Black Knight",    MaxHp=50000, Abs=5,  MinGoldDrop=0, DropChance=0,
+            Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=100,
+            StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50 };
+
+        // tbl_166 = Black Knight Mount; present in DS floor 100 binary pool.
+        // Motions: c22a.chr info.cfg @ data.dat 0x1e565800 — identical to c21a (0–26, death=7) plus:
+        // Idx	Frames	Name (JP)	Meaning
+        // 27	595–645	攻撃３（強攻撃）	attack 3 (heavy attack)
+        internal static readonly EnemyDefaults BlackKnightMount = new EnemyDefaults {
+            Id=221, TableIndex=166, ModelCode="c22a", Name="Black Knight", MaxHp=50000, AttackPower=0 };
 
         // ── Demon Shaft enhanced tier variants ────────────────────────────────────
         // These reuse base-game species IDs with new model codes and scaled stats.
