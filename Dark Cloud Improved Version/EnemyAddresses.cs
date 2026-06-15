@@ -15,6 +15,17 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>RAM address of <paramref name="fieldOffset"/> within slot <paramref name="slot"/>.</summary>
             internal static int SlotAddr(int slot, int fieldOffset) => SlotBase + slot * Stride + fieldOffset;
         }
+
+        /// <summary>
+        /// CMainMonstorUnit — the parent global (= -0x6320($gp), size 0x60750) that owns both the FloorSlots
+        /// array (at Base+0x1E3D0) and the ModelScale / render-object table (ModelBase, at Base+0x1FD60) as
+        /// sub-arrays. RE'd across the enemy spawn / motion paths.
+        /// </summary>
+        internal static class MainMonstorUnit
+        {
+            internal const long Base      = 0x21DF87D0;
+            internal const int  LiveCount = 0x4C;     // int — number of live enemies on the floor; decrement when freeing a slot
+        }
     }
 
     /// <summary>Enemy slot field offsets relative to slot base address.</summary>
@@ -360,6 +371,18 @@ namespace Dark_Cloud_Improved_Version
 
         // +0x370: animation clip cap (7–23 per enemy species); capping below true value freezes higher-index animations (attacks); Setting above true count does not change default behavior.
         internal const int AnimCount = 0x370;
+
+        // ── Motion player (RE'd for the boss-death system; see EnemyModelInjector.BossScriptPatcher) ──
+        // The render object embeds a "motion player" sub-struct. The RE references it from the motion-block base
+        // (MonstorUnit + slot*0x3510 + 0x1FCD0) with offsets +0xc60 speed / +0xc64 flags / +0xc68 motion-id /
+        // +0xc70 state, and the PLAYING frame at +0x2F0 (= absolute MonstorUnit+slot*0x3510+0x1FFC0). The consts
+        // below are ModelBase-relative (ModelBase = that motion-block base + 0x90), i.e. subtract 0x90 from the
+        // RE offsets, so they work with the usual ModelBase + slot*ModelStride + field addressing.
+        internal const int PlayingMotionSpeed = 0xBD0; // float — playback speed for the current clip (−1.0 = use the motion's KEY speed). RE +0xc60.
+        internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (mirrored to FloorSlot 0x20938, read by _STATUS_GET_MOTION_ID). RE +0xc68.
+        // PLAYING motion FRAME (float). Same field _SET_MOTION_FRM (ELF 0x1e1cb0) writes and _GET_MOTION_FRM reads.
+        // NOTE: the motion-table KEY "speed" is NOT the frame-advance rate, so to retime a clip drive THIS directly.
+        internal const int PlayingMotionFrame = 0x260; // RE +0x2F0 / absolute MonstorUnit+slot*0x3510+0x1FFC0.
     }
 
     /// <summary>

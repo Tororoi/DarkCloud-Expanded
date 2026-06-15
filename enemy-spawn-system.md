@@ -267,6 +267,57 @@ force-spawned boss is on a non-boss floor, so the accumulated kill value never e
 is **never set** → no clear. Suppressed at the source (no code patch, no race), and restored on the real boss
 floor. Needs the `CDngStatusData` base resolved (via `fn0x1581E0`); **next task.**
 
+### Boss death animation (cancel → roar → slow collapse → hold → fade out → remove) ✅ DONE
+
+A force-spawned boss does **not** enter the engine's normal dying-state (that's reserved for the defeat
+cutscene), so on `HP<=0` its AI (`STB label-100`) just keeps running and it never visibly dies. We drive a
+full death sequence entirely from C# (`BossScriptPatcher.CollapseDrive`, called each tick from `EnsureNopped`),
+data-only — no recompiled code is touched.
+
+**The label-100 clobber (core technique).** `Step` runs whatever bytecode is at `label-100` every frame. So
+instead of fighting the AI, we **overwrite label-100's bytecode in EE RAM** (STB bytecode is data → safe to
+write) with a tiny sequence and let `Step` execute it. Original bytecode is saved (`_origLabel100`, 84 bytes)
+and restored when no boss is dead. Two sequences (3-field `vmcode_t` records, stride `0xC`):
+- `DeathSeq(m)` = `_SET_MOVE_CANSEL; _SET_MOTION(m,1,2); push 0; RET` — queue motion `m`.
+- `HoldSeq()`  = `push 0; RET` — no-op; freezes engine playback so **we** own the frame.
+
+**Canceling the current motion (the real interrupt).** `_SET_MOVE_CANSEL` cancels *movement only*, not the
+animation — and `_SET_MOTION` merely **queues** the motion: it writes the requested id to `slot+0xEC` (low
+halfword) but the engine doesn't switch the rendered clip until the *current* clip finishes. The gate is a
+flag at **`slot+0xF4`** (`MotionCommitFlag`): `CMonstorUnit::Step`'s commit (`@ELF 0x1dd890`) copies the
+requested motion (`slot+0xEC`) into the render object's player **only when `slot+0xF4 != 0`**, which the engine
+sets on clip-complete. **Writing `slot+0xF4 = 1` ourselves forces the switch immediately** → true cancel.
+(`_SET_MOTION` @`0x1e1710` writes `0xEC`/`0xEE`/`0xF0`=motion/flags/speed; the played motion id also mirrors to
+the render object at `+0xc68` = `slot+0x20938`, read by `_STATUS_GET_MOTION_ID`.)
+
+**Slow motion (C#-driven frame advance).** The motion-table KEY "speed" (3rd value, e.g. `0.15`) is **NOT** the
+frame-advance rate — overwriting it does nothing visible. To slow the death we instead **freeze** engine
+playback (clobber label-100 → `HoldSeq`) and **advance the motion frame ourselves**: write the PLAYING frame
+float at `unit + idx*0x3510 + 0x1FFC0` each tick from `captureFrame + elapsed*PlaybackFps`. Smooth and exactly
+tunable (`PlaybackFps`, default 30).
+
+**The state machine** (`CollapseDrive`, global phase since label-100 is shared; per-slot timing dicts):
+1. **phase 0 → cancel + queue.** Clobber label-100 → `DeathSeq(roar or collapse)`; phase = roar?1:2.
+2. **!captured → interrupt.** Write `slot+0xF4=1` each tick until the engine starts the motion (frame enters
+   `[start-2, end+5]`), then **capture**: re-clobber → `HoldSeq`, record `captureFrame`/`captureTime`.
+3. **captured → C#-advance** the frame to the phase end at `PlaybackFps`. At the end: phase 1 → switch
+   `DeathSeq(collapse)` + un-capture (play the collapse); phase 2 → **hold + fade**.
+4. **hold + fade.** Pin the last collapse frame; ramp `Opacity` (`slot+0x120`, 128→0) over `FadeMs`; then
+   remove (`RenderStatus=-1`, decrement live count at `MainMonstorUnit+0x4C`). `CollapseTimeoutMs` is a fallback.
+
+**Per-boss data** (from the model's `info.cfg` KEY list — see the `datadat-index-and-chr-motions` memory;
+decode the `.chr`'s Shift-JIS motion names): `CollapseMotion` / `CollapseStart/EndFrame` and `RoarMotion` /
+`RoarStart/EndFrame`, keyed by `TableIndex`. **c16a / Minotaur Joe (83):** collapse = motion 9 (死亡, 300–330),
+roar = motion 4 (雄たけび, 210–260). Other bosses TBD via the same lookup.
+
+**Tunables** (top of `BossScriptPatcher`): `EnableRoar` (bool, play roar before collapse), `PlaybackFps`,
+`FadeMs`, `CollapseTimeoutMs`.
+
+**Key ELF addresses:** commit/`MotionCommitFlag` gate `0x1dd890`; `_SET_MOTION` `0x1e1710`; `_SET_MOTION_FRM`
+`0x1e1cb0` (writes the same `0x1FFC0` frame field); generic motion-player step `0x138530`. Slot fields in
+[`EnemyAddresses.cs`](Dark Cloud Improved Version/EnemyAddresses.cs): `AiStatePacked` `0xEC` (requested motion +
+flags), `AiSpeedParam` `0xF0`, `MotionCommitFlag` `0xF4`, `Opacity` `0x120`.
+
 ---
 
 ## 5b. Live slot conversion (tested, not viable for a full re-skin)

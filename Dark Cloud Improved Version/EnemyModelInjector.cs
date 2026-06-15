@@ -227,8 +227,7 @@ namespace Dark_Cloud_Improved_Version
             long rec = EnemySpeciesTable.RecordAddress(tableIndex);
             if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
             Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
-            Memory.WriteInt(rec + EnemySpeciesTable.MaxHp, 100); // TEMP test aid: weak boss for fast clear-trigger testing
-            Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100), MaxHp->100 for TableIndex {tableIndex}.");
+            Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
         }
 
         internal static void SetPopulationTarget(int pop)
@@ -607,54 +606,55 @@ namespace Dark_Cloud_Improved_Version
 
         private static long _stbBase = -1;
 
-        // --- BOSS DEATH = collapse animation + clean removal -----------------------------------------
-        // The boss's defeat cutscene is its label-120 _RUN_SCRIPT(0x6F). We retarget it to _SET_MOTION(0xC8)
-        // so the boss plays its own collapse/death motion (no cutscene), then C# removes the slot like
-        // _STATUS_SET_DEAD once the animation has played (CollapseHoldMs). The collapse motion index per
-        // boss comes from its model's info.cfg KEY list (decoded from <code>.chr): for c16a/MinotaurJoe,
-        // motion 9 = 死亡 ("death"). Other bosses' indices are read the same way -> CollapseMotion().
-        private static int CollapseMotion(int tableIndex) => tableIndex switch
-        {
-            83 => 9,    // MinotaurJoe (c16a): KEY 9 = 死亡 "death" (frames 300-330)
-            _  => -1,   // unknown -> fall back to instant _STATUS_SET_DEAD (no collapse)
-        };
-        // Death state (engine, in CheckDmg/MonsterStep): an enemy is "dying" when slot+0x8 > 0. While set, the
-        // engine suppresses the AI (label-100), keeps running the death program (our label-120 _SET_MOTION) every
-        // frame, fades it (PalletStep), and removes it when the timer counts down to 0. Bosses never get this set
-        // (they trigger the defeat cutscene instead), so their AI just resumes and overrides the death motion.
-        // We engage it ourselves when the boss's HP<=0 — which also makes motion 9 stick (re-run each frame).
-        private const int  DyingTimerOff = 0x8;            // slot+0x8 = dying/fade countdown
-        private const int  DyingFrames   = 120;            // TEMP(testing): re-asserted each tick so the boss stays collapsed (no vanish)
-        private static readonly System.Collections.Generic.HashSet<int> _bossDying = new();
-        private static readonly System.Collections.Generic.Dictionary<int, int[]> _lastBlk = new();
-        private static int _deathPhase = 0;             // 0=none, 1=roar, 2=collapse
-        // C#-driven playback: the motion-table "speed" (KEY 3rd value) is NOT the frame-advance rate, so to slow the
-        // death we freeze the engine's playback (re-clobber label-100 to a no-op) and advance the motion frame ourselves.
-        private static bool _captured = false;          // true once engine playback is frozen and we're driving the frame
-        private static float _captureFrame = 0f;        // animation frame at capture (C#-advance starts here)
-        private static System.DateTime _captureTime;    // when C#-advance for the current phase began
-        private const float PlaybackFps = 30f;          // C#-driven animation rate for the death (lower = slower)
-        public  const bool  EnableRoar  = true;          // toggle: play the boss "roar" before the collapse on death (false = collapse only)
-        // Optional pre-collapse motion (boss "roar") played before the death motion. -1 = none. Frame ranges from info.cfg.
-        private static int RoarMotion(int tableIndex) => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;   // c16a motion 4 = 雄たけび
-        private static int RoarStartFrame(int tableIndex) => tableIndex switch { 83 => 210, _ => 0 };  // motion 4 = frames 210-260
-        private static int RoarEndFrame(int tableIndex) => tableIndex switch { 83 => 260, _ => 0 };
-        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 83 => 300, _ => 0 }; // motion 9 = frames 300-330
-        private static byte[] _origLabel100;            // saved original AI bytecode (to restore)
-        private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _collapseStart = new();
-        private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _deadSince = new();
-        private const int FadeMs            = 1600;      // hold the down pose + fade this long after the collapse, then remove
-        private static readonly System.Collections.Generic.Dictionary<int, float[]> _palStart = new();
-        private const int CollapseTimeoutMs = 20000;    // fallback (generous: slowed motions take longer to reach the end frame)
-        private const long MotionBlock = 0x3510;        // per-enemy motion block stride
-        private const long MotionFrameField = 0x1FFC0;  // current PLAYING motion frame (float) @ unit + idx*0x3510 + 0x1FFC0
-        // Collapse (死亡) motion frame range per boss (from info.cfg KEY list); remove when the frame reaches the end.
-        private static int CollapseEndFrame(int tableIndex) => tableIndex switch { 83 => 330, _ => 0 };
-        // CRunScript context (per enemy): unit + idx*0x48 + 0x54DD0. +0x2C = current bytecode ptr (the running
-        // program, set by run(ctx,label)); +0x3C = the enemy's STB base. Redirecting +0x2C is the data-only lever.
-        private const long MainMonstorUnit = 0x21DF87D0;
-        private const long CtxArrayOff     = 0x54DD0;
-        private const int  CtxStride       = 0x48;
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+        // BOSS DEATH = cancel → (roar) → slow-motion collapse → hold → fade out → remove.  No cutscene.
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+        // Bosses don't enter the engine's normal dying-state (they trigger the defeat cutscene instead) and
+        // their AI (STB label-100) keeps running after HP<=0. So on death we drive the whole sequence from C#
+        // by CLOBBERING label-100's bytecode in EE RAM (data only — never recompiled code) and writing a few
+        // per-slot fields. Step runs whatever is at label-100, so it runs our sequence. CollapseDrive() (called
+        // each tick from EnsureNopped) is the state machine:
+        //   1. CANCEL the current motion: clobber label-100 -> _SET_MOTION(deathMotion) [DeathSeq], which queues
+        //      the motion in slot+0xEC, then write slot+0xF4=1 (MotionCommitFlag) so the engine commits it NOW
+        //      instead of after the current clip finishes. (RE'd from CMonstorUnit::Step commit @ELF 0x1dd890.)
+        //   2. CAPTURE: once the engine starts the motion (frame enters its range), re-clobber label-100 to a
+        //      no-op (HoldSeq) to FREEZE engine playback, and advance the motion frame ourselves at PlaybackFps
+        //      (the motion-table KEY "speed" is NOT the frame-advance rate, so this is the only reliable slow-mo).
+        //   3. ROAR -> COLLAPSE: if EnableRoar, phase 1 plays the roar motion, then phase 2 plays the collapse.
+        //   4. HOLD + FADE: pin the last collapse frame, ramp Opacity (slot+0x120) 128->0 over FadeMs, then
+        //      remove (RenderStatus=-1, decrement live count). label-100 is restored when no boss is dead.
+        // Per-boss motion indices + frame ranges come from the model's info.cfg KEY list (decoded from <code>.chr;
+        // see the datadat-index-and-chr-motions memory). c16a/MinotaurJoe: motion 9 = 死亡 "death" (300-330),
+        // motion 4 = 雄たけび "roar" (210-260).
+
+        // ── Per-boss motion data (TableIndex -> motion index / frame range; -1/0 = none) ──────────────
+        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 83 => 9,   _ => -1 };
+        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 83 => 300, _ => 0  };
+        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 83 => 330, _ => 0  };
+        private static int RoarMotion(int tableIndex)         => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;
+        private static int RoarStartFrame(int tableIndex)     => tableIndex switch { 83 => 210, _ => 0  };
+        private static int RoarEndFrame(int tableIndex)       => tableIndex switch { 83 => 260, _ => 0  };
+
+        // ── Tunables ──────────────────────────────────────────────────────────────────────────────────
+        public  const bool  EnableRoar       = true;     // play the boss "roar" before the collapse (false = collapse only)
+        private const float PlaybackFps      = 30f;      // C#-driven death-animation rate (lower = slower motion)
+        private const int   FadeMs           = 1600;     // hold the down pose + fade out this long after the collapse, then remove
+        private const int   CollapseTimeoutMs = 20000;   // fallback: remove this long after death even if the frame never reaches the end
+
+        // ── Runtime state ───────────────────────────────────────────────────────────────────────────────
+        private static int        _deathPhase = 0;       // 0=none/alive, 1=roar, 2=collapse
+        private static bool       _captured   = false;   // true once engine playback is frozen and we're driving the frame
+        private static float      _captureFrame = 0f;    // animation frame at capture (C#-advance starts here)
+        private static System.DateTime _captureTime;     // when C#-advance for the current phase began
+        private static byte[]     _origLabel100;         // saved original AI bytecode (restored when no boss is dead)
+        private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _collapseStart = new(); // per-slot: hold/fade start
+        private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _deadSince     = new(); // per-slot: death detected (timeout)
+        private static readonly System.Collections.Generic.Dictionary<int, float[]>          _palStart      = new(); // per-slot: opacity at fade start
+
+        // ── EE memory layout ──────────────────────────────────────────────────────────────────────────
+        private const long MainMonstorUnit  = EnemyAddresses.MainMonstorUnit.Base;          // = -0x6320($gp)
+        private const long MotionBlock      = ModelScaleOffsets.ModelStride;                // 0x3510 render-object stride
+        private const long MotionFrameField = 0x1FFC0;     // PLAYING motion frame (float) @ unit + idx*0x3510 + 0x1FFC0 (= ModelScaleOffsets.PlayingMotionFrame)
 
         // Known STB load addresses per (boss TableIndex, dungeon). Boss-first makes these roster-independent;
         // one per floor-half (the address shifts across the mid-dungeon event floor) — we probe all candidates,
@@ -662,16 +662,24 @@ namespace Dark_Cloud_Improved_Version
         // fallback (logged). Option 2 (live heap-base read) will make these unnecessary.
         private static long[] KnownAddrs(int tableIndex, int dungeon) => (tableIndex, dungeon) switch
         {
+            // Divine Beast Cave
             // Dran
             (78, 0) => new long[] { 0x012166D0 },
             // Master Utan
             (79, 0) => new long[] { 0x01211A90 },
             // Minotaur Joe
-            (83, 0) => new long[] { 0x011A8990, 0x011A8950 },             // c16a Divine Beast Cave
-            (83, 1) => new long[] { 0x013B7190, 0x013B7250 },             // c16a Wise Owl Forest
-            (83, 2) => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 }, // c16a Shipwreck (3 sections)
-            (83, 3) => new long[] { 0x01137750 },                         // c16a Sun & Moon Temple (early floors)
+            (83, 0) => new long[] { 0x011A8990, 0x011A8950 },
+            // Black Knight Mount
             (166, 0) =>new long[] { 0x011C3C80 },
+            // Wise Owl Forest
+            // Minotaur Joe
+            (83, 1) => new long[] { 0x013B7190, 0x013B7250 },
+            // Shipwreck (3 sections)
+            // Minotaur Joe
+            (83, 2) => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 },
+            // Sun & Moon Temple
+            // Minotaur Joe
+            (83, 3) => new long[] { 0x01137750 },
             _ => System.Array.Empty<long>(),
         };
 
@@ -771,7 +779,6 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
                 Console.WriteLine($"[BossPatch] NOPed _SET_POSITION for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");
             }
-            DumpVtables(tableIndex);
             int rs = BossInfo(tableIndex).runScriptOff;
             int motion = CollapseMotion(tableIndex);
             if (rs != 0 && motion >= 0)
@@ -814,16 +821,15 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
-        // PURE OBSERVATION (no writes): log every enemy slot at HP<=0 — its eid, RenderStatus, the dying timer
-        // slot+0x8, and the program pointer. Goal: compare a REGULAR enemy's death to the BOSS's. If regulars
-        // get slot+0x8 set >0 by the engine (then count down to removal) but the boss stays slot+0x8==0 with the
-        // AI running, that's the exact data difference — the engine engages the death-state for one and not the other.
+        // Death state machine — runs each tick while the boss STB is patched. See the BOSS DEATH overview above.
+        // Drives every dead boss slot (HP<=0): cancel -> (roar) -> slow collapse -> hold -> fade -> remove, by
+        // clobbering the boss's label-100 bytecode and writing per-slot fields. Restores label-100 when none dead.
         private static void CollapseDrive(long stbBase, int tableIndex)
         {
             ushort bossEid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.EnemySpeciesId);
             int motion = CollapseMotion(tableIndex);
-            int cb = Memory.ReadInt(stbBase + 0x8);
-            int coff100 = LabelCodeOffset(stbBase, 0x64);
+            int cb = Memory.ReadInt(stbBase + 0x8);                          // STB codeBase offset
+            int coff100 = LabelCodeOffset(stbBase, 0x64);                    // label-100 = AI program
             if (coff100 < 0) return;
             long l100 = stbBase + cb + Memory.ReadInt(stbBase + coff100);   // label-100 vmcode start
 
@@ -910,8 +916,8 @@ namespace Dark_Cloud_Improved_Version
                 if (held || timedOut)
                 {
                     Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus), -1);
-                    int cnt = Memory.ReadInt(MainMonstorUnit + 0x4C);
-                    if (cnt > 0) Memory.WriteInt(MainMonstorUnit + 0x4C, cnt - 1);
+                    int cnt = Memory.ReadInt(MainMonstorUnit + EnemyAddresses.MainMonstorUnit.LiveCount);
+                    if (cnt > 0) Memory.WriteInt(MainMonstorUnit + EnemyAddresses.MainMonstorUnit.LiveCount, cnt - 1);
                     Console.WriteLine($"[BossDeath] slot {s}: removed ({(held ? "hold done" : "timeout")}; count {cnt}->{cnt - 1})");
                     _deadSince.Remove(s); _collapseStart.Remove(s); _palStart.Remove(s);
                 }
@@ -927,8 +933,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static byte[] DeathSeq(int motion)
         {
-            // _SET_MOVE_CANSEL; _SET_MOTION(motion, 1, 2); push 0; RET — cancel the current motion, then play the
-            // collapse (param 2 animates). Re-issued each frame from the clobbered label-100.
+            // _SET_MOVE_CANSEL; _SET_MOTION(motion, 1, 2); push 0; RET — stop movement (_SET_MOVE_CANSEL cancels
+            // MOVEMENT only, not the animation) and queue the motion (slot+0xEC). The actual animation interrupt is
+            // CollapseDrive writing MotionCommitFlag (slot+0xF4). Re-issued each frame from the clobbered label-100.
             var recs = new (uint op, uint opnd, uint val)[]
             { (3,1,0x22),(0x15,1,0), (3,1,0xC8),(3,1,(uint)motion),(3,1,1),(3,1,2),(0x15,4,0), (3,1,0),(0xF,0,0) };
             byte[] blk = new byte[recs.Length * 12];
@@ -963,25 +970,5 @@ namespace Dark_Cloud_Improved_Version
             return b;
         }
 
-        // READ-ONLY DIAGNOSTIC: each enemy is a CMonstorUnit object at unit + idx*0x3510 + 0x1FCD0; its vtable
-        // pointer is at obj+0xA0, and Step (death handling) is vtable[0xA0]. Logging every active slot's vtable
-        // lets us compare the boss (tableIndex's eid) against regular enemies — if the boss has a DIFFERENT
-        // vtable, it's a different subclass and that's why it skips the dying-state path. No writes.
-        private static void DumpVtables(int bossTableIndex)
-        {
-            if ((Environment.TickCount & 0x7FF) >= 48) return;         // ~once every 2s, brief window
-            ushort bossEid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(bossTableIndex) + EnemySpeciesTable.EnemySpeciesId);
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                int rs = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
-                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                if (rs == -1 || eid == 0) continue;
-                long obj = MainMonstorUnit + (long)s * 0x3510 + 0x1FCD0;
-                int vt = Memory.ReadInt(obj + 0xA0);
-                int stepFn = (vt > 0x01000000 && vt < 0x02000000) ? Memory.ReadInt((vt | 0x20000000L) + 0xA0) : 0;
-                string tag = eid == bossEid ? " <-- BOSS" : "";
-                Console.WriteLine($"[Vtable] slot {s}: eid={eid} RS={rs} obj@0x{obj:X8} vtable(+A0)=0x{vt:X8} step(vt+A0)=0x{stepFn:X8}{tag}");
-            }
-        }
     }
 }
