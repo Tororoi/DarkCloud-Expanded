@@ -227,6 +227,7 @@ namespace Dark_Cloud_Improved_Version
             long rec = EnemySpeciesTable.RecordAddress(tableIndex);
             if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
             Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
+            Memory.WriteUShort(rec + EnemySpeciesTable.MaxHp, 50);
             Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
         }
 
@@ -628,9 +629,12 @@ namespace Dark_Cloud_Improved_Version
         // motion 4 = 雄たけび "roar" (210-260).
 
         // ── Per-boss motion data (TableIndex -> motion index / frame range; -1/0 = none) ──────────────
-        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 83 => 9,   _ => -1 };
-        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 83 => 300, _ => 0  };
-        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 83 => 330, _ => 0  };
+        // 79 = Master Utan (c14a): death is the 14th KEY entry; its info.cfg labels it "14" but the labels skip
+        //      11, so the sequential table index is 13 (frames 360–385). No roar, no death-loop. If the collapse
+        //      plays the wrong clip in-game, try 14 (i.e. the .chr loader honoured the printed label, not order).
+        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 79 => 13,  83 => 9,   _ => -1 };
+        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 79 => 360, 83 => 300, _ => 0  };
+        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 79 => 385, 83 => 330, _ => 0  };
         private static int RoarMotion(int tableIndex)         => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;
         private static int RoarStartFrame(int tableIndex)     => tableIndex switch { 83 => 210, _ => 0  };
         private static int RoarEndFrame(int tableIndex)       => tableIndex switch { 83 => 260, _ => 0  };
@@ -806,6 +810,25 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadByte(r) == 0x6F) { Memory.WriteByte(r, 0x68); Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8}"); }
             }
         }
+
+        // ┌─ KNOWN ISSUE: Master Utan (79) displaces the roster-index-1 species ──────────────────────────┐
+        // When Master Utan is force-spawned, the species at ROSTER INDEX 1 (the entry right after the boss)
+        // spawns at a bad position — off-map / underground — for ALL its instances. Roster index 0 (the boss)
+        // and index 2+ are fine. Minotaur Joe / Dran do NOT trigger it, so it's specific to Utan (likely its
+        // multi-part / raised-arena setup).
+        // Investigated (2026-06-14) and PARKED — findings so the next person doesn't redo them:
+        //   • It is purely a POSITION corruption, not a model/block overlap: the index-1 species' model loads
+        //     fine (valid, distinct model pointer; the model renders, just in the wrong place).
+        //   • BOTH the logical slot position (LocationX/Z/Y @0x100/04/08) and the render-object position
+        //     (unit+slot*0x3510+0x1FCD0 +0x10/+0x14/+0x18, where SetPosition@0x138fb0 stores it) are off-map.
+        //   • The engine RE-APPLIES the bad position every frame, so correcting either live field loses the
+        //     race (a live render<->slot sync only made the lock-on reticle flicker). Must be fixed at SPAWN.
+        //   • Root cause not pinned: presumably the spawn-position assignment (ArrangementPos 0x1D7FC0 /
+        //     SetupViewMonstor 0x1E02B0) uses a per-species offset or shared spawn-anchor that Utan shifts by 1.
+        // WORKAROUND (in use): put a NON-SPAWNING entry at roster index 1 (e.g. a mimic — mimics don't spawn
+        // via the roster; they use a separate dungeon-furniture mechanism), with real enemies at index 2+.
+        // If this recurs on other bosses, resume from the spawn-position trace above.
+        // └────────────────────────────────────────────────────────────────────────────────────────────────┘
 
         // Reads the STB program table to find the codeOffset (entry+4) of a label. run__CRunScript sets the
         // running program via ctx+0x2C = STB + that codeOffset, so this is what we redirect to.
