@@ -98,8 +98,9 @@ namespace Dark_Cloud_Improved_Version
         // AiStatePacked and AiSpeedParam change together at each AI phase transition.
         // Observed AiStatePacked values: 0x00000001 (idle/patrol), 0x00040002, 0x0002000D, 0x00060010 (attack/chase states).
         // AiSpeedParam is enemy species and state-specific: Auntie Medu alternates 0.36↔0.20; Pirate's Chariot uses 0.25/−1.0; Mask of Prajna uses 0.24–0.35.
-        internal const int AiStatePacked     = 0x0EC; // int   — packed AI state: upper ushort = state ID, lower ushort = substep; transitions on each AI phase change
-        internal const int AiSpeedParam      = 0x0F0; // float — state-dependent speed/behavior parameter; changes with AiStatePacked; −1.0 observed at first spawn initialization
+        internal const int AiStatePacked     = 0x0EC; // int   — packed AI state. RE'd (ELF _SET_MOTION 0x1e1710 / commit 0x1dd890): low halfword (0xEC) = REQUESTED motion id, high halfword (0xEE) = motion flags. _SET_MOTION writes the queued motion here.
+        internal const int AiSpeedParam      = 0x0F0; // float — REQUESTED motion speed; _SET_MOTION writes −1.0 (= use the motion's own KEY speed) here, matching the −1.0 seen at spawn.
+        internal const int MotionCommitFlag  = 0x0F4; // halfword — commit gate (-0x1b3c). CMonstorUnit::Step (ELF 0x1dd890) commits the requested motion (0xEC) into the render object's player ONLY when this is nonzero; the engine sets it when the current clip finishes. Writing 1 forces an immediate motion switch (interrupt).
 
         // ── Species data pointer (regular enemies) ───────────────────────────
         // +0x0FC: PS2-native pointer to a per-species data block, set at spawn and SHARED by all

@@ -634,8 +634,9 @@ namespace Dark_Cloud_Improved_Version
         private static float _captureFrame = 0f;        // animation frame at capture (C#-advance starts here)
         private static System.DateTime _captureTime;    // when C#-advance for the current phase began
         private const float PlaybackFps = 30f;          // C#-driven animation rate for the death (lower = slower)
+        public  const bool  EnableRoar  = true;          // toggle: play the boss "roar" before the collapse on death (false = collapse only)
         // Optional pre-collapse motion (boss "roar") played before the death motion. -1 = none. Frame ranges from info.cfg.
-        private static int RoarMotion(int tableIndex) => tableIndex switch { 83 => 4, _ => -1 };       // c16a motion 4 = 雄たけび
+        private static int RoarMotion(int tableIndex) => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;   // c16a motion 4 = 雄たけび
         private static int RoarStartFrame(int tableIndex) => tableIndex switch { 83 => 210, _ => 0 };  // motion 4 = frames 210-260
         private static int RoarEndFrame(int tableIndex) => tableIndex switch { 83 => 260, _ => 0 };
         private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 83 => 300, _ => 0 }; // motion 9 = frames 300-330
@@ -854,8 +855,12 @@ namespace Dark_Cloud_Improved_Version
 
                 if (!_captured)
                 {
-                    // Wait for the engine to actually start this phase's motion (the current motion finishes first),
-                    // then freeze its playback so we drive the frame ourselves.
+                    // INTERRUPT the current motion: the requested motion (slot+0xEC, set by our _SET_MOTION) is only
+                    // committed to the render object when slot+0xF4 != 0 — which the engine normally sets only when the
+                    // current clip finishes (that's the "finish current motion first" delay). Set it ourselves so the
+                    // roar/collapse starts immediately. RE'd from CMonstorUnit::Step commit @ELF 0x1dd890.
+                    Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.MotionCommitFlag), 1);
+                    // Once the engine starts this phase's motion, freeze its playback so we drive the frame ourselves.
                     if (frame >= phStart - 2 && frame <= phEnd + 5)
                     {
                         Memory.WriteByteArray(l100, HoldSeq());          // no-op: stop engine frame-advance
