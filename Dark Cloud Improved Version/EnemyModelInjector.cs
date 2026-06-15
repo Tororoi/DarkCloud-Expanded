@@ -627,15 +627,24 @@ namespace Dark_Cloud_Improved_Version
         private const int  DyingFrames   = 120;            // TEMP(testing): re-asserted each tick so the boss stays collapsed (no vanish)
         private static readonly System.Collections.Generic.HashSet<int> _bossDying = new();
         private static readonly System.Collections.Generic.Dictionary<int, int[]> _lastBlk = new();
-        private static bool _label100Clobbered = false;
-        private static bool _label100Held = false;
+        private static int _deathPhase = 0;             // 0=none, 1=roar, 2=collapse
+        // C#-driven playback: the motion-table "speed" (KEY 3rd value) is NOT the frame-advance rate, so to slow the
+        // death we freeze the engine's playback (re-clobber label-100 to a no-op) and advance the motion frame ourselves.
+        private static bool _captured = false;          // true once engine playback is frozen and we're driving the frame
+        private static float _captureFrame = 0f;        // animation frame at capture (C#-advance starts here)
+        private static System.DateTime _captureTime;    // when C#-advance for the current phase began
+        private const float PlaybackFps = 30f;          // C#-driven animation rate for the death (lower = slower)
+        // Optional pre-collapse motion (boss "roar") played before the death motion. -1 = none. Frame ranges from info.cfg.
+        private static int RoarMotion(int tableIndex) => tableIndex switch { 83 => 4, _ => -1 };       // c16a motion 4 = 雄たけび
+        private static int RoarStartFrame(int tableIndex) => tableIndex switch { 83 => 210, _ => 0 };  // motion 4 = frames 210-260
+        private static int RoarEndFrame(int tableIndex) => tableIndex switch { 83 => 260, _ => 0 };
+        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 83 => 300, _ => 0 }; // motion 9 = frames 300-330
         private static byte[] _origLabel100;            // saved original AI bytecode (to restore)
         private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _collapseStart = new();
         private static readonly System.Collections.Generic.Dictionary<int, System.DateTime> _deadSince = new();
-        private static readonly System.Collections.Generic.Dictionary<int, float> _peakFrame = new();
         private const int FadeMs            = 1600;      // hold the down pose + fade this long after the collapse, then remove
         private static readonly System.Collections.Generic.Dictionary<int, float[]> _palStart = new();
-        private const int CollapseTimeoutMs = 6000;     // fallback: remove this long after death even if frame never reaches the end
+        private const int CollapseTimeoutMs = 20000;    // fallback (generous: slowed motions take longer to reach the end frame)
         private const long MotionBlock = 0x3510;        // per-enemy motion block stride
         private const long MotionFrameField = 0x1FFC0;  // current PLAYING motion frame (float) @ unit + idx*0x3510 + 0x1FFC0
         // Collapse (死亡) motion frame range per boss (from info.cfg KEY list); remove when the frame reaches the end.
@@ -823,45 +832,73 @@ namespace Dark_Cloud_Improved_Version
                 ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
                 int rstat = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
                 int hp    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
-                if (sid != bossEid || rstat == -1 || hp > 0) { _collapseStart.Remove(s); _deadSince.Remove(s); continue; }
+                if (sid != bossEid || rstat == -1 || hp > 0) { _collapseStart.Remove(s); _deadSince.Remove(s); _palStart.Remove(s); continue; }
                 anyDead = true;
-                // Clobber label-100 once (save original AI first) so Step plays the collapse instead of the AI.
                 int endF = CollapseEndFrame(tableIndex);
+                int roar = RoarMotion(tableIndex);
                 long frameAddr = MainMonstorUnit + (long)s * MotionBlock + MotionFrameField;
-                if (!_label100Clobbered)
+                // Phase start: cancel the current motion and play the ROAR (or go straight to collapse if no roar).
+                if (_deathPhase == 0)
                 {
                     _origLabel100 ??= ReadBytes(l100, 84);
-                    Memory.WriteByteArray(l100, DeathSeq(motion));                                  // label-100 -> _SET_MOTION(9,1,2)
-                    _label100Clobbered = true;
-                    Console.WriteLine($"[BossDeath] clobbered label-100 @0x{l100:X8} -> _SET_MOTION({motion},1,2)");
+                    Memory.WriteByteArray(l100, DeathSeq(roar >= 0 ? roar : motion));
+                    _deathPhase = roar >= 0 ? 1 : 2;
+                    _captured = false;
+                    Console.WriteLine($"[BossDeath] death start -> {(roar >= 0 ? $"roar {roar}" : $"collapse {motion}")}");
                 }
                 if (!_deadSince.ContainsKey(s)) _deadSince[s] = System.DateTime.UtcNow;
                 float frame = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(frameAddr));
-                if ((Environment.TickCount & 0x3F) < 8)
-                    Console.WriteLine($"[BossDeath] slot {s}: motionFrame={frame:F1} (collapse ends at {endF})");
-                // Track the PEAK frame (frame loops; peak catches the first collapse reaching the end regardless
-                // of C# tick timing). Only raise peak while in the collapse range so the wrap-around is ignored.
-                float peak = frame; if (_peakFrame.TryGetValue(s, out var pv) && pv > peak) peak = pv;
-                if (frame >= 290 && frame <= endF + 5) _peakFrame[s] = peak;
-                bool collapseDone = _peakFrame.TryGetValue(s, out var pk) && pk >= endF - 4;
-                if (collapseDone)
+                // Current phase's motion frame range.
+                int phStart = _deathPhase == 1 ? RoarStartFrame(tableIndex) : CollapseStartFrame(tableIndex);
+                int phEnd   = _deathPhase == 1 ? RoarEndFrame(tableIndex)   : endF;
+
+                if (!_captured)
                 {
-                    // Stop the loop and HOLD the down pose: re-clobber label-100 to no-op + pin the frame at the end.
-                    if (!_collapseStart.ContainsKey(s))
+                    // Wait for the engine to actually start this phase's motion (the current motion finishes first),
+                    // then freeze its playback so we drive the frame ourselves.
+                    if (frame >= phStart - 2 && frame <= phEnd + 5)
                     {
-                        Memory.WriteByteArray(l100, HoldSeq());
-                        _collapseStart[s] = System.DateTime.UtcNow;
-                        float op0 = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity)));
-                        _palStart[s] = new[] { op0 };
-                        Console.WriteLine($"[BossDeath] slot {s}: collapse done peak={pk:F0} -> hold+fade {FadeMs}ms (opacity {op0:F0})");
+                        Memory.WriteByteArray(l100, HoldSeq());          // no-op: stop engine frame-advance
+                        _captured = true;
+                        _captureFrame = frame;
+                        _captureTime = System.DateTime.UtcNow;
+                        Console.WriteLine($"[BossDeath] slot {s}: captured phase {_deathPhase} @frame {frame:F0} -> C#-advance @{PlaybackFps}fps");
                     }
-                    Memory.WriteInt(frameAddr, System.BitConverter.SingleToInt32Bits(endF));   // pin the down pose
-                    // Fade: ramp Opacity (0x120, default 128) toward 0 over the hold.
-                    float t = (float)(System.DateTime.UtcNow - _collapseStart[s]).TotalMilliseconds / FadeMs;
-                    if (t > 1f) t = 1f;
-                    if (_palStart.TryGetValue(s, out var p0))
-                        Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity),
-                                        System.BitConverter.SingleToInt32Bits(p0[0] * (1f - t)));
+                }
+                else
+                {
+                    // C#-drive the frame from the capture point to the phase end at PlaybackFps.
+                    float pf = _captureFrame + (float)(System.DateTime.UtcNow - _captureTime).TotalSeconds * PlaybackFps;
+                    if (pf >= phEnd) pf = phEnd;
+                    Memory.WriteInt(frameAddr, System.BitConverter.SingleToInt32Bits(pf));
+                    if ((Environment.TickCount & 0x3F) < 8)
+                        Console.WriteLine($"[BossDeath] slot {s}: phase={_deathPhase} playFrame={pf:F1}/{phEnd}");
+                    if (pf >= phEnd)
+                    {
+                        if (_deathPhase == 1)               // roar done -> start the collapse
+                        {
+                            Memory.WriteByteArray(l100, DeathSeq(motion));
+                            _deathPhase = 2;
+                            _captured = false;
+                            Console.WriteLine($"[BossDeath] roar done -> collapse {motion}");
+                        }
+                        else                                // collapse done -> hold the down pose + fade out
+                        {
+                            if (!_collapseStart.ContainsKey(s))
+                            {
+                                _collapseStart[s] = System.DateTime.UtcNow;
+                                float op0 = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity)));
+                                _palStart[s] = new[] { op0 };
+                                Console.WriteLine($"[BossDeath] slot {s}: collapse done -> hold+fade {FadeMs}ms (opacity {op0:F0})");
+                            }
+                            // frame is already pinned at endF by the pf write above. Ramp Opacity (default 128) -> 0.
+                            float t = (float)(System.DateTime.UtcNow - _collapseStart[s]).TotalMilliseconds / FadeMs;
+                            if (t > 1f) t = 1f;
+                            if (_palStart.TryGetValue(s, out var p0))
+                                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity),
+                                                System.BitConverter.SingleToInt32Bits(p0[0] * (1f - t)));
+                        }
+                    }
                 }
                 bool held = _collapseStart.TryGetValue(s, out var hs) && (System.DateTime.UtcNow - hs).TotalMilliseconds > FadeMs;
                 bool timedOut = (System.DateTime.UtcNow - _deadSince[s]).TotalMilliseconds > CollapseTimeoutMs;
@@ -871,14 +908,14 @@ namespace Dark_Cloud_Improved_Version
                     int cnt = Memory.ReadInt(MainMonstorUnit + 0x4C);
                     if (cnt > 0) Memory.WriteInt(MainMonstorUnit + 0x4C, cnt - 1);
                     Console.WriteLine($"[BossDeath] slot {s}: removed ({(held ? "hold done" : "timeout")}; count {cnt}->{cnt - 1})");
-                    _peakFrame.Remove(s); _deadSince.Remove(s); _collapseStart.Remove(s); _palStart.Remove(s);
+                    _deadSince.Remove(s); _collapseStart.Remove(s); _palStart.Remove(s);
                 }
             }
-            if (!anyDead && _label100Clobbered && _origLabel100 != null)
+            if (!anyDead && _deathPhase > 0 && _origLabel100 != null)
             {
                 Memory.WriteByteArray(l100, _origLabel100);             // restore AI for live/respawned bosses
-                _label100Clobbered = false;
-                _label100Held = false;
+                _deathPhase = 0;
+                _captured = false;
                 Console.WriteLine("[BossDeath] restored label-100 AI (no dead boss)");
             }
         }
