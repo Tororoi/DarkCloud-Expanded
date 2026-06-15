@@ -502,7 +502,7 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine("Injector: enter a TableIndex or list, e.g. 20  |  20,3,6  |  20!,60 (Gyon once)");
                 return;
             }
-            int.TryParse(Tbox_Injector_Pop.Text, out int population); // 0 (or unparseable) = keep original
+            int population = 0; // 0 (or unparseable) = keep original
             if (idx.Count == 1) EnemyModelInjector.SetSpawnRosterToSpecies(idx[0], population);
             else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
         }

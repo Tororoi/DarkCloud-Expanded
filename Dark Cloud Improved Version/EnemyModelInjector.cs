@@ -594,6 +594,7 @@ namespace Dark_Cloud_Improved_Version
         {
             78  => (0x3AC8u, 0x419C, 0x3A3C),  // Dran        (c12a)
             79  => (0x4484u, 0x4F48, 0x438C),  // Master Utan (c14a)
+            80  => (0x2914u, 0x2B44, 0x288C),  // Ice Queen   (c13a) — codeOff@0x54; label-1 _SET_POSITION; label-120 _RUN_SCRIPT
             83  => (0x575Cu, 0x631C, 0x5700),  // MinotaurJoe (c16a)
             166 => (0x60C0u, 0x6C20, 0),       // c22a (no label-120 _RUN_SCRIPT; cutscene fix TBD)
             _   => (0u, 0, 0),
@@ -645,9 +646,9 @@ namespace Dark_Cloud_Improved_Version
         // 79 = Master Utan (c14a): death is the 14th KEY entry; its info.cfg labels it "14" but the labels skip
         //      11, so the sequential table index is 13 (frames 360–385). No roar, no death-loop. If the collapse
         //      plays the wrong clip in-game, try 14 (i.e. the .chr loader honoured the printed label, not order).
-        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 78 => 6,   79 => 13,  83 => 9,   _ => -1 };
-        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 78 => 100, 79 => 360, 83 => 300, _ => 0  };
-        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 78 => 120, 79 => 385, 83 => 330, _ => 0  };
+        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 78 => 6,   79 => 13,  80 => 11,  83 => 9,   _ => -1 };
+        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 78 => 100, 79 => 360, 80 => 165, 83 => 300, _ => 0  };
+        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 78 => 120, 79 => 385, 80 => 185, 83 => 330, _ => 0  };
         private static int RoarMotion(int tableIndex)         => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;
         private static int RoarStartFrame(int tableIndex)     => tableIndex switch { 83 => 210, _ => 0  };
         private static int RoarEndFrame(int tableIndex)       => tableIndex switch { 83 => 260, _ => 0  };
