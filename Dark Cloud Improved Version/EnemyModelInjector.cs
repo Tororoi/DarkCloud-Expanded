@@ -627,14 +627,27 @@ namespace Dark_Cloud_Improved_Version
         // Per-boss motion indices + frame ranges come from the model's info.cfg KEY list (decoded from <code>.chr;
         // see the datadat-index-and-chr-motions memory). c16a/MinotaurJoe: motion 9 = 死亡 "death" (300-330),
         // motion 4 = 雄たけび "roar" (210-260).
+        //
+        // WHY THE CLOBBER (simpler label-120 rewrites were tried on Joe and DON'T work): the cutscene-type bosses'
+        // collapse is locked INSIDE the defeat cutscene (label-120 calls _RUN_SCRIPT(510)); suppressing the cutscene
+        // loses the animation, and Joe's AI (label-100) keeps running regardless, overriding any motion set from a
+        // one-shot label-120. We tried rewriting Joe's label-120 to two self-contained death patterns:
+        //   • the REGULAR-enemy pattern (… _STATUS_SET_DEAD) — AI kept running, no clean death.
+        //   • the c22a/Black Knight Mount pattern (… _DEL_REFERENCE(1), 0xFB) — same: AI continues as if not dead.
+        // Neither stops label-100, so only the per-frame label-100 clobber below makes the collapse stick on Joe-type
+        // bosses. (c22a works WITHOUT a clobber because its engine death-state stops its AI; Joe's cutscene path
+        // doesn't engage that state. See EngineDeathCleanup for the c22a/166 case.)
 
         // ── Per-boss motion data (TableIndex -> motion index / frame range; -1/0 = none) ──────────────
+        // 78 = Dran (c12a): death = motion 6 (飛行=0 … 死亡=6, frames 100–120), no roar. NOTE its info.cfg has a
+        //      "KEY start key, end key, step" header line; if that counts as table index 0 the death is 7, not 6 —
+        //      verify in-game and bump to 7 if the wrong clip plays. (Dran is a FLYER — see the flying-AI note below.)
         // 79 = Master Utan (c14a): death is the 14th KEY entry; its info.cfg labels it "14" but the labels skip
         //      11, so the sequential table index is 13 (frames 360–385). No roar, no death-loop. If the collapse
         //      plays the wrong clip in-game, try 14 (i.e. the .chr loader honoured the printed label, not order).
-        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 79 => 13,  83 => 9,   _ => -1 };
-        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 79 => 360, 83 => 300, _ => 0  };
-        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 79 => 385, 83 => 330, _ => 0  };
+        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 78 => 6,   79 => 13,  83 => 9,   _ => -1 };
+        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 78 => 100, 79 => 360, 83 => 300, _ => 0  };
+        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 78 => 120, 79 => 385, 83 => 330, _ => 0  };
         private static int RoarMotion(int tableIndex)         => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;
         private static int RoarStartFrame(int tableIndex)     => tableIndex switch { 83 => 210, _ => 0  };
         private static int RoarEndFrame(int tableIndex)       => tableIndex switch { 83 => 260, _ => 0  };
@@ -848,6 +861,25 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // ┌─ SHELVED: Dran (c12a, TableIndex 78) flight on normal floors ───────────────────────────────────┐
+        // Dran spawns and is defeatable, but on a normal floor he hovers high over the player (loc height ~57)
+        // and won't descend, so only RANGED attacks (e.g. Xiao) can reach him — melee can't. This was chased
+        // hard and PARKED (his spawn is intentionally left enabled; just omit him from a roster if you don't
+        // want a ranged-only fight). Findings, so the next person doesn't redo them (full detail in
+        // engine-symbols-and-collision.md):
+        //   • He already PHASES walls: horizontal collision (CMonstorUnit::Step CheckHit/CheckWidth) is gated by
+        //     the FALL flag FloorSlot+0x88, which is 0 for flyers. Forcing it to 1 re-enables collision and
+        //     FREEZES him — proving the gate, and proving the "stuck on a wall" look is really hover, not a pin.
+        //   • The jam is purely hover ALTITUDE. His position is written every frame through a CFrame hierarchy
+        //     (loc = world matrix, not a single field), so mod-side clamps (slower than 60fps) get overwritten —
+        //     altitude can't be held from C#. There is no settable "fly height" field/command in the symbols.
+        //   • Dead ends (all verified in-game): redirecting flight/takeoff _SET_MOTION (changes only animation);
+        //     zeroing flight _SET_MOVE speeds; holding _STATUS_SET_COL_OFF (FloorSlot+0xA8) high (gates the
+        //     normal movers, not terrain); zeroing FALL (+0x88) (already 0); clamping CFrame +0x224 / loc Z.
+        //   • To resume: break on the loc-height write and step up into the flight code to find the target-
+        //     altitude value, then patch it once in the STB (no per-frame fight). That's the only viable path.
+        // └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
         // ┌─ KNOWN ISSUE: Master Utan (79) displaces the roster-index-1 species ──────────────────────────┐
         // When Master Utan is force-spawned, the species at ROSTER INDEX 1 (the entry right after the boss)
         // spawns at a bad position — off-map / underground — for ALL its instances. Roster index 0 (the boss)
@@ -1007,6 +1039,7 @@ namespace Dark_Cloud_Improved_Version
             }
             return blk;
         }
+
 
         private static byte[] HoldSeq()
         {
