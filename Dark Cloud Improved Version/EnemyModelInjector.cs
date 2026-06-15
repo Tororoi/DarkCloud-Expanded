@@ -809,6 +809,43 @@ namespace Dark_Cloud_Improved_Version
                 long r = stbBase + rs;
                 if (Memory.ReadByte(r) == 0x6F) { Memory.WriteByte(r, 0x68); Console.WriteLine($"[BossPatch] _RUN_SCRIPT->_STATUS_SET_DEAD for boss {tableIndex} @ 0x{r:X8}"); }
             }
+            else
+            {
+                // No label-120 _RUN_SCRIPT (e.g. c22a/166): the engine already plays a clean death + fade, but
+                // never frees the slot, so the collision lingers as an invisible blocker. Just remove it once faded.
+                EngineDeathCleanup(tableIndex);
+            }
+        }
+
+        // For bosses whose STOCK death already animates + fades cleanly (no cutscene, no label-120 _RUN_SCRIPT to
+        // retarget), the only defect is that the engine leaves the slot live (collision persists). We let the engine
+        // do the whole death animation, then free the slot ourselves once it has faded out (Opacity ~0) or timed out.
+        private static void EngineDeathCleanup(int tableIndex)
+        {
+            ushort bossEid = Memory.ReadUShort(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.EnemySpeciesId);
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                int rstat = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
+                int hp    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                if (sid != bossEid || rstat == -1 || hp > 0) { _deadSince.Remove(s); continue; }
+                if (!_deadSince.ContainsKey(s))
+                {
+                    _deadSince[s] = System.DateTime.UtcNow;
+                    Console.WriteLine($"[BossDeath] slot {s}: boss {tableIndex} dead — engine plays death+fade, awaiting fade-out to free the slot");
+                }
+                float opacity = System.BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Opacity)));
+                bool faded = opacity < 8f;     // engine has faded it out (default 128; hit-flash only dips to ~44)
+                bool timedOut = (System.DateTime.UtcNow - _deadSince[s]).TotalMilliseconds > CollapseTimeoutMs;
+                if (faded || timedOut)
+                {
+                    Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus), -1);
+                    int cnt = Memory.ReadInt(MainMonstorUnit + EnemyAddresses.MainMonstorUnit.LiveCount);
+                    if (cnt > 0) Memory.WriteInt(MainMonstorUnit + EnemyAddresses.MainMonstorUnit.LiveCount, cnt - 1);
+                    Console.WriteLine($"[BossDeath] slot {s}: freed boss {tableIndex} ({(faded ? $"faded (opacity {opacity:F0})" : "timeout")}; count {cnt}->{cnt - 1})");
+                    _deadSince.Remove(s);
+                }
+            }
         }
 
         // ┌─ KNOWN ISSUE: Master Utan (79) displaces the roster-index-1 species ──────────────────────────┐
