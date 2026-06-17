@@ -3358,8 +3358,10 @@ namespace Dark_Cloud_Improved_Version
         // Idx	Frames	Name (JP)	Meaning
         // 0	10–30	氷出現	ice appear
         // 1	40–55	氷破裂	ice burst
+        // NOTE: idx 76's real ModelCode is "korinoya" (STB c13_korinoya) — the flying, damaging ice-arrow
+        // PROJECTILE, not the static "kori" ice source (that's idx 102). The 4-char "kori" here was a truncation.
         internal static readonly EnemyDefaults IceArrow = new EnemyDefaults {
-            Id=84, TableIndex=76, ModelCode="kori", Name="Ice Arrow",        MaxHp=100,   Abs=17, MinGoldDrop=0, DropChance=0,
+            Id=84, TableIndex=76, ModelCode="korinoya", Name="Ice Arrow", MaxHp=100,   Abs=17, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=2.0f,  EntityScaleCopy=2.0f,  Unk090A=5,  Unk090B=0,
             StealItemId=65535, ItemResA=70, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0 };
@@ -3367,20 +3369,23 @@ namespace Dark_Cloud_Improved_Version
         // IceQueen (SW floor 18) fight companions — all id=0, boss sentinels. Ice-attack effect entities.
         // code=bari → baria.chr (barrier) @ data.dat 0x1e1b1000 — 0 ループ(loop) / 1 消滅(despawn) / 2 出現(appear).
         internal static readonly EnemyDefaults IQComp101 = new EnemyDefaults {
-            Id=0, TableIndex=101, ModelCode="bari", Name="(IQ companion bari)", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=101, ModelCode="bari", Name="Ice Barrier", MaxHp=0, AttackPower=65535 };
         // code=kori → kori.chr (ice arrow); motions documented above at IceArrow (0 ice appear / 1 ice burst).
         // Motions: kori.chr @ data.dat 0x1e3a8800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
         // 0	10–30	氷出現	iceappear
         // 1	40–55	氷破裂	ice破裂
         internal static readonly EnemyDefaults IQComp102 = new EnemyDefaults {
-            Id=0, TableIndex=102, ModelCode="kori", Name="(IQ companion kori)", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=102, ModelCode="kori", Name="Ice Prison", MaxHp=0, AttackPower=65535 };
         // code=i_me → i_meteo.chr (ice meteor) @ data.dat 0x1e37a000 — 0 氷生成(ice form) / 1 ループ / 2 爆発(explode).
         internal static readonly EnemyDefaults IQComp103 = new EnemyDefaults {
-            Id=0, TableIndex=103, ModelCode="i_me", Name="(IQ companion i_me)", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=103, ModelCode="i_me", Name="Ice Meteor", MaxHp=0, AttackPower=65535 };
+        // code=b3_r → b3_reiki.chr (霊気 "aura/spirit") @ data.dat 0x1a8c1800 — 1 motion: 0 reiki (aura).
+        internal static readonly EnemyDefaults SWComp92 = new EnemyDefaults {
+            Id=0, TableIndex=92, ModelCode="b3_r", Name="Ice Aura", MaxHp=0, AttackPower=65535 };
         // code=i_ta → i_tatumaki.chr (ice tornado) @ data.dat 0x1e38b800 — 0 柱出現(pillar) / 1 竜巻(tornado) / 2 竜巻消える(vanish).
         internal static readonly EnemyDefaults IQComp104 = new EnemyDefaults {
-            Id=0, TableIndex=104, ModelCode="i_ta", Name="(IQ companion i_ta)", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=104, ModelCode="i_ta", Name="Ice Tornado", MaxHp=0, AttackPower=65535 };
 
         // SMT boss. Motions: c15a.chr info.cfg @ data.dat 0x1ae5c000.
         // Idx	Frames	Name (JP)	Meaning
@@ -3518,9 +3523,6 @@ namespace Dark_Cloud_Improved_Version
         // 2	80–90	消滅	despawn
         internal static readonly EnemyDefaults DGComp90 = new EnemyDefaults {
             Id=0, TableIndex=90, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535 };
-        // code=b3_r → b3_reiki.chr (霊気 "aura/spirit") @ data.dat 0x1a8c1800 — 1 motion: 0 reiki (aura).
-        internal static readonly EnemyDefaults SWComp92 = new EnemyDefaults {
-            Id=0, TableIndex=92, ModelCode="b3_r", Name="(SW boss companion b3_r)", MaxHp=0, AttackPower=65535 };
         // code=c17_
         // Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -4918,6 +4920,10 @@ namespace Dark_Cloud_Improved_Version
             { DarkGenie.Id,   DarkGenie.Name   }, { RightHand.Id,   RightHand.Name   },
             { LeftHand.Id,    LeftHand.Name    }, { WineKeg.Id,     WineKeg.Name     },
             { BlackKnight.Id, BlackKnight.Name },
+            // Ice Queen's eid-0 companions, tagged with synthetic ids (see BossScriptPatcher.TagCompanions) so the
+            // logs identify them and they're excluded from miniboss scaling. Not real game enemy ids.
+            { 240, "Ice Barrier" },     { 241, "Ice Prison" },    { 242, "Ice Meteor" },
+            { 243, "Ice Tornado" }, { 244, "Ice Aura" },
         };
     }
 

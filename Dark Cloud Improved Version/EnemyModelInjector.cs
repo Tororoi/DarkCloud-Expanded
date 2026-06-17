@@ -226,7 +226,7 @@ namespace Dark_Cloud_Improved_Version
         {
             long rec = EnemySpeciesTable.RecordAddress(tableIndex);
             if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
-            Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
+            // Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
             Memory.WriteUShort(rec + EnemySpeciesTable.MaxHp, 50);
             Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
         }
@@ -285,6 +285,11 @@ namespace Dark_Cloud_Improved_Version
             // Per-species "spawn once vs repeatable" flag = EnemySpeciesTable.SpawnCap (+0x78): 0/3 = repeatable,
             // anything else = at most one per floor (the placement loop retries, so total stays 15). Write
             // it on the source record so the floor-load copy carries it.
+            // The boss (cNNx) is spawn-once. Mark companions spawn-once with '!'. Leave at least one REGULAR enemy
+            // unmarked (repeatable) so it fills the remaining slots up to the floor's population (15) — the floor
+            // won't load until all slots are filled, and spawn-once species can each occupy only one slot.
+            // (We can't bias the spawn toward the boss by duplicating its entry — BtLoadMonstor loads each entry's
+            // model, so a duplicate boss double-loads its large model and blows the buffer, failing the whole spawn.)
             int armedBoss = -1;
             for (int i = 0; i < n; i++)
             {
@@ -295,12 +300,15 @@ namespace Dark_Cloud_Improved_Version
                 bool isBossClass = Memory.ReadByte(rec + EnemySpeciesTable.ModelCode) == (byte)'c';
                 bool isOnce = (spawnOnce != null && i < spawnOnce.Length && spawnOnce[i]) || isBossClass;
                 Memory.WriteInt(rec + EnemySpeciesTable.SpawnCap, isOnce ? 2 : 0);
-                RegularizeBossRecord(tableIndices[i]);
+                // De-sentinel ONLY the boss (cNNx). Companions are sentinels by design (AttackPower 65535 = effect
+                // entity, not a melee attacker); de-sentineling them breaks their attack behavior.
+                if (isBossClass) RegularizeBossRecord(tableIndices[i]);
                 // Arm the script patch for the first boss that has a known _INITIALIZE fix (Dran/Master Utan/
                 // MinotaurJoe/c22a). Other 'c' bosses still spawn (spawn-once) but may be displaced — WIP.
                 if (armedBoss < 0 && BossScriptPatcher.IsPatchable(tableIndices[i])) armedBoss = tableIndices[i];
             }
             BossScriptPatcher.ArmedBoss = armedBoss;
+            if (armedBoss == 80) BossScriptPatcher.TagCompanions();   // name Ice Queen's eid-0 companions in logs
             if (armedBoss >= 0)
                 Console.WriteLine($"[BossPatch] armed for boss {armedBoss} — will NOP its label-1 _INITIALIZE in the loaded STB.");
 
@@ -331,6 +339,50 @@ namespace Dark_Cloud_Improved_Version
             string once = onceList.Count == 0 ? "none" : string.Join(",", onceList);
             Console.WriteLine($"[EnemyInjector] roster mix: dungeon {dungeon}, {n} species "
                 + $"[{string.Join(",", tableIndices[..n])}] spawn-once=[{once}] across {floors} floors. Re-enter a floor.");
+        }
+
+        // TEST: write the EXACT real Shipwreck floor-18 boss block (count/id/weight per entry) to the current
+        // dungeon's floors — including the +0x0 Count field the normal roster path never writes — to see whether
+        // matching the game's block reproduces the deterministic boss spawn (Ice Queen -> slot 0 + companions).
+        internal static void SetIceQueenFloorExact()
+        {
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            if (dungeon < 0 || dungeon >= BtEnemyLayout.DungeonCount)
+            {
+                Console.WriteLine($"[IQexact] not in a known dungeon (checkDungeon={dungeon}).");
+                return;
+            }
+            // (count, tableIndex/id, weight) — verbatim from the real SW floor-18 BtEnemyLayout block.
+            var block = new (int cnt, int id, int wt)[]
+            {
+                (1, 80, 40), (1, 101, 10), (1, 76, 10), (1, 102, 10), (1, 103, 10), (1, 92, 10), (1, 104, 10)
+            };
+            int armed = -1;
+            foreach (var (_, id, _) in block)
+            {
+                long rec = EnemySpeciesTable.RecordAddress(id);
+                bool bossClass = Memory.ReadByte(rec + EnemySpeciesTable.ModelCode) == (byte)'c';
+                Memory.WriteInt(rec + EnemySpeciesTable.SpawnCap, bossClass ? 2 : 0);  // boss spawn-once
+                if (bossClass) RegularizeBossRecord(id);                                // de-sentinel ONLY the boss (companions stay sentinel effect entities)
+                if (armed < 0 && BossScriptPatcher.IsPatchable(id)) armed = id;
+            }
+            BossScriptPatcher.ArmedBoss = armed;
+            if (armed == 80) BossScriptPatcher.TagCompanions();   // name Ice Queen's eid-0 companions in logs
+            int floors = BtEnemyLayout.FloorCount[dungeon];
+            foreach (int layoutBase in new[] { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] })
+                for (int floor = 0; floor < floors; floor++)
+                    for (int e = 0; e < BtEnemyLayout.EntriesPerFloor; e++)
+                    {
+                        long ea = BtEnemyLayout.EntryAddress(layoutBase, floor, e);
+                        if (e < block.Length)
+                        {
+                            Memory.WriteInt(ea + BtEnemyLayout.Count, block[e].cnt);
+                            Memory.WriteInt(ea + BtEnemyLayout.Id, block[e].id);
+                            Memory.WriteInt(ea + BtEnemyLayout.Weight, block[e].wt);
+                        }
+                        else Memory.WriteInt(ea + BtEnemyLayout.Id, -1);
+                    }
+            Console.WriteLine($"[IQexact] wrote exact SW floor-18 block to dungeon {dungeon} (all floors, incl. Count field). Re-enter a floor.");
         }
 
         /// <summary>
@@ -601,7 +653,7 @@ namespace Dark_Cloud_Improved_Version
         };
         internal static bool IsPatchable(int tableIndex) => BossInfo(tableIndex).codeOff != 0;
 
-        private const long ScanLo = 0x01000000, ScanHi = 0x01500000;  // boss-first load window (per dungeon/half)
+        private const long ScanLo = 0x01000000, ScanHi = 0x01A00000;  // boss-first load window (some dungeons, e.g. Moon Sea, load the boss STB above 0x01500000)
         private const int  ChunkWords = 8192;           // 32 KB per batched round-trip
         private const uint StbMagic = 0x00425453u;      // "STB\0"
         private const int  InitCmdLen = 60;             // _INITIALIZE call = 5 vmcode_t records (all 4 bosses)
@@ -685,6 +737,8 @@ namespace Dark_Cloud_Improved_Version
             (78, 0) => new long[] { 0x012166D0 },
             // Master Utan
             (79, 0) => new long[] { 0x01211A90 },
+            // Ice Queen
+            (80, 0) => new long[] { 0x013C4C50 },
             // Minotaur Joe
             (83, 0) => new long[] { 0x011A8990, 0x011A8950 },
             // Black Knight Mount
@@ -698,6 +752,15 @@ namespace Dark_Cloud_Improved_Version
             // Sun & Moon Temple
             // Minotaur Joe
             (83, 3) => new long[] { 0x01137750 },
+            // Moon Sea
+            (80, 4) => new long[] { 0x015860D0 },
+            // Moon Sea — Ice Queen companions (own STBs; explicit addrs disambiguate shared codeOffs)
+            (101, 4) => new long[] { 0x015A2990 },   // baria     (codeOff 0x874)
+            (76, 4)  => new long[] { 0x015BF790 },   // korinoya  (ice-arrow source, codeOff 0x7D0)
+            (102, 4) => new long[] { 0x015DC890 },   // kori      (codeOff 0x5EC)
+            (103, 4) => new long[] { 0x015F9920 },   // i_meteo   (codeOff 0x5EC)
+            (92, 4)  => new long[] { 0x01646B50 },   // reiki     (codeOff 0x3AC)
+            (104, 4) => new long[] { 0x01646B50 },   // i_tatumaki(codeOff 0x3AC)
             _ => System.Array.Empty<long>(),
         };
 
@@ -709,6 +772,25 @@ namespace Dark_Cloud_Improved_Version
             if (codeOff == 0) { _stbBase = -1; return; }
             try
             {
+                // Ice Queen. Two strategies:
+                //  TrySlotSwap: physically reorder all 7 entities to their NATIVE slots (0-6) so the real companion
+                //    scripts run unmodified (no remap, no stand-ins) — gives the real arrow flight + reiki damage.
+                //  else: leave them scattered and drive the fight via the _GET_MONSTOR remap + global stand-ins.
+                if (ti == 80)
+                {
+                    if (TrySlotSwap)
+                    {
+                        ReorderToNativeOnce();                                 // correct slots -> the real companion scripts run
+                        if (IqNudgeX != 0f || IqNudgeY != 0f)
+                            NudgeCompanionPositions();                          // move companions the SAME offset as Ice Queen (preserve layout)
+                        else if (IqTranslate)                                  // off for the Moon Sea native test (she stays at her -Y corner)
+                        {
+                            if (TranslateCompanions) PatchCompanionPositions();
+                            PatchKorinoyaArrow();
+                        }
+                    }
+                    else { if (TranslateCompanions) PatchCompanionPositions(); PatchShieldTarget(); KorinoyaStandIn(); }
+                }
                 int dungeon = Memory.ReadByte(Addresses.checkDungeon);
                 // 1) Known addresses for (boss, dungeon) — instant, deterministic, no scan.
                 foreach (long addr in KnownAddrs(ti, dungeon))
@@ -759,6 +841,797 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
+        // Ice Queen's attacks are separate companion entities (kori/i_meteo/i_tatumaki/baria) coordinated via global
+        // ints. The fight's coordination depends on everyone starting in the native arena layout (NOP-ing the label-1
+        // _SET_POSITION calls breaks it). But that layout is an off-map corner near the origin, so she's unreachable.
+        // Fix: TRANSLATE the whole fight onto a walkable chest tile — rewrite every entity's _SET_POSITION by ONE
+        // shared delta = (chestX, chestY - IqNativeY). The engine spawns them there (no loc-write), Ice Queen lands on
+        // the chest (reachable), and the relative layout (hence the coordination) is preserved. All natives have X=0;
+        // only Y differs. baria self-positions (follows Ice Queen via the slot lookup), so it needs no translate.
+        // _SET_POSITION only takes effect at spawn, so writing it every tick is harmless after spawn and needs no
+        // floor-tracking — native+delta is idempotent. (kori & i_meteo share codeOff 0x5EC; disambiguate by which
+        // candidate offset actually holds the _SET_POSITION push.)
+        private const float IqNativeX = 0f, IqNativeY = 177f;
+        // She lands exactly on the chest tile and gets stuck inside the chest object, so shift the whole fight off it
+        // (world +Y). Tunable — large boss body needs real clearance; bump/flip if she lands in a wall.
+        private const float ChestClearOffsetY = 10f;
+        // false = leave companions at native positions (they move/attack there); true = translate them with the boss.
+        private const bool TranslateCompanions = true;
+        private static bool _iqXlateLogged = false;
+        // Offset test: nudge Ice Queen from her native position toward the player (worldX +X, worldY +Y) to find how
+        // far she can move before the companion repositioning breaks. Both 0 = fall back to full chest translate.
+        private const float IqNudgeX = 360f;
+        private const float IqNudgeY = 360f;   // worldY moves from native -177 toward the player's +Y side
+        private static float _iqNatX = float.NaN, _iqNatZ;   // captured native _SET_POSITION worldX / z-arg
+        private static float ReadCoordArg(long opAddr, long valAddr)
+        {
+            int op = Memory.ReadInt(opAddr), v = Memory.ReadInt(valAddr);
+            return op == 2 ? BitConverter.Int32BitsToSingle(v) : (float)v;   // op2=float operand, else int
+        }
+        // Each companion's REAL spawn _SET_POSITION (the worldY=-380 / worldY=0 anchor that sets its idle/char position),
+        // found via the [CompSpawn] dump. Nudging these (NOT the effect/emitter blocks the old list targeted) actually
+        // relocates the companion's body with Ice Queen. Shared codeOffs (0x5EC kori+i_meteo, 0x3AC i_tatumaki+reiki)
+        // are disambiguated per-STB by IsSetPosPush — the wrong offset isn't a _SET_POSITION in that STB, so it's skipped.
+        private static readonly (uint codeOff, int initOff, float nativeY)[] _iqCompanionPos =
+        {
+            (0x7D0u, 0x724, IqNativeY),   // korinoya  (ice-arrow source) spawn
+            (0x5ECu, 0xB3C, IqNativeY),   // kori      spawn
+            (0x5ECu, 0x714, IqNativeY),   // i_meteo   spawn
+            (0x3ACu, 0x4E0, IqNativeY),   // i_tatumaki spawn
+            (0x3ACu, 0xD9C, IqNativeY),   // reiki     spawn
+            (0x874u, 0x79C, IqNativeY),   // baria     (shield) spawn
+        };
+        private static readonly long[] _compAddr = { -1, -1, -1, -1, -1, -1 };
+        // Per-companion captured native _SET_POSITION coords (worldX / z-arg), for the same-offset nudge as Ice Queen.
+        private static readonly float[] _compNatX = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
+        private static readonly float[] _compNatZ = new float[6];
+
+        private static bool IsSetPosPush(long a)   // 5-record _SET_POSITION block starts with push(op3,operand1,0x24)
+            => Memory.ReadInt(a) == 3 && Memory.ReadInt(a + 4) == 1 && Memory.ReadInt(a + 8) == 0x24;
+
+        // First active chest with a sane coord = a guaranteed-walkable target (chests are placed before enemies, so
+        // the table is populated by the time we patch the STBs pre-spawn).
+        private static bool TryGetChestTarget(out float cx, out float cy)
+        {
+            cx = cy = 0f;
+            int cnt = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            if (cnt < 1 || cnt > 16) return false;
+            for (int c = 0; c < cnt; c++)
+            {
+                if (Memory.ReadInt(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.ActiveFlag)) != 1) continue;
+                float wx = Memory.ReadFloat(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.WorldX));
+                float wy = Memory.ReadFloat(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.WorldY));
+                if (wx > 10f && wx < 5000f && wy > 10f && wy < 5000f) { cx = wx; cy = wy; return true; }
+            }
+            return false;
+        }
+
+        // Rewrite a _SET_POSITION block's X (arg1) and Y (arg3) to float literals; leave arg2 (height) untouched.
+        // arg1: operand@+16, value@+20.  arg3: operand@+40, value@+44.  (operand 2 = float literal.)
+        // WRITE ONCE: skip if the block already holds the target (operand=float + matching value). The native STB
+        // has operand!=2, so the first (pre-spawn) tick writes; afterwards we no-op until the floor reloads native.
+        // Rewriting the block every tick while the companion's AI runs freezes its attack (idle/"stuck in position").
+        private static void WritePosArgs(long block, float newX, float newY)
+        {
+            if (Memory.ReadInt(block + 16) == 2 && Memory.ReadInt(block + 40) == 2
+                && Math.Abs(BitConverter.Int32BitsToSingle(Memory.ReadInt(block + 20)) - newX) < 0.5f
+                && Math.Abs(BitConverter.Int32BitsToSingle(Memory.ReadInt(block + 44)) - newY) < 0.5f)
+                return;   // already translated this floor — don't touch the running interpreter
+            Memory.WriteInt(block + 16, 2);
+            Memory.WriteInt(block + 20, BitConverter.SingleToInt32Bits(newX));
+            Memory.WriteInt(block + 40, 2);
+            Memory.WriteInt(block + 44, BitConverter.SingleToInt32Bits(newY));
+        }
+
+        private static void PatchCompanionPositions()
+        {
+            if (!TryGetChestTarget(out float cx, out float cy)) return;   // no walkable target yet — leave native this tick
+            // _SET_POSITION arg3 is WORLD Y *negated* (arg3 = +1577 → loc Y = -1577), while arg1 is world X directly.
+            // The walkable area is all +Y, so to land world (cx, cy) we need argX = cx, argY = -cy. Baking the sign
+            // into dy keeps the shared-delta layout (native_argY + dy) correct.
+            float dx = cx - IqNativeX, dy = -cy - IqNativeY - ChestClearOffsetY;
+            // Fast path: re-validate cached STBs (cheap); only full-scan if any entry is unresolved.
+            bool needScan = false;
+            for (int k = 0; k < _iqCompanionPos.Length; k++)
+            {
+                long a = _compAddr[k];
+                if (a >= 0 && Memory.ReadUInt(a) == StbMagic && (uint)Memory.ReadInt(a + 0x54) == _iqCompanionPos[k].codeOff)
+                    WritePosArgs(a + _iqCompanionPos[k].initOff, IqNativeX + dx, _iqCompanionPos[k].nativeY + dy);
+                else { _compAddr[k] = -1; needScan = true; }
+            }
+            if (!needScan) return;
+            for (long a = ScanLo; a < ScanHi; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, ScanHi);
+                int n = (int)((end - a) / 4);
+                if (n <= 0x16) continue;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 0x16 < n; i++)
+                {
+                    if (w[i] != StbMagic) continue;
+                    uint co = w[i + 0x15];
+                    long stb = a + (long)i * 4;
+                    for (int k = 0; k < _iqCompanionPos.Length; k++)
+                    {
+                        if (_compAddr[k] >= 0 || _iqCompanionPos[k].codeOff != co) continue;
+                        int io = _iqCompanionPos[k].initOff;
+                        if (IsSetPosPush(stb + io))
+                        {
+                            _compAddr[k] = stb;
+                            WritePosArgs(stb + io, IqNativeX + dx, _iqCompanionPos[k].nativeY + dy);
+                            Console.WriteLine($"[IQxlate] companion #{k} STB 0x{stb:X8} -> ({IqNativeX + dx:F0},{_iqCompanionPos[k].nativeY + dy:F0})");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Move each companion by the SAME offset as Ice Queen's nudge (IqNudgeX/IqNudgeY), relative to its OWN
+        // native spawn — preserving the whole cluster's relative layout so the fight behaves as it does at native,
+        // just shifted. Native coords captured per-companion once (constant). worldY = -zArg, so +IqNudgeY worldY
+        // means zArg -= IqNudgeY.
+        private static void NudgeOne(int k, long stb)
+        {
+            long block = stb + _iqCompanionPos[k].initOff;
+            if (float.IsNaN(_compNatX[k]))
+            {
+                if (!IsSetPosPush(block)) return;
+                _compNatX[k] = ReadCoordArg(block + 16, block + 20);
+                _compNatZ[k] = ReadCoordArg(block + 40, block + 44);
+            }
+            WritePosArgs(block, _compNatX[k] + IqNudgeX, _compNatZ[k] - IqNudgeY);
+        }
+
+        // One-shot: dump EVERY _SET_POSITION block in each companion STB, with coords, so we can find each one's
+        // real SPAWN block (matching its native char position) vs. the effect/emitter blocks we were wrongly nudging.
+        // (tableIndex, codeOff, name) for Ice Queen's companions — resolved to STB addrs via KnownAddrs(ti, dungeon),
+        // with a codeOff scan fallback (excluding already-known addrs) for ones not yet in KnownAddrs (reiki/baria).
+        private static readonly (int ti, uint codeOff, string name)[] _iqCompanions =
+        {
+            (80, 0x2914u, "IceQueen"),
+            (76, 0x7D0u, "korinoya"), (102, 0x5ECu, "kori"), (103, 0x5ECu, "i_meteo"),
+            (104, 0x3ACu, "i_tatumaki"), (92, 0x3ACu, "reiki"), (101, 0x874u, "baria"),
+        };
+        private static long ScanForCodeOff(uint codeOff, System.Collections.Generic.HashSet<long> exclude)
+        {
+            for (long a = ScanLo; a < ScanHi; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, ScanHi);
+                int n = (int)((end - a) / 4);
+                if (n <= 0x16) continue;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 0x16 < n; i++)
+                {
+                    if (w[i] != StbMagic || w[i + 0x15] != codeOff) continue;
+                    long stb = a + (long)i * 4;
+                    if (!exclude.Contains(stb)) return stb;
+                }
+            }
+            return -1;
+        }
+        // One-shot: dump Ice Queen's dispatcher command flow (codeOff grid @0x2914) so we can find the player-proximity
+        // gate (GET_POSITION(-2) player + GET_DISTANCE vs a fixed arena/origin reference) that starts her attack loop.
+        private static bool _iqActDumped;
+        private static void DumpIqActivation(long stbBase)
+        {
+            if (_iqActDumped) return;
+            _iqActDumped = true;
+            var cmd = new System.Collections.Generic.Dictionary<int, string>
+            {
+                {0x24,"SET_POS"}, {0x0B,"GET_POS"}, {0x0A,"GET_DIST"}, {0xD5,"GET_MONSTOR_POS"}, {0xE1,"GET_MONSTOR_VEC"},
+                {0xDC,"SET_GLOBAL"}, {0xDD,"GET_GLOBAL"}, {0xC8,"SET_MOTION"}, {0x20,"SET_MOVE"}, {0x22,"CHK_MOVE"},
+            };
+            Console.WriteLine($"[IQact] IceQueen dispatcher 0x{stbBase:X8} +0x2914:");
+            for (int k = 0; k < 220; k++)
+            {
+                int off = 0x2914 + k * 12;
+                int op = Memory.ReadInt(stbBase + off), a1 = Memory.ReadInt(stbBase + off + 4), a2 = Memory.ReadInt(stbBase + off + 8);
+                string note = null;
+                if (op == 3 && cmd.TryGetValue(a2, out var c3)) note = "CMD " + c3;
+                else if (op == 3) note = $"push {a2}";
+                else if (op == 1 && cmd.TryGetValue(a1, out var c1)) note = "CMD " + c1;
+                else if (op == 1) note = $"push1 {a1}";
+                else note = op switch { 21 => $"EXT({a1})", 23 => "YIELD", 4 => $"JMP->0x{a1:X}", 17 => $"BRF->0x{a1:X}", 18 => $"BRT->0x{a1:X}", 15 => "RET", 14 => "BINOP", _ => null };
+                if (note != null) Console.WriteLine($"[IQact] +0x{off:X}: {note}");
+                if (op == 15) break;
+            }
+        }
+
+        private static readonly System.Collections.Generic.HashSet<int> _compDumped = new();
+        private static readonly System.Collections.Generic.HashSet<long> _compResolved = new();
+        private static void DumpCompanionSpawns()
+        {
+            if (_compDumped.Count >= _iqCompanions.Length) return;
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            foreach (var (cti, co, nm) in _iqCompanions)
+            {
+                if (_compDumped.Contains(cti)) continue;
+                long stb = -1;
+                foreach (long addr in KnownAddrs(cti, dungeon))
+                    if (!_compResolved.Contains(addr) && Memory.ReadUInt(addr) == StbMagic && (uint)Memory.ReadInt(addr + 0x54) == co) { stb = addr; break; }
+                if (stb < 0) stb = ScanForCodeOff(co, _compResolved);   // exclude already-claimed addrs (shared codeOffs)
+                if (stb < 0) continue;
+                _compResolved.Add(stb);
+                _compDumped.Add(cti);
+                Console.WriteLine($"[CompSpawn] {nm} (ti {cti}) @0x{stb:X8}:");
+                uint[] body = Memory.ReadUIntBatch(stb + 0x100, 0x1800);   // 0x100..0x6100 (full STB)
+                for (int j = 0; j + 12 < body.Length; j++)
+                {
+                    if (body[j] != 3 || body[j + 1] != 1 || body[j + 2] != 0x24) continue;
+                    float x = body[j + 4] == 2 ? BitConverter.Int32BitsToSingle((int)body[j + 5]) : (int)body[j + 5];
+                    float z = body[j + 10] == 2 ? BitConverter.Int32BitsToSingle((int)body[j + 11]) : (int)body[j + 11];
+                    Console.WriteLine($"[CompSpawn]   +0x{0x100 + j * 4:X}: x={x:F0} z={z:F0} (worldY={-z:F0})");
+                }
+            }
+        }
+
+        // One-shot: dump each live floor-slot's block (0x190) as coordinate-like floats, to find a registration/home
+        // field still at native while the live LocationX/Y is shifted — the likely engine enemy-wake reference.
+        private static bool _fsDumped;
+        private static void DumpFloorSlots()
+        {
+            if (_fsDumped) return;
+            bool any = false;
+            for (int s = 0; s <= 6; s++)
+            {
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
+                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                any = true;
+                Console.WriteLine($"[FSdump] slot {s} eid={eid}:");
+                uint[] blk = Memory.ReadUIntBatch(EnemyAddresses.FloorSlots.SlotAddr(s, 0), 0x190 / 4);
+                for (int i = 0; i < blk.Length; i++)
+                {
+                    float f = BitConverter.Int32BitsToSingle((int)blk[i]);
+                    if (Math.Abs(f) > 10f && Math.Abs(f) < 5000f)
+                        Console.WriteLine($"[FSdump]   +0x{i * 4:X}: {f:F0}");
+                }
+            }
+            if (any) _fsDumped = true;
+        }
+
+        private static void NudgeCompanionPositions()
+        {
+            DumpCompanionSpawns();
+            DumpFloorSlots();
+            bool needScan = false;
+            for (int k = 0; k < _iqCompanionPos.Length; k++)
+            {
+                long a = _compAddr[k];
+                if (a >= 0 && Memory.ReadUInt(a) == StbMagic && (uint)Memory.ReadInt(a + 0x54) == _iqCompanionPos[k].codeOff)
+                    NudgeOne(k, a);
+                else { _compAddr[k] = -1; needScan = true; }
+            }
+            if (!needScan) return;
+            for (long a = ScanLo; a < ScanHi; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, ScanHi);
+                int n = (int)((end - a) / 4);
+                if (n <= 0x16) continue;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 0x16 < n; i++)
+                {
+                    if (w[i] != StbMagic) continue;
+                    uint co = w[i + 0x15];
+                    long stb = a + (long)i * 4;
+                    for (int k = 0; k < _iqCompanionPos.Length; k++)
+                    {
+                        if (_compAddr[k] >= 0 || _iqCompanionPos[k].codeOff != co) continue;
+                        if (IsSetPosPush(stb + _iqCompanionPos[k].initOff))
+                        {
+                            _compAddr[k] = stb;
+                            NudgeOne(k, stb);
+                            Console.WriteLine($"[IQnudge] companion #{k} STB 0x{stb:X8} +({IqNudgeX:F0},{IqNudgeY:F0})");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ice Queen's shield (baria, c13_baria.stb) hardcodes the boss as slot 0: it calls _GET_MONSTOR_POS(0)
+        // and _GET_MONSTOR_VECTOR(0) to wrap around her. The roster places her in a random slot, so the shield
+        // looks up the wrong slot and lands away from her. We can't force her to slot 0 (engine-coded placement;
+        // the cave needs a code hook that crashes PINE), so instead we PATCH the shield's STB to read her ACTUAL
+        // slot. baria codeOff@0x54 = 0x874; the 4 slot-index value fields are at cmdId-push + 0x14.
+        // Option C — full slot remap. EVERY companion (not just baria/korinoya) hardcodes the boss as native slot 0
+        // via _GET_MONSTOR_POS(0)/_GET_MONSTOR_VECTOR(0); on a random floor she's elsewhere, so unpatched companions
+        // position against the wrong slot and the handshake never advances. We scan for all companion STBs (codeOffs
+        // are shared: i_tatumaki/reiki=0x3AC, kori/i_meteo=0x5EC, korinoya=0x7D0, baria=0x874), and grid-walk each to
+        // re-point every _GET_MONSTOR ref at Ice Queen's real slot. (Global-int mailboxes are literal/slot-independent,
+        // and _GET_POSITION positive args resolve to neither self nor a slot in the handler — so neither is remapped.)
+        private static int _remappedForSlot = -1;   // IQ slot we last remapped for (re-armed when she despawns)
+        private static int _waveCount;               // attack/shield wave alternation counter (KorinoyaStandIn)
+
+        // ── EXPERIMENTAL: physical slot reorder ──────────────────────────────────────────────────────────
+        // Monsters are direct-indexed off MainMonstorUnit (no entity pointer to swap), and nothing stores its own
+        // slot index — the slot IS the array position. So to move an entity from slot A to slot B we physically
+        // swap all four per-slot data blocks; the scripts then find it at its new index. INCREMENTAL TEST: swap
+        // only Ice Queen -> slot 0 and check it's stable. Risk: the game runs during the (~25-50ms) swap and could
+        // read half-swapped state. Toggle off here if it crashes/glitches.
+        private const bool TrySlotSwap = true;
+        // When false: NO position translation — Ice Queen + companions stay at their native (genuine-fight) positions
+        // so the real coordinate frame is intact (for the Moon Sea test where her -Y corner is reachable). The death
+        // patch + slot reorder still apply. Flip true to translate her onto a walkable chest (reachability) again.
+        private const bool IqTranslate = false;
+        private static bool _swapDone;
+        private static readonly (long baseAddr, int stride)[] _slotBlocks =
+        {
+            (0x21E16BA0, 0x190),   // FloorSlot         (MMU + slot*0x190 + 0x1E3D0)
+            (0x21E184A0, 0x3510),  // CCharacter        (MMU + slot*0x3510 + 0x1FCD0) — position/render/motion
+            (0x21E4D5A0, 0x48),    // CRunScript        (MMU + slot*0x48 + 0x54DD0)   — STB VM state
+            // NOTE: the per-slot alloc-ptr at MMU+slot*4 is deliberately NOT swapped — for slot 0 that's MMU+0
+            // (the CMainMonstorUnit header), and swapping it corrupted the unit (frame-counter reset on activation).
+        };
+        // Native slot layout (the genuine Shipwreck fight): each entity at the slot its scripts hardcode. Identified
+        // by eid (IceQueen 113, korinoya 84 confirmed from the genuine fight; companions tagged 240-244 by
+        // TagCompanions, slot = their global-int mailbox index: i_tatumaki[1], kori[3], i_meteo[4], reiki[5]; baria[6]).
+        private static readonly (int nativeSlot, ushort eid)[] _nativeLayout =
+        {
+            (0, 113),   // Ice Queen
+            (1, 243),   // i_tatumaki (tornado)
+            (2, 84),    // korinoya (ice arrow)
+            (3, 241),   // kori (ice source)
+            (4, 242),   // i_meteo (meteor)
+            (5, 244),   // reiki (aura)
+            (6, 240),   // baria (shield)
+        };
+        private static int FindSlotByEid(ushort eid)
+        {
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1
+                    && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == eid)
+                    return s;
+            return -1;
+        }
+        // Once all 7 entities have spawned, physically move each to its native slot (selection-place: re-find by eid
+        // each step since swaps shuffle things). Runs once per fight; re-armed when Ice Queen despawns.
+        private static void ReorderToNativeOnce()
+        {
+            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; return; }   // Ice Queen gone — re-arm
+            if (_swapDone) return;
+            foreach (var (_, eid) in _nativeLayout)
+                if (FindSlotByEid(eid) < 0) return;                       // wait until all 7 are present
+            _swapDone = true;
+            foreach (var (t, eid) in _nativeLayout)
+            {
+                int s = FindSlotByEid(eid);
+                if (s >= 0 && s != t) SwapSlots(s, t);
+            }
+            Console.WriteLine("[IQreorder] placed all 7 entities at native slots 0-6 — real scripts now run");
+        }
+
+        // Force korinoya's [2] handler to reach its ack (SET_GLOBAL_INT(0,1) @0x104C) + homing. At +Y her reposition
+        // mirrors to -Y, failing the distance/state checks that gate the ack via BR_FALSE @0x1004 (wait loop ->0xFD4)
+        // and @0x1040 (skip-ack ->0x170C). Convert both BR_FALSE (op17) to POP (op16): POP consumes the same condition
+        // the preceding BINOP pushed, then falls through — so she always acks (handshake advances) and runs her real
+        // arrow homing, no stand-in. Re-armed per floor (STB reloads).
+        private static bool _korPatched;
+        private static void PatchKorinoyaArrow()
+        {
+            if (_korPatched) return;
+            long stb = ScanRange(ScanLo, ScanHi, 0x7D0);
+            if (stb < 0) return;
+            _korPatched = true;
+            int n = 0;
+            if (Memory.ReadInt(stb + 0x1004) == 17) { Memory.WriteInt(stb + 0x1004, 16); n++; }
+            if (Memory.ReadInt(stb + 0x1040) == 17) { Memory.WriteInt(stb + 0x1040, 16); n++; }
+            Console.WriteLine($"[KORpatch] korinoya @0x{stb:X8}: {n} BR_FALSE gate(s) -> POP (force ack + homing)");
+        }
+
+        // Read both slots' blocks fully first, then write them swapped, to minimize the half-swapped window.
+        private static void SwapSlots(int a, int b)
+        {
+            int nb = _slotBlocks.Length;
+            var aData = new uint[nb][];
+            var bData = new uint[nb][];
+            for (int i = 0; i < nb; i++)
+            {
+                var (baseAddr, stride) = _slotBlocks[i];
+                int words = stride / 4;
+                aData[i] = Memory.ReadUIntBatch(baseAddr + (long)a * stride, words);
+                bData[i] = Memory.ReadUIntBatch(baseAddr + (long)b * stride, words);
+            }
+            // Relocate self/cross pointers: a word pointing into the SOURCE slot's region must be re-aimed at the
+            // DEST slot (+ (dst-src)*stride). aData came from slot a -> goes to b; bData from b -> goes to a.
+            int relA = RelocatePointers(aData, a, b);
+            int relB = RelocatePointers(bData, b, a);
+
+            for (int i = 0; i < nb; i++)
+            {
+                var (baseAddr, stride) = _slotBlocks[i];
+                Memory.WriteUIntBatch(baseAddr + (long)a * stride, bData[i]);
+                Memory.WriteUIntBatch(baseAddr + (long)b * stride, aData[i]);
+            }
+            Console.WriteLine($"[IQswap] swapped slot {a} <-> {b}; relocated {relA}+{relB} self-pointers");
+        }
+
+        // Adjust every word in <data> that points into <srcSlot>'s FloorSlot/CCharacter/CRunScript region so it
+        // points into <dstSlot>'s corresponding region (the entity is moving srcSlot -> dstSlot). Pointers are
+        // PS2-native (addr & 0x1FFFFFFF), 4-byte aligned. Returns the count relocated.
+        private static int RelocatePointers(uint[][] data, int srcSlot, int dstSlot)
+        {
+            int relocated = 0;
+            for (int blk = 0; blk < data.Length; blk++)
+                for (int wi = 0; wi < data[blk].Length; wi++)
+                {
+                    uint val = data[blk][wi];
+                    long pn = val & 0x1FFFFFFF;
+                    if ((pn & 3) != 0) continue;                         // pointers are word-aligned
+                    for (int r = 0; r < _slotBlocks.Length; r++)
+                    {
+                        long lo = (_slotBlocks[r].baseAddr & 0x1FFFFFFF) + (long)srcSlot * _slotBlocks[r].stride;
+                        if (pn >= lo && pn < lo + _slotBlocks[r].stride)
+                        {
+                            data[blk][wi] = (uint)(val + (long)(dstSlot - srcSlot) * _slotBlocks[r].stride);
+                            relocated++;
+                            break;
+                        }
+                    }
+                }
+            return relocated;
+        }
+
+        // Ice Queen's companions ship with EnemySpeciesId 0 in their table records (only korinoya/IceQueen have
+        // real ids), so logs show them as "Unknown id=0". Write a synthetic id into each record BEFORE spawn (the
+        // slot inherits the record's id at spawn) so [EnemyInfo]/the observer name them via Enemies.BossEnemies,
+        // which also excludes them from miniboss scaling. Idempotent (only writes records still at 0).
+        private static readonly (int tableIndex, ushort eid)[] _companionTags =
+        { (101, 240), (102, 241), (103, 242), (104, 243), (92, 244) };  // baria, kori, i_meteo, i_tatumaki, reiki
+        internal static void TagCompanions()
+        {
+            foreach (var (idx, eid) in _companionTags)
+            {
+                long a = EnemySpeciesTable.RecordAddress(idx) + EnemySpeciesTable.EnemySpeciesId;
+                if (Memory.ReadUShort(a) == 0)
+                {
+                    Memory.WriteInt(a, eid);   // eid in low 16 bits; +0x7E padding (always 0) stays 0
+                    Console.WriteLine($"[IQtag] companion table idx {idx} -> eid {eid}");
+                }
+            }
+        }
+
+        // Re-point every companion's boss reference at Ice Queen's actual slot — WITHOUT relying on the codeOff
+        // (only korinoya/baria have code starting there; kori/i_meteo/i_tatumaki/reiki keep theirs elsewhere). We
+        // signature-scan the whole boss-load window for the _GET_MONSTOR command shape, on the 12-byte vmcode grid:
+        //   entry0 = push(cmdId 0xD5/0xE1)   entry1 = push(slot)   [ext follows]
+        // A push is op 1 (value @+4) OR op 3 (value @+8). We only rewrite slot==0 (the native boss) -> iqSlot, so a
+        // self/neighbor ref (non-zero) is never clobbered. Runs once per slot (re-armed when Ice Queen despawns).
+        private static int PushVal(uint op, uint w1, uint w2) => op == 1 ? (int)w1 : op == 3 ? (int)w2 : int.MinValue;
+        private static void RemapCompanionBossRefs(int iqSlot)
+        {
+            if (_remappedForSlot == iqSlot) return;
+            var stbStarts = new System.Collections.Generic.List<(long a, uint co)>();
+            var hits = new System.Collections.Generic.List<long>();
+            const int Step = ChunkWords - 12;   // overlap so a command spanning a chunk edge isn't missed
+            for (long a = ScanLo; a < ScanHi; a += (long)Step * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, ScanHi);
+                int n = (int)((end - a) / 4);
+                if (n <= 0x16) continue;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 7 < n; i++)
+                {
+                    if (w[i] == StbMagic && i + 0x15 < n) { stbStarts.Add((a + (long)i * 4, w[i + 0x15])); continue; }
+                    int cmd = PushVal(w[i], w[i + 1], w[i + 2]);              // entry0 = push(cmdId)?
+                    if (cmd != 0xD5 && cmd != 0xE1) continue;                // not _GET_MONSTOR_POS/_VECTOR
+                    uint argOp = w[i + 3];                                    // entry1 = push(slot)
+                    int slotWord = argOp == 1 ? i + 4 : argOp == 3 ? i + 5 : -1;
+                    if (slotWord < 0 || slotWord >= n) continue;
+                    if (w[slotWord] == 0)                                     // native boss ref only
+                    {
+                        Memory.WriteInt(a + (long)slotWord * 4, iqSlot);
+                        hits.Add(a + (long)i * 4);
+                    }
+                }
+            }
+            _remappedForSlot = iqSlot;
+            // attribute each hit to the STB that contains it (most recent start <= hit), for confirmation logging
+            stbStarts.Sort((x, y) => x.a.CompareTo(y.a));
+            var perCo = new System.Collections.Generic.SortedDictionary<uint, int>();
+            foreach (long h in hits)
+            {
+                uint co = 0;
+                foreach (var s in stbStarts) { if (s.a <= h) co = s.co; else break; }
+                perCo[co] = perCo.TryGetValue(co, out int v) ? v + 1 : 1;
+            }
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (var kv in perCo) parts.Add($"co=0x{kv.Key:X}:{kv.Value}");
+            Console.WriteLine($"[IQremap] re-pointed {hits.Count} _GET_MONSTOR boss refs -> slot {iqSlot} [{string.Join(" ", parts)}]");
+        }
+        // One-run diagnostic: confirm the _SET_POSITION arg↔loc-axis mapping on Ice Queen herself, and that the
+        // chest table is populated/valid at patch time — so the chest-based position translation can be wired up.
+        private static bool _iqDiagDone = false;
+        private static void DiagnoseIQ(int iqSlot)
+        {
+            if (_iqDiagDone) return;
+            var (codeOff, initOff, _) = BossInfo(80);
+            if (_stbBase < 0 || !IsBossStb(_stbBase, codeOff)) return;
+            long b = _stbBase + initOff;   // _SET_POSITION block: args at +20/+32/+44, operands at +16/+28/+40
+            int o1 = Memory.ReadInt(b + 16), v1 = Memory.ReadInt(b + 20);
+            int o2 = Memory.ReadInt(b + 28), v2 = Memory.ReadInt(b + 32);
+            int o3 = Memory.ReadInt(b + 40), v3 = Memory.ReadInt(b + 44);
+            float lx = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(iqSlot, EnemySlotOffsets.LocationX));
+            float lz = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(iqSlot, EnemySlotOffsets.LocationZ));
+            float ly = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(iqSlot, EnemySlotOffsets.LocationY));
+            float f1 = BitConverter.Int32BitsToSingle(v1), f2 = BitConverter.Int32BitsToSingle(v2), f3 = BitConverter.Int32BitsToSingle(v3);
+            Console.WriteLine($"[IQdiag] _SET_POSITION args: a1(op{o1})={v1}/{f1:F1}  a2(op{o2})={v2}/{f2:F1}  a3(op{o3})={v3}/{f3:F1}");
+            Console.WriteLine($"[IQdiag] IQ loc: X(0x100)={lx:F1}  Z/height(0x104)={lz:F1}  Y(0x108)={ly:F1}");
+            int cc = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            Console.WriteLine($"[IQdiag] chest count={cc}");
+            for (int c = 0; c < Math.Min(Math.Max(cc, 0), 16); c++)
+            {
+                int af = Memory.ReadInt(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.ActiveFlag));
+                float wx = Memory.ReadFloat(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.WorldX));
+                float wy = Memory.ReadFloat(ChestAddresses.ChestSlots.SlotAddr(c, ChestSlotOffsets.WorldY));
+                Console.WriteLine($"[IQdiag]   chest[{c}] active={af} world=({wx:F1},{wy:F1})");
+            }
+            _iqDiagDone = true;
+        }
+
+        // One-shot: list EVERY loaded STB (address + codeOff) across a wide window so we can find the companion
+        // STBs the boss-ref scan missed (kori/i_meteo), and dump the bytecode grid of the codeOff-0x3AC companion
+        // (the one with COMPUTED global indices) so we can decode how it builds its mailbox index.
+        private static bool _stbListDone;
+        private static void DumpAllStbsOnce()
+        {
+            if (_stbListDone) return; _stbListDone = true;
+            const long lo = 0x01000000, hi = 0x01A00000;
+            var found = new System.Collections.Generic.List<(long addr, uint co)>();
+            for (long a = lo; a < hi; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, hi);
+                int n = (int)((end - a) / 4);
+                if (n <= 0x16) continue;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 0x16 < n; i++)
+                    if (w[i] == StbMagic) found.Add((a + (long)i * 4, w[i + 0x15]));
+            }
+            Console.WriteLine($"[IQstblist] {found.Count} STBs in 0x{lo:X}-0x{hi:X}:");
+            foreach (var (addr, co) in found) Console.WriteLine($"[IQstblist]   0x{addr:X8} codeOff=0x{co:X}");
+            foreach (var (addr, co) in found)
+                if (co == 0x3AC)
+                {
+                    Console.WriteLine($"[IQgrid] STB 0x{addr:X8} co=0x3AC bytecode (op a1 a2):");
+                    for (int k = 0; k < 130; k++)
+                    {
+                        long e = addr + co + (long)k * 12;
+                        int op = Memory.ReadInt(e), a1 = Memory.ReadInt(e + 4), a2 = Memory.ReadInt(e + 8);
+                        Console.WriteLine($"[IQgrid]   +0x{co + (uint)(k * 12):X}: op={op} a1={a1} a2={a2}");
+                        if (op == 15) break;
+                    }
+                }
+        }
+
+        private static void PatchShieldTarget()
+        {
+            int n = EnemyAddresses.FloorSlots.Count;
+            int iq = -1;
+            for (int s = 0; s < n; s++)
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1
+                    && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == 113) { iq = s; break; }
+            if (iq < 0) { _remappedForSlot = -1; return; }   // Ice Queen gone — re-arm the remap for next floor
+
+            DiagnoseIQ(iq);
+
+            // Option C: re-point EVERY companion's _GET_MONSTOR refs (baria, korinoya, kori, i_meteo, i_tatumaki,
+            // reiki) at Ice Queen's actual slot — not just baria/korinoya — so every companion can position relative
+            // to her and ack the handshake regardless of where the random spawn placed her.
+            RemapCompanionBossRefs(iq);
+            DumpAllStbsOnce();
+        }
+
+        // The handshake (global[0]) only advances when each companion ACKS its trigger. Confirmed by testing: at a
+        // non-native slot the real korinoya never consumes [2] (stays frozen at idle) and global[0] is stuck at 0 —
+        // IQ loops block 1 forever. The real companions only self-ack when the random spawn lands them near their
+        // native slots; the _GET_MONSTOR remap fixes their positioning but NOT their ack. So we drive the handshake
+        // via globals: korinoya's [2] block -> ack [0]=1 + fire [3]=1 (kori icicle) + consume [2]; reiki's [5] block
+        // -> end the shield phase + loop back. (The visible flying arrow is the separate CFrame projectile.)
+        private static void KorinoyaStandIn()
+        {
+            // korinoya ([2]): ack the master handshake so IQ advances past block 1, and trigger the kori icicle.
+            long g2 = GlobalIntBase + 2 * 4;
+            if (Memory.ReadInt(g2) == 1)
+            {
+                Memory.WriteInt(GlobalIntBase + 3 * 4, 1);  // fire the kori icicle effect
+                Memory.WriteInt(GlobalIntBase + 0 * 4, 1);  // ack [0] = 1 (korinoya acted) -> IQ advances
+                Memory.WriteInt(g2, 0);                     // consume the trigger
+                Console.WriteLine("[IQkorinoya] [2]=1 -> set [3]=1, [0]=1, [2]=0 (ack handshake + icicle)");
+            }
+
+            // After kori acks ([0]=3) the genuine IQ alternates ATTACK waves ([0]3->4, i_meteo/meteor) and SHIELD
+            // waves ([0]3->5, baria). The choice is driven by her internal counters [6]/[7]/[8], which don't cycle to
+            // 2 off-native — so we only ever get attack waves and never a shield. Drive the alternation explicitly:
+            // every 3rd completed wave is a shield wave (cancel the queued meteor + trigger reiki to end it & loop).
+            if (Memory.ReadInt(GlobalIntBase) == 3 && Memory.ReadInt(GlobalIntBase + 4 * 4) == 1)
+            {
+                _waveCount++;
+                if (_waveCount % 3 == 0)
+                {
+                    Memory.WriteInt(GlobalIntBase, 5);          // [0]=5 -> baria shield phase
+                    Memory.WriteInt(GlobalIntBase + 4 * 4, 0);  // shield wave, not a meteor wave
+                    Memory.WriteInt(GlobalIntBase + 5 * 4, 1);  // trigger reiki -> its stand-in ends the phase & loops
+                    Console.WriteLine($"[IQwave] #{_waveCount}: SHIELD wave ([0]=3->5)");
+                }
+                else
+                {
+                    Memory.WriteInt(GlobalIntBase, 4);          // [0]=4 -> meteor attack wave
+                    Console.WriteLine($"[IQwave] #{_waveCount}: meteor wave ([0]=3->4)");
+                }
+            }
+
+            // reiki ([5]): ends the shield/defensive phase (sets [0]=0) so her dispatch loops back to the attack
+            // rotation. Without it [0] stays 5 (shield) and she loops the shield forever instead of re-attacking.
+            long g5 = GlobalIntBase + 5 * 4;
+            if (Memory.ReadInt(g5) == 1)
+            {
+                Memory.WriteInt(g5, 0);                     // reiki acks its trigger
+                Memory.WriteInt(GlobalIntBase + 0 * 4, 0);  // reiki clears the master handshake
+                // Reset her internal barrier counters [6]/[7]/[8] to 0 (she does this herself each cycle in the
+                // genuine fight; off-arena they stick at 1). This lets block 1 re-run -> re-trigger korinoya -> the
+                // attack rotation loops instead of stalling after one wave.
+                Memory.WriteInt(GlobalIntBase + 6 * 4, 0);
+                Memory.WriteInt(GlobalIntBase + 7 * 4, 0);
+                Memory.WriteInt(GlobalIntBase + 8 * 4, 0);
+                Console.WriteLine("[IQreiki] [5]=1 -> reset [5],[0],[6],[7],[8]=0 (loop back to attacks)");
+            }
+
+            // Keep the rotation LOOPING: off-native IQ never recycles her phase counters [6]/[7]/[8] (they stick at
+            // 1 after block 1), so block 1 never re-runs and the rotation stalls after one wave — which is why the
+            // shield/attacks only appear intermittently. Re-arm block 1 each cycle by clearing them during the idle
+            // gap ([0]==0). Guarded to only fire (and log) when they're actually stuck non-zero.
+            if (Memory.ReadInt(GlobalIntBase) == 0
+                && (Memory.ReadInt(GlobalIntBase + 6 * 4) != 0 || Memory.ReadInt(GlobalIntBase + 7 * 4) != 0 || Memory.ReadInt(GlobalIntBase + 8 * 4) != 0))
+            {
+                Memory.WriteInt(GlobalIntBase + 6 * 4, 0);
+                Memory.WriteInt(GlobalIntBase + 7 * 4, 0);
+                Memory.WriteInt(GlobalIntBase + 8 * 4, 0);
+                Console.WriteLine("[IQloop] [0]==0 -> reset [6][7][8] (re-arm block 1)");
+            }
+        }
+
+        // ── FIGHT OBSERVER (Ice Queen) ──────────────────────────────────────────────────────────────────
+        // Logs the live-slot lifecycle (which species appear/clear, position, playing motion), Ice Queen's own
+        // playing motion, and changes to the script GLOBAL-INT array (her companions read these to drive attacks).
+        // Active only while species 113 (Ice Queen) is on the floor — run it during the GENUINE SW boss fight to
+        // capture how the companions are summoned/positioned and the global-int coordination protocol.
+        private const long GlobalIntBase  = 0x21D8FC80;   // _SET/_GET_GLOBAL_INT array (handler @ELF 0x1e5190): global[i] = base + i*4
+        private const int  GlobalIntCount = 64;
+        // The ice arrow (korinoya) homes to the PLAYER — _GET_POSITION(-2) copies the player vector from here.
+        private const long PlayerPosVec = 0x21EA1D30;   // (X @+0, height @+4, Y @+8)
+        private static System.DateTime _lastHomeLog = System.DateTime.MinValue;
+        // One-shot: identify the loaded map + dump the map/tile-grid frame, so the genuine Ice Queen arena
+        // (where the ice-arrow homing works) can be compared against a random floor (where it doesn't).
+        // Map structure documented in DungeonAddresses.cs.
+        private static void DumpArena()
+        {
+            int mapNo = Memory.ReadInt(DungeonAddresses.Map.MapNo);
+            uint mpRaw = Memory.ReadUInt(DungeonAddresses.Map.MapPartsPtr), ndRaw = Memory.ReadUInt(DungeonAddresses.Map.NowDngMapPtr);
+            long mp = DungeonAddresses.Map.Deref(mpRaw), nd = DungeonAddresses.Map.Deref(ndRaw);
+            Console.WriteLine($"[IQmap] map_no={mapNo}  mapparts=0x{mpRaw:X8}->0x{mp:X8}  NowDngMap=0x{ndRaw:X8}->0x{nd:X8}");
+            void HexWin(string tag, long a)
+            {
+                if (a == 0) { Console.WriteLine($"[IQmap]   {tag}: <null>"); return; }
+                uint[] w = Memory.ReadUIntBatch(a, 16);
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < w.Length; i++) sb.Append(w[i].ToString("X8")).Append(' ');
+                Console.WriteLine($"[IQmap]   {tag}@0x{a:X8}: {sb}");
+            }
+            HexWin("DngMap.head", nd != 0 ? nd : DungeonAddresses.Map.MainDungeonMap);
+            HexWin("mapparts.head", mp);
+        }
+        private static bool _obsActive;
+        private static readonly int[] _obsEid = new int[EnemyAddresses.FloorSlots.Count];
+        private static readonly int[] _obsSdp = new int[EnemyAddresses.FloorSlots.Count];
+        private static readonly int[] _obsMot = new int[EnemyAddresses.FloorSlots.Count];
+        private static int[] _obsGlob;
+        internal static void ObserveBossFight()
+        {
+            try
+            {
+                string ts = System.DateTime.Now.ToString("HH:mm:ss.fff");
+                int n = EnemyAddresses.FloorSlots.Count;
+                int iq = -1;
+                for (int s = 0; s < n; s++)
+                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1
+                        && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == 113)
+                    { iq = s; break; }
+                if (iq < 0)
+                {
+                    if (_obsActive) { Console.WriteLine("[IQobs] Ice Queen gone — stop"); _obsActive = false; for (int s = 0; s < n; s++) { _obsEid[s] = -2; _obsSdp[s] = 0; _obsMot[s] = -2; } _obsGlob = null; }
+                    return;
+                }
+                if (!_obsActive)
+                {
+                    _obsActive = true; for (int s = 0; s < n; s++) _obsMot[s] = -2;
+                    Console.WriteLine("[IQobs] Ice Queen fight detected — observing slots + globals");
+                    DumpArena();
+                }
+                float F(long a) => System.BitConverter.Int32BitsToSingle(Memory.ReadInt(a));
+                for (int s = 0; s < n; s++)
+                {
+                    bool live = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1;
+                    int eid = live ? Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) : -1;
+                    int sdp = live ? (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.SpeciesDataPtr)) & 0x1FFFFFFF) : 0;
+                    if (eid != _obsEid[s] || sdp != _obsSdp[s])
+                    {
+                        if (live)
+                        {
+                            int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                            int pm = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + 0x20938);
+                            Console.WriteLine($"{ts} [IQobs] slot {s} LIVE eid={eid} sdp=0x{sdp:X6} hp={hp} pos=({F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX)):F0},{F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ)):F0},{F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY)):F0}) playMot={pm}");
+                        }
+                        else Console.WriteLine($"{ts} [IQobs] slot {s} CLEARED");
+                        _obsEid[s] = eid; _obsSdp[s] = sdp;
+                    }
+                    // track EVERY live slot's playing motion (companions react to her global signals)
+                    int pmNow = live ? Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + 0x20938) : -1;
+                    if (pmNow != _obsMot[s])
+                    {
+                        if (live) Console.WriteLine($"{ts} [IQobs] slot {s}{(s == iq ? "(IceQueen)" : eid == 84 ? "(IceArrow)" : "")} playMot {_obsMot[s]} -> {pmNow}");
+                        _obsMot[s] = pmNow;
+                    }
+                }
+                // Homing diagnostic. korinoya (eid 84) is a stationary EMITTER — its floor-slot LocationX/Y never
+                // moves even in the genuine fight (where the arrow visibly flies & homes). The real moving position
+                // is the CFrame (render transform) of the CCharacter at MainMonstorUnit + slot*0x3510 + 0x1fcd0,
+                // reached via +0xBC -> +0x110 = CFrame; its local matrix is @ CFrame+0x150 (translation row TBD).
+                // _SET_MOVE / _GET_POSITION(-1) operate on THIS, not the floor slot. We dump the matrix once for
+                // Ice Queen (whose floor-slot pos is known, so we can confirm which row is the translation) and
+                // log the world pos each tick for IQ + korinoya.
+                if ((System.DateTime.Now - _lastHomeLog).TotalMilliseconds > 250)
+                {
+                    _lastHomeLog = System.DateTime.Now;
+                    float pX = F(PlayerPosVec), pY = F(PlayerPosVec + 8);
+                    void LogChar(string tag, int s)
+                    {
+                        // CCharacter live position (what _SET_POSITION/_SET_MOVE drive): the flying homing arrow
+                        // IS this moving. Confirmed: korinoya idle = (0,10,-380) = its _SET_POSITION(0,10,380), Y neg.
+                        long pos = EnemyAddresses.CharObjects.PosAddr(s);
+                        float cx = F(pos), cz = F(pos + 4), cy = F(pos + 8);
+                        float fx = F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
+                        float fy = F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
+                        int mot = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + 0x20938);
+                        Console.WriteLine($"{ts} [IQpos] {tag} slot{s} char=({cx:F0},{cz:F0},{cy:F0}) floor=({fx:F0},{fy:F0}) mot={mot} player=({pX:F0},{pY:F0})");
+                    }
+                    LogChar("IceQueen", iq);
+                    for (int s = 0; s < n; s++)
+                    {
+                        if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
+                        if (Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == 84) LogChar("korinoya", s);
+                    }
+                }
+                uint[] g = Memory.ReadUIntBatch(GlobalIntBase, GlobalIntCount);
+                if (_obsGlob != null)
+                {
+                    bool anyChange = false;
+                    for (int i = 0; i < GlobalIntCount; i++)
+                        if ((int)g[i] != _obsGlob[i]) { Console.WriteLine($"{ts} [IQobs] global[{i}] {_obsGlob[i]} -> {(int)g[i]}"); anyChange = true; }
+                    // On any attack-trigger change, snapshot the geometry so we can learn what gates each attack:
+                    // IQ HP%, her position, the player's position, and the horizontal distance between them.
+                    if (anyChange)
+                    {
+                        int hp  = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.Hp));
+                        int mhp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.MaxHp));
+                        float ix = F(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.LocationX));
+                        float iy = F(EnemyAddresses.FloorSlots.SlotAddr(iq, EnemySlotOffsets.LocationY));
+                        float px = Memory.ReadFloat(Player.dunPositionX);
+                        float py = Memory.ReadFloat(Player.dunPositionY);
+                        float dist = (float)System.Math.Sqrt((ix - px) * (ix - px) + (iy - py) * (iy - py));
+                        int pct = mhp > 0 ? hp * 100 / mhp : 0;
+                        // Movement diagnostics: commanded speed (+0x80 MovementBlend) + facing vector (+0x60/64/68)
+                        // + the collision-off countdown (+0xA8). If spd>0 but she doesn't move => collision-blocked;
+                        // if spd==0 => her AI isn't commanding movement (rotation gated before the move step).
+                        float spd = F(EnemyAddresses.FloorSlots.SlotAddr(iq, 0x80));
+                        float fx = F(EnemyAddresses.FloorSlots.SlotAddr(iq, 0x60)), fz = F(EnemyAddresses.FloorSlots.SlotAddr(iq, 0x68));
+                        int colOff = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(iq, 0xA8));
+                        Console.WriteLine($"{ts} [IQctx] hp={hp}/{mhp} ({pct}%)  IQ=({ix:F0},{iy:F0})  player=({px:F0},{py:F0})  dist={dist:F0}  spd={spd:F1} face=({fx:F2},{fz:F2}) colOff={colOff}");
+                    }
+                }
+                _obsGlob = new int[GlobalIntCount];
+                for (int i = 0; i < GlobalIntCount; i++) _obsGlob[i] = (int)g[i];
+            }
+            catch { /* transient PINE read */ }
+        }
+
         // OPTION-2 DIAGNOSTIC: dump the MonstorModelBuffer allocator (object @ 0x01F066D0: +0 base ptr,
         // +8 current unit index, +0xC capacity) next to the located STB, so we can see whether
         // stb == base + const (pure base read) or needs the current index. Remove once option 2 is derived.
@@ -792,7 +1665,36 @@ namespace Dark_Cloud_Improved_Version
         private static void EnsureNopped(long stbBase, int initOff, int tableIndex)
         {
             long a = stbBase + initOff;
-            if (Memory.ReadInt(a) != 0)                                // _SET_POSITION push still present
+            if (tableIndex == 80)
+            {
+                // Capture her native _SET_POSITION coords once (constant across floors). worldX = arg1 (direct),
+                // arg3 = z (worldY = -z). Used so we can nudge her by a fixed offset relative to native.
+                if (float.IsNaN(_iqNatX))
+                {
+                    _iqNatX = ReadCoordArg(a + 16, a + 20);
+                    _iqNatZ = ReadCoordArg(a + 40, a + 44);
+                    Console.WriteLine($"[IQnudge] Ice Queen native worldX={_iqNatX:F0} zArg={_iqNatZ:F0} (worldY={-_iqNatZ:F0})");
+                }
+                DumpIqActivation(stbBase);   // one-shot: find her player-proximity / arena-origin activation gate
+                if (IqNudgeX != 0f || IqNudgeY != 0f)
+                {
+                    // OFFSET TEST: +IqNudgeX worldX, +IqNudgeY worldY (zArg = nativeZ - IqNudgeY since worldY = -zArg)
+                    WritePosArgs(a, _iqNatX + IqNudgeX, _iqNatZ - IqNudgeY);
+                    // ALSO shift her dispatcher's arena-home SET_POS(0,0,177) @+0x2B48 — the native re-anchor the
+                    // attack/activation keys off. Its args are push1 ints: x@+0x2B58, z@+0x2B70 (worldY = -z).
+                    if (Memory.ReadInt(stbBase + 0x2B48) == 3 && Memory.ReadInt(stbBase + 0x2B48 + 8) == 0x24)
+                    {
+                        Memory.WriteInt(stbBase + 0x2B58, (int)IqNudgeX);          // x: 0 -> +IqNudgeX
+                        Memory.WriteInt(stbBase + 0x2B70, 177 - (int)IqNudgeY);    // z: 177 -> 177-IqNudgeY
+                    }
+                }
+                else if (IqTranslate && TryGetChestTarget(out float cx, out float cy))
+                {
+                    WritePosArgs(a, cx, -cy - ChestClearOffsetY);   // full chest translation (reachability, breaks the frame)
+                    if (!_iqXlateLogged) { Console.WriteLine($"[IQxlate] Ice Queen STB 0x{stbBase:X8} -> chest ({cx:F0},{cy:F0})"); _iqXlateLogged = true; }
+                }
+            }
+            else if (Memory.ReadInt(a) != 0)                            // other bosses: NOP the _SET_POSITION push as before
             {
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
                 Console.WriteLine($"[BossPatch] NOPed _SET_POSITION for boss {tableIndex} @ 0x{a:X8} (STB @ 0x{stbBase:X8})");

@@ -26,6 +26,27 @@ namespace Dark_Cloud_Improved_Version
             internal const long Base      = 0x21DF87D0;
             internal const int  LiveCount = 0x4C;     // int — number of live enemies on the floor; decrement when freeing a slot
         }
+
+        /// <summary>
+        /// CCharacter array inside CMainMonstorUnit (stride 0x3510, starting at Base+0x1FCD0), indexed by the
+        /// same monster/floor-slot index as <see cref="FloorSlots"/>. This is the array the STB script reads/
+        /// writes: <c>_GET_POSITION(-1)</c>/<c>_GET_MONSTOR_POS(idx)</c> resolve to it (handlers @ELF 0x1e1df0/
+        /// 0x1e4920), and <c>_SET_POSITION</c>/<c>_SET_MOVE</c> drive it. The live world position is the float
+        /// triple at <see cref="PosOffset"/> = (X, Z/height, Y) — distinct from the floor-slot LocationX/Y,
+        /// which can stay frozen (e.g. korinoya the ice-arrow emitter). The flying, homing ice arrow IS this
+        /// position moving. Vtable ptr sits at +0xA0; <c>_GET_POSITION(-2)</c> = player @0x21EA1D30.
+        /// </summary>
+        internal static class CharObjects
+        {
+            internal const long ArrayOffset = 0x1FCD0;  // Base + slot*Stride + ArrayOffset = CCharacter
+            internal const int  Stride      = 0x3510;
+            internal const int  PosOffset   = 0x10;      // float triple: X @+0x10, Z/height @+0x14, Y @+0x18
+
+            /// <summary>EE address of the CCharacter for <paramref name="slot"/>.</summary>
+            internal static long CharAddr(int slot) => MainMonstorUnit.Base + (long)slot * Stride + ArrayOffset;
+            /// <summary>EE address of the live position triple (X,Z,Y) for <paramref name="slot"/>.</summary>
+            internal static long PosAddr(int slot) => CharAddr(slot) + PosOffset;
+        }
     }
 
     /// <summary>Enemy slot field offsets relative to slot base address.</summary>

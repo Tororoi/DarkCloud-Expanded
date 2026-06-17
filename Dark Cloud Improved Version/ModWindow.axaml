@@ -125,7 +125,7 @@
           <!-- Experimental: dungeon spawn-roster editor -->
           <TextBlock Text="TableIdx:" Margin="46,332,0,0"
                      VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"/>
-          <TextBox x:Name="Tbox_Injector_Table" Text="80,101,76,102,103,92,104" Width="150" Height="24"
+          <TextBox x:Name="Tbox_Injector_Table" Text="80,101!,76!,102!,103!,92!,104!,3" Width="150" Height="24"
                    Margin="106,328,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
           <Button x:Name="Btn_Injector_Test" Content="Set roster"
                   Width="92" Height="26" Margin="262,327,0,0"

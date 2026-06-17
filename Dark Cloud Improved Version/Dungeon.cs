@@ -101,6 +101,7 @@ namespace Dark_Cloud_Improved_Version
                 // Runs every tick (incl. during floor load) so it can NOP MinotaurJoe's arena-init in the
                 // loaded c16a.stb before the boss spawns. No-op unless a c16a boss is in the roster.
                 BossScriptPatcher.Tick();
+                BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
                 if (Player.InDungeonFloor())
                 {
                     // Evilcise curse applies immediately on equip, even from the pause menu

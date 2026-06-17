@@ -487,6 +487,12 @@ namespace Dark_Cloud_Improved_Version
         {
             // Box accepts "20" or a comma list "20,3,6". A trailing "!" marks a species spawn-once
             // (at most 1 per floor; the rest fill normally, total stays 15), e.g. "20!,60" = one Gyon + Cursed Roses.
+            // Special token "iq" = write the exact real Ice Queen (SW floor-18) boss block, incl. the Count field.
+            if (Tbox_Injector_Table.Text.Trim().ToLowerInvariant() == "iq")
+            {
+                EnemyModelInjector.SetIceQueenFloorExact();
+                return;
+            }
             var idx = new System.Collections.Generic.List<int>();
             var once = new System.Collections.Generic.List<bool>();
             foreach (string p in Tbox_Injector_Table.Text.Split(','))

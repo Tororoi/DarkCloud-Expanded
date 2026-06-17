@@ -49,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 ushort id = allIds[i];
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
-                if (id == 0 || nonKeyEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
+                if (id == 0 || nonKeyEnemies.ContainsKey(id) || Enemies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
                     ineligibleCount++;
             }
 
@@ -62,6 +62,7 @@ namespace Dark_Cloud_Improved_Version
                 ushort id = allIds[i];
                 if (id == 0) continue;
                 if (nonKeyEnemies.ContainsKey(id)) continue;
+                if (Enemies.BossEnemies.ContainsKey(id)) continue;   // never promote a boss/boss-companion (e.g. Ice Queen 113, IceArrow 84) to a miniboss
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (dropVal != 0 && dropVal != 65535) continue;
                 if (rnd.Next(denominator) == 0)

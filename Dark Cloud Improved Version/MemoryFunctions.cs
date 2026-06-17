@@ -464,6 +464,31 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        // Writes <values.Length> consecutive 32-bit words starting at <startAddr>, packing many Write32 commands
+        // into each PINE packet (chunked) so a large block moves in a handful of round-trips instead of one per
+        // word. Used for slot-block swaps where per-word writes would be far too slow and leave the running game
+        // reading half-written state.
+        internal static void WriteUIntBatch(long startAddr, uint[] values)
+        {
+            const int chunk = 400;                 // 400*9 = 3604 bytes/packet — well under the PINE buffer
+            byte op = OpWrite32;
+            for (int start = 0; start < values.Length; start += chunk)
+            {
+                int n = Math.Min(chunk, values.Length - start);
+                int pktLen = 4 + n * 9;            // header + n*(opcode(1)+addr(4)+value(4))
+                var pkt = new byte[pktLen];
+                BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+                for (int i = 0; i < n; i++)
+                {
+                    int off = 4 + i * 9;
+                    pkt[off] = op;
+                    BitConverter.GetBytes(PhysAddr(startAddr + (long)(start + i) * 4)).CopyTo(pkt, off + 1);
+                    BitConverter.GetBytes(values[start + i]).CopyTo(pkt, off + 5);
+                }
+                SendBatch(pkt);
+            }
+        }
+
         internal static bool WriteUInt(long address, uint value)
         {
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
