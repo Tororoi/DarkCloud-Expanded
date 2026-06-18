@@ -772,6 +772,17 @@ namespace Dark_Cloud_Improved_Version
             if (codeOff == 0) { _stbBase = -1; return; }
             try
             {
+                // Track the floor's map_no / MAPPARTS BEFORE Ice Queen's arena overlay sets map_no=800 and nulls
+                // the tile grid. Capture the grid the moment it's populated (early ticks) so we have the floor's
+                // walkable tiles even after she activates.
+                int mapNow = Memory.ReadInt(DungeonAddresses.Map.MapNo);
+                uint mpNow = Memory.ReadUInt(DungeonAddresses.Map.MapPartsPtr);
+                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; }   // re-arm per floor
+                // The tile grid is EMBEDDED in the CDungeonMap at +0x9C50 (ArrangementPos reads it to place enemies);
+                // it's valid at floor-entry, independent of the standalone `mapparts` global (which is NULL in her arena).
+                // Dump it as soon as the floor's CDungeonMap exists — i.e. BEFORE we ever swap Ice Queen in.
+                if (DungeonAddresses.Map.Deref(Memory.ReadUInt(DungeonAddresses.Map.NowDngMapPtr)) != 0) DumpMapParts();
+
                 // Ice Queen. Two strategies:
                 //  TrySlotSwap: physically reorder all 7 entities to their NATIVE slots (0-6) so the real companion
                 //    scripts run unmodified (no remap, no stand-ins) — gives the real arrow flight + reiki damage.
@@ -782,7 +793,12 @@ namespace Dark_Cloud_Improved_Version
                     {
                         ReorderToNativeOnce();                                 // correct slots -> the real companion scripts run
                         if (IqNudgeX != 0f || IqNudgeY != 0f)
+                        {
                             NudgeCompanionPositions();                          // move companions the SAME offset as Ice Queen (preserve layout)
+                            WakeShiftFloorSlots();                              // pre-shift the dormant floor-slot (the engine's wake-origin) to the cluster
+                            PatchBariaShield();                                 // zero baria's orbit radius so the shield lands on her, not ~+2000
+                            DumpEnemyPositions();                               // one-shot: enemy positions (walkable world anchors)
+                        }
                         else if (IqTranslate)                                  // off for the Moon Sea native test (she stays at her -Y corner)
                         {
                             if (TranslateCompanions) PatchCompanionPositions();
@@ -860,8 +876,11 @@ namespace Dark_Cloud_Improved_Version
         private static bool _iqXlateLogged = false;
         // Offset test: nudge Ice Queen from her native position toward the player (worldX +X, worldY +Y) to find how
         // far she can move before the companion repositioning breaks. Both 0 = fall back to full chest translate.
-        private const float IqNudgeX = 360f;
-        private const float IqNudgeY = 360f;   // worldY moves from native -177 toward the player's +Y side
+        // These start as a fallback guess but are OVERWRITTEN at floor-entry by ComputeWalkableAnchor() once the
+        // MAPPARTS grid is populated: we find the largest open room and set the nudge to drop her cluster at its
+        // world center (cell = 160 world units; worldX = col*160, worldY = row*160 — calibrated against live player/IQ).
+        private static float IqNudgeX = 360f;
+        private static float IqNudgeY = 360f;   // worldY moves from native -177 toward the player's +Y side
         private static float _iqNatX = float.NaN, _iqNatZ;   // captured native _SET_POSITION worldX / z-arg
         private static float ReadCoordArg(long opAddr, long valAddr)
         {
@@ -874,17 +893,19 @@ namespace Dark_Cloud_Improved_Version
         // are disambiguated per-STB by IsSetPosPush — the wrong offset isn't a _SET_POSITION in that STB, so it's skipped.
         private static readonly (uint codeOff, int initOff, float nativeY)[] _iqCompanionPos =
         {
-            (0x7D0u, 0x724, IqNativeY),   // korinoya  (ice-arrow source) spawn
-            (0x5ECu, 0xB3C, IqNativeY),   // kori      spawn
-            (0x5ECu, 0x714, IqNativeY),   // i_meteo   spawn
-            (0x3ACu, 0x4E0, IqNativeY),   // i_tatumaki spawn
-            (0x3ACu, 0xD9C, IqNativeY),   // reiki     spawn
-            (0x874u, 0x79C, IqNativeY),   // baria     (shield) spawn
+            // korinoya (0x7D0) — all worldY=-380 position anchors
+            (0x7D0u, 0x724, IqNativeY), (0x7D0u, 0x928, IqNativeY), (0x7D0u, 0x1898, IqNativeY), (0x7D0u, 0x1988, IqNativeY),
+            // kori + i_meteo (0x5EC) — worldY=-380 anchors (per-STB IsSetPosPush picks the valid offsets)
+            (0x5ECu, 0x66C, IqNativeY), (0x5ECu, 0xB3C, IqNativeY), (0x5ECu, 0x714, IqNativeY), (0x5ECu, 0xCFC, IqNativeY),
+            // i_tatumaki + reiki (0x3AC) — worldY=0 anchors
+            (0x3ACu, 0x4E0, IqNativeY), (0x3ACu, 0x7C8, IqNativeY), (0x3ACu, 0x4BC, IqNativeY), (0x3ACu, 0xD9C, IqNativeY),
+            // baria (0x874) — worldY=-380 anchor
+            (0x874u, 0x79C, IqNativeY),
         };
-        private static readonly long[] _compAddr = { -1, -1, -1, -1, -1, -1 };
+        private static readonly long[] _compAddr = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
         // Per-companion captured native _SET_POSITION coords (worldX / z-arg), for the same-offset nudge as Ice Queen.
-        private static readonly float[] _compNatX = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
-        private static readonly float[] _compNatZ = new float[6];
+        private static readonly float[] _compNatX = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
+        private static readonly float[] _compNatZ = new float[13];
 
         private static bool IsSetPosPush(long a)   // 5-record _SET_POSITION block starts with push(op3,operand1,0x24)
             => Memory.ReadInt(a) == 3 && Memory.ReadInt(a + 4) == 1 && Memory.ReadInt(a + 8) == 0x24;
@@ -1009,6 +1030,309 @@ namespace Dark_Cloud_Improved_Version
             }
             return -1;
         }
+        // One-shot: dump baria's (shield) command flow to find the reposition math (_GET_MONSTOR_POS(IQ) -> compute ->
+        // _SET_POSITION) that flings it to ~+2000 when Ice Queen is shifted.
+        private static bool _bariaDumped;
+        private static void DumpBariaHandler()
+        {
+            if (_bariaDumped) return;
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            long stb = -1;
+            foreach (long addr in KnownAddrs(101, dungeon))
+                if (Memory.ReadUInt(addr) == StbMagic && (uint)Memory.ReadInt(addr + 0x54) == 0x874) { stb = addr; break; }
+            if (stb < 0) stb = ScanForCodeOff(0x874, new System.Collections.Generic.HashSet<long>());
+            if (stb < 0) return;
+            _bariaDumped = true;
+            var cmd = new System.Collections.Generic.Dictionary<int, string>
+            {
+                {0x24,"SET_POS"}, {0x0B,"GET_POS"}, {0x0A,"GET_DIST"}, {0xD5,"GET_MONSTOR_POS"}, {0xE1,"GET_MONSTOR_VEC"},
+                {0xDC,"SET_GLOBAL"}, {0xDD,"GET_GLOBAL"}, {0xC8,"SET_MOTION"}, {0x20,"SET_MOVE"}, {0x22,"CHK_MOVE"},
+                {0x1F,"GET_DIR"}, {0x1E,"GET_VEC"}, {0x21,"SET_ROT"},
+            };
+            Console.WriteLine($"[BARIA] baria STB 0x{stb:X8} codeOff 0x874 — reposition flow:");
+            for (int k = 0; k < 290; k++)
+            {
+                int off = 0x874 + k * 12;
+                int op = Memory.ReadInt(stb + off), a1 = Memory.ReadInt(stb + off + 4), a2 = Memory.ReadInt(stb + off + 8);
+                string note = null;
+                if (op == 3 && cmd.TryGetValue(a2, out var c3)) note = "CMD " + c3;
+                else if (op == 3) note = $"push {a2}";
+                else if (op == 1 && cmd.TryGetValue(a1, out var c1)) note = "CMD " + c1;
+                else if (op == 1) note = $"push1 {a1}";
+                else note = op switch { 21 => $"EXT({a1})", 23 => "YIELD", 4 => $"JMP->0x{a1:X}", 17 => $"BRF->0x{a1:X}", 18 => $"BRT->0x{a1:X}", 15 => "RET", 14 => $"BINOP(0x{a1:X})", 16 => "POP", _ => null };
+                if (note != null) Console.WriteLine($"[BARIA] +0x{off:X}: {note}");
+                if (op == 15) break;
+            }
+        }
+
+        // baria (shield) positions itself at IceQueen.pos + direction*15.0 (six float-15.0 = 1097859072 orbit-radius
+        // pushes across its two reposition blocks). When she's shifted, the direction isn't unit-length and ×15 flings
+        // One-shot per floor: dump the MAPPARTS grid (room/walkable layout) + raw sample cells, so we can locate a
+        // large room and (with the corner-record conversion) place Ice Queen there instead of a fixed offset/chest.
+        private static bool _mapDumped;
+        private static int _lastMapNo = -1;
+        // Find the live collision mesh (CCollisionMDT, vtable 0x2A10D0/0x2A1100 @ instance+0x20) and dump its MDT
+        // geometry: vertex count, vertex bounds (the floor extent), centroid, sample polygons. This is the walkable
+        // surface (present during the fight, unlike the cleared tile grid) we'll use to place her in an open area.
+        private static bool _meshDumped;
+        private static void DumpMesh()
+        {
+            if (_meshDumped) return;
+            _meshDumped = true;
+            int vhits = 0, candCount = 0;
+            // overall floor extent (all pieces) + the largest-AREA piece (the biggest open room)
+            float flMinX = 1e9f, flMaxX = -1e9f, flMinZ = 1e9f, flMaxZ = -1e9f;
+            float bestArea = -1, bestCx = 0, bestCz = 0, bestSx = 0, bestSz = 0; long bestInst = 0;
+            for (long a = 0x20000000; a < 0x22000000; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, 0x22000000);
+                int n = (int)((end - a) / 4);
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i < n; i++)
+                {
+                    if (w[i] != 0x2A10D0 && w[i] != 0x2A1100) continue;
+                    vhits++;
+                    long cand = a + (long)i * 4 - 0x20;
+                    long m = DungeonAddresses.Map.Deref(Memory.ReadUInt(cand + 0x30));
+                    if (m == 0) continue;
+                    int vc = Memory.ReadInt(m + 0xC);
+                    if (vc < 3 || vc >= 500000) continue;
+                    candCount++;
+                    long verts = m + (uint)Memory.ReadInt(m + 0x10);
+                    int sc = Math.Min(vc, 256);
+                    uint[] vb = Memory.ReadUIntBatch(verts, sc * 4);   // 4 ints (16 bytes) per vertex
+                    float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+                    for (int v = 0; v < sc; v++)
+                    {
+                        float x = BitConverter.Int32BitsToSingle((int)vb[v * 4]);
+                        float z = BitConverter.Int32BitsToSingle((int)vb[v * 4 + 2]);
+                        if (x < minX) minX = x; if (x > maxX) maxX = x;
+                        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+                    }
+                    float sx = maxX - minX, sz = maxZ - minZ, area = sx * sz, cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+                    if (cx < flMinX) flMinX = cx; if (cx > flMaxX) flMaxX = cx;
+                    if (cz < flMinZ) flMinZ = cz; if (cz > flMaxZ) flMaxZ = cz;
+                    if (candCount <= 30) Console.WriteLine($"[MESH] piece@0x{cand:X8} vc={vc} center=({cx:F0},{cz:F0}) size=({sx:F0},{sz:F0})");
+                    if (area > bestArea) { bestArea = area; bestInst = cand; bestCx = cx; bestCz = cz; bestSx = sx; bestSz = sz; }
+                }
+            }
+            if (candCount == 0) { Console.WriteLine($"[MESH] no valid mesh (vtable-value hits={vhits})"); return; }
+            Console.WriteLine($"[MESH] {candCount} pieces; piece-CENTERS span X[{flMinX:F0},{flMaxX:F0}] Z[{flMinZ:F0},{flMaxZ:F0}]");
+            Console.WriteLine($"[MESH] LARGEST-AREA room: inst@0x{bestInst:X8} center=({bestCx:F0},{bestCz:F0}) size=({bestSx:F0},{bestSz:F0}) area={bestArea:F0}");
+            // Reverse-lookup the room's owning CFrame (collision ptr @ CFrame+4) and dump it broadly: the world
+            // translation (floats ~700-2000) is the piece's placement — that's the room's world position.
+            uint ptrVal = (uint)(bestInst - 0x20000000);
+            long frame = -1;
+            for (long a = 0x20000000; a < 0x22000000 && frame < 0; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, 0x22000000);
+                int n = (int)((end - a) / 4);
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i < n; i++)
+                    if (w[i] == ptrVal) { frame = a + (long)i * 4 - 4; break; }
+            }
+            if (frame < 0) { Console.WriteLine($"[MESH] room CFrame (ptr 0x{ptrVal:X}) NOT found"); return; }
+            Console.WriteLine($"[MESH] room CFrame@0x{frame:X8} (local). Looking for parent CMapObject (CFrame @ +0xD0)...");
+            // The parent CMapObject references this CFrame at +0xD0 and holds the world position at +0x60.
+            uint framePtr = (uint)(frame - 0x20000000);
+            long mapObj = -1;
+            for (long a = 0x20000000; a < 0x22000000 && mapObj < 0; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, 0x22000000);
+                int n = (int)((end - a) / 4);
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i < n; i++)
+                    if (w[i] == framePtr) { mapObj = a + (long)i * 4 - 0xD0; break; }
+            }
+            if (mapObj < 0) { Console.WriteLine($"[MESH] parent CMapObject (CFrame ptr 0x{framePtr:X}) NOT found"); return; }
+            Console.WriteLine($"[MESH] CMapObject@0x{mapObj:X8} coords (|f|50-6000) + pointers (+0x0..+0x100):");
+            for (int o = 0; o <= 0x100; o += 4)
+            {
+                int iv = Memory.ReadInt(mapObj + o);
+                float f = BitConverter.Int32BitsToSingle(iv);
+                uint uv = (uint)iv;
+                bool ptr = (uv > 0x100000 && uv < 0x2000000) || (uv > 0x20100000 && uv < 0x22000000);
+                bool coord = Math.Abs(f) > 50f && Math.Abs(f) < 6000f;
+                if (ptr) Console.WriteLine($"[MESH]   +0x{o:X}: PTR 0x{uv:X8}");
+                else if (coord) Console.WriteLine($"[MESH]   +0x{o:X}: {f:F0}");
+            }
+            long tgt = DungeonAddresses.Map.Deref((uint)Memory.ReadInt(mapObj + 0xA4));
+            if (tgt == 0) return;
+            Console.WriteLine($"[MESH] CMapObject+0xA4 -> 0x{tgt:X8}; WORLD coords (|f|>200) + ptrs (+0x0..+0x200):");
+            for (int o = 0; o <= 0x200; o += 4)
+            {
+                int iv = Memory.ReadInt(tgt + o);
+                float f = BitConverter.Int32BitsToSingle(iv);
+                uint uv = (uint)iv;
+                if ((uv > 0x100000 && uv < 0x2000000) || (uv > 0x20100000 && uv < 0x22000000))
+                    Console.WriteLine($"[MESH]   +0x{o:X}: PTR 0x{uv:X8}");
+                else if (Math.Abs(f) > 200f && Math.Abs(f) < 10000f)
+                    Console.WriteLine($"[MESH]   +0x{o:X}: {f:F0}");
+            }
+        }
+
+        // The mesh world-placement is grid-derived (cleared during her fight). Pivot: enemies ARE arranged onto
+        // walkable tiles, so their CCharacter positions are real walkable world coords. Dump them to pick an anchor.
+        private static bool _enPosDumped;
+        private static void DumpEnemyPositions()
+        {
+            if (_enPosDumped) return;
+            _enPosDumped = true;
+            Console.WriteLine("[ENPOS] spawned-enemy CCharacter positions (walkable world coords):");
+            for (int s = 0; s <= 16; s++)
+            {
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
+                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                long pa = EnemyAddresses.CharObjects.PosAddr(s);
+                float x = BitConverter.Int32BitsToSingle(Memory.ReadInt(pa));
+                float z = BitConverter.Int32BitsToSingle(Memory.ReadInt(pa + 8));
+                Console.WriteLine($"[ENPOS] slot {s} eid={eid} pos=({x:F0},{z:F0})");
+            }
+        }
+
+        private const int GridRows = 24, GridCols = 20;
+        private const float CellWorld = 160f;   // SearchiDoPutArea: each MAPPARTS cell = 160 world units (calibrated)
+        private static bool _anchorSet;          // once we've locked the walkable anchor from a populated grid
+
+        private static void DumpMapParts()
+        {
+            if (_mapDumped) return;
+            long nowDng = DungeonAddresses.Map.Deref(Memory.ReadUInt(DungeonAddresses.Map.NowDngMapPtr));
+            if (nowDng == 0) return;
+            var objCells = ReadObjectCells(nowDng);                 // chest/atra/trap grid cells (engine placement-exclusions)
+            var (populated, tile) = LogMapGrid(nowDng, objCells);
+            if (populated == 0) return;     // still loading — keep trying next tick (don't latch _mapDumped on a wiped read)
+            _mapDumped = true;
+            if (populated >= 16 && !_anchorSet) SetWalkAnchorFromGrid(tile, objCells);
+        }
+
+        // Render the MAPPARTS tile grid as an ASCII map (one [MAP] line per row), overlaying chest/atra/trap markers.
+        // Returns the populated-tile count and the boolean tile grid (true = placed/walkable cell, f0 != 0 && f0 != -1).
+        private static (int populated, bool[,] tile) LogMapGrid(long nowDng, System.Collections.Generic.Dictionary<int, char> objCells)
+        {
+            long gb = nowDng + 0x9C50;   // MAPPARTS is embedded in the CDungeonMap (ArrangementPos: a0 = CDungeonMap + 0x9C50)
+            var tile = new bool[GridRows, GridCols];
+            int populated = 0, wiped = 0, empty = 0;
+            Console.WriteLine($"[MAP] mapno={Memory.ReadInt(DungeonAddresses.Map.MapNo)} CDungeonMap@0x{nowDng:X8} MAPPARTS@0x{gb:X8}  (' '=empty '-'=wiped '#'=tile  C=chest A=atra T=trap)");
+            for (int row = 0; row < GridRows; row++)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int col = 0; col < GridCols; col++)
+                {
+                    int f0 = Memory.ReadInt(DungeonAddresses.MapPartsGrid.CellAddr(gb, row, col));
+                    char ch;
+                    if (f0 == 0) { ch = ' '; empty++; }
+                    else if (f0 == -1) { ch = '-'; wiped++; }
+                    else { ch = '#'; populated++; tile[row, col] = true; }
+                    if (objCells.TryGetValue(row * GridCols + col, out var m)) ch = m;   // overlay object marker
+                    sb.Append(ch);
+                }
+                Console.WriteLine($"[MAP] r{row:D2} {sb}");
+            }
+            Console.WriteLine($"[MAP] cells: {populated} tiles, {empty} empty, {wiped} wiped(-1), {objCells.Count} objects — grid is {(populated > 0 ? "POPULATED (valid floor layout)" : wiped > 0 ? "WIPED (-1, too late)" : "EMPTY")}");
+            return (populated, tile);
+        }
+
+        // Chest/atra/trap-circle cells the engine excludes from enemy placement (see DungeonAddresses.DungeonObjects).
+        // Keyed by row*GridCols+col; value is the map marker char. We mirror these so Ice Queen's cluster never lands
+        // on a chest. World pos -> cell: col = x/160, row = z/160.
+        private static System.Collections.Generic.Dictionary<int, char> ReadObjectCells(long nowDng)
+        {
+            var cells = new System.Collections.Generic.Dictionary<int, char>();
+            void Add(float x, float z, char c)
+            {
+                int col = (int)(x / CellWorld), row = (int)(z / CellWorld);
+                if (row >= 0 && row < GridRows && col >= 0 && col < GridCols) cells[row * GridCols + col] = c;
+            }
+            // Chests
+            int nChest = System.Math.Clamp(Memory.ReadInt(nowDng + DungeonAddresses.DungeonObjects.ChestCount), 0, DungeonAddresses.DungeonObjects.ChestMax);
+            for (int i = 0; i < nChest; i++)
+            {
+                long b = nowDng + DungeonAddresses.DungeonObjects.ChestArray + i * DungeonAddresses.DungeonObjects.ChestStride;
+                if (Memory.ReadInt(b + DungeonAddresses.DungeonObjects.ChestActive) == 0) continue;
+                Add(Memory.ReadFloat(b + DungeonAddresses.DungeonObjects.ChestPos), Memory.ReadFloat(b + DungeonAddresses.DungeonObjects.ChestPos + 8), 'C');
+            }
+            // Atra
+            int nAtra = System.Math.Clamp(Memory.ReadInt(nowDng + DungeonAddresses.DungeonObjects.AtraCount), 0, DungeonAddresses.DungeonObjects.AtraMax);
+            for (int i = 0; i < nAtra; i++)
+            {
+                long b = nowDng + DungeonAddresses.DungeonObjects.AtraArray + i * DungeonAddresses.DungeonObjects.AtraStride;
+                if (Memory.ReadInt(b + DungeonAddresses.DungeonObjects.AtraActive) == 0) continue;
+                Add(Memory.ReadFloat(b + DungeonAddresses.DungeonObjects.AtraPos), Memory.ReadFloat(b + DungeonAddresses.DungeonObjects.AtraPos + 8), 'A');
+            }
+            // Trap circles
+            for (int i = 0; i < DungeonAddresses.DungeonObjects.TrapMax; i++)
+            {
+                long b = nowDng + DungeonAddresses.DungeonObjects.TrapArray + i * DungeonAddresses.DungeonObjects.TrapStride;
+                if (Memory.ReadInt(b + DungeonAddresses.DungeonObjects.TrapActive) == 0) continue;
+                Add(Memory.ReadFloat(b + DungeonAddresses.DungeonObjects.TrapPos), Memory.ReadFloat(b + DungeonAddresses.DungeonObjects.TrapPos + 8), 'T');
+            }
+            return cells;
+        }
+
+        // Find the largest open room (maximal all-tile rectangle) and aim Ice Queen's cluster at its world center.
+        // worldX = col*160, worldY(floor) = row*160. Her native is (worldX 0, worldY -177), and the nudge is added:
+        //   IqNudgeX = targetX - nativeX(≈0);  worldY = -177 + IqNudgeY  =>  IqNudgeY = targetY + 177.
+        // Chest/atra/trap cells are excluded from the candidate tiles so the room (and her cluster) never covers one.
+        private static void SetWalkAnchorFromGrid(bool[,] tile, System.Collections.Generic.Dictionary<int, char> objCells)
+        {
+            var free = (bool[,])tile.Clone();
+            foreach (var key in objCells.Keys) free[key / GridCols, key % GridCols] = false;   // can't place on a chest/atra/trap
+            var (cr, cc, h, w) = LargestRoomRect(free);
+            if (h < 2 || w < 2) { Console.WriteLine($"[ANCHOR] largest chest-free room only {w}x{h} — too small, keeping fallback nudge ({IqNudgeX:F0},{IqNudgeY:F0})"); return; }
+            float targetX = (cc + 0.5f) * CellWorld;   // cell center
+            float targetY = (cr + 0.5f) * CellWorld;
+            IqNudgeX = targetX;          // native worldX ≈ 0
+            IqNudgeY = targetY + 177f;   // worldY = -177 + IqNudgeY = targetY
+            _anchorSet = true;
+            Console.WriteLine($"[ANCHOR] largest chest-free room {w}x{h} centered at grid(r{cr},c{cc}) -> world({targetX:F0},{targetY:F0}); nudge=({IqNudgeX:F0},{IqNudgeY:F0})");
+        }
+
+        // Largest all-true rectangle in the tile grid (histogram method). Returns (centerRow, centerCol, height, width).
+        // Scored by the NARROW dimension first (min(w,h)) then area, so we pick the roomiest open space for the 7-member
+        // cluster — not a 1-wide boundary-wall strip or a long thin corridor that would win on raw area.
+        private static (int, int, int, int) LargestRoomRect(bool[,] tile)
+        {
+            int[] hist = new int[GridCols];
+            int bestMin = 0, bestArea = 0, bR = 0, bC = 0, bH = 0, bW = 0;
+            for (int row = 0; row < GridRows; row++)
+            {
+                for (int col = 0; col < GridCols; col++) hist[col] = tile[row, col] ? hist[col] + 1 : 0;
+                for (int left = 0; left < GridCols; left++)
+                {
+                    if (hist[left] == 0) continue;
+                    int minH = hist[left];
+                    for (int right = left; right < GridCols; right++)
+                    {
+                        if (hist[right] == 0) break;
+                        minH = System.Math.Min(minH, hist[right]);
+                        int w = right - left + 1, area = w * minH, minDim = System.Math.Min(w, minH);
+                        if (minDim > bestMin || (minDim == bestMin && area > bestArea))
+                        { bestMin = minDim; bestArea = area; bH = minH; bW = w; bR = row - minH + 1 + (minH - 1) / 2; bC = left + (w - 1) / 2; }
+                    }
+                }
+            }
+            return (bR, bC, bH, bW);
+        }
+
+        // baria to ~+2000. Zero those radius constants -> it lands AT her, stays hittable, and can break. Re-armed/floor.
+        private static bool _bariaPatched;
+        private static void PatchBariaShield()
+        {
+            if (_bariaPatched) return;
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            long stb = -1;
+            foreach (long addr in KnownAddrs(101, dungeon))
+                if (Memory.ReadUInt(addr) == StbMagic && (uint)Memory.ReadInt(addr + 0x54) == 0x874) { stb = addr; break; }
+            if (stb < 0) stb = ScanForCodeOff(0x874, new System.Collections.Generic.HashSet<long>());
+            if (stb < 0) return;
+            _bariaPatched = true;
+            int n = 0;
+            foreach (int o in new[] { 0xD68, 0xDC8, 0xE28, 0x1158, 0x11B8, 0x1218 })   // a2 (value) of each "push 15.0"
+                if (Memory.ReadInt(stb + o) == 1097859072) { Memory.WriteInt(stb + o, 0); n++; }
+            Console.WriteLine($"[BARIApatch] zeroed {n}/6 orbit-radius floats @0x{stb:X8} — shield should stay on Ice Queen");
+        }
+
         // One-shot: dump Ice Queen's dispatcher command flow (codeOff grid @0x2914) so we can find the player-proximity
         // gate (GET_POSITION(-2) player + GET_DISTANCE vs a fixed arena/origin reference) that starts her attack loop.
         private static bool _iqActDumped;
@@ -1087,6 +1411,23 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
             if (any) _fsDumped = true;
+        }
+
+        // The engine's enemy-wake culling reads the floor-slot LocationX/Y, which sits at the arrange origin (~0,0)
+        // while the enemy is dormant and only jumps to the shifted spot once its AI wakes. So pre-write the dormant
+        // floor-slot to the shifted cluster position — then the wake fires when the player approaches HER, not origin.
+        // Only touch slots still near origin (dormant); once active (already shifted) we leave them to the AI.
+        private static void WakeShiftFloorSlots()
+        {
+            float wx = 0f + IqNudgeX, wy = -177f + IqNudgeY;   // Ice Queen's shifted worldX / worldY
+            for (int s = 0; s <= 6; s++)
+            {
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
+                float lx = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX)));
+                if (Math.Abs(lx) >= 100f) continue;   // already active/shifted — don't fight the AI
+                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX), BitConverter.SingleToInt32Bits(wx));
+                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY), BitConverter.SingleToInt32Bits(wy));
+            }
         }
 
         private static void NudgeCompanionPositions()
@@ -1186,7 +1527,7 @@ namespace Dark_Cloud_Improved_Version
         // each step since swaps shuffle things). Runs once per fight; re-armed when Ice Queen despawns.
         private static void ReorderToNativeOnce()
         {
-            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; return; }   // Ice Queen gone — re-arm
+            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _meshDumped = false; _anchorSet = false; _enPosDumped = false; return; }   // Ice Queen gone — re-arm
             if (_swapDone) return;
             foreach (var (_, eid) in _nativeLayout)
                 if (FindSlotByEid(eid) < 0) return;                       // wait until all 7 are present
