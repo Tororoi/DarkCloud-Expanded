@@ -61,6 +61,10 @@ namespace Dark_Cloud_Improved_Version
                 InitQuestState(areaData);
                 FishPhaseLogger.LogFishSession(_fishingAreaId, areaData.SlotBase, areaData.SlotCount);
                 ActivateMardanSwordAbilities(areaData);
+                // Native fish-size smoothing applies to every non-Arise session. Arise sessions already
+                // smooth internally via AriseScaleFishSizes, so don't double-apply here.
+                if (mardanSwordId != Items.arisemardan)
+                    SmoothFishSizes(areaData.SlotBase, areaData.SlotCount);
                 FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
             }
             FishDataFarmer.OnSessionDetected();
@@ -259,16 +263,15 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Writes all known <see cref="FishData"/> fields into the slot at <paramref name="slotStart"/>.
         /// Null fields are skipped so the game's native value is preserved.
-        /// Size is randomized in <c>[MinSize, MaxSize]</c> and scale floats are updated to match.
+        /// Size is rolled via the native slot-init formula (<see cref="SimulateSlotInit"/>) so rerolled
+        /// slots match the game's own distribution; the smoothing/Arise size effects are applied afterward
+        /// over all slots by <see cref="SmoothFishSizes"/> / <see cref="AriseScaleFishSizes"/>.
         /// </summary>
         /// <param name="slotStart">Absolute memory address of the slot's base.</param>
         /// <param name="fishId">Fish ID byte to write at offset 0x000.</param>
         /// <param name="fishData">Species data to write into the slot.</param>
         private static void WriteSlotData(int slotStart, byte fishId, FishData fishData)
         {
-            float minSize = fishData.MinSize ?? 5.0f;
-            float maxSize = fishData.MaxSize ?? minSize;
-            float size = minSize + (float)(Rng.NextDouble() * Math.Max(0, maxSize - minSize));
             Memory.WriteByte(slotStart, fishId);
             if (fishData.ScaleDivisor.HasValue)
                 Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleDivisor, fishData.ScaleDivisor.Value);
@@ -308,10 +311,10 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffBattan, fishData.BaitAffBattan.Value);
             if (fishData.BaitAffPetitefish.HasValue)
                 Memory.WriteFloat(slotStart + FishSlotOffsets.BaitAffPetitefish, fishData.BaitAffPetitefish.Value);
-            float scaleDivisor = fishData.ScaleDivisor ?? 0f;
-            Memory.WriteFloat(slotStart + FishSlotOffsets.Size,      size);
-            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleModel, scaleDivisor > 0f ? size / scaleDivisor : 0f);
-            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed, size / 25f);
+            SimulateSlotInit(fishData, out float size, out float scaleModel, out float scaleFixed);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.Size,       size);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleModel, scaleModel);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed, scaleFixed);
         }
 
         /// <summary>
@@ -335,13 +338,59 @@ namespace Dark_Cloud_Improved_Version
 
         // ---- Aesthetics ----
 
+        // ---- Size adjustment math ----
+        // Both effects operate on the size the game has already rolled and clamped to [MinSize, MaxSize].
+        // Sizes are in the game's native size units (display cm = floor(size * 10)). Fish only get bigger.
+
         /// <summary>
-        /// Scales each fish slot's size by a curve-based multiplier: 1× at the floor rising to
-        /// <paramref name="scaleFactor"/>× at max size (quadratic in normalized position).
-        /// Fish near their minimum size get almost no boost; only near-max rolls approach the full factor.
-        /// Logs original vs scaled values per slot.
+        /// Smoothing buff over an arbitrary <c>[base, max]</c> range. Zero at base and at max,
+        /// peaks in the upper range; keeps <c>f(base)=base</c>, <c>f(max)=max</c>, <c>f(s)&gt;=s</c>.
+        /// Fills the sparse region just below the cap so the distribution ramps into it smoothly.
         /// </summary>
-        internal static void ScaleFishSizes(int slotBase, int slotCount, float scaleFactor)
+        static float SmoothCore(float size, float baseSize, float max, float strength, float exponent)
+        {
+            if (strength <= 0f || max <= baseSize || size <= baseSize) return size;
+            float t = Math.Min(1f, (size - baseSize) / (max - baseSize));
+            return size + strength * (max - baseSize) * (float)Math.Pow(t, exponent) * (1f - t);
+        }
+
+        /// <summary>
+        /// Linear scaling: multiplier ramps from 1× at <paramref name="min"/> to
+        /// <paramref name="factor"/>× at <paramref name="max"/>. <paramref name="size"/> is assumed
+        /// already within <c>[min, max]</c>.
+        /// </summary>
+        static float ScaleCore(float size, float min, float max, float factor)
+        {
+            if (factor <= 1f || max <= min) return size;
+            float t = (size - min) / (max - min);
+            return size * (1f + (factor - 1f) * t);
+        }
+
+        /// <summary>Native smoothing only (strength 0.93, exponent 1.2).</summary>
+        static float SmoothNative(float size, float baseSize, float max)
+            => SmoothCore(size, baseSize, max, 0.93f, 1.2f);
+
+        /// <summary>
+        /// Full Arise transform: native smooth → ×2 scale → smooth over the scaled range.
+        /// Raises the effective cap to <c>2 × max</c>.
+        /// </summary>
+        static float AriseTransform(float size, float baseSize, float min, float max)
+        {
+            const float FACTOR = 2f;
+            float s = Math.Min(size, max);                          // already clamped, just in case
+            s = SmoothCore(s, baseSize, max, 0.93f, 1.2f);          // 1. native smooth
+            s = ScaleCore(s, min, max, FACTOR);                     // 2. ×2 scale
+            float scaledBase = ScaleCore(baseSize, min, max, FACTOR);
+            float scaledMax  = max * FACTOR;
+            return SmoothCore(s, scaledBase, scaledMax, 0.72f, 2f); // 3. scaled smooth
+        }
+
+        /// <summary>
+        /// Applies the native smoothing buff ("Smooth Native Fish Size Distribution") to every slot,
+        /// filling the sparse region just below MaxSize so the distribution ramps smoothly into the cap
+        /// instead of the vanilla clamp spike. Does not change the max. Logs original vs new per fish.
+        /// </summary>
+        internal static void SmoothFishSizes(int slotBase, int slotCount)
         {
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
@@ -349,27 +398,59 @@ namespace Dark_Cloud_Improved_Version
                 byte fishId = Memory.ReadByte(slotStart);
                 float originalSize = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
                 if (originalSize <= 0f) continue;
+                if (!Fish.TryGetValue(fishId, out FishData fishData) ||
+                    !fishData.BaseSize.HasValue || !fishData.MinSize.HasValue) continue;
 
-                float floor = Fish.TryGetValue(fishId, out FishData fishData) && fishData.MinSize.HasValue
-                    ? fishData.MinSize.Value : 0f;
-                float maxSize = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
-                float range   = maxSize - floor;
+                float baseSize = fishData.BaseSize.Value;
+                float maxSize  = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
+                float newSize  = SmoothNative(originalSize, baseSize, maxSize);
 
-                float normalizedPosition = range > 0f ? Math.Max(0f, originalSize - floor) / range : 0f;
-                float multiplier = 1f + (scaleFactor - 1f) * normalizedPosition * normalizedPosition;
-                float scaledSize = originalSize * multiplier;
-
-                float scaleRatio = scaledSize / originalSize;
-                Memory.WriteFloat(slotStart + FishSlotOffsets.Size,      scaledSize);
-                Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleModel,
-                    Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleModel) * scaleRatio);
-                Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed,
-                    Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleFixed) * scaleRatio);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[SizeScale] slot={slotIndex} {Fish.GetName(fishId)} " +
-                    $"floor={floor:F1} max={maxSize:F1} orig={originalSize:F4} scaled={scaledSize:F4} " +
-                    $"({(int)(originalSize*10)}→{(int)(scaledSize*10)}cm)");
+                WriteScaledSize(slotStart, originalSize, newSize, fishId);
             }
+        }
+
+        /// <summary>
+        /// Applies the full "Arise Mardan Scaling" effect to every slot: native smooth, then linear
+        /// scale to 2× max, then a second smooth over the scaled range. Always includes the native
+        /// smoothing internally (independent of <see cref="SmoothFishSizes"/>). Raises the cap to
+        /// 2 × MaxSize. Logs original vs new per fish.
+        /// </summary>
+        internal static void AriseScaleFishSizes(int slotBase, int slotCount)
+        {
+            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
+            {
+                int slotStart = slotBase + slotIndex * FishSlotOffsets.Stride;
+                byte fishId = Memory.ReadByte(slotStart);
+                float originalSize = Memory.ReadFloat(slotStart + FishSlotOffsets.Size);
+                if (originalSize <= 0f) continue;
+                if (!Fish.TryGetValue(fishId, out FishData fishData) ||
+                    !fishData.BaseSize.HasValue || !fishData.MinSize.HasValue) continue;
+
+                float baseSize = fishData.BaseSize.Value;
+                float minSize  = fishData.MinSize.Value;
+                float maxSize  = Memory.ReadFloat(slotStart + FishSlotOffsets.MaxSize);
+                float newSize  = AriseTransform(originalSize, baseSize, minSize, maxSize);
+
+                WriteScaledSize(slotStart, originalSize, newSize, fishId);
+            }
+        }
+
+        /// <summary>
+        /// Shared writeback for the size effects: writes the new Size and multiplies both render-scale
+        /// floats (ScaleModel, ScaleFixed) by <c>newSize / originalSize</c> so the model grows to match.
+        /// Logs the original vs new size in both native units and display cm.
+        /// </summary>
+        static void WriteScaledSize(int slotStart, float originalSize, float newSize, byte fishId)
+        {
+            float scaleRatio = newSize / originalSize;
+            Memory.WriteFloat(slotStart + FishSlotOffsets.Size, newSize);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleModel,
+                Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleModel) * scaleRatio);
+            Memory.WriteFloat(slotStart + FishSlotOffsets.ScaleFixed,
+                Memory.ReadFloat(slotStart + FishSlotOffsets.ScaleFixed) * scaleRatio);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[SizeAdjust] {Fish.GetName(fishId)} orig={originalSize:F4} new={newSize:F4} " +
+                $"({(int)(originalSize*10)}->{(int)(newSize*10)}cm)");
         }
 
         /// <summary>
@@ -646,9 +727,10 @@ namespace Dark_Cloud_Improved_Version
                 RollFishSlots(areaData.SlotBase, areaData.SlotCount, Fish.MardanGarayan.Id, 0.2f);
             // Apply the Mardan sword FP boost to all non-Garayan fish. Must be done after rolling so bonus applies to new spawns.
             ApplyMardanBonus(areaData.SlotBase, areaData.SlotCount);
-            // Arise Mardan ability: scale fish sizes up. Must be done after rolling and bonuses so the boost applies to final sizes.
+            // Arise Mardan ability: smooth + scale fish sizes up. Must be done after rolling and bonuses so the boost applies to final sizes.
+            // AriseScaleFishSizes already includes the native smoothing, so SmoothFishSizes is not also called here.
             if (mardanSwordId == Items.arisemardan)
-                ScaleFishSizes(areaData.SlotBase, areaData.SlotCount, 2f);
+                AriseScaleFishSizes(areaData.SlotBase, areaData.SlotCount);
         }
 
         /// <summary>
@@ -755,6 +837,11 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="scaleFixed">slot+0x068: Size / 25.0.</param>
         internal static void SimulateSlotInit(FishData fish, out float size, out float scaleModel, out float scaleFixed)
         {
+            // Display cm = floor(size × 10), NOT rounded. The game's only float→int path is the
+            // soft-cast helper at ELF 0x001110B0 (902 call sites): it right-shifts the mantissa by
+            // (23 − exponent), discarding fractional bits — i.e. truncation toward zero (C-style (int)).
+            // No ×10 site in the ELF adds 0.5 before casting, so there is no rounding. Since the clamp
+            // below keeps size ≥ 0.5×BaseSize > 0, floor == truncation here. e.g. 8.7653 → 87cm, not 88.
             float baseSize     = fish.BaseSize      ?? 0f;
             float maxSize      = fish.MaxSize       ?? 0f;
             float scaleDivisor = fish.ScaleDivisor  ?? 0f;
