@@ -199,6 +199,76 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Readable per-slot dump for boss fights (esp. Ice Queen) — like <see cref="LogEnemySpawns"/> but tuned for
+        /// live combat: current/max HP, collision scale, lock-on reticle, world position, playing motion, and the
+        /// resistance packs (scale: 0=immune, &lt;100=resistant, 100=neutral, &gt;100=weak — so the shield's magic
+        /// immunity and the Queen's physical immunity are visible). Dumps EVERY live slot incl. eid-0 sub-entities,
+        /// no miniboss filter. <paramref name="tag"/> labels the snapshot.
+        /// </summary>
+        internal static void BossInfo(string tag)
+        {
+            Console.WriteLine($"[BossInfo] === {tag} ===");
+            for (int i = 0; i < 16; i++)
+            {
+                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                if (Memory.ReadInt(slotBase) == -1) continue;
+
+                ushort eid  = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
+                string name = GetEnemyName(eid);
+                int hp      = Memory.ReadInt(slotBase + EnemySlotOffsets.Hp);
+                int maxHp   = Memory.ReadInt(slotBase + EnemySlotOffsets.MaxHp);
+                float scale = Memory.ReadFloat(slotBase + EnemySlotOffsets.EntityScale);
+                float rw    = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleWidth);
+                float rh    = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleHeight);
+                float x     = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
+                float y     = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);
+                int mot     = Memory.ReadInt(EnemyAddresses.CharObjects.CharAddr(i) + 0xC68);   // playing motion id
+
+                int p1 = Memory.ReadInt(slotBase + EnemySlotOffsets.ResistancePack1);
+                int p2 = Memory.ReadInt(slotBase + EnemySlotOffsets.ResistancePack2);
+                int p3 = Memory.ReadInt(slotBase + EnemySlotOffsets.ResistancePack3);
+                ushort res1 = (ushort)(p1 & 0xFFFF), fire = (ushort)(p1 >> 16);
+                ushort ice  = (ushort)(p2 & 0xFFFF), thun = (ushort)(p2 >> 16);
+                ushort wind = (ushort)(p3 & 0xFFFF), holy = (ushort)(p3 >> 16);
+
+                Console.WriteLine($"[BossInfo] slot={i,2} {name} (id={eid}) hp={hp}/{maxHp} scale={scale:F1} reticle={rw:F2}x{rh:F2} pos=({x:F0},{y:F0}) mot={mot} | type={res1} fire={fire} ice={ice} thun={thun} wind={wind} holy={holy} | {SlotStbId(i)}");
+            }
+        }
+
+        /// <summary>
+        /// Identify which companion script a slot is running, by decoding its STB code-offset. The slot's CRunScript
+        /// (0x21E4D5A0 + slot*0x48) holds the live instruction pointer at +0x30; that points INTO the loaded STB, so
+        /// we scan back to the "STB\0" header and read codeOff @+0x54. codeOff is the companion's signature: korinoya
+        /// 0x7D0, baria 0x874, kori/i_meteo 0x5EC, i_tatumaki/reiki 0x3AC, Ice Queen 0x2914. This is how we verify the
+        /// eid-0 companions (kori/i_meteo/i_tatumaki) are in their correct native slots.
+        /// </summary>
+        private static string SlotStbId(int slot)
+        {
+            const uint StbMagic = 0x00425453u;   // "STB\0"
+            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + slot * 0x48 + 0x30);
+            if (ipRaw == 0) return "no-script";
+            long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
+            const int win = 0x8000;                                   // STBs are well under 32 KB
+            long start = System.Math.Max(0x20000000, ip - win);
+            int nWords = (int)((ip - start) / 4);
+            if (nWords <= 1) return "?";
+            uint[] w = Memory.ReadUIntBatch(start, nWords);
+            for (int i = w.Length - 1; i >= 0; i--)                   // nearest STB header below the IP, with a known codeOff
+            {
+                if (w[i] != StbMagic) continue;
+                long stb = start + (long)i * 4;
+                uint co = (uint)Memory.ReadInt(stb + 0x54);
+                string nm = co switch
+                {
+                    0x2914 => "IceQueen", 0x7D0 => "korinoya", 0x874 => "baria",
+                    0x5EC => "kori/i_meteo", 0x3AC => "i_tatumaki/reiki", _ => null
+                };
+                if (nm != null) return $"codeOff=0x{co:X}({nm})";
+            }
+            return "?";
+        }
+
+        /// <summary>
         /// Dumps the model/render scale table (separate from enemy slots).
         /// Base 0x21E18530, stride 0x3510 — mirrors the width/height/depth used by MiniBoss scaling.
         /// </summary>

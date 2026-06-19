@@ -3347,6 +3347,10 @@ namespace Dark_Cloud_Improved_Version
         // 24	320–326	バリア（入り）	barrier (enter)
         // 25	327–335	バリア（ループ）	barrier (loop)
         // 26	336–340	バリア（戻り）	barrier (return)
+        // Damage model (confirmed from the genuine fight 2026-06-18): IceRes=65486=0xFFCE=-50 → she ABSORBS ice
+        // (ice magic HEALS her). Weak to FIRE (150) and HOLY (120); resists thunder/wind (80). So she is damaged with
+        // fire/holy magic, never ice. Her companions (barrier/arrow/prison/meteor/tornado) are all ice-IMMUNE (IceRes=0)
+        // and fire-weak (200); reiki/Ice Aura alone is fully neutral. MaxHp 700.
         internal static readonly EnemyDefaults IceQueen = new EnemyDefaults {
             Id=113, TableIndex=80, ModelCode="c13a", Name="Ice Queen",       MaxHp=700,   Abs=30, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=150, IceRes=65486, ThunderRes=80, WindRes=80, HolyRes=120,
@@ -3369,23 +3373,33 @@ namespace Dark_Cloud_Improved_Version
         // IceQueen (SW floor 18) fight companions — all id=0, boss sentinels. Ice-attack effect entities.
         // code=bari → baria.chr (barrier) @ data.dat 0x1e1b1000 — 0 ループ(loop) / 1 消滅(despawn) / 2 出現(appear).
         internal static readonly EnemyDefaults IQComp101 = new EnemyDefaults {
-            Id=0, TableIndex=101, ModelCode="bari", Name="Ice Barrier", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=101, ModelCode="bari", Name="Ice Barrier", MaxHp=100, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f };
         // code=kori → kori.chr (ice arrow); motions documented above at IceArrow (0 ice appear / 1 ice burst).
         // Motions: kori.chr @ data.dat 0x1e3a8800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
         // 0	10–30	氷出現	iceappear
         // 1	40–55	氷破裂	ice破裂
         internal static readonly EnemyDefaults IQComp102 = new EnemyDefaults {
-            Id=0, TableIndex=102, ModelCode="kori", Name="Ice Prison", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=102, ModelCode="kori", Name="Ice Prison", MaxHp=100, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f };
         // code=i_me → i_meteo.chr (ice meteor) @ data.dat 0x1e37a000 — 0 氷生成(ice form) / 1 ループ / 2 爆発(explode).
         internal static readonly EnemyDefaults IQComp103 = new EnemyDefaults {
-            Id=0, TableIndex=103, ModelCode="i_me", Name="Ice Meteor", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=103, ModelCode="i_me", Name="Ice Meteor", MaxHp=100, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f };
         // code=b3_r → b3_reiki.chr (霊気 "aura/spirit") @ data.dat 0x1a8c1800 — 1 motion: 0 reiki (aura).
         internal static readonly EnemyDefaults SWComp92 = new EnemyDefaults {
-            Id=0, TableIndex=92, ModelCode="b3_r", Name="Ice Aura", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=92, ModelCode="b3_r", Name="Ice Aura", MaxHp=80, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,  // reiki: fully neutral (unlike the ice-immune siblings)
+            EntityScale=5.0f, EntityScaleCopy=5.0f, ReticleWidth=1.0f, ReticleHeight=1.0f };
         // code=i_ta → i_tatumaki.chr (ice tornado) @ data.dat 0x1e38b800 — 0 柱出現(pillar) / 1 竜巻(tornado) / 2 竜巻消える(vanish).
         internal static readonly EnemyDefaults IQComp104 = new EnemyDefaults {
-            Id=0, TableIndex=104, ModelCode="i_ta", Name="Ice Tornado", MaxHp=0, AttackPower=65535 };
+            Id=0, TableIndex=104, ModelCode="i_ta", Name="Ice Tornado", MaxHp=100, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f };
 
         // SMT boss. Motions: c15a.chr info.cfg @ data.dat 0x1ae5c000.
         // Idx	Frames	Name (JP)	Meaning

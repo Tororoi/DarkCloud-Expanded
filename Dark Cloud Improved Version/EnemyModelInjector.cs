@@ -798,6 +798,8 @@ namespace Dark_Cloud_Improved_Version
                             WakeShiftFloorSlots();                              // pre-shift the dormant floor-slot (the engine's wake-origin) to the cluster
                             PatchBariaShield();                                 // zero baria's orbit radius so the shield lands on her, not ~+2000
                             DumpEnemyPositions();                               // one-shot: enemy positions (walkable world anchors)
+                            RestoreShieldNativeEid();                           // (toggle) restore baria's slot eid to native 0
+                            DumpReikiHandler();                                 // one-shot: reiki's script flow (find its effect gate)
                         }
                         else if (IqTranslate)                                  // off for the Moon Sea native test (she stays at her -Y corner)
                         {
@@ -1065,6 +1067,64 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // Resolve a slot's STB base from its live CRunScript instruction pointer (CRunScript @ 0x21E4D5A0+slot*0x48,
+        // IP @ +0x30 points INTO the loaded STB) by scanning back to the "STB\0" header with a known codeOff. This
+        // disambiguates the shared-codeOff companions (reiki vs i_tatumaki = 0x3AC, kori vs i_meteo = 0x5EC) by slot.
+        private static long SlotStbBase(int slot)
+        {
+            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + (long)slot * 0x48 + 0x30);
+            if (ipRaw == 0) return -1;
+            long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
+            long start = Math.Max(0x20000000, ip - 0x8000);
+            int n = (int)((ip - start) / 4);
+            if (n <= 1) return -1;
+            uint[] w = Memory.ReadUIntBatch(start, n);
+            for (int i = w.Length - 1; i >= 0; i--)
+            {
+                if (w[i] != StbMagic) continue;
+                long stb = start + (long)i * 4;
+                uint c = (uint)Memory.ReadInt(stb + 0x54);
+                if (c == 0x3AC || c == 0x5EC || c == 0x7D0 || c == 0x874 || c == 0x2914) return stb;
+            }
+            return -1;
+        }
+
+        // One-shot: dump reiki's (Ice Aura, slot 5) script flow to find what gates its EFFECT. reiki fires only after
+        // the shield is destroyed AND the player is close, so its label should read a GET_GLOBAL (shield-down flag)
+        // and a GET_POSITION(-2)+GET_DIST proximity check, then BR_FALSE past the damage/effect command if unmet —
+        // which is why we see the animation but no effect. Located by slot (shares codeOff 0x3AC with i_tatumaki).
+        private static bool _reikiDumped;
+        private static void DumpReikiHandler()
+        {
+            if (_reikiDumped) return;
+            int slot = FindSlotByEid(244);                 // reiki = Ice Aura (tagged 244) at native slot 5
+            if (slot < 0) return;
+            long stb = SlotStbBase(slot);
+            if (stb < 0) return;
+            _reikiDumped = true;
+            uint co = (uint)Memory.ReadInt(stb + 0x54);
+            var cmd = new System.Collections.Generic.Dictionary<int, string>
+            {
+                {0x24,"SET_POS"}, {0x0B,"GET_POS"}, {0x0A,"GET_DIST"}, {0xD5,"GET_MONSTOR_POS"}, {0xE1,"GET_MONSTOR_VEC"},
+                {0xDC,"SET_GLOBAL"}, {0xDD,"GET_GLOBAL"}, {0xC8,"SET_MOTION"}, {0x20,"SET_MOVE"}, {0x22,"CHK_MOVE"},
+                {0xE4,"SET_LIFE"}, {0xE5,"SET_SHOT2"}, {0x6C,"COL_OFF"}, {0x6D,"GET_LIFE_RATE"},
+            };
+            Console.WriteLine($"[REIKI] reiki STB 0x{stb:X8} codeOff 0x{co:X} (slot {slot}) — flow:");
+            for (int k = 0; k < 290; k++)
+            {
+                int off = (int)co + k * 12;
+                int op = Memory.ReadInt(stb + off), a1 = Memory.ReadInt(stb + off + 4), a2 = Memory.ReadInt(stb + off + 8);
+                string note;
+                if (op == 3 && cmd.TryGetValue(a2, out var c3)) note = "CMD " + c3;
+                else if (op == 3) note = $"push {a2}";
+                else if (op == 1 && cmd.TryGetValue(a1, out var c1)) note = "CMD " + c1;
+                else if (op == 1) note = $"push1 {a1}";
+                else note = op switch { 21 => $"EXT({a1})", 23 => "YIELD", 4 => $"JMP->0x{a1:X}", 17 => $"BRF->0x{a1:X}", 18 => $"BRT->0x{a1:X}", 15 => "RET", 14 => $"BINOP(0x{a1:X})", 16 => "POP", _ => null };
+                if (note != null) Console.WriteLine($"[REIKI] +0x{off:X}: {note}");
+                if (op == 15) break;
+            }
+        }
+
         // baria (shield) positions itself at IceQueen.pos + direction*15.0 (six float-15.0 = 1097859072 orbit-radius
         // pushes across its two reposition blocks). When she's shifted, the direction isn't unit-length and ×15 flings
         // One-shot per floor: dump the MAPPARTS grid (room/walkable layout) + raw sample cells, so we can locate a
@@ -1276,25 +1336,36 @@ namespace Dark_Cloud_Improved_Version
         // Chest/atra/trap cells are excluded from the candidate tiles so the room (and her cluster) never covers one.
         private static void SetWalkAnchorFromGrid(bool[,] tile, System.Collections.Generic.Dictionary<int, char> objCells)
         {
-            var free = (bool[,])tile.Clone();
-            foreach (var key in objCells.Keys) free[key / GridCols, key % GridCols] = false;   // can't place on a chest/atra/trap
-            var (cr, cc, h, w) = LargestRoomRect(free);
-            if (h < 2 || w < 2) { Console.WriteLine($"[ANCHOR] largest chest-free room only {w}x{h} — too small, keeping fallback nudge ({IqNudgeX:F0},{IqNudgeY:F0})"); return; }
-            float targetX = (cc + 0.5f) * CellWorld;   // cell center
-            float targetY = (cr + 0.5f) * CellWorld;
+            // Find the room from the FULL tile geometry — a chest/atra/trap inside a room does NOT split it (you just
+            // don't stand ON the object). Excluding object cells first fragments a real room into slivers smaller than
+            // a corridor, which made her spawn off-walkable. Then anchor at the object-free cell nearest the room center.
+            var (top, left, h, w) = LargestRoomRect(tile);
+            if (h < 2 || w < 2) { Console.WriteLine($"[ANCHOR] largest room only {w}x{h} — too small, keeping fallback nudge ({IqNudgeX:F0},{IqNudgeY:F0})"); return; }
+            float fcr = top + (h - 1) / 2f, fcc = left + (w - 1) / 2f;   // geometric center of the room
+            int bestR = -1, bestC = -1; double bestD = double.MaxValue;
+            for (int r = top; r < top + h; r++)
+                for (int c = left; c < left + w; c++)
+                {
+                    if (objCells.ContainsKey(r * GridCols + c)) continue;   // don't anchor ON a chest/atra/trap
+                    double d = (r - fcr) * (r - fcr) + (c - fcc) * (c - fcc);
+                    if (d < bestD) { bestD = d; bestR = r; bestC = c; }
+                }
+            if (bestR < 0) { Console.WriteLine($"[ANCHOR] room {w}x{h} is entirely objects — keeping fallback nudge"); return; }
+            float targetX = (bestC + 0.5f) * CellWorld;
+            float targetY = (bestR + 0.5f) * CellWorld;
             IqNudgeX = targetX;          // native worldX ≈ 0
             IqNudgeY = targetY + 177f;   // worldY = -177 + IqNudgeY = targetY
             _anchorSet = true;
-            Console.WriteLine($"[ANCHOR] largest chest-free room {w}x{h} centered at grid(r{cr},c{cc}) -> world({targetX:F0},{targetY:F0}); nudge=({IqNudgeX:F0},{IqNudgeY:F0})");
+            Console.WriteLine($"[ANCHOR] largest room {w}x{h} @grid(r{top},c{left}); anchor cell (r{bestR},c{bestC}) -> world({targetX:F0},{targetY:F0}); nudge=({IqNudgeX:F0},{IqNudgeY:F0})");
         }
 
         // Largest all-true rectangle in the tile grid (histogram method). Returns (centerRow, centerCol, height, width).
         // Scored by the NARROW dimension first (min(w,h)) then area, so we pick the roomiest open space for the 7-member
         // cluster — not a 1-wide boundary-wall strip or a long thin corridor that would win on raw area.
-        private static (int, int, int, int) LargestRoomRect(bool[,] tile)
+        private static (int top, int left, int h, int w) LargestRoomRect(bool[,] tile)
         {
             int[] hist = new int[GridCols];
-            int bestMin = 0, bestArea = 0, bR = 0, bC = 0, bH = 0, bW = 0;
+            int bestMin = 0, bestArea = 0, bTop = 0, bLeft = 0, bH = 0, bW = 0;
             for (int row = 0; row < GridRows; row++)
             {
                 for (int col = 0; col < GridCols; col++) hist[col] = tile[row, col] ? hist[col] + 1 : 0;
@@ -1308,17 +1379,24 @@ namespace Dark_Cloud_Improved_Version
                         minH = System.Math.Min(minH, hist[right]);
                         int w = right - left + 1, area = w * minH, minDim = System.Math.Min(w, minH);
                         if (minDim > bestMin || (minDim == bestMin && area > bestArea))
-                        { bestMin = minDim; bestArea = area; bH = minH; bW = w; bR = row - minH + 1 + (minH - 1) / 2; bC = left + (w - 1) / 2; }
+                        { bestMin = minDim; bestArea = area; bH = minH; bW = w; bTop = row - minH + 1; bLeft = left; }
                     }
                 }
             }
-            return (bR, bC, bH, bW);
+            return (bTop, bLeft, bH, bW);
         }
 
+        // baria's native math is IQ.pos + facing×15 (GET_MONSTOR_POS(0)+GET_MONSTOR_VEC(0)), which sits the shield
+        // just in front of her — correct now that the slot-swap puts her at slot 0 with a correctly-shifted position.
+        // The +2000 fling was an artifact of the OLD pre-swap setup; zeroing the six 15.0 radius floats was a band-aid
+        // that parks the shield AT her center (wrong) and may be what keeps it from working. Default OFF — let the
+        // native formula run. Flip true only if the shield flings again.
+        private static readonly bool ZeroBariaRadius = false;
         // baria to ~+2000. Zero those radius constants -> it lands AT her, stays hittable, and can break. Re-armed/floor.
         private static bool _bariaPatched;
         private static void PatchBariaShield()
         {
+            if (!ZeroBariaRadius) return;   // let baria's native IQ.pos + facing×15 position the shield in front of her
             if (_bariaPatched) return;
             int dungeon = Memory.ReadByte(Addresses.checkDungeon);
             long stb = -1;
@@ -1395,13 +1473,23 @@ namespace Dark_Cloud_Improved_Version
         private static void DumpFloorSlots()
         {
             if (_fsDumped) return;
+            if (FindSlotByEid(240) < 0 || FindSlotByEid(113) < 0) return;   // wait until BOTH the shield (baria) and Queen are live
             bool any = false;
             for (int s = 0; s <= 6; s++)
             {
                 if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
                 ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
                 any = true;
-                Console.WriteLine($"[FSdump] slot {s} eid={eid}:");
+                // Collision/targeting fields — compare the shield (eid 240) against the Queen (eid 113) to see why
+                // attacks pass through it: EntityScale (+0x44 collision radius), reticle/hitbox (+0x110/+0x114),
+                // collision-off countdown (+0xA8). A tiny/zero scale or reticle => not a lock-on target / no blocker.
+                float escale = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0x44)));
+                float retW = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0x110)));
+                float retH = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0x114)));
+                int colOff = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0xA8));
+                int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                int mhp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.MaxHp));
+                Console.WriteLine($"[FSdump] slot {s} eid={eid}: hp={hp}/{mhp} scale(+0x44)={escale:F2} reticle(+0x110/114)={retW:F2}/{retH:F2} colOff(+0xA8)={colOff}");
                 uint[] blk = Memory.ReadUIntBatch(EnemyAddresses.FloorSlots.SlotAddr(s, 0), 0x190 / 4);
                 for (int i = 0; i < blk.Length; i++)
                 {
@@ -1494,6 +1582,7 @@ namespace Dark_Cloud_Improved_Version
         // patch + slot reorder still apply. Flip true to translate her onto a walkable chest (reachability) again.
         private const bool IqTranslate = false;
         private static bool _swapDone;
+
         private static readonly (long baseAddr, int stride)[] _slotBlocks =
         {
             (0x21E16BA0, 0x190),   // FloorSlot         (MMU + slot*0x190 + 0x1E3D0)
@@ -1502,18 +1591,21 @@ namespace Dark_Cloud_Improved_Version
             // NOTE: the per-slot alloc-ptr at MMU+slot*4 is deliberately NOT swapped — for slot 0 that's MMU+0
             // (the CMainMonstorUnit header), and swapping it corrupted the unit (frame-counter reset on activation).
         };
-        // Native slot layout (the genuine Shipwreck fight): each entity at the slot its scripts hardcode. Identified
-        // by eid (IceQueen 113, korinoya 84 confirmed from the genuine fight; companions tagged 240-244 by
-        // TagCompanions, slot = their global-int mailbox index: i_tatumaki[1], kori[3], i_meteo[4], reiki[5]; baria[6]).
+        // Native slot layout — CORRECTED from the genuine fight (2026-06-18). We had derived this from the global-int
+        // MAILBOX index, which is NOT the actual slot. The genuine arena proved: slot 0=Queen(113), slot 1=the SHIELD
+        // (baria — the only companion that takes damage, HP cycling 100→0→100), slot 2=korinoya(84), slot 5=reiki
+        // (hp 80/scale 5). The eid-0 trio kori/i_meteo/i_tatumaki occupy the remaining slots (3/4/6) — order among
+        // them is unconfirmed but the engine's shield gate keys on slot 1, so it shouldn't matter. Companions are
+        // located here by their TagCompanions eid (240-244) only to drive the reorder.
         private static readonly (int nativeSlot, ushort eid)[] _nativeLayout =
         {
             (0, 113),   // Ice Queen
-            (1, 243),   // i_tatumaki (tornado)
+            (1, 240),   // baria (shield)   — genuine slot 1 (the damageable companion)
             (2, 84),    // korinoya (ice arrow)
             (3, 241),   // kori (ice source)
             (4, 242),   // i_meteo (meteor)
-            (5, 244),   // reiki (aura)
-            (6, 240),   // baria (shield)
+            (5, 244),   // reiki (aura)     — genuine slot 5 (hp 80, scale 5)
+            (6, 243),   // i_tatumaki (tornado) — moved off slot 1 (slot 1 is the shield)
         };
         private static int FindSlotByEid(ushort eid)
         {
@@ -1527,17 +1619,50 @@ namespace Dark_Cloud_Improved_Version
         // each step since swaps shuffle things). Runs once per fight; re-armed when Ice Queen despawns.
         private static void ReorderToNativeOnce()
         {
-            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _meshDumped = false; _anchorSet = false; _enPosDumped = false; return; }   // Ice Queen gone — re-arm
+            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _meshDumped = false; _anchorSet = false; _enPosDumped = false; _fsDumped = false; _shieldSlot = -1; _reikiDumped = false; return; }   // Ice Queen gone — re-arm
             if (_swapDone) return;
             foreach (var (_, eid) in _nativeLayout)
                 if (FindSlotByEid(eid) < 0) return;                       // wait until all 7 are present
             _swapDone = true;
+            int swaps = 0;
             foreach (var (t, eid) in _nativeLayout)
             {
                 int s = FindSlotByEid(eid);
-                if (s >= 0 && s != t) SwapSlots(s, t);
+                if (s >= 0 && s != t) { SwapSlots(s, t); swaps++; }
             }
-            Console.WriteLine("[IQreorder] placed all 7 entities at native slots 0-6 — real scripts now run");
+            // With the slottest iso (deterministic sequential spawn) the group should already be at native slots,
+            // so 0 swaps => the spawn order matched _nativeLayout and NO physical slot-swap happened. Any swaps>0
+            // means the spawn was still scrambled (e.g. unpatched iso or population != roster size).
+            if (swaps == 0)
+                Console.WriteLine("[IQreorder] spawn order ALREADY NATIVE (0-6) — 0 swaps, reorder skipped (deterministic spawn confirmed)");
+            else
+                Console.WriteLine($"[IQreorder] reordered to native slots 0-6 with {swaps} physical swap(s) — spawn was scrambled");
+        }
+
+        // EXPERIMENT: the shield (baria) is natively eid 0; TagCompanions rewrites it to 240, which appears to stop
+        // the engine treating it as the damageable shield that gates the Queen's invulnerability. Restore the live
+        // slot's eid to 0 (its native identity) once it's located, while keeping the table-record tag for setup.
+        // If the engine re-recognizes it, the shield takes physical damage + the Queen is protected. We track baria
+        // by slot index thereafter (FindSlotByEid(240) no longer finds it). +0x42 is a ushort — never WriteInt it
+        // (that clobbers +0x44 EntityScale).
+        // Restore baria's live-slot eid to its native 0 after the reorder. Slot-order alone (baria -> slot 1) proved
+        // INCONSISTENT — the eid-240 barrier took no physical damage even when reachable and correctly positioned,
+        // while the genuine eid-0 barrier reliably does. The tag is needed only to drive the reorder; once baria is
+        // at slot 1 we hand the engine its native identity so it treats it as the damageable shield. ON.
+        private static readonly bool RestoreShieldEid = false;
+        private static int _shieldSlot = -1;
+        private static void RestoreShieldNativeEid()
+        {
+            if (!RestoreShieldEid) return;
+            if (!_swapDone) return;   // CRITICAL: the reorder finds baria by eid 240 — don't zero it until baria is placed at slot 1
+            if (_shieldSlot < 0) _shieldSlot = FindSlotByEid(240);   // locate while still tagged
+            if (_shieldSlot < 0) return;
+            long a = EnemyAddresses.FloorSlots.SlotAddr(_shieldSlot, EnemySlotOffsets.EnemySpeciesId);
+            if (Memory.ReadUShort(a) != 0)
+            {
+                Memory.WriteUShort(a, 0);
+                Console.WriteLine($"[IQshield] restored baria slot {_shieldSlot} eid 240 -> 0 (native shield identity)");
+            }
         }
 
         // Force korinoya's [2] handler to reach its ack (SET_GLOBAL_INT(0,1) @0x104C) + homing. At +Y her reposition
@@ -1839,9 +1964,31 @@ namespace Dark_Cloud_Improved_Version
         // The ice arrow (korinoya) homes to the PLAYER — _GET_POSITION(-2) copies the player vector from here.
         private const long PlayerPosVec = 0x21EA1D30;   // (X @+0, height @+4, Y @+8)
         private static System.DateTime _lastHomeLog = System.DateTime.MinValue;
+        private static readonly int[] _lastHp = InitLastHp();   // per-slot HP-change watch
+        private static int[] InitLastHp() { var a = new int[32]; for (int i = 0; i < a.Length; i++) a[i] = int.MinValue; return a; }
         // One-shot: identify the loaded map + dump the map/tile-grid frame, so the genuine Ice Queen arena
         // (where the ice-arrow homing works) can be compared against a random floor (where it doesn't).
         // Map structure documented in DungeonAddresses.cs.
+        // One-shot: dump the engine's resolved spawn-candidate table (ArrangementPos indexes it at this+0x1dea8,
+        // stride 0x9C, entry count = float @ this+0x48; this = CMonstorUnit = MainMonstorUnit). The deterministic-spawn
+        // iso patch picks roster entry by table index, so we need to know whether the table preserves the roster order
+        // (entry 0 == Ice Queen / tableIndex 80). We can't read the tableIndex directly, so dump the eid (+0x7C) and a
+        // few raw words per entry to identify each. Runs at fight-detect on ANY build (independent of the iso patch).
+        private static bool _spawnTblDumped;
+        private static void DumpSpawnTable()
+        {
+            if (_spawnTblDumped) return;
+            _spawnTblDumped = true;
+            long mmu = MainMonstorUnit;
+            int count = Memory.ReadInt(mmu + 0x48);   // INT count (engine cvt.s.w's it to float for the rand math)
+            Console.WriteLine($"[SPAWNTBL] count={count} (table @ MMU+0x1dea8, stride 0x9C; flag@+0, eid@+4):");
+            for (int i = 0; i < 9; i++)
+            {
+                long e = mmu + 0x1dea8 + (long)i * 0x9C;
+                Console.WriteLine($"[SPAWNTBL]  [{i}] flag@+0={Memory.ReadInt(e)} eid@+4={Memory.ReadInt(e + 4)}");
+            }
+        }
+
         private static void DumpArena()
         {
             int mapNo = Memory.ReadInt(DungeonAddresses.Map.MapNo);
@@ -1885,8 +2032,10 @@ namespace Dark_Cloud_Improved_Version
                     _obsActive = true; for (int s = 0; s < n; s++) _obsMot[s] = -2;
                     Console.WriteLine("[IQobs] Ice Queen fight detected — observing slots + globals");
                     DumpArena();
+                    DumpSpawnTable();
                 }
                 float F(long a) => System.BitConverter.Int32BitsToSingle(Memory.ReadInt(a));
+                bool rosterChanged = false;
                 for (int s = 0; s < n; s++)
                 {
                     bool live = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1;
@@ -1894,11 +2043,18 @@ namespace Dark_Cloud_Improved_Version
                     int sdp = live ? (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.SpeciesDataPtr)) & 0x1FFFFFFF) : 0;
                     if (eid != _obsEid[s] || sdp != _obsSdp[s])
                     {
+                        rosterChanged = true;
                         if (live)
                         {
                             int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+                            int mhp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.MaxHp));
                             int pm = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + 0x20938);
-                            Console.WriteLine($"{ts} [IQobs] slot {s} LIVE eid={eid} sdp=0x{sdp:X6} hp={hp} pos=({F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX)):F0},{F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ)):F0},{F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY)):F0}) playMot={pm}");
+                            // Native collision/targeting fields (compare genuine baria vs the Queen to learn what our
+                            // spawn strips): EntityScale(+0x44 collision radius), lock-on reticle(+0x110/+0x114), COL_OFF(+0xA8).
+                            float esc = F(EnemyAddresses.FloorSlots.SlotAddr(s, 0x44));
+                            float rw = F(EnemyAddresses.FloorSlots.SlotAddr(s, 0x110)), rh = F(EnemyAddresses.FloorSlots.SlotAddr(s, 0x114));
+                            int coff = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0xA8));
+                            Console.WriteLine($"{ts} [IQobs] slot {s} LIVE eid={eid} sdp=0x{sdp:X6} hp={hp}/{mhp} scale={esc:F2} reticle={rw:F2}/{rh:F2} colOff={coff} pos=({F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX)):F0},{F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationZ)):F0},{F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY)):F0}) playMot={pm}");
                         }
                         else Console.WriteLine($"{ts} [IQobs] slot {s} CLEARED");
                         _obsEid[s] = eid; _obsSdp[s] = sdp;
@@ -1909,6 +2065,25 @@ namespace Dark_Cloud_Improved_Version
                     {
                         if (live) Console.WriteLine($"{ts} [IQobs] slot {s}{(s == iq ? "(IceQueen)" : eid == 84 ? "(IceArrow)" : "")} playMot {_obsMot[s]} -> {pmNow}");
                         _obsMot[s] = pmNow;
+                    }
+                }
+                // On any roster change (entity spawns / clears / changes eid), print a clean readable slot snapshot.
+                if (rosterChanged) EnemySlots.BossInfo($"roster @ {ts}");
+                // Per-frame HP watch — log the instant ANY slot's HP changes, so a landed hit is unmistakable and we
+                // learn which entity takes which damage type. In the GENUINE fight this reveals baria's real eid and
+                // its physical break threshold; the Queen should only drop to Ruby's MAGIC, baria only to PHYSICAL.
+                for (int s = 0; s < n; s++)
+                {
+                    bool live = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1;
+                    int hp = live ? Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) : int.MinValue;
+                    if (hp != _lastHp[s])
+                    {
+                        if (live && _lastHp[s] != int.MinValue)
+                        {
+                            int eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                            Console.WriteLine($"{ts} [HP] slot {s} eid={eid} {_lastHp[s]} -> {hp}");
+                        }
+                        _lastHp[s] = hp;
                     }
                 }
                 // Homing diagnostic. korinoya (eid 84) is a stationary EMITTER — its floor-slot LocationX/Y never
@@ -1937,7 +2112,9 @@ namespace Dark_Cloud_Improved_Version
                     for (int s = 0; s < n; s++)
                     {
                         if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
-                        if (Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == 84) LogChar("korinoya", s);
+                        ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+                        if (sid == 84) LogChar("korinoya", s);
+                        else if (sid == 240) LogChar("baria/shield", s);   // expect IQ.pos + facing×15 (just in front of her)
                     }
                 }
                 uint[] g = Memory.ReadUIntBatch(GlobalIntBase, GlobalIntCount);
