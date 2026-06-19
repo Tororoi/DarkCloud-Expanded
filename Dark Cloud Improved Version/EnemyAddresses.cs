@@ -431,11 +431,12 @@ namespace Dark_Cloud_Improved_Version
     ///   ModelScale table (0x21E18530) are sub-arrays of one global, MainMonstorUnit (PS2 0x01DF87D0,
     ///   size 0x60750). BtArrengeMonstor__Fv wires each of the 16 slots to a 0x10-byte script entry.
     ///
-    /// IMPORTANT — the Id at entry +0x4 is the game's internal enemy id (0–166), the same value as
-    /// EnemyDefaults.Id. It is NOT the physical species-table record index (use EnemyDefaults.TableIndex
-    /// for that), and the "Id N → model eNNa" convention holds for many mid-range ids but NOT all
-    /// (bosses use cNNx; several ids have no direct species record and route through event/scripted
-    /// paths — e.g. ids 53/54 Killer Snake). Always resolve via EnemySpeciesTable / EnemyData.cs.
+    /// IMPORTANT — CORRECTED 2026-06-19: the value at entry +0x4 is the physical species-table ROW INDEX
+    /// (EnemyDefaults.TableIndex), NOT the internal enemy id. Confirmed two ways: (1) BtLoadMonstor passes
+    /// +0x4 straight to SetupBaseModel's tableIndex arg; (2) a raw ELF dump of DBC floor 0 has +0x4 = 52/1/3
+    /// = the TableIndex of CaveBat(Id 60)/SkeletonSoldier(Id 3)/Dasher(Id 6), i.e. TableIndex not Id. This is
+    /// why SetSpawnRosterMix correctly writes EnemyDefaults.TableIndex here. (The prior note claiming this was
+    /// EnemyDefaults.Id was wrong.) Always resolve via EnemySpeciesTable / EnemyData.cs.
     ///
     /// Full decoded rosters for all 7 dungeons (normal + Ura) are in /enemy-spawn-layout.md at repo root.
     /// </summary>
@@ -475,16 +476,23 @@ namespace Dark_Cloud_Improved_Version
             FloorAddress(layoutBaseNative, floor) + entry * EntryStride;
 
         // ── Entry field offsets (0x0C bytes per entry) ──
-        // +0x0: purpose UNCONFIRMED (entry 0 commonly 3–4, other entries 1). It is NOT the floor
-        // population: live testing (2026-06-09) showed that overwriting it (1 vs 16) does not change how
-        // many enemies spawn — the floor's enemy COUNT is fixed by its spawn-point generation at floor
-        // assembly, independent of this table. The roster only selects WHICH species fill those points
-        // (weighted by +0x8). Earlier "spawn count / population" label was wrong.
-        internal const int Count    = 0x0; // int   — UNCONFIRMED; not the population (see note above)
-        // +0x4: enemy id (= EnemyDefaults.Id). -1 = empty slot. This is what SetupBaseModel loads.
-        internal const int Id       = 0x4; // int   — enemy id; -1 = unused
-        // +0x8: spawn weight (percent). Active entries' weights sum to ≈100 per floor → weighted-random pick.
-        internal const int Weight   = 0x8; // int   — spawn weight %
+        // CONFIRMED 2026-06-19 by disassembling the ONLY pool reader, BtLoadMonstor__Fi (dun.bin overlay
+        // @ 0x01DB9330): it loads BtEnemyLayoutList[dungeon] (0x2917B0) / Ura (0x2917D0), adds floor*0x70,
+        // then walks entries 0..8 at stride 0xC reading ONLY +0x4 (Id), calling SetupBaseModel for each,
+        // and BREAKING when +0x4 == -1. It never reads +0x0 or +0x8. A whole-binary scan (main ELF + dun
+        // overlay) found no other reader of the 0x2860D0..0x291660 pool. So ONLY Id (+0x4) drives spawns.
+        // +0x0: entry 0 holds a per-floor value (3/4/5/7/8, rising with depth — this is DungeonData's
+        // "tier"); entries 1..8 are always 1. NOT read by any code → vestigial authoring metadata (matches
+        // the 2026-06-09 test where overwriting it changed nothing). Floor population is fixed by spawn-point
+        // generation at floor assembly, not by this table.
+        internal const int Count    = 0x0; // int   — entry-0 = DungeonData "tier"; UNUSED at runtime (see note)
+        // +0x4: species-table row index (= EnemyDefaults.TableIndex; NOT EnemyDefaults.Id — see the note
+        // above). -1 = terminator/empty. This is the tableIndex SetupBaseModel loads. (Const kept named
+        // `Id` to match the field's conventional name, but it holds a TableIndex.)
+        internal const int Id       = 0x4; // int   — species TableIndex; -1 = unused/terminator
+        // +0x8: spawn weight (percent); source data sums to ~100 per floor, but NOT read by the spawn path —
+        // species selection is uniform rand%(distinct loaded species). No reader of +0x8 exists in the binary.
+        internal const int Weight   = 0x8; // int   — spawn weight %; UNUSED at runtime (uniform pick)
     }
 
     /// <summary>

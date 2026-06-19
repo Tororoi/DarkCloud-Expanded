@@ -174,16 +174,19 @@ namespace Dark_Cloud_Improved_Version
     // Exception: the very first record in the entire table has no [0, 1] header and is
     // 26 words; all subsequent records are 28 words.
     //
-    // Standard record layout (28 words, little-endian 32-bit each):
-    //   word 0 : 0
-    //   word 1 : 1
-    //   word 2 : tier (0 = unset / back-floor default)
-    //   words 3+ : (TableIndex, probability%, 1) triplets, one per entry
-    //   0xFFFF  : sentinel ending entry list
-    //   0,1,0xFFFF : padding triplets filling remainder to 28 words
+    // Standard record layout (28 words, little-endian 32-bit each) — corrected 2026-06-19 from a raw
+    // ELF .data dump + BtLoadMonstor disassembly (the earlier "word0=0/word1=1/word2=tier" framing was a
+    // misread):
+    //   9 entries × 3 words (stride 0xC):  Count @+0x0,  Id @+0x4,  Weight @+0x8
+    //   word 27 (tail) : 1
+    //   The engine (BtLoadMonstor) walks entries 0..8 reading ONLY Id (+0x4) and stops at Id == -1.
+    //   Count and Weight are never read:
+    //     • Count (+0x0): entry 0 = the per-floor "tier" (3/4/5/7/8, rising with depth); entries 1..8 = 1.
+    //     • Weight (+0x8): authored to sum to ~100/floor, but selection is uniform rand%(loaded species).
+    //   Both are VESTIGIAL — only Id (+0x4) matters. (FloorSpawnPool now models just the Id list.)
     //
-    // TableIndex is the physical 0-based row index in the enemy species table
-    // (ELF offset 0x17FC54, stride 0x9C).  It is NOT the same as EnemyDefaults.Id.
+    // Id is the physical 0-based row index in the enemy species table (ELF offset 0x17FC54, stride 0x9C),
+    // i.e. EnemyDefaults.TableIndex.  It is NOT the same as EnemyDefaults.Id.
     //
     // RAM ADDRESSES
     // -------------
@@ -248,97 +251,108 @@ namespace Dark_Cloud_Improved_Version
     //   Live spawn selection buffer (hardcoded): 0x01EB60D0 — confirmed to be a metadata
     //   header (6 non-zero words), not spawn-pool data.
 
-    internal struct SpawnEntry
-    {
-        // Physical row index in the enemy species table (ELF 0x17FC54, stride 0x9C).
-        internal int TableIndex;
-        // Spawn weight / probability; values in a pool sum to 100.
-        internal int Probability;
-        internal SpawnEntry(int idx, int prob) { TableIndex = idx; Probability = prob; }
-    }
-
+    // A floor's spawn pool, modeled as just the species that can spawn there (by TableIndex).
+    //
+    // The live BtEnemyLayout entry is 0xC bytes: Count @+0x0, Id @+0x4, Weight @+0x8. Disassembly of the
+    // only pool reader (BtLoadMonstor, dun.bin 0x01DB9330) shows the engine reads ONLY Id (+0x4); it never
+    // reads Count or Weight. So both of those are VESTIGIAL and dropped from this model:
+    //   • Count (+0x0): entry 0 held the per-floor "tier" (3/4/5/7/8, rising with depth); entries 1..8 = 1.
+    //     Unused at runtime — a leftover difficulty tag.
+    //   • Weight (+0x8): source data summed to ~100/floor, but selection is uniform rand%(distinct loaded
+    //     species), so weights never mattered.
+    // TableIndex (= the Id field, +0x4) is the only thing that matters. (Formerly a Tier + SpawnEntry[]
+    // of {TableIndex, Weight, Count}; see EnemyAddresses.BtEnemyLayout and the enemy-spawn-pool-reader notes.)
     internal struct FloorSpawnPool
     {
-        internal int Tier;
-        internal SpawnEntry[] Entries;
-        internal FloorSpawnPool(int tier, SpawnEntry[] entries) { Tier = tier; Entries = entries; }
+        internal int[] TableIndices;
+        internal FloorSpawnPool(int[] tableIndices) { TableIndices = tableIndices; }
     }
 
-    // Helper for terse entry construction
+    // Helper for terse pool construction: SP.Pool(id, id, ...) / SP.Empty().
     internal static class SP
     {
-        internal static SpawnEntry E(int? idx, int prob) => new SpawnEntry(idx!.Value, prob);
-        internal static FloorSpawnPool Pool(int tier, params SpawnEntry[] entries) =>
-            new FloorSpawnPool(tier, entries);
-        internal static FloorSpawnPool Empty(int tier) =>
-            new FloorSpawnPool(tier, new SpawnEntry[0]);
+        internal static FloorSpawnPool Pool(params int?[] ids) =>
+            new FloorSpawnPool(System.Array.ConvertAll(ids, x => x!.Value));
+        internal static FloorSpawnPool Empty() =>
+            new FloorSpawnPool(System.Array.Empty<int>());
     }
 
     /// <summary>
     /// Binary-extracted spawn pools for all 7 dungeons.
-    /// Front[0] is the dungeon descriptor pool (not a numbered floor; used by the engine
-    /// before floor 1 loads).  Front[N] is floor N's enemy pool.  Back[N] is the back-side
-    /// pool for floor N (floors that have no back — boss and GoT — have no back entry).
+    ///
+    /// INDEXING IS NOT UNIFORM ACROSS DUNGEONS — verify per dungeon against the live BtEnemyLayout
+    /// (EnemyModelInjector RosterDump) before trusting the floor labels:
+    ///   • DBC (VERIFIED 0-indexed): Front[N] = floor N, NO descriptor. Front length (15) ==
+    ///     BtEnemyLayout.FloorCount[0] (15) and Front[0] holds real floor-0 spawn data.
+    ///   • WOF/SW/SMT/MS/GoT/DS (UNVERIFIED): historically modeled as Front[0]=descriptor,
+    ///     Front[N]=floor N. Their Front lengths do NOT equal the dungeon floor counts (WOF/SW/SMT
+    ///     are +1, MS is short), and DungeonData's dungeon order does not line up 1:1 with
+    ///     BtEnemyLayout's FloorCount indices, so whether [0] is a real empty floor-0 or a genuine
+    ///     descriptor is still open. Dump each before relabeling.
+    /// Back[N] is the back-side pool for floor N (floors that have no back — boss and GoT — have no
+    /// back entry). This table is reference data only; nothing reads it at runtime today.
     /// </summary>
     internal static class SpawnPoolData
     {
         // ── Dungeon 0 : Divine Beast Cave (DBC) ────────────────────────────────────────
-        // 14 floors.  Boss: Dran (floor 14).  Event floors: 3, 7, 14.
-        // Descriptor pool (slot 0) is non-empty — the only dungeon where this is the case.
+        // 15 floors, 0-indexed (0–14).  Boss: Dran (floor 14).  Event floors: 3, 7, 14.
+        // Index [N] is floor N's pool — there is NO descriptor slot. Verified against the live
+        // BtEnemyLayout RosterDump: array length (15) == BtEnemyLayout.FloorCount[0] (15), and the
+        // old "descriptor" [0] holds real floor-0 spawn data (CaveBat/SkeletonSoldier/Dasher).
         // Front slots  0– 14  RAM 0x002860D0–0x002866F0
         // Back  slots 15– 28  RAM 0x00286760–0x00286D10
 
         internal static readonly FloorSpawnPool[] DBC_Front = new FloorSpawnPool[]
         {
-            // [0] descriptor
-            SP.Pool(3, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.SkeletonSoldier.TableIndex,50), SP.E(Enemies.Dasher.TableIndex,30)),
+            // [0] floor 0
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Dasher.TableIndex),
             // [1] floor 1
-            SP.Pool(3, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.SkeletonSoldier.TableIndex,20), SP.E(Enemies.Dasher.TableIndex,40), SP.E(Enemies.Yammich.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Dasher.TableIndex, Enemies.Yammich.TableIndex),
             // [2] floor 2
-            SP.Pool(3, SP.E(Enemies.CaveBat.TableIndex,25), SP.E(Enemies.SkeletonSoldier.TableIndex,25), SP.E(Enemies.Dasher.TableIndex,10), SP.E(Enemies.Statue.TableIndex,20), SP.E(Enemies.StatueDog.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Dasher.TableIndex, Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex),
             // [3] floor 3 — EVENT: skeleton encounter (SkeletonSoldier:100%)
-            SP.Pool(3, SP.E(Enemies.SkeletonSoldier.TableIndex,100)),
+            SP.Pool(Enemies.SkeletonSoldier.TableIndex),
             // [4] floor 4
-            SP.Pool(4, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.Dasher.TableIndex,20), SP.E(Enemies.Statue.TableIndex,20), SP.E(Enemies.StatueDog.TableIndex,20), SP.E(Enemies.Yammich.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dasher.TableIndex, Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex, Enemies.Yammich.TableIndex),
             // [5] floor 5
-            SP.Pool(4, SP.E(Enemies.CaveBat.TableIndex,25), SP.E(Enemies.SkeletonSoldier.TableIndex,25), SP.E(Enemies.Statue.TableIndex,25), SP.E(Enemies.MimicDBC.TableIndex,25)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Statue.TableIndex, Enemies.MimicDBC.TableIndex),
             // [6] floor 6
-            SP.Pool(5, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.SkeletonSoldier.TableIndex,20), SP.E(Enemies.Ghost.TableIndex,20), SP.E(Enemies.Opar.TableIndex,20), SP.E(Enemies.MasterJacket.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex, Enemies.Opar.TableIndex, Enemies.MasterJacket.TableIndex),
             // [7] floor 7 — EVENT: story (no enemy spawns)
-            SP.Empty(5),
+            SP.Empty(),
             // [8] floor 8
-            SP.Pool(5, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.Ghost.TableIndex,20), SP.E(Enemies.Statue.TableIndex,20), SP.E(Enemies.StatueDog.TableIndex,20), SP.E(Enemies.MimicDBC.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Ghost.TableIndex, Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex, Enemies.MimicDBC.TableIndex),
             // [9] floor 9
-            SP.Pool(7, SP.E(Enemies.CaveBat.TableIndex,25), SP.E(Enemies.Dasher.TableIndex,10), SP.E(Enemies.Ghost.TableIndex,10), SP.E(Enemies.MasterJacket.TableIndex,30), SP.E(Enemies.Rockanoff.TableIndex,25)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dasher.TableIndex, Enemies.Ghost.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.Rockanoff.TableIndex),
             // [10] floor 10
-            SP.Pool(7, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.Dasher.TableIndex,25), SP.E(Enemies.Opar.TableIndex,20), SP.E(Enemies.MasterJacket.TableIndex,20), SP.E(Enemies.Dragon.TableIndex,15)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dasher.TableIndex, Enemies.Opar.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.Dragon.TableIndex),
             // [11] floor 11
-            SP.Pool(7, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.Statue.TableIndex,20), SP.E(Enemies.MasterJacket.TableIndex,20), SP.E(Enemies.KingMimicDBC.TableIndex,20), SP.E(Enemies.Rockanoff.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Statue.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.KingMimicDBC.TableIndex, Enemies.Rockanoff.TableIndex),
             // [12] floor 12
-            SP.Pool(7, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.Opar.TableIndex,20), SP.E(Enemies.MasterJacket.TableIndex,20), SP.E(Enemies.Rockanoff.TableIndex,20), SP.E(Enemies.Dragon.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Opar.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.Rockanoff.TableIndex, Enemies.Dragon.TableIndex),
             // [13] floor 13
-            SP.Pool(7, SP.E(Enemies.CaveBat.TableIndex,20), SP.E(Enemies.Ghost.TableIndex,20), SP.E(Enemies.KingMimicDBC.TableIndex,20), SP.E(Enemies.Rockanoff.TableIndex,20), SP.E(Enemies.Dragon.TableIndex,20)),
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Ghost.TableIndex, Enemies.KingMimicDBC.TableIndex, Enemies.Rockanoff.TableIndex, Enemies.Dragon.TableIndex),
             // [14] floor 14 — BOSS: Dran
-            SP.Pool(7, SP.E(Enemies.Dran.TableIndex,100)),
+            SP.Pool(Enemies.Dran.TableIndex),
         };
 
         // Back-floor pools for DBC slots 0-13 (index N here = back for Front[N]).
         internal static readonly FloorSpawnPool[] DBC_Back = new FloorSpawnPool[]
         {
-            SP.Pool(3, SP.E(Enemies.SkeletonSoldier.TableIndex,60), SP.E(Enemies.Ghost.TableIndex,20), SP.E(Enemies.Yammich.TableIndex,20)),        // back for descriptor
-            SP.Pool(3, SP.E(Enemies.SkeletonSoldier.TableIndex,80), SP.E(Enemies.Ghost.TableIndex,20)),                      // back for floor 1
-            SP.Pool(3, SP.E(Enemies.SkeletonSoldier.TableIndex,80), SP.E(Enemies.Ghost.TableIndex,20)),                      // back for floor 2
-            SP.Empty(3),                                               // back for floor 3 (event)
-            SP.Pool(4, SP.E(Enemies.MimicDBC.TableIndex,50), SP.E(Enemies.KingMimicDBC.TableIndex,50)),                     // back for floor 4
-            SP.Pool(4, SP.E(Enemies.Statue.TableIndex,50), SP.E(Enemies.StatueDog.TableIndex,50)),                      // back for floor 5
-            SP.Pool(5, SP.E(Enemies.Dasher.TableIndex,50), SP.E(Enemies.Rockanoff.TableIndex,50)),                      // back for floor 6
-            SP.Empty(5),                                               // back for floor 7 (event)
-            SP.Pool(5, SP.E(Enemies.CaveBat.TableIndex,100)),                                  // back for floor 8
-            SP.Pool(7, SP.E(Enemies.MimicDBC.TableIndex,30), SP.E(Enemies.KingMimicDBC.TableIndex,30), SP.E(Enemies.Rockanoff.TableIndex,40)),        // back for floor 9
-            SP.Pool(7, SP.E(Enemies.Ghost.TableIndex,25), SP.E(Enemies.MimicDBC.TableIndex,50), SP.E(Enemies.MasterJacket.TableIndex,25)),         // back for floor 10
-            SP.Pool(7, SP.E(Enemies.CaveBat.TableIndex,50), SP.E(Enemies.Dragon.TableIndex,50)),                     // back for floor 11
-            SP.Pool(7, SP.E(Enemies.MimicDBC.TableIndex,50), SP.E(Enemies.KingMimicDBC.TableIndex,50)),                     // back for floor 12
-            SP.Pool(7, SP.E(Enemies.Rockanoff.TableIndex,100)),                                  // back for floor 13
+            SP.Pool(Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex, Enemies.Yammich.TableIndex),        // back for floor 0
+            SP.Pool(Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex),                      // back for floor 1
+            SP.Pool(Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex),                      // back for floor 2
+            SP.Empty(),                                               // back for floor 3 (event)
+            SP.Pool(Enemies.MimicDBC.TableIndex, Enemies.KingMimicDBC.TableIndex),                     // back for floor 4
+            SP.Pool(Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex),                      // back for floor 5
+            SP.Pool(Enemies.Dasher.TableIndex, Enemies.Rockanoff.TableIndex),                      // back for floor 6
+            SP.Empty(),                                               // back for floor 7 (event)
+            SP.Pool(Enemies.CaveBat.TableIndex),                                  // back for floor 8
+            SP.Pool(Enemies.MimicDBC.TableIndex, Enemies.KingMimicDBC.TableIndex, Enemies.Rockanoff.TableIndex),        // back for floor 9
+            SP.Pool(Enemies.Ghost.TableIndex, Enemies.MimicDBC.TableIndex, Enemies.MasterJacket.TableIndex),         // back for floor 10
+            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dragon.TableIndex),                     // back for floor 11
+            SP.Pool(Enemies.MimicDBC.TableIndex, Enemies.KingMimicDBC.TableIndex),                     // back for floor 12
+            SP.Pool(Enemies.Rockanoff.TableIndex),                                  // back for floor 13
         };
 
         // ── Dungeon 1 : Wise Owl Forest (WOF) ─────────────────────────────────────────────
@@ -350,62 +364,62 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FloorSpawnPool[] WOF_Front = new FloorSpawnPool[]
         {
             // [0] descriptor (empty)
-            SP.Empty(0),
+            SP.Empty(),
             // [1] floor 1
-            SP.Pool(4, SP.E(Enemies.CannibalPlant.TableIndex,20), SP.E(Enemies.Saturday.TableIndex,20), SP.E(Enemies.Friday.TableIndex,20), SP.E(Enemies.Thursday.TableIndex,20), SP.E(Enemies.Wednesday.TableIndex,20)),
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Saturday.TableIndex, Enemies.Friday.TableIndex, Enemies.Thursday.TableIndex, Enemies.Wednesday.TableIndex),
             // [2] floor 2
-            SP.Pool(4, SP.E(Enemies.CannibalPlant.TableIndex,25), SP.E(Enemies.Tuesday.TableIndex,25), SP.E(Enemies.Monday.TableIndex,25), SP.E(Enemies.FliFli.TableIndex,25)),
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.FliFli.TableIndex),
             // [3] floor 3
-            SP.Pool(4, SP.E(Enemies.CannibalPlant.TableIndex,20), SP.E(Enemies.Thursday.TableIndex,20), SP.E(Enemies.Sunday.TableIndex,20), SP.E(Enemies.Hornet.TableIndex,20), SP.E(Enemies.KingPrickly.TableIndex,20)),
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Thursday.TableIndex, Enemies.Sunday.TableIndex, Enemies.Hornet.TableIndex, Enemies.KingPrickly.TableIndex),
             // [4] floor 4
-            SP.Pool(4, SP.E(Enemies.Thursday.TableIndex,20), SP.E(Enemies.Sunday.TableIndex,20), SP.E(Enemies.FliFli.TableIndex,20), SP.E(Enemies.Hornet.TableIndex,20), SP.E(Enemies.KingPrickly.TableIndex,20)),
+            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Sunday.TableIndex, Enemies.FliFli.TableIndex, Enemies.Hornet.TableIndex, Enemies.KingPrickly.TableIndex),
             // [5] floor 5
-            SP.Pool(4, SP.E(Enemies.CannibalPlant.TableIndex,20), SP.E(Enemies.Friday.TableIndex,20), SP.E(Enemies.Wednesday.TableIndex,20), SP.E(Enemies.MimicWOF.TableIndex,20), SP.E(Enemies.HaleyHoley.TableIndex,20)),
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Friday.TableIndex, Enemies.Wednesday.TableIndex, Enemies.MimicWOF.TableIndex, Enemies.HaleyHoley.TableIndex),
             // [6] floor 6
-            SP.Pool(4, SP.E(Enemies.Saturday.TableIndex,20), SP.E(Enemies.Thursday.TableIndex,20), SP.E(Enemies.FliFli.TableIndex,20), SP.E(Enemies.Hornet.TableIndex,20), SP.E(Enemies.WitchIllza.TableIndex,20)),
+            SP.Pool(Enemies.Saturday.TableIndex, Enemies.Thursday.TableIndex, Enemies.FliFli.TableIndex, Enemies.Hornet.TableIndex, Enemies.WitchIllza.TableIndex),
             // [7] floor 7
-            SP.Pool(5, SP.E(Enemies.Wednesday.TableIndex,20), SP.E(Enemies.Tuesday.TableIndex,20), SP.E(Enemies.Monday.TableIndex,20), SP.E(Enemies.Sunday.TableIndex,20), SP.E(Enemies.WitchIllza.TableIndex,20)),
+            SP.Pool(Enemies.Wednesday.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.Sunday.TableIndex, Enemies.WitchIllza.TableIndex),
             // [8] floor 8 — EVENT
-            SP.Pool(5, SP.E(Enemies.FliFli.TableIndex,20), SP.E(Enemies.Hornet.TableIndex,20), SP.E(Enemies.MimicWOF.TableIndex,20), SP.E(Enemies.WitchIllza.TableIndex,20), SP.E(Enemies.KingPrickly.TableIndex,20)),
+            SP.Pool(Enemies.FliFli.TableIndex, Enemies.Hornet.TableIndex, Enemies.MimicWOF.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.KingPrickly.TableIndex),
             // [9] floor 9
-            SP.Empty(5),
+            SP.Empty(),
             // [10] floor 10
-            SP.Pool(6, SP.E(Enemies.CannibalPlant.TableIndex,20), SP.E(Enemies.Hornet.TableIndex,20), SP.E(Enemies.MimicWOF.TableIndex,20), SP.E(Enemies.EarthDigger.TableIndex,20), SP.E(Enemies.HaleyHoley.TableIndex,20)),
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Hornet.TableIndex, Enemies.MimicWOF.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.HaleyHoley.TableIndex),
             // [11] floor 11
-            SP.Pool(6, SP.E(Enemies.FliFli.TableIndex,20), SP.E(Enemies.WitchIllza.TableIndex,20), SP.E(Enemies.EarthDigger.TableIndex,20), SP.E(Enemies.Halloween.TableIndex,20), SP.E(Enemies.HaleyHoley.TableIndex,20)),
+            SP.Pool(Enemies.FliFli.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.Halloween.TableIndex, Enemies.HaleyHoley.TableIndex),
             // [12] floor 12
-            SP.Pool(6, SP.E(Enemies.Hornet.TableIndex,25), SP.E(Enemies.WitchIllza.TableIndex,25), SP.E(Enemies.EarthDigger.TableIndex,25), SP.E(Enemies.KingMimicWOF.TableIndex,25)),
+            SP.Pool(Enemies.Hornet.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.KingMimicWOF.TableIndex),
             // [13] floor 13
-            SP.Pool(7, SP.E(Enemies.CannibalPlant.TableIndex,30), SP.E(Enemies.FliFli.TableIndex,40), SP.E(Enemies.EarthDigger.TableIndex,30)),
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.FliFli.TableIndex, Enemies.EarthDigger.TableIndex),
             // [14] floor 14
-            SP.Pool(7, SP.E(Enemies.Sunday.TableIndex,25), SP.E(Enemies.WitchIllza.TableIndex,25), SP.E(Enemies.Halloween.TableIndex,25), SP.E(Enemies.Werewolf.TableIndex,25)),
+            SP.Pool(Enemies.Sunday.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.Halloween.TableIndex, Enemies.Werewolf.TableIndex),
             // [15] floor 15
-            SP.Pool(7, SP.E(Enemies.Thursday.TableIndex,20), SP.E(Enemies.Hornet.TableIndex,20), SP.E(Enemies.Halloween.TableIndex,20), SP.E(Enemies.KingMimicWOF.TableIndex,20), SP.E(Enemies.KingPrickly.TableIndex,20)),
+            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Hornet.TableIndex, Enemies.Halloween.TableIndex, Enemies.KingMimicWOF.TableIndex, Enemies.KingPrickly.TableIndex),
             // [16] floor 16
-            SP.Pool(8, SP.E(Enemies.WitchIllza.TableIndex,20), SP.E(Enemies.EarthDigger.TableIndex,20), SP.E(Enemies.Halloween.TableIndex,20), SP.E(Enemies.KingMimicWOF.TableIndex,20), SP.E(Enemies.Werewolf.TableIndex,20)),
+            SP.Pool(Enemies.WitchIllza.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.Halloween.TableIndex, Enemies.KingMimicWOF.TableIndex, Enemies.Werewolf.TableIndex),
             // [17] floor 17 — BOSS: MasterUtan
-            SP.Pool(1, SP.E(Enemies.MasterUtan.TableIndex,100)),
+            SP.Pool(Enemies.MasterUtan.TableIndex),
         };
 
         // Back-floor pools for WOF floors 1-16 (index N here = back for floor N).
         internal static readonly FloorSpawnPool[] WOF_Back = new FloorSpawnPool[]
         {
-            SP.Pool(0, SP.E(Enemies.CannibalPlant.TableIndex,50), SP.E(Enemies.Hornet.TableIndex,50)),                                // back for floor 1
-            SP.Pool(0, SP.E(Enemies.EarthDigger.TableIndex,100)),                                            // back for floor 2
-            SP.Pool(0, SP.E(Enemies.FliFli.TableIndex,50), SP.E(Enemies.WitchIllza.TableIndex,50)),                               // back for floor 3
-            SP.Pool(0, SP.E(Enemies.MimicWOF.TableIndex,50), SP.E(Enemies.KingMimicWOF.TableIndex,50)),                              // back for floor 4
-            SP.Pool(0, SP.E(Enemies.FliFli.TableIndex,30), SP.E(Enemies.WitchIllza.TableIndex,30), SP.E(Enemies.Halloween.TableIndex,40)),                  // back for floor 5
-            SP.Pool(0, SP.E(Enemies.Thursday.TableIndex,25), SP.E(Enemies.Tuesday.TableIndex,25), SP.E(Enemies.Monday.TableIndex,25), SP.E(Enemies.Sunday.TableIndex,25)),   // back for floor 6
-            SP.Pool(0, SP.E(Enemies.EarthDigger.TableIndex,50), SP.E(Enemies.KingPrickly.TableIndex,50)),                              // back for floor 7
-            SP.Pool(0, SP.E(Enemies.MimicWOF.TableIndex,50), SP.E(Enemies.KingMimicWOF.TableIndex,50)),                              // back for floor 8
-            SP.Empty(0),                                                        // back for floor 9
-            SP.Pool(0, SP.E(Enemies.Werewolf.TableIndex,100)),                                            // back for floor 10
-            SP.Pool(0, SP.E(Enemies.Halloween.TableIndex,100)),                                            // back for floor 11
-            SP.Pool(0, SP.E(Enemies.CannibalPlant.TableIndex,50), SP.E(Enemies.FliFli.TableIndex,50)),                               // back for floor 12
-            SP.Pool(0, SP.E(Enemies.Thursday.TableIndex,20), SP.E(Enemies.Tuesday.TableIndex,20), SP.E(Enemies.Monday.TableIndex,20), SP.E(Enemies.Sunday.TableIndex,20), SP.E(Enemies.Halloween.TableIndex,20)), // back for floor 13
-            SP.Pool(0, SP.E(Enemies.EarthDigger.TableIndex,100)),                                            // back for floor 14
-            SP.Pool(0, SP.E(Enemies.MimicWOF.TableIndex,50), SP.E(Enemies.KingMimicWOF.TableIndex,50)),                              // back for floor 15
-            SP.Pool(0, SP.E(Enemies.Saturday.TableIndex,25), SP.E(Enemies.Friday.TableIndex,25), SP.E(Enemies.Thursday.TableIndex,25), SP.E(Enemies.Wednesday.TableIndex,25)),   // back for floor 16
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Hornet.TableIndex),                                // back for floor 1
+            SP.Pool(Enemies.EarthDigger.TableIndex),                                            // back for floor 2
+            SP.Pool(Enemies.FliFli.TableIndex, Enemies.WitchIllza.TableIndex),                               // back for floor 3
+            SP.Pool(Enemies.MimicWOF.TableIndex, Enemies.KingMimicWOF.TableIndex),                              // back for floor 4
+            SP.Pool(Enemies.FliFli.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.Halloween.TableIndex),                  // back for floor 5
+            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.Sunday.TableIndex),   // back for floor 6
+            SP.Pool(Enemies.EarthDigger.TableIndex, Enemies.KingPrickly.TableIndex),                              // back for floor 7
+            SP.Pool(Enemies.MimicWOF.TableIndex, Enemies.KingMimicWOF.TableIndex),                              // back for floor 8
+            SP.Empty(),                                                        // back for floor 9
+            SP.Pool(Enemies.Werewolf.TableIndex),                                            // back for floor 10
+            SP.Pool(Enemies.Halloween.TableIndex),                                            // back for floor 11
+            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.FliFli.TableIndex),                               // back for floor 12
+            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.Sunday.TableIndex, Enemies.Halloween.TableIndex), // back for floor 13
+            SP.Pool(Enemies.EarthDigger.TableIndex),                                            // back for floor 14
+            SP.Pool(Enemies.MimicWOF.TableIndex, Enemies.KingMimicWOF.TableIndex),                              // back for floor 15
+            SP.Pool(Enemies.Saturday.TableIndex, Enemies.Friday.TableIndex, Enemies.Thursday.TableIndex, Enemies.Wednesday.TableIndex),   // back for floor 16
         };
 
         // ── Dungeon 2 : Shipwreck (SW) ────────────────────────────────────────────────────
@@ -418,64 +432,64 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FloorSpawnPool[] SW_Front = new FloorSpawnPool[]
         {
             // [0] descriptor (empty)
-            SP.Empty(0),
+            SP.Empty(),
             // [1] floor 1
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,30), SP.E(Enemies.Gunny.TableIndex,70)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex),
             // [2] floor 2
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,30), SP.E(Enemies.Gunny.TableIndex,50), SP.E(Enemies.CursedRose.TableIndex,20)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex),
             // [3] floor 3
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,40), SP.E(Enemies.Gunny.TableIndex,50), SP.E(Enemies.CursedRose.TableIndex,10)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex),
             // [4] floor 4
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,20), SP.E(Enemies.Gunny.TableIndex,35), SP.E(Enemies.CursedRose.TableIndex,20), SP.E(Enemies.MimicSW.TableIndex,25)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex, Enemies.MimicSW.TableIndex),
             // [5] floor 5
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,40), SP.E(Enemies.Gunny.TableIndex,40), SP.E(Enemies.MimicSW.TableIndex,20)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.MimicSW.TableIndex),
             // [6] floor 6
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,5), SP.E(Enemies.CursedRose.TableIndex,5), SP.E(Enemies.MimicSW.TableIndex,25), SP.E(Enemies.Gyon.TableIndex,65)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.CursedRose.TableIndex, Enemies.MimicSW.TableIndex, Enemies.Gyon.TableIndex),
             // [7] floor 7
-            SP.Pool(5, SP.E(Enemies.Gunny.TableIndex,30), SP.E(Enemies.CursedRose.TableIndex,10), SP.E(Enemies.Gyon.TableIndex,40), SP.E(Enemies.Sam.TableIndex,20)),
+            SP.Pool(Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex, Enemies.Gyon.TableIndex, Enemies.Sam.TableIndex),
             // [8] floor 8 — EVENT
-            SP.Pool(5, SP.E(Enemies.MimicSW.TableIndex,25), SP.E(Enemies.Gyon.TableIndex,45), SP.E(Enemies.Sam.TableIndex,5), SP.E(Enemies.Captain.TableIndex,25)),
+            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.Gyon.TableIndex, Enemies.Sam.TableIndex, Enemies.Captain.TableIndex),
             // [9] floor 9
-            SP.Pool(5, SP.E(Enemies.Corcea.TableIndex,50), SP.E(Enemies.Captain.TableIndex,25), SP.E(Enemies.PiratesChariot.TableIndex,25)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex),
             // [10] floor 10
-            SP.Pool(6, SP.E(Enemies.Gunny.TableIndex,30), SP.E(Enemies.CursedRose.TableIndex,20), SP.E(Enemies.Captain.TableIndex,25), SP.E(Enemies.PiratesChariot.TableIndex,25)),
+            SP.Pool(Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex),
             // [11] floor 11
-            SP.Pool(6, SP.E(Enemies.Corcea.TableIndex,20), SP.E(Enemies.Gyon.TableIndex,35), SP.E(Enemies.PiratesChariot.TableIndex,20), SP.E(Enemies.KingMimicSW.TableIndex,25)),
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gyon.TableIndex, Enemies.PiratesChariot.TableIndex, Enemies.KingMimicSW.TableIndex),
             // [12] floor 12
-            SP.Pool(6, SP.E(Enemies.CursedRose.TableIndex,25), SP.E(Enemies.MimicSW.TableIndex,25), SP.E(Enemies.Captain.TableIndex,25), SP.E(Enemies.KingMimicSW.TableIndex,25)),
+            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.MimicSW.TableIndex, Enemies.Captain.TableIndex, Enemies.KingMimicSW.TableIndex),
             // [13] floor 13
-            SP.Pool(7, SP.E(Enemies.MimicSW.TableIndex,25), SP.E(Enemies.Captain.TableIndex,25), SP.E(Enemies.PiratesChariot.TableIndex,25), SP.E(Enemies.AuntieMedu.TableIndex,25)),
+            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex, Enemies.AuntieMedu.TableIndex),
             // [14] floor 14
-            SP.Pool(7, SP.E(Enemies.Sam.TableIndex,25), SP.E(Enemies.KingMimicSW.TableIndex,25), SP.E(Enemies.AuntieMedu.TableIndex,25), SP.E(Enemies.MaskOfPrajna.TableIndex,25)),
+            SP.Pool(Enemies.Sam.TableIndex, Enemies.KingMimicSW.TableIndex, Enemies.AuntieMedu.TableIndex, Enemies.MaskOfPrajna.TableIndex),
             // [15] floor 15
-            SP.Pool(7, SP.E(Enemies.Gyon.TableIndex,40), SP.E(Enemies.Captain.TableIndex,10), SP.E(Enemies.AuntieMedu.TableIndex,25), SP.E(Enemies.MaskOfPrajna.TableIndex,25)),
+            SP.Pool(Enemies.Gyon.TableIndex, Enemies.Captain.TableIndex, Enemies.AuntieMedu.TableIndex, Enemies.MaskOfPrajna.TableIndex),
             // [16] floor 16
-            SP.Pool(8, SP.E(Enemies.CursedRose.TableIndex,25), SP.E(Enemies.Captain.TableIndex,25), SP.E(Enemies.PiratesChariot.TableIndex,25), SP.E(Enemies.MaskOfPrajna.TableIndex,25)),
+            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex, Enemies.MaskOfPrajna.TableIndex),
             // [17] floor 17
-            SP.Pool(8, SP.E(Enemies.PiratesChariot.TableIndex,25), SP.E(Enemies.KingMimicSW.TableIndex,25), SP.E(Enemies.AuntieMedu.TableIndex,25), SP.E(Enemies.MaskOfPrajna.TableIndex,25)),
+            SP.Pool(Enemies.PiratesChariot.TableIndex, Enemies.KingMimicSW.TableIndex, Enemies.AuntieMedu.TableIndex, Enemies.MaskOfPrajna.TableIndex),
             // [18] floor 18 — BOSS: IceQueen + companions (kori, i_me, i_ta, c17_, e124)
-            SP.Pool(1, SP.E(Enemies.IceQueen.TableIndex,40), SP.E(Enemies.IQComp101.TableIndex,10), SP.E(Enemies.IceArrow.TableIndex,10), SP.E(Enemies.IQComp102.TableIndex,10), SP.E(Enemies.IQComp103.TableIndex,10), SP.E(Enemies.SWComp92.TableIndex,10), SP.E(Enemies.IQComp104.TableIndex,10)),
+            SP.Pool(Enemies.IceQueen.TableIndex, Enemies.IQComp101.TableIndex, Enemies.IceArrow.TableIndex, Enemies.IQComp102.TableIndex, Enemies.IQComp103.TableIndex, Enemies.SWComp92.TableIndex, Enemies.IQComp104.TableIndex),
         };
 
         internal static readonly FloorSpawnPool[] SW_Back = new FloorSpawnPool[]
         {
-            SP.Pool(4, SP.E(Enemies.Gunny.TableIndex,50), SP.E(Enemies.Gyon.TableIndex,50)),                             // back for floor 1
-            SP.Pool(4, SP.E(Enemies.Corcea.TableIndex,50), SP.E(Enemies.Captain.TableIndex,50)),                             // back for floor 2
-            SP.Pool(4, SP.E(Enemies.CursedRose.TableIndex,50), SP.E(Enemies.Captain.TableIndex,50)),                             // back for floor 3
-            SP.Pool(4, SP.E(Enemies.Sam.TableIndex,30), SP.E(Enemies.MaskOfPrajna.TableIndex,70)),                             // back for floor 4
-            SP.Pool(4, SP.E(Enemies.PiratesChariot.TableIndex,50), SP.E(Enemies.MaskOfPrajna.TableIndex,50)),                             // back for floor 5
-            SP.Pool(4, SP.E(Enemies.MimicSW.TableIndex,50), SP.E(Enemies.KingMimicSW.TableIndex,50)),                             // back for floor 6
-            SP.Pool(4, SP.E(Enemies.CursedRose.TableIndex,50), SP.E(Enemies.AuntieMedu.TableIndex,50)),                             // back for floor 7
-            SP.Pool(4, SP.E(Enemies.Gyon.TableIndex,50), SP.E(Enemies.AuntieMedu.TableIndex,50)),                             // back for floor 8
-            SP.Empty(5),                                                       // back for floor 9
-            SP.Pool(5, SP.E(Enemies.MimicSW.TableIndex,50), SP.E(Enemies.KingMimicSW.TableIndex,50)),                             // back for floor 10
-            SP.Pool(5, SP.E(Enemies.Sam.TableIndex,30), SP.E(Enemies.MaskOfPrajna.TableIndex,70)),                             // back for floor 11
-            SP.Pool(6, SP.E(Enemies.PiratesChariot.TableIndex,50), SP.E(Enemies.MaskOfPrajna.TableIndex,50)),                             // back for floor 12
-            SP.Pool(6, SP.E(Enemies.Corcea.TableIndex,50), SP.E(Enemies.CursedRose.TableIndex,50)),                             // back for floor 13
-            SP.Pool(5, SP.E(Enemies.MaskOfPrajna.TableIndex,100)),                                          // back for floor 14  [tier 5, not 7]
-            SP.Pool(7, SP.E(Enemies.Gyon.TableIndex,50), SP.E(Enemies.AuntieMedu.TableIndex,50)),                             // back for floor 15
-            SP.Pool(7, SP.E(Enemies.MimicSW.TableIndex,50), SP.E(Enemies.KingMimicSW.TableIndex,50)),                             // back for floor 16
-            SP.Pool(7, SP.E(Enemies.Corcea.TableIndex,30), SP.E(Enemies.Captain.TableIndex,30), SP.E(Enemies.PiratesChariot.TableIndex,40)),               // back for floor 17
+            SP.Pool(Enemies.Gunny.TableIndex, Enemies.Gyon.TableIndex),                             // back for floor 1
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Captain.TableIndex),                             // back for floor 2
+            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.Captain.TableIndex),                             // back for floor 3
+            SP.Pool(Enemies.Sam.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 4
+            SP.Pool(Enemies.PiratesChariot.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 5
+            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.KingMimicSW.TableIndex),                             // back for floor 6
+            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.AuntieMedu.TableIndex),                             // back for floor 7
+            SP.Pool(Enemies.Gyon.TableIndex, Enemies.AuntieMedu.TableIndex),                             // back for floor 8
+            SP.Empty(),                                                       // back for floor 9
+            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.KingMimicSW.TableIndex),                             // back for floor 10
+            SP.Pool(Enemies.Sam.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 11
+            SP.Pool(Enemies.PiratesChariot.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 12
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.CursedRose.TableIndex),                             // back for floor 13
+            SP.Pool(Enemies.MaskOfPrajna.TableIndex),                                          // back for floor 14  [tier 5, not 7]
+            SP.Pool(Enemies.Gyon.TableIndex, Enemies.AuntieMedu.TableIndex),                             // back for floor 15
+            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.KingMimicSW.TableIndex),                             // back for floor 16
+            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex),               // back for floor 17
         };
 
         // ── Dungeon 3 : Sun & Moon Temple (SMT) ──────────────────────────────────────────
@@ -486,46 +500,46 @@ namespace Dark_Cloud_Improved_Version
 
         internal static readonly FloorSpawnPool[] SMT_Front = new FloorSpawnPool[]
         {
-            SP.Empty(0),                                                                                   // [0] descriptor
-            SP.Pool(4, SP.E(Enemies.Mummy.TableIndex,50), SP.E(Enemies.Phantom.TableIndex,50)),                                                         // [1] floor 1
-            SP.Pool(4, SP.E(Enemies.Mummy.TableIndex,40), SP.E(Enemies.Phantom.TableIndex,30), SP.E(Enemies.BomberHead.TableIndex,30)),                                            // [2] floor 2
-            SP.Pool(4, SP.E(Enemies.Mummy.TableIndex,25), SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.MimicSMT.TableIndex,25)),                               // [3] floor 3
-            SP.Pool(4, SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.MimicSMT.TableIndex,25), SP.E(Enemies.Golem.TableIndex,25)),                               // [4] floor 4
-            SP.Pool(4, SP.E(Enemies.Mummy.TableIndex,20), SP.E(Enemies.MimicSMT.TableIndex,35), SP.E(Enemies.Golem.TableIndex,45)),                                            // [5] floor 5
-            SP.Pool(4, SP.E(Enemies.Mummy.TableIndex,25), SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.Golem.TableIndex,25), SP.E(Enemies.MrBlare.TableIndex,25)),                               // [6] floor 6
-            SP.Pool(5, SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.MimicSMT.TableIndex,25), SP.E(Enemies.Golem.TableIndex,25), SP.E(Enemies.CrabbyHermit.TableIndex,25)),                               // [7] floor 7
-            SP.Pool(5, SP.E(Enemies.BomberHead.TableIndex,50), SP.E(Enemies.MrBlare.TableIndex,50)),                                                         // [8] floor 8 — EVENT
-            SP.Pool(5, SP.E(Enemies.Gol.TableIndex,50), SP.E(Enemies.Sil.TableIndex,50)),                                                         // [9] floor 9
-            SP.Pool(6, SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.Golem.TableIndex,25), SP.E(Enemies.Dune.TableIndex,25)),                               // [10] floor 10
-            SP.Pool(6, SP.E(Enemies.MimicSMT.TableIndex,25), SP.E(Enemies.CrabbyHermit.TableIndex,25), SP.E(Enemies.Dune.TableIndex,50)),                                            // [11] floor 11
-            SP.Pool(6, SP.E(Enemies.Mummy.TableIndex,25), SP.E(Enemies.Golem.TableIndex,25), SP.E(Enemies.Dune.TableIndex,25), SP.E(Enemies.KingMimicSMT.TableIndex,25)),                               // [12] floor 12
-            SP.Pool(7, SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.MrBlare.TableIndex,25), SP.E(Enemies.Dune.TableIndex,25)),                               // [13] floor 13
-            SP.Pool(7, SP.E(Enemies.MimicSMT.TableIndex,25), SP.E(Enemies.Golem.TableIndex,20), SP.E(Enemies.CrabbyHermit.TableIndex,20), SP.E(Enemies.KingMimicSMT.TableIndex,25), SP.E(Enemies.BlueDragon.TableIndex,10)),                  // [14] floor 14
-            SP.Pool(7, SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.Dune.TableIndex,25), SP.E(Enemies.SteelGiant.TableIndex,25)),                               // [15] floor 15
-            SP.Pool(8, SP.E(Enemies.MimicSMT.TableIndex,50), SP.E(Enemies.KingMimicSMT.TableIndex,50)),                                                         // [16] floor 16
-            SP.Pool(8, SP.E(Enemies.Dune.TableIndex,25), SP.E(Enemies.KingMimicSMT.TableIndex,25), SP.E(Enemies.BlueDragon.TableIndex,25), SP.E(Enemies.SteelGiant.TableIndex,25)),                               // [17] floor 17
-            SP.Pool(1, SP.E(Enemies.KingsCurseCoffin.TableIndex,50), SP.E(Enemies.KingsCurse.TableIndex,50)),                                                         // [18] floor 18 — BOSS: KingsCurseCoffin + PhaseEntity100
+            SP.Empty(),                                                                                   // [0] descriptor
+            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex),                                                         // [1] floor 1
+            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex),                                            // [2] floor 2
+            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.MimicSMT.TableIndex),                               // [3] floor 3
+            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex),                               // [4] floor 4
+            SP.Pool(Enemies.Mummy.TableIndex, Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex),                                            // [5] floor 5
+            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex, Enemies.Golem.TableIndex, Enemies.MrBlare.TableIndex),                               // [6] floor 6
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex, Enemies.CrabbyHermit.TableIndex),                               // [7] floor 7
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                                                         // [8] floor 8 — EVENT
+            SP.Pool(Enemies.Gol.TableIndex, Enemies.Sil.TableIndex),                                                         // [9] floor 9
+            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.Golem.TableIndex, Enemies.Dune.TableIndex),                               // [10] floor 10
+            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.CrabbyHermit.TableIndex, Enemies.Dune.TableIndex),                                            // [11] floor 11
+            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Golem.TableIndex, Enemies.Dune.TableIndex, Enemies.KingMimicSMT.TableIndex),                               // [12] floor 12
+            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex, Enemies.Dune.TableIndex),                               // [13] floor 13
+            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex, Enemies.CrabbyHermit.TableIndex, Enemies.KingMimicSMT.TableIndex, Enemies.BlueDragon.TableIndex),                  // [14] floor 14
+            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.Dune.TableIndex, Enemies.SteelGiant.TableIndex),                               // [15] floor 15
+            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                                                         // [16] floor 16
+            SP.Pool(Enemies.Dune.TableIndex, Enemies.KingMimicSMT.TableIndex, Enemies.BlueDragon.TableIndex, Enemies.SteelGiant.TableIndex),                               // [17] floor 17
+            SP.Pool(Enemies.KingsCurseCoffin.TableIndex, Enemies.KingsCurse.TableIndex),                                                         // [18] floor 18 — BOSS: KingsCurseCoffin + PhaseEntity100
         };
 
         internal static readonly FloorSpawnPool[] SMT_Back = new FloorSpawnPool[]
         {
-            SP.Pool(4, SP.E(Enemies.Golem.TableIndex,100)),                                          // back for floor 1
-            SP.Pool(4, SP.E(Enemies.Phantom.TableIndex,40), SP.E(Enemies.CrabbyHermit.TableIndex,20), SP.E(Enemies.Dune.TableIndex,40)),                // back for floor 2
-            SP.Pool(4, SP.E(Enemies.MimicSMT.TableIndex,50), SP.E(Enemies.KingMimicSMT.TableIndex,50)),                             // back for floor 3
-            SP.Pool(4, SP.E(Enemies.BomberHead.TableIndex,50), SP.E(Enemies.MrBlare.TableIndex,50)),                             // back for floor 4
-            SP.Pool(4, SP.E(Enemies.Golem.TableIndex,30), SP.E(Enemies.Dune.TableIndex,30), SP.E(Enemies.SteelGiant.TableIndex,40)),               // back for floor 5
-            SP.Pool(4, SP.E(Enemies.CrabbyHermit.TableIndex,30), SP.E(Enemies.Dune.TableIndex,70)),                             // back for floor 6
-            SP.Pool(4, SP.E(Enemies.BomberHead.TableIndex,50), SP.E(Enemies.MrBlare.TableIndex,50)),                             // back for floor 7
-            SP.Pool(4, SP.E(Enemies.MimicSMT.TableIndex,50), SP.E(Enemies.KingMimicSMT.TableIndex,50)),                             // back for floor 8
-            SP.Empty(5),                                                       // back for floor 9
-            SP.Pool(5, SP.E(Enemies.BomberHead.TableIndex,50), SP.E(Enemies.SteelGiant.TableIndex,50)),                             // back for floor 10
-            SP.Pool(5, SP.E(Enemies.BomberHead.TableIndex,100)),                                          // back for floor 11
-            SP.Pool(6, SP.E(Enemies.BomberHead.TableIndex,50), SP.E(Enemies.SteelGiant.TableIndex,50)),                             // back for floor 12
-            SP.Pool(6, SP.E(Enemies.BomberHead.TableIndex,50), SP.E(Enemies.MrBlare.TableIndex,50)),                             // back for floor 13
-            SP.Pool(5, SP.E(Enemies.Mummy.TableIndex,100)),                                          // back for floor 14  [tier 5, not 7]
-            SP.Pool(7, SP.E(Enemies.Phantom.TableIndex,100)),                                          // back for floor 15
-            SP.Pool(7, SP.E(Enemies.MimicSMT.TableIndex,50), SP.E(Enemies.KingMimicSMT.TableIndex,50)),                             // back for floor 16
-            SP.Pool(7, SP.E(Enemies.BlueDragon.TableIndex,100)),                                          // back for floor 17
+            SP.Pool(Enemies.Golem.TableIndex),                                          // back for floor 1
+            SP.Pool(Enemies.Phantom.TableIndex, Enemies.CrabbyHermit.TableIndex, Enemies.Dune.TableIndex),                // back for floor 2
+            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                             // back for floor 3
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                             // back for floor 4
+            SP.Pool(Enemies.Golem.TableIndex, Enemies.Dune.TableIndex, Enemies.SteelGiant.TableIndex),               // back for floor 5
+            SP.Pool(Enemies.CrabbyHermit.TableIndex, Enemies.Dune.TableIndex),                             // back for floor 6
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                             // back for floor 7
+            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                             // back for floor 8
+            SP.Empty(),                                                       // back for floor 9
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.SteelGiant.TableIndex),                             // back for floor 10
+            SP.Pool(Enemies.BomberHead.TableIndex),                                          // back for floor 11
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.SteelGiant.TableIndex),                             // back for floor 12
+            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                             // back for floor 13
+            SP.Pool(Enemies.Mummy.TableIndex),                                          // back for floor 14  [tier 5, not 7]
+            SP.Pool(Enemies.Phantom.TableIndex),                                          // back for floor 15
+            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                             // back for floor 16
+            SP.Pool(Enemies.BlueDragon.TableIndex),                                          // back for floor 17
         };
 
         // ── Dungeon 4 : Moon Sea (MS) ─────────────────────────────────────────────────────
@@ -536,40 +550,40 @@ namespace Dark_Cloud_Improved_Version
 
         internal static readonly FloorSpawnPool[] MS_Front = new FloorSpawnPool[]
         {
-            SP.Empty(0),                                                                      // [0] descriptor
-            SP.Pool(4, SP.E(Enemies.HellPockle.TableIndex,40), SP.E(Enemies.MoonBug.TableIndex,30), SP.E(Enemies.WitchHellza.TableIndex,30)),                               // [1] floor 1
-            SP.Pool(4, SP.E(Enemies.HellPockle.TableIndex,25), SP.E(Enemies.MoonBug.TableIndex,25), SP.E(Enemies.WitchHellza.TableIndex,25), SP.E(Enemies.SpaceGyon.TableIndex,25)),                  // [2] floor 2
-            SP.Pool(4, SP.E(Enemies.HellPockle.TableIndex,25), SP.E(Enemies.MoonBug.TableIndex,25), SP.E(Enemies.SpaceGyon.TableIndex,25), SP.E(Enemies.MimicMS.TableIndex,25)),                  // [3] floor 3
-            SP.Pool(4, SP.E(Enemies.MoonBug.TableIndex,25), SP.E(Enemies.WitchHellza.TableIndex,25), SP.E(Enemies.SpaceGyon.TableIndex,25), SP.E(Enemies.MimicMS.TableIndex,25)),                  // [4] floor 4
-            SP.Pool(4, SP.E(Enemies.HellPockle.TableIndex,50), SP.E(Enemies.MoonDigger.TableIndex,50)),                                             // [5] floor 5
-            SP.Pool(4, SP.E(Enemies.WitchHellza.TableIndex,25), SP.E(Enemies.SpaceGyon.TableIndex,25), SP.E(Enemies.MimicMS.TableIndex,25), SP.E(Enemies.WhiteFang.TableIndex,25)),                  // [6] floor 6
-            SP.Pool(5, SP.E(Enemies.MoonBug.TableIndex,25), SP.E(Enemies.MoonDigger.TableIndex,25), SP.E(Enemies.WhiteFang.TableIndex,25), SP.E(Enemies.Vulcan.TableIndex,25)),                  // [7] floor 7 — EVENT
-            SP.Empty(5),                                                                      // [8] floor 8
-            SP.Pool(5, SP.E(Enemies.SpaceGyon.TableIndex,25), SP.E(Enemies.MoonDigger.TableIndex,25), SP.E(Enemies.Vulcan.TableIndex,25), SP.E(Enemies.KingMimicMS.TableIndex,25)),                  // [9] floor 9
-            SP.Pool(6, SP.E(Enemies.MoonDigger.TableIndex,25), SP.E(Enemies.WhiteFang.TableIndex,25), SP.E(Enemies.Vulcan.TableIndex,25), SP.E(Enemies.Titan.TableIndex,25)),                  // [10] floor 10
-            SP.Pool(6, SP.E(Enemies.MoonBug.TableIndex,50), SP.E(Enemies.Titan.TableIndex,50)),                                             // [11] floor 11
-            SP.Pool(6, SP.E(Enemies.WitchHellza.TableIndex,25), SP.E(Enemies.Vulcan.TableIndex,25), SP.E(Enemies.Titan.TableIndex,25), SP.E(Enemies.CrescentBaron.TableIndex,25)),                  // [12] floor 12
-            SP.Pool(7, SP.E(Enemies.MoonDigger.TableIndex,25), SP.E(Enemies.Vulcan.TableIndex,25), SP.E(Enemies.CrescentBaron.TableIndex,25), SP.E(Enemies.Arthur.TableIndex,25)),                  // [13] floor 13
-            SP.Pool(7, SP.E(Enemies.KingMimicMS.TableIndex,25), SP.E(Enemies.Titan.TableIndex,25), SP.E(Enemies.CrescentBaron.TableIndex,25), SP.E(Enemies.Arthur.TableIndex,25)),                  // [14] floor 14
-            SP.Pool(7, SP.E(Enemies.MinotaurJoe.TableIndex,50), SP.E(Enemies.WineKeg.TableIndex,50)),                                             // [15] floor 15 — BOSS: MinotaurJoe + WineKeg
+            SP.Empty(),                                                                      // [0] descriptor
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonBug.TableIndex, Enemies.WitchHellza.TableIndex),                               // [1] floor 1
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonBug.TableIndex, Enemies.WitchHellza.TableIndex, Enemies.SpaceGyon.TableIndex),                  // [2] floor 2
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonBug.TableIndex, Enemies.SpaceGyon.TableIndex, Enemies.MimicMS.TableIndex),                  // [3] floor 3
+            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.WitchHellza.TableIndex, Enemies.SpaceGyon.TableIndex, Enemies.MimicMS.TableIndex),                  // [4] floor 4
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonDigger.TableIndex),                                             // [5] floor 5
+            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.SpaceGyon.TableIndex, Enemies.MimicMS.TableIndex, Enemies.WhiteFang.TableIndex),                  // [6] floor 6
+            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.MoonDigger.TableIndex, Enemies.WhiteFang.TableIndex, Enemies.Vulcan.TableIndex),                  // [7] floor 7 — EVENT
+            SP.Empty(),                                                                      // [8] floor 8
+            SP.Pool(Enemies.SpaceGyon.TableIndex, Enemies.MoonDigger.TableIndex, Enemies.Vulcan.TableIndex, Enemies.KingMimicMS.TableIndex),                  // [9] floor 9
+            SP.Pool(Enemies.MoonDigger.TableIndex, Enemies.WhiteFang.TableIndex, Enemies.Vulcan.TableIndex, Enemies.Titan.TableIndex),                  // [10] floor 10
+            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.Titan.TableIndex),                                             // [11] floor 11
+            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.Vulcan.TableIndex, Enemies.Titan.TableIndex, Enemies.CrescentBaron.TableIndex),                  // [12] floor 12
+            SP.Pool(Enemies.MoonDigger.TableIndex, Enemies.Vulcan.TableIndex, Enemies.CrescentBaron.TableIndex, Enemies.Arthur.TableIndex),                  // [13] floor 13
+            SP.Pool(Enemies.KingMimicMS.TableIndex, Enemies.Titan.TableIndex, Enemies.CrescentBaron.TableIndex, Enemies.Arthur.TableIndex),                  // [14] floor 14
+            SP.Pool(Enemies.MinotaurJoe.TableIndex, Enemies.WineKeg.TableIndex),                                             // [15] floor 15 — BOSS: MinotaurJoe + WineKeg
         };
 
         internal static readonly FloorSpawnPool[] MS_Back = new FloorSpawnPool[]
         {
-            SP.Pool(4, SP.E(Enemies.MoonDigger.TableIndex,100)),                                          // back for floor 1
-            SP.Pool(4, SP.E(Enemies.Titan.TableIndex,50), SP.E(Enemies.Arthur.TableIndex,50)),                             // back for floor 2
-            SP.Pool(4, SP.E(Enemies.HellPockle.TableIndex,50), SP.E(Enemies.CrescentBaron.TableIndex,50)),                             // back for floor 3
-            SP.Pool(4, SP.E(Enemies.WitchHellza.TableIndex,50), SP.E(Enemies.Titan.TableIndex,50)),                             // back for floor 4
-            SP.Pool(4, SP.E(Enemies.MoonBug.TableIndex,100)),                                          // back for floor 5
-            SP.Pool(4, SP.E(Enemies.HellPockle.TableIndex,33), SP.E(Enemies.MimicMS.TableIndex,33), SP.E(Enemies.KingMimicMS.TableIndex,34)),               // back for floor 6
-            SP.Pool(4, SP.E(Enemies.MoonBug.TableIndex,50), SP.E(Enemies.CrescentBaron.TableIndex,50)),                             // back for floor 7
-            SP.Empty(4),                                                       // back for floor 8
-            SP.Pool(5, SP.E(Enemies.HellPockle.TableIndex,50), SP.E(Enemies.MoonDigger.TableIndex,50)),                             // back for floor 9
-            SP.Pool(5, SP.E(Enemies.Vulcan.TableIndex,100)),                                          // back for floor 10
-            SP.Pool(5, SP.E(Enemies.Arthur.TableIndex,100)),                                          // back for floor 11
-            SP.Pool(6, SP.E(Enemies.SpaceGyon.TableIndex,100)),                                          // back for floor 12
-            SP.Pool(6, SP.E(Enemies.HellPockle.TableIndex,33), SP.E(Enemies.MimicMS.TableIndex,33), SP.E(Enemies.KingMimicMS.TableIndex,34)),               // back for floor 13
-            SP.Pool(5, SP.E(Enemies.WitchHellza.TableIndex,34), SP.E(Enemies.WhiteFang.TableIndex,33), SP.E(Enemies.CrescentBaron.TableIndex,33)),               // back for floor 14  [tier 5, not 7]
+            SP.Pool(Enemies.MoonDigger.TableIndex),                                          // back for floor 1
+            SP.Pool(Enemies.Titan.TableIndex, Enemies.Arthur.TableIndex),                             // back for floor 2
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.CrescentBaron.TableIndex),                             // back for floor 3
+            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.Titan.TableIndex),                             // back for floor 4
+            SP.Pool(Enemies.MoonBug.TableIndex),                                          // back for floor 5
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MimicMS.TableIndex, Enemies.KingMimicMS.TableIndex),               // back for floor 6
+            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.CrescentBaron.TableIndex),                             // back for floor 7
+            SP.Empty(),                                                       // back for floor 8
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonDigger.TableIndex),                             // back for floor 9
+            SP.Pool(Enemies.Vulcan.TableIndex),                                          // back for floor 10
+            SP.Pool(Enemies.Arthur.TableIndex),                                          // back for floor 11
+            SP.Pool(Enemies.SpaceGyon.TableIndex),                                          // back for floor 12
+            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MimicMS.TableIndex, Enemies.KingMimicMS.TableIndex),               // back for floor 13
+            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.WhiteFang.TableIndex, Enemies.CrescentBaron.TableIndex),               // back for floor 14  [tier 5, not 7]
         };
 
         // ── Dungeon 5 : Gallery of Time (GoT) ────────────────────────────────────────────
@@ -581,68 +595,68 @@ namespace Dark_Cloud_Improved_Version
 
         internal static readonly FloorSpawnPool[] GoT_Front = new FloorSpawnPool[]
         {
-            SP.Empty(0),                                                                                    // [0] descriptor
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,40), SP.E(Enemies.CurseDancer.TableIndex,30), SP.E(Enemies.DarkFlower.TableIndex,30)),                                             // [1] floor 1
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.CurseDancer.TableIndex,25), SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.Billy.TableIndex,25)),                                // [2] floor 2
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.Billy.TableIndex,25), SP.E(Enemies.LivingArmor.TableIndex,25)),                                // [3] floor 3
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.CurseDancer.TableIndex,25), SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25)),                                // [4] floor 4
-            SP.Pool(4, SP.E(Enemies.CurseDancer.TableIndex,25), SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.RashDasher.TableIndex,25)),                                // [5] floor 5
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.Billy.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25), SP.E(Enemies.Club.TableIndex,25)),                                // [6] floor 6
-            SP.Pool(5, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25), SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Heart.TableIndex,25)),                                // [7] floor 7
-            SP.Pool(5, SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.Billy.TableIndex,25), SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.Diamond.TableIndex,25)),                                // [8] floor 8
-            SP.Pool(5, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Spade.TableIndex,25)),                                // [9] floor 9
-            SP.Pool(6, SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25), SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Joker.TableIndex,25)),                                // [10] floor 10
-            SP.Pool(6, SP.E(Enemies.Club.TableIndex,20), SP.E(Enemies.Heart.TableIndex,20), SP.E(Enemies.Diamond.TableIndex,20), SP.E(Enemies.Spade.TableIndex,20), SP.E(Enemies.Joker.TableIndex,20)),                   // [11] floor 11
-            SP.Pool(6, SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Heart.TableIndex,25), SP.E(Enemies.Joker.TableIndex,25), SP.E(Enemies.KingMimicGoT.TableIndex,25)),                                // [12] floor 12
-            SP.Pool(7, SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Club.TableIndex,25), SP.E(Enemies.Diamond.TableIndex,25), SP.E(Enemies.Lich.TableIndex,25)),                                // [13] floor 13
-            SP.Pool(7, SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.KingMimicGoT.TableIndex,25), SP.E(Enemies.Lich.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25)),                                // [14] floor 14
-            SP.Pool(7, SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.Lich.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25)),                                // [15] floor 15
-            SP.Pool(8, SP.E(Enemies.KingMimicGoT.TableIndex,25), SP.E(Enemies.Lich.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),                                // [16] floor 16
-            SP.Pool(8, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),                                // [17] floor 17
-            SP.Pool(8, SP.E(Enemies.LivingArmor.TableIndex,40), SP.E(Enemies.MimicGoT.TableIndex,30), SP.E(Enemies.KingMimicGoT.TableIndex,30)),                                             // [18] floor 18
-            SP.Pool(8, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.CurseDancer.TableIndex,25), SP.E(Enemies.Billy.TableIndex,25), SP.E(Enemies.Lich.TableIndex,25)),                                // [19] floor 19
-            SP.Pool(8, SP.E(Enemies.DarkFlower.TableIndex,25), SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),                                // [20] floor 20
-            SP.Pool(8, SP.E(Enemies.EvilBat.TableIndex,25), SP.E(Enemies.Billy.TableIndex,25), SP.E(Enemies.Heart.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25)),                                // [21] floor 21
-            SP.Pool(8, SP.E(Enemies.Joker.TableIndex,25), SP.E(Enemies.KingMimicGoT.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),                                // [22] floor 22
-            SP.Pool(8, SP.E(Enemies.Club.TableIndex,20), SP.E(Enemies.Heart.TableIndex,20), SP.E(Enemies.Diamond.TableIndex,20), SP.E(Enemies.Spade.TableIndex,20), SP.E(Enemies.Joker.TableIndex,20)),                   // [23] floor 23
-            SP.Pool(8, SP.E(Enemies.Lich.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),                                // [24] floor 24
+            SP.Empty(),                                                                                    // [0] descriptor
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.DarkFlower.TableIndex),                                             // [1] floor 1
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.Billy.TableIndex),                                // [2] floor 2
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.Billy.TableIndex, Enemies.LivingArmor.TableIndex),                                // [3] floor 3
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex),                                // [4] floor 4
+            SP.Pool(Enemies.CurseDancer.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.RashDasher.TableIndex),                                // [5] floor 5
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.Billy.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.Club.TableIndex),                                // [6] floor 6
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.RashDasher.TableIndex, Enemies.Heart.TableIndex),                                // [7] floor 7
+            SP.Pool(Enemies.DarkFlower.TableIndex, Enemies.Billy.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.Diamond.TableIndex),                                // [8] floor 8
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.RashDasher.TableIndex, Enemies.Spade.TableIndex),                                // [9] floor 9
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.RashDasher.TableIndex, Enemies.Joker.TableIndex),                                // [10] floor 10
+            SP.Pool(Enemies.Club.TableIndex, Enemies.Heart.TableIndex, Enemies.Diamond.TableIndex, Enemies.Spade.TableIndex, Enemies.Joker.TableIndex),                   // [11] floor 11
+            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Heart.TableIndex, Enemies.Joker.TableIndex, Enemies.KingMimicGoT.TableIndex),                                // [12] floor 12
+            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Club.TableIndex, Enemies.Diamond.TableIndex, Enemies.Lich.TableIndex),                                // [13] floor 13
+            SP.Pool(Enemies.DarkFlower.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Lich.TableIndex, Enemies.Blizzard.TableIndex),                                // [14] floor 14
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Lich.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex),                                // [15] floor 15
+            SP.Pool(Enemies.KingMimicGoT.TableIndex, Enemies.Lich.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [16] floor 16
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [17] floor 17
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex),                                             // [18] floor 18
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.Billy.TableIndex, Enemies.Lich.TableIndex),                                // [19] floor 19
+            SP.Pool(Enemies.DarkFlower.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.RashDasher.TableIndex, Enemies.BlackDragon.TableIndex),                                // [20] floor 20
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.Billy.TableIndex, Enemies.Heart.TableIndex, Enemies.Blizzard.TableIndex),                                // [21] floor 21
+            SP.Pool(Enemies.Joker.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [22] floor 22
+            SP.Pool(Enemies.Club.TableIndex, Enemies.Heart.TableIndex, Enemies.Diamond.TableIndex, Enemies.Spade.TableIndex, Enemies.Joker.TableIndex),                   // [23] floor 23
+            SP.Pool(Enemies.Lich.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [24] floor 24
         };
 
         // Back-floor pools for GoT floors 1-24.
         internal static readonly FloorSpawnPool[] GoT_Back = new FloorSpawnPool[]
         {
-            SP.Pool(4, SP.E(Enemies.Heart.TableIndex,50), SP.E(Enemies.Lich.TableIndex,50)),                             // back for floor 1
-            SP.Pool(4, SP.E(Enemies.LivingArmor.TableIndex,50), SP.E(Enemies.Alexander.TableIndex,50)),                             // back for floor 2
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,50), SP.E(Enemies.BlackDragon.TableIndex,50)),                             // back for floor 3
-            SP.Pool(4, SP.E(Enemies.EvilBat.TableIndex,50), SP.E(Enemies.DarkFlower.TableIndex,50)),                             // back for floor 4
-            SP.Pool(4, SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25), SP.E(Enemies.KingMimicGoT.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25)),  // back for floor 5
-            SP.Pool(4, SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),  // back for floor 6
-            SP.Pool(4, SP.E(Enemies.LivingArmor.TableIndex,50), SP.E(Enemies.Alexander.TableIndex,50)),                             // back for floor 7
-            SP.Pool(5, SP.E(Enemies.EvilBat.TableIndex,50), SP.E(Enemies.BlackDragon.TableIndex,50)),                             // back for floor 8
-            SP.Pool(5, SP.E(Enemies.LivingArmor.TableIndex,50), SP.E(Enemies.Alexander.TableIndex,50)),                             // back for floor 9
-            SP.Pool(5, SP.E(Enemies.EvilBat.TableIndex,50), SP.E(Enemies.DarkFlower.TableIndex,50)),                             // back for floor 10
-            SP.Pool(6, SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25), SP.E(Enemies.KingMimicGoT.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25)),  // back for floor 11
-            SP.Pool(6, SP.E(Enemies.RashDasher.TableIndex,25), SP.E(Enemies.Blizzard.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25), SP.E(Enemies.BlackDragon.TableIndex,25)),  // back for floor 12
-            SP.Pool(5, SP.E(Enemies.EvilBat.TableIndex,50), SP.E(Enemies.BlackDragon.TableIndex,50)),                             // back for floor 13  [tier 5, not 7]
-            SP.Pool(7, SP.E(Enemies.CurseDancer.TableIndex,50), SP.E(Enemies.Billy.TableIndex,50)),                             // back for floor 14
-            SP.Pool(7, SP.E(Enemies.LivingArmor.TableIndex,25), SP.E(Enemies.MimicGoT.TableIndex,25), SP.E(Enemies.KingMimicGoT.TableIndex,25), SP.E(Enemies.Alexander.TableIndex,25)),  // back for floor 15
-            SP.Pool(7, SP.E(Enemies.EvilBat.TableIndex,100)),                                          // back for floor 16
-            SP.Pool(7, SP.E(Enemies.EvilBat.TableIndex,50), SP.E(Enemies.DarkFlower.TableIndex,50)),                             // back for floor 17
-            SP.Pool(7, SP.E(Enemies.MimicGoT.TableIndex,30), SP.E(Enemies.Diamond.TableIndex,40), SP.E(Enemies.KingMimicGoT.TableIndex,30)),               // back for floor 18
-            SP.Pool(7, SP.E(Enemies.MimicGoT.TableIndex,30), SP.E(Enemies.Club.TableIndex,40), SP.E(Enemies.KingMimicGoT.TableIndex,30)),               // back for floor 19
-            SP.Pool(8, SP.E(Enemies.MimicGoT.TableIndex,30), SP.E(Enemies.Heart.TableIndex,40), SP.E(Enemies.KingMimicGoT.TableIndex,30)),               // back for floor 20
-            SP.Pool(8, SP.E(Enemies.MimicGoT.TableIndex,30), SP.E(Enemies.Spade.TableIndex,40), SP.E(Enemies.KingMimicGoT.TableIndex,30)),               // back for floor 21
-            SP.Pool(8, SP.E(Enemies.MimicGoT.TableIndex,30), SP.E(Enemies.Joker.TableIndex,40), SP.E(Enemies.KingMimicGoT.TableIndex,30)),               // back for floor 22
-            SP.Pool(8, SP.E(Enemies.Club.TableIndex,20), SP.E(Enemies.Heart.TableIndex,20), SP.E(Enemies.Diamond.TableIndex,20), SP.E(Enemies.Spade.TableIndex,20), SP.E(Enemies.Joker.TableIndex,20)), // back for floor 23
-            SP.Pool(8, SP.E(Enemies.EvilBat.TableIndex,100)),                                          // back for floor 24
+            SP.Pool(Enemies.Heart.TableIndex, Enemies.Lich.TableIndex),                             // back for floor 1
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Alexander.TableIndex),                             // back for floor 2
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.BlackDragon.TableIndex),                             // back for floor 3
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex),                             // back for floor 4
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex),  // back for floor 5
+            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),  // back for floor 6
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Alexander.TableIndex),                             // back for floor 7
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.BlackDragon.TableIndex),                             // back for floor 8
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Alexander.TableIndex),                             // back for floor 9
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex),                             // back for floor 10
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex),  // back for floor 11
+            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),  // back for floor 12
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.BlackDragon.TableIndex),                             // back for floor 13  [tier 5, not 7]
+            SP.Pool(Enemies.CurseDancer.TableIndex, Enemies.Billy.TableIndex),                             // back for floor 14
+            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex),  // back for floor 15
+            SP.Pool(Enemies.EvilBat.TableIndex),                                          // back for floor 16
+            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex),                             // back for floor 17
+            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Diamond.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 18
+            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Club.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 19
+            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Heart.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 20
+            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Spade.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 21
+            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Joker.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 22
+            SP.Pool(Enemies.Club.TableIndex, Enemies.Heart.TableIndex, Enemies.Diamond.TableIndex, Enemies.Spade.TableIndex, Enemies.Joker.TableIndex), // back for floor 23
+            SP.Pool(Enemies.EvilBat.TableIndex),                                          // back for floor 24
         };
 
         // DarkGenie boss pool — belongs to DS but stored in the binary after GoT's last
         // front floor (slot 190) and before GoT's back floors.  The companion empty slot
         // (slot 191) occupies the back-floor position for this boss encounter.
         internal static readonly FloorSpawnPool GoT_DarkGenieBoss =
-            SP.Pool(1, SP.E(Enemies.DarkGenie.TableIndex,40), SP.E(Enemies.DarkGenieForm2.TableIndex,10), SP.E(Enemies.RightHand.TableIndex,10), SP.E(Enemies.LeftHand.TableIndex,10),
-                       SP.E(Enemies.DGComp88.TableIndex,10), SP.E(Enemies.DGComp89.TableIndex,10), SP.E(Enemies.DGComp90.TableIndex,5), SP.E(Enemies.DGComp93.TableIndex,5));
+            SP.Pool(Enemies.DarkGenie.TableIndex, Enemies.DarkGenieForm2.TableIndex, Enemies.RightHand.TableIndex, Enemies.LeftHand.TableIndex,
+                       Enemies.DGComp88.TableIndex, Enemies.DGComp89.TableIndex, Enemies.DGComp90.TableIndex, Enemies.DGComp93.TableIndex);
 
         // ── Dungeon 6 : Demon Shaft (DS) ────────────────────────────────────────────────
         // 100 floors.  Boss: BlackKnight + tbl_165 (floor 100); DarkGenie is the true final
@@ -668,119 +682,119 @@ namespace Dark_Cloud_Improved_Version
         {
             // 101 entries: [0] descriptor + floors 1-100
             var p = new FloorSpawnPool[101];
-            p[0] = SP.Empty(0); // descriptor
+            p[0] = SP.Empty(); // descriptor
 
             // Floors 1-20: GemronFire group
-            p[1]  = SP.Pool(4, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            p[2]  = SP.Pool(4, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            p[3]  = SP.Pool(4, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[4]  = SP.Pool(4, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            p[5]  = SP.Pool(4, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            p[6]  = SP.Pool(4, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            p[7]  = SP.Pool(5, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[8]  = SP.Pool(5, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            p[9]  = SP.Pool(5, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            p[10] = SP.Pool(6, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[11] = SP.Pool(6, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[12] = SP.Pool(6, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            p[13] = SP.Pool(7, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[14] = SP.Pool(7, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            p[15] = SP.Pool(7, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            p[16] = SP.Pool(8, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[17] = SP.Pool(8, SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            p[18] = SP.Pool(8, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25));
-            p[19] = SP.Pool(8, SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            p[20] = SP.Pool(8, SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
+            p[1]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            p[2]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            p[3]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[4]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            p[5]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            p[6]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            p[7]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[8]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            p[9]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            p[10] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[11] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[12] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            p[13] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[14] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            p[15] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            p[16] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[17] = SP.Pool(Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            p[18] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex);
+            p[19] = SP.Pool(Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[20] = SP.Pool(Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
 
             // Floors 21-40: GemronIce group
-            p[21] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25));
-            p[22] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            p[23] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            p[24] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[25] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25));
-            p[26] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            p[27] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            p[28] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[29] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            p[30] = SP.Pool(8, SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            p[31] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[32] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[33] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            p[34] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[35] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[36] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            p[37] = SP.Pool(8, SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[38] = SP.Pool(8, SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            p[39] = SP.Pool(8, SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            p[40] = SP.Pool(8, SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25)); // same as floor 37
+            p[21] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
+            p[22] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.MimicDS.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            p[23] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.KingMimicDS.TableIndex);
+            p[24] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[25] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
+            p[26] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            p[27] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
+            p[28] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[29] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            p[30] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
+            p[31] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.KingMimicDS.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[32] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[33] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            p[34] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[35] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[36] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
+            p[37] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[38] = SP.Pool(Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            p[39] = SP.Pool(Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            p[40] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex); // same as floor 37
 
             // Floors 41-60: GemronThunder group
-            p[41] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25));
-            p[42] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            p[43] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            p[44] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[45] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25));
-            p[46] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            p[47] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            p[48] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[49] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            p[50] = SP.Pool(8, SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            p[51] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[52] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[53] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            p[54] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[55] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[56] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            p[57] = SP.Pool(8, SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[58] = SP.Pool(8, SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            p[59] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            p[60] = SP.Pool(8, SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
+            p[41] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex);
+            p[42] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            p[43] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            p[44] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[45] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex);
+            p[46] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.BishopQ.TableIndex);
+            p[47] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            p[48] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[49] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            p[50] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            p[51] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[52] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[53] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            p[54] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[55] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[56] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            p[57] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[58] = SP.Pool(Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            p[59] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[60] = SP.Pool(Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
 
             // Floors 61-80: GemronWind group
-            p[61] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25));
-            p[62] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            p[63] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            p[64] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[65] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25));
-            p[66] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            p[67] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            p[68] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[69] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            p[70] = SP.Pool(8, SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            p[71] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[72] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[73] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            p[74] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[75] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[76] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            p[77] = SP.Pool(8, SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[78] = SP.Pool(8, SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            p[79] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            p[80] = SP.Pool(8, SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
+            p[61] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
+            p[62] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            p[63] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            p[64] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[65] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
+            p[66] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            p[67] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            p[68] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[69] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            p[70] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            p[71] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[72] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[73] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            p[74] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[75] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[76] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            p[77] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[78] = SP.Pool(Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            p[79] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[80] = SP.Pool(Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
 
             // Floors 81-99: GemronHoly group
-            p[81] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25));
-            p[82] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            p[83] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            p[84] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[85] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25));
-            p[86] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            p[87] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            p[88] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[89] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            p[90] = SP.Pool(8, SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            p[91] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[92] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[93] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            p[94] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[95] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[96] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            p[97] = SP.Pool(8, SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            p[98] = SP.Pool(8, SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            p[99] = SP.Pool(8, SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
+            p[81] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex);
+            p[82] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.EvilBatEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            p[83] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            p[84] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[85] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex);
+            p[86] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            p[87] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            p[88] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[89] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            p[90] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            p[91] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[92] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[93] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            p[94] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[95] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[96] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            p[97] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[98] = SP.Pool(Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            p[99] = SP.Pool(Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
 
             // Floor 100 — BOSS: BlackKnight (tbl_165) + garbage padding (tbl_166, as extracted from binary)
-            p[100] = SP.Pool(1, SP.E(Enemies.BlackKnightMount.TableIndex,50), SP.E(Enemies.BlackKnight.TableIndex,50));
+            p[100] = SP.Pool(Enemies.BlackKnightMount.TableIndex, Enemies.BlackKnight.TableIndex);
 
             return p;
         }
@@ -791,115 +805,115 @@ namespace Dark_Cloud_Improved_Version
             var b = new FloorSpawnPool[99];
 
             // Back floors 1-20: GemronFire group variants
-            b[0]  = SP.Pool(4, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[1]  = SP.Pool(4, SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            b[2]  = SP.Pool(4, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25));
-            b[3]  = SP.Pool(4, SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[4]  = SP.Pool(4, SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[5]  = SP.Pool(4, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            b[6]  = SP.Pool(4, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            b[7]  = SP.Pool(4, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[8]  = SP.Pool(5, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            b[9]  = SP.Pool(5, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            b[10] = SP.Pool(5, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            b[11] = SP.Pool(6, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[12] = SP.Pool(6, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            b[13] = SP.Pool(5, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            b[14] = SP.Pool(7, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[15] = SP.Pool(7, SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[16] = SP.Pool(7, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.GemronFire.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
-            b[17] = SP.Pool(7, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.MasterJacketEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.ArthurEnhanced.TableIndex,25));
-            b[18] = SP.Pool(7, SP.E(Enemies.MummyEnhanced.TableIndex,25), SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.WhiteFangEnhanced.TableIndex,25), SP.E(Enemies.VulcanEnhanced.TableIndex,25));
-            b[19] = SP.Pool(7, SP.E(Enemies.HalloweenEnhanced.TableIndex,25), SP.E(Enemies.DiamondEnhanced.TableIndex,25), SP.E(Enemies.SilEnhanced.TableIndex,25), SP.E(Enemies.Nikapous.TableIndex,25));
+            b[0]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[1]  = SP.Pool(Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            b[2]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex);
+            b[3]  = SP.Pool(Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[4]  = SP.Pool(Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[5]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            b[6]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            b[7]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[8]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            b[9]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            b[10] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            b[11] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[12] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            b[13] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            b[14] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[15] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[16] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            b[17] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            b[18] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
+            b[19] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
 
             // Back floors 21-40: GemronIce group variants
-            b[20] = SP.Pool(8, SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[21] = SP.Pool(8, SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            b[22] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[23] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            b[24] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25));
-            b[25] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            b[26] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            b[27] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[28] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25));
-            b[29] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            b[30] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            b[31] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[32] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            b[33] = SP.Pool(8, SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
-            b[34] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.MimicDS.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[35] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.GemronIce.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[36] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.WitchHellzaEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25));
-            b[37] = SP.Pool(8, SP.E(Enemies.CorceaEnhanced.TableIndex,25), SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.RockanoffEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
+            b[20] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[21] = SP.Pool(Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            b[22] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.GemronIce.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[23] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            b[24] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
+            b[25] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.MimicDS.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            b[26] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.KingMimicDS.TableIndex);
+            b[27] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[28] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
+            b[29] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            b[30] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
+            b[31] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[32] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            b[33] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
+            b[34] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.KingMimicDS.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[35] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[36] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
+            b[37] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
 
             // Back floors 39-40 bridge gap (the two remaining GemronIce back slots)
-            b[38] = SP.Pool(8, SP.E(Enemies.HornHead.TableIndex,25), SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.SteelGiantEnhanced.TableIndex,25));
-            b[39] = SP.Pool(8, SP.E(Enemies.YammichEnhanced.TableIndex,25), SP.E(Enemies.ClubEnhanced.TableIndex,25), SP.E(Enemies.AuntieMeduEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDS.TableIndex,25));
+            b[38] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[39] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
 
             // Back floors 41-60: GemronThunder group variants
-            b[40] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            b[41] = SP.Pool(8, SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[42] = SP.Pool(8, SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            b[43] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[44] = SP.Pool(8, SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[45] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25));
-            b[46] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            b[47] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            b[48] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[49] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25));
-            b[50] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            b[51] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            b[52] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[53] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            b[54] = SP.Pool(8, SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25));
-            b[55] = SP.Pool(8, SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[56] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GemronThunder.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[57] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.SpadeEnhanced.TableIndex,25), SP.E(Enemies.RashDasherEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25));
-            b[58] = SP.Pool(8, SP.E(Enemies.CaptainEnhanced.TableIndex,25), SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GolEnhanced.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
-            b[59] = SP.Pool(8, SP.E(Enemies.CaveBatEnhanced.TableIndex,25), SP.E(Enemies.GyonEnhanced.TableIndex,25), SP.E(Enemies.BishopQ.TableIndex,25), SP.E(Enemies.MaskOfPrajnaEnhanced.TableIndex,25));
+            b[40] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            b[41] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[42] = SP.Pool(Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            b[43] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[44] = SP.Pool(Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[45] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex);
+            b[46] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            b[47] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            b[48] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[49] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex);
+            b[50] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.BishopQ.TableIndex);
+            b[51] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            b[52] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[53] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            b[54] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
+            b[55] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[56] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[57] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
+            b[58] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[59] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
 
             // Back floors 61-80: GemronWind group variants
-            b[60] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            b[61] = SP.Pool(8, SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[62] = SP.Pool(8, SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            b[63] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[64] = SP.Pool(8, SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[65] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25));
-            b[66] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            b[67] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            b[68] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[69] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25));
-            b[70] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            b[71] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            b[72] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[73] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            b[74] = SP.Pool(8, SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25));
-            b[75] = SP.Pool(8, SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedTwice.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[76] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.GemronWind.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[77] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.SilverGear.TableIndex,25), SP.E(Enemies.HeartEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25));
-            b[78] = SP.Pool(8, SP.E(Enemies.BomberHeadEnhanced.TableIndex,25), SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.PiratesChariotEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
-            b[79] = SP.Pool(8, SP.E(Enemies.CrabbyHermitEnhanced.TableIndex,25), SP.E(Enemies.CursedRoseEnhanced.TableIndex,25), SP.E(Enemies.SpaceGyonEnhanced.TableIndex,25), SP.E(Enemies.AlexanderEnhanced.TableIndex,25));
+            b[60] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            b[61] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[62] = SP.Pool(Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            b[63] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[64] = SP.Pool(Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[65] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
+            b[66] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            b[67] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            b[68] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[69] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
+            b[70] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            b[71] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            b[72] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[73] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            b[74] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
+            b[75] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[76] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[77] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
+            b[78] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[79] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
 
             // Back floors 81-99: GemronHoly group variants
-            b[80] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[81] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            b[82] = SP.Pool(8, SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[83] = SP.Pool(8, SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            b[84] = SP.Pool(8, SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[85] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25));
-            b[86] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            b[87] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            b[88] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[89] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25));
-            b[90] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            b[91] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            b[92] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[93] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            b[94] = SP.Pool(8, SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25));
-            b[95] = SP.Pool(8, SP.E(Enemies.LichEnhanced.TableIndex,25), SP.E(Enemies.MimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.KingMimicDSEnhancedThrice.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[96] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.GemronHoly.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
-            b[97] = SP.Pool(8, SP.E(Enemies.LivingArmorEnhanced.TableIndex,25), SP.E(Enemies.StatueDogEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.GaciousEnhanced.TableIndex,25));
-            b[98] = SP.Pool(8, SP.E(Enemies.EvilBatEnhanced.TableIndex,25), SP.E(Enemies.TitanEnhanced.TableIndex,25), SP.E(Enemies.JokerEnhanced.TableIndex,25), SP.E(Enemies.CrescentBaronEnhanced.TableIndex,25));
+            b[80] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[81] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            b[82] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[83] = SP.Pool(Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            b[84] = SP.Pool(Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[85] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex);
+            b[86] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.EvilBatEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            b[87] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            b[88] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[89] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex);
+            b[90] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            b[91] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            b[92] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[93] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            b[94] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
+            b[95] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[96] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[97] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
+            b[98] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
 
             return b;
         }
@@ -907,8 +921,9 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>
     /// Dungeon metadata backed by binary-extracted spawn pools.
-    /// Front[0] is the dungeon descriptor pool (used before floor 1 loads).
-    /// Front[N] is floor N's front-side pool.  Back[N] is floor N's back-side pool.
+    /// Front[N]/Back[N] index a floor's spawn pools, but the floor↔index mapping is NOT uniform across
+    /// dungeons — DBC is verified 0-indexed (Front[N]=floor N, no descriptor); the others are unverified
+    /// (historically Front[0]=descriptor). See the SpawnPoolData summary before trusting floor labels.
     /// </summary>
     internal struct DungeonData
     {

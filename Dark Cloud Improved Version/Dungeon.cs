@@ -102,6 +102,12 @@ namespace Dark_Cloud_Improved_Version
                 // loaded c16a.stb before the boss spawns. No-op unless a c16a boss is in the roster.
                 BossScriptPatcher.Tick();
                 BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
+                // Drives "spawn roster resets on floor change": reverts SetSpawnRoster* edits to vanilla once
+                // the player leaves the floor the roster was applied to. No-op unless a roster is staged.
+                EnemyModelInjector.NotifyInFloor(Player.InDungeonFloor());
+                // Authentic mimic chests: register a chest disguise for each placed roster mimic (no-op off
+                // custom-roster floors; dedups + waits for placement). Engine renders + wakes on open.
+                EnemyModelInjector.SpawnMimicChestsOnFloor();
                 if (Player.InDungeonFloor())
                 {
                     // Evilcise curse applies immediately on equip, even from the pause menu
@@ -479,6 +485,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not ingame anymore! Exited from Dungeon!");
                             EnemySlots.RestoreRedirectedEnemies();
+                            EnemyModelInjector.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
                             break;
                         }
                     }
@@ -772,6 +779,7 @@ namespace Dark_Cloud_Improved_Version
             // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             EnemySlots.LogEnemySpawns();
             EnemySlots.LogFloorDataForTileMapSearch();
+            EnemyModelInjector.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
 
             if (numNormalEnemies > 3)
             {
@@ -799,7 +807,7 @@ namespace Dark_Cloud_Improved_Version
             minibossProcess?.Join(2000);
             // EnemySlots.ApplyTestModifications();
             EnemySlots.ResetPollState();
-            EnemySlots.FixModelRedirectSpawnPositions();
+            // EnemySlots.FixModelRedirectSpawnPositions();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 
