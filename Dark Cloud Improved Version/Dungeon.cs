@@ -31,8 +31,8 @@ namespace Dark_Cloud_Improved_Version
 
         private static readonly EnemyDefaults[] _bossSpecies = {
             Enemies.IceArrow, Enemies.Dran, Enemies.IceQueen, Enemies.MasterUtan,
-            Enemies.KingsCurse, Enemies.MinotaurJoe, Enemies.DarkGenie, Enemies.DarkGenieForm2,
-            Enemies.RightHand, Enemies.LeftHand, Enemies.WineKeg, Enemies.UnknownPhase100,
+            Enemies.KingsCurseCoffin, Enemies.MinotaurJoe, Enemies.DarkGenie, Enemies.DarkGenieForm2,
+            Enemies.RightHand, Enemies.LeftHand, Enemies.WineKeg, Enemies.KingsCurse,
             Enemies.BlackKnight,
         };
         static byte[] wepLevelArray = new byte[10];
@@ -117,6 +117,7 @@ namespace Dark_Cloud_Improved_Version
                     // EnemySlots.MonitorFlashTimer();
                     // EnemySlots.TeleportEnemiesDebug();        // DEBUG: remove when done
                     EnemySlots.DumpModelTableForRenderPosition(); // DEBUG: remove when done
+                    EnemySlots.BossInfoIfKingsCurseCoffin("live KC fight"); // one-shot dump when the boss appears post-cutscene
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -584,7 +585,7 @@ namespace Dark_Cloud_Improved_Version
                 case 0: return 14;   // DBC — Dran
                 case 1: return 17;   // WOF — MasterUtan
                 case 2: return 18;   // SW  — IceQueen
-                case 3: return 18;   // SMT — KingsCurse
+                case 3: return 18;   // SMT — KingsCurseCoffin
                 case 4: return 15;   // MS  — MinotaurJoe
                 case 5: return 24;   // GoT — DarkGenie
                 case 6: return 100;  // DS
@@ -771,6 +772,7 @@ namespace Dark_Cloud_Improved_Version
             // EnemySlots.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
             // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             EnemySlots.LogEnemySpawns();
+            EnemySlots.BossInfoIfKingsCurseCoffin($"floor-entry dun={currentDungeon} floor={currentFloor + 1}");
             EnemySlots.LogFloorDataForTileMapSearch();
 
             if (numNormalEnemies > 3)

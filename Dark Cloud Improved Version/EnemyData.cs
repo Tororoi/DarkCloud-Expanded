@@ -396,7 +396,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Index 24 — "e114a_ex": MasterUtan extended attack.
         // "e114" prefix matches MasterUtan (EID=114). Same hitbox as e115a_ex; BehaviorFlags=0x0008.
-        // Likely MasterUtan's special vine or slam attack, one flag-bit below KingsCurse.
+        // Likely MasterUtan's special vine or slam attack, one flag-bit below KingsCurseCoffin.
         internal static readonly BehaviorScript MasterUtanAttack = new BehaviorScript {
             Index=24, ScriptName="e114a_ex",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
@@ -407,10 +407,10 @@ namespace Dark_Cloud_Improved_Version
 
         // ---- pointer-array entries [25]–[33] — directly referenced by BehaviorScriptTable.PointerArray ----
 
-        // Index 25 — "e115a_ex": KingsCurse extended melee attack.
-        // "e115" prefix matches KingsCurse (EID=115). BehaviorFlags=0x0010.
+        // Index 25 — "e115a_ex": KingsCurseCoffin extended melee attack.
+        // "e115" prefix matches KingsCurseCoffin (EID=115). BehaviorFlags=0x0010.
         // Likely the claw/arm-grab special that deals high damage at medium range.
-        internal static readonly BehaviorScript KingsCurseAttack = new BehaviorScript {
+        internal static readonly BehaviorScript KingsCurseCoffinAttack = new BehaviorScript {
             Index=25, ScriptName="e115a_ex",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=7.0f, SecondaryRange=8.0f,
@@ -3410,8 +3410,8 @@ namespace Dark_Cloud_Improved_Version
         // 4	70–80	ダメージ	damage
         // 5	90–110	死亡	death ← collapse
         // 6	110–115	死亡ループ	death loop
-        internal static readonly EnemyDefaults KingsCurse = new EnemyDefaults {
-            Id=115, TableIndex=81, ModelCode="c15a", Name="King's Curse",    MaxHp=2000,  Abs=40, MinGoldDrop=0, DropChance=0,
+        internal static readonly EnemyDefaults KingsCurseCoffin = new EnemyDefaults {
+            Id=115, TableIndex=81, ModelCode="c15a", Name="King's Curse Coffin",    MaxHp=2000,  Abs=40, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=125,
             EntityScale=6.0f,  EntityScaleCopy=6.0f,  Unk090A=10, Unk090B=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
@@ -3429,8 +3429,8 @@ namespace Dark_Cloud_Improved_Version
         // 7	180–185	黒玉〜棺桶	black-orb → coffin
         // 8	190–200	黒丸ループ	black-orb loop
         // 9	165–175	棺桶ループ	coffin loop
-        internal static readonly EnemyDefaults UnknownPhase100 = new EnemyDefaults {
-            Id=100, TableIndex=82, ModelCode="c15b", Name="(phase entity 100)", MaxHp=1000, Abs=40, MinGoldDrop=0, DropChance=0,
+        internal static readonly EnemyDefaults KingsCurse = new EnemyDefaults {
+            Id=100, TableIndex=82, ModelCode="c15b", Name="King's Curse", MaxHp=1000, Abs=40, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=4.0f,  EntityScaleCopy=4.0f,  Unk090A=10, Unk090B=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
@@ -4841,10 +4841,10 @@ namespace Dark_Cloud_Improved_Version
                 // Bosses
                 IceArrow,
                 Dran, IceQueen, MasterUtan,
-                KingsCurse,
+                KingsCurseCoffin,
                 MinotaurJoe,
                 DarkGenie, DarkGenieForm2, RightHand, LeftHand, WineKeg,
-                UnknownPhase100,
+                KingsCurse,
                 BlackKnight,
             };
             Defaults = new Dictionary<ushort, EnemyDefaults>(all.Length);
@@ -4930,7 +4930,7 @@ namespace Dark_Cloud_Improved_Version
         {
             { IceArrow.Id,    IceArrow.Name    }, { Dran.Id,        Dran.Name        },
             { IceQueen.Id,    IceQueen.Name    }, { MasterUtan.Id,  MasterUtan.Name  },
-            { KingsCurse.Id,  KingsCurse.Name  }, { MinotaurJoe.Id, MinotaurJoe.Name },
+            { KingsCurseCoffin.Id,  KingsCurseCoffin.Name  }, { MinotaurJoe.Id, MinotaurJoe.Name },
             { DarkGenie.Id,   DarkGenie.Name   }, { RightHand.Id,   RightHand.Name   },
             { LeftHand.Id,    LeftHand.Name    }, { WineKeg.Id,     WineKeg.Name     },
             { BlackKnight.Id, BlackKnight.Name },

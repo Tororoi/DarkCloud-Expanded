@@ -205,6 +205,31 @@ namespace Dark_Cloud_Improved_Version
         /// immunity and the Queen's physical immunity are visible). Dumps EVERY live slot incl. eid-0 sub-entities,
         /// no miniboss filter. <paramref name="tag"/> labels the snapshot.
         /// </summary>
+        /// If King's Curse (id 115) or its phase entity (id 100) is present in any live slot, dump the full per-slot
+        /// boss table (incl. STB codeOff + world pos + playing motion). Called from the always-on floor-entry path so
+        /// the GENUINE fight (no boss armed) is captured, not just the DBC roster spawn.
+        private static bool _kcDumped;
+        private static System.DateTime _kcLastDump = System.DateTime.MinValue;
+        internal static void BossInfoIfKingsCurseCoffin(string tag)
+        {
+            bool present = false;
+            for (int i = 0; i < 16; i++)
+            {
+                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
+                if (Memory.ReadInt(slotBase) == -1) continue;
+                ushort eid = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
+                if (eid == 115 || eid == 100) { present = true; break; }
+            }
+            if (!present) { _kcDumped = false; return; }
+            // Dump on first appearance AND re-dump every 3s while present: the spawn-frame snapshot has IP=0/pos=(0,0)
+            // (scripts not yet initialized), so the re-dumps capture the LIVE state (codeOff, position, motion).
+            if (!_kcDumped || (System.DateTime.UtcNow - _kcLastDump).TotalSeconds >= 3)
+            {
+                _kcDumped = true; _kcLastDump = System.DateTime.UtcNow;
+                BossInfo(tag);
+            }
+        }
+
         internal static void BossInfo(string tag)
         {
             Console.WriteLine($"[BossInfo] === {tag} ===");
@@ -253,19 +278,24 @@ namespace Dark_Cloud_Improved_Version
             int nWords = (int)((ip - start) / 4);
             if (nWords <= 1) return "?";
             uint[] w = Memory.ReadUIntBatch(start, nWords);
+            long nearestStb = -1; uint nearestCo = 0;
             for (int i = w.Length - 1; i >= 0; i--)                   // nearest STB header below the IP, with a known codeOff
             {
                 if (w[i] != StbMagic) continue;
                 long stb = start + (long)i * 4;
                 uint co = (uint)Memory.ReadInt(stb + 0x54);
+                if (nearestStb < 0) { nearestStb = stb; nearestCo = co; }   // remember the nearest header for the raw fallback
                 string nm = co switch
                 {
                     0x2914 => "IceQueen", 0x7D0 => "korinoya", 0x874 => "baria",
-                    0x5EC => "kori/i_meteo", 0x3AC => "i_tatumaki/reiki", _ => null
+                    0x5EC => "kori/i_meteo", 0x3AC => "i_tatumaki/reiki",
+                    0x778 => "KingsCurseCoffin(c15a)", 0x2FDC => "phase(c15b)", _ => null
                 };
-                if (nm != null) return $"codeOff=0x{co:X}({nm})";
+                if (nm != null) return $"codeOff=0x{co:X}({nm}) stb=0x{stb:X8}";
             }
-            return "?";
+            // No recognized signature — report the nearest header's RAW codeOff + address so unmapped scripts (e.g. the
+            // King's Curse phase entity whose runtime codeOff we're trying to confirm) are still identifiable.
+            return nearestStb >= 0 ? $"codeOff=0x{nearestCo:X}(?) stb=0x{nearestStb:X8}" : "?";
         }
 
         /// <summary>

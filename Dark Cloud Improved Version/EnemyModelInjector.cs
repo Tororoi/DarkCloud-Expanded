@@ -228,7 +228,7 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
             // Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
             Memory.WriteUShort(rec + EnemySpeciesTable.MaxHp, 50);
-            Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
+            // Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
         }
 
         internal static void SetPopulationTarget(int pop)
@@ -647,6 +647,7 @@ namespace Dark_Cloud_Improved_Version
             78  => (0x3AC8u, 0x419C, 0x3A3C),  // Dran        (c12a)
             79  => (0x4484u, 0x4F48, 0x438C),  // Master Utan (c14a)
             80  => (0x2914u, 0x2B44, 0x288C),  // Ice Queen   (c13a) — codeOff@0x54; label-1 _SET_POSITION; label-120 _RUN_SCRIPT
+            81  => (0x778u,  0x8BC,  0x70C),   // King's Curse(c15a) — label-1 SET_POS origin-reset @0x8BC; label-120 _RUN_SCRIPT(510) cutscene cmdId(0x6F) @0x70C (op1 push1, not op3)
             83  => (0x575Cu, 0x631C, 0x5700),  // MinotaurJoe (c16a)
             166 => (0x60C0u, 0x6C20, 0),       // c22a (no label-120 _RUN_SCRIPT; cutscene fix TBD)
             _   => (0u, 0, 0),
@@ -698,9 +699,12 @@ namespace Dark_Cloud_Improved_Version
         // 79 = Master Utan (c14a): death is the 14th KEY entry; its info.cfg labels it "14" but the labels skip
         //      11, so the sequential table index is 13 (frames 360–385). No roar, no death-loop. If the collapse
         //      plays the wrong clip in-game, try 14 (i.e. the .chr loader honoured the printed label, not order).
-        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 78 => 6,   79 => 13,  80 => 11,  83 => 9,   _ => -1 };
-        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 78 => 100, 79 => 360, 80 => 165, 83 => 300, _ => 0  };
-        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 78 => 120, 79 => 385, 80 => 185, 83 => 330, _ => 0  };
+        private static int CollapseMotion(int tableIndex)     => tableIndex switch { 78 => 6,   79 => 13,  80 => 11,  81 => 5,   83 => 9,   _ => -1 };
+        // STB-relative start offset of label-120 (the "defeated" script) for bosses whose ENTIRE label-120 must be NOPed
+        // (its early commands trigger the engine dungeon-end). -1 = use the per-_RUN_SCRIPT rewrite instead. KC c15a: 0x624.
+        private static int Label120Start(int tableIndex)      => tableIndex switch { 81 => 0x624, _ => -1 };
+        private static int CollapseStartFrame(int tableIndex) => tableIndex switch { 78 => 100, 79 => 360, 80 => 165, 81 => 90,  83 => 300, _ => 0  };
+        private static int CollapseEndFrame(int tableIndex)   => tableIndex switch { 78 => 120, 79 => 385, 80 => 185, 81 => 110, 83 => 330, _ => 0  };
         private static int RoarMotion(int tableIndex)         => EnableRoar ? (tableIndex switch { 83 => 4, _ => -1 }) : -1;
         private static int RoarStartFrame(int tableIndex)     => tableIndex switch { 83 => 210, _ => 0  };
         private static int RoarEndFrame(int tableIndex)       => tableIndex switch { 83 => 260, _ => 0  };
@@ -739,6 +743,10 @@ namespace Dark_Cloud_Improved_Version
             (79, 0) => new long[] { 0x01211A90 },
             // Ice Queen
             (80, 0) => new long[] { 0x013C4C50 },
+            // King's Curse
+            (81, 0) => new long[] { 0x0108ADD0 },
+            // King's Curse Phase Entity
+            (82, 0) => new long[] { 0x210E5830 },
             // Minotaur Joe
             (83, 0) => new long[] { 0x011A8990, 0x011A8950 },
             // Black Knight Mount
@@ -777,7 +785,7 @@ namespace Dark_Cloud_Improved_Version
                 // walkable tiles even after she activates.
                 int mapNow = Memory.ReadInt(DungeonAddresses.Map.MapNo);
                 uint mpNow = Memory.ReadUInt(DungeonAddresses.Map.MapPartsPtr);
-                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; }   // re-arm per floor
+                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; _kcPhaseDumped = false; _kcPhaseStb = -1; _kcSwapDone = false; }   // re-arm per floor
                 // The tile grid is EMBEDDED in the CDungeonMap at +0x9C50 (ArrangementPos reads it to place enemies);
                 // it's valid at floor-entry, independent of the standalone `mapparts` global (which is NULL in her arena).
                 // Dump it as soon as the floor's CDungeonMap exists — i.e. BEFORE we ever swap Ice Queen in.
@@ -809,6 +817,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else { if (TranslateCompanions) PatchCompanionPositions(); PatchShieldTarget(); KorinoyaStandIn(); }
                 }
+                if (ti == 81) { ReorderKingsCurseOnce(); SuppressKcDungeonEnd(); }   // reorder + clamp dungeon-clear flags
                 int dungeon = Memory.ReadByte(Addresses.checkDungeon);
                 // 1) Known addresses for (boss, dungeon) — instant, deterministic, no scan.
                 foreach (long addr in KnownAddrs(ti, dungeon))
@@ -944,6 +953,81 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(block + 20, BitConverter.SingleToInt32Bits(newX));
             Memory.WriteInt(block + 40, 2);
             Memory.WriteInt(block + 44, BitConverter.SingleToInt32Bits(newY));
+        }
+
+        // Like WritePosArgs but for STBs whose _SET_POSITION uses op1 push1 INT literals (c15a/c15b King's Curse) instead
+        // of op3 type/value pushes. The x value is the op1 operand @block+16 (rec1+4), z @block+40 (rec3+4). Keep op1;
+        // just overwrite the ints. Write-once (skip if already at target) so we don't re-touch the running interpreter.
+        private static void WritePosArgsInt(long block, int newX, int newZ)
+        {
+            if (Memory.ReadInt(block + 16) == newX && Memory.ReadInt(block + 40) == newZ) return;
+            Memory.WriteInt(block + 16, newX);
+            Memory.WriteInt(block + 40, newZ);
+        }
+
+        // King's Curse (c15a, table 81) + its phase entity (c15b, table 82) both spawn at a near-origin arena anchor.
+        // Relocate the WHOLE pair to the largest room by the SAME world offset (preserve their relative layout), exactly
+        // like the Ice Queen cluster. Each native _SET_POSITION is op1 ints (x@+16, z@+40; worldY = -z). We anchor 81 at
+        // the room center (its native worldY = -500 => nudgeY = anchorY + 500) and shift 82 by that same nudge.
+        private static void RelocateKingsCurseCoffinCluster(long stb81, long block81)
+        {
+            float nudgeX = _anchorX, nudgeY = _anchorY + 500f;
+            WritePosArgsInt(block81, (int)(0 + nudgeX), (int)(500 - nudgeY));     // c15a native (0,0,500) -> room center
+            // Phase entity c15b (codeOff 0x2fdc, _SET_POSITION @ +0x3678, native 0,0,237). Resolve the LIVE instance via
+            // the eid-100 slot's CRunScript IP — the codeOff scan was hitting a stale pre-spawn TEMPLATE copy (e.g.
+            // 0x01698CC0) while the live instance lives elsewhere (e.g. 0x210E5830). Patching the live STB's SET_POS is
+            // also what fixes the in-fight position reset. Resolvable only once c15b's script is live (post-spawn).
+            long live = LiveKcPhaseStb();
+            if (live >= 0)
+            {
+                WritePosArgsInt(live + 0x3678, (int)(0 + nudgeX), (int)(237 - nudgeY));
+                if (_kcPhaseStb != live) { Console.WriteLine($"[KCxlate] LIVE phase c15b STB 0x{live:X8} (coffin81 @0x{stb81:X8}) -> room +({nudgeX:F0},{nudgeY:F0})"); _kcPhaseStb = live; }
+            }
+        }
+
+        // Resolve the LIVE c15b (King's Curse, eid 100) STB from its slot's CRunScript IP (IP @ 0x21E4D5A0+slot*0x48+0x30
+        // points INTO the loaded STB). Scans back to the "STB\0" header with codeOff(+0x54)==0x2fdc. -1 until live.
+        private static long LiveKcPhaseStb()
+        {
+            int slot = FindSlotByEid(100);
+            if (slot < 0) return -1;
+            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + (long)slot * 0x48 + 0x30);
+            if (ipRaw == 0) return -1;
+            long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
+            long lo = Math.Max(0x20000000, ip - 0x8000);
+            int n = (int)((ip - lo) / 4);
+            if (n <= 1) return -1;
+            uint[] w = Memory.ReadUIntBatch(lo, n);
+            for (int i = w.Length - 1; i >= 0; i--)
+                if (w[i] == StbMagic && (uint)Memory.ReadInt(lo + (long)i * 4 + 0x54) == 0x2FDCu) return lo + (long)i * 4;
+            return -1;
+        }
+
+        // One-shot diagnostic: the phase entity is eid 100 (KingsCurse/c15b). Resolve ITS slot's STB directly from
+        // the live CRunScript IP (no codeOff filter) and report codeOff(+0x54) + the words at +0x3678 (expected SET_POS
+        // push1(36)) + its slot world pos. Tells us why FindKcPhaseStb misses it (wrong codeOff? no STB until transform?).
+        private static bool _kcPhaseDumped;
+        private static void DumpKcPhaseEntity()
+        {
+            if (_kcPhaseDumped) return;
+            int slot = FindSlotByEid(100);
+            if (slot < 0) return;
+            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + (long)slot * 0x48 + 0x30);
+            if (ipRaw == 0) return;     // c15b script not live yet — retry next tick (don't latch on the IP=0 spawn frame)
+            _kcPhaseDumped = true;
+            long stb = -1;
+            if (ipRaw != 0)
+            {
+                long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
+                long lo = Math.Max(0x20000000, ip - 0x8000);
+                int n = (int)((ip - lo) / 4);
+                if (n > 1) { uint[] w = Memory.ReadUIntBatch(lo, n); for (int i = w.Length - 1; i >= 0; i--) if (w[i] == StbMagic) { stb = lo + (long)i * 4; break; } }
+            }
+            float px = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.LocationX));
+            float py = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.LocationY));
+            if (stb < 0) { Console.WriteLine($"[KCphase] eid100 @slot {slot}: IP=0x{ipRaw:X8} pos=({px:F0},{py:F0}) — no STB resolved (phase script not live until transform?)"); return; }
+            uint co = (uint)Memory.ReadInt(stb + 0x54);
+            Console.WriteLine($"[KCphase] eid100 @slot {slot}: STB=0x{stb:X8} codeOff=0x{co:X} +0x3678=[op{Memory.ReadInt(stb + 0x3678)},v{Memory.ReadInt(stb + 0x367C)}] pos=({px:F0},{py:F0})");
         }
 
         private static void PatchCompanionPositions()
@@ -1253,6 +1337,9 @@ namespace Dark_Cloud_Improved_Version
         private const int GridRows = 24, GridCols = 20;
         private const float CellWorld = 160f;   // SearchiDoPutArea: each MAPPARTS cell = 160 world units (calibrated)
         private static bool _anchorSet;          // once we've locked the walkable anchor from a populated grid
+        private static float _anchorX, _anchorY;  // raw world center of the largest room (= the anchor cell), boss-agnostic
+        private static int _anchorRoomW, _anchorRoomH;  // largest-room dimensions (cells); a wiped/arena grid yields a degenerate room
+        private static long _kcPhaseStb = -1;      // cached c15b (King's Curse phase entity, table 82) STB base
 
         private static void DumpMapParts()
         {
@@ -1273,7 +1360,7 @@ namespace Dark_Cloud_Improved_Version
             long gb = nowDng + 0x9C50;   // MAPPARTS is embedded in the CDungeonMap (ArrangementPos: a0 = CDungeonMap + 0x9C50)
             var tile = new bool[GridRows, GridCols];
             int populated = 0, wiped = 0, empty = 0;
-            Console.WriteLine($"[MAP] mapno={Memory.ReadInt(DungeonAddresses.Map.MapNo)} CDungeonMap@0x{nowDng:X8} MAPPARTS@0x{gb:X8}  (' '=empty '-'=wiped '#'=tile  C=chest A=atra T=trap)");
+            var rows = new string[GridRows];
             for (int row = 0; row < GridRows; row++)
             {
                 var sb = new System.Text.StringBuilder();
@@ -1287,9 +1374,15 @@ namespace Dark_Cloud_Improved_Version
                     if (objCells.TryGetValue(row * GridCols + col, out var m)) ch = m;   // overlay object marker
                     sb.Append(ch);
                 }
-                Console.WriteLine($"[MAP] r{row:D2} {sb}");
+                rows[row] = sb.ToString();
             }
-            Console.WriteLine($"[MAP] cells: {populated} tiles, {empty} empty, {wiped} wiped(-1), {objCells.Count} objects — grid is {(populated > 0 ? "POPULATED (valid floor layout)" : wiped > 0 ? "WIPED (-1, too late)" : "EMPTY")}");
+            // Only emit the map when it's actually populated — skip the noisy empty/wiped reads while a floor is loading.
+            if (populated > 0)
+            {
+                Console.WriteLine($"[MAP] mapno={Memory.ReadInt(DungeonAddresses.Map.MapNo)} CDungeonMap@0x{nowDng:X8} MAPPARTS@0x{gb:X8}  (' '=empty '-'=wiped '#'=tile  C=chest A=atra T=trap)");
+                for (int row = 0; row < GridRows; row++) Console.WriteLine($"[MAP] r{row:D2} {rows[row]}");
+                Console.WriteLine($"[MAP] cells: {populated} tiles, {empty} empty, {wiped} wiped(-1), {objCells.Count} objects — grid is POPULATED (valid floor layout)");
+            }
             return (populated, tile);
         }
 
@@ -1355,6 +1448,9 @@ namespace Dark_Cloud_Improved_Version
             float targetY = (bestR + 0.5f) * CellWorld;
             IqNudgeX = targetX;          // native worldX ≈ 0
             IqNudgeY = targetY + 177f;   // worldY = -177 + IqNudgeY = targetY
+            _anchorX = targetX;          // raw room center (boss-agnostic; used by King's Curse cluster relocate)
+            _anchorY = targetY;
+            _anchorRoomW = w; _anchorRoomH = h;
             _anchorSet = true;
             Console.WriteLine($"[ANCHOR] largest room {w}x{h} @grid(r{top},c{left}); anchor cell (r{bestR},c{bestC}) -> world({targetX:F0},{targetY:F0}); nudge=({IqNudgeX:F0},{IqNudgeY:F0})");
         }
@@ -1637,6 +1733,51 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine("[IQreorder] spawn order ALREADY NATIVE (0-6) — 0 swaps, reorder skipped (deterministic spawn confirmed)");
             else
                 Console.WriteLine($"[IQreorder] reordered to native slots 0-6 with {swaps} physical swap(s) — spawn was scrambled");
+        }
+
+        // King's Curse native slot layout (confirmed from the genuine SMT fight): coffin (c15a, id 115) at slot 0,
+        // king (c15b, id 100) at slot 1. The two scripts coordinate by slot (like the Ice Queen cluster), so a roster
+        // spawn that scrambles them breaks the fight. Physically move them to native slots once both are live.
+        private static readonly (int nativeSlot, ushort eid)[] _kcNativeLayout =
+        {
+            (0, 115),   // coffin (c15a) — the HP/kill target
+            (1, 100),   // king   (c15b) — the active, lockable attacker
+        };
+        // The coffin (c15a, eid 115) is a dungeon-END boss: the engine fires the dungeon-clear/save (memory-card screen)
+        // when its HP hits 0. On a force-spawn (normal floor) we don't want the dungeon to end. Clamp the clear flags to
+        // 0 every tick so the engine never advances the exit sequence. DATA-only (state flags, not code). Logs catches so
+        // we can see whether the clamp beats the engine or loses the ~50ms race (the existing Dayuppy poller is too slow).
+        private const long DungeonClearAddr = 0x21DF881C, BossDefeatedFlagAddr = 0x21DF94FC, BattleStateAddr = 0x21DF8F6C;
+        private static int _kcLastBattleState = int.MinValue;
+        private static void SuppressKcDungeonEnd()
+        {
+            // DIAGNOSTIC: the memory-card screen is a PS2 RESET (crash), almost certainly the engine's boss-defeat ->
+            // dungeon-end function running on c15a HP=0 with invalid normal-floor context. Log the battleState switch
+            // (0x21DF8F6C) + clear flags as they change so we can see the defeat transition right before the crash.
+            int bs = Memory.ReadInt(BattleStateAddr);
+            if (bs != _kcLastBattleState) { Console.WriteLine($"[KCstate] battleState {_kcLastBattleState} -> {bs}  (dungeonClear=0x{Memory.ReadUInt(DungeonClearAddr):X8} bossDefeated={Memory.ReadInt(BossDefeatedFlagAddr)})"); _kcLastBattleState = bs; }
+            uint dc = Memory.ReadUInt(DungeonClearAddr);
+            if (dc != 0) { Memory.WriteInt(DungeonClearAddr, 0); Console.WriteLine($"[KCclear] dungeonClear 0x{dc:X8} -> 0"); }
+            int bd = Memory.ReadInt(BossDefeatedFlagAddr);
+            if (bd != 0) { Memory.WriteInt(BossDefeatedFlagAddr, 0); Console.WriteLine($"[KCclear] BossDefeatedFlag {bd} -> 0"); }
+        }
+
+        private static bool _kcSwapDone;
+        private static void ReorderKingsCurseOnce()
+        {
+            if (FindSlotByEid(115) < 0 && FindSlotByEid(100) < 0) { _kcSwapDone = false; return; }   // both gone — re-arm
+            if (_kcSwapDone) return;
+            foreach (var (_, eid) in _kcNativeLayout)
+                if (FindSlotByEid(eid) < 0) return;                       // wait until BOTH are present
+            _kcSwapDone = true;
+            int swaps = 0;
+            foreach (var (t, eid) in _kcNativeLayout)
+            {
+                int s = FindSlotByEid(eid);
+                if (s >= 0 && s != t) { SwapSlots(s, t); swaps++; }
+            }
+            if (swaps == 0) Console.WriteLine("[KCreorder] coffin(115)/king(100) already at native slots 0/1 — 0 swaps");
+            else Console.WriteLine($"[KCreorder] placed coffin(115)->slot0, king(100)->slot1 with {swaps} swap(s)");
         }
 
         // EXPERIMENT: the shield (baria) is natively eid 0; TagCompanions rewrites it to 240, which appears to stop
@@ -2212,6 +2353,21 @@ namespace Dark_Cloud_Improved_Version
                     if (!_iqXlateLogged) { Console.WriteLine($"[IQxlate] Ice Queen STB 0x{stbBase:X8} -> chest ({cx:F0},{cy:F0})"); _iqXlateLogged = true; }
                 }
             }
+            else if (tableIndex == 81)
+            {
+                // King's Curse: OFFSET both him and the phase entity c15b to the largest room by the same delta (like Ice
+                // Queen) so they spawn together on walkable ground. This needs a REAL room — if the grid was wiped/arena-
+                // nulled (map_no 800) the "largest room" is a degenerate corner clump, which strands him somewhere
+                // unreachable. In that case fall back to NOP (the engine's own ArrangementPos placement = findable).
+                DumpKcPhaseEntity();   // one-shot: report the phase entity (eid 100 / c15b) STB + codeOff + position
+                bool realRoom = _anchorSet && Math.Min(_anchorRoomW, _anchorRoomH) >= 3;
+                if (realRoom) RelocateKingsCurseCoffinCluster(stbBase, a);
+                else if (Memory.ReadInt(a) != 0)
+                {
+                    Memory.WriteByteArray(a, new byte[InitCmdLen]);
+                    Console.WriteLine($"[BossPatch] boss 81: no usable room (anchorSet={_anchorSet} room={_anchorRoomW}x{_anchorRoomH}) — NOPed _SET_POSITION @ 0x{a:X8} (engine ArrangementPos)");
+                }
+            }
             else if (Memory.ReadInt(a) != 0)                            // other bosses: NOP the _SET_POSITION push as before
             {
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
@@ -2219,9 +2375,25 @@ namespace Dark_Cloud_Improved_Version
             }
             int rs = BossInfo(tableIndex).runScriptOff;
             int motion = CollapseMotion(tableIndex);
-            if (rs != 0 && motion >= 0)
+            int l120 = Label120Start(tableIndex);
+            if (rs != 0 && motion >= 0 && l120 >= 0)
+            {
+                // King's Curse: rewriting only the _RUN_SCRIPT isn't enough — label-120 has EARLIER commands (before the
+                // _RUN_SCRIPT) that fire the engine's dungeon-end (memory-card/save). NOP the WHOLE defeated-script with a
+                // RET at its start so none of it runs; the collapse is driven entirely by CollapseDrive (label-100), which
+                // keeps running after HP<=0 and overrides any label-120 motion anyway.
+                if (Memory.ReadInt(stbBase + l120) != 15)
+                {
+                    byte[] ret = new byte[12]; System.BitConverter.GetBytes(15u).CopyTo(ret, 0);
+                    Memory.WriteByteArray(stbBase + l120, ret);
+                    Console.WriteLine($"[BossPatch] NOPed label-120 defeated-script (RET @start) for boss {tableIndex} @ 0x{stbBase + l120:X8}");
+                }
+                CollapseDrive(stbBase, tableIndex);
+            }
+            else if (rs != 0 && motion >= 0)
             {
                 // label-120 -> _SET_MOTION(motion,1,2) so the death program plays the collapse (no cutscene).
+                // rs points at the _RUN_SCRIPT cmdId byte (0x6F), pushed via op3 (value@+8 => cmdId vmcode @ rs-8).
                 long rec0 = stbBase + rs - 8;
                 if (Memory.ReadByte(stbBase + rs) == 0x6F)
                 {

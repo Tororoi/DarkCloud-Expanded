@@ -481,7 +481,7 @@ namespace Dark_Cloud_Improved_Version
         // ── Dungeon 3 : Sun & Moon Temple (SMT) ──────────────────────────────────────────
         // Front slots  99–117  RAM 0x00288C20–0x00289400
         // Back  slots 118–134  RAM 0x00289470–0x00289B70
-        // 18 floors.  Boss: KingsCurse + PhaseEntity100 (floor 18).  Event floors: 8, 18.
+        // 18 floors.  Boss: KingsCurseCoffin + PhaseEntity100 (floor 18).  Event floors: 8, 18.
         // NOTE: GetDungeonEventFloors currently returns 17 for the boss floor — should be 18.
 
         internal static readonly FloorSpawnPool[] SMT_Front = new FloorSpawnPool[]
@@ -504,7 +504,7 @@ namespace Dark_Cloud_Improved_Version
             SP.Pool(7, SP.E(Enemies.Phantom.TableIndex,25), SP.E(Enemies.BomberHead.TableIndex,25), SP.E(Enemies.Dune.TableIndex,25), SP.E(Enemies.SteelGiant.TableIndex,25)),                               // [15] floor 15
             SP.Pool(8, SP.E(Enemies.MimicSMT.TableIndex,50), SP.E(Enemies.KingMimicSMT.TableIndex,50)),                                                         // [16] floor 16
             SP.Pool(8, SP.E(Enemies.Dune.TableIndex,25), SP.E(Enemies.KingMimicSMT.TableIndex,25), SP.E(Enemies.BlueDragon.TableIndex,25), SP.E(Enemies.SteelGiant.TableIndex,25)),                               // [17] floor 17
-            SP.Pool(1, SP.E(Enemies.KingsCurse.TableIndex,50), SP.E(Enemies.UnknownPhase100.TableIndex,50)),                                                         // [18] floor 18 — BOSS: KingsCurse + PhaseEntity100
+            SP.Pool(1, SP.E(Enemies.KingsCurseCoffin.TableIndex,50), SP.E(Enemies.KingsCurse.TableIndex,50)),                                                         // [18] floor 18 — BOSS: KingsCurseCoffin + PhaseEntity100
         };
 
         internal static readonly FloorSpawnPool[] SMT_Back = new FloorSpawnPool[]
