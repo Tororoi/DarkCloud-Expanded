@@ -459,33 +459,6 @@ namespace Dark_Cloud_Improved_Version
                 + "Existing spawns may not re-dispatch; if not, it binds on the next spawn/floor.");
         }
 
-        /// <summary>
-        /// "Defuse" boss-class live slots: any slot whose SpeciesDataPtr (slot+0x4C) is non-zero gets it
-        /// zeroed, so the engine treats it like a regular enemy (regular enemies legitimately run with
-        /// 0x4C == 0, so the engine guards against null) instead of running the arena-bound boss behavior
-        /// script that hangs a normal floor. Returns how many slots were defused.
-        /// EXPERIMENTAL: if the floor hang is a one-time boss-intro lock fired at spawn, nulling afterward
-        /// may not un-stick it — clicking this mid-hang tells us which.
-        /// </summary>
-        internal static int DefuseBossSlots()
-        {
-            int defused = 0;
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                long ptrAddr = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.SpeciesDataPtr);
-                int sdp = Memory.ReadInt(ptrAddr);
-                if (sdp != 0)
-                {
-                    ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                    Memory.WriteInt(ptrAddr, 0);
-                    Console.WriteLine($"[EnemyInjector] defused slot {s} (species id {sid}): SpeciesDataPtr 0x{sdp:X8} -> 0");
-                    defused++;
-                }
-            }
-            Console.WriteLine($"[EnemyInjector] defuse: {defused} boss-class slot(s) nulled.");
-            return defused;
-        }
-
         /// <summary>Returns the cave code relocated to <see cref="CaveBase"/>.</summary>
         internal static byte[] BuildCave()
         {
@@ -710,7 +683,7 @@ namespace Dark_Cloud_Improved_Version
         private static int RoarEndFrame(int tableIndex)       => tableIndex switch { 83 => 260, _ => 0  };
 
         // ── Tunables ──────────────────────────────────────────────────────────────────────────────────
-        public  const bool  EnableRoar       = true;     // play the boss "roar" before the collapse (false = collapse only)
+        public  const bool  EnableRoar       = false;     // play the boss "roar" before the collapse (false = collapse only)
         private const float PlaybackFps      = 30f;      // C#-driven death-animation rate (lower = slower motion)
         private const int   FadeMs           = 1600;     // hold the down pose + fade out this long after the collapse, then remove
         private const int   CollapseTimeoutMs = 20000;   // fallback: remove this long after death even if the frame never reaches the end
@@ -785,7 +758,7 @@ namespace Dark_Cloud_Improved_Version
                 // walkable tiles even after she activates.
                 int mapNow = Memory.ReadInt(DungeonAddresses.Map.MapNo);
                 uint mpNow = Memory.ReadUInt(DungeonAddresses.Map.MapPartsPtr);
-                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; _kcPhaseDumped = false; _kcPhaseStb = -1; _kcSwapDone = false; }   // re-arm per floor
+                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; _kcPhaseLogged = false; _kcPhaseStb = -1; _kcSwapDone = false; }   // re-arm per floor
                 // The tile grid is EMBEDDED in the CDungeonMap at +0x9C50 (ArrangementPos reads it to place enemies);
                 // it's valid at floor-entry, independent of the standalone `mapparts` global (which is NULL in her arena).
                 // Dump it as soon as the floor's CDungeonMap exists — i.e. BEFORE we ever swap Ice Queen in.
@@ -817,7 +790,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else { if (TranslateCompanions) PatchCompanionPositions(); PatchShieldTarget(); KorinoyaStandIn(); }
                 }
-                if (ti == 81) { ReorderKingsCurseOnce(); SuppressKcDungeonEnd(); }   // reorder + clamp dungeon-clear flags
+                if (ti == 81) ReorderKingsCurseOnce();   // coffin(115)->slot0, king(100)->slot1 once both are live
                 int dungeon = Memory.ReadByte(Addresses.checkDungeon);
                 // 1) Known addresses for (boss, dungeon) — instant, deterministic, no scan.
                 foreach (long addr in KnownAddrs(ti, dungeon))
@@ -973,16 +946,44 @@ namespace Dark_Cloud_Improved_Version
         {
             float nudgeX = _anchorX, nudgeY = _anchorY + 500f;
             WritePosArgsInt(block81, (int)(0 + nudgeX), (int)(500 - nudgeY));     // c15a native (0,0,500) -> room center
-            // Phase entity c15b (codeOff 0x2fdc, _SET_POSITION @ +0x3678, native 0,0,237). Resolve the LIVE instance via
-            // the eid-100 slot's CRunScript IP — the codeOff scan was hitting a stale pre-spawn TEMPLATE copy (e.g.
-            // 0x01698CC0) while the live instance lives elsewhere (e.g. 0x210E5830). Patching the live STB's SET_POS is
-            // also what fixes the in-fight position reset. Resolvable only once c15b's script is live (post-spawn).
-            long live = LiveKcPhaseStb();
-            if (live >= 0)
+            int cx = (int)(0 + nudgeX), cz = (int)(237 - nudgeY);                // c15b room coords (native 0,0,237)
+            // c15b (codeOff 0x2fdc, _SET_POSITION @ +0x3678). Relocate it via TWO paths so timing never matters:
+            //  (1) pre-spawn: the guarded codeOff scan (exclude coffin + SET_POS signature, so never the coffin) finds
+            //      the TEMPLATE so c15b SPAWNS in the room. (0x01698CC0 was a real c15b template, NOT the coffin.)
+            //  (2) post-spawn: also patch the LIVE instance (via its slot IP) so an in-fight position reset uses the room.
+            if (!(_kcPhaseStb >= 0 && _kcPhaseStb != stb81 && Memory.ReadUInt(_kcPhaseStb) == StbMagic
+                  && (uint)Memory.ReadInt(_kcPhaseStb + 0x54) == 0x2FDCu))
+                _kcPhaseStb = FindKcPhaseStb(stb81);
+            if (_kcPhaseStb >= 0)
             {
-                WritePosArgsInt(live + 0x3678, (int)(0 + nudgeX), (int)(237 - nudgeY));
-                if (_kcPhaseStb != live) { Console.WriteLine($"[KCxlate] LIVE phase c15b STB 0x{live:X8} (coffin81 @0x{stb81:X8}) -> room +({nudgeX:F0},{nudgeY:F0})"); _kcPhaseStb = live; }
+                WritePosArgsInt(_kcPhaseStb + 0x3678, cx, cz);
+                if (!_kcPhaseLogged) { Console.WriteLine($"[KCxlate] c15b template STB 0x{_kcPhaseStb:X8} (coffin81 @0x{stb81:X8}) -> room +({nudgeX:F0},{nudgeY:F0})"); _kcPhaseLogged = true; }
             }
+            long live = LiveKcPhaseStb();
+            if (live >= 0 && live != _kcPhaseStb) WritePosArgsInt(live + 0x3678, cx, cz);
+        }
+        private static bool _kcPhaseLogged;
+        // c15b template scan: StbMagic + codeOff(+0x54)==0x2fdc, NOT the coffin (exclude), AND the real SET_POS push
+        // (op1 push1(36)) at +0x3678. Wide window (c15b loads below the boss-first ScanLo 0x01000000 — genuine fight
+        // had it at raw 0x00EB8E30). PINE reads cached PS2 RAM directly; this covers ~8 MB..26 MB.
+        private const long KcPhaseScanLo = 0x00800000, KcPhaseScanHi = 0x01A00000;
+        private static long FindKcPhaseStb(long exclude)
+        {
+            for (long a = KcPhaseScanLo; a < KcPhaseScanHi; a += (long)ChunkWords * 4)
+            {
+                long end = Math.Min(a + (long)ChunkWords * 4, KcPhaseScanHi);
+                int n = (int)((end - a) / 4);
+                if (n <= 0x16) continue;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 0x16 < n; i++)
+                {
+                    if (w[i] != StbMagic || w[i + 0x15] != 0x2FDCu) continue;
+                    long stb = a + (long)i * 4;
+                    if (stb == exclude) continue;
+                    if (Memory.ReadInt(stb + 0x3678) == 1 && Memory.ReadInt(stb + 0x3678 + 4) == 36) return stb;
+                }
+            }
+            return -1;
         }
 
         // Resolve the LIVE c15b (King's Curse, eid 100) STB from its slot's CRunScript IP (IP @ 0x21E4D5A0+slot*0x48+0x30
@@ -1001,33 +1002,6 @@ namespace Dark_Cloud_Improved_Version
             for (int i = w.Length - 1; i >= 0; i--)
                 if (w[i] == StbMagic && (uint)Memory.ReadInt(lo + (long)i * 4 + 0x54) == 0x2FDCu) return lo + (long)i * 4;
             return -1;
-        }
-
-        // One-shot diagnostic: the phase entity is eid 100 (KingsCurse/c15b). Resolve ITS slot's STB directly from
-        // the live CRunScript IP (no codeOff filter) and report codeOff(+0x54) + the words at +0x3678 (expected SET_POS
-        // push1(36)) + its slot world pos. Tells us why FindKcPhaseStb misses it (wrong codeOff? no STB until transform?).
-        private static bool _kcPhaseDumped;
-        private static void DumpKcPhaseEntity()
-        {
-            if (_kcPhaseDumped) return;
-            int slot = FindSlotByEid(100);
-            if (slot < 0) return;
-            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + (long)slot * 0x48 + 0x30);
-            if (ipRaw == 0) return;     // c15b script not live yet — retry next tick (don't latch on the IP=0 spawn frame)
-            _kcPhaseDumped = true;
-            long stb = -1;
-            if (ipRaw != 0)
-            {
-                long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
-                long lo = Math.Max(0x20000000, ip - 0x8000);
-                int n = (int)((ip - lo) / 4);
-                if (n > 1) { uint[] w = Memory.ReadUIntBatch(lo, n); for (int i = w.Length - 1; i >= 0; i--) if (w[i] == StbMagic) { stb = lo + (long)i * 4; break; } }
-            }
-            float px = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.LocationX));
-            float py = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.LocationY));
-            if (stb < 0) { Console.WriteLine($"[KCphase] eid100 @slot {slot}: IP=0x{ipRaw:X8} pos=({px:F0},{py:F0}) — no STB resolved (phase script not live until transform?)"); return; }
-            uint co = (uint)Memory.ReadInt(stb + 0x54);
-            Console.WriteLine($"[KCphase] eid100 @slot {slot}: STB=0x{stb:X8} codeOff=0x{co:X} +0x3678=[op{Memory.ReadInt(stb + 0x3678)},v{Memory.ReadInt(stb + 0x367C)}] pos=({px:F0},{py:F0})");
         }
 
         private static void PatchCompanionPositions()
@@ -1116,41 +1090,6 @@ namespace Dark_Cloud_Improved_Version
             }
             return -1;
         }
-        // One-shot: dump baria's (shield) command flow to find the reposition math (_GET_MONSTOR_POS(IQ) -> compute ->
-        // _SET_POSITION) that flings it to ~+2000 when Ice Queen is shifted.
-        private static bool _bariaDumped;
-        private static void DumpBariaHandler()
-        {
-            if (_bariaDumped) return;
-            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
-            long stb = -1;
-            foreach (long addr in KnownAddrs(101, dungeon))
-                if (Memory.ReadUInt(addr) == StbMagic && (uint)Memory.ReadInt(addr + 0x54) == 0x874) { stb = addr; break; }
-            if (stb < 0) stb = ScanForCodeOff(0x874, new System.Collections.Generic.HashSet<long>());
-            if (stb < 0) return;
-            _bariaDumped = true;
-            var cmd = new System.Collections.Generic.Dictionary<int, string>
-            {
-                {0x24,"SET_POS"}, {0x0B,"GET_POS"}, {0x0A,"GET_DIST"}, {0xD5,"GET_MONSTOR_POS"}, {0xE1,"GET_MONSTOR_VEC"},
-                {0xDC,"SET_GLOBAL"}, {0xDD,"GET_GLOBAL"}, {0xC8,"SET_MOTION"}, {0x20,"SET_MOVE"}, {0x22,"CHK_MOVE"},
-                {0x1F,"GET_DIR"}, {0x1E,"GET_VEC"}, {0x21,"SET_ROT"},
-            };
-            Console.WriteLine($"[BARIA] baria STB 0x{stb:X8} codeOff 0x874 — reposition flow:");
-            for (int k = 0; k < 290; k++)
-            {
-                int off = 0x874 + k * 12;
-                int op = Memory.ReadInt(stb + off), a1 = Memory.ReadInt(stb + off + 4), a2 = Memory.ReadInt(stb + off + 8);
-                string note = null;
-                if (op == 3 && cmd.TryGetValue(a2, out var c3)) note = "CMD " + c3;
-                else if (op == 3) note = $"push {a2}";
-                else if (op == 1 && cmd.TryGetValue(a1, out var c1)) note = "CMD " + c1;
-                else if (op == 1) note = $"push1 {a1}";
-                else note = op switch { 21 => $"EXT({a1})", 23 => "YIELD", 4 => $"JMP->0x{a1:X}", 17 => $"BRF->0x{a1:X}", 18 => $"BRT->0x{a1:X}", 15 => "RET", 14 => $"BINOP(0x{a1:X})", 16 => "POP", _ => null };
-                if (note != null) Console.WriteLine($"[BARIA] +0x{off:X}: {note}");
-                if (op == 15) break;
-            }
-        }
-
         // Resolve a slot's STB base from its live CRunScript instruction pointer (CRunScript @ 0x21E4D5A0+slot*0x48,
         // IP @ +0x30 points INTO the loaded STB) by scanning back to the "STB\0" header with a known codeOff. This
         // disambiguates the shared-codeOff companions (reiki vs i_tatumaki = 0x3AC, kori vs i_meteo = 0x5EC) by slot.
@@ -1215,105 +1154,6 @@ namespace Dark_Cloud_Improved_Version
         // large room and (with the corner-record conversion) place Ice Queen there instead of a fixed offset/chest.
         private static bool _mapDumped;
         private static int _lastMapNo = -1;
-        // Find the live collision mesh (CCollisionMDT, vtable 0x2A10D0/0x2A1100 @ instance+0x20) and dump its MDT
-        // geometry: vertex count, vertex bounds (the floor extent), centroid, sample polygons. This is the walkable
-        // surface (present during the fight, unlike the cleared tile grid) we'll use to place her in an open area.
-        private static bool _meshDumped;
-        private static void DumpMesh()
-        {
-            if (_meshDumped) return;
-            _meshDumped = true;
-            int vhits = 0, candCount = 0;
-            // overall floor extent (all pieces) + the largest-AREA piece (the biggest open room)
-            float flMinX = 1e9f, flMaxX = -1e9f, flMinZ = 1e9f, flMaxZ = -1e9f;
-            float bestArea = -1, bestCx = 0, bestCz = 0, bestSx = 0, bestSz = 0; long bestInst = 0;
-            for (long a = 0x20000000; a < 0x22000000; a += (long)ChunkWords * 4)
-            {
-                long end = Math.Min(a + (long)ChunkWords * 4, 0x22000000);
-                int n = (int)((end - a) / 4);
-                uint[] w = Memory.ReadUIntBatch(a, n);
-                for (int i = 0; i < n; i++)
-                {
-                    if (w[i] != 0x2A10D0 && w[i] != 0x2A1100) continue;
-                    vhits++;
-                    long cand = a + (long)i * 4 - 0x20;
-                    long m = DungeonAddresses.Map.Deref(Memory.ReadUInt(cand + 0x30));
-                    if (m == 0) continue;
-                    int vc = Memory.ReadInt(m + 0xC);
-                    if (vc < 3 || vc >= 500000) continue;
-                    candCount++;
-                    long verts = m + (uint)Memory.ReadInt(m + 0x10);
-                    int sc = Math.Min(vc, 256);
-                    uint[] vb = Memory.ReadUIntBatch(verts, sc * 4);   // 4 ints (16 bytes) per vertex
-                    float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
-                    for (int v = 0; v < sc; v++)
-                    {
-                        float x = BitConverter.Int32BitsToSingle((int)vb[v * 4]);
-                        float z = BitConverter.Int32BitsToSingle((int)vb[v * 4 + 2]);
-                        if (x < minX) minX = x; if (x > maxX) maxX = x;
-                        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-                    }
-                    float sx = maxX - minX, sz = maxZ - minZ, area = sx * sz, cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
-                    if (cx < flMinX) flMinX = cx; if (cx > flMaxX) flMaxX = cx;
-                    if (cz < flMinZ) flMinZ = cz; if (cz > flMaxZ) flMaxZ = cz;
-                    if (candCount <= 30) Console.WriteLine($"[MESH] piece@0x{cand:X8} vc={vc} center=({cx:F0},{cz:F0}) size=({sx:F0},{sz:F0})");
-                    if (area > bestArea) { bestArea = area; bestInst = cand; bestCx = cx; bestCz = cz; bestSx = sx; bestSz = sz; }
-                }
-            }
-            if (candCount == 0) { Console.WriteLine($"[MESH] no valid mesh (vtable-value hits={vhits})"); return; }
-            Console.WriteLine($"[MESH] {candCount} pieces; piece-CENTERS span X[{flMinX:F0},{flMaxX:F0}] Z[{flMinZ:F0},{flMaxZ:F0}]");
-            Console.WriteLine($"[MESH] LARGEST-AREA room: inst@0x{bestInst:X8} center=({bestCx:F0},{bestCz:F0}) size=({bestSx:F0},{bestSz:F0}) area={bestArea:F0}");
-            // Reverse-lookup the room's owning CFrame (collision ptr @ CFrame+4) and dump it broadly: the world
-            // translation (floats ~700-2000) is the piece's placement — that's the room's world position.
-            uint ptrVal = (uint)(bestInst - 0x20000000);
-            long frame = -1;
-            for (long a = 0x20000000; a < 0x22000000 && frame < 0; a += (long)ChunkWords * 4)
-            {
-                long end = Math.Min(a + (long)ChunkWords * 4, 0x22000000);
-                int n = (int)((end - a) / 4);
-                uint[] w = Memory.ReadUIntBatch(a, n);
-                for (int i = 0; i < n; i++)
-                    if (w[i] == ptrVal) { frame = a + (long)i * 4 - 4; break; }
-            }
-            if (frame < 0) { Console.WriteLine($"[MESH] room CFrame (ptr 0x{ptrVal:X}) NOT found"); return; }
-            Console.WriteLine($"[MESH] room CFrame@0x{frame:X8} (local). Looking for parent CMapObject (CFrame @ +0xD0)...");
-            // The parent CMapObject references this CFrame at +0xD0 and holds the world position at +0x60.
-            uint framePtr = (uint)(frame - 0x20000000);
-            long mapObj = -1;
-            for (long a = 0x20000000; a < 0x22000000 && mapObj < 0; a += (long)ChunkWords * 4)
-            {
-                long end = Math.Min(a + (long)ChunkWords * 4, 0x22000000);
-                int n = (int)((end - a) / 4);
-                uint[] w = Memory.ReadUIntBatch(a, n);
-                for (int i = 0; i < n; i++)
-                    if (w[i] == framePtr) { mapObj = a + (long)i * 4 - 0xD0; break; }
-            }
-            if (mapObj < 0) { Console.WriteLine($"[MESH] parent CMapObject (CFrame ptr 0x{framePtr:X}) NOT found"); return; }
-            Console.WriteLine($"[MESH] CMapObject@0x{mapObj:X8} coords (|f|50-6000) + pointers (+0x0..+0x100):");
-            for (int o = 0; o <= 0x100; o += 4)
-            {
-                int iv = Memory.ReadInt(mapObj + o);
-                float f = BitConverter.Int32BitsToSingle(iv);
-                uint uv = (uint)iv;
-                bool ptr = (uv > 0x100000 && uv < 0x2000000) || (uv > 0x20100000 && uv < 0x22000000);
-                bool coord = Math.Abs(f) > 50f && Math.Abs(f) < 6000f;
-                if (ptr) Console.WriteLine($"[MESH]   +0x{o:X}: PTR 0x{uv:X8}");
-                else if (coord) Console.WriteLine($"[MESH]   +0x{o:X}: {f:F0}");
-            }
-            long tgt = DungeonAddresses.Map.Deref((uint)Memory.ReadInt(mapObj + 0xA4));
-            if (tgt == 0) return;
-            Console.WriteLine($"[MESH] CMapObject+0xA4 -> 0x{tgt:X8}; WORLD coords (|f|>200) + ptrs (+0x0..+0x200):");
-            for (int o = 0; o <= 0x200; o += 4)
-            {
-                int iv = Memory.ReadInt(tgt + o);
-                float f = BitConverter.Int32BitsToSingle(iv);
-                uint uv = (uint)iv;
-                if ((uv > 0x100000 && uv < 0x2000000) || (uv > 0x20100000 && uv < 0x22000000))
-                    Console.WriteLine($"[MESH]   +0x{o:X}: PTR 0x{uv:X8}");
-                else if (Math.Abs(f) > 200f && Math.Abs(f) < 10000f)
-                    Console.WriteLine($"[MESH]   +0x{o:X}: {f:F0}");
-            }
-        }
 
         // The mesh world-placement is grid-derived (cleared during her fight). Pivot: enemies ARE arranged onto
         // walkable tiles, so their CCharacter positions are real walkable world coords. Dump them to pick an anchor.
@@ -1360,7 +1200,7 @@ namespace Dark_Cloud_Improved_Version
             long gb = nowDng + 0x9C50;   // MAPPARTS is embedded in the CDungeonMap (ArrangementPos: a0 = CDungeonMap + 0x9C50)
             var tile = new bool[GridRows, GridCols];
             int populated = 0, wiped = 0, empty = 0;
-            var rows = new string[GridRows];
+            Console.WriteLine($"[MAP] mapno={Memory.ReadInt(DungeonAddresses.Map.MapNo)} CDungeonMap@0x{nowDng:X8} MAPPARTS@0x{gb:X8}  (' '=empty '-'=wiped '#'=tile  C=chest A=atra T=trap)");
             for (int row = 0; row < GridRows; row++)
             {
                 var sb = new System.Text.StringBuilder();
@@ -1374,15 +1214,9 @@ namespace Dark_Cloud_Improved_Version
                     if (objCells.TryGetValue(row * GridCols + col, out var m)) ch = m;   // overlay object marker
                     sb.Append(ch);
                 }
-                rows[row] = sb.ToString();
+                Console.WriteLine($"[MAP] r{row:D2} {sb}");
             }
-            // Only emit the map when it's actually populated — skip the noisy empty/wiped reads while a floor is loading.
-            if (populated > 0)
-            {
-                Console.WriteLine($"[MAP] mapno={Memory.ReadInt(DungeonAddresses.Map.MapNo)} CDungeonMap@0x{nowDng:X8} MAPPARTS@0x{gb:X8}  (' '=empty '-'=wiped '#'=tile  C=chest A=atra T=trap)");
-                for (int row = 0; row < GridRows; row++) Console.WriteLine($"[MAP] r{row:D2} {rows[row]}");
-                Console.WriteLine($"[MAP] cells: {populated} tiles, {empty} empty, {wiped} wiped(-1), {objCells.Count} objects — grid is POPULATED (valid floor layout)");
-            }
+            Console.WriteLine($"[MAP] cells: {populated} tiles, {empty} empty, {wiped} wiped(-1), {objCells.Count} objects — grid is {(populated > 0 ? "POPULATED (valid floor layout)" : wiped > 0 ? "WIPED (-1, too late)" : "EMPTY")}");
             return (populated, tile);
         }
 
@@ -1715,7 +1549,7 @@ namespace Dark_Cloud_Improved_Version
         // each step since swaps shuffle things). Runs once per fight; re-armed when Ice Queen despawns.
         private static void ReorderToNativeOnce()
         {
-            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _meshDumped = false; _anchorSet = false; _enPosDumped = false; _fsDumped = false; _shieldSlot = -1; _reikiDumped = false; return; }   // Ice Queen gone — re-arm
+            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _anchorSet = false; _enPosDumped = false; _fsDumped = false; _shieldSlot = -1; _reikiDumped = false; return; }   // Ice Queen gone — re-arm
             if (_swapDone) return;
             foreach (var (_, eid) in _nativeLayout)
                 if (FindSlotByEid(eid) < 0) return;                       // wait until all 7 are present
@@ -1743,25 +1577,6 @@ namespace Dark_Cloud_Improved_Version
             (0, 115),   // coffin (c15a) — the HP/kill target
             (1, 100),   // king   (c15b) — the active, lockable attacker
         };
-        // The coffin (c15a, eid 115) is a dungeon-END boss: the engine fires the dungeon-clear/save (memory-card screen)
-        // when its HP hits 0. On a force-spawn (normal floor) we don't want the dungeon to end. Clamp the clear flags to
-        // 0 every tick so the engine never advances the exit sequence. DATA-only (state flags, not code). Logs catches so
-        // we can see whether the clamp beats the engine or loses the ~50ms race (the existing Dayuppy poller is too slow).
-        private const long DungeonClearAddr = 0x21DF881C, BossDefeatedFlagAddr = 0x21DF94FC, BattleStateAddr = 0x21DF8F6C;
-        private static int _kcLastBattleState = int.MinValue;
-        private static void SuppressKcDungeonEnd()
-        {
-            // DIAGNOSTIC: the memory-card screen is a PS2 RESET (crash), almost certainly the engine's boss-defeat ->
-            // dungeon-end function running on c15a HP=0 with invalid normal-floor context. Log the battleState switch
-            // (0x21DF8F6C) + clear flags as they change so we can see the defeat transition right before the crash.
-            int bs = Memory.ReadInt(BattleStateAddr);
-            if (bs != _kcLastBattleState) { Console.WriteLine($"[KCstate] battleState {_kcLastBattleState} -> {bs}  (dungeonClear=0x{Memory.ReadUInt(DungeonClearAddr):X8} bossDefeated={Memory.ReadInt(BossDefeatedFlagAddr)})"); _kcLastBattleState = bs; }
-            uint dc = Memory.ReadUInt(DungeonClearAddr);
-            if (dc != 0) { Memory.WriteInt(DungeonClearAddr, 0); Console.WriteLine($"[KCclear] dungeonClear 0x{dc:X8} -> 0"); }
-            int bd = Memory.ReadInt(BossDefeatedFlagAddr);
-            if (bd != 0) { Memory.WriteInt(BossDefeatedFlagAddr, 0); Console.WriteLine($"[KCclear] BossDefeatedFlag {bd} -> 0"); }
-        }
-
         private static bool _kcSwapDone;
         private static void ReorderKingsCurseOnce()
         {
@@ -2359,7 +2174,6 @@ namespace Dark_Cloud_Improved_Version
                 // Queen) so they spawn together on walkable ground. This needs a REAL room — if the grid was wiped/arena-
                 // nulled (map_no 800) the "largest room" is a degenerate corner clump, which strands him somewhere
                 // unreachable. In that case fall back to NOP (the engine's own ArrangementPos placement = findable).
-                DumpKcPhaseEntity();   // one-shot: report the phase entity (eid 100 / c15b) STB + codeOff + position
                 bool realRoom = _anchorSet && Math.Min(_anchorRoomW, _anchorRoomH) >= 3;
                 if (realRoom) RelocateKingsCurseCoffinCluster(stbBase, a);
                 else if (Memory.ReadInt(a) != 0)

@@ -205,31 +205,6 @@ namespace Dark_Cloud_Improved_Version
         /// immunity and the Queen's physical immunity are visible). Dumps EVERY live slot incl. eid-0 sub-entities,
         /// no miniboss filter. <paramref name="tag"/> labels the snapshot.
         /// </summary>
-        /// If King's Curse (id 115) or its phase entity (id 100) is present in any live slot, dump the full per-slot
-        /// boss table (incl. STB codeOff + world pos + playing motion). Called from the always-on floor-entry path so
-        /// the GENUINE fight (no boss armed) is captured, not just the DBC roster spawn.
-        private static bool _kcDumped;
-        private static System.DateTime _kcLastDump = System.DateTime.MinValue;
-        internal static void BossInfoIfKingsCurseCoffin(string tag)
-        {
-            bool present = false;
-            for (int i = 0; i < 16; i++)
-            {
-                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
-                if (Memory.ReadInt(slotBase) == -1) continue;
-                ushort eid = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
-                if (eid == 115 || eid == 100) { present = true; break; }
-            }
-            if (!present) { _kcDumped = false; return; }
-            // Dump on first appearance AND re-dump every 3s while present: the spawn-frame snapshot has IP=0/pos=(0,0)
-            // (scripts not yet initialized), so the re-dumps capture the LIVE state (codeOff, position, motion).
-            if (!_kcDumped || (System.DateTime.UtcNow - _kcLastDump).TotalSeconds >= 3)
-            {
-                _kcDumped = true; _kcLastDump = System.DateTime.UtcNow;
-                BossInfo(tag);
-            }
-        }
-
         internal static void BossInfo(string tag)
         {
             Console.WriteLine($"[BossInfo] === {tag} ===");
@@ -779,40 +754,6 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine("[ModelDump] scan complete");
         }
         // --- END DEBUG ---
-
-        /// <summary>
-        /// Logs SpeciesDataPtr and surrounding words for every active boss-species slot.
-        /// Call this a few seconds after a boss spawns on a redirected floor to capture the
-        /// pointer value and the data structure it points to (which contains the defeat callback).
-        /// Look for values in the 0x001XXXXX range — those are PS2-native code pointers.
-        /// </summary>
-        internal static void LogBossSlotSpeciesDataPtrs()
-        {
-            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
-            {
-                int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
-                if (Memory.ReadInt(slotBase) <= 0) continue;
-                ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
-                if (!Enemies.BossEnemies.ContainsKey(id)) continue;
-
-                int rawPtr = Memory.ReadInt(slotBase + EnemySlotOffsets.SpeciesDataPtr);
-                uint pcsx2Ptr = ((uint)rawPtr & 0x1FFFFFFFu) + 0x20000000u;
-                Console.WriteLine($"[BossPtrDump] slot={i:D2} species={id} SpeciesDataPtr raw=0x{(uint)rawPtr:X8} pcsx2=0x{pcsx2Ptr:X8}");
-
-                // Dump 128 bytes (32 words) at the pointed-to address
-                Console.Write($"[BossPtrDump]   words: ");
-                for (int w = 0; w < 32; w++)
-                {
-                    int word = Memory.ReadInt((int)(pcsx2Ptr + (uint)(w * 4)));
-                    uint uword = (uint)word;
-                    // Flag values that look like PS2-native code pointers (= potential callbacks)
-                    string flag = (uword >= 0x00100000 && uword <= 0x001FFFFF) ? "*" : "";
-                    Console.Write($"[{w:D2}]=0x{uword:X8}{flag} ");
-                    if ((w & 3) == 3) Console.WriteLine();
-                }
-                Console.WriteLine();
-            }
-        }
 
         /// <summary>
         /// Scans candidate memory regions for walkable tile-map data and writes a hex dump

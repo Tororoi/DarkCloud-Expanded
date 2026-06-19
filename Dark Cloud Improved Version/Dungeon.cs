@@ -117,7 +117,6 @@ namespace Dark_Cloud_Improved_Version
                     // EnemySlots.MonitorFlashTimer();
                     // EnemySlots.TeleportEnemiesDebug();        // DEBUG: remove when done
                     EnemySlots.DumpModelTableForRenderPosition(); // DEBUG: remove when done
-                    EnemySlots.BossInfoIfKingsCurseCoffin("live KC fight"); // one-shot dump when the boss appears post-cutscene
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -772,7 +771,6 @@ namespace Dark_Cloud_Improved_Version
             // EnemySlots.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
             // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             EnemySlots.LogEnemySpawns();
-            EnemySlots.BossInfoIfKingsCurseCoffin($"floor-entry dun={currentDungeon} floor={currentFloor + 1}");
             EnemySlots.LogFloorDataForTileMapSearch();
 
             if (numNormalEnemies > 3)
@@ -802,23 +800,6 @@ namespace Dark_Cloud_Improved_Version
             // EnemySlots.ApplyTestModifications();
             EnemySlots.ResetPollState();
             EnemySlots.FixModelRedirectSpawnPositions();
-            new Thread(() => { Thread.Sleep(3000); EnemySlots.LogBossSlotSpeciesDataPtrs(); }).Start();
-            new Thread(() =>
-            {
-                for (int sample = 1; sample <= 5; sample++)
-                {
-                    Thread.Sleep(5000);
-                    for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
-                    {
-                        ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
-                        if (!Enemies.BossEnemies.ContainsKey(id)) continue;
-                        float x = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.LocationX));
-                        float y = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.LocationY));
-                        float z = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.LocationZ));
-                        Console.WriteLine($"[PosProbe] t+{sample * 5}s slot={i} id={id} pos=({x:F1},{y:F1},{z:F1})");
-                    }
-                }
-            }) { IsBackground = true }.Start();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 
