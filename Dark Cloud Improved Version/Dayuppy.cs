@@ -785,7 +785,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] bytes;
             int addressPointer = Memory.ReadInt(0x202A2DDC);
 
-            addressPointer += 0x20000000;
+            addressPointer += (int)Memory.Pcsx2Base;
 
             switch (currentElem)
             {

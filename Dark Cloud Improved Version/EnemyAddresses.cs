@@ -50,6 +50,56 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// STB behavior-script file format and VM constants. RE'd 2026-06-19 via exe__10CRunScript @0x23E080.
+    ///
+    /// Header (all 32-bit little-endian):
+    ///   +0x00  magic "STB\0" (0x00425453) — validate before patching
+    ///   +0x04  total code-section size in bytes
+    ///   +0x08  byte offset of the code section from the header base (read with <see cref="CodeSectionOff"/>)
+    ///   +0x0C  byte offset of the label table (8-byte entries: labelId@+0, codeOff@+4)
+    ///   +0x10  number of label-table entries
+    ///
+    /// Every instruction is a fixed-size 12-byte record (vmcode_t): op@+0, operandA@+4, operandB@+8.
+    /// Dispatch table at 0x29FB80 (31 ops). See <see cref="Op*"/> constants for the opcodes used in
+    /// enemy scripts. External commands (op21) are dispatched via a per-program funcdata table; the
+    /// funcId is pushed as an int literal immediately before the op21 instruction. See <see cref="Fn*"/>.
+    /// </summary>
+    internal static class StbVm
+    {
+        // ── Header ───────────────────────────────────────────────────────────
+        internal const int Magic          = 0x00425453; // "STB\0" — first word; validate before patching
+        internal const int CodeSectionOff = 0x08;       // header field: byte offset of the code section
+        internal const int LabelTableOff  = 0x0C;       // header field: byte offset of the label table
+        internal const int LabelCount     = 0x10;       // header field: number of label-table entries
+
+        // ── Instruction layout ────────────────────────────────────────────
+        internal const int InstrSize = 0x0C;    // 12 bytes per vmcode_t
+        internal const int OperandA  = 0x04;    // byte offset of operandA within a vmcode_t (type for op3; variable index for op1)
+        internal const int OperandB  = 0x08;    // byte offset of operandB within a vmcode_t (value for op3 int-literal; scope for op1; callee offset for call_func)
+
+        // ── Opcodes (op field) ────────────────────────────────────────────
+        internal const int OpPush1       = 1;  // push-VARIABLE: operandA = variable index, operandB = scope (ScopeLocal = arg/local)
+        internal const int OpPush2       = 2;  // push-VARIABLE: float variant (same layout)
+        internal const int OpPush3       = 3;  // push-LITERAL:  operandA = type (TypeInt/Float/String), operandB = value
+        internal const int OpCallFunc    = 19; // call_func: jump to sub-program; operandB = code offset of callee
+        internal const int OpCallFuncCond = 27; // call_func conditional variant (same layout)
+        internal const int OpExt         = 21; // external-command call; operandB must be 0; first pushed arg = funcId
+
+        // ── Operand type/scope qualifiers ─────────────────────────────────
+        internal const int TypeInt    = 1; // operandA of OpPush3: int32 literal (operandB = the value)
+        internal const int TypeFloat  = 2; // operandA of OpPush3: float literal (operandB = IEEE-754 bits)
+        internal const int ScopeLocal = 1; // operandB of OpPush1: scope 1 = local / call argument (as opposed to global)
+
+        // ── External command function IDs (as pushed in the STB as funcId to OpExt) ─────────────
+        // These are the per-program funcIds observed in monster STBs, one step before the global
+        // dispatch table (0x2917C8). _SET_SHOT and _SET_SHOT2 entries: argc==6 → explicit damage arg
+        // (5th pushed value); argc!=6 → "default" shot (damage comes from BehaviorScriptTable +0x3C).
+        internal const int FnSetShot      = 133; // _SET_SHOT   with explicit damage (argc==6)
+        internal const int FnSetShotReg   = 135; // _SET_SHOT   registry entry (not observed in any monster STB)
+        internal const int FnSetShot2     = 229; // _SET_SHOT2 / second-shot with explicit damage (argc==6)
+    }
+
+    /// <summary>
     /// CRunScript — the per-enemy-slot STB-VM state, a sub-array inside CMainMonstorUnit at
     /// Base + 0x54DD0 (PCSX2 0x21E4D5A0), stride 0x48. One entry per FloorSlots/CCharacter slot index.
     /// (Listed in EnemyModelInjector._slotBlocks as the third per-slot block.)
@@ -93,7 +143,9 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const int OffsetInUnit = 0x5A4D0; // base offset within CMainMonstorUnit
         internal const int SlotStride   = 0x350;   // per-slot
-        internal const int EntryStride  = 4;       // per body-part damage int
+        internal const int EntryStride  = 4;       // per body-part damage int (int32)
+        internal const int EntryCount   = 32;      // body-part slots per enemy (covers any observed enemy)
+        internal const int ReadLength   = EntryCount * EntryStride; // 0x80 — safe read window for the full array
 
         /// <summary>EE base address of <paramref name="slot"/>'s per-body-part melee-damage array.</summary>
         internal static long ArrayAddr(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + OffsetInUnit;
@@ -392,8 +444,13 @@ namespace Dark_Cloud_Improved_Version
         internal const int DamageReduction = 0x064; // ushort — flat damage-taken reduction (slot DefenseStats low)
         internal const int WeaponDefense   = 0x066; // ushort — weapon-damage defense, fed to SwordDmgCheck1 (slot DefenseStats high)
 
-        internal const int Unk014     = 0x068; // ushort — 65535 for most enemies; non-zero for some (values 0,2,3,11); purpose unknown
-        internal const int Unk016     = 0x06A; // ushort — 65535 for all observed valid enemies
+        // +0x068/+0x06A: BST shot-effect indices — confirmed 2026-06-20 (projectile-damage RE). Each is the
+        // 0-based index into BehaviorScriptTable.PointerArray (0x27FA70) that selects which BST entry governs
+        // this species' primary/secondary shot. 0xFFFF = no shot effect. For "default" shooters (STB _SET_SHOT
+        // with argc!=6), the engine reads the selected entry's +0x3C base damage. Observed values: 0,2,3,11
+        // (primary) and 0xFFFF (secondary, i.e. no secondary shot). Set per species in CMonstorUnit::SetupBaseModel.
+        internal const int PrimaryBstIndex   = 0x068; // ushort — primary BST shot-effect index into PointerArray; 0xFFFF = none
+        internal const int SecondaryBstIndex = 0x06A; // ushort — secondary BST shot-effect index; 0xFFFF = none (observed for all species so far)
 
         internal const int Abs        = 0x06C; // int    — XP rewarded to the player on kill; written to slot Abs (0x0B0) at spawn
         internal const int MinGoldDrop= 0x070; // int    — minimum gold dropped on death; written to slot MinGoldDrop (0x034) at spawn
@@ -592,7 +649,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>PCSX2 address of a floor block's first entry. Pass a base from LayoutBase/UraLayoutBase.</summary>
         internal static int FloorAddress(int layoutBaseNative, int floor) =>
-            (layoutBaseNative + 0x20000000) + floor * FloorStride;
+            (int)(layoutBaseNative + Memory.Pcsx2Base) + floor * FloorStride;
 
         /// <summary>PCSX2 address of entry <paramref name="entry"/> (0–8) within a floor block.</summary>
         internal static int EntryAddress(int layoutBaseNative, int floor, int entry) =>

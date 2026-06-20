@@ -89,7 +89,7 @@ namespace Dark_Cloud_Improved_Version
                     if (idx == 0xFFFF) continue;
                     int bt = Memory.ReadInt(BstPtrArray + idx * 4);
                     if (bt == 0) continue;
-                    long btRam = ((long)bt & 0x1FFFFFFF) | 0x20000000;
+                    long btRam = Memory.ToMmu(bt);
                     sb.Append($" {tag}=idx{idx}->bst0x{bt:X}+0x3C={Memory.ReadInt(btRam + BstDamageField)}");
                 }
                 Console.WriteLine($"[ShotProbe] slot {slot} id {id} TI {ti} default-shot(BST):{sb}");
@@ -102,7 +102,7 @@ namespace Dark_Cloud_Improved_Version
         {
             int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
             if (stbNative == 0 || stbNative == -1) return 0;
-            return (stbNative & 0x1FFFFFFF) | 0x20000000;
+            return Memory.ToMmu(stbNative);
         }
 
         // The live STB base for this slot (CRunScript+0x3C) + magic validation, to locate the shot-damage constant.
@@ -110,7 +110,7 @@ namespace Dark_Cloud_Improved_Version
         {
             int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
             if (stbNative == 0 || stbNative == -1) return "  (stb: none)";
-            long stb = (stbNative & 0x1FFFFFFF) | 0x20000000;
+            long stb = Memory.ToMmu(stbNative);
             int magic = Memory.ReadInt(stb);
             string ok = magic == StbMagic ? "STB" : $"?0x{magic:X8}";
             return $"  (stb native 0x{stbNative:X8} magic {ok})";

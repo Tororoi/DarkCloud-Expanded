@@ -83,10 +83,6 @@ namespace Dark_Cloud_Improved_Version
         // the RAM address of the entry's +0x3C field; never cleared (the originals are the boot values).
         private static readonly Dictionary<long, int> _bstOriginal = new();
         private static bool _bstDirty;      // any BST entry currently holds a scaled value (needs restore on exit)
-        private const long SpeciesTableRam = 0x2027FB00;  // EnemySpeciesTable record 0 in RAM (native 0x27FB00)
-        private const long BstPtrArrayRam  = 0x2027FA70;  // BST pointer array in RAM (native 0x27FA70)
-        private const int  ShotIdxPrimary  = 0x68;        // species record: primary shot-effect index (default shots use this)
-        private const int  BstDamageOff    = 0x3C;        // BST entry: shot base damage
 
         private static bool IsBoss(in EnemyDefaults e) =>
             !string.IsNullOrEmpty(e.ModelCode) && e.ModelCode[0] == 'c';
@@ -375,7 +371,7 @@ namespace Dark_Cloud_Improved_Version
             var scaledResults = new HashSet<int>(map.Values);     // don't re-patch a value we produced (anti-cascade)
 
             long arr = DmgParaCache.ArrayAddr(slot);
-            byte[] d = Memory.ReadByteArray(arr, 0x80);            // 32 body-part entries — covers any enemy
+            byte[] d = Memory.ReadByteArray(arr, DmgParaCache.ReadLength);
             if (d == null) return;
             int hits = 0;
             for (int i = 0; i + 4 <= d.Length; i += 4)
@@ -392,8 +388,7 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine($"[Normalize]   slot {slot} melee: factor {f:F2} but none of [{string.Join(",", e.MeleeDamage)}] found in cache @0x{arr:X8}");
         }
 
-        // Magic at RS_PROG_HEADER+0x00 ("STB\0") — validates a loaded STB before patching it.
-        private const int StbMagic = 0x00425453;
+        // See StbVm in EnemyAddresses.cs for header/opcode/funcId constants used below.
 
         // Scale a slot's PROJECTILE damage by patching the STB op3 int-literal that feeds _SET_SHOT/_SET_SHOT2's
         // 5th (damage) arg. Unlike melee — whose value is latched once into the RAM cache at init — the shot-damage
@@ -422,21 +417,21 @@ namespace Dark_Cloud_Improved_Version
             int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
             if (stbNative == 0 || stbNative == -1) return;
             if (!_projPatchedStb.Add(stbNative)) return;     // this STB's shot literals already scaled this floor
-            long stb = ((long)stbNative & 0x1FFFFFFF) | 0x20000000;
-            if (Memory.ReadInt(stb) != StbMagic) return;     // not a valid loaded STB
+            long stb = Memory.ToMmu(stbNative);
+            if (Memory.ReadInt(stb) != StbVm.Magic) return;   // not a valid loaded STB
 
             const int Window = 0xC000;                        // covers the largest enemy STB (~44 KB)
             byte[] d = Memory.ReadByteArray(stb, Window);
             if (d == null || d.Length < 0x10) return;
             int Word(int i) => d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24);
-            int code = Word(8);                               // code-section start (header+0x08)
-            if (code < 0xC || code >= d.Length) return;
+            int code = Word(StbVm.CodeSectionOff);
+            if (code < StbVm.LabelTableOff || code >= d.Length) return;
 
             // call_func (op19/27) target offset -> its call-site offsets, for resolving subroutine-arg shooters.
             var callsByTarget = new Dictionary<int, List<int>>();
-            for (int i = code; i + 12 <= d.Length; i += 4)
-                if (Word(i) == 19 || Word(i) == 27)
-                    (callsByTarget.TryGetValue(Word(i + 8), out var l) ? l : (callsByTarget[Word(i + 8)] = new List<int>())).Add(i);
+            for (int i = code; i + StbVm.InstrSize <= d.Length; i += 4)
+                if (Word(i) == StbVm.OpCallFunc || Word(i) == StbVm.OpCallFuncCond)
+                    (callsByTarget.TryGetValue(Word(i + StbVm.OperandB), out var l) ? l : (callsByTarget[Word(i + StbVm.OperandB)] = [])).Add(i);
 
             var patched = new HashSet<int>();   // operandB offsets already scaled this pass (anti double-scale)
             int hits = 0;
@@ -466,7 +461,7 @@ namespace Dark_Cloud_Improved_Version
             List<int> ArgsBefore(int cs)
             {
                 var a = new List<int>();
-                for (int j = cs - 0xC; j >= code && (Word(j) == 1 || Word(j) == 2 || Word(j) == 3); j -= 0xC) a.Add(j);
+                for (int j = cs - StbVm.InstrSize; j >= code && Word(j) is StbVm.OpPush1 or StbVm.OpPush2 or StbVm.OpPush3; j -= StbVm.InstrSize) a.Add(j);
                 a.Reverse();
                 return a;
             }
@@ -483,39 +478,37 @@ namespace Dark_Cloud_Improved_Version
                     var args = ArgsBefore(cs);
                     if (idx < 0 || idx >= args.Count) continue;
                     int ar = args[idx];
-                    if (Word(ar) == 3 && Word(ar + 4) == 1) ScaleLiteralAt(ar + 8);            // op3 int-literal base damage
-                    else if (Word(ar) == 1 && Word(ar + 8) == 1) ScaleArg(FuncStart(cs), Word(ar + 4), seen, depth + 1); // forwarded local
+                    if (Word(ar) == StbVm.OpPush3 && Word(ar + StbVm.OperandA) == StbVm.TypeInt) ScaleLiteralAt(ar + StbVm.OperandB);
+                    else if (Word(ar) == StbVm.OpPush1 && Word(ar + StbVm.OperandB) == StbVm.ScopeLocal) ScaleArg(FuncStart(cs), Word(ar + StbVm.OperandA), seen, depth + 1);
                 }
             }
 
-            for (int x = code; x + 12 <= d.Length; x += 4)
+            for (int x = code; x + StbVm.InstrSize <= d.Length; x += 4)
             {
-                if (Word(x) != 21 || Word(x + 8) != 0) continue;        // op21 ext-call (operandB unused = 0)
-                int argc = Word(x + 4);
+                if (Word(x) != StbVm.OpExt || Word(x + StbVm.OperandB) != 0) continue;  // op21 ext-call (operandB must be 0)
+                int argc = Word(x + StbVm.OperandA);
                 if (argc < 2 || argc > 10) continue;
-                int fpos = x - argc * 0xC;                              // first pushed arg = the function id
+                int fpos = x - argc * StbVm.InstrSize;                       // first pushed arg = the function id
                 if (fpos < code) continue;
-                if (Word(fpos) != 3 || Word(fpos + 4) != 1) continue;   // op3 int-literal funcId
-                int fid = Word(fpos + 8);
-                // _SET_SHOT (133) / _SET_SHOT2: the monster scripts actually push funcId 229 for the second shot
-                // (registry 135 exists but is never used); 229 carries explicit damage exactly like 133. Missing it
-                // left 6 enemies' second shots unscaled (Heart 107, Mr. Blare 80, Billy 93, Sam 58, Bishop Q 130, …).
-                if (fid != 133 && fid != 135 && fid != 229) continue;
-                if (argc != 6)                                          // argc!=6 → no 5th arg: an engine "default" shot
+                if (Word(fpos) != StbVm.OpPush3 || Word(fpos + StbVm.OperandA) != StbVm.TypeInt) continue;
+                int fid = Word(fpos + StbVm.OperandB);
+                // FnSetShot2 (229) is what scripts use for the second shot; FnSetShotReg (135) exists in the
+                // registry but is not observed in any monster STB. Missing 229 left 6 enemies unscaled.
+                if (fid != StbVm.FnSetShot && fid != StbVm.FnSetShotReg && fid != StbVm.FnSetShot2) continue;
+                if (argc != 6)                                                // argc!=6 → no 5th arg: an engine "default" shot
                 {
-                    PatchBstDefault(slot, ti, f);                       // scale its BST +0x3C base damage instead
+                    PatchBstDefault(slot, ti, f);                             // scale its BST +0x3C base damage instead
                     continue;
                 }
-                int dr = x - 0xC;                                       // last pushed arg = the damage
+                int dr = x - StbVm.InstrSize;                                // last pushed arg = the damage
 
-                if (Word(dr) == 3 && Word(dr + 4) == 1)                 // EXPLICIT: op3 int-literal damage
+                if (Word(dr) == StbVm.OpPush3 && Word(dr + StbVm.OperandA) == StbVm.TypeInt)       // EXPLICIT: op3 int-literal damage
                 {
-                    ScaleLiteralAt(dr + 8);
+                    ScaleLiteralAt(dr + StbVm.OperandB);
                 }
-                else if (Word(dr) == 1 && Word(dr + 8) == 1)            // SUBROUTINE: op1 scope==1 (call argument)
+                else if (Word(dr) == StbVm.OpPush1 && Word(dr + StbVm.OperandB) == StbVm.ScopeLocal) // SUBROUTINE: op1 local argument
                 {
-                    // The shot reads local[idx]; resolve it up the call chain to the op3 literal(s) and scale them.
-                    ScaleArg(FuncStart(x), Word(dr + 4), new HashSet<long>(), 0);
+                    ScaleArg(FuncStart(x), Word(dr + StbVm.OperandA), [], 0);
                 }
             }
             if (LogNormalize && hits == 0)
@@ -531,11 +524,11 @@ namespace Dark_Cloud_Improved_Version
         private static void PatchBstDefault(int slot, int ti, float f)
         {
             if (ti < 0) return;
-            int idx = Memory.ReadUShort(SpeciesTableRam + (long)ti * EnemySpeciesTable.Stride + ShotIdxPrimary);
+            int idx = Memory.ReadUShort(EnemySpeciesTable.TableBase + (long)ti * EnemySpeciesTable.Stride + EnemySpeciesTable.PrimaryBstIndex);
             if (idx == 0xFFFF) return;                                  // no shot effect
-            int btNative = Memory.ReadInt(BstPtrArrayRam + idx * 4);
+            int btNative = Memory.ReadInt(BehaviorScriptTable.PointerArray + idx * 4);
             if (btNative == 0) return;
-            long dmgAddr = (((long)btNative & 0x1FFFFFFF) | 0x20000000) + BstDamageOff;
+            long dmgAddr = Memory.ToMmu(btNative) + BehaviorScriptTable.ShotBaseDamage;
 
             if (!_bstOriginal.TryGetValue(dmgAddr, out int orig))      // snapshot boot value once
             {

@@ -238,7 +238,17 @@ namespace Dark_Cloud_Improved_Version
             _writeFailCount = 0;
         }
 
-        private static uint PhysAddr(long address) => (uint)(address & 0x1FFFFFFF);
+        // PCSX2 address-space constants.
+        // The PS2 EE is MIPS: segment bits occupy the upper 3 bits of a 32-bit virtual address
+        // (kseg0/kseg1/kuseg all alias the same physical RAM). Strip them with PhysAddrMask to get the
+        // physical byte offset, then add Pcsx2Base to land in PCSX2's RAM window (where PINE reads/writes).
+        internal const long PhysAddrMask = 0x1FFFFFFF; // strips MIPS segment bits → 29-bit physical address
+        internal const long Pcsx2Base    = 0x20000000; // PCSX2 maps PS2 physical RAM at this offset
+
+        // Convert a PS2-native pointer (read from PS2 RAM) to a PCSX2-addressable address.
+        internal static long ToMmu(long nativePtr) => (nativePtr & PhysAddrMask) | Pcsx2Base;
+
+        private static uint PhysAddr(long address) => (uint)(address & PhysAddrMask);
 
         private static byte[] BuildReadPacket(byte opcode, long address)
         {

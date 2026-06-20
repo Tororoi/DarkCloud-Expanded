@@ -37,7 +37,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long UraDungeonMap  = 0x21DD56F0;
 
             /// <summary>Resolve a stored PS2-native pointer to a PCSX2-readable EE address (0 stays 0).</summary>
-            internal static long Deref(uint storedPtr) => storedPtr == 0 ? 0 : (storedPtr < 0x20000000 ? storedPtr + 0x20000000 : storedPtr);
+            internal static long Deref(uint storedPtr) => storedPtr == 0 ? 0 : (storedPtr < Memory.Pcsx2Base ? storedPtr + Memory.Pcsx2Base : storedPtr);
         }
 
         /// <summary>

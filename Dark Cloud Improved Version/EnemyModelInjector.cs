@@ -729,7 +729,7 @@ namespace Dark_Cloud_Improved_Version
         internal static byte[] BuildCave()
         {
             byte[] code = FromHex(CaveTemplateHex);
-            uint native = CaveBase & 0x1FFFFFFF;      // EE physical address the cave loads internally
+            uint native = (uint)(CaveBase & Memory.PhysAddrMask); // EE physical address the cave loads internally
             uint paramAddr = native;
             uint posAddr   = native + P_POS;
 
@@ -758,7 +758,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The 4-byte `j cave` detour written at <see cref="HookAddr"/> (delay slot = original next instr).</summary>
         internal static byte[] BuildHook()
         {
-            uint codeStart = (CaveBase & 0x1FFFFFFF) + 0x20;
+            uint codeStart = (uint)(CaveBase & Memory.PhysAddrMask) + 0x20;
             uint jWord = (0x02u << 26) | ((codeStart >> 2) & 0x03FFFFFF);
             return BitConverter.GetBytes(jWord);
         }
@@ -901,6 +901,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  InitCmdLen = 60;             // _INITIALIZE call = 5 vmcode_t records (all 4 bosses)
 
         private static long _stbBase = -1;              // the located boss STB base (set by Tick, used by EnsureNopped/death handling)
+        private static long _utanRelocStb = -1;         // STB base of the Master Utan _SET_POSITION we last relocated (log-once)
 
         // ════════════════════════════════════════════════════════════════════════════════════════════
         // BOSS DEATH = cancel → (roar) → slow-motion collapse → hold → fade out → remove.  No cutscene.
@@ -1016,22 +1017,117 @@ namespace Dark_Cloud_Improved_Version
                     else { if (TranslateCompanions) PatchCompanionPositions(); PatchShieldTarget(); KorinoyaStandIn(); }
                 }
                 if (ti == 81) ReorderKingsCurseOnce();   // coffin(115)->slot0, king(100)->slot1 once both are live
-                // Locate the boss's live STB directly via its slot's CRunScript pointer (CRunScript+0x3C) — any
-                // boss in any dungeon. No KnownAddrs table, no RAM scan.
-                long stb = LocateStbByCodeOff(codeOff);
-                if (stb >= 0)
+                // Locate the boss's STB PRE-SPAWN (so the label-1 _SET_POSITION patch lands before it runs its
+                // init). CRunScript+0x3C can't be used here — it only resolves post-spawn. Order:
+                //   1) KnownAddrs[(boss,dungeon)] — instant, no scan.  2) cached base (cheap re-validate).
+                //   3) signature scan over the load window (logs the hit so it can be tabled).
+                int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+                long stb = -1;
+                foreach (long addr in KnownAddrs(ti, dungeon)) if (IsBossStb(addr, codeOff)) { stb = addr; break; }
+                if (stb < 0 && _stbBase >= 0 && IsBossStb(_stbBase, codeOff)) stb = _stbBase;
+                if (stb < 0)
                 {
-                    if (stb != _stbBase) Console.WriteLine($"[BossPatch] boss {ti} STB @ 0x{stb:X8} (via CRunScript+0x3C).");
-                    _stbBase = stb;
-                    EnsureNopped(stb, initOff, ti);
+                    stb = ScanRange(ScanLo, ScanHi, codeOff);
+                    if (stb >= 0) Console.WriteLine($"[BossPatch] boss {ti} STB @ 0x{stb:X8} (dungeon {dungeon}, scan) — add to KnownAddrs for instant patch.");
                 }
+                if (stb >= 0) { _stbBase = stb; EnsureNopped(stb, initOff, ti); if (ti == 79) DumpUtanLivePos(stb, initOff); }
             }
             catch { /* transient PINE read; retry next tick */ }
         }
 
+        // TEMP diagnostic: once Master Utan (eid 114) is live, log the three _SET_POSITION arg values we wrote next
+        // to his actual CCharacter position (X@+0x10, height/Z@+0x14, Y@+0x18) — so we can map which arg is which
+        // world axis (the height arg is ambiguous between arg2/arg3 by eye). Remove once mapped.
+        private static bool _utanPosLogged;
+        private static void DumpUtanLivePos(long stbBase, int initOff)
+        {
+            if (_utanPosLogged) return;
+            int slot = FindSlotByEid(114);
+            if (slot < 0) return;
+            _utanPosLogged = true;
+            long blk = stbBase + initOff;
+            float a1 = BitConverter.Int32BitsToSingle(Memory.ReadInt(blk + 20));
+            float a2 = BitConverter.Int32BitsToSingle(Memory.ReadInt(blk + 32));
+            float a3 = BitConverter.Int32BitsToSingle(Memory.ReadInt(blk + 44));
+            long pa = EnemyAddresses.CharObjects.PosAddr(slot);
+            float lx = Memory.ReadFloat(pa), lh = Memory.ReadFloat(pa + 4), ly = Memory.ReadFloat(pa + 8);
+            Console.WriteLine($"[UtanPos] wrote arg1={a1:F0} arg2={a2:F0} arg3={a3:F0} | live X(+0x10)={lx:F0} height(+0x14)={lh:F0} Y(+0x18)={ly:F0}");
+            // Dump every live enemy's position + its CRunScript STB, to see how the slot after Utan is mispositioned.
+            float plx = Memory.ReadFloat(Addresses.dunPositionX), plh = Memory.ReadFloat(Addresses.dunPositionZ), ply = Memory.ReadFloat(Addresses.dunPositionY);
+            Console.WriteLine($"[RosterPos] player X={plx:F0} height={plh:F0} Y={ply:F0}  anchor=({_anchorX:F0},{_anchorY:F0})");
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                long b = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                int rs = Memory.ReadInt(b + EnemySlotOffsets.RenderStatus);
+                if (rs < 0) continue;
+                int eid = Memory.ReadUShort(b + EnemySlotOffsets.EnemySpeciesId);
+                long p = EnemyAddresses.CharObjects.PosAddr(s);
+                int stbN = Memory.ReadInt(CRunScript.StbPtrAddr(s));
+                Console.WriteLine($"[RosterPos] slot {s} eid={eid} status={rs} X={Memory.ReadFloat(p):F0} height={Memory.ReadFloat(p + 4):F0} Y={Memory.ReadFloat(p + 8):F0} stb=0x{(uint)stbN:X8}");
+            }
+        }
+
+        // Known STB load addresses per (boss TableIndex, dungeon) — the instant pre-spawn fast path before the
+        // signature scan. Boss-first load makes these roster-independent; one entry per floor-half (the address
+        // shifts across the mid-dungeon event floor), and we probe all candidates so no half-detection is needed.
+        // Untabled (boss,dungeon) pairs fall through to ScanRange (which logs the found address so it can be added).
+        private static long[] KnownAddrs(int tableIndex, int dungeon) => (tableIndex, dungeon) switch
+        {
+            // Divine Beast Cave
+            (78, 0) => new long[] { 0x012166D0 },                       // Dran
+            (79, 0) => new long[] { 0x01211A90 },                       // Master Utan
+            (80, 0) => new long[] { 0x013C4C50 },                       // Ice Queen
+            (81, 0) => new long[] { 0x0108ADD0 },                       // King's Curse
+            (82, 0) => new long[] { 0x210E5830 },                       // King's Curse phase entity
+            (83, 0) => new long[] { 0x011A8990, 0x011A8950 },           // Minotaur Joe
+            (166, 0) => new long[] { 0x011C3C80 },                      // Black Knight Mount
+            // Wise Owl Forest
+            (83, 1) => new long[] { 0x013B7190, 0x013B7250 },           // Minotaur Joe
+            // Shipwreck (3 sections)
+            (83, 2) => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 }, // Minotaur Joe
+            // Sun & Moon Temple
+            (83, 3) => new long[] { 0x01137750 },                       // Minotaur Joe
+            // Moon Sea
+            (80, 4) => new long[] { 0x015860D0 },                       // Ice Queen
+            (101, 4) => new long[] { 0x015A2990 },                      // baria      (codeOff 0x874)
+            (76, 4)  => new long[] { 0x015BF790 },                      // korinoya   (codeOff 0x7D0)
+            (102, 4) => new long[] { 0x015DC890 },                      // kori       (codeOff 0x5EC)
+            (103, 4) => new long[] { 0x015F9920 },                      // i_meteo    (codeOff 0x5EC)
+            (92, 4)  => new long[] { 0x01646B50 },                      // reiki      (codeOff 0x3AC)
+            (104, 4) => new long[] { 0x01646B50 },                      // i_tatumaki (codeOff 0x3AC)
+            _ => System.Array.Empty<long>(),
+        };
+
         // Validate a located boss STB: "STB\0" magic at +0x00 and the label-1 codeOffset at +0x54.
         private static bool IsBossStb(long b, uint codeOff)
             => Memory.ReadUInt(b) == StbMagic && (uint)Memory.ReadInt(b + 0x54) == codeOff;
+
+        // Locate a boss STB by signature scan over the load window. Unlike CRunScript+0x3C this works PRE-SPAWN
+        // (the STB is in RAM the moment the model loads, before the VM runs label-1) — required for the _SET_POSITION
+        // patch, which must land before the boss spawns. Returns the PCSX2 base, or -1.
+        private static long ScanRange(long lo, long hi, uint codeOff)
+        {
+            if (lo < ScanLo) lo = ScanLo;
+            if (hi > ScanHi) hi = ScanHi;
+            for (long a = lo; a < hi; a += (long)ChunkWords * 4)
+            {
+                long hit = ScanChunk(a, codeOff);
+                if (hit >= 0) return hit;
+            }
+            return -1;
+        }
+
+        private static long ScanChunk(long start, uint codeOff)
+        {
+            long end = Math.Min(start + (long)ChunkWords * 4, ScanHi);
+            int n = (int)((end - start) / 4);
+            if (n <= 0x16) return -1;
+            uint[] w = Memory.ReadUIntBatch(start, n);
+            for (int i = 0; i + 0x16 < n; i++)          // word at +0x54 (= i+0x15) holds label-1's codeOffset
+                if (w[i] == StbMagic && w[i + 0x15] == codeOff)
+                    return start + (long)i * 4;
+            return -1;
+        }
 
         // Ice Queen's attacks are separate companion entities (kori/i_meteo/i_tatumaki/baria) coordinated via global
         // ints. The fight's coordination depends on everyone starting in the native arena layout (NOP-ing the label-1
@@ -1118,6 +1214,22 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(block + 20, BitConverter.SingleToInt32Bits(newX));
             Memory.WriteInt(block + 40, 2);
             Memory.WriteInt(block + 44, BitConverter.SingleToInt32Bits(newY));
+        }
+
+        // Rewrite ALL THREE _SET_POSITION args to float literals: arg1 (worldX) @+20, arg2 (HEIGHT/elevation) @+32,
+        // arg3 (worldY ground axis) @+44. Operands at +16/+28/+40. Used for Master Utan, who (unlike Ice Queen/
+        // King's Curse, whose height arg is 0 and left native) needs his height set to the floor ground — his
+        // native height (60) is for his own arena and is wrong on a roster floor, which mispositions his neighbors.
+        private static void WritePosArgsAll3(long block, float x, float height, float z)
+        {
+            if (Memory.ReadInt(block + 16) == 2 && Memory.ReadInt(block + 28) == 2 && Memory.ReadInt(block + 40) == 2
+                && Math.Abs(BitConverter.Int32BitsToSingle(Memory.ReadInt(block + 20)) - x) < 0.5f
+                && Math.Abs(BitConverter.Int32BitsToSingle(Memory.ReadInt(block + 32)) - height) < 0.5f
+                && Math.Abs(BitConverter.Int32BitsToSingle(Memory.ReadInt(block + 44)) - z) < 0.5f)
+                return;
+            Memory.WriteInt(block + 16, 2); Memory.WriteInt(block + 20, BitConverter.SingleToInt32Bits(x));
+            Memory.WriteInt(block + 28, 2); Memory.WriteInt(block + 32, BitConverter.SingleToInt32Bits(height));
+            Memory.WriteInt(block + 40, 2); Memory.WriteInt(block + 44, BitConverter.SingleToInt32Bits(z));
         }
 
         // Like WritePosArgs but for STBs whose _SET_POSITION uses op1 push1 INT literals (c15a/c15b King's Curse) instead
@@ -1228,7 +1340,7 @@ namespace Dark_Cloud_Improved_Version
         {
             int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
             if (stbNative == 0 || stbNative == -1) return -1;
-            long stb = ((long)stbNative & 0x1FFFFFFF) | 0x20000000;
+            long stb = Memory.ToMmu(stbNative);
             return Memory.ReadUInt(stb) == StbMagic ? stb : -1;
         }
 
@@ -1656,11 +1768,11 @@ namespace Dark_Cloud_Improved_Version
                 for (int wi = 0; wi < data[blk].Length; wi++)
                 {
                     uint val = data[blk][wi];
-                    long pn = val & 0x1FFFFFFF;
+                    long pn = val & Memory.PhysAddrMask;
                     if ((pn & 3) != 0) continue;                         // pointers are word-aligned
                     for (int r = 0; r < _slotBlocks.Length; r++)
                     {
-                        long lo = (_slotBlocks[r].baseAddr & 0x1FFFFFFF) + (long)srcSlot * _slotBlocks[r].stride;
+                        long lo = (_slotBlocks[r].baseAddr & Memory.PhysAddrMask) + (long)srcSlot * _slotBlocks[r].stride;
                         if (pn >= lo && pn < lo + _slotBlocks[r].stride)
                         {
                             data[blk][wi] = (uint)(val + (long)(dstSlot - srcSlot) * _slotBlocks[r].stride);
@@ -1976,7 +2088,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     bool live = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1;
                     int eid = live ? Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) : -1;
-                    int sdp = live ? (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.SpeciesDataPtr)) & 0x1FFFFFFF) : 0;
+                    int sdp = live ? (int)(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.SpeciesDataPtr)) & Memory.PhysAddrMask) : 0;
                     if (eid != _obsEid[s] || sdp != _obsSdp[s])
                     {
                         rosterChanged = true;
@@ -2138,6 +2250,23 @@ namespace Dark_Cloud_Improved_Version
                     Console.WriteLine($"[BossPatch] boss 81: no usable room (anchorSet={_anchorSet} room={_anchorRoomW}x{_anchorRoomH}) — NOPed _SET_POSITION @ 0x{a:X8} (engine ArrangementPos)");
                 }
             }
+            else if (tableIndex == 79)
+            {
+                // Master Utan: instead of NOPing his _SET_POSITION (which left him at the arena origin and
+                // mispositioned the NEXT roster enemy), relocate it to the largest room — same as King's Curse.
+                // c14a _SET_POSITION is op3/float — mapped live (2026-06-20): arg1=worldX, arg2=HEIGHT/elevation,
+                // arg3=worldY (the ground 2nd axis, DIRECT — worldY = arg3, NOT negated like Ice Queen/King's Curse).
+                // Set all three: room ground (anchorX, anchorY) + the floor's ground HEIGHT (the player is standing
+                // on it). His native height (60) is for his own arena, so it's wrong on a roster floor and
+                // mispositions his neighbors. WAIT for the room anchor rather than NOP — the scan finds the STB
+                // pre-spawn, and NOPing would destroy the _SET_POSITION before we can rewrite it.
+                if (_anchorSet && Math.Min(_anchorRoomW, _anchorRoomH) >= 3)
+                {
+                    float floorH = Memory.ReadFloat(Addresses.dunPositionZ);   // roster floor ground height (Z = elevation)
+                    WritePosArgsAll3(a, _anchorX, floorH, _anchorY);
+                    if (_utanRelocStb != stbBase) { Console.WriteLine($"[BossPatch] boss 79 (Master Utan) _SET_POSITION -> room ({_anchorX:F0},{_anchorY:F0}) height={floorH:F0} @ 0x{a:X8}"); _utanRelocStb = stbBase; }
+                }
+            }
             else if (Memory.ReadInt(a) != 0)                            // other bosses: NOP the _SET_POSITION push as before
             {
                 Memory.WriteByteArray(a, new byte[InitCmdLen]);
@@ -2245,21 +2374,14 @@ namespace Dark_Cloud_Improved_Version
 
         // ┌─ KNOWN ISSUE: Master Utan (79) displaces the roster-index-1 species ──────────────────────────┐
         // When Master Utan is force-spawned, the species at ROSTER INDEX 1 (the entry right after the boss)
-        // spawns at a bad position — off-map / underground — for ALL its instances. Roster index 0 (the boss)
-        // and index 2+ are fine. Minotaur Joe / Dran do NOT trigger it, so it's specific to Utan (likely its
-        // multi-part / raised-arena setup).
-        // Investigated (2026-06-14) and PARKED — findings so the next person doesn't redo them:
-        //   • It is purely a POSITION corruption, not a model/block overlap: the index-1 species' model loads
-        //     fine (valid, distinct model pointer; the model renders, just in the wrong place).
-        //   • BOTH the logical slot position (LocationX/Z/Y @0x100/04/08) and the render-object position
-        //     (unit+slot*0x3510+0x1FCD0 +0x10/+0x14/+0x18, where SetPosition@0x138fb0 stores it) are off-map.
-        //   • The engine RE-APPLIES the bad position every frame, so correcting either live field loses the
-        //     race (a live render<->slot sync only made the lock-on reticle flicker). Must be fixed at SPAWN.
-        //   • Root cause not pinned: presumably the spawn-position assignment (ArrangementPos 0x1D7FC0 /
-        //     SetupViewMonstor 0x1E02B0) uses a per-species offset or shared spawn-anchor that Utan shifts by 1.
-        // WORKAROUND (in use): put a NON-SPAWNING entry at roster index 1 (e.g. a mimic — mimics don't spawn
-        // via the roster; they use a separate dungeon-furniture mechanism), with real enemies at index 2+.
-        // If this recurs on other bosses, resume from the spawn-position trace above.
+        // has its CCharacter render-object position (unit+slot*0x3510+0x1FCD0 +0x10/14/18) displaced far
+        // off-map while the floor-slot Location (LocationX/Z/Y @0x100/04/08) is correct (set by ArrangementPos).
+        // Result: shadows/names appear in the right room position but the 3D model and lock-on are far away.
+        // Root cause not pinned: Utan's multi-part / raised-arena setup appears to corrupt the CCharacter
+        // spawn-position for the next entry (Minotaur Joe / Dran do NOT trigger this). Must be fixed at
+        // SPAWN — writing the CCharacter position live loses the race (engine re-applies every frame).
+        // PARKED (2026-06-20). To resume: write-breakpoint on slot-1 CCharacter +0x10 during floor load
+        // to find what sets the bad position and patch the source.
         // └────────────────────────────────────────────────────────────────────────────────────────────────┘
 
         // Reads the STB program table to find the codeOffset (entry+4) of a label. run__CRunScript sets the

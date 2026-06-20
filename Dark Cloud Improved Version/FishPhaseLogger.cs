@@ -505,7 +505,7 @@ namespace Dark_Cloud_Improved_Version
             //   BaseFp=600 at MaxSize+4,    MaxFp=1000 at MaxSize+8
             // (offsets mirror the fish slot layout: ScaleDivisor@0x004, BaseSize@0x008,
             //  MaxSize@0x00C, BaseFp@0x010, MaxFp@0x014)
-            const long  scanStart  = 0x20000000L;
+            long  scanStart  = Memory.Pcsx2Base;
             const long  scanEnd    = 0x22000000L;
             const int   batchSize  = 1024;
             const float target     = 30.0f;
@@ -607,7 +607,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     uint ptr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrWords[p]), 0);
                     if (ptr == 0) continue;
-                    long targetAddr = 0x20000000L + ptr;
+                    long targetAddr = Memory.Pcsx2Base + ptr;
                     float[] targetWords = Memory.ReadFloatBatch(targetAddr, 8);
                     var rowBuilder = new System.Text.StringBuilder();
                     for (int t = 0; t < 8; t++)
@@ -672,7 +672,7 @@ namespace Dark_Cloud_Improved_Version
                 uint rawFollowPtr = BitConverter.ToUInt32(BitConverter.GetBytes(ptrFieldWords[0]), 0);
                 if (rawFollowPtr != 0 && rawFollowPtr < 0x02200000u)
                 {
-                    long followTarget = 0x20000000L + rawFollowPtr;
+                    long followTarget = Memory.Pcsx2Base + rawFollowPtr;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"[FishTableScan] ptr@0x{(uint)ptrFieldAddr:X8}=0x{rawFollowPtr:X8} → 0x{(uint)followTarget:X8}:");
                     float[] followData = Memory.ReadFloatBatch(followTarget, 64);

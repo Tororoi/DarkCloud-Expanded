@@ -247,9 +247,9 @@ namespace Dark_Cloud_Improved_Version
             const uint StbMagic = 0x00425453u;   // "STB\0"
             uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + slot * 0x48 + 0x30);
             if (ipRaw == 0) return "no-script";
-            long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
+            long ip = ipRaw < Memory.Pcsx2Base ? ipRaw + Memory.Pcsx2Base : ipRaw;
             const int win = 0x8000;                                   // STBs are well under 32 KB
-            long start = System.Math.Max(0x20000000, ip - win);
+            long start = System.Math.Max(Memory.Pcsx2Base, ip - win);
             int nWords = (int)((ip - start) / 4);
             if (nWords <= 1) return "?";
             uint[] w = Memory.ReadUIntBatch(start, nWords);
@@ -532,8 +532,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat (recordAddr + EnemySpeciesTable.EntityScale,    Memory.ReadFloat (srcAddr + EnemySpeciesTable.EntityScale));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.DamageReduction, Memory.ReadUShort(srcAddr + EnemySpeciesTable.DamageReduction));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.WeaponDefense,   Memory.ReadUShort(srcAddr + EnemySpeciesTable.WeaponDefense));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk014,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk014));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk016,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk016));
+            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.PrimaryBstIndex,   Memory.ReadUShort(srcAddr + EnemySpeciesTable.PrimaryBstIndex));
+            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.SecondaryBstIndex, Memory.ReadUShort(srcAddr + EnemySpeciesTable.SecondaryBstIndex));
             Memory.WriteInt   (recordAddr + EnemySpeciesTable.Abs,            Memory.ReadInt   (srcAddr + EnemySpeciesTable.Abs));
             // Memory.WriteInt   (recordAddr + EnemySpeciesTable.MinGoldDrop,    Memory.ReadInt   (srcAddr + EnemySpeciesTable.MinGoldDrop));
             // Memory.WriteInt   (recordAddr + EnemySpeciesTable.DropChance,     Memory.ReadInt   (srcAddr + EnemySpeciesTable.DropChance));
@@ -803,7 +803,7 @@ namespace Dark_Cloud_Improved_Version
                 bool isCachedPtr  = v is >= 0x80100000 and <= 0x81FFFFFF;
                 if (isNativePtr || isCachedPtr)
                 {
-                    uint pcsx2 = (v & 0x01FFFFFFu) + 0x20000000u;
+                    uint pcsx2 = (v & 0x01FFFFFFu) + (uint)Memory.Pcsx2Base;
                     w.WriteLine($"  [0x{addr:X8}] = 0x{v:X8}  → PCSX2: 0x{pcsx2:X8}  <-- POINTER");
                     ptrTargets.Add(pcsx2);
                 }
