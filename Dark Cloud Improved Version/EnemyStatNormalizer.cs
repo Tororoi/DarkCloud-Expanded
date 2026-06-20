@@ -11,7 +11,8 @@ namespace Dark_Cloud_Improved_Version
     /// When the randomizer injects a species into a dungeon that is not its native one, its stats are
     /// either trivially weak (early enemy in a late dungeon) or a brick wall (late enemy in an early
     /// dungeon). This rescales HP, defense and attack damage toward the CURRENT dungeon's power level
-    /// along a 7-step gradient (one baseline per dungeon, ID 0..6), with a single tunable knob.
+    /// along a per-dungeon gradient with a single tunable knob. Two tier systems (see below): ATTACK uses the
+    /// 7 dungeons (Demon Shaft = one tier); HP/DEFENSE uses 11 (Demon Shaft split into its 5 floor bands).
     ///
     /// Native tier `n` (the dungeon a species belongs to), current dungeon `c`, knob `k` = <see cref="NormalizationStrength"/>:
     ///     effectiveTier e = max(c, n − (n − c)·k)          // "floor weak, tame strong"
@@ -24,17 +25,21 @@ namespace Dark_Cloud_Improved_Version
     ///     current but tamed. The factor depends only on (n, c, k), so two same-tier species keep their
     ///     relative ordering (Holy Gemron stays above Fire Gemron — only the gap to the current dungeon closes).
     ///
-    /// HP/defense are written to the species record (reverted by EnemyModelInjector's snapshot/restore on
-    /// dungeon exit) plus a sweep of already-spawned live slots. Damage lives only in the .stb script and is
-    /// patched in RAM once per floor (see <see cref="NormalizeDamage"/>); STB-in-RAM addressing is still being
-    /// pinned, so the damage path is OFF by default while HP/defense are validated first.
+    /// All writes target LIVE per-slot fields in one sweep per floor (enemies all spawn at load, no respawns) —
+    /// no species-record patch:
+    ///   • HP/defense → the enemy slot (MaxHp/Hp, packed DefenseStats).
+    ///   • Melee damage → the cached _SET_DMG_PARA array (the value the engine latched at the enemy's init).
+    ///   • Projectile damage → the per-slot shot cache (explicit shots) or, for "default" shots, the static
+    ///     BehaviorScriptTable +0x3C entry.
+    /// Slot + per-floor caches self-revert on floor reload; the static BST table is snapshotted and restored on
+    /// dungeon exit (<see cref="RestoreBst"/>). Gated by <see cref="NormalizeEnemyStats"/> / <see cref="NormalizeDamage"/>.
     /// </summary>
     internal static class EnemyStatNormalizer
     {
         // ── Config (the single tuning surface) ───────────────────────────────────────────────────────
         internal static bool  NormalizeEnemyStats   = true;  // master on/off  (TESTING: default on)
         internal static float NormalizationStrength = 1.0f;  // k ∈ [0,1]: 0 = strong enemies run wild (weak still buffed), 1 = flatten all to current
-        internal static bool  NormalizeDamage       = true;  // also rescale melee attack damage (cached _SET_DMG_PARA field)
+        internal static bool  NormalizeDamage       = true;  // also rescale attack damage (melee + projectile)
         internal static bool  LogNormalize          = true;  // verbose per-enemy logging (TESTING)
 
         private const int DungeonCount = 7;
@@ -251,9 +256,9 @@ namespace Dark_Cloud_Improved_Version
         // Per-floor entry point
         // ════════════════════════════════════════════════════════════════════════════════════════════
         /// <summary>
-        /// Normalize every present non-native species' stats for the current floor. Idempotent and guarded so
-        /// it runs once per floor; safe to call each tick. No-op when disabled or in town. Native species
-        /// (factor 1) are left untouched, so this is harmless on vanilla floors.
+        /// Call each dungeon-thread tick. Sweeps live slots and normalizes each non-native enemy once when it
+        /// first appears (the floor's enemies all spawn at load), then self-terminates for the floor. No-op when
+        /// disabled or in town; native species (factor 1) are left untouched, so it's harmless on vanilla floors.
         /// </summary>
         internal static void NormalizeStatsForFloor()
         {

@@ -893,12 +893,14 @@ namespace Dark_Cloud_Improved_Version
         };
         internal static bool IsPatchable(int tableIndex) => BossInfo(tableIndex).codeOff != 0;
 
-        private const long ScanLo = 0x01000000, ScanHi = 0x01A00000;  // boss-first load window (some dungeons, e.g. Moon Sea, load the boss STB above 0x01500000)
+        // STB load-address window for the remaining RAM scans (Ice Queen companion locate + command-pattern
+        // scans). Boss STB location no longer scans — it reads CRunScript+0x3C (see LocateStbByCodeOff).
+        private const long ScanLo = 0x01000000, ScanHi = 0x01A00000;
         private const int  ChunkWords = 8192;           // 32 KB per batched round-trip
         private const uint StbMagic = 0x00425453u;      // "STB\0"
         private const int  InitCmdLen = 60;             // _INITIALIZE call = 5 vmcode_t records (all 4 bosses)
 
-        private static long _stbBase = -1;
+        private static long _stbBase = -1;              // the located boss STB base (set by Tick, used by EnsureNopped/death handling)
 
         // ════════════════════════════════════════════════════════════════════════════════════════════
         // BOSS DEATH = cancel → (roar) → slow-motion collapse → hold → fade out → remove.  No cutscene.
@@ -969,47 +971,6 @@ namespace Dark_Cloud_Improved_Version
         private const long MotionBlock      = ModelScaleOffsets.ModelStride;                // 0x3510 render-object stride
         private const long MotionFrameField = 0x1FFC0;     // PLAYING motion frame (float) @ unit + idx*0x3510 + 0x1FFC0 (= ModelScaleOffsets.PlayingMotionFrame)
 
-        // Known STB load addresses per (boss TableIndex, dungeon). Boss-first makes these roster-independent;
-        // one per floor-half (the address shifts across the mid-dungeon event floor) — we probe all candidates,
-        // so no half-detection is needed. c16a populated from testing; other bosses/dungeons fill via the scan
-        // fallback (logged). Option 2 (live heap-base read) will make these unnecessary.
-        private static long[] KnownAddrs(int tableIndex, int dungeon) => (tableIndex, dungeon) switch
-        {
-            // Divine Beast Cave
-            // Dran
-            (78, 0) => new long[] { 0x012166D0 },
-            // Master Utan
-            (79, 0) => new long[] { 0x01211A90 },
-            // Ice Queen
-            (80, 0) => new long[] { 0x013C4C50 },
-            // King's Curse
-            (81, 0) => new long[] { 0x0108ADD0 },
-            // King's Curse Phase Entity
-            (82, 0) => new long[] { 0x210E5830 },
-            // Minotaur Joe
-            (83, 0) => new long[] { 0x011A8990, 0x011A8950 },
-            // Black Knight Mount
-            (166, 0) =>new long[] { 0x011C3C80 },
-            // Wise Owl Forest
-            // Minotaur Joe
-            (83, 1) => new long[] { 0x013B7190, 0x013B7250 },
-            // Shipwreck (3 sections)
-            // Minotaur Joe
-            (83, 2) => new long[] { 0x012BF210, 0x012BF190, 0x012CACD0 },
-            // Sun & Moon Temple
-            // Minotaur Joe
-            (83, 3) => new long[] { 0x01137750 },
-            // Moon Sea
-            (80, 4) => new long[] { 0x015860D0 },
-            // Moon Sea — Ice Queen companions (own STBs; explicit addrs disambiguate shared codeOffs)
-            (101, 4) => new long[] { 0x015A2990 },   // baria     (codeOff 0x874)
-            (76, 4)  => new long[] { 0x015BF790 },   // korinoya  (ice-arrow source, codeOff 0x7D0)
-            (102, 4) => new long[] { 0x015DC890 },   // kori      (codeOff 0x5EC)
-            (103, 4) => new long[] { 0x015F9920 },   // i_meteo   (codeOff 0x5EC)
-            (92, 4)  => new long[] { 0x01646B50 },   // reiki     (codeOff 0x3AC)
-            (104, 4) => new long[] { 0x01646B50 },   // i_tatumaki(codeOff 0x3AC)
-            _ => System.Array.Empty<long>(),
-        };
 
         internal static void Tick()
         {
@@ -1024,7 +985,7 @@ namespace Dark_Cloud_Improved_Version
                 // walkable tiles even after she activates.
                 int mapNow = Memory.ReadInt(DungeonAddresses.Map.MapNo);
                 uint mpNow = Memory.ReadUInt(DungeonAddresses.Map.MapPartsPtr);
-                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; _kcPhaseLogged = false; _kcPhaseStb = -1; _kcSwapDone = false; }   // re-arm per floor
+                if (mapNow != _lastMapNo) { Console.WriteLine($"[MAP] map_no {_lastMapNo}->{mapNow}  mapparts=0x{mpNow:X8}"); _lastMapNo = mapNow; _mapDumped = false; _anchorSet = false; _kcPhaseLogged = false; _kcSwapDone = false; }   // re-arm per floor
                 // The tile grid is EMBEDDED in the CDungeonMap at +0x9C50 (ArrangementPos reads it to place enemies);
                 // it's valid at floor-entry, independent of the standalone `mapparts` global (which is NULL in her arena).
                 // Dump it as soon as the floor's CDungeonMap exists — i.e. BEFORE we ever swap Ice Queen in.
@@ -1044,9 +1005,7 @@ namespace Dark_Cloud_Improved_Version
                             NudgeCompanionPositions();                          // move companions the SAME offset as Ice Queen (preserve layout)
                             WakeShiftFloorSlots();                              // pre-shift the dormant floor-slot (the engine's wake-origin) to the cluster
                             PatchBariaShield();                                 // zero baria's orbit radius so the shield lands on her, not ~+2000
-                            DumpEnemyPositions();                               // one-shot: enemy positions (walkable world anchors)
                             RestoreShieldNativeEid();                           // (toggle) restore baria's slot eid to native 0
-                            DumpReikiHandler();                                 // one-shot: reiki's script flow (find its effect gate)
                         }
                         else if (IqTranslate)                                  // off for the Moon Sea native test (she stays at her -Y corner)
                         {
@@ -1057,55 +1016,22 @@ namespace Dark_Cloud_Improved_Version
                     else { if (TranslateCompanions) PatchCompanionPositions(); PatchShieldTarget(); KorinoyaStandIn(); }
                 }
                 if (ti == 81) ReorderKingsCurseOnce();   // coffin(115)->slot0, king(100)->slot1 once both are live
-                int dungeon = Memory.ReadByte(Addresses.checkDungeon);
-                // 1) Known addresses for (boss, dungeon) — instant, deterministic, no scan.
-                foreach (long addr in KnownAddrs(ti, dungeon))
-                    if (IsBossStb(addr, codeOff)) { EnsureNopped(addr, initOff, ti); return; }
-                // 2) Cached hit from a previous (untabled) relocate.
-                if (_stbBase >= 0 && IsBossStb(_stbBase, codeOff)) { EnsureNopped(_stbBase, initOff, ti); return; }
-                // 3) Fallback scan-by-signature; logs the address so it can be tabled.
-                long hit = _stbBase >= 0 ? ScanRange(_stbBase - 0x40000, _stbBase + 0x40000, codeOff) : -1;
-                if (hit < 0) hit = ScanRange(ScanLo, ScanHi, codeOff);
-                if (hit >= 0)
+                // Locate the boss's live STB directly via its slot's CRunScript pointer (CRunScript+0x3C) — any
+                // boss in any dungeon. No KnownAddrs table, no RAM scan.
+                long stb = LocateStbByCodeOff(codeOff);
+                if (stb >= 0)
                 {
-                    if (hit != _stbBase)
-                    {
-                        Console.WriteLine($"[BossPatch] located boss {ti} STB @ 0x{hit:X8} (dungeon {dungeon}) — add to KnownAddrs for instant patch.");
-                        DumpAllocState(hit);   // option-2 diagnostic: derive STB address from the live allocator base
-                    }
-                    _stbBase = hit;
-                    EnsureNopped(hit, initOff, ti);
+                    if (stb != _stbBase) Console.WriteLine($"[BossPatch] boss {ti} STB @ 0x{stb:X8} (via CRunScript+0x3C).");
+                    _stbBase = stb;
+                    EnsureNopped(stb, initOff, ti);
                 }
             }
             catch { /* transient PINE read; retry next tick */ }
         }
 
-        private static long ScanRange(long lo, long hi, uint codeOff)
-        {
-            if (lo < ScanLo) lo = ScanLo;
-            if (hi > ScanHi) hi = ScanHi;
-            for (long a = lo; a < hi; a += (long)ChunkWords * 4)
-            {
-                long hit = ScanChunk(a, codeOff);
-                if (hit >= 0) return hit;
-            }
-            return -1;
-        }
-
+        // Validate a located boss STB: "STB\0" magic at +0x00 and the label-1 codeOffset at +0x54.
         private static bool IsBossStb(long b, uint codeOff)
             => Memory.ReadUInt(b) == StbMagic && (uint)Memory.ReadInt(b + 0x54) == codeOff;
-
-        private static long ScanChunk(long start, uint codeOff)
-        {
-            long end = Math.Min(start + (long)ChunkWords * 4, ScanHi);
-            int n = (int)((end - start) / 4);
-            if (n <= 0x16) return -1;
-            uint[] w = Memory.ReadUIntBatch(start, n);
-            for (int i = 0; i + 0x16 < n; i++)          // word at +0x54 (= i+0x15) holds label-1's codeOffset
-                if (w[i] == StbMagic && w[i + 0x15] == codeOff)
-                    return start + (long)i * 4;
-            return -1;
-        }
 
         // Ice Queen's attacks are separate companion entities (kori/i_meteo/i_tatumaki/baria) coordinated via global
         // ints. The fight's coordination depends on everyone starting in the native arena layout (NOP-ing the label-1
@@ -1213,61 +1139,26 @@ namespace Dark_Cloud_Improved_Version
             float nudgeX = _anchorX, nudgeY = _anchorY + 500f;
             WritePosArgsInt(block81, (int)(0 + nudgeX), (int)(500 - nudgeY));     // c15a native (0,0,500) -> room center
             int cx = (int)(0 + nudgeX), cz = (int)(237 - nudgeY);                // c15b room coords (native 0,0,237)
-            // c15b (codeOff 0x2fdc, _SET_POSITION @ +0x3678). Relocate it via TWO paths so timing never matters:
-            //  (1) pre-spawn: the guarded codeOff scan (exclude coffin + SET_POS signature, so never the coffin) finds
-            //      the TEMPLATE so c15b SPAWNS in the room. (0x01698CC0 was a real c15b template, NOT the coffin.)
-            //  (2) post-spawn: also patch the LIVE instance (via its slot IP) so an in-fight position reset uses the room.
-            if (!(_kcPhaseStb >= 0 && _kcPhaseStb != stb81 && Memory.ReadUInt(_kcPhaseStb) == StbMagic
-                  && (uint)Memory.ReadInt(_kcPhaseStb + 0x54) == 0x2FDCu))
-                _kcPhaseStb = FindKcPhaseStb(stb81);
-            if (_kcPhaseStb >= 0)
-            {
-                WritePosArgsInt(_kcPhaseStb + 0x3678, cx, cz);
-                if (!_kcPhaseLogged) { Console.WriteLine($"[KCxlate] c15b template STB 0x{_kcPhaseStb:X8} (coffin81 @0x{stb81:X8}) -> room +({nudgeX:F0},{nudgeY:F0})"); _kcPhaseLogged = true; }
-            }
+            // c15b (codeOff 0x2fdc, _SET_POSITION @ +0x3678): patch the LIVE instance, located via its slot's
+            // CRunScript STB pointer (LiveKcPhaseStb). This runs every tick, so it catches c15b as soon as it's in
+            // a slot and rewrites its _SET_POSITION to the room.
             long live = LiveKcPhaseStb();
-            if (live >= 0 && live != _kcPhaseStb) WritePosArgsInt(live + 0x3678, cx, cz);
+            if (live >= 0)
+            {
+                WritePosArgsInt(live + 0x3678, cx, cz);
+                if (!_kcPhaseLogged) { Console.WriteLine($"[KCxlate] c15b live STB 0x{live:X8} (coffin81 @0x{stb81:X8}) -> room +({nudgeX:F0},{nudgeY:F0})"); _kcPhaseLogged = true; }
+            }
         }
         private static bool _kcPhaseLogged;
-        // c15b template scan: StbMagic + codeOff(+0x54)==0x2fdc, NOT the coffin (exclude), AND the real SET_POS push
-        // (op1 push1(36)) at +0x3678. Wide window (c15b loads below the boss-first ScanLo 0x01000000 — genuine fight
-        // had it at raw 0x00EB8E30). PINE reads cached PS2 RAM directly; this covers ~8 MB..26 MB.
-        private const long KcPhaseScanLo = 0x00800000, KcPhaseScanHi = 0x01A00000;
-        private static long FindKcPhaseStb(long exclude)
-        {
-            for (long a = KcPhaseScanLo; a < KcPhaseScanHi; a += (long)ChunkWords * 4)
-            {
-                long end = Math.Min(a + (long)ChunkWords * 4, KcPhaseScanHi);
-                int n = (int)((end - a) / 4);
-                if (n <= 0x16) continue;
-                uint[] w = Memory.ReadUIntBatch(a, n);
-                for (int i = 0; i + 0x16 < n; i++)
-                {
-                    if (w[i] != StbMagic || w[i + 0x15] != 0x2FDCu) continue;
-                    long stb = a + (long)i * 4;
-                    if (stb == exclude) continue;
-                    if (Memory.ReadInt(stb + 0x3678) == 1 && Memory.ReadInt(stb + 0x3678 + 4) == 36) return stb;
-                }
-            }
-            return -1;
-        }
 
-        // Resolve the LIVE c15b (King's Curse, eid 100) STB from its slot's CRunScript IP (IP @ 0x21E4D5A0+slot*0x48+0x30
-        // points INTO the loaded STB). Scans back to the "STB\0" header with codeOff(+0x54)==0x2fdc. -1 until live.
+        // Resolve the LIVE c15b (King's Curse, eid 100) STB directly from its slot's CRunScript pointer
+        // (CRunScript+0x3C = the STB base). Confirmed by codeOff(+0x54)==0x2fdc. -1 until live.
         private static long LiveKcPhaseStb()
         {
             int slot = FindSlotByEid(100);
             if (slot < 0) return -1;
-            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + (long)slot * 0x48 + 0x30);
-            if (ipRaw == 0) return -1;
-            long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
-            long lo = Math.Max(0x20000000, ip - 0x8000);
-            int n = (int)((ip - lo) / 4);
-            if (n <= 1) return -1;
-            uint[] w = Memory.ReadUIntBatch(lo, n);
-            for (int i = w.Length - 1; i >= 0; i--)
-                if (w[i] == StbMagic && (uint)Memory.ReadInt(lo + (long)i * 4 + 0x54) == 0x2FDCu) return lo + (long)i * 4;
-            return -1;
+            long stb = SlotStbBase(slot);
+            return stb >= 0 && (uint)Memory.ReadInt(stb + 0x54) == 0x2FDCu ? stb : -1;
         }
 
         private static void PatchCompanionPositions()
@@ -1329,123 +1220,42 @@ namespace Dark_Cloud_Improved_Version
             WritePosArgs(block, _compNatX[k] + IqNudgeX, _compNatZ[k] - IqNudgeY);
         }
 
-        // One-shot: dump EVERY _SET_POSITION block in each companion STB, with coords, so we can find each one's
-        // real SPAWN block (matching its native char position) vs. the effect/emitter blocks we were wrongly nudging.
-        // (tableIndex, codeOff, name) for Ice Queen's companions — resolved to STB addrs via KnownAddrs(ti, dungeon),
-        // with a codeOff scan fallback (excluding already-known addrs) for ones not yet in KnownAddrs (reiki/baria).
-        private static readonly (int ti, uint codeOff, string name)[] _iqCompanions =
-        {
-            (80, 0x2914u, "IceQueen"),
-            (76, 0x7D0u, "korinoya"), (102, 0x5ECu, "kori"), (103, 0x5ECu, "i_meteo"),
-            (104, 0x3ACu, "i_tatumaki"), (92, 0x3ACu, "reiki"), (101, 0x874u, "baria"),
-        };
-        private static long ScanForCodeOff(uint codeOff, System.Collections.Generic.HashSet<long> exclude)
-        {
-            for (long a = ScanLo; a < ScanHi; a += (long)ChunkWords * 4)
-            {
-                long end = Math.Min(a + (long)ChunkWords * 4, ScanHi);
-                int n = (int)((end - a) / 4);
-                if (n <= 0x16) continue;
-                uint[] w = Memory.ReadUIntBatch(a, n);
-                for (int i = 0; i + 0x16 < n; i++)
-                {
-                    if (w[i] != StbMagic || w[i + 0x15] != codeOff) continue;
-                    long stb = a + (long)i * 4;
-                    if (!exclude.Contains(stb)) return stb;
-                }
-            }
-            return -1;
-        }
-        // Resolve a slot's STB base from its live CRunScript instruction pointer (CRunScript @ 0x21E4D5A0+slot*0x48,
-        // IP @ +0x30 points INTO the loaded STB) by scanning back to the "STB\0" header with a known codeOff. This
-        // disambiguates the shared-codeOff companions (reiki vs i_tatumaki = 0x3AC, kori vs i_meteo = 0x5EC) by slot.
+        // Resolve a slot's loaded STB base directly from its CRunScript record: +0x3C holds the native base of the
+        // STB this slot's VM is executing (RE'd 2026-06-19; see EnemyAddresses.CRunScript). No scan, no codeOff
+        // table — and it's inherently slot-specific, so it disambiguates shared-codeOff companions for free.
+        // Returns the PCSX2 address, or -1 if the slot has no valid STB.
         private static long SlotStbBase(int slot)
         {
-            uint ipRaw = Memory.ReadUInt(0x21E4D5A0 + (long)slot * 0x48 + 0x30);
-            if (ipRaw == 0) return -1;
-            long ip = ipRaw < 0x20000000 ? ipRaw + 0x20000000 : ipRaw;
-            long start = Math.Max(0x20000000, ip - 0x8000);
-            int n = (int)((ip - start) / 4);
-            if (n <= 1) return -1;
-            uint[] w = Memory.ReadUIntBatch(start, n);
-            for (int i = w.Length - 1; i >= 0; i--)
+            int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
+            if (stbNative == 0 || stbNative == -1) return -1;
+            long stb = ((long)stbNative & 0x1FFFFFFF) | 0x20000000;
+            return Memory.ReadUInt(stb) == StbMagic ? stb : -1;
+        }
+
+        // Locate the loaded STB for an enemy/boss with the given label-1 codeOffset, by reading each live slot's
+        // CRunScript STB pointer (SlotStbBase). Replaces the KnownAddrs table + signature scan — works for any
+        // boss in any dungeon. Returns the PCSX2 STB base, or -1 if no present slot runs that script.
+        private static long LocateStbByCodeOff(uint codeOff)
+        {
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                if (w[i] != StbMagic) continue;
-                long stb = start + (long)i * 4;
-                uint c = (uint)Memory.ReadInt(stb + 0x54);
-                if (c == 0x3AC || c == 0x5EC || c == 0x7D0 || c == 0x874 || c == 0x2914) return stb;
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0) + EnemySlotOffsets.RenderStatus) < 0) continue;
+                long stb = SlotStbBase(s);
+                if (stb >= 0 && (uint)Memory.ReadInt(stb + 0x54) == codeOff) return stb;
             }
             return -1;
         }
 
-        // One-shot: dump reiki's (Ice Aura, slot 5) script flow to find what gates its EFFECT. reiki fires only after
-        // the shield is destroyed AND the player is close, so its label should read a GET_GLOBAL (shield-down flag)
-        // and a GET_POSITION(-2)+GET_DIST proximity check, then BR_FALSE past the damage/effect command if unmet —
-        // which is why we see the animation but no effect. Located by slot (shares codeOff 0x3AC with i_tatumaki).
-        private static bool _reikiDumped;
-        private static void DumpReikiHandler()
-        {
-            if (_reikiDumped) return;
-            int slot = FindSlotByEid(244);                 // reiki = Ice Aura (tagged 244) at native slot 5
-            if (slot < 0) return;
-            long stb = SlotStbBase(slot);
-            if (stb < 0) return;
-            _reikiDumped = true;
-            uint co = (uint)Memory.ReadInt(stb + 0x54);
-            var cmd = new System.Collections.Generic.Dictionary<int, string>
-            {
-                {0x24,"SET_POS"}, {0x0B,"GET_POS"}, {0x0A,"GET_DIST"}, {0xD5,"GET_MONSTOR_POS"}, {0xE1,"GET_MONSTOR_VEC"},
-                {0xDC,"SET_GLOBAL"}, {0xDD,"GET_GLOBAL"}, {0xC8,"SET_MOTION"}, {0x20,"SET_MOVE"}, {0x22,"CHK_MOVE"},
-                {0xE4,"SET_LIFE"}, {0xE5,"SET_SHOT2"}, {0x6C,"COL_OFF"}, {0x6D,"GET_LIFE_RATE"},
-            };
-            Console.WriteLine($"[REIKI] reiki STB 0x{stb:X8} codeOff 0x{co:X} (slot {slot}) — flow:");
-            for (int k = 0; k < 290; k++)
-            {
-                int off = (int)co + k * 12;
-                int op = Memory.ReadInt(stb + off), a1 = Memory.ReadInt(stb + off + 4), a2 = Memory.ReadInt(stb + off + 8);
-                string note;
-                if (op == 3 && cmd.TryGetValue(a2, out var c3)) note = "CMD " + c3;
-                else if (op == 3) note = $"push {a2}";
-                else if (op == 1 && cmd.TryGetValue(a1, out var c1)) note = "CMD " + c1;
-                else if (op == 1) note = $"push1 {a1}";
-                else note = op switch { 21 => $"EXT({a1})", 23 => "YIELD", 4 => $"JMP->0x{a1:X}", 17 => $"BRF->0x{a1:X}", 18 => $"BRT->0x{a1:X}", 15 => "RET", 14 => $"BINOP(0x{a1:X})", 16 => "POP", _ => null };
-                if (note != null) Console.WriteLine($"[REIKI] +0x{off:X}: {note}");
-                if (op == 15) break;
-            }
-        }
-
-        // baria (shield) positions itself at IceQueen.pos + direction*15.0 (six float-15.0 = 1097859072 orbit-radius
-        // pushes across its two reposition blocks). When she's shifted, the direction isn't unit-length and ×15 flings
         // One-shot per floor: dump the MAPPARTS grid (room/walkable layout) + raw sample cells, so we can locate a
         // large room and (with the corner-record conversion) place Ice Queen there instead of a fixed offset/chest.
         private static bool _mapDumped;
         private static int _lastMapNo = -1;
-
-        // The mesh world-placement is grid-derived (cleared during her fight). Pivot: enemies ARE arranged onto
-        // walkable tiles, so their CCharacter positions are real walkable world coords. Dump them to pick an anchor.
-        private static bool _enPosDumped;
-        private static void DumpEnemyPositions()
-        {
-            if (_enPosDumped) return;
-            _enPosDumped = true;
-            Console.WriteLine("[ENPOS] spawned-enemy CCharacter positions (walkable world coords):");
-            for (int s = 0; s <= 16; s++)
-            {
-                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
-                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                long pa = EnemyAddresses.CharObjects.PosAddr(s);
-                float x = BitConverter.Int32BitsToSingle(Memory.ReadInt(pa));
-                float z = BitConverter.Int32BitsToSingle(Memory.ReadInt(pa + 8));
-                Console.WriteLine($"[ENPOS] slot {s} eid={eid} pos=({x:F0},{z:F0})");
-            }
-        }
 
         private const int GridRows = 24, GridCols = 20;
         private const float CellWorld = 160f;   // SearchiDoPutArea: each MAPPARTS cell = 160 world units (calibrated)
         private static bool _anchorSet;          // once we've locked the walkable anchor from a populated grid
         private static float _anchorX, _anchorY;  // raw world center of the largest room (= the anchor cell), boss-agnostic
         private static int _anchorRoomW, _anchorRoomH;  // largest-room dimensions (cells); a wiped/arena grid yields a degenerate room
-        private static long _kcPhaseStb = -1;      // cached c15b (King's Curse phase entity, table 82) STB base
 
         private static void DumpMapParts()
         {
@@ -1594,107 +1404,13 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!ZeroBariaRadius) return;   // let baria's native IQ.pos + facing×15 position the shield in front of her
             if (_bariaPatched) return;
-            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
-            long stb = -1;
-            foreach (long addr in KnownAddrs(101, dungeon))
-                if (Memory.ReadUInt(addr) == StbMagic && (uint)Memory.ReadInt(addr + 0x54) == 0x874) { stb = addr; break; }
-            if (stb < 0) stb = ScanForCodeOff(0x874, new System.Collections.Generic.HashSet<long>());
+            long stb = LocateStbByCodeOff(0x874);   // baria (CRunScript+0x3C; was KnownAddrs + scan)
             if (stb < 0) return;
             _bariaPatched = true;
             int n = 0;
             foreach (int o in new[] { 0xD68, 0xDC8, 0xE28, 0x1158, 0x11B8, 0x1218 })   // a2 (value) of each "push 15.0"
                 if (Memory.ReadInt(stb + o) == 1097859072) { Memory.WriteInt(stb + o, 0); n++; }
             Console.WriteLine($"[BARIApatch] zeroed {n}/6 orbit-radius floats @0x{stb:X8} — shield should stay on Ice Queen");
-        }
-
-        // One-shot: dump Ice Queen's dispatcher command flow (codeOff grid @0x2914) so we can find the player-proximity
-        // gate (GET_POSITION(-2) player + GET_DISTANCE vs a fixed arena/origin reference) that starts her attack loop.
-        private static bool _iqActDumped;
-        private static void DumpIqActivation(long stbBase)
-        {
-            if (_iqActDumped) return;
-            _iqActDumped = true;
-            var cmd = new System.Collections.Generic.Dictionary<int, string>
-            {
-                {0x24,"SET_POS"}, {0x0B,"GET_POS"}, {0x0A,"GET_DIST"}, {0xD5,"GET_MONSTOR_POS"}, {0xE1,"GET_MONSTOR_VEC"},
-                {0xDC,"SET_GLOBAL"}, {0xDD,"GET_GLOBAL"}, {0xC8,"SET_MOTION"}, {0x20,"SET_MOVE"}, {0x22,"CHK_MOVE"},
-            };
-            Console.WriteLine($"[IQact] IceQueen dispatcher 0x{stbBase:X8} +0x2914:");
-            for (int k = 0; k < 220; k++)
-            {
-                int off = 0x2914 + k * 12;
-                int op = Memory.ReadInt(stbBase + off), a1 = Memory.ReadInt(stbBase + off + 4), a2 = Memory.ReadInt(stbBase + off + 8);
-                string note = null;
-                if (op == 3 && cmd.TryGetValue(a2, out var c3)) note = "CMD " + c3;
-                else if (op == 3) note = $"push {a2}";
-                else if (op == 1 && cmd.TryGetValue(a1, out var c1)) note = "CMD " + c1;
-                else if (op == 1) note = $"push1 {a1}";
-                else note = op switch { 21 => $"EXT({a1})", 23 => "YIELD", 4 => $"JMP->0x{a1:X}", 17 => $"BRF->0x{a1:X}", 18 => $"BRT->0x{a1:X}", 15 => "RET", 14 => "BINOP", _ => null };
-                if (note != null) Console.WriteLine($"[IQact] +0x{off:X}: {note}");
-                if (op == 15) break;
-            }
-        }
-
-        private static readonly System.Collections.Generic.HashSet<int> _compDumped = new();
-        private static readonly System.Collections.Generic.HashSet<long> _compResolved = new();
-        private static void DumpCompanionSpawns()
-        {
-            if (_compDumped.Count >= _iqCompanions.Length) return;
-            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
-            foreach (var (cti, co, nm) in _iqCompanions)
-            {
-                if (_compDumped.Contains(cti)) continue;
-                long stb = -1;
-                foreach (long addr in KnownAddrs(cti, dungeon))
-                    if (!_compResolved.Contains(addr) && Memory.ReadUInt(addr) == StbMagic && (uint)Memory.ReadInt(addr + 0x54) == co) { stb = addr; break; }
-                if (stb < 0) stb = ScanForCodeOff(co, _compResolved);   // exclude already-claimed addrs (shared codeOffs)
-                if (stb < 0) continue;
-                _compResolved.Add(stb);
-                _compDumped.Add(cti);
-                Console.WriteLine($"[CompSpawn] {nm} (ti {cti}) @0x{stb:X8}:");
-                uint[] body = Memory.ReadUIntBatch(stb + 0x100, 0x1800);   // 0x100..0x6100 (full STB)
-                for (int j = 0; j + 12 < body.Length; j++)
-                {
-                    if (body[j] != 3 || body[j + 1] != 1 || body[j + 2] != 0x24) continue;
-                    float x = body[j + 4] == 2 ? BitConverter.Int32BitsToSingle((int)body[j + 5]) : (int)body[j + 5];
-                    float z = body[j + 10] == 2 ? BitConverter.Int32BitsToSingle((int)body[j + 11]) : (int)body[j + 11];
-                    Console.WriteLine($"[CompSpawn]   +0x{0x100 + j * 4:X}: x={x:F0} z={z:F0} (worldY={-z:F0})");
-                }
-            }
-        }
-
-        // One-shot: dump each live floor-slot's block (0x190) as coordinate-like floats, to find a registration/home
-        // field still at native while the live LocationX/Y is shifted — the likely engine enemy-wake reference.
-        private static bool _fsDumped;
-        private static void DumpFloorSlots()
-        {
-            if (_fsDumped) return;
-            if (FindSlotByEid(240) < 0 || FindSlotByEid(113) < 0) return;   // wait until BOTH the shield (baria) and Queen are live
-            bool any = false;
-            for (int s = 0; s <= 6; s++)
-            {
-                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
-                ushort eid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                any = true;
-                // Collision/targeting fields — compare the shield (eid 240) against the Queen (eid 113) to see why
-                // attacks pass through it: EntityScale (+0x44 collision radius), reticle/hitbox (+0x110/+0x114),
-                // collision-off countdown (+0xA8). A tiny/zero scale or reticle => not a lock-on target / no blocker.
-                float escale = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0x44)));
-                float retW = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0x110)));
-                float retH = BitConverter.Int32BitsToSingle(Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0x114)));
-                int colOff = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, 0xA8));
-                int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
-                int mhp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.MaxHp));
-                Console.WriteLine($"[FSdump] slot {s} eid={eid}: hp={hp}/{mhp} scale(+0x44)={escale:F2} reticle(+0x110/114)={retW:F2}/{retH:F2} colOff(+0xA8)={colOff}");
-                uint[] blk = Memory.ReadUIntBatch(EnemyAddresses.FloorSlots.SlotAddr(s, 0), 0x190 / 4);
-                for (int i = 0; i < blk.Length; i++)
-                {
-                    float f = BitConverter.Int32BitsToSingle((int)blk[i]);
-                    if (Math.Abs(f) > 10f && Math.Abs(f) < 5000f)
-                        Console.WriteLine($"[FSdump]   +0x{i * 4:X}: {f:F0}");
-                }
-            }
-            if (any) _fsDumped = true;
         }
 
         // The engine's enemy-wake culling reads the floor-slot LocationX/Y, which sits at the arrange origin (~0,0)
@@ -1716,8 +1432,6 @@ namespace Dark_Cloud_Improved_Version
 
         private static void NudgeCompanionPositions()
         {
-            DumpCompanionSpawns();
-            DumpFloorSlots();
             bool needScan = false;
             for (int k = 0; k < _iqCompanionPos.Length; k++)
             {
@@ -1815,7 +1529,7 @@ namespace Dark_Cloud_Improved_Version
         // each step since swaps shuffle things). Runs once per fight; re-armed when Ice Queen despawns.
         private static void ReorderToNativeOnce()
         {
-            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _anchorSet = false; _enPosDumped = false; _fsDumped = false; _shieldSlot = -1; _reikiDumped = false; return; }   // Ice Queen gone — re-arm
+            if (FindSlotByEid(113) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _anchorSet = false; _shieldSlot = -1; return; }   // Ice Queen gone — re-arm
             if (_swapDone) return;
             foreach (var (_, eid) in _nativeLayout)
                 if (FindSlotByEid(eid) < 0) return;                       // wait until all 7 are present
@@ -1896,7 +1610,7 @@ namespace Dark_Cloud_Improved_Version
         private static void PatchKorinoyaArrow()
         {
             if (_korPatched) return;
-            long stb = ScanRange(ScanLo, ScanHi, 0x7D0);
+            long stb = LocateStbByCodeOff(0x7D0);   // korinoya (CRunScript+0x3C; was a full RAM scan)
             if (stb < 0) return;
             _korPatched = true;
             int n = 0;
@@ -2372,29 +2086,6 @@ namespace Dark_Cloud_Improved_Version
             catch { /* transient PINE read */ }
         }
 
-        // OPTION-2 DIAGNOSTIC: dump the MonstorModelBuffer allocator (object @ 0x01F066D0: +0 base ptr,
-        // +8 current unit index, +0xC capacity) next to the located STB, so we can see whether
-        // stb == base + const (pure base read) or needs the current index. Remove once option 2 is derived.
-        private static void DumpAllocState(long stb)
-        {
-            try
-            {
-                uint[] a = Memory.ReadUIntBatch(0x21F066D0, 6);
-                long ptr = a[0] | 0x20000000L;
-                Console.WriteLine($"[BossPatch][alloc] obj@0x01F066D0: base=0x{a[0]:X8} +4=0x{a[1]:X8} cur=0x{a[2]:X8} cap=0x{a[3]:X8}"
-                    + $"  STB-base=0x{(uint)(stb - ptr):X8}  STB-deref... ");
-                // also try 0x01F066D0 as a POINTER to the allocator object
-                int objPtr = Memory.ReadInt(0x21F066D0);
-                if (objPtr > 0x01000000 && objPtr < 0x02000000)
-                {
-                    long o = objPtr | 0x20000000L;
-                    uint[] b = Memory.ReadUIntBatch(o, 4);
-                    Console.WriteLine($"[BossPatch][alloc] *obj@0x{objPtr:X8}: base=0x{b[0]:X8} +4=0x{b[1]:X8} cur=0x{b[2]:X8}  STB-base2=0x{(uint)(stb - (b[0] | 0x20000000L)):X8}");
-                }
-            }
-            catch { }
-        }
-
         // Applies both STB patches to a located boss STB, then services the death->collapse->removal:
         //   (1) SPAWN FIX: NOP the label-1 _SET_POSITION(0,0,0) call (60 bytes) so the boss doesn't reset to
         //       the arena origin on a normal floor.
@@ -2415,7 +2106,6 @@ namespace Dark_Cloud_Improved_Version
                     _iqNatZ = ReadCoordArg(a + 40, a + 44);
                     Console.WriteLine($"[IQnudge] Ice Queen native worldX={_iqNatX:F0} zArg={_iqNatZ:F0} (worldY={-_iqNatZ:F0})");
                 }
-                DumpIqActivation(stbBase);   // one-shot: find her player-proximity / arena-origin activation gate
                 if (IqNudgeX != 0f || IqNudgeY != 0f)
                 {
                     // OFFSET TEST: +IqNudgeX worldX, +IqNudgeY worldY (zArg = nativeZ - IqNudgeY since worldY = -zArg)

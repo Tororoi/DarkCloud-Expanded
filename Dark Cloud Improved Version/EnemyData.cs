@@ -5074,6 +5074,7 @@ namespace Dark_Cloud_Improved_Version
                 KingsCurseCoffin,
                 MinotaurJoe,
                 DarkGenie, DarkGenieForm2, RightHand, LeftHand, WineKeg,
+                DarkGenieFinal,   // final-form boss (Id 223); its companions have Id 0 (collide), kept out like the c17_ ones
                 KingsCurse,
                 BlackKnight,
             };

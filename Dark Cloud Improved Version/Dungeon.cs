@@ -34,6 +34,9 @@ namespace Dark_Cloud_Improved_Version
             Enemies.KingsCurseCoffin, Enemies.MinotaurJoe, Enemies.DarkGenie, Enemies.DarkGenieForm2,
             Enemies.RightHand, Enemies.LeftHand, Enemies.WineKeg, Enemies.KingsCurse,
             Enemies.BlackKnight,
+            // Dark Genie (Final Form) + its spawned attack-effect entities.
+            Enemies.DarkGenieFinal, Enemies.DGFinalSummon, Enemies.DGFinalGroundWave,
+            Enemies.DGFinalBeam, Enemies.DGFinalBeamS,
         };
         static byte[] wepLevelArray = new byte[10];
         public static bool monsterQuestMachoActive = false;
