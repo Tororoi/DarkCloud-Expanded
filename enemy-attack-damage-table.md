@@ -13,9 +13,16 @@ species-table `AttackPower` (flat across enemies that hit differently — see `E
 - **Melee** (`_SET_DMG_PARA`, cmd 132): swing hitbox; **arg0 = base damage** (clean constant). Listed per
   attack in the *Melee dmg* column.
 - **Projectile** (`_SET_SHOT`/`_SET_SHOT2`, cmd 133/229): fires a shot. Signature is
-  `_SET_SHOT(modelFrameName, p1, p2, p3, [damage])` — the **optional 5th arg is the damage** (`-1`/`default`
-  if omitted, e.g. Golem). The model is a named frame in the enemy's own model data — there is NO separate
-  projectile-damage table; the damage is in the script. Listed in the *Projectile dmg* column.
+  `_SET_SHOT(modelFrameName, p1, p2, p3, [damage])` — the **optional 5th arg is the damage**. The model is a
+  named frame in the enemy's own model data — there is NO separate projectile-damage table; the damage is in
+  the script. Listed in the *Projectile dmg* column.
+- **`default`** in the projectile column = the `_SET_SHOT` 5th arg was **omitted** in the script. The handler
+  (`0x1E4120`) initialises the shot's damage field to `-1`, but these shots **still deal real damage** —
+  confirmed by in-game measurement (2026-06-19): **Sam 58**, **Crescent Baron 70** (solved from `damage =
+  base − defense` across two defense values). So the `-1` is NOT non-damaging; the actual base comes from a
+  source **outside the STB** that is not yet pinned (it is not the STB, not the species record, and not
+  `AttackPower`). Treat `default` as "damage TBD — measure in-game"; measured values are noted per row.
+  (My earlier static "clamps to 0 / non-damaging" read was WRONG — left here as a caution.)
 - **No damage command** — `_SET_BODY_COL`/`_SET_MOV_COL` are collision *presence* (geometry) and
   `_SET_BODY_COL_PARA` only sets weak-point / damage-**taken** multipliers (`damageToEnemy × param/100`), so a
   body collision is NOT a source of damage dealt to the player. An enemy with no `_SET_DMG_PARA` and no
@@ -64,7 +71,7 @@ Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (11
 | 22 | 26 | Auntie Medu | `e26a` | 74 | 60 |  |
 | 23 | 27 | Captain | `e27a` | 74, 74, 72, 72 | — |  |
 | 24 | 28 | Corcea | `e28a` | 43, 43, 42, 42 | — |  |
-| 25 | 30 | Golem | `e30a` | 71, 71, 75, 75, 62, 55, 45 | 1, default |  |
+| 25 | 30 | Golem | `e30a` | 71, 71, 75, 75, 62, 55, 45 | 1, default | "shockwave" = melee 55; shot2 dmg unmeasured |
 | 26 | 31 | Mr. Blare | `e31a` | 81, 81 | 80 |  |
 | 27 | 32 | Dune | `e32a` | 85, 85, 85 | — |  |
 | 28 | 33 | Titan | `e33a` | 105, 105, 105, 105, 90, 75, 60 | 1, 90 |  |
@@ -107,7 +114,7 @@ Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (11
 | 65 | 73 | Blue Dragon | `e73a` | 90, 90 | — |  |
 | 66 | 74 | Black Dragon | `e74a` | 130, 130 | — |  |
 | 67 | 75 | Mask of Prajna | `e75a` | 80, 78 | 65 |  |
-| 68 | 76 | Crescent Baron | `e76a` | 98, 98, 94, 94 | default |  |
+| 68 | 76 | Crescent Baron | `e76a` | 98, 98, 94, 94 | default → **70** | shot dmg 70 measured in-game (not in STB) |
 | 69 | 77 | Rockanoff | `e77a` | 35, 35 | — |  |
 | 70 | 78 | King Mimic (Wise Owl Forest) | `e78a` | 67, 56, 45, 50 | — |  |
 | 71 | 79 | Mimic (Wise Owl Forest) | `e79a` | 47, 47 | — |  |
@@ -116,7 +123,7 @@ Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (11
 | 74 | 82 | King Mimic (Gallery of Time) | `e82a` | 134, 120, 98 | — |  |
 | 75 | 83 | Mimic (Gallery of Time) | `e83a` | 100, 100 | — |  |
 | 76 | 84 | Ice Arrow | `korinoya` | 69 | — | resolved STB `c13_korinoya` |
-| 77 | 85 | Sam | `e86a` | 64, 64, 80 | default |  |
+| 77 | 85 | Sam | `e86a` | 64, 64, 80 | default → **58** | shot dmg 58 measured in-game (not in STB) |
 | 78 | 112 | Dran | `c12a` | 45, 45, 45, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25 | 17 |  |
 | 79 | 114 | Master Utan | `c14a` | 62, 47 | 13 |  |
 | 80 | 113 | Ice Queen | `c13a` | — | — | no own attack — deals damage only via spawned companions |
@@ -200,4 +207,4 @@ Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (11
 | 163 | 309 | Mimic (Demon Shaft) (Enhanced x3) | `e109` | 130 | — |  |
 | 164 | 310 | King Mimic (Demon Shaft) (Enhanced x3) | `e110` | 170, 170, 170 | — |  |
 | 165 | 221 | Black Knight | `c21a` | 170, 170 | 26, 6, 8, 8 |  |
-| 166 | 221 | Black Knight | `c22a` | 170 | 4, 15, default |  |
+| 166 | 221 | Black Knight | `c22a` | 170 | 4, 15, default | default shot dmg unmeasured |

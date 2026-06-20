@@ -49,6 +49,56 @@ namespace Dark_Cloud_Improved_Version
         }
     }
 
+    /// <summary>
+    /// CRunScript — the per-enemy-slot STB-VM state, a sub-array inside CMainMonstorUnit at
+    /// Base + 0x54DD0 (PCSX2 0x21E4D5A0), stride 0x48. One entry per FloorSlots/CCharacter slot index.
+    /// (Listed in EnemyModelInjector._slotBlocks as the third per-slot block.)
+    ///
+    /// ★ RUNTIME STB LOCATION (confirmed 2026-06-19, live RE): <see cref="StbPtr"/> (+0x3C) holds the NATIVE
+    /// base address of the exact .stb behaviour script this slot's VM is executing — i.e. the way to find any
+    /// enemy's loaded STB in RAM with no scan and no roster math. This supersedes BossScriptPatcher's
+    /// KnownAddrs table + signature scan (which can also locate a STALE/duplicate copy — e.g. Minotaur Joe
+    /// loads twice, at 0x011A8990 and 0x01698CC0; CRunScript+0x3C names the live one, 0x011A8990).
+    /// Validate a read pointer by checking the STB magic 0x00425453 at +0x00 and the label-1 codeOffset at
+    /// +0x54. Usage: stbBase = Memory.ReadInt(CRunScript.StbPtrAddr(slot)); patch at (stbBase | 0x20000000).
+    ///
+    /// Other observed fields: +0x2C = current instruction pointer (into the running script),
+    /// +0x40 = code base (script base + label-1 code offset). See memory enemy-stat-normalization / stb-vm-cracked.
+    /// </summary>
+    internal static class CRunScript
+    {
+        internal const long Base   = EnemyAddresses.MainMonstorUnit.Base + 0x54DD0; // 0x21E4D5A0
+        internal const int  Stride = 0x48;
+        internal const int  CurIp  = 0x2C; // current instruction pointer (native)
+        internal const int  StbPtr = 0x3C; // ★ native base of the STB this slot executes
+        internal const int  CodeBase = 0x40; // script base + codeOffset
+
+        internal static long SlotAddr(int slot, int fieldOffset) => Base + (long)slot * Stride + fieldOffset;
+        /// <summary>EE address of the STB-base pointer field for <paramref name="slot"/>.</summary>
+        internal static long StbPtrAddr(int slot) => SlotAddr(slot, StbPtr);
+    }
+
+    /// <summary>
+    /// Cached per-attack MELEE damage — the array that <c>_SET_DMG_PARA</c> (STB cmd 132, handler ELF 0x1E3FD0)
+    /// writes its arg0 into at the enemy's INIT. A per-slot sub-array of CMainMonstorUnit at
+    /// Base + slot*0x350 + 0x5A4D0, indexed by body-part (the index comes from a per-slot field at +0x5A690);
+    /// entry stride 4 (int). This is the value <c>BtCheckDamageProc</c> ultimately subtracts player defense from.
+    ///
+    /// ★ This is the live MELEE-damage normalization hook (confirmed 2026-06-19): patching an entry here changes
+    /// the dealt damage immediately (e.g. Arthur slot's two 116 entries → 58 ⇒ his hits dropped 62→4 at def 54).
+    /// Patching the STB script value instead is too late — _SET_DMG_PARA already latched it here at spawn.
+    /// (The _SET_DMG_PARA value list per species is mirrored in EnemyDefaults.MeleeDamage.)
+    /// </summary>
+    internal static class DmgParaCache
+    {
+        internal const int OffsetInUnit = 0x5A4D0; // base offset within CMainMonstorUnit
+        internal const int SlotStride   = 0x350;   // per-slot
+        internal const int EntryStride  = 4;       // per body-part damage int
+
+        /// <summary>EE base address of <paramref name="slot"/>'s per-body-part melee-damage array.</summary>
+        internal static long ArrayAddr(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + OffsetInUnit;
+    }
+
     /// <summary>Enemy slot field offsets relative to slot base address.</summary>
     internal static class EnemySlotOffsets
     {

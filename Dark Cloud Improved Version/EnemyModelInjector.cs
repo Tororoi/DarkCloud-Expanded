@@ -429,7 +429,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Snapshots a species record (full 0x9C) once, before the first edit to it.</summary>
-        private static void SnapshotSpeciesRecordIfNeeded(int tableIndex)
+        internal static void SnapshotSpeciesRecordIfNeeded(int tableIndex)
         {
             if (_speciesRecordSnaps.ContainsKey(tableIndex)) return;
             _speciesRecordSnaps[tableIndex] =

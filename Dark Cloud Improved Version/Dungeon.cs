@@ -108,6 +108,10 @@ namespace Dark_Cloud_Improved_Version
                 // Authentic mimic chests: register a chest disguise for each placed roster mimic (no-op off
                 // custom-roster floors; dedups + waits for placement). Engine renders + wakes on open.
                 EnemyModelInjector.SpawnMimicChestsOnFloor();
+                // Gradient stat normalization: rescale non-native enemies' HP/defense (and optionally damage)
+                // toward the current dungeon's power level. Self-guards to run once per floor; no-op when off.
+                EnemyStatNormalizer.NormalizeStatsForFloor();
+                ShotSourceProbe.Tick();   // TEMP: locate the RAM source of default-shot damage
                 if (Player.InDungeonFloor())
                 {
                     // Evilcise curse applies immediately on equip, even from the pause menu
