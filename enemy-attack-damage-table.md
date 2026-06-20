@@ -1,68 +1,38 @@
 # Enemy attack damage table
 
-Per-species attack damage decoded from each enemy's behaviour script `dun/monstor/<code>.stb` in
-`data.dat`. Generated 2026-06-19; projectile column revised 2026-06-20 (STB VM decoded — `1`/`2` were op1
-variable indices, not damage; corrected to `var`/literal/`default`; added several missed shooters).
+Per-species attack damage, decoded from each enemy's behaviour script `dun/monstor/<code>.stb` in `data.dat`.
 
-## How enemy damage works
+## How damage works
 
-Hit damage = **`baseDamage − playerDefense`** (clamped >0), computed in `BtCheckDamageProc` (dun overlay
-`0x01DBAFD0`) and applied via `AddNowLife`. `baseDamage` is set **by the STB script**, NOT by the
-species-table `AttackPower` (flat across enemies that hit differently — see `EnemyAddresses.cs` / memory
-`enemy-attack-damage-system`). Three attack mechanisms:
+Hit damage = **`baseDamage − playerDefense`** (clamped > 0), computed in `BtCheckDamageProc` (dun overlay
+`0x01DBAFD0`) and applied via `AddNowLife`. `baseDamage` comes from the **STB script**, not the species-table
+`AttackPower` (which is identical across enemies that hit very differently). The script sets it two ways:
 
-- **Melee** (`_SET_DMG_PARA`, cmd 132): swing hitbox; **arg0 = base damage** (clean constant). Listed per
-  attack in the *Melee dmg* column.
-- **Projectile** (`_SET_SHOT` = STB funcId **133**; `_SET_SHOT2` = STB funcId **229** — the monster registry maps
-  229 to the second-shot handler `0x1E4310`; registry funcId 135 exists but is **never used**. 6 enemies fire a
-  229 second shot: Heart 107, Mr. Blare 80, Billy 93, Sam 58, Bishop Q 130, Heart-Enh 130). Signature is
-  `_SET_SHOT(modelFrameName, p1, p2, p3,
-  [damage])` — the **5th arg is the damage**, read **only when exactly 5 args are passed** (vmcode op21
-  `argc==6`, since `argc` counts the funcId too). The model is a named frame in the enemy's own model data —
-  there is NO separate projectile-damage table; the damage lives in the script. There are **three** cases
-  (RE'd 2026-06-20 by decoding the STB VM, `exe__10CRunScript` `0x23E080`; 12-byte vmcode records `{op,A,B}`,
-  op3 = push-literal, op1 = push-runtime-variable, op21 = ext-call):
-  - **literal** — the 5th arg is an op3 int constant baked directly at the `_SET_SHOT`: the real per-species value
-    (e.g. Pirate's Chariot **69**, Gunny **26**, Mr. Blare **90**, Billy **110**). Shown as the number.
-  - **subroutine** (also a number) — the 5th arg is an op1 `scope=1` local, because the `_SET_SHOT` lives in a
-    shared "fire" subroutine that takes the damage as an **argument**. The real value is an op3 int-literal pushed
-    at each `call_func` site as argument `idx`; resolving that gives the **base** damage (e.g. Golem **64** — which
-    matches the live `+0x5FF78` field — Gol/Sil 62, Dragon 50, Black Dragon 135). ⚠ This is a **distance-scaled
-    base**: the engine multiplies it down by player distance at runtime (point-blank = full base, far = much less),
-    so the table value is the point-blank maximum. Cross-validated where an enemy has both forms with equal value
-    (Titan 90/90, Steel Giant 64/64, Blizzard 105/105). ⚠ The `1`/`2` values in earlier versions of this table were
-    a SCANNER BUG — the op1 variable **index** (idx 1 / idx 2), NOT damage — now resolved to the real value.
-    Some shooters (Ghost 21, Lich 100, Lich-Enhanced 110) **forward** their `local[idx]` one extra subroutine level
-    before the literal appears — resolved by walking the call chain. No purely-computed op1 shots remain.
-  - **`default`** (now a number) — fewer than 5 args (`argc!=6`), so the handler leaves the shot's damage at `-1`
-    and the engine uses the shot effect's **own default**. SOURCE FOUND 2026-06-20: `CSHOT_EFFECT::Set` (ELF
-    0x1ADD60) inits the shot damage from `BT_SHOT_EFFECT+0x3C` — a `BehaviorScriptTable` entry (0x27EB90, stride
-    0x70) selected by the species record's `+0x68`(primary)/`+0x6A` shot-effect index via the pointer array at
-    `0x27FA70`. Default shots use the **primary `+0x68`** index. Verified: **Sam 58** (`i_boll`), **Crescent Baron
-    70** (`mikazuki_ex`) match in-game measurement; also **Thursday 30** (`ringo_ex`), **Golem shot2 34**
-    (`g_wave1`). (Heart's `magic_bin` 133-shot is a 0-damage bind; its real damage is a funcId-229 shot dealing
-    107 — see the funcId-229 note above.) The `70.0` global at `0x21D90420` is a red herring (no readers). (My
-    earlier static "clamps to 0 / non-damaging" read was WRONG.)
-- **No damage command** — `_SET_BODY_COL`/`_SET_MOV_COL` are collision *presence* (geometry) and
-  `_SET_BODY_COL_PARA` only sets weak-point / damage-**taken** multipliers (`damageToEnemy × param/100`), so a
-  body collision is NOT a source of damage dealt to the player. An enemy with no `_SET_DMG_PARA` and no
-  `_SET_SHOT` simply deals **no scripted damage**. After the recursive-scanner fix only 7 rows are like this,
-  and each is a non-attacker by design: **Ice Queen** (damages you only via her spawned companions), **King's
-  Curse Coffin** (the passive, damageable phase of King's Curse), the Ice Queen's **Ice Barrier** / **Ice
-  Prison**, and the Dark Genie **wind/light/shock** effect entities. Their roles are spelled out in *Notes*.
+- **Melee** — funcId 132 sets the swing's base damage (`arg0`); funcId 131 (`_SET_DMG_PARA`) sets only its hitbox
+  geometry. *Melee dmg* column.
+- **Projectile** — `_SET_SHOT` (funcId 133) / `_SET_SHOT2` (funcId 229); handlers `0x1E4120` / `0x1E4310`.
+  Signature `_SET_SHOT(modelName, x, y, z, [damage])`; the optional 5th arg is the damage (read only when
+  present — vmcode `op21 argc==6`). The shot model is a named frame in the enemy's own model data; there is no
+  separate projectile table. Decoded from the STB VM (`exe__10CRunScript` `0x23E080`; 12-byte vmcode `{op, A, B}`
+  — op3 push-literal, op1 push-variable, op21 ext-call), the *Projectile dmg* column uses three forms:
 
-Rows in **TableIndex** order. `—` = mechanism not used.
+| form | how the 5th arg is supplied | meaning |
+|---|---|---|
+| `N` | op3 literal at the call site | fixed per-species damage |
+| `N var` | op1 `scope=1` local → the literal pushed at the subroutine's `call_func` site (Ghost/Lich forward it one extra level) | **distance-scaled**: `N` is the point-blank max; the engine scales it down with player distance |
+| `N def` | no 5th arg; engine uses the shot effect's default at `BT_SHOT_EFFECT+0x3C` (a `BehaviorScriptTable` entry, `0x27EB90`) selected by the species record's primary shot index `+0x68` via pointer array `0x27FA70` | fixed per-effect default |
 
-Truncated `ModelCode`s for the Ice Queen / Dark Genie effect entities (e.g. `c17_`, `kori`, `i_me`) are
-resolved to their real `.stb` (shown in *Notes*). The Ice Queen entity herself deals no damage; her damage
-comes entirely from spawned companions: Ice Arrow 69, Ice Meteor 69, Ice Tornado 74, Ice Aura 74 (her Barrier
-and Prison are non-damaging crowd-control). Dark Genie hands: hand swipe 125, beam (`c17_beem`) 175;
-wind/light/shock splits are non-damaging effect entities.
+Enemies that fire two shots list both (e.g. Bishop Q `130, 130`, Golem `64 var, 34 def`).
 
-Damage is extracted by a **recursive** STB scanner that follows `call_func` subroutines. An earlier
-label-only scan missed every attack placed in a subroutine, which made several enemies look like stubs or
-pure-contact when they actually shoot: the **Gemron** elemental turrets (Fire 100 / Ice 120 / Thunder 130 /
-Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (110) are all ranged shooters.
+**No damage** — `_SET_BODY_COL` / `_SET_MOV_COL` are collision geometry and `_SET_BODY_COL_PARA` sets
+damage-*taken* multipliers, so none of them hurt the player; an enemy with no `_SET_DMG_PARA` and no `_SET_SHOT`
+(`—` / `—` rows) is a non-attacker by design — the Ice Queen and her Ice Barrier / Ice Prison, King's Curse
+Coffin, and the Dark Genie wind/light/shock effect entities.
+
+Rows are in **TableIndex** order (`—` = mechanism not used). Truncated `ModelCode`s for the Ice Queen / Dark Genie
+effect entities (`c17_`, `kori`, `i_me`, …) are resolved to their real `.stb` in *Notes*. The Ice Queen deals
+damage only through spawned companions (Ice Arrow 69, Ice Meteor 69, Ice Tornado 74, Ice Aura 74); the Dark Genie
+through its hands (swipe 125, beam `c17_beem` 175).
 
 | TableIndex | Id | Name | Model | Melee dmg | Projectile dmg | Notes |
 |---:|---:|---|---|---|---|---|
@@ -172,6 +142,7 @@ Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (11
 | 103 | 0 | Ice Meteor | `i_me` | 69 | — | resolved STB `c13_i_meteo` |
 | 104 | 0 | Ice Tornado | `i_ta` | 74 | — | resolved STB `c13_i_tatumaki` |
 | 105 | 317 | Gacious | `e124` | 130, 130, 130, 130, 130 | — |  |
+| 106 | 223 | Dark Genie (Final Form) | `c23a` | 85, 85, 85, 85, 85 | 130 def | Dark Genie's final form (endgame battle); distinct from c17a/c17b. Mouth beam = `ex4`/`ex5` `_SET_SHOT` (BST default 130 via `last_gw2`); 5 hand swings ×85 |
 | 111 | 311 | Gemron (Fire) | `e111` | — | 100 |  |
 | 112 | 308 | Nikapous | `e108` | 150, 150, 150, 150 | 150 |  |
 | 113 | 56 | White Fang (Enhanced) | `e125` | 122, 122 | — |  |
@@ -226,5 +197,5 @@ Wind 140 / Holy 150), **Pirate's Chariot** (cannon, 69), and **Silver Gear** (11
 | 162 | 55 | Living Armor (Enhanced) | `e164` | 150, 150, 150, 150 | — |  |
 | 163 | 309 | Mimic (Demon Shaft) (Enhanced x3) | `e109` | 130 | — |  |
 | 164 | 310 | King Mimic (Demon Shaft) (Enhanced x3) | `e110` | 170, 170, 170 | — |  |
-| 165 | 221 | Black Knight | `c21a` | 170, 170 | 26, 6, 8 |  |
-| 166 | 221 | Black Knight | `c22a` | 170 | 4, 15, default | default shot dmg unmeasured |
+| 165 | 221 | Black Knight | `c21a` | 170, 170 | 150 | boss-AI specials (BST behaviors via species `+0x68/+0x6A`): `engetu` crescent slash 150, `terepo` teleport (movement, no dmg); no `_SET_SHOT`. Old `26,6,8` was a scanner misread |
+| 166 | 221 | Black Knight Mount | `c22a` | 170 | 170 def | `g_center` `_SET_SHOT` (BST default → 170, = the `dash` charge); `kamai` stance (movement, no dmg). Old `4,15` was a misread |

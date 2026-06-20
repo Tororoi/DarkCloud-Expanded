@@ -3722,15 +3722,43 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=100,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50,
-            MeleeDamage=new int[]{170,170}, ProjectileDamage=new int[]{26,6,8} };
+            // Projectile = the `engetu` crescent-slash boss behavior (BST idx30, 150); `terepo` (idx33) is teleport (no dmg).
+            MeleeDamage=new int[]{170,170}, ProjectileDamage=new int[]{150} };
 
         // tbl_166 = Black Knight Mount; present in DS floor 100 binary pool.
         // Motions: c22a.chr info.cfg @ data.dat 0x1e565800 — identical to c21a (0–26, death=7) plus:
         // Idx	Frames	Name (JP)	Meaning
         // 27	595–645	攻撃３（強攻撃）	attack 3 (heavy attack)
         internal static readonly EnemyDefaults BlackKnightMount = new EnemyDefaults {
-            Id=221, TableIndex=166, ModelCode="c22a", Name="Black Knight", MaxHp=50000, AttackPower=0,
-            MeleeDamage=new int[]{170}, ProjectileDamage=new int[]{4,15,-1} };
+            // Projectile = the `g_center` _SET_SHOT (BST default 170, = the `dash` charge idx31); `kamai` (idx32) is a stance (no dmg).
+            Id=221, TableIndex=166, ModelCode="c22a", Name="Black Knight Mount", MaxHp=50000, AttackPower=0,
+            MeleeDamage=new int[]{170}, ProjectileDamage=new int[]{170} };
+
+        // Dark Genie — FINAL FORM (EID 223, model c23a); the endgame Dark Genie battle, distinct from the earlier
+        // forms c17a/c17b. Giant hands + mouth beam. (Its TI 106 sits in the d5 spawn-layout pool in the data, but
+        // the final fight is a scripted encounter, not a Muska Lacka floor.)
+        // Weak to fire (70) and holy (140). Attacks: 5 hand swings ×85; mouth beam = funcId-229 `_SET_SHOT`
+        // (`ex4`/`ex5`), BST default 130 via `last_gw2` (idx26, proj speed 1.5, lifetime 20).
+        // Sub-effect STBs: c23_beem (beam) / c23_syougeki (impact) / c23_hasira (pillar).
+        // Motions: c23a.chr info.cfg.
+        // Idx  Frames    Name (JP)        Meaning
+        // 0    5–20      基本立ち          basic idle
+        // 1    26–30     肩開き            shoulder open
+        // 2    30–40     開きループ        open loop
+        // 3    40–44     肩閉じ            shoulder close
+        // 4    51–70     左手ひっぱたき     left-hand slap
+        // 5    76–94     右手ひっぱたき     right-hand slap
+        // 6    100–107   口開け            mouth open
+        // 7    107–115   溜                charge
+        // 8    115–123   発射体制に        firing stance
+        // 9    123–130   発射ループ        firing loop
+        // 10   130–140   発射戻り          firing return
+        internal static readonly EnemyDefaults DarkGenieFinal = new EnemyDefaults {
+            Id=223, TableIndex=106, ModelCode="c23a", Name="Dark Genie (Final Form)", MaxHp=5000, Abs=5, MinGoldDrop=5, DropChance=30,
+            Category=EnemyCategory.Undead, FireRes=70, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
+            StealItemId=65535, ItemResA=100, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            MeleeDamage=new int[]{85,85,85,85,85}, ProjectileDamage=new int[]{130} };
 
         // ── Demon Shaft enhanced tier variants ────────────────────────────────────
         // These reuse base-game species IDs with new model codes and scaled stats.
