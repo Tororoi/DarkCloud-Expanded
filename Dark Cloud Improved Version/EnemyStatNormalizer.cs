@@ -84,8 +84,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Dictionary<long, int> _bstOriginal = new();
         private static bool _bstDirty;      // any BST entry currently holds a scaled value (needs restore on exit)
 
-        private static bool IsBoss(in EnemyDefaults e) =>
-            !string.IsNullOrEmpty(e.ModelCode) && e.ModelCode[0] == 'c';
+        private static bool IsBoss(in EnemyDefaults enemyDefaults) =>
+            !string.IsNullOrEmpty(enemyDefaults.ModelCode) && enemyDefaults.ModelCode[0] == 'c';
 
         // ════════════════════════════════════════════════════════════════════════════════════════════
         // Init
@@ -117,13 +117,13 @@ namespace Dark_Cloud_Improved_Version
         // enhanced variants that share an Id and so collide in Enemies.Defaults). Keyed by unique TableIndex.
         private static void BuildTableIndexMap()
         {
-            foreach (FieldInfo f in typeof(Enemies).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+            foreach (FieldInfo field in typeof(Enemies).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             {
-                if (f.FieldType != typeof(EnemyDefaults)) continue;
-                var e = (EnemyDefaults)f.GetValue(null);
-                if (!e.TableIndex.HasValue) continue;
-                _byTableIndex[e.TableIndex.Value] = e;
-                (_byId.TryGetValue(e.Id, out var l) ? l : (_byId[e.Id] = new List<int>())).Add(e.TableIndex.Value);
+                if (field.FieldType != typeof(EnemyDefaults)) continue;
+                var enemyDefaults = (EnemyDefaults)field.GetValue(null);
+                if (!enemyDefaults.TableIndex.HasValue) continue;
+                _byTableIndex[enemyDefaults.TableIndex.Value] = enemyDefaults;
+                (_byId.TryGetValue(enemyDefaults.Id, out var tiList) ? tiList : (_byId[enemyDefaults.Id] = [])).Add(enemyDefaults.TableIndex.Value);
             }
         }
 
@@ -140,13 +140,13 @@ namespace Dark_Cloud_Improved_Version
                     if (pools == null) continue;
                     for (int floor = 0; floor < pools.Length; floor++)
                     {
-                        int[] tis = pools[floor].TableIndices;
-                        if (tis == null) continue;
+                        int[] tableIndices = pools[floor].TableIndices;
+                        if (tableIndices == null) continue;
                         int hpdef = HpDefTierOf(d, floor); // for DS this varies by floor band
-                        foreach (int ti in tis)
+                        foreach (int tableIndex in tableIndices)
                         {
-                            if (!_atkTier.TryGetValue(ti, out int a) || d < a)         _atkTier[ti]   = d;
-                            if (!_hpdefTier.TryGetValue(ti, out int h) || hpdef < h)    _hpdefTier[ti] = hpdef;
+                            if (!_atkTier.TryGetValue(tableIndex, out int prevAtkTier) || d < prevAtkTier)         _atkTier[tableIndex]   = d;
+                            if (!_hpdefTier.TryGetValue(tableIndex, out int prevHpDefTier) || hpdef < prevHpDefTier)    _hpdefTier[tableIndex] = hpdef;
                         }
                     }
                 }
@@ -159,39 +159,39 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int t = 0; t < HpDefTierCount; t++)
             {
-                var hp = new List<double>(); var dr = new List<double>(); var wd = new List<double>();
+                var hpSamples = new List<double>(); var drSamples = new List<double>(); var wdSamples = new List<double>();
                 foreach (var kv in _hpdefTier)
                 {
-                    if (kv.Value != t || !_byTableIndex.TryGetValue(kv.Key, out EnemyDefaults e) || IsBoss(e)) continue;
-                    if (e.MaxHp.HasValue)           hp.Add(e.MaxHp.Value);
-                    if (e.DamageReduction.HasValue) dr.Add(e.DamageReduction.Value);
-                    if (e.WeaponDefense.HasValue)   wd.Add(e.WeaponDefense.Value);
+                    if (kv.Value != t || !_byTableIndex.TryGetValue(kv.Key, out EnemyDefaults enemyDefaults) || IsBoss(enemyDefaults)) continue;
+                    if (enemyDefaults.MaxHp.HasValue)           hpSamples.Add(enemyDefaults.MaxHp.Value);
+                    if (enemyDefaults.DamageReduction.HasValue) drSamples.Add(enemyDefaults.DamageReduction.Value);
+                    if (enemyDefaults.WeaponDefense.HasValue)   wdSamples.Add(enemyDefaults.WeaponDefense.Value);
                 }
-                _bHp[t] = (float)Median(hp); _bDr[t] = (float)Median(dr); _bWd[t] = (float)Median(wd);
+                _bHp[t] = (float)Median(hpSamples); _bDr[t] = (float)Median(drSamples); _bWd[t] = (float)Median(wdSamples);
             }
             for (int t = 0; t < AtkTierCount; t++)
             {
-                var mel = new List<double>(); var pr = new List<double>();
+                var meleeSamples = new List<double>(); var projSamples = new List<double>();
                 foreach (var kv in _atkTier)
                 {
-                    if (kv.Value != t || !_byTableIndex.TryGetValue(kv.Key, out EnemyDefaults e) || IsBoss(e)) continue;
-                    int m = Representative(e.MeleeDamage);      if (m > 0) mel.Add(m);
-                    int p = Representative(e.ProjectileDamage); if (p > 0) pr.Add(p);
+                    if (kv.Value != t || !_byTableIndex.TryGetValue(kv.Key, out EnemyDefaults enemyDefaults) || IsBoss(enemyDefaults)) continue;
+                    int meleeRep = Representative(enemyDefaults.MeleeDamage);      if (meleeRep > 0) meleeSamples.Add(meleeRep);
+                    int projRep  = Representative(enemyDefaults.ProjectileDamage); if (projRep  > 0) projSamples.Add(projRep);
                 }
-                _bMelee[t] = (float)Median(mel); _bProj[t] = (float)Median(pr);
+                _bMelee[t] = (float)Median(meleeSamples); _bProj[t] = (float)Median(projSamples);
             }
             // The tiers are a difficulty ramp, so each baseline should be a rising trend. Sparse stats produce
             // noisy dips/gaps from tiny sample sizes — enforce non-decreasing (fill empty tiers, then cumulative-max).
-            foreach (float[] b in new[] { _bHp, _bDr, _bWd, _bMelee, _bProj }) MakeMonotonic(b);
+            foreach (float[] baseline in new[] { _bHp, _bDr, _bWd, _bMelee, _bProj }) MakeMonotonic(baseline);
         }
 
         // Back-fill leading empty tiers from the first sampled value, then make the series non-decreasing.
-        private static void MakeMonotonic(float[] b)
+        private static void MakeMonotonic(float[] baseline)
         {
-            int first = Array.FindIndex(b, v => v > 0);
+            int first = Array.FindIndex(baseline, v => v > 0);
             if (first < 0) return;               // stat never sampled — leave all zero (Factor falls back to 1)
-            for (int d = 0; d < first; d++) b[d] = b[first];
-            for (int d = 1; d < b.Length; d++) if (b[d] < b[d - 1]) b[d] = b[d - 1];
+            for (int tier = 0; tier < first; tier++) baseline[tier] = baseline[first];
+            for (int tier = 1; tier < baseline.Length; tier++) if (baseline[tier] < baseline[tier - 1]) baseline[tier] = baseline[tier - 1];
         }
 
         // A species' representative attack = its strongest hit (ignores the -1 "engine default" projectile marker).
@@ -220,26 +220,26 @@ namespace Dark_Cloud_Improved_Version
             return Math.Max(currentDungeon, nativeTier - (nativeTier - currentDungeon) * k);
         }
 
-        private static float Lerp(float[] baseline, float e)
+        private static float Lerp(float[] baseline, float effectiveTier)
         {
-            if (e <= 0) return baseline[0];
-            if (e >= baseline.Length - 1) return baseline[baseline.Length - 1];
-            int i = (int)Math.Floor(e);
-            float f = e - i;
+            if (effectiveTier <= 0) return baseline[0];
+            if (effectiveTier >= baseline.Length - 1) return baseline[^1];
+            int i = (int)Math.Floor(effectiveTier);
+            float frac = effectiveTier - i;
             float v0 = baseline[i], v1 = baseline[i + 1];
             if (v0 <= 0) return v1;           // no native sample in tier i — fall back to the neighbour
             if (v1 <= 0) return v0;
-            return v0 * (1 - f) + v1 * f;
+            return v0 * (1 - frac) + v1 * frac;
         }
 
         // Scale factor for a stat given its per-dungeon baseline series. 1.0 = leave unchanged.
         private static float Factor(float[] baseline, int nativeTier, int currentDungeon)
         {
-            float bn = baseline[nativeTier];
-            if (bn <= 0) return 1f;
-            float be = Lerp(baseline, EffectiveTier(nativeTier, currentDungeon));
-            if (be <= 0) return 1f;
-            return be / bn;
+            float baselineNative = baseline[nativeTier];
+            if (baselineNative <= 0) return 1f;
+            float baselineEffective = Lerp(baseline, EffectiveTier(nativeTier, currentDungeon));
+            if (baselineEffective <= 0) return 1f;
+            return baselineEffective / baselineNative;
         }
 
         private static int ScaleRound(int nativeValue, float factor)
@@ -304,54 +304,54 @@ namespace Dark_Cloud_Improved_Version
             int normalized = 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                long b = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
-                if (Memory.ReadInt(b + EnemySlotOffsets.RenderStatus) < 0) continue; // empty slot
-                int id = Memory.ReadUShort(b + EnemySlotOffsets.EnemySpeciesId);
-                if (_swept.TryGetValue(s, out int sp) && sp == id) continue;  // this enemy already normalized
-                if (!_byId.TryGetValue(id, out var tis)) continue;            // not a known species
+                long slotBase = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                if (Memory.ReadInt(slotBase + EnemySlotOffsets.RenderStatus) < 0) continue; // empty slot
+                int id = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
+                if (_swept.TryGetValue(s, out int prevSpeciesId) && prevSpeciesId == id) continue;  // this enemy already normalized
+                if (!_byId.TryGetValue(id, out var tableIndices)) continue;   // not a known species
                 _swept[s] = id; normalized++;                                // normalize once (enemies spawn at load, no respawn)
 
-                int slotMaxHp = Memory.ReadInt(b + EnemySlotOffsets.MaxHp);
-                int ti = tis.Count == 1 ? tis[0]
-                                        : tis.OrderBy(t => Math.Abs((_byTableIndex[t].MaxHp ?? 0) - slotMaxHp)).First();
-                EnemyDefaults e = _byTableIndex[ti];
-                bool hasHp  = _hpdefTier.TryGetValue(ti, out int nHp);
-                bool hasAtk = _atkTier.TryGetValue(ti, out int nAtk);
-                bool native = (!hasHp || nHp == curHpDef) && (!hasAtk || nAtk == curAtk);
+                int slotMaxHp = Memory.ReadInt(slotBase + EnemySlotOffsets.MaxHp);
+                int tableIndex = tableIndices.Count == 1 ? tableIndices[0]
+                                        : tableIndices.OrderBy(candidate => Math.Abs((_byTableIndex[candidate].MaxHp ?? 0) - slotMaxHp)).First();
+                EnemyDefaults enemyDefaults = _byTableIndex[tableIndex];
+                bool hasHp  = _hpdefTier.TryGetValue(tableIndex, out int nativeHpTier);
+                bool hasAtk = _atkTier.TryGetValue(tableIndex, out int nativeAtkTier);
+                bool native = (!hasHp || nativeHpTier == curHpDef) && (!hasAtk || nativeAtkTier == curAtk);
                 if (LogNormalize)
-                    Console.WriteLine($"[Normalize] slot {s} {e.Name} (id {id}, ti {ti}): nativeTier(HpDef={(hasHp ? nHp : -1)},Atk={(hasAtk ? nAtk : -1)}) curTier(HpDef={curHpDef},Atk={curAtk}){(native ? " — native, skip" : "")}");
+                    Console.WriteLine($"[Normalize] slot {s} {enemyDefaults.Name} (id {id}, ti {tableIndex}): nativeTier(HpDef={(hasHp ? nativeHpTier : -1)},Atk={(hasAtk ? nativeAtkTier : -1)}) curTier(HpDef={curHpDef},Atk={curAtk}){(native ? " — native, skip" : "")}");
                 if (native) continue;
 
                 // HP / defense (HP/def tier).
-                if (hasHp && nHp != curHpDef)
+                if (hasHp && nativeHpTier != curHpDef)
                 {
-                    if (e.MaxHp.HasValue)
+                    if (enemyDefaults.MaxHp.HasValue)
                     {
-                        float fHp  = Factor(_bHp, nHp, curHpDef);
-                        int newMax = ScaleRound(e.MaxHp.Value, fHp);
-                        int curHp  = Memory.ReadInt(b + EnemySlotOffsets.Hp);
+                        float factorHp = Factor(_bHp, nativeHpTier, curHpDef);
+                        int newMax = ScaleRound(enemyDefaults.MaxHp.Value, factorHp);
+                        int curHp  = Memory.ReadInt(slotBase + EnemySlotOffsets.Hp);
                         int curMax = Math.Max(1, slotMaxHp);
                         int newHp  = Math.Max(1, (int)Math.Round(curHp * (newMax / (double)curMax)));
-                        Memory.WriteInt(b + EnemySlotOffsets.MaxHp, newMax);
-                        Memory.WriteInt(b + EnemySlotOffsets.Hp, newHp);
-                        if (LogNormalize) Console.WriteLine($"[Normalize]   slot {s} HP: {slotMaxHp} -> {newMax} (factor {fHp:F2}); curHP {curHp} -> {newHp}");
+                        Memory.WriteInt(slotBase + EnemySlotOffsets.MaxHp, newMax);
+                        Memory.WriteInt(slotBase + EnemySlotOffsets.Hp, newHp);
+                        if (LogNormalize) Console.WriteLine($"[Normalize]   slot {s} HP: {slotMaxHp} -> {newMax} (factor {factorHp:F2}); curHP {curHp} -> {newHp}");
                     }
-                    if (e.DamageReduction.HasValue || e.WeaponDefense.HasValue)
+                    if (enemyDefaults.DamageReduction.HasValue || enemyDefaults.WeaponDefense.HasValue)
                     {
-                        float fDr = Factor(_bDr, nHp, curHpDef), fWd = Factor(_bWd, nHp, curHpDef);
-                        ushort dr = (ushort)ScaleRound(e.DamageReduction ?? 0, fDr);
-                        ushort wd = (ushort)ScaleRound(e.WeaponDefense ?? 0, fWd);
-                        int oldDef = Memory.ReadInt(b + EnemySlotOffsets.DefenseStats);
-                        Memory.WriteInt(b + EnemySlotOffsets.DefenseStats, (dr & 0xFFFF) | (wd << 16));
-                        if (LogNormalize) Console.WriteLine($"[Normalize]   slot {s} def DR: {oldDef & 0xFFFF} -> {dr} (factor {fDr:F2}), WD: {(oldDef >> 16) & 0xFFFF} -> {wd} (factor {fWd:F2})");
+                        float factorDr = Factor(_bDr, nativeHpTier, curHpDef), factorWd = Factor(_bWd, nativeHpTier, curHpDef);
+                        ushort dr = (ushort)ScaleRound(enemyDefaults.DamageReduction ?? 0, factorDr);
+                        ushort wd = (ushort)ScaleRound(enemyDefaults.WeaponDefense ?? 0, factorWd);
+                        int oldDef = Memory.ReadInt(slotBase + EnemySlotOffsets.DefenseStats);
+                        Memory.WriteInt(slotBase + EnemySlotOffsets.DefenseStats, (dr & 0xFFFF) | (wd << 16));
+                        if (LogNormalize) Console.WriteLine($"[Normalize]   slot {s} def DR: {oldDef & 0xFFFF} -> {dr} (factor {factorDr:F2}), WD: {(oldDef >> 16) & 0xFFFF} -> {wd} (factor {factorWd:F2})");
                     }
                 }
 
                 // Damage — melee via the cached _SET_DMG_PARA array, projectile via the STB shot-damage literal.
-                if (NormalizeDamage && hasAtk && nAtk != curAtk)
+                if (NormalizeDamage && hasAtk && nativeAtkTier != curAtk)
                 {
-                    PatchMeleeCache(s, e, nAtk, curAtk);
-                    PatchProjectileCache(s, ti, nAtk, curAtk);
+                    PatchMeleeCache(s, enemyDefaults, nativeAtkTier, curAtk);
+                    PatchProjectileCache(s, tableIndex, nativeAtkTier, curAtk);
                 }
             }
             return normalized;
@@ -359,33 +359,33 @@ namespace Dark_Cloud_Improved_Version
 
         // Scale the live cached melee-damage entries for a slot. Value-matched + cascade-guarded, so it's
         // idempotent.
-        private static void PatchMeleeCache(int slot, in EnemyDefaults e, int nAtk, int curAtk)
+        private static void PatchMeleeCache(int slot, in EnemyDefaults enemyDefaults, int nativeAtkTier, int curAtk)
         {
-            if (e.MeleeDamage == null || e.MeleeDamage.Length == 0) return;
-            float f = Factor(_bMelee, nAtk, curAtk);
-            if (f == 1f) return;
+            if (enemyDefaults.MeleeDamage == null || enemyDefaults.MeleeDamage.Length == 0) return;
+            float factor = Factor(_bMelee, nativeAtkTier, curAtk);
+            if (factor == 1f) return;
 
             var map = new Dictionary<int, int>();                 // native value -> scaled value
-            foreach (int mv in e.MeleeDamage)
-                if (mv > 0 && !map.ContainsKey(mv)) map[mv] = ScaleRound(mv, f);
+            foreach (int nativeDmg in enemyDefaults.MeleeDamage)
+                if (nativeDmg > 0 && !map.ContainsKey(nativeDmg)) map[nativeDmg] = ScaleRound(nativeDmg, factor);
             var scaledResults = new HashSet<int>(map.Values);     // don't re-patch a value we produced (anti-cascade)
 
-            long arr = DmgParaCache.ArrayAddr(slot);
-            byte[] d = Memory.ReadByteArray(arr, DmgParaCache.ReadLength);
-            if (d == null) return;
+            long dmgCacheAddr = DmgParaCache.ArrayAddr(slot);
+            byte[] cacheBytes = Memory.ReadByteArray(dmgCacheAddr, DmgParaCache.ReadLength);
+            if (cacheBytes == null) return;
             int hits = 0;
-            for (int i = 0; i + 4 <= d.Length; i += 4)
+            for (int i = 0; i + 4 <= cacheBytes.Length; i += 4)
             {
-                int v = d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24);
-                if (map.TryGetValue(v, out int nv) && nv != v && !scaledResults.Contains(v))
+                int cachedValue = cacheBytes[i] | (cacheBytes[i + 1] << 8) | (cacheBytes[i + 2] << 16) | (cacheBytes[i + 3] << 24);
+                if (map.TryGetValue(cachedValue, out int scaledValue) && scaledValue != cachedValue && !scaledResults.Contains(cachedValue))
                 {
-                    Memory.WriteInt(arr + i, nv);
+                    Memory.WriteInt(dmgCacheAddr + i, scaledValue);
                     hits++;
-                    if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} melee +0x{i:X}: {v} -> {nv} (factor {f:F2})");
+                    if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} melee +0x{i:X}: {cachedValue} -> {scaledValue} (factor {factor:F2})");
                 }
             }
             if (LogNormalize && hits == 0)
-                Console.WriteLine($"[Normalize]   slot {slot} melee: factor {f:F2} but none of [{string.Join(",", e.MeleeDamage)}] found in cache @0x{arr:X8}");
+                Console.WriteLine($"[Normalize]   slot {slot} melee: factor {factor:F2} but none of [{string.Join(",", enemyDefaults.MeleeDamage)}] found in cache @0x{dmgCacheAddr:X8}");
         }
 
         // See StbVm in EnemyAddresses.cs for header/opcode/funcId constants used below.
@@ -409,10 +409,10 @@ namespace Dark_Cloud_Improved_Version
         // 12-byte records → no relocation. Unresolved cases (op1 scope!=1 "default"/engine source — Sam/Crescent
         // Baron — or op1 whose call-site arg is itself computed — Ghost/Lich) are skipped. Idempotent across the
         // shared/duplicated per-species STB via <see cref="_projPatchedStb"/> and a per-pass patched-offset set.
-        private static void PatchProjectileCache(int slot, int ti, int nAtk, int curAtk)
+        private static void PatchProjectileCache(int slot, int tableIndex, int nativeAtkTier, int curAtk)
         {
-            float f = Factor(_bProj, nAtk, curAtk);
-            if (f == 1f) return;
+            float factor = Factor(_bProj, nativeAtkTier, curAtk);
+            if (factor == 1f) return;
 
             int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
             if (stbNative == 0 || stbNative == -1) return;
@@ -421,17 +421,17 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(stb) != StbVm.Magic) return;   // not a valid loaded STB
 
             const int Window = 0xC000;                        // covers the largest enemy STB (~44 KB)
-            byte[] d = Memory.ReadByteArray(stb, Window);
-            if (d == null || d.Length < 0x10) return;
-            int Word(int i) => d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24);
+            byte[] stbBytes = Memory.ReadByteArray(stb, Window);
+            if (stbBytes == null || stbBytes.Length < 0x10) return;
+            int Word(int i) => stbBytes[i] | (stbBytes[i + 1] << 8) | (stbBytes[i + 2] << 16) | (stbBytes[i + 3] << 24);
             int code = Word(StbVm.CodeSectionOff);
-            if (code < StbVm.LabelTableOff || code >= d.Length) return;
+            if (code < StbVm.LabelTableOff || code >= stbBytes.Length) return;
 
             // call_func (op19/27) target offset -> its call-site offsets, for resolving subroutine-arg shooters.
             var callsByTarget = new Dictionary<int, List<int>>();
-            for (int i = code; i + StbVm.InstrSize <= d.Length; i += 4)
+            for (int i = code; i + StbVm.InstrSize <= stbBytes.Length; i += 4)
                 if (Word(i) == StbVm.OpCallFunc || Word(i) == StbVm.OpCallFuncCond)
-                    (callsByTarget.TryGetValue(Word(i + StbVm.OperandB), out var l) ? l : (callsByTarget[Word(i + StbVm.OperandB)] = [])).Add(i);
+                    (callsByTarget.TryGetValue(Word(i + StbVm.OperandB), out var callSites) ? callSites : (callsByTarget[Word(i + StbVm.OperandB)] = [])).Add(i);
 
             var patched = new HashSet<int>();   // operandB offsets already scaled this pass (anti double-scale)
             int hits = 0;
@@ -439,80 +439,80 @@ namespace Dark_Cloud_Improved_Version
             // Scale the op3 int-literal whose operandB sits at litOff (idempotent within this pass).
             void ScaleLiteralAt(int litOff)
             {
-                if (litOff < code || litOff + 4 > d.Length || !patched.Add(litOff)) return;
-                int v = Word(litOff);
-                if (v <= 0) return;
-                int nv = ScaleRound(v, f);
-                if (nv == v) return;
-                Memory.WriteInt(stb + litOff, nv);
+                if (litOff < code || litOff + 4 > stbBytes.Length || !patched.Add(litOff)) return;
+                int currentValue = Word(litOff);
+                if (currentValue <= 0) return;
+                int scaledValue = ScaleRound(currentValue, factor);
+                if (scaledValue == currentValue) return;
+                Memory.WriteInt(stb + litOff, scaledValue);
                 hits++;
-                if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} proj STB 0x{stbNative:X8}+0x{litOff:X}: {v} -> {nv} (factor {f:F2})");
+                if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} proj STB 0x{stbNative:X8}+0x{litOff:X}: {currentValue} -> {scaledValue} (factor {factor:F2})");
             }
 
             // Subroutine entry containing code offset `off` = the largest call_func target <= off.
             int FuncStart(int off)
             {
-                int s = code;
-                foreach (int t in callsByTarget.Keys) if (t <= off && t > s) s = t;
-                return s;
+                int start = code;
+                foreach (int t in callsByTarget.Keys) if (t <= off && t > start) start = t;
+                return start;
             }
 
-            // Record offsets of the consecutive op1/2/3 pushes immediately before call site `cs`, in push order.
-            List<int> ArgsBefore(int cs)
+            // Record offsets of the consecutive op1/2/3 pushes immediately before call site, in push order.
+            List<int> ArgsBefore(int callSite)
             {
-                var a = new List<int>();
-                for (int j = cs - StbVm.InstrSize; j >= code && Word(j) is StbVm.OpPush1 or StbVm.OpPush2 or StbVm.OpPush3; j -= StbVm.InstrSize) a.Add(j);
-                a.Reverse();
-                return a;
+                var argOffsets = new List<int>();
+                for (int j = callSite - StbVm.InstrSize; j >= code && Word(j) is StbVm.OpPush1 or StbVm.OpPush2 or StbVm.OpPush3; j -= StbVm.InstrSize) argOffsets.Add(j);
+                argOffsets.Reverse();
+                return argOffsets;
             }
 
-            // Resolve which op3 int-literals ultimately feed argument `idx` of subroutine `fsub`, following op1
+            // Resolve which op3 int-literals ultimately feed argument `idx` of subroutine `funcStart`, following op1
             // scope-1 forwarding up the call chain (e.g. Ghost/Lich forward local[1] one extra level), and scale
             // each. Depth- and cycle-guarded.
-            void ScaleArg(int fsub, int idx, HashSet<long> seen, int depth)
+            void ScaleArg(int funcStart, int idx, HashSet<long> seen, int depth)
             {
-                if (depth > 8 || !callsByTarget.TryGetValue(fsub, out var sites)) return;
-                if (!seen.Add(((long)fsub << 20) ^ (uint)idx)) return;
-                foreach (int cs in sites)
+                if (depth > 8 || !callsByTarget.TryGetValue(funcStart, out var sites)) return;
+                if (!seen.Add(((long)funcStart << 20) ^ (uint)idx)) return;
+                foreach (int callSite in sites)
                 {
-                    var args = ArgsBefore(cs);
+                    var args = ArgsBefore(callSite);
                     if (idx < 0 || idx >= args.Count) continue;
-                    int ar = args[idx];
-                    if (Word(ar) == StbVm.OpPush3 && Word(ar + StbVm.OperandA) == StbVm.TypeInt) ScaleLiteralAt(ar + StbVm.OperandB);
-                    else if (Word(ar) == StbVm.OpPush1 && Word(ar + StbVm.OperandB) == StbVm.ScopeLocal) ScaleArg(FuncStart(cs), Word(ar + StbVm.OperandA), seen, depth + 1);
+                    int argInstr = args[idx];
+                    if (Word(argInstr) == StbVm.OpPush3 && Word(argInstr + StbVm.OperandA) == StbVm.TypeInt) ScaleLiteralAt(argInstr + StbVm.OperandB);
+                    else if (Word(argInstr) == StbVm.OpPush1 && Word(argInstr + StbVm.OperandB) == StbVm.ScopeLocal) ScaleArg(FuncStart(callSite), Word(argInstr + StbVm.OperandA), seen, depth + 1);
                 }
             }
 
-            for (int x = code; x + StbVm.InstrSize <= d.Length; x += 4)
+            for (int x = code; x + StbVm.InstrSize <= stbBytes.Length; x += 4)
             {
                 if (Word(x) != StbVm.OpExt || Word(x + StbVm.OperandB) != 0) continue;  // op21 ext-call (operandB must be 0)
                 int argc = Word(x + StbVm.OperandA);
                 if (argc < 2 || argc > 10) continue;
-                int fpos = x - argc * StbVm.InstrSize;                       // first pushed arg = the function id
-                if (fpos < code) continue;
-                if (Word(fpos) != StbVm.OpPush3 || Word(fpos + StbVm.OperandA) != StbVm.TypeInt) continue;
-                int fid = Word(fpos + StbVm.OperandB);
+                int funcIdPos = x - argc * StbVm.InstrSize;                  // first pushed arg = the function id
+                if (funcIdPos < code) continue;
+                if (Word(funcIdPos) != StbVm.OpPush3 || Word(funcIdPos + StbVm.OperandA) != StbVm.TypeInt) continue;
+                int funcId = Word(funcIdPos + StbVm.OperandB);
                 // FnSetShot2 (229) is what scripts use for the second shot; FnSetShotReg (135) exists in the
                 // registry but is not observed in any monster STB. Missing 229 left 6 enemies unscaled.
-                if (fid != StbVm.FnSetShot && fid != StbVm.FnSetShotReg && fid != StbVm.FnSetShot2) continue;
+                if (funcId != StbVm.FnSetShot && funcId != StbVm.FnSetShotReg && funcId != StbVm.FnSetShot2) continue;
                 if (argc != 6)                                                // argc!=6 → no 5th arg: an engine "default" shot
                 {
-                    PatchBstDefault(slot, ti, f);                             // scale its BST +0x3C base damage instead
+                    PatchBstDefault(slot, tableIndex, factor);                 // scale its BST +0x3C base damage instead
                     continue;
                 }
-                int dr = x - StbVm.InstrSize;                                // last pushed arg = the damage
+                int dmgArgInstr = x - StbVm.InstrSize;                       // last pushed arg = the damage
 
-                if (Word(dr) == StbVm.OpPush3 && Word(dr + StbVm.OperandA) == StbVm.TypeInt)       // EXPLICIT: op3 int-literal damage
+                if (Word(dmgArgInstr) == StbVm.OpPush3 && Word(dmgArgInstr + StbVm.OperandA) == StbVm.TypeInt)       // EXPLICIT: op3 int-literal damage
                 {
-                    ScaleLiteralAt(dr + StbVm.OperandB);
+                    ScaleLiteralAt(dmgArgInstr + StbVm.OperandB);
                 }
-                else if (Word(dr) == StbVm.OpPush1 && Word(dr + StbVm.OperandB) == StbVm.ScopeLocal) // SUBROUTINE: op1 local argument
+                else if (Word(dmgArgInstr) == StbVm.OpPush1 && Word(dmgArgInstr + StbVm.OperandB) == StbVm.ScopeLocal) // SUBROUTINE: op1 local argument
                 {
-                    ScaleArg(FuncStart(x), Word(dr + StbVm.OperandA), [], 0);
+                    ScaleArg(FuncStart(x), Word(dmgArgInstr + StbVm.OperandA), [], 0);
                 }
             }
             if (LogNormalize && hits == 0)
-                Console.WriteLine($"[Normalize]   slot {slot} proj: factor {f:F2}, no scalable _SET_SHOT literal in STB 0x{stbNative:X8} (computed/default shooter or no shot)");
+                Console.WriteLine($"[Normalize]   slot {slot} proj: factor {factor:F2}, no scalable _SET_SHOT literal in STB 0x{stbNative:X8} (computed/default shooter or no shot)");
         }
 
         // Scale a "default" shooter's BST base damage (BehaviorScriptTable entry +0x3C, the source the engine uses
@@ -521,10 +521,10 @@ namespace Dark_Cloud_Improved_Version
         // exit, since the BST is static and persists) and write round(original × factor). Only invoked for enemies
         // that actually fire a default shot, so we never apply one species' factor to an entry an override shooter
         // merely shares (override shooters ignore +0x3C). 0-damage entries (e.g. Heart's bind) scale to nothing.
-        private static void PatchBstDefault(int slot, int ti, float f)
+        private static void PatchBstDefault(int slot, int tableIndex, float factor)
         {
-            if (ti < 0) return;
-            int idx = Memory.ReadUShort(EnemySpeciesTable.TableBase + (long)ti * EnemySpeciesTable.Stride + EnemySpeciesTable.PrimaryBstIndex);
+            if (tableIndex < 0) return;
+            int idx = Memory.ReadUShort(EnemySpeciesTable.TableBase + (long)tableIndex * EnemySpeciesTable.Stride + EnemySpeciesTable.PrimaryBstIndex);
             if (idx == 0xFFFF) return;                                  // no shot effect
             int btNative = Memory.ReadInt(BehaviorScriptTable.PointerArray + idx * 4);
             if (btNative == 0) return;
@@ -536,12 +536,12 @@ namespace Dark_Cloud_Improved_Version
                 _bstOriginal[dmgAddr] = orig;
             }
             if (orig <= 0) return;                                      // non-damaging shot (bind) — nothing to scale
-            int nv = ScaleRound(orig, f);
+            int scaledValue = ScaleRound(orig, factor);
             int cur = Memory.ReadInt(dmgAddr);
-            if (cur == nv) return;                                      // already scaled (re-run / sibling)
-            Memory.WriteInt(dmgAddr, nv);
+            if (cur == scaledValue) return;                             // already scaled (re-run / sibling)
+            Memory.WriteInt(dmgAddr, scaledValue);
             _bstDirty = true;
-            if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} proj BST idx{idx} @0x{dmgAddr:X8}: {orig} -> {nv} (factor {f:F2})");
+            if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} proj BST idx{idx} @0x{dmgAddr:X8}: {orig} -> {scaledValue} (factor {factor:F2})");
         }
 
         // Restore every BST entry we scaled back to its boot value. Called on leaving the dungeon floor (to town);
