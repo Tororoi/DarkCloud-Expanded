@@ -769,7 +769,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=3.6f, EntityScaleCopy=3.6f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.1f, ReticleHeight=1.1f, StealItemId=135, ItemResA=100, ItemResB=90,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1220, ModelAnimCount=21, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{20,20}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{20,20}, ProjectileDamage=new int[]{21} };
 
         // confirmed from clean dump 2026-05-30, DBC game fl.14
         // Motions: e59a.chr @ data.dat 0x1d223800  (idx = _SET_MOTION; 死亡 = death)
@@ -799,7 +799,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=5, WeaponDefense=40,
             ReticleWidth=2.9f, ReticleHeight=2.7f, StealItemId=161, ItemResA=90,  ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=32.0f, ModelUnk028=60.0f, ModelDataSize=1422, ModelAnimCount=19, AttackPower=85, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{45,45}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{45,45}, ProjectileDamage=new int[]{50} };
 
         // confirmed from clean dump 2026-05-30, DBC fl.12
         // Motions: e34a.chr @ data.dat 0x1c354800  (idx = _SET_MOTION; 死亡 = death)
@@ -934,7 +934,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=167, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=21.0f, ModelUnk028=60.0f, ModelDataSize=474,  ModelAnimCount=7, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{28,28,36}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{28,28,36}, ProjectileDamage=new int[]{30} };
 
         // confirmed from clean dump 2026-05-30, WOF game fl.7/fl.14; spans both pools
         // Motions: e14a.chr @ data.dat 0x1b964000  (idx = _SET_MOTION; 死亡 = death)
@@ -1083,7 +1083,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{29}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{29}, ProjectileDamage=new int[]{30} };
 
         // confirmed from clean dump 2026-05-30, WOF game fl.5
         // Motions: e19a.chr @ data.dat 0x1bbe0000  (idx = _SET_MOTION; 死亡 = death)
@@ -1171,7 +1171,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=169, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=868,  ModelAnimCount=18, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{47}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{47}, ProjectileDamage=new int[]{47} };
 
         // confirmed from clean dump 2026-05-30, WOF game fl.5
         // Motions: e79a.chr @ data.dat 0x1dc01800  (idx = _SET_MOTION; 死亡 = death)
@@ -1351,7 +1351,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.3f, StealItemId=188, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=936,  ModelAnimCount=19, AttackPower=197, ElemAtkFire=50, ElemAtkIce=50, ElemAtkThunder=120, ElemAtkWind=50, ElemAtkHoly=50, ElemAtkDark=50,
-            MeleeDamage=new int[]{52}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{52}, ProjectileDamage=new int[]{37} };
 
         // from static table 2026-06-04; stronger WitchIllza variant; needs dump confirmation
         // Motions: e21a.chr @ data.dat 0x1bcc9000  (idx = _SET_MOTION; 死亡 = death)
@@ -1379,7 +1379,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=70,  IceRes=70,  ThunderRes=70,  WindRes=70,  HolyRes=100,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=169, ItemResA=85, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{73}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{73}, ProjectileDamage=new int[]{73} };
 
         // from static table 2026-06-04; same model/stats tier as KingMimicDBC but different code; needs dump confirmation
         // Motions: e78a.chr @ data.dat 0x1db86800  (idx = _SET_MOTION; 死亡 = death)
@@ -1504,7 +1504,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=153, ItemResA=95,  ItemResB=70,
             ModelUnk020=14.0f, ModelUnk024=20.0f, ModelUnk028=0.0f,  ModelDataSize=1270, ModelAnimCount=19, AttackPower=193, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{44,44}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{44,44}, ProjectileDamage=new int[]{26} };
 
         // confirmed from clean dump 2026-05-30, SW game fl.3; StealItemId=null (0xFFFF in memory)
         // Motions: e68a.chr @ data.dat 0x1d664000  (idx = _SET_MOTION; 死亡 = death)
@@ -1522,7 +1522,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=null, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=22.0f, ModelUnk028=60.0f, ModelDataSize=476,  ModelAnimCount=7, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{49,49,48}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{49,49,48}, ProjectileDamage=new int[]{46} };
 
         // confirmed from clean dump 2026-05-30, SW game fl.8
         // Motions: e24a.chr @ data.dat 0x1be46000  (idx = _SET_MOTION; 死亡 = death)
@@ -1549,7 +1549,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=134, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=25.0f, ModelUnk028=60.0f, ModelDataSize=849,  ModelAnimCount=16, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{59,59}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{59,59}, ProjectileDamage=new int[]{59} };
 
         // confirmed from clean dump 2026-05-30, SW game fl.17
         // Unk150/154/158 (0x150/154/158) read as 0 for regular Auntie Medu; observed non-zero (127.5/80.0/15.0) when the mod's miniboss process was active on this enemy species.
@@ -1668,7 +1668,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.6f, StealItemId=162, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=19.0f, ModelUnk028=0.0f,  ModelDataSize=871,  ModelAnimCount=19, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{64,64,80}, ProjectileDamage=new int[]{-1} };
+            MeleeDamage=new int[]{64,64,80}, ProjectileDamage=new int[]{58,58} };
 
         // confirmed from clean dump 2026-05-30, SW game fl.8
         // Motions: e81a.chr @ data.dat 0x1dccb000  (idx = _SET_MOTION; 死亡 = death)
@@ -1891,7 +1891,7 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             ReticleWidth=2.4f, ReticleHeight=2.4f, StealItemId=177, ItemResA=100, ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=33.0f, ModelUnk028=60.0f, ModelDataSize=1071, ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{1,-1} };
+            MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{64,34} };
 
         // confirmed from dump 2026-05-31, SM game fl.7; unk020=14.0 (ranged/large class); unk028=100.0 (highest observed — aquatic/crab movement class?)
         // Motions: e71a.chr @ data.dat 0x1d7b9800  (idx = _SET_MOTION; 死亡 = death)
@@ -1984,7 +1984,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=0,   IceRes=170, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=10,
             StealItemId=161, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{81,81}, ProjectileDamage=new int[]{80} };
+            MeleeDamage=new int[]{81,81}, ProjectileDamage=new int[]{80,90} };
 
         // from static table 2026-06-04; needs dump confirmation
         // Motions: e32a.chr @ data.dat 0x1c217800  (idx = _SET_MOTION; 死亡 = death)
@@ -2034,7 +2034,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{105,105,105,105,90,75,60}, ProjectileDamage=new int[]{1,90} };
+            MeleeDamage=new int[]{105,105,105,105,90,75,60}, ProjectileDamage=new int[]{90,90} };
 
         // from static table 2026-06-04; playing-card mage set; needs dump confirmation for dungeon assignment
         // Motions: e44a.chr @ data.dat 0x1c6f6000  (idx = _SET_MOTION; 死亡 = death)
@@ -2063,7 +2063,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=150, ItemResA=80, ItemResB=50, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{107}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{107}, ProjectileDamage=new int[]{107} };
 
         // Motions: e45a.chr @ data.dat 0x1c7a0800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2270,7 +2270,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=20,  IceRes=20,  ThunderRes=20,  WindRes=20,  HolyRes=160,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=5, WeaponDefense=0,
             StealItemId=176, ItemResA=80, ItemResB=30, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{114,114}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{114,114}, ProjectileDamage=new int[]{100} };
 
         // Motions: e52a.chr @ data.dat 0x1cf09800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2573,7 +2573,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=80,  IceRes=100, ThunderRes=125, WindRes=80,  HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=177, ItemResA=95, ItemResB=50, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{93,93,98,98,80,70,60}, ProjectileDamage=new int[]{1,64} };
+            MeleeDamage=new int[]{93,93,98,98,80,70,60}, ProjectileDamage=new int[]{64,64} };
 
         // Motions: e65a.chr @ data.dat 0x1d506800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2600,7 +2600,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=140, WindRes=140, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=5, WeaponDefense=0,
             StealItemId=162, ItemResA=100, ItemResB=50, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{119,119,119,119,105,90,75}, ProjectileDamage=new int[]{1,105} };
+            MeleeDamage=new int[]{119,119,119,119,105,90,75}, ProjectileDamage=new int[]{105,105} };
 
         // Motions: e66a.chr @ data.dat 0x1d5a5000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2628,7 +2628,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=150, IceRes=125, ThunderRes=80,  WindRes=80,  HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=0,
             StealItemId=187, ItemResA=100, ItemResB=70, AttackPower=197, ElemAtkFire=45, ElemAtkIce=45, ElemAtkThunder=130, ElemAtkWind=45, ElemAtkHoly=45, ElemAtkDark=45,
-            MeleeDamage=new int[]{83}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{83}, ProjectileDamage=new int[]{72} };
 
         // Motions: e67a.chr @ data.dat 0x1d602000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2644,7 +2644,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=5, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=147, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{90,90,94}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{90,90,94}, ProjectileDamage=new int[]{85} };
 
         // thunder=0 (immune)
         // Motions: e69a.chr @ data.dat 0x1d6bc000  (idx = _SET_MOTION; 死亡 = death)
@@ -2671,7 +2671,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=0,   WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=163, ItemResA=100, ItemResB=70, AttackPower=83, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{93,93}, ProjectileDamage=new int[]{93} };
+            MeleeDamage=new int[]{93,93}, ProjectileDamage=new int[]{93,110} };
 
         // fire=65486 (0xFFCE — effectively absorbs fire damage)
         // Motions: e70a.chr @ data.dat 0x1d71b000  (idx = _SET_MOTION; 死亡 = death)
@@ -2718,7 +2718,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=75,  IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=153, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{78,78}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{78,78}, ProjectileDamage=new int[]{75} };
 
         // Motions: e73a.chr @ data.dat 0x1d8b0000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2745,7 +2745,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=125, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=5, WeaponDefense=30,
             StealItemId=162, ItemResA=80, ItemResB=50, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{90,90}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{90,90}, ProjectileDamage=new int[]{90} };
 
         // Motions: e74a.chr @ data.dat 0x1d9a5000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2772,7 +2772,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=130,
             EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=10, WeaponDefense=60,
             StealItemId=154, ItemResA=50, ItemResB=40, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{130,130}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{130,130}, ProjectileDamage=new int[]{135} };
 
         // Motions: e76a.chr @ data.dat 0x1dadd800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2801,7 +2801,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=null, ItemResA=80, ItemResB=70, AttackPower=170, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{98,98,94,94}, ProjectileDamage=new int[]{-1} };
+            MeleeDamage=new int[]{98,98,94,94}, ProjectileDamage=new int[]{70} };
 
         // Motions: e82a.chr @ data.dat 0x1dd19000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -2891,7 +2891,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90,  ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
-            MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{62} };
 
         // listed as non-drop in Enemies.cs
         // Motions: e91a.chr @ data.dat 0x1df13800  (idx = _SET_MOTION; 死亡 = death)
@@ -2919,7 +2919,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=90,  IceRes=120, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=0,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
-            MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{62} };
 
         // ── Overseas (USA/PAL-exclusive enemies) ──────────────────────────────────
         // Overseas enemies appear in the USA/PAL version of Dark Cloud but are absent
@@ -3722,7 +3722,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=100,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50,
-            MeleeDamage=new int[]{170,170}, ProjectileDamage=new int[]{26,6,8,8} };
+            MeleeDamage=new int[]{170,170}, ProjectileDamage=new int[]{26,6,8} };
 
         // tbl_166 = Black Knight Mount; present in DS floor 100 binary pool.
         // Motions: c22a.chr info.cfg @ data.dat 0x1e565800 — identical to c21a (0–26, death=7) plus:
@@ -3820,7 +3820,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20,
-            MeleeDamage=new int[]{111,111,115,115,102,95,85}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{111,111,115,115,102,95,85}, ProjectileDamage=new int[]{102} };
 
         // e128
         // Motions: e128a.chr @ data.dat 0x1ee7a800  (idx = _SET_MOTION; 死亡 = death)
@@ -4072,7 +4072,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=50,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=169, ItemResA=85, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{100}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{100}, ProjectileDamage=new int[]{100} };
 
         // e137
         // Motions: e137a.chr @ data.dat 0x1f486800  (idx = _SET_MOTION; 死亡 = death)
@@ -4100,7 +4100,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=80, IceRes=80, ThunderRes=150, WindRes=80, HolyRes=80,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=15, WeaponDefense=70,
             StealItemId=177, ItemResA=95, ItemResB=50, AttackPower=154, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20,
-            MeleeDamage=new int[]{163,163,178,178,163,162,161}, ProjectileDamage=new int[]{1,164} };
+            MeleeDamage=new int[]{163,163,178,178,163,162,161}, ProjectileDamage=new int[]{164,164} };
 
         // e138
         // Motions: e138a.chr @ data.dat 0x1f52b800  (idx = _SET_MOTION; 死亡 = death)
@@ -4219,7 +4219,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=30, WeaponDefense=80,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
-            MeleeDamage=new int[]{131,131,135,135,132,125,125}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{131,131,135,135,132,125,125}, ProjectileDamage=new int[]{132} };
 
         // e142
         // Motions: e142a.chr @ data.dat 0x1f75d000  (idx = _SET_MOTION; 死亡 = death)
@@ -4274,7 +4274,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=134, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{100,100}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{100,100}, ProjectileDamage=new int[]{100} };
 
         // e144
         // Motions: e144a.chr @ data.dat 0x1f86a800  (idx = _SET_MOTION; 死亡 = death)
@@ -4484,7 +4484,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=150, ItemResA=80, ItemResB=50, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{130} };
 
         // e151
         // Motions: e151a.chr @ data.dat 0x1fbfe800  (idx = _SET_MOTION; 死亡 = death)
@@ -4566,7 +4566,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=130, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{140,140,140}, ProjectileDamage=new int[]{1} };
+            MeleeDamage=new int[]{140,140,140}, ProjectileDamage=new int[]{140} };
 
         // e154
         // Motions: e154a.chr @ data.dat 0x1fd72800  (idx = _SET_MOTION; 死亡 = death)
@@ -4621,7 +4621,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=0, IceRes=0, ThunderRes=20, WindRes=0, HolyRes=0,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=153, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{160,160}, ProjectileDamage=new int[]{2} };
+            MeleeDamage=new int[]{160,160}, ProjectileDamage=new int[]{160} };
 
         // e109
         // Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)
@@ -4858,7 +4858,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=20, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=160,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=176, ItemResA=80, ItemResB=30, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
-            MeleeDamage=new int[]{110,110}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{110,110}, ProjectileDamage=new int[]{110} };
 
         // e163
         // Motions: e163a.chr @ data.dat 0x2016c000  (idx = _SET_MOTION; 死亡 = death)
@@ -4886,7 +4886,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
-            MeleeDamage=new int[]{155,155,160,160,150,145,140}, ProjectileDamage=new int[]{1,160} };
+            MeleeDamage=new int[]{155,155,160,160,150,145,140}, ProjectileDamage=new int[]{160,160} };
 
         // e164
         // Motions: e164a.chr @ data.dat 0x20211800  (idx = _SET_MOTION; 死亡 = death)

@@ -99,6 +99,52 @@ namespace Dark_Cloud_Improved_Version
         internal static long ArrayAddr(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + OffsetInUnit;
     }
 
+    /// <summary>
+    /// Cached per-slot PROJECTILE (shot) damage — the field that <c>_SET_SHOT</c> (STB cmd 134, handler ELF
+    /// 0x1E4120) and <c>_SET_SHOT2</c> (STB cmd 136, handler 0x1E4310) write each time the enemy fires. A per-slot
+    /// sub-array of CMainMonstorUnit, stride 0x30 (one entry per FloorSlots/CCharacter slot):
+    ///   SHOT  struct base  = MMU.Base + slot*0x30 + 0x5FF50,  damage int @ +0x5FF78
+    ///   SHOT2 struct base  = MMU.Base + slot*0x30 + 0x60250,  damage int @ +0x60278   (SHOT2 array sits exactly
+    ///   after the 16-slot SHOT array: 16*0x30 = 0x300, and 0x60250 − 0x5FF50 = 0x300.)
+    /// Struct fields (RE'd 2026-06-19): +0x00/+0x04/+0x08 = three floats (shot params), +0x0C = 1.0f, +0x20 =
+    /// validated effect handle, +0x24 = active flag, +0x28 = DAMAGE (int).
+    ///
+    /// ★ DAMAGE SEMANTICS — UNLIKE MELEE, THIS IS NOT INIT-LATCHED. The handler inits the damage to −1 and only
+    /// overwrites it from the STB 5th arg when the call has 5 args (explicit-damage shots). CMonstorUnit::Step
+    /// (ELF 0x1DD540) reads the field every frame (reader @0x1DEF88 for SHOT, 0x1DF090 for SHOT2): if the active
+    /// flag is set AND damage != −1 it spawns the shot via 0x1AE610 passing the damage, then CLEARS the active
+    /// flag. So the active flag is re-armed by _SET_SHOT once per shot, and the damage is re-written from the STB
+    /// constant on every shot. CONSEQUENCE: writing this field live loses the race — the next _SET_SHOT overwrites
+    /// it from the script before Step fires. The STABLE normalization target is the STB constant the script pushes
+    /// (op1 push-const → constant pool), patched once per floor via CRunScript.StbPtr(slot) — NOT this field.
+    /// This field is still useful READ-ONLY: after a shooter's first shot the native damage persists here (only the
+    /// active flag toggles), so probing it confirms a species' live shot damage. (The per-species explicit values
+    /// are mirrored in EnemyDefaults.ProjectileDamage; default/−1 shots source their damage at fire time elsewhere.)
+    ///
+    /// STB VM reference (RE'd 2026-06-19, exe__10CRunScript @0x23E080): vmcode_t = 12-byte {op@+0, operandA@+4,
+    /// operandB@+8}; opcode dispatch table @0x29FB80 (31 ops). op3 = push-LITERAL (operandA = type 1=int/2=float/
+    /// 3=string, operandB = the inline value), op1 = push-VARIABLE (operandB = scope-size, operandA = index into
+    /// runtime storage; no inline value), op20 = _PRINT, op21 = external-command call (ext @0x23DD00 → dispatch
+    /// table @0x2917C8, cmd id via per-program funcdata). GetStackInt/Float read 8-byte {tag,value} args. Cmd ids:
+    /// _SET_DMG_PARA 132, _SET_SHOT 134, _SET_SHOT2 136. So an explicit shooter's damage is an op3 literal (operandB
+    /// patchable in place); a "default" shooter (Golem/Sam/Crescent Baron) pushes it via op1 from a runtime source
+    /// (no literal — overwrite that push record with an op3 literal carrying the scaled value to normalize it).
+    /// </summary>
+    internal static class ShotDmgCache
+    {
+        internal const int SlotStride   = 0x30;     // per enemy slot
+
+        internal const int ShotBase     = 0x5FF50;  // SHOT  struct base within MMU
+        internal const int Shot2Base    = 0x60250;  // SHOT2 struct base within MMU
+        internal const int DamageField  = 0x28;     // int damage, relative to a struct base (−1 = no explicit dmg)
+        internal const int ActiveField  = 0x24;     // int active flag (set by _SET_SHOT, cleared by Step after firing)
+
+        /// <summary>EE address of <paramref name="slot"/>'s SHOT damage int (+0x5FF78).</summary>
+        internal static long ShotDamageAddr(int slot)  => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + ShotBase  + DamageField;
+        /// <summary>EE address of <paramref name="slot"/>'s SHOT2 damage int (+0x60278).</summary>
+        internal static long Shot2DamageAddr(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + Shot2Base + DamageField;
+    }
+
     /// <summary>Enemy slot field offsets relative to slot base address.</summary>
     internal static class EnemySlotOffsets
     {
@@ -668,7 +714,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int SecondaryRange     = 0x30; // float — secondary hitbox / follow-through range; 0 for movement behaviors
         // +0x34: always 0
         internal const int DurationFrames     = 0x38; // int   — frames this behavior stays active
-        internal const int AttackDistance     = 0x3C; // int   — distance scaling applied to the attack
+        // +0x3C CONFIRMED 2026-06-20 (projectile-damage RE): this is the SHOT BASE DAMAGE, not "attack distance".
+        // CSHOT_EFFECT::Set (ELF 0x1ADD60) reads [BT_SHOT_EFFECT+0x3C] (a BST entry here) and writes it as the new
+        // shot's damage (CSHOT record +0xA010). For "default" shooters whose STB _SET_SHOT passes no 5th-arg
+        // damage (argc!=6: Sam, Crescent Baron, Heart, Thursday, Golem-shot2), THIS is the damage dealt — verified
+        // Sam=58, Crescent Baron=70 against in-game measurement. For explicit shooters the STB value (via SetDmg)
+        // overrides it. The shot's BST entry is selected by the species record's +0x68/+0x6A shot-effect indices
+        // through PointerArray (0x27FA70), in CMonstorUnit::SetupBaseModel.
+        internal const int ShotBaseDamage     = 0x3C; // int   — base damage of a shot behavior (was mislabeled AttackDistance)
         internal const int BehaviorFlags      = 0x40; // int   — packed flags controlling hit response / VFX
         internal const int PhaseCount         = 0x44; // int   — number of animation phases in this behavior
         // +0x48: always 1

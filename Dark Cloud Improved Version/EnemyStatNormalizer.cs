@@ -68,8 +68,20 @@ namespace Dark_Cloud_Improved_Version
         private static int _normalizedKey = -1;   // packed (dungeon<<8 | floor) of the current floor
         private static int _curHpDef, _curAtk;    // current-floor tiers
         private static readonly Dictionary<int, int> _swept = new(); // slot -> species already normalized (patch once on spawn)
+        private static readonly HashSet<int> _projPatchedStb = new(); // STB native bases whose shot literals are already scaled this floor (anti-cascade; STBs are shared/duplicated per species)
         private static bool _sweepDone;     // set once the floor's enemies are loaded + normalized; stops the per-tick sweep
         private static int  _sweepIdle;     // consecutive sweep passes with nothing new to patch
+
+        // BST "default" shot-damage normalization. The BehaviorScriptTable (0x27EB90) is a STATIC ELF table — its
+        // entries' +0x3C "base damage" feed the default (argc!=6) shots and persist across floors, so we snapshot
+        // each entry's boot value the first time we touch it and restore on leaving the dungeon (to town). Keyed by
+        // the RAM address of the entry's +0x3C field; never cleared (the originals are the boot values).
+        private static readonly Dictionary<long, int> _bstOriginal = new();
+        private static bool _bstDirty;      // any BST entry currently holds a scaled value (needs restore on exit)
+        private const long SpeciesTableRam = 0x2027FB00;  // EnemySpeciesTable record 0 in RAM (native 0x27FB00)
+        private const long BstPtrArrayRam  = 0x2027FA70;  // BST pointer array in RAM (native 0x27FA70)
+        private const int  ShotIdxPrimary  = 0x68;        // species record: primary shot-effect index (default shots use this)
+        private const int  BstDamageOff    = 0x3C;        // BST entry: shot base damage
 
         private static bool IsBoss(in EnemyDefaults e) =>
             !string.IsNullOrEmpty(e.ModelCode) && e.ModelCode[0] == 'c';
@@ -246,7 +258,10 @@ namespace Dark_Cloud_Improved_Version
         internal static void NormalizeStatsForFloor()
         {
             if (!NormalizeEnemyStats) return;
-            if (!Player.InDungeonFloor()) return;
+            // Leaving the floor (town / dungeon exit) must invalidate the cached key, so that RE-entering the same
+            // dungeon+floor re-runs the sweep. The game reloads fresh native-value STBs/slots on every entry, so a
+            // persisted key (same floor number) would otherwise skip normalization on the 2nd+ visit.
+            if (!Player.InDungeonFloor()) { _normalizedKey = -1; RestoreBst(); return; }
 
             int dungeon = Memory.ReadByte(Addresses.checkDungeon);
             int floor   = Memory.ReadByte(Addresses.checkFloor);
@@ -260,19 +275,22 @@ namespace Dark_Cloud_Improved_Version
                 _normalizedKey = key;
                 _curHpDef = HpDefTierOf(dungeon, floor); // 0..10
                 _curAtk   = dungeon;                     // 0..6
-                _swept.Clear(); _sweepDone = false; _sweepIdle = 0; // new floor: sweep until its enemies are loaded
+                _swept.Clear(); _projPatchedStb.Clear(); _sweepDone = false; _sweepIdle = 0; // new floor: sweep until its enemies are loaded
                 if (LogNormalize)
                     Console.WriteLine($"[Normalize] enter dungeon {dungeon} floor {floor} (HP/def tier {_curHpDef}, atk tier {_curAtk}); k={NormalizationStrength:F2}, dmg={(NormalizeDamage ? "on" : "off")}.");
             }
 
             // All of a floor's enemies spawn at load (no respawns), so we just sweep the live slots — patching each
             // enemy's slot HP/defense and cached melee damage directly — until they've all appeared, then stop.
-            // No species-record patch is needed (nothing spawns late to inherit it).
+            // No species-record patch is needed (nothing spawns late to inherit it). The enemies often spawn a few
+            // ticks AFTER the floor-enter event (the floor key updates before BtLoadMonstor populates the slots), so
+            // we must NOT give up before any enemy is seen — only settle once enemies have appeared and no new ones
+            // show for several passes. A large absolute cap still bails out on genuinely enemy-less floors.
             if (!_sweepDone)
             {
                 int normalized = SweepLiveSlots(_curHpDef, _curAtk);
-                if (normalized > 0) _sweepIdle = 0;
-                else if (++_sweepIdle >= 8) _sweepDone = true; // enemies loaded + done (or an enemy-less floor)
+                if (normalized > 0) _sweepIdle = 0; else _sweepIdle++;
+                if ((_swept.Count > 0 && _sweepIdle >= 8) || _sweepIdle >= 200) _sweepDone = true;
             }
         }
 
@@ -322,9 +340,12 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
 
-                // Melee damage — patch the cached _SET_DMG_PARA array (DmgParaCache); attack tier.
+                // Damage — melee via the cached _SET_DMG_PARA array, projectile via the STB shot-damage literal.
                 if (NormalizeDamage && hasAtk && nAtk != curAtk)
+                {
                     PatchMeleeCache(s, e, nAtk, curAtk);
+                    PatchProjectileCache(s, ti, nAtk, curAtk);
+                }
             }
             return normalized;
         }
@@ -360,11 +381,184 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine($"[Normalize]   slot {slot} melee: factor {f:F2} but none of [{string.Join(",", e.MeleeDamage)}] found in cache @0x{arr:X8}");
         }
 
+        // Magic at RS_PROG_HEADER+0x00 ("STB\0") — validates a loaded STB before patching it.
+        private const int StbMagic = 0x00425453;
+
+        // Scale a slot's PROJECTILE damage by patching the STB op3 int-literal that feeds _SET_SHOT/_SET_SHOT2's
+        // 5th (damage) arg. Unlike melee — whose value is latched once into the RAM cache at init — the shot-damage
+        // RAM field (ShotDmgCache) is rewritten from this STB constant on EVERY shot and consumed the next frame, so
+        // the script literal is the only stable target (RE'd 2026-06-19; see EnemyAddresses.ShotDmgCache).
+        //
+        // We walk the STB code section (RS_PROG_HEADER+0x08) for op21 ext-calls whose first pushed arg is the
+        // op3 int-literal funcId 133/135 (_SET_SHOT/_SET_SHOT2 in the STB command registry), then scale the call's
+        // LAST arg — the damage. Two forms (RE'd 2026-06-20):
+        //   • EXPLICIT: the last arg is an op3 int-literal — the per-species value baked in the script. Scale it.
+        //   • SUBROUTINE: the last arg is an op1 runtime variable with scope==1 (a local/argument). The _SET_SHOT
+        //     sits in a shared "fire" subroutine; the real base damage is an op3 int-literal pushed at the call_func
+        //     site as argument index `idx`. Resolve up the call chain (ScaleArg): a caller may forward its OWN
+        //     local[idx'] another level (Ghost 21 / Lich 100 / Lich-Enh 110 do this once) before the literal appears.
+        //     Scale every literal found. The engine then distance-scales this base at runtime (point-blank = full,
+        //     far = less — per in-game observation), so scaling the base scales the whole curve.
+        // Values are read from the STB itself (ground truth), independent of EnemyDefaults.ProjectileDamage. Fixed
+        // 12-byte records → no relocation. Unresolved cases (op1 scope!=1 "default"/engine source — Sam/Crescent
+        // Baron — or op1 whose call-site arg is itself computed — Ghost/Lich) are skipped. Idempotent across the
+        // shared/duplicated per-species STB via <see cref="_projPatchedStb"/> and a per-pass patched-offset set.
+        private static void PatchProjectileCache(int slot, int ti, int nAtk, int curAtk)
+        {
+            float f = Factor(_bProj, nAtk, curAtk);
+            if (f == 1f) return;
+
+            int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
+            if (stbNative == 0 || stbNative == -1) return;
+            if (!_projPatchedStb.Add(stbNative)) return;     // this STB's shot literals already scaled this floor
+            long stb = ((long)stbNative & 0x1FFFFFFF) | 0x20000000;
+            if (Memory.ReadInt(stb) != StbMagic) return;     // not a valid loaded STB
+
+            const int Window = 0xC000;                        // covers the largest enemy STB (~44 KB)
+            byte[] d = Memory.ReadByteArray(stb, Window);
+            if (d == null || d.Length < 0x10) return;
+            int Word(int i) => d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24);
+            int code = Word(8);                               // code-section start (header+0x08)
+            if (code < 0xC || code >= d.Length) return;
+
+            // call_func (op19/27) target offset -> its call-site offsets, for resolving subroutine-arg shooters.
+            var callsByTarget = new Dictionary<int, List<int>>();
+            for (int i = code; i + 12 <= d.Length; i += 4)
+                if (Word(i) == 19 || Word(i) == 27)
+                    (callsByTarget.TryGetValue(Word(i + 8), out var l) ? l : (callsByTarget[Word(i + 8)] = new List<int>())).Add(i);
+
+            var patched = new HashSet<int>();   // operandB offsets already scaled this pass (anti double-scale)
+            int hits = 0;
+
+            // Scale the op3 int-literal whose operandB sits at litOff (idempotent within this pass).
+            void ScaleLiteralAt(int litOff)
+            {
+                if (litOff < code || litOff + 4 > d.Length || !patched.Add(litOff)) return;
+                int v = Word(litOff);
+                if (v <= 0) return;
+                int nv = ScaleRound(v, f);
+                if (nv == v) return;
+                Memory.WriteInt(stb + litOff, nv);
+                hits++;
+                if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} proj STB 0x{stbNative:X8}+0x{litOff:X}: {v} -> {nv} (factor {f:F2})");
+            }
+
+            // Subroutine entry containing code offset `off` = the largest call_func target <= off.
+            int FuncStart(int off)
+            {
+                int s = code;
+                foreach (int t in callsByTarget.Keys) if (t <= off && t > s) s = t;
+                return s;
+            }
+
+            // Record offsets of the consecutive op1/2/3 pushes immediately before call site `cs`, in push order.
+            List<int> ArgsBefore(int cs)
+            {
+                var a = new List<int>();
+                for (int j = cs - 0xC; j >= code && (Word(j) == 1 || Word(j) == 2 || Word(j) == 3); j -= 0xC) a.Add(j);
+                a.Reverse();
+                return a;
+            }
+
+            // Resolve which op3 int-literals ultimately feed argument `idx` of subroutine `fsub`, following op1
+            // scope-1 forwarding up the call chain (e.g. Ghost/Lich forward local[1] one extra level), and scale
+            // each. Depth- and cycle-guarded.
+            void ScaleArg(int fsub, int idx, HashSet<long> seen, int depth)
+            {
+                if (depth > 8 || !callsByTarget.TryGetValue(fsub, out var sites)) return;
+                if (!seen.Add(((long)fsub << 20) ^ (uint)idx)) return;
+                foreach (int cs in sites)
+                {
+                    var args = ArgsBefore(cs);
+                    if (idx < 0 || idx >= args.Count) continue;
+                    int ar = args[idx];
+                    if (Word(ar) == 3 && Word(ar + 4) == 1) ScaleLiteralAt(ar + 8);            // op3 int-literal base damage
+                    else if (Word(ar) == 1 && Word(ar + 8) == 1) ScaleArg(FuncStart(cs), Word(ar + 4), seen, depth + 1); // forwarded local
+                }
+            }
+
+            for (int x = code; x + 12 <= d.Length; x += 4)
+            {
+                if (Word(x) != 21 || Word(x + 8) != 0) continue;        // op21 ext-call (operandB unused = 0)
+                int argc = Word(x + 4);
+                if (argc < 2 || argc > 10) continue;
+                int fpos = x - argc * 0xC;                              // first pushed arg = the function id
+                if (fpos < code) continue;
+                if (Word(fpos) != 3 || Word(fpos + 4) != 1) continue;   // op3 int-literal funcId
+                int fid = Word(fpos + 8);
+                // _SET_SHOT (133) / _SET_SHOT2: the monster scripts actually push funcId 229 for the second shot
+                // (registry 135 exists but is never used); 229 carries explicit damage exactly like 133. Missing it
+                // left 6 enemies' second shots unscaled (Heart 107, Mr. Blare 80, Billy 93, Sam 58, Bishop Q 130, …).
+                if (fid != 133 && fid != 135 && fid != 229) continue;
+                if (argc != 6)                                          // argc!=6 → no 5th arg: an engine "default" shot
+                {
+                    PatchBstDefault(slot, ti, f);                       // scale its BST +0x3C base damage instead
+                    continue;
+                }
+                int dr = x - 0xC;                                       // last pushed arg = the damage
+
+                if (Word(dr) == 3 && Word(dr + 4) == 1)                 // EXPLICIT: op3 int-literal damage
+                {
+                    ScaleLiteralAt(dr + 8);
+                }
+                else if (Word(dr) == 1 && Word(dr + 8) == 1)            // SUBROUTINE: op1 scope==1 (call argument)
+                {
+                    // The shot reads local[idx]; resolve it up the call chain to the op3 literal(s) and scale them.
+                    ScaleArg(FuncStart(x), Word(dr + 4), new HashSet<long>(), 0);
+                }
+            }
+            if (LogNormalize && hits == 0)
+                Console.WriteLine($"[Normalize]   slot {slot} proj: factor {f:F2}, no scalable _SET_SHOT literal in STB 0x{stbNative:X8} (computed/default shooter or no shot)");
+        }
+
+        // Scale a "default" shooter's BST base damage (BehaviorScriptTable entry +0x3C, the source the engine uses
+        // when the STB _SET_SHOT passes no explicit damage). The entry is selected by the species record's primary
+        // shot-effect index (+0x68) via the pointer array; we snapshot the boot value once (restored on dungeon
+        // exit, since the BST is static and persists) and write round(original × factor). Only invoked for enemies
+        // that actually fire a default shot, so we never apply one species' factor to an entry an override shooter
+        // merely shares (override shooters ignore +0x3C). 0-damage entries (e.g. Heart's bind) scale to nothing.
+        private static void PatchBstDefault(int slot, int ti, float f)
+        {
+            if (ti < 0) return;
+            int idx = Memory.ReadUShort(SpeciesTableRam + (long)ti * EnemySpeciesTable.Stride + ShotIdxPrimary);
+            if (idx == 0xFFFF) return;                                  // no shot effect
+            int btNative = Memory.ReadInt(BstPtrArrayRam + idx * 4);
+            if (btNative == 0) return;
+            long dmgAddr = (((long)btNative & 0x1FFFFFFF) | 0x20000000) + BstDamageOff;
+
+            if (!_bstOriginal.TryGetValue(dmgAddr, out int orig))      // snapshot boot value once
+            {
+                orig = Memory.ReadInt(dmgAddr);
+                _bstOriginal[dmgAddr] = orig;
+            }
+            if (orig <= 0) return;                                      // non-damaging shot (bind) — nothing to scale
+            int nv = ScaleRound(orig, f);
+            int cur = Memory.ReadInt(dmgAddr);
+            if (cur == nv) return;                                      // already scaled (re-run / sibling)
+            Memory.WriteInt(dmgAddr, nv);
+            _bstDirty = true;
+            if (LogNormalize) Console.WriteLine($"[Normalize]   slot {slot} proj BST idx{idx} @0x{dmgAddr:X8}: {orig} -> {nv} (factor {f:F2})");
+        }
+
+        // Restore every BST entry we scaled back to its boot value. Called on leaving the dungeon floor (to town);
+        // the BST is a static ELF table that persists across floors, so without this a scaled default-shot damage
+        // would leak into the next dungeon. Originals are kept (boot values) so re-entry re-scales from them.
+        private static void RestoreBst()
+        {
+            if (!_bstDirty) return;
+            foreach (var kv in _bstOriginal) Memory.WriteInt(kv.Key, kv.Value);
+            _bstDirty = false;
+            if (LogNormalize) Console.WriteLine($"[Normalize] restored {_bstOriginal.Count} BST default-shot entr{(_bstOriginal.Count == 1 ? "y" : "ies")} on dungeon exit.");
+        }
+
         // NOTE on damage normalization:
-        //   • MELEE is normalized live via the cached _SET_DMG_PARA array (PatchMeleeCache above) — patching the
-        //     STB script value is too late since the engine latches it at the enemy's init.
-        //   • PROJECTILE (_SET_SHOT 5th arg) is not yet normalized: explicit-arg shots cache elsewhere and the
-        //     "default" shots (Sam/CB/etc.) read their damage from a separate float field still being pinned.
-        //     Tracked as a follow-up; melee covers the large majority of attack damage.
+        //   • MELEE is normalized live via the cached _SET_DMG_PARA array (PatchMeleeCache) — patching the STB value
+        //     is too late since the engine latches it into that cache at the enemy's init.
+        //   • PROJECTILE has two sources, both handled by PatchProjectileCache:
+        //       – STB shots (argc==6): scaled at the script literal — explicit op3 literals AND subroutine shooters
+        //         (op1 scope-1 arg resolved up the call chain, e.g. Golem 64, Ghost 21).
+        //       – "default" shots (argc!=6, no STB damage): scaled at the BST entry +0x3C base damage via
+        //         PatchBstDefault, with snapshot/restore (RestoreBst on dungeon exit) since the BST is static.
+        //     This covers every projectile shooter; only boss (cN) shots are intentionally left (normalizer skips bosses).
     }
 }
