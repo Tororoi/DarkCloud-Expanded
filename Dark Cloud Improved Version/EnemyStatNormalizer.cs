@@ -318,7 +318,7 @@ namespace Dark_Cloud_Improved_Version
                 bool hasAtk = _atkTier.TryGetValue(ti, out int nAtk);
                 bool native = (!hasHp || nHp == curHpDef) && (!hasAtk || nAtk == curAtk);
                 if (LogNormalize)
-                    Console.WriteLine($"[Normalize] slot {s} {e.Name} (id {id}, ti {ti}): nativeHpTier={(hasHp ? nHp : -1)} nativeAtkTier={(hasAtk ? nAtk : -1)} cur(HpDef={curHpDef},Atk={curAtk}){(native ? " — native, skip" : "")}");
+                    Console.WriteLine($"[Normalize] slot {s} {e.Name} (id {id}, ti {ti}): nativeTier(HpDef={(hasHp ? nHp : -1)},Atk={(hasAtk ? nAtk : -1)}) curTier(HpDef={curHpDef},Atk={curAtk}){(native ? " — native, skip" : "")}");
                 if (native) continue;
 
                 // HP / defense (HP/def tier).
@@ -326,17 +326,23 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (e.MaxHp.HasValue)
                     {
-                        int newMax = ScaleRound(e.MaxHp.Value, Factor(_bHp, nHp, curHpDef));
+                        float fHp  = Factor(_bHp, nHp, curHpDef);
+                        int newMax = ScaleRound(e.MaxHp.Value, fHp);
                         int curHp  = Memory.ReadInt(b + EnemySlotOffsets.Hp);
                         int curMax = Math.Max(1, slotMaxHp);
+                        int newHp  = Math.Max(1, (int)Math.Round(curHp * (newMax / (double)curMax)));
                         Memory.WriteInt(b + EnemySlotOffsets.MaxHp, newMax);
-                        Memory.WriteInt(b + EnemySlotOffsets.Hp, Math.Max(1, (int)Math.Round(curHp * (newMax / (double)curMax))));
+                        Memory.WriteInt(b + EnemySlotOffsets.Hp, newHp);
+                        if (LogNormalize) Console.WriteLine($"[Normalize]   slot {s} HP: {slotMaxHp} -> {newMax} (factor {fHp:F2}); curHP {curHp} -> {newHp}");
                     }
                     if (e.DamageReduction.HasValue || e.WeaponDefense.HasValue)
                     {
-                        ushort dr = (ushort)ScaleRound(e.DamageReduction ?? 0, Factor(_bDr, nHp, curHpDef));
-                        ushort wd = (ushort)ScaleRound(e.WeaponDefense ?? 0, Factor(_bWd, nHp, curHpDef));
+                        float fDr = Factor(_bDr, nHp, curHpDef), fWd = Factor(_bWd, nHp, curHpDef);
+                        ushort dr = (ushort)ScaleRound(e.DamageReduction ?? 0, fDr);
+                        ushort wd = (ushort)ScaleRound(e.WeaponDefense ?? 0, fWd);
+                        int oldDef = Memory.ReadInt(b + EnemySlotOffsets.DefenseStats);
                         Memory.WriteInt(b + EnemySlotOffsets.DefenseStats, (dr & 0xFFFF) | (wd << 16));
+                        if (LogNormalize) Console.WriteLine($"[Normalize]   slot {s} def DR: {oldDef & 0xFFFF} -> {dr} (factor {fDr:F2}), WD: {(oldDef >> 16) & 0xFFFF} -> {wd} (factor {fWd:F2})");
                     }
                 }
 
