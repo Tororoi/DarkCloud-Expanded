@@ -789,4 +789,28 @@ namespace Dark_Cloud_Improved_Version
         internal const int ProjectileLifetime = 0x5C; // int   — frames the projectile lives; 0 if no projectile
         // +0x60–+0x6C: four ints, all -1
     }
+
+    /// <summary>
+    /// EE RAM addresses + unit-relative offsets used by the runtime enemy injector / boss-fight orchestration
+    /// (EnemyModelInjector). PCSX2 addresses unless noted (= PS2-native + 0x20000000).
+    /// </summary>
+    internal static class InjectorAddresses
+    {
+        // Per-floor enemy-count target globals read by CMonstorUnit::ArrangementPos — the placement loop runs this
+        // many times (capped by walkable spawn tiles). Native 0x01D564xx; these three are the ones used as the count arg.
+        internal static readonly long[] PopulationTargets = [0x21D56494, 0x21D5649C, 0x21D564A0];
+
+        // STB load-address scan window (PS2-native) for the remaining RAM scans (companion locate / pattern scans).
+        internal const long StbScanLo = 0x01000000;
+        internal const long StbScanHi = 0x01A00000;
+
+        // Engine spawn-candidate table, indexed by ArrangementPos at MainMonstorUnit + SpawnCandidateTableOff
+        // (stride SpawnCandidateStride; flag @+0, eid @+4).
+        internal const long SpawnCandidateTableOff = 0x1DEA8;
+        internal const int  SpawnCandidateStride   = 0x9C;
+
+        // MainMonstorUnit-relative motion fields: unit + slot*ModelScaleOffsets.ModelStride + offset.
+        internal const long PlayingMotionFrameOff = 0x1FFC0; // float — same field as ModelScaleOffsets.PlayingMotionFrame (absolute)
+        internal const int  PlayingMotionIdOff    = 0x20938; // int   — mirror of ModelScaleOffsets.PlayingMotionId
+    }
 }

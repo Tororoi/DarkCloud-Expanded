@@ -175,4 +175,13 @@ namespace Dark_Cloud_Improved_Version
             // world vertex of a poly index = vertArray + idx * VertStride
         }
     }
+
+    /// <summary>
+    /// The engine's _SET/_GET_GLOBAL_INT scratch array (handler @ ELF 0x1E5190): global[i] = Base + i*4.
+    /// ELF global-int array @0x1D8FC80, read at PCSX2 0x21D8FC80. Used by the Ice Queen fight handshake.
+    /// </summary>
+    internal static class GlobalInt
+    {
+        internal const long Base = 0x21D8FC80;
+    }
 }
