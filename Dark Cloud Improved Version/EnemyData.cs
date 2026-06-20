@@ -3647,7 +3647,7 @@ namespace Dark_Cloud_Improved_Version
         // c17_beem.chr (発射/ループ/消滅 = launch/loop/despawn), c17_kaze.chr (wind), c17_hikari.chr (light),
         // c17_syougeki.chr (shock). e.g. c17_beem @ data.dat 0x1b1e9000. Which TableIndex→which is unconfirmed.
         internal static readonly EnemyDefaults DGComp88 = new EnemyDefaults {
-            Id=0, TableIndex=88, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535,
+            Id=0, TableIndex=88, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=90, AttackPower=65535,
             MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
         // Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
@@ -3655,7 +3655,7 @@ namespace Dark_Cloud_Improved_Version
         // 1	60–68	ループ	(loop)
         // 2	80–90	消滅	despawn
         internal static readonly EnemyDefaults DGComp89 = new EnemyDefaults {
-            Id=0, TableIndex=89, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535,
+            Id=0, TableIndex=89, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=90, AttackPower=65535,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
         // code=c17_
         // Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)
@@ -3664,7 +3664,7 @@ namespace Dark_Cloud_Improved_Version
         // 1	60–68	ループ	(loop)
         // 2	80–90	消滅	despawn
         internal static readonly EnemyDefaults DGComp90 = new EnemyDefaults {
-            Id=0, TableIndex=90, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535,
+            Id=0, TableIndex=90, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=90, AttackPower=65535,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
         // code=c17_
         // Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)
@@ -3673,7 +3673,7 @@ namespace Dark_Cloud_Improved_Version
         // 1	60–68	ループ	(loop)
         // 2	80–90	消滅	despawn
         internal static readonly EnemyDefaults DGComp93 = new EnemyDefaults {
-            Id=0, TableIndex=93, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=0, AttackPower=65535,
+            Id=0, TableIndex=93, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=80, AttackPower=65535,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // Motions: e85a.chr info.cfg @ data.dat 0x1ddf5000 — 2 (object; no death anim).
@@ -3718,7 +3718,7 @@ namespace Dark_Cloud_Improved_Version
         // 25	445–470	攻撃２（円月輪）	attack 2 (chakram)
         // 26	560–585	攻撃１（二刀流斬りその2）	attack 1 (dual-slash B)
         internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
-            Id=221, TableIndex=165, ModelCode="c21a", Name="Black Knight",    MaxHp=50000, Abs=5,  MinGoldDrop=0, DropChance=0,
+            Id=221, TableIndex=165, ModelCode="c21a", Name="Black Knight",    MaxHp=40000, Abs=5,  MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=100,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50,
@@ -3759,6 +3759,32 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=65535, ItemResA=100, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{85,85,85,85,85}, ProjectileDamage=new int[]{130} };
+
+        // ── Dark Genie (Final Form) attack-effect entities (EID 0; spawned by c23a, not standalone enemies) ──
+        // code=last_mc → last_mc.chr @ data.dat 0x203C9000 — 発射(fire) / 召喚(summon) / 待ち(wait). No own damage script (pure visual).
+        internal static readonly EnemyDefaults DGFinalSummon = new EnemyDefaults {
+            Id=0, TableIndex=107, ModelCode="last_mc", Name="DG Final summon (last_mc)", MaxHp=100, AttackPower=65535,
+            Category=EnemyCategory.Undead, FireRes=70, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
+            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
+        // code=last_gw1 → last_gw1.chr @ data.dat 0x20397000 — グランドウェイブ(ground wave). No own damage script.
+        internal static readonly EnemyDefaults DGFinalGroundWave = new EnemyDefaults {
+            Id=0, TableIndex=108, ModelCode="last_gw1", Name="DG Final ground wave (last_gw1)", MaxHp=100, AttackPower=65535,
+            Category=EnemyCategory.Undead, FireRes=70, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
+            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
+        // code=c23_beem → c23_beem.chr @ data.dat 0x203A7800 — 発射(fire) / ループ(loop) / 消滅(vanish). Beam, 175 dmg (= the c17_beem Dark Genie beam).
+        internal static readonly EnemyDefaults DGFinalBeam = new EnemyDefaults {
+            Id=0, TableIndex=109, ModelCode="c23_beem", Name="DG Final beam", MaxHp=90, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
+            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
+        // code=c23_beem_s → c23_beem_s.chr @ data.dat 0x20851000 — 発動(activate) / ループ(loop) / 消滅(vanish). Beam variant, 175 dmg.
+        internal static readonly EnemyDefaults DGFinalBeamS = new EnemyDefaults {
+            Id=0, TableIndex=110, ModelCode="c23_beem_s", Name="DG Final beam (small)", MaxHp=90, AttackPower=65535,
+            Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
+            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
 
         // ── Demon Shaft enhanced tier variants ────────────────────────────────────
         // These reuse base-game species IDs with new model codes and scaled stats.

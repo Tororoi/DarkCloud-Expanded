@@ -143,6 +143,10 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 104 | 0 | Ice Tornado | `i_ta` | 74 | — | resolved STB `c13_i_tatumaki` |
 | 105 | 317 | Gacious | `e124` | 130, 130, 130, 130, 130 | — |  |
 | 106 | 223 | Dark Genie (Final Form) | `c23a` | 85, 85, 85, 85, 85 | 130 def | Dark Genie's final form (endgame battle); distinct from c17a/c17b. Mouth beam = `ex4`/`ex5` `_SET_SHOT` (BST default 130 via `last_gw2`); 5 hand swings ×85 |
+| 107 | 0 | DG Final summon | `last_mc` | — | — | Dark Genie Final effect entity; motions 発射/召喚/待ち (fire/summon/wait); no own damage |
+| 108 | 0 | DG Final ground wave | `last_gw1` | — | — | Dark Genie Final effect entity; motion グランドウェイブ (ground wave); no own damage |
+| 109 | 0 | DG Final beam | `c23_beem` | 175 | — | Dark Genie Final beam (= the `c17_beem` Dark Genie beam, 175); motions 発射/ループ/消滅 (fire/loop/vanish) |
+| 110 | 0 | DG Final beam (small) | `c23_beem_s` | 175 | — | Dark Genie Final beam variant; motions 発動/ループ/消滅 (activate/loop/vanish) |
 | 111 | 311 | Gemron (Fire) | `e111` | — | 100 |  |
 | 112 | 308 | Nikapous | `e108` | 150, 150, 150, 150 | 150 |  |
 | 113 | 56 | White Fang (Enhanced) | `e125` | 122, 122 | — |  |
