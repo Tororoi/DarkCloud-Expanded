@@ -56,11 +56,13 @@ namespace Dark_Cloud_Improved_Version
         internal float? EntityScale;
         internal float? EntityScaleCopy;
 
-        // Slot +0x090: packed ushorts — source is EnemySpeciesTable.Unk010/Unk012; loaded at spawn.
-        // Modifying the static table value changes the value the slot gets on next spawn.
-        // Observed: Gyon=0/0; Captain/Auntie Medu=3/0; Cursed Rose=2/0; Pirate's Chariot=5/30; Gunny=5/20; Mask of Prajna=5/10.
-        internal ushort? Unk090A;   // slot +0x090 low  — static table: EnemySpeciesTable.Unk010 (0x064)
-        internal ushort? Unk090B;   // slot +0x090 high — static table: EnemySpeciesTable.Unk012 (0x066); non-zero on ranged enemies; may be max shoot range
+        // Enemy DEFENSE pair (slot +0x090 / record 0x064+0x066), loaded at spawn. CONFIRMED 2026-06-19 as the
+        // real per-dungeon durability scalers (see EnemyAddresses.EnemySpeciesTable.DamageReduction/WeaponDefense):
+        //   DamageReduction = flat reduction subtracted from incoming damage (CheckDmg).
+        //   WeaponDefense   = weapon-damage defense, fed to SwordDmgCheck1.
+        // (Formerly DamageReduction/WeaponDefense.) These are NOT attack — actual hit damage is STB-script-driven.
+        internal ushort? DamageReduction;   // record 0x064 / slot DefenseStats low
+        internal ushort? WeaponDefense;     // record 0x066 / slot DefenseStats high
 
         // Slot +0x0D8: steal item ID — low ushort is the item ID; 65535 if none.
         // Static table: EnemySpeciesTable.StealItemId (0x080) / EnemySpeciesTable.StealFlag (0x082).
@@ -567,7 +569,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SkeletonSoldier = new EnemyDefaults {
             Id=3, TableIndex=1, ModelCode="e03a",  Name="Skeleton Soldier", MaxHp=23,  Abs=3,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=90,  ThunderRes=100, WindRes=100, HolyRes=160,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=0, Unk090B=0,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.3f, StealItemId=null, ItemResA=100, ItemResB=90,
             ModelUnk020=7.0f, ModelUnk024=18.0f, ModelUnk028=60.0f, ModelDataSize=1080, ModelAnimCount=19, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -597,7 +599,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MasterJacket = new EnemyDefaults {
             Id=1, TableIndex=0, ModelCode="e01a",  Name="Master Jacket",    MaxHp=75,  Abs=5,  MinGoldDrop=7,  DropChance=50,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=80,  ThunderRes=100, WindRes=80,  HolyRes=130,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=3, Unk090B=0,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.3f, StealItemId=177, ItemResA=100, ItemResB=80,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1123, ModelAnimCount=20, AttackPower=150, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -625,7 +627,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Statue = new EnemyDefaults {
             Id=5, TableIndex=2, ModelCode="e05a",  Name="Statue",           MaxHp=38,  Abs=3,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=3, Unk090B=20,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=20,
             ReticleWidth=1.2f, ReticleHeight=1.7f, StealItemId=160, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=22.0f, ModelUnk028=60.0f, ModelDataSize=792,  ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -654,7 +656,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Dasher = new EnemyDefaults {
             Id=6, TableIndex=3, ModelCode="e06a",  Name="Dasher",           MaxHp=23,  Abs=3,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=1, Unk090B=0,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=1, WeaponDefense=0,
             ReticleWidth=1.7f, ReticleHeight=1.7f, StealItemId=148, ItemResA=100, ItemResB=90,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -685,7 +687,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CaveBat = new EnemyDefaults {
             Id=60, TableIndex=52, ModelCode="e60a", Name="Cave Bat",         MaxHp=12,  Abs=3,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=100,
-            EntityScale=3.0f, EntityScaleCopy=3.0f, Unk090A=0, Unk090B=0,
+            EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=0.8f, ReticleHeight=0.8f, StealItemId=151, ItemResA=100, ItemResB=90,
             ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=940,  ModelAnimCount=21, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -715,7 +717,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicDBC = new EnemyDefaults {
             Id=35, TableIndex=30, ModelCode="e35a", Name="Mimic (Divine Beast Cave)", MaxHp=68, Abs=3, MinGoldDrop=10, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=1, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=1, WeaponDefense=10,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=920,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -746,7 +748,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Ghost = new EnemyDefaults {
             Id=42, TableIndex=36, ModelCode="e42a", Name="Ghost",            MaxHp=15,  Abs=3,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
-            EntityScale=3.6f, EntityScaleCopy=3.6f, Unk090A=0, Unk090B=0,
+            EntityScale=3.6f, EntityScaleCopy=3.6f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.1f, ReticleHeight=1.1f, StealItemId=135, ItemResA=100, ItemResB=90,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1220, ModelAnimCount=21, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -775,7 +777,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Dragon = new EnemyDefaults {
             Id=59, TableIndex=51, ModelCode="e59a", Name="Dragon",           MaxHp=90,  Abs=5,  MinGoldDrop=15, DropChance=50,
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=120, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=17.5f, EntityScaleCopy=17.5f, Unk090A=5, Unk090B=40,
+            EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=5, WeaponDefense=40,
             ReticleWidth=2.9f, ReticleHeight=2.7f, StealItemId=161, ItemResA=90,  ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=32.0f, ModelUnk028=60.0f, ModelDataSize=1422, ModelAnimCount=19, AttackPower=85, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -808,7 +810,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicDBC = new EnemyDefaults {
             Id=34, TableIndex=29, ModelCode="e34a", Name="King Mimic (Divine Beast Cave)", MaxHp=90, Abs=4, MinGoldDrop=20, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=3, Unk090B=10,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.9f, ReticleHeight=1.65f, StealItemId=175, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=28.0f, ModelUnk028=60.0f, ModelDataSize=1012, ModelAnimCount=23, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -837,7 +839,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Rockanoff = new EnemyDefaults {
             Id=77, TableIndex=69, ModelCode="e77a", Name="Rockanoff",        MaxHp=30,  Abs=3,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=5, Unk090B=20,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.7f, ReticleHeight=1.7f, StealItemId=160, ItemResA=90,  ItemResB=60,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=954,  ModelAnimCount=19, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -859,7 +861,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults StatueDog = new EnemyDefaults {
             Id=303, TableIndex=97, ModelCode="e103", Name="Statue Dog",      MaxHp=15,  Abs=2,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=60,
-            EntityScale=9.0f, EntityScaleCopy=9.0f, Unk090A=3, Unk090B=10,
+            EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=160, ItemResA=90,  ItemResB=100,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=667,  ModelAnimCount=12, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -890,7 +892,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults FliFli = new EnemyDefaults {
             Id=8, TableIndex=5, ModelCode="e08a", Name="FliFli",            MaxHp=120, Abs=3,  MinGoldDrop=7,  DropChance=30,
             Category=EnemyCategory.Plant, FireRes=180, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=0, Unk090B=0,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=169, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e11a.chr @ data.dat 0x1b808800  (idx = _SET_MOTION; 死亡 = death)
@@ -905,7 +907,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CannibalPlant = new EnemyDefaults {
             Id=11, TableIndex=8, ModelCode="e11a", Name="Cannibal Plant",   MaxHp=60,  Abs=3,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Plant, FireRes=180, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=2, Unk090B=0,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=167, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=21.0f, ModelUnk028=60.0f, ModelDataSize=474,  ModelAnimCount=7, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -934,7 +936,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Sunday = new EnemyDefaults {
             Id=14, TableIndex=10, ModelCode="e14a", Name="Sunday",           MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=170, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1454, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -963,7 +965,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Monday = new EnemyDefaults {
             Id=15, TableIndex=11, ModelCode="e15a", Name="Monday",           MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=146, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -992,7 +994,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Tuesday = new EnemyDefaults {
             Id=16, TableIndex=12, ModelCode="e16a", Name="Tuesday",          MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=151, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1427, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1021,7 +1023,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Wednesday = new EnemyDefaults {
             Id=17, TableIndex=13, ModelCode="e17a", Name="Wednesday",        MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=146, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1438, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1050,7 +1052,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Thursday = new EnemyDefaults {
             Id=18, TableIndex=14, ModelCode="e18a", Name="Thursday",         MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // confirmed from clean dump 2026-05-30, WOF game fl.5
@@ -1078,7 +1080,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Friday = new EnemyDefaults {
             Id=19, TableIndex=15, ModelCode="e19a", Name="Friday",           MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=148, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1438, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1107,7 +1109,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Saturday = new EnemyDefaults {
             Id=20, TableIndex=16, ModelCode="e20a", Name="Saturday",         MaxHp=60,  Abs=3,  MinGoldDrop=6,  DropChance=40,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=148, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // confirmed from clean dump 2026-05-30, WOF game fl.7/fl.14/fl.16; spans both pools
@@ -1134,7 +1136,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults WitchIllza = new EnemyDefaults {
             Id=22, TableIndex=18, ModelCode="e22a", Name="Witch Illza",      MaxHp=120, Abs=3,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Mage, FireRes=90,  IceRes=90,  ThunderRes=90,  WindRes=90,  HolyRes=100,
-            EntityScale=8.0f, EntityScaleCopy=8.0f, Unk090A=0, Unk090B=0,
+            EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=169, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=868,  ModelAnimCount=18, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1164,7 +1166,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicWOF = new EnemyDefaults {
             Id=79, TableIndex=71, ModelCode="e79a", Name="Mimic (Wise Owl Forest)", MaxHp=90,  Abs=3,  MinGoldDrop=6,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=2, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=10,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=914,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1191,7 +1193,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults HaleyHoley = new EnemyDefaults {
             Id=305, TableIndex=99, ModelCode="e105", Name="Haley Holey",     MaxHp=50,  Abs=3,  MinGoldDrop=7,  DropChance=40,
             Category=EnemyCategory.Plant, FireRes=140, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=3, Unk090B=10,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.0f, ReticleHeight=1.1f, StealItemId=186, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1046, ModelAnimCount=19, AttackPower=189, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1220,7 +1222,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Werewolf = new EnemyDefaults {
             Id=7, TableIndex=4, ModelCode="e07a",  Name="Werewolf",         MaxHp=180, Abs=12, MinGoldDrop=15, DropChance=50,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
-            EntityScale=7.5f, EntityScaleCopy=7.5f, Unk090A=5, Unk090B=0,
+            EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=5, WeaponDefense=0,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=174, ItemResA=90,  ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1111, ModelAnimCount=19, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1251,7 +1253,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Hornet = new EnemyDefaults {
             Id=9, TableIndex=6, ModelCode="e09a",  Name="Hornet",           MaxHp=60,  Abs=3,  MinGoldDrop=7,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=120, ThunderRes=100, WindRes=120, HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=0, Unk090B=0,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.2f, StealItemId=151, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1279,7 +1281,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Halloween = new EnemyDefaults {
             Id=10, TableIndex=7, ModelCode="e10a", Name="Halloween",        MaxHp=150, Abs=3,  MinGoldDrop=7,  DropChance=40,
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=3, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.3f, ReticleHeight=1.3f, StealItemId=168, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=850,  ModelAnimCount=18, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1308,7 +1310,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults EarthDigger = new EnemyDefaults {
             Id=12, TableIndex=9, ModelCode="e12a", Name="Earth Digger",     MaxHp=120, Abs=3,  MinGoldDrop=7,  DropChance=30,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=80,  WindRes=80,  HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=2, Unk090B=0,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.3f, StealItemId=188, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=936,  ModelAnimCount=19, AttackPower=197, ElemAtkFire=50, ElemAtkIce=50, ElemAtkThunder=120, ElemAtkWind=50, ElemAtkHoly=50, ElemAtkDark=50 };
 
@@ -1336,7 +1338,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults WitchHellza = new EnemyDefaults {
             Id=21, TableIndex=17, ModelCode="e21a", Name="Witch Hellza",     MaxHp=270, Abs=5,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=70,  IceRes=70,  ThunderRes=70,  WindRes=70,  HolyRes=100,
-            EntityScale=8.0f, EntityScaleCopy=8.0f, Unk090A=0, Unk090B=0,
+            EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=169, ItemResA=85, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; same model/stats tier as KingMimicDBC but different code; needs dump confirmation
@@ -1368,7 +1370,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicWOF = new EnemyDefaults {
             Id=78, TableIndex=70, ModelCode="e78a", Name="King Mimic (Wise Owl Forest)", MaxHp=150, Abs=10, MinGoldDrop=15, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=5, Unk090B=10,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // ── Shipwreck (dungeon 2) ──────────────────────────────────────────────
@@ -1398,7 +1400,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Captain = new EnemyDefaults {
             Id=27, TableIndex=23, ModelCode="e27a", Name="Captain",          MaxHp=225, Abs=6,  MinGoldDrop=12, DropChance=30,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=80,  WindRes=80,  HolyRes=150,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=3, Unk090B=0,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=177, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=873,  ModelAnimCount=19, AttackPower=227, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1427,7 +1429,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults PiratesChariot = new EnemyDefaults {
             Id=25, TableIndex=21, ModelCode="e25a", Name="Pirate's Chariot", MaxHp=270, Abs=8,  MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Metal, FireRes=120, IceRes=80,  ThunderRes=140, WindRes=100, HolyRes=100,
-            EntityScale=8.0f, EntityScaleCopy=8.0f, Unk090A=5, Unk090B=30,
+            EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=5, WeaponDefense=30,
             ReticleWidth=1.9f, ReticleHeight=1.8f, StealItemId=159, ItemResA=95,  ItemResB=60,
             ModelUnk020=7.0f, ModelUnk024=25.0f, ModelUnk028=60.0f, ModelDataSize=835,  ModelAnimCount=19, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1456,7 +1458,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Gunny = new EnemyDefaults {
             Id=23, TableIndex=19, ModelCode="e23a", Name="Gunny",            MaxHp=250, Abs=4,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=120, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=5, Unk090B=20,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=153, ItemResA=95,  ItemResB=70,
             ModelUnk020=14.0f, ModelUnk024=20.0f, ModelUnk028=0.0f,  ModelDataSize=1270, ModelAnimCount=19, AttackPower=193, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1473,7 +1475,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CursedRose = new EnemyDefaults {
             Id=68, TableIndex=60, ModelCode="e68a", Name="Cursed Rose",      MaxHp=225, Abs=4,  MinGoldDrop=6,  DropChance=30,
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=130,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=2, Unk090B=0,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=null, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=22.0f, ModelUnk028=60.0f, ModelDataSize=476,  ModelAnimCount=7, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1499,7 +1501,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Gyon = new EnemyDefaults {
             Id=24, TableIndex=20, ModelCode="e24a", Name="Gyon",             MaxHp=225, Abs=4,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=0, Unk090B=0,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=134, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=25.0f, ModelUnk028=60.0f, ModelDataSize=849,  ModelAnimCount=16, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1529,7 +1531,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults AuntieMedu = new EnemyDefaults {
             Id=26, TableIndex=22, ModelCode="e26a", Name="Auntie Medu",      MaxHp=300, Abs=10, MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=100, IceRes=140, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=3, Unk090B=0,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.4f, StealItemId=166, ItemResA=100, ItemResB=60,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=944,  ModelAnimCount=19, AttackPower=245, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1558,7 +1560,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Corcea = new EnemyDefaults {
             Id=28, TableIndex=24, ModelCode="e28a", Name="Corcea",           MaxHp=150, Abs=4,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=140, HolyRes=130,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=0, Unk090B=0,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.4f, StealItemId=152, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=18.0f, ModelUnk028=60.0f, ModelDataSize=871,  ModelAnimCount=19, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1587,7 +1589,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MaskOfPrajna = new EnemyDefaults {
             Id=75, TableIndex=67, ModelCode="e75a", Name="Mask of Prajna",   MaxHp=375, Abs=12, MinGoldDrop=15, DropChance=50,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=145,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=5, Unk090B=10,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=5, WeaponDefense=10,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=151, ItemResA=80,  ItemResB=70,
             ModelUnk020=32.0f, ModelUnk024=26.0f, ModelUnk028=0.0f,  ModelDataSize=1398, ModelAnimCount=19, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1614,7 +1616,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Sam = new EnemyDefaults {
             Id=85, TableIndex=77, ModelCode="e86a", Name="Sam",              MaxHp=180, Abs=4,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.6f, StealItemId=162, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=19.0f, ModelUnk028=0.0f,  ModelDataSize=871,  ModelAnimCount=19, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1644,11 +1646,11 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicSW = new EnemyDefaults {
             Id=81, TableIndex=73, ModelCode="e81a", Name="Mimic (Shipwreck)", MaxHp=150, Abs=4, MinGoldDrop=6, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=5, Unk090B=20,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=918,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from dump 2026-05-31, SW game fl.16; same model/anim data as KingMimicDBC but higher stats and different Unk090
+        // confirmed from dump 2026-05-31, SW game fl.16; same model/anim data as KingMimicDBC but higher stats and different DamageReduction/WeaponDefense
         // Motions: e80a.chr @ data.dat 0x1dc4f800  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
         // 0	35–45	立ち	idle
@@ -1677,7 +1679,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicSW = new EnemyDefaults {
             Id=80, TableIndex=72, ModelCode="e80a", Name="King Mimic (Shipwreck)", MaxHp=300, Abs=15, MinGoldDrop=15, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=5, Unk090B=20,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.9f, ReticleHeight=1.65f, StealItemId=175, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=28.0f, ModelUnk028=60.0f, ModelDataSize=1012, ModelAnimCount=23, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1708,7 +1710,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Mummy = new EnemyDefaults {
             Id=50, TableIndex=44, ModelCode="e50a", Name="Mummy",            MaxHp=150, Abs=4,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Undead, FireRes=150, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=120,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=0, Unk090B=0,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=null, ItemResA=100, ItemResB=70,
             ModelUnk020=9.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1029, ModelAnimCount=19, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1739,11 +1741,11 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Phantom = new EnemyDefaults {
             Id=58, TableIndex=50, ModelCode="e58a", Name="Phantom",          MaxHp=150, Abs=4,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=125, ThunderRes=100, WindRes=125, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.2f, StealItemId=151, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from dump 2026-05-31, SM game fl.2–7; Unk090A=8 (large, like Golem); steal=159
+        // confirmed from dump 2026-05-31, SM game fl.2–7; DamageReduction=8 (large, like Golem); steal=159
         // Motions: e49a.chr @ data.dat 0x1ca46000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
         // 0	10–20	立ち	idle
@@ -1772,7 +1774,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults BomberHead = new EnemyDefaults {
             Id=49, TableIndex=43, ModelCode="e49a", Name="Bomber Head",      MaxHp=180, Abs=4,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=200, IceRes=75,  ThunderRes=125, WindRes=100, HolyRes=75,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=8, Unk090B=20,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=8, WeaponDefense=20,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=159, ItemResA=100, ItemResB=70,
             ModelUnk020=7.0f, ModelUnk024=18.0f, ModelUnk028=60.0f, ModelDataSize=1663, ModelAnimCount=23, AttackPower=159, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1802,11 +1804,11 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicSMT = new EnemyDefaults {
             Id=37, TableIndex=32, ModelCode="e37a", Name="Mimic (Sun & Moon Temple)", MaxHp=270, Abs=6, MinGoldDrop=12, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=5, Unk090B=20,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=918,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
-        // confirmed from dump 2026-05-31, SM game fl.3–7; scale=14.0 (large body); Unk090A=8
+        // confirmed from dump 2026-05-31, SM game fl.3–7; scale=14.0 (large body); DamageReduction=8
         // Motions: e30a.chr @ data.dat 0x1c10d000  (idx = _SET_MOTION; 死亡 = death)
         // Idx	Frames	Name (JP)	Meaning
         // 0	10–20	立ち	idle
@@ -1830,7 +1832,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Golem = new EnemyDefaults {
             Id=30, TableIndex=25, ModelCode="e30a", Name="Golem",            MaxHp=375, Abs=4,  MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=0,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             ReticleWidth=2.4f, ReticleHeight=2.4f, StealItemId=177, ItemResA=100, ItemResB=50,
             ModelUnk020=7.0f, ModelUnk024=33.0f, ModelUnk028=60.0f, ModelDataSize=1071, ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1862,7 +1864,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CrabbyHermit = new EnemyDefaults {
             Id=71, TableIndex=63, ModelCode="e71a", Name="Crabby Hermit",    MaxHp=300, Abs=4,  MinGoldDrop=12, DropChance=30,
             Category=EnemyCategory.Marine, FireRes=100, IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
-            EntityScale=10.0f, EntityScaleCopy=10.0f, Unk090A=5, Unk090B=20,
+            EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.9f, ReticleHeight=1.9f, StealItemId=166, ItemResA=95,  ItemResB=70,
             ModelUnk020=14.0f, ModelUnk024=22.0f, ModelUnk028=100.0f, ModelDataSize=1612, ModelAnimCount=22, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
@@ -1895,7 +1897,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicSMT = new EnemyDefaults {
             Id=36, TableIndex=31, ModelCode="e36a", Name="King Mimic (Sun & Moon Temple)", MaxHp=525, Abs=15, MinGoldDrop=20, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=5, Unk090B=20,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=20,
             StealItemId=174, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; needs dump confirmation
@@ -1921,7 +1923,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MrBlare = new EnemyDefaults {
             Id=31, TableIndex=26, ModelCode="e31a", Name="Mr. Blare",        MaxHp=225, Abs=5,  MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=0,   IceRes=170, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=10,
             StealItemId=161, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; needs dump confirmation
@@ -1942,7 +1944,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Dune = new EnemyDefaults {
             Id=32, TableIndex=27, ModelCode="e32a", Name="Dune",             MaxHp=525, Abs=10, MinGoldDrop=18, DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=80,  WindRes=120, HolyRes=100,
-            EntityScale=11.0f, EntityScaleCopy=11.0f, Unk090A=0, Unk090B=0,
+            EntityScale=11.0f, EntityScaleCopy=11.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; needs dump confirmation
@@ -1969,7 +1971,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Titan = new EnemyDefaults {
             Id=33, TableIndex=28, ModelCode="e33a", Name="Titan",            MaxHp=750, Abs=12, MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=10, Unk090B=50,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; playing-card mage set; needs dump confirmation for dungeon assignment
@@ -1997,7 +1999,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Heart = new EnemyDefaults {
             Id=44, TableIndex=38, ModelCode="e44a", Name="Heart",            MaxHp=525, Abs=6,  MinGoldDrop=12, DropChance=50,
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=3, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=150, ItemResA=80, ItemResB=50, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e45a.chr @ data.dat 0x1c7a0800  (idx = _SET_MOTION; 死亡 = death)
@@ -2024,7 +2026,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Club = new EnemyDefaults {
             Id=45, TableIndex=39, ModelCode="e45a", Name="Club",             MaxHp=525, Abs=6,  MinGoldDrop=12, DropChance=50,
             Category=EnemyCategory.Mage, FireRes=150, IceRes=100, ThunderRes=100, WindRes=50,  HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=3, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=147, ItemResA=80, ItemResB=50, AttackPower=134, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e46a.chr @ data.dat 0x1c84b800  (idx = _SET_MOTION; 死亡 = death)
@@ -2051,7 +2053,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Diamond = new EnemyDefaults {
             Id=46, TableIndex=40, ModelCode="e46a", Name="Diamond",          MaxHp=525, Abs=6,  MinGoldDrop=12, DropChance=50,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=50,  WindRes=150, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=3, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=151, ItemResA=80, ItemResB=50, AttackPower=135, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e47a.chr @ data.dat 0x1c8f2000  (idx = _SET_MOTION; 死亡 = death)
@@ -2078,7 +2080,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Spade = new EnemyDefaults {
             Id=47, TableIndex=41, ModelCode="e47a", Name="Spade",            MaxHp=525, Abs=6,  MinGoldDrop=12, DropChance=50,
             Category=EnemyCategory.Mage, FireRes=150, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=3, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=152, ItemResA=80, ItemResB=50, AttackPower=132, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // fire=50/ice=50/thu=50/win=50 (resistant to all), holy=150; all-element-resistant mage
@@ -2106,7 +2108,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Joker = new EnemyDefaults {
             Id=48, TableIndex=42, ModelCode="e48a", Name="Joker",            MaxHp=600, Abs=6,  MinGoldDrop=12, DropChance=50,
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=150,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=3, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=149, ItemResA=50, ItemResB=10, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // ── Moon Sea (dungeon 4) ──────────────────────────────────────────────────
@@ -2140,7 +2142,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicMS = new EnemyDefaults {
             Id=38, TableIndex=33, ModelCode="e38a", Name="King Mimic (Moon Sea)", MaxHp=600, Abs=12, MinGoldDrop=20, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=8, Unk090B=30,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=8, WeaponDefense=30,
             StealItemId=176, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e39a.chr @ data.dat 0x1c564000  (idx = _SET_MOTION; 死亡 = death)
@@ -2168,7 +2170,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicMS = new EnemyDefaults {
             Id=39, TableIndex=34, ModelCode="e39a", Name="Mimic (Moon Sea)",     MaxHp=450, Abs=6,  MinGoldDrop=15, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=8, Unk090B=30,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=8, WeaponDefense=30,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e51a.chr @ data.dat 0x1cdd4000  (idx = _SET_MOTION; 死亡 = death)
@@ -2197,7 +2199,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Lich = new EnemyDefaults {
             Id=51, TableIndex=45, ModelCode="e51a", Name="Lich",             MaxHp=300, Abs=12, MinGoldDrop=15, DropChance=80,
             Category=EnemyCategory.Undead, FireRes=20,  IceRes=20,  ThunderRes=20,  WindRes=20,  HolyRes=160,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=5, Unk090B=0,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=5, WeaponDefense=0,
             StealItemId=176, ItemResA=80, ItemResB=30, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e52a.chr @ data.dat 0x1cf09800  (idx = _SET_MOTION; 死亡 = death)
@@ -2224,7 +2226,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CurseDancer = new EnemyDefaults {
             Id=52, TableIndex=46, ModelCode="e52a", Name="Curse Dancer",     MaxHp=300, Abs=5,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=160,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=166, ItemResA=100, ItemResB=70, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // CUT ENEMY — no species table entry and no CHR model file (e53a.chr/e54a.chr absent).
@@ -2281,7 +2283,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults LivingArmor = new EnemyDefaults {
             Id=55, TableIndex=47, ModelCode="e55a", Name="Living Armor",     MaxHp=450, Abs=6,  MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=80,  HolyRes=80,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=10, Unk090B=50,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=null, ItemResA=100, ItemResB=50, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e56a.chr @ data.dat 0x1d098000  (idx = _SET_MOTION; 死亡 = death)
@@ -2308,7 +2310,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults WhiteFang = new EnemyDefaults {
             Id=56, TableIndex=48, ModelCode="e56a", Name="White Fang",       MaxHp=525, Abs=10, MinGoldDrop=12, DropChance=30,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
-            EntityScale=7.5f, EntityScaleCopy=7.5f, Unk090A=0, Unk090B=0,
+            EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=0, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e57a.chr @ data.dat 0x1d160000  (idx = _SET_MOTION; 死亡 = death)
@@ -2325,7 +2327,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MoonBug = new EnemyDefaults {
             Id=57, TableIndex=49, ModelCode="e57a", Name="Moon Bug",         MaxHp=450, Abs=5,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Metal, FireRes=50,  IceRes=120, ThunderRes=150, WindRes=50,  HolyRes=100,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=8, Unk090B=40,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=8, WeaponDefense=40,
             StealItemId=159, ItemResA=90, ItemResB=70, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // ── Gallery of Time (dungeon 5) ───────────────────────────────────────────
@@ -2353,7 +2355,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Arthur = new EnemyDefaults {
             Id=40, TableIndex=35, ModelCode="e40a", Name="Arthur",           MaxHp=600, Abs=15, MinGoldDrop=15, DropChance=30,
             Category=EnemyCategory.Metal, FireRes=80,  IceRes=100, ThunderRes=150, WindRes=80,  HolyRes=80,
-            EntityScale=9.0f, EntityScaleCopy=9.0f, Unk090A=10, Unk090B=60,
+            EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e43a.chr @ data.dat 0x1c6a7800  (idx = _SET_MOTION; 死亡 = death)
@@ -2380,7 +2382,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Alexander = new EnemyDefaults {
             Id=43, TableIndex=37, ModelCode="e43a", Name="Alexander",        MaxHp=675, Abs=15, MinGoldDrop=17, DropChance=50,
             Category=EnemyCategory.Metal, FireRes=150, IceRes=130, ThunderRes=100, WindRes=120, HolyRes=130,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=10, Unk090B=50,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=164, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // shares scale=3.0 with CaveBat
@@ -2410,7 +2412,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults EvilBat = new EnemyDefaults {
             Id=61, TableIndex=53, ModelCode="e61a", Name="Evil Bat",         MaxHp=150, Abs=4,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=120, HolyRes=100,
-            EntityScale=3.0f, EntityScaleCopy=3.0f, Unk090A=0, Unk090B=0,
+            EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=149, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e62a.chr @ data.dat 0x1d360800  (idx = _SET_MOTION; 死亡 = death)
@@ -2437,7 +2439,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults HellPockle = new EnemyDefaults {
             Id=62, TableIndex=54, ModelCode="e62a", Name="Hell Pockle",      MaxHp=270, Abs=5,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=120, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=2, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e63a.chr @ data.dat 0x1d3e1800  (idx = _SET_MOTION; 死亡 = death)
@@ -2464,7 +2466,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults RashDasher = new EnemyDefaults {
             Id=63, TableIndex=55, ModelCode="e63a", Name="Rash Dasher",      MaxHp=600, Abs=6,  MinGoldDrop=12, DropChance=30,
             Category=EnemyCategory.Beast, FireRes=50,  IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=2, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=2, WeaponDefense=10,
             StealItemId=149, ItemResA=100, ItemResB=70, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e64a.chr @ data.dat 0x1d461800  (idx = _SET_MOTION; 死亡 = death)
@@ -2490,7 +2492,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SteelGiant = new EnemyDefaults {
             Id=64, TableIndex=56, ModelCode="e64a", Name="Steel Giant",      MaxHp=750, Abs=12, MinGoldDrop=15, DropChance=50,
             Category=EnemyCategory.Metal, FireRes=80,  IceRes=100, ThunderRes=125, WindRes=80,  HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=10, Unk090B=50,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=177, ItemResA=95, ItemResB=50, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e65a.chr @ data.dat 0x1d506800  (idx = _SET_MOTION; 死亡 = death)
@@ -2516,7 +2518,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Blizzard = new EnemyDefaults {
             Id=65, TableIndex=57, ModelCode="e65a", Name="Blizzard",         MaxHp=750, Abs=8,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=140, WindRes=140, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=5, Unk090B=0,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=5, WeaponDefense=0,
             StealItemId=162, ItemResA=100, ItemResB=50, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e66a.chr @ data.dat 0x1d5a5000  (idx = _SET_MOTION; 死亡 = death)
@@ -2543,7 +2545,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MoonDigger = new EnemyDefaults {
             Id=66, TableIndex=58, ModelCode="e66a", Name="Moon Digger",      MaxHp=420, Abs=6,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Beast, FireRes=150, IceRes=125, ThunderRes=80,  WindRes=80,  HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=2, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=0,
             StealItemId=187, ItemResA=100, ItemResB=70, AttackPower=197, ElemAtkFire=45, ElemAtkIce=45, ElemAtkThunder=130, ElemAtkWind=45, ElemAtkHoly=45, ElemAtkDark=45 };
 
         // Motions: e67a.chr @ data.dat 0x1d602000  (idx = _SET_MOTION; 死亡 = death)
@@ -2558,7 +2560,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults DarkFlower = new EnemyDefaults {
             Id=67, TableIndex=59, ModelCode="e67a", Name="Dark Flower",      MaxHp=300, Abs=5,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=5, Unk090B=0,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=5, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=147, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // thunder=0 (immune)
@@ -2584,7 +2586,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Billy = new EnemyDefaults {
             Id=69, TableIndex=61, ModelCode="e69a", Name="Billy",            MaxHp=300, Abs=6,  MinGoldDrop=10, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=0,   WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=5, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=163, ItemResA=100, ItemResB=70, AttackPower=83, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // fire=65486 (0xFFCE — effectively absorbs fire damage)
@@ -2605,7 +2607,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Vulcan = new EnemyDefaults {
             Id=70, TableIndex=62, ModelCode="e70a", Name="Vulcan",           MaxHp=480, Abs=12, MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=65486, IceRes=180, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=5, Unk090B=40,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=5, WeaponDefense=40,
             StealItemId=81, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e72a.chr @ data.dat 0x1d812800  (idx = _SET_MOTION; 死亡 = death)
@@ -2629,7 +2631,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SpaceGyon = new EnemyDefaults {
             Id=72, TableIndex=64, ModelCode="e72a", Name="Space Gyon",       MaxHp=525, Abs=5,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=75,  IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=0, Unk090B=0,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=153, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e73a.chr @ data.dat 0x1d8b0000  (idx = _SET_MOTION; 死亡 = death)
@@ -2655,7 +2657,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults BlueDragon = new EnemyDefaults {
             Id=73, TableIndex=65, ModelCode="e73a", Name="Blue Dragon",      MaxHp=600, Abs=12, MinGoldDrop=18, DropChance=50,
             Category=EnemyCategory.Dragon, FireRes=125, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=17.5f, EntityScaleCopy=17.5f, Unk090A=5, Unk090B=30,
+            EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=5, WeaponDefense=30,
             StealItemId=162, ItemResA=80, ItemResB=50, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e74a.chr @ data.dat 0x1d9a5000  (idx = _SET_MOTION; 死亡 = death)
@@ -2681,7 +2683,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults BlackDragon = new EnemyDefaults {
             Id=74, TableIndex=66, ModelCode="e74a", Name="Black Dragon",     MaxHp=900, Abs=20, MinGoldDrop=22, DropChance=50,
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=130,
-            EntityScale=17.5f, EntityScaleCopy=17.5f, Unk090A=10, Unk090B=60,
+            EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=10, WeaponDefense=60,
             StealItemId=154, ItemResA=50, ItemResB=40, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e76a.chr @ data.dat 0x1dadd800  (idx = _SET_MOTION; 死亡 = death)
@@ -2709,7 +2711,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CrescentBaron = new EnemyDefaults {
             Id=76, TableIndex=68, ModelCode="e76a", Name="Crescent Baron",   MaxHp=450, Abs=12, MinGoldDrop=18, DropChance=50,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=5, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=null, ItemResA=80, ItemResB=70, AttackPower=170, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e82a.chr @ data.dat 0x1dd19000  (idx = _SET_MOTION; 死亡 = death)
@@ -2740,7 +2742,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicGoT = new EnemyDefaults {
             Id=82, TableIndex=74, ModelCode="e82a", Name="King Mimic (Gallery of Time)", MaxHp=675, Abs=18, MinGoldDrop=25, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=5, Unk090B=30,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=30,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // code=kori (Japanese for "ice" — may be official name)
@@ -2769,7 +2771,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicGoT = new EnemyDefaults {
             Id=83, TableIndex=75, ModelCode="e83a", Name="Mimic (Gallery of Time)", MaxHp=450, Abs=6,  MinGoldDrop=20, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=5, Unk090B=20,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=20,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // listed as non-drop in Enemies.cs
@@ -2796,7 +2798,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Gol = new EnemyDefaults {
             Id=90, TableIndex=94, ModelCode="e90a", Name="Gol",              MaxHp=600, Abs=5,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90,  ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=0,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // listed as non-drop in Enemies.cs
@@ -2823,7 +2825,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Sil = new EnemyDefaults {
             Id=91, TableIndex=95, ModelCode="e91a", Name="Sil",              MaxHp=500, Abs=5,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=90,  IceRes=120, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=10, Unk090B=0,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=0,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // ── Overseas (USA/PAL-exclusive enemies) ──────────────────────────────────
@@ -2853,7 +2855,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Yammich = new EnemyDefaults {
             Id=301, TableIndex=96, ModelCode="e101", Name="Yammich",         MaxHp=13,  Abs=3,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=70,  HolyRes=130,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=0, Unk090B=1,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=0, WeaponDefense=1,
             StealItemId=160, ItemResA=90, ItemResB=100, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; needs dump confirmation
@@ -2881,7 +2883,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Opar = new EnemyDefaults {
             Id=304, TableIndex=98, ModelCode="e104", Name="Opar",            MaxHp=28,  Abs=3,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=100, IceRes=60,  ThunderRes=130, WindRes=100, HolyRes=100,
-            EntityScale=15.0f, EntityScaleCopy=15.0f, Unk090A=1, Unk090B=2,
+            EntityScale=15.0f, EntityScaleCopy=15.0f, DamageReduction=1, WeaponDefense=2,
             StealItemId=227, ItemResA=90, ItemResB=100, AttackPower=190, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; needs dump confirmation
@@ -2912,7 +2914,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingPrickly = new EnemyDefaults {
             Id=306, TableIndex=100, ModelCode="e106", Name="King Prickly",    MaxHp=63,  Abs=3,  MinGoldDrop=7,  DropChance=40,
             Category=EnemyCategory.Beast, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=3, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // from static table 2026-06-04; appears in overseas late dungeons; needs dump confirmation
@@ -2940,7 +2942,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Nikapous = new EnemyDefaults {
             Id=308, TableIndex=112, ModelCode="e108", Name="Nikapous",        MaxHp=2350, Abs=15, MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=100, ThunderRes=100, WindRes=125, HolyRes=125,
-            EntityScale=8.0f, EntityScaleCopy=8.0f, Unk090A=10, Unk090B=10,
+            EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=133, ItemResA=100, ItemResB=70, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // ── Demon Shaft (dungeon 6) ───────────────────────────────────────────────
@@ -2975,7 +2977,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicDS = new EnemyDefaults {
             Id=309, TableIndex=130, ModelCode="e109", Name="Mimic (Demon Shaft)",     MaxHp=3500, Abs=10, MinGoldDrop=26, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=15, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // King Mimic (Demon Shaft) — tier 1
@@ -3007,7 +3009,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicDS = new EnemyDefaults {
             Id=310, TableIndex=131, ModelCode="e110", Name="King Mimic (Demon Shaft)", MaxHp=5000, Abs=20, MinGoldDrop=35, DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=15, Unk090B=50,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=15, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
         // Gemron (Fire) — tier 1
@@ -3035,7 +3037,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GemronFire = new EnemyDefaults {
             Id=311, TableIndex=111, ModelCode="e111", Name="Gemron (Fire)",   MaxHp=2500, Abs=15, MinGoldDrop=20, DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=0,   IceRes=150, ThunderRes=30,  WindRes=30,  HolyRes=30,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=10, Unk090B=10,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=10, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=161, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Gemron (Ice) — tier 2
@@ -3063,7 +3065,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GemronIce = new EnemyDefaults {
             Id=312, TableIndex=121, ModelCode="e112", Name="Gemron (Ice)",    MaxHp=4000, Abs=20, MinGoldDrop=20, DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0,   ThunderRes=30,  WindRes=30,  HolyRes=30,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=15, Unk090B=10,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=15, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=162, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Gemron (Thunder) — tier 3
@@ -3091,7 +3093,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GemronThunder = new EnemyDefaults {
             Id=313, TableIndex=132, ModelCode="e113", Name="Gemron (Thunder)", MaxHp=5500, Abs=25, MinGoldDrop=20, DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=30,  IceRes=30,  ThunderRes=0,   WindRes=150, HolyRes=30,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=20, Unk090B=10,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=20, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=163, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Gemron (Wind) — tier 4
@@ -3119,7 +3121,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GemronWind = new EnemyDefaults {
             Id=314, TableIndex=143, ModelCode="e114", Name="Gemron (Wind)",   MaxHp=8000, Abs=30, MinGoldDrop=20, DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=100, IceRes=100, ThunderRes=140, WindRes=0,   HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=23, Unk090B=10,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=164, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Gemron (Holy) — tier 5
@@ -3147,7 +3149,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GemronHoly = new EnemyDefaults {
             Id=315, TableIndex=154, ModelCode="e115", Name="Gemron (Holy)",   MaxHp=12500, Abs=35, MinGoldDrop=20, DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=0,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=30, Unk090B=10,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=30, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=165, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e116a.chr @ data.dat 0x1ea22000  (idx = _SET_MOTION; 死亡 = death)
@@ -3172,7 +3174,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults BishopQ = new EnemyDefaults {
             Id=316, TableIndex=133, ModelCode="e116", Name="Bishop Q",        MaxHp=6000, Abs=25, MinGoldDrop=20, DropChance=30,
             Category=EnemyCategory.Mage, FireRes=40,  IceRes=40,  ThunderRes=40,  WindRes=40,  HolyRes=140,
-            EntityScale=11.0f, EntityScaleCopy=11.0f, Unk090A=20, Unk090B=10,
+            EntityScale=11.0f, EntityScaleCopy=11.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=null, ItemResA=50, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // code=e124
@@ -3200,7 +3202,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Gacious = new EnemyDefaults {
             Id=317, TableIndex=105, ModelCode="e124", Name="Gacious",         MaxHp=1800, Abs=5,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=70,  IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=0,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=90, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e118a.chr @ data.dat 0x1eab7800  (idx = _SET_MOTION; 死亡 = death)
@@ -3227,7 +3229,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SilverGear = new EnemyDefaults {
             Id=318, TableIndex=144, ModelCode="e118", Name="Silver Gear",     MaxHp=2500, Abs=30, MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=30,  IceRes=30,  ThunderRes=30,  WindRes=30,  HolyRes=150,
-            EntityScale=10.0f, EntityScaleCopy=10.0f, Unk090A=23, Unk090B=10,
+            EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=100, AttackPower=190, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // Motions: e119a.chr @ data.dat 0x1eb74000  (idx = _SET_MOTION; 死亡 = death)
@@ -3254,7 +3256,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults HornHead = new EnemyDefaults {
             Id=319, TableIndex=122, ModelCode="e119", Name="Horn Head",       MaxHp=2500, Abs=20, MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=20,  ThunderRes=20,  WindRes=20,  HolyRes=150,
-            EntityScale=10.0f, EntityScaleCopy=10.0f, Unk090A=15, Unk090B=10,
+            EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=100, AttackPower=186, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // ── Bosses ─────────────────────────────────────────────────────────────
@@ -3289,7 +3291,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults Dran = new EnemyDefaults {
             Id=112, TableIndex=78, ModelCode="c12a", Name="Dran",            MaxHp=250,   Abs=10, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=150, ThunderRes=100, WindRes=100, HolyRes=50,
-            EntityScale=45.0f, EntityScaleCopy=45.0f, Unk090A=10, Unk090B=20,
+            EntityScale=45.0f, EntityScaleCopy=45.0f, DamageReduction=10, WeaponDefense=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // WOF boss. Motions: c14a.chr info.cfg @ data.dat 0x1ad22000.
@@ -3314,7 +3316,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MasterUtan = new EnemyDefaults {
             Id=114, TableIndex=79, ModelCode="c14a", Name="Master Utan",     MaxHp=700,   Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=35.0f, EntityScaleCopy=35.0f, Unk090A=12, Unk090B=0,
+            EntityScale=35.0f, EntityScaleCopy=35.0f, DamageReduction=12, WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // SW boss — ice=65486 (0xFFCE, -50 as int16) = fire-absorbing (same encoding as Vulcan's fire)
@@ -3354,7 +3356,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults IceQueen = new EnemyDefaults {
             Id=113, TableIndex=80, ModelCode="c13a", Name="Ice Queen",       MaxHp=700,   Abs=30, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=150, IceRes=65486, ThunderRes=80, WindRes=80, HolyRes=120,
-            EntityScale=13.0f, EntityScaleCopy=13.0f, Unk090A=10, Unk090B=0,
+            EntityScale=13.0f, EntityScaleCopy=13.0f, DamageReduction=10, WeaponDefense=0,
             StealItemId=65535, ItemResA=40, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // SW boss — projectile/summon entity of Ice Queen; not a standalone fight.
@@ -3367,7 +3369,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults IceArrow = new EnemyDefaults {
             Id=84, TableIndex=76, ModelCode="korinoya", Name="Ice Arrow", MaxHp=100,   Abs=17, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=2.0f,  EntityScaleCopy=2.0f,  Unk090A=5,  Unk090B=0,
+            EntityScale=2.0f,  EntityScaleCopy=2.0f,  DamageReduction=5,  WeaponDefense=0,
             StealItemId=65535, ItemResA=70, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // IceQueen (SW floor 18) fight companions — all id=0, boss sentinels. Ice-attack effect entities.
@@ -3413,7 +3415,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingsCurseCoffin = new EnemyDefaults {
             Id=115, TableIndex=81, ModelCode="c15a", Name="King's Curse Coffin",    MaxHp=2000,  Abs=40, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=125,
-            EntityScale=6.0f,  EntityScaleCopy=6.0f,  Unk090A=10, Unk090B=40,
+            EntityScale=6.0f,  EntityScaleCopy=6.0f,  DamageReduction=10, WeaponDefense=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // Unlisted phase entity — code=c15b; not in Enemies.cs; suspected SMT King's-Curse scripted phase.
@@ -3432,7 +3434,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingsCurse = new EnemyDefaults {
             Id=100, TableIndex=82, ModelCode="c15b", Name="King's Curse", MaxHp=1000, Abs=40, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=4.0f,  EntityScaleCopy=4.0f,  Unk090A=10, Unk090B=0,
+            EntityScale=4.0f,  EntityScaleCopy=4.0f,  DamageReduction=10, WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // MS boss. Motions: c16a.chr info.cfg @ data.dat 0x1aee3000.
@@ -3451,7 +3453,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MinotaurJoe = new EnemyDefaults {
             Id=116, TableIndex=83, ModelCode="c16a", Name="Minotaur Joe",    MaxHp=2000,  Abs=50, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
-            EntityScale=25.0f, EntityScaleCopy=25.0f, Unk090A=12, Unk090B=40,
+            EntityScale=25.0f, EntityScaleCopy=25.0f, DamageReduction=12, WeaponDefense=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // GoT boss (final). Motions: c17a.chr info.cfg @ data.dat 0x1afed000.
@@ -3480,7 +3482,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults DarkGenie = new EnemyDefaults {
             Id=117, TableIndex=84, ModelCode="c17a", Name="Dark Genie",      MaxHp=2000,  Abs=60, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=25, Unk090B=30,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=25, WeaponDefense=30,
             StealItemId=65535, ItemResA=30, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // Dark Genie second form — not named in Enemies.cs; code=c17c; same resistance profile as hands
@@ -3491,7 +3493,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults DarkGenieForm2 = new EnemyDefaults {
             Id=118, TableIndex=85, ModelCode="c17b", Name="Dark Genie (form 2)", MaxHp=3200, Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
-            EntityScale=8.0f,  EntityScaleCopy=8.0f,  Unk090A=0,  Unk090B=20,
+            EntityScale=8.0f,  EntityScaleCopy=8.0f,  DamageReduction=0,  WeaponDefense=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // Dark Genie hands. Motions: c17c.chr info.cfg @ data.dat 0x1b160800 — only 2 (no death anim).
@@ -3501,7 +3503,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults RightHand = new EnemyDefaults {
             Id=119, TableIndex=86, ModelCode="c17c", Name="Right Hand",      MaxHp=3200,  Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
-            EntityScale=8.0f,  EntityScaleCopy=8.0f,  Unk090A=0,  Unk090B=20,
+            EntityScale=8.0f,  EntityScaleCopy=8.0f,  DamageReduction=0,  WeaponDefense=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // Left Hand has no EID=120 record in the table; its HP (90) is stored in Right Hand's u98
@@ -3510,7 +3512,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults LeftHand = new EnemyDefaults {
             Id=120, TableIndex=87, ModelCode="c17_", Name="Left Hand",       MaxHp=90,    Abs=20, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f,  EntityScaleCopy=5.0f,  Unk090A=0,  Unk090B=0,
+            EntityScale=5.0f,  EntityScaleCopy=5.0f,  DamageReduction=0,  WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };  // idx=87 is the anonymous EID=0 record
 
         // These are ATTACK/EFFECT entities (projectiles, beams, barriers, summons), not standalone enemies —
@@ -3553,7 +3555,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults WineKeg = new EnemyDefaults {
             Id=121, TableIndex=91, ModelCode="e85a", Name="Wine Keg",        MaxHp=80,    Abs=0,  MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=7.0f,  EntityScaleCopy=7.0f,  Unk090A=0,  Unk090B=0,
+            EntityScale=7.0f,  EntityScaleCopy=7.0f,  DamageReduction=0,  WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0 };
 
         // DS boss — confirmed from EnemySpeciesTable scan 2026-06-05: tbl_165 is BlackKnight (id=221, hp=50000, BOSS, code=c22a).
@@ -3589,7 +3591,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
             Id=221, TableIndex=165, ModelCode="c21a", Name="Black Knight",    MaxHp=50000, Abs=5,  MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=8, Unk090B=100,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=100,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50 };
 
         // tbl_166 = Black Knight Mount; present in DS floor 100 binary pool.
@@ -3630,7 +3632,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults WhiteFangEnhanced = new EnemyDefaults {
             Id=56,  TableIndex=113, ModelCode="e125", Name="White Fang (Enhanced)",  MaxHp=1750,  Abs=15,  MinGoldDrop=12,  DropChance=30,
             Category=EnemyCategory.Beast, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
-            EntityScale=7.5f, EntityScaleCopy=7.5f, Unk090A=10, Unk090B=10,
+            EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=10, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e126
@@ -3656,7 +3658,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults ArthurEnhanced = new EnemyDefaults {
             Id=40,  TableIndex=114, ModelCode="e126", Name="Arthur (Enhanced)",  MaxHp=2900,  Abs=20,  MinGoldDrop=15,  DropChance=30,
             Category=EnemyCategory.Metal, FireRes=50, IceRes=50, ThunderRes=150, WindRes=80, HolyRes=80,
-            EntityScale=9.0f, EntityScaleCopy=9.0f, Unk090A=10, Unk090B=60,
+            EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
         // e127
@@ -3683,7 +3685,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SilEnhanced = new EnemyDefaults {
             Id=91,  TableIndex=115, ModelCode="e127", Name="Sil (Enhanced)",  MaxHp=1500,  Abs=15,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=10, Unk090B=60,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20 };
 
         // e128
@@ -3710,7 +3712,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults HalloweenEnhanced = new EnemyDefaults {
             Id=10,  TableIndex=116, ModelCode="e128", Name="Halloween (Enhanced)",  MaxHp=1800,  Abs=15,  MinGoldDrop=7,  DropChance=40,
             Category=EnemyCategory.Plant, FireRes=150, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=50,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=10, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=168, ItemResA=100, ItemResB=70, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e129
@@ -3739,7 +3741,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MasterJacketEnhanced = new EnemyDefaults {
             Id=1,   TableIndex=117, ModelCode="e129", Name="Master Jacket (Enhanced)",  MaxHp=2000,  Abs=15,  MinGoldDrop=7,  DropChance=50,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=80, ThunderRes=100, WindRes=80, HolyRes=130,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=10, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=177, ItemResA=100, ItemResB=80, AttackPower=150, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e130
@@ -3760,7 +3762,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults VulcanEnhanced = new EnemyDefaults {
             Id=70,  TableIndex=118, ModelCode="e130", Name="Vulcan (Enhanced)",  MaxHp=2400,  Abs=15,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=0, IceRes=180, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=10, Unk090B=40,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=10, WeaponDefense=40,
             StealItemId=81, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e131
@@ -3788,7 +3790,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MummyEnhanced = new EnemyDefaults {
             Id=50,  TableIndex=119, ModelCode="e131", Name="Mummy (Enhanced)",  MaxHp=1500,  Abs=5,  MinGoldDrop=10,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=150, IceRes=50, ThunderRes=100, WindRes=100, HolyRes=120,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=10, Unk090B=10,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e132
@@ -3816,7 +3818,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults DiamondEnhanced = new EnemyDefaults {
             Id=46,  TableIndex=120, ModelCode="e132", Name="Diamond (Enhanced)",  MaxHp=1750,  Abs=10,  MinGoldDrop=12,  DropChance=50,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=50, WindRes=150, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=10, Unk090B=50,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=151, ItemResA=80, ItemResB=50, AttackPower=135, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
 
@@ -3846,7 +3848,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults AuntieMeduEnhanced = new EnemyDefaults {
             Id=26,  TableIndex=123, ModelCode="e133", Name="Auntie Medu (Enhanced)",  MaxHp=3750,  Abs=20,  MinGoldDrop=15,  DropChance=30,
             Category=EnemyCategory.Dragon, FireRes=30, IceRes=150, ThunderRes=30, WindRes=30, HolyRes=30,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=15, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=166, ItemResA=100, ItemResB=60, AttackPower=245, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e134
@@ -3874,7 +3876,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults RockanoffEnhanced = new EnemyDefaults {
             Id=77,  TableIndex=124, ModelCode="e134", Name="Rockanoff (Enhanced)",  MaxHp=2500,  Abs=20,  MinGoldDrop=10,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=15, Unk090B=50,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=15, WeaponDefense=50,
             StealItemId=160, ItemResA=90, ItemResB=60, AttackPower=160, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20 };
 
         // e135
@@ -3899,7 +3901,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults YammichEnhanced = new EnemyDefaults {
             Id=301, TableIndex=125, ModelCode="e135", Name="Yammich (Enhanced)",  MaxHp=3000,  Abs=20,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=20, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=130,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=15, Unk090B=10,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=160, ItemResA=90, ItemResB=100, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e136
@@ -3926,7 +3928,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults WitchHellzaEnhanced = new EnemyDefaults {
             Id=21,  TableIndex=126, ModelCode="e136", Name="Witch Hellza (Enhanced)",  MaxHp=1500,  Abs=20,  MinGoldDrop=10,  DropChance=30,
             Category=EnemyCategory.Mage, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=50,
-            EntityScale=8.0f, EntityScaleCopy=8.0f, Unk090A=15, Unk090B=10,
+            EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=169, ItemResA=85, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e137
@@ -3953,7 +3955,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SteelGiantEnhanced = new EnemyDefaults {
             Id=64,  TableIndex=127, ModelCode="e137", Name="Steel Giant (Enhanced)",  MaxHp=3900,  Abs=25,  MinGoldDrop=15,  DropChance=50,
             Category=EnemyCategory.Metal, FireRes=80, IceRes=80, ThunderRes=150, WindRes=80, HolyRes=80,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=15, Unk090B=70,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=15, WeaponDefense=70,
             StealItemId=177, ItemResA=95, ItemResB=50, AttackPower=154, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20 };
 
         // e138
@@ -3981,7 +3983,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults ClubEnhanced = new EnemyDefaults {
             Id=45,  TableIndex=128, ModelCode="e138", Name="Club (Enhanced)",  MaxHp=2525,  Abs=20,  MinGoldDrop=12,  DropChance=50,
             Category=EnemyCategory.Mage, FireRes=150, IceRes=100, ThunderRes=100, WindRes=50, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=15, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=147, ItemResA=80, ItemResB=50, AttackPower=134, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e139
@@ -4009,7 +4011,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CorceaEnhanced = new EnemyDefaults {
             Id=28,  TableIndex=129, ModelCode="e139", Name="Corcea (Enhanced)",  MaxHp=3250,  Abs=20,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=130,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=15, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=152, ItemResA=100, ItemResB=70, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
 
@@ -4041,7 +4043,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CaveBatEnhanced = new EnemyDefaults {
             Id=60,  TableIndex=134, ModelCode="e140", Name="Cave Bat (Enhanced)",  MaxHp=1500,  Abs=25,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=100,
-            EntityScale=3.0f, EntityScaleCopy=3.0f, Unk090A=20, Unk090B=10,
+            EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=151, ItemResA=100, ItemResB=90, AttackPower=0, ElemAtkFire=100, ElemAtkIce=150, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e141
@@ -4068,7 +4070,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GolEnhanced = new EnemyDefaults {
             Id=90,  TableIndex=135, ModelCode="e141", Name="Gol (Enhanced)",  MaxHp=6000,  Abs=25,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=30, Unk090B=80,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=30, WeaponDefense=80,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
         // e142
@@ -4096,7 +4098,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MaskOfPrajnaEnhanced = new EnemyDefaults {
             Id=75,  TableIndex=136, ModelCode="e142", Name="Mask of Prajna (Enhanced)",  MaxHp=5500,  Abs=25,  MinGoldDrop=15,  DropChance=50,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=145,
-            EntityScale=7.5f, EntityScaleCopy=7.5f, Unk090A=20, Unk090B=10,
+            EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=20, WeaponDefense=10,
             StealItemId=151, ItemResA=80, ItemResB=70, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e143
@@ -4121,7 +4123,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GyonEnhanced = new EnemyDefaults {
             Id=24,  TableIndex=137, ModelCode="e143", Name="Gyon (Enhanced)",  MaxHp=5750,  Abs=25,  MinGoldDrop=8,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=20, Unk090B=10,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=134, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e144
@@ -4149,7 +4151,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SpadeEnhanced = new EnemyDefaults {
             Id=47,  TableIndex=138, ModelCode="e144", Name="Spade (Enhanced)",  MaxHp=5000,  Abs=25,  MinGoldDrop=12,  DropChance=50,
             Category=EnemyCategory.Mage, FireRes=150, IceRes=50, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=20, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=152, ItemResA=80, ItemResB=50, AttackPower=132, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e145
@@ -4177,7 +4179,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults RashDasherEnhanced = new EnemyDefaults {
             Id=63,  TableIndex=139, ModelCode="e145", Name="Rash Dasher (Enhanced)",  MaxHp=5000,  Abs=25,  MinGoldDrop=12,  DropChance=30,
             Category=EnemyCategory.Beast, FireRes=50, IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=20, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=149, ItemResA=100, ItemResB=70, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e146
@@ -4205,7 +4207,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CaptainEnhanced = new EnemyDefaults {
             Id=27,  TableIndex=140, ModelCode="e146", Name="Captain (Enhanced)",  MaxHp=4000,  Abs=25,  MinGoldDrop=12,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=80, WindRes=80, HolyRes=150,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=20, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=227, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e109
@@ -4234,7 +4236,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicDSEnhanced = new EnemyDefaults {
             Id=309, TableIndex=141, ModelCode="e109", Name="Mimic (Demon Shaft) (Enhanced)",  MaxHp=5000,  Abs=10,  MinGoldDrop=26,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=20, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e110
@@ -4266,7 +4268,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicDSEnhanced = new EnemyDefaults {
             Id=310, TableIndex=142, ModelCode="e110", Name="King Mimic (Demon Shaft) (Enhanced)",  MaxHp=7500,  Abs=20,  MinGoldDrop=35,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=20, Unk090B=50,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=20, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
 
@@ -4296,7 +4298,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults AlexanderEnhanced = new EnemyDefaults {
             Id=43,  TableIndex=145, ModelCode="e149", Name="Alexnder (Enhanced)",  MaxHp=7500,  Abs=30,  MinGoldDrop=17,  DropChance=50,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=120, WindRes=100, HolyRes=100,
-            EntityScale=7.0f, EntityScaleCopy=7.0f, Unk090A=23, Unk090B=50,
+            EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=23, WeaponDefense=50,
             StealItemId=164, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e150
@@ -4324,7 +4326,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults HeartEnhanced = new EnemyDefaults {
             Id=44,  TableIndex=146, ModelCode="e150", Name="Heart (Enhanced)",  MaxHp=5000,  Abs=30,  MinGoldDrop=12,  DropChance=50,
             Category=EnemyCategory.Mage, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=23, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=150, ItemResA=80, ItemResB=50, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e151
@@ -4356,7 +4358,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults BomberHeadEnhanced = new EnemyDefaults {
             Id=49,  TableIndex=147, ModelCode="e151", Name="Bomber Head (Enhanced)",  MaxHp=6000,  Abs=30,  MinGoldDrop=10,  DropChance=30,
             Category=EnemyCategory.Mage, FireRes=200, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=20,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=23, Unk090B=20,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=23, WeaponDefense=20,
             StealItemId=159, ItemResA=100, ItemResB=70, AttackPower=159, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e152
@@ -4387,7 +4389,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CrabbyHermitEnhanced = new EnemyDefaults {
             Id=71,  TableIndex=148, ModelCode="e152", Name="Crabby Hermit (Enhanced)",  MaxHp=6500,  Abs=30,  MinGoldDrop=12,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=100, IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
-            EntityScale=10.0f, EntityScaleCopy=10.0f, Unk090A=23, Unk090B=20,
+            EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=23, WeaponDefense=20,
             StealItemId=166, ItemResA=95, ItemResB=70, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e153
@@ -4403,7 +4405,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CursedRoseEnhanced = new EnemyDefaults {
             Id=68,  TableIndex=149, ModelCode="e153", Name="Cursed Rose (Enhanced)",  MaxHp=5000,  Abs=30,  MinGoldDrop=6,  DropChance=30,
             Category=EnemyCategory.Plant, FireRes=130, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
-            EntityScale=6.5f, EntityScaleCopy=6.5f, Unk090A=23, Unk090B=10,
+            EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e154
@@ -4431,7 +4433,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults PiratesChariotEnhanced = new EnemyDefaults {
             Id=25,  TableIndex=150, ModelCode="e154", Name="Pirate's Chariot (Enhanced)",  MaxHp=6750,  Abs=30,  MinGoldDrop=15,  DropChance=30,
             Category=EnemyCategory.Metal, FireRes=120, IceRes=80, ThunderRes=140, WindRes=100, HolyRes=100,
-            EntityScale=8.0f, EntityScaleCopy=8.0f, Unk090A=23, Unk090B=60,
+            EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=23, WeaponDefense=60,
             StealItemId=159, ItemResA=95, ItemResB=60, AttackPower=92, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=20, ElemAtkDark=100 };
 
         // e155
@@ -4456,7 +4458,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults SpaceGyonEnhanced = new EnemyDefaults {
             Id=72,  TableIndex=151, ModelCode="e155", Name="Space Gyon (Enhanced)",  MaxHp=7800,  Abs=30,  MinGoldDrop=4,  DropChance=30,
             Category=EnemyCategory.Marine, FireRes=0, IceRes=0, ThunderRes=20, WindRes=0, HolyRes=0,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=23, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=153, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e109
@@ -4485,7 +4487,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicDSEnhancedTwice = new EnemyDefaults {
             Id=309, TableIndex=152, ModelCode="e109", Name="Mimic (Demon Shaft) (Enhanced x2)",  MaxHp=6500,  Abs=15,  MinGoldDrop=26,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=23, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e110
@@ -4517,7 +4519,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicDSEnhancedTwice = new EnemyDefaults {
             Id=310, TableIndex=153, ModelCode="e110", Name="King Mimic (Demon Shaft) (Enhanced x2)",  MaxHp=10000,  Abs=25,  MinGoldDrop=35,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=23, Unk090B=50,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=23, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
 
@@ -4547,7 +4549,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults GaciousEnhanced = new EnemyDefaults {
             Id=317, TableIndex=155, ModelCode="e117", Name="Gacious (Enhanced)",  MaxHp=15000,  Abs=35,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Undead, FireRes=0, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=140,
-            EntityScale=11.0f, EntityScaleCopy=11.0f, Unk090A=30, Unk090B=10,
+            EntityScale=11.0f, EntityScaleCopy=11.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=189, ItemResA=100, ItemResB=90, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e158
@@ -4577,7 +4579,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults EvilBatEnhanced = new EnemyDefaults {
             Id=61,  TableIndex=156, ModelCode="e158", Name="Evil Bat (Enhanced)",  MaxHp=7500,  Abs=35,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Sky, FireRes=150, IceRes=150, ThunderRes=150, WindRes=150, HolyRes=200,
-            EntityScale=3.0f, EntityScaleCopy=3.0f, Unk090A=30, Unk090B=10,
+            EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=149, ElemAtkFire=100, ElemAtkIce=200, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e159
@@ -4606,7 +4608,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults CrescentBaronEnhanced = new EnemyDefaults {
             Id=76,  TableIndex=157, ModelCode="e159", Name="Crescent Baron (Enhanced)",  MaxHp=16000,  Abs=35,  MinGoldDrop=18,  DropChance=50,
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
-            EntityScale=6.0f, EntityScaleCopy=6.0f, Unk090A=30, Unk090B=10,
+            EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=null, ItemResA=80, ItemResB=70, AttackPower=170, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e160
@@ -4627,7 +4629,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults StatueDogEnhanced = new EnemyDefaults {
             Id=303, TableIndex=158, ModelCode="e160", Name="Statue Dog (Enhanced)",  MaxHp=12500,  Abs=35,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=60,
-            EntityScale=9.0f, EntityScaleCopy=9.0f, Unk090A=30, Unk090B=10,
+            EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=160, ItemResA=90, ItemResB=100, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e161
@@ -4655,7 +4657,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults JokerEnhanced = new EnemyDefaults {
             Id=48,  TableIndex=159, ModelCode="e161", Name="Joker (Enhanced)",  MaxHp=9500,  Abs=35,  MinGoldDrop=12,  DropChance=50,
             Category=EnemyCategory.Mage, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=150,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=30, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=149, ItemResA=50, ItemResB=10, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e162
@@ -4685,7 +4687,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults LichEnhanced = new EnemyDefaults {
             Id=51,  TableIndex=160, ModelCode="e162", Name="Lich (Enhanced)",  MaxHp=10000,  Abs=35,  MinGoldDrop=15,  DropChance=80,
             Category=EnemyCategory.Undead, FireRes=20, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=160,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=30, Unk090B=10,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=176, ItemResA=80, ItemResB=30, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e163
@@ -4712,7 +4714,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults TitanEnhanced = new EnemyDefaults {
             Id=33,  TableIndex=161, ModelCode="e163", Name="Titan (Enhanced)",  MaxHp=11500,  Abs=35,  MinGoldDrop=15,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
-            EntityScale=14.0f, EntityScaleCopy=14.0f, Unk090A=30, Unk090B=50,
+            EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
         // e164
@@ -4740,7 +4742,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults LivingArmorEnhanced = new EnemyDefaults {
             Id=55,  TableIndex=162, ModelCode="e164", Name="Living Armor (Enhanced)",  MaxHp=9500,  Abs=35,  MinGoldDrop=15,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=80, HolyRes=80,
-            EntityScale=4.0f, EntityScaleCopy=4.0f, Unk090A=30, Unk090B=50,
+            EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=null, ItemResA=100, ItemResB=50, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
         // e109
@@ -4769,7 +4771,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults MimicDSEnhancedThrice = new EnemyDefaults {
             Id=309, TableIndex=163, ModelCode="e109", Name="Mimic (Demon Shaft) (Enhanced x3)",  MaxHp=7500,  Abs=20,  MinGoldDrop=26,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=5.0f, EntityScaleCopy=5.0f, Unk090A=30, Unk090B=10,
+            EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100 };
 
         // e110
@@ -4801,7 +4803,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KingMimicDSEnhancedThrice = new EnemyDefaults {
             Id=310, TableIndex=164, ModelCode="e110", Name="King Mimic (Demon Shaft) (Enhanced x3)",  MaxHp=19500,  Abs=30,  MinGoldDrop=35,  DropChance=80,
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
-            EntityScale=12.0f, EntityScaleCopy=12.0f, Unk090A=30, Unk090B=50,
+            EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20 };
 
         // ── Lookup by species ID ──────────────────────────────────────────────────

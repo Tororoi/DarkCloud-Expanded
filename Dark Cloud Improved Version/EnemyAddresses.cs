@@ -102,7 +102,13 @@ namespace Dark_Cloud_Improved_Version
 
         internal const int MovementBlend     = 0x080; // float — rest value is enemy species specific (Pirate's Chariot=0.70, Auntie Medu=0.50); drops to 0.0 momentarily on hit or AI pause; likely movement speed blend weight
 
-        internal const int Unk090            = 0x090; // packed ushorts — semantics unclear; write at floor load had no effect on AI; high ushort non-zero only on projectile enemies (may be max shoot range)
+        // CONFIRMED 2026-06-19 (damage RE): packed DEFENSE pair, copied from the species record at spawn
+        // (low = record DamageReduction 0x64, high = record WeaponDefense 0x66). NOT attack. These scale how
+        // much damage the enemy TAKES, and are the real per-dungeon DURABILITY scalers (e.g. Mimic DBC 1/10 ->
+        // Moon Sea 8/30). CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them: low is subtracted from incoming
+        // damage (flat reduction), high is passed to SwordDmgCheck1 (the player-weapon damage check). See the
+        // ATTACK/DAMAGE block above EnemySpeciesTable.AttackPower for the full enemy→player formula.
+        internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
         internal const int HitStunTimer      = 0x098; // int   — 0 at rest; set to a positive value on hit (e.g. 966 observed); presumably a stun or invincibility-frame countdown
 
@@ -279,11 +285,16 @@ namespace Dark_Cloud_Improved_Version
         // 0x098; this is the corrected placement.
         internal const int EntityScale = 0x060; // float  — entity/collision radius copied to slot at spawn
 
-        // +0x064/+0x066: loaded into the live slot's Unk090 (0x090) low/high ushorts at spawn.
-        // Low ushort: observed values 0–5; non-zero for enemies with ranged/special AI.
-        // High ushort: non-zero only for ranged enemies (Gunny=20, Pirate's Chariot=30); may be max shoot range in world units.
-        internal const int Unk010     = 0x064; // ushort — copied to slot Unk090 low  at spawn
-        internal const int Unk012     = 0x066; // ushort — copied to slot Unk090 high at spawn; non-zero on ranged enemies
+        // +0x064/+0x066: the enemy DEFENSE pair, copied into the live slot's DefenseStats (0x090) low/high at
+        // spawn. CONFIRMED 2026-06-19 (damage RE) as the real per-dungeon DURABILITY scalers — they grow with
+        // dungeon depth where the attack fields stay flat (e.g. regular Mimic: DBC 1/10 → WOF 2/10 → SW 5/20 →
+        // Moon Sea 8/30). CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them when the enemy TAKES damage:
+        //   DamageReduction (0x064): subtracted from the incoming damage (flat reduction; halved for one damage
+        //     type). Higher = enemy takes less damage.
+        //   WeaponDefense   (0x066): passed as the int arg to SwordDmgCheck1 (the player-weapon damage check);
+        //     scales weapon damage taken. (Earlier "max shoot range" guess was wrong.)
+        internal const int DamageReduction = 0x064; // ushort — flat damage-taken reduction (slot DefenseStats low)
+        internal const int WeaponDefense   = 0x066; // ushort — weapon-damage defense, fed to SwordDmgCheck1 (slot DefenseStats high)
 
         internal const int Unk014     = 0x068; // ushort — 65535 for most enemies; non-zero for some (values 0,2,3,11); purpose unknown
         internal const int Unk016     = 0x06A; // ushort — 65535 for all observed valid enemies
@@ -307,8 +318,24 @@ namespace Dark_Cloud_Improved_Version
         internal const int ItemResA   = 0x084; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance
         internal const int ItemResB   = 0x086; // ushort — item resistance B
 
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+        // ENEMY → PLAYER DAMAGE (how hard an enemy hits) — RE'd 2026-06-19. KEY RESULT: AttackPower below
+        // does NOT control actual hit damage. The applied damage is computed in BtCheckDamageProc (dun
+        // overlay 0x01DBAFD0) as:
+        //     damage = baseAttack − playerDefense      (clamped > 0; halved in some block/guard cases)
+        //     then applied via AddNowLife(player, −damage)  (ELF 0x1BE710)
+        // baseAttack is set PER-ATTACK by the enemy's STB behavior script (via the _SET_DMG_PARA command,
+        // ELF 0x1E3FD0) — it is NOT read from any species-table field. Proof: across all regular mimics
+        // (which hit for very different amounts) every attack field here is IDENTICAL (AttackPower=235,
+        // all elementals=100); only HP (0x050), DamageReduction (0x064), WeaponDefense (0x066), XP (0x06C)
+        // and gold (0x070) differ. So per-dungeon attack strength lives in each species' STB script, and
+        // normalizing it would require runtime STB patching (BossScriptPatcher-style), not a field write.
+        // DURABILITY (HP + DamageReduction/WeaponDefense) IS field-driven and can be normalized directly.
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+        //
         // +0x088: base melee attack power. Regular enemies: 82–200. Bosses: 65535 (sentinel; use
         // only behavior-script attacks). 0 if enemy has no melee attack (e.g. pure-projectile flyers).
+        // NOTE: this field is NOT the real hit damage (see the block above) — treat it as a category marker.
         // +0x08A–+0x094: six elemental attack-output multipliers in the same element order as the
         // resistance fields: [fire, ice, thunder, wind, holy, unknown(dark?)]. Scale: 100=neutral,
         // >100=enemy's primary attack element, <100=reduced output of that element.
