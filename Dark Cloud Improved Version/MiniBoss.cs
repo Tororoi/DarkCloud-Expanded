@@ -43,6 +43,7 @@ namespace Dark_Cloud_Improved_Version
             Thread.Sleep(200);
 
             miniBossEnemyNumbers.Clear();
+            EnemyStatScaler.ResetSlotProjectile();   // drop last floor's per-slot projectile-scale cache
 
             // Count all enemies ineligible to become a miniboss (ID 0, flying, or has a forced item drop)
             int ineligibleCount = 0;
@@ -88,6 +89,19 @@ namespace Dark_Cloud_Improved_Version
 
             miniBossRolled = true;
             return true;
+        }
+
+        /// <summary>
+        /// Per-tick: maintain miniboss PROJECTILE scaling (×<see cref="minibossAttackFactor"/>). HP/defense/melee are
+        /// one-shot at spawn, but projectile damage's live source is the per-slot ShotDmgCache field that _SET_SHOT
+        /// rewrites on every shot, so it has to be re-applied each tick (see EnemyStatScaler.MaintainSlotProjectile).
+        /// Only the (few) miniboss slots are touched — never all enemies. No-op when no minibosses are rolled.
+        /// </summary>
+        public static void MaintainProjectileScale()
+        {
+            if (!miniBossRolled) return;
+            foreach (int slot in miniBossEnemyNumbers)
+                EnemyStatScaler.MaintainSlotProjectile(slot, minibossAttackFactor);
         }
 
         /// <summary>

@@ -31,12 +31,46 @@ namespace Dark_Cloud_Improved_Version
         // each entry's boot value the first time we touch it and restore on dungeon exit (keyed by the +0x3C addr).
         private static readonly Dictionary<long, int> _bstOriginal = new();
         private static bool _bstDirty;
+        // Per-slot projectile scaling (see MaintainSlotProjectile): ShotDmgCache field addr -> the scaled value we
+        // last wrote, so re-reading our own value doesn't compound.
+        private static readonly Dictionary<long, int> _shotScaled = new();
 
         private static int ScaleRound(int value, float factor)
             => value <= 0 ? value : Math.Max(1, (int)Math.Round(value * factor));
 
         /// <summary>Clear the per-floor projectile-STB dedup. Call once on each floor entry.</summary>
         internal static void ResetFloor() => _projPatchedStb.Clear();
+
+        /// <summary>Clear the per-slot projectile (ShotDmgCache) scaling cache. Call when the scaled-slot set changes.</summary>
+        internal static void ResetSlotProjectile() => _shotScaled.Clear();
+
+        // ── Projectile, PER-SLOT (per-tick maintenance) ──────────────────────────────────────────────────
+        /// <summary>
+        /// Scale ONE enemy's projectile damage by rewriting its per-slot ShotDmgCache field — call EVERY tick for
+        /// each slot you want buffed. Unlike <see cref="ScaleProjectile"/> (per-species STB), this is per-SLOT: the
+        /// shot reads its damage from this field at ~hit time, and _SET_SHOT rewrites it (with the species base) on
+        /// every shot, so it must be re-applied continuously. Whenever the field holds a NEW positive base we write
+        /// base×factor; the shot then deals the scaled amount IF our write lands before it resolves (works at range —
+        /// a point-blank shot can outrun the rewrite). Only scales positive values (never turns an idle -1 into a
+        /// shot), and remembers each scaled value so it can't compound. Use ONLY for a few slots (e.g. minibosses) —
+        /// it's a per-tick read/write per slot, so don't run it over all enemies.
+        /// </summary>
+        internal static void MaintainSlotProjectile(int slot, float factor)
+        {
+            if (factor == 1f) return;
+            ScaleShotField(ShotDmgCache.ShotDamageAddr(slot), factor);
+            ScaleShotField(ShotDmgCache.Shot2DamageAddr(slot), factor);
+        }
+
+        private static void ScaleShotField(long addr, float factor)
+        {
+            int cur = Memory.ReadInt(addr);
+            if (cur <= 0) return;                                          // -1/0 = no explicit pending shot
+            if (_shotScaled.TryGetValue(addr, out int t) && cur == t) return;  // already our scaled value (no compound)
+            int scaled = Math.Max(1, (int)Math.Round(cur * factor));
+            Memory.WriteInt(addr, scaled);
+            _shotScaled[addr] = scaled;
+        }
 
         // ── HP (per-slot) ───────────────────────────────────────────────────────────────────────────────
         /// <summary>Scale a slot's MaxHp by <paramref name="factor"/>, keeping the current health fraction.</summary>
