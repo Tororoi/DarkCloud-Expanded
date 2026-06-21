@@ -103,12 +103,15 @@ namespace Dark_Cloud_Improved_Version
         internal int[] ProjectileDamage;
 
         // Model scale table (base 0x21E18530, stride 0x3510 per slot) — separate from enemy slot.
-        // +0x020: unknown float — semantics unconfirmed; see ModelScaleOffsets.Unk020.
-        internal float? ModelUnk020;
-        // +0x024: unknown float — semantics unconfirmed; see ModelScaleOffsets.Unk024.
-        internal float? ModelUnk024;
-        // +0x028: unknown float — semantics unconfirmed; see ModelScaleOffsets.Unk028.
-        internal float? ModelUnk028;
+        // "BODY SIZE" triple, set from the MODEL file's info.cfg `BODY_SIZE height,width,depth` line via
+        // CommandBODY_SIZE (RE'd 2026-06-20; see ModelScaleOffsets.BodyWidth/BodyHeight/BodyDepth). Read live (not cached at spawn).
+        // +0x020: body WIDTH / girth radius (7 small → 14 Gunny → 32 Prajna) — CCharacter::PickUpPoly floor-poly
+        //         pickup radius (min 2.0, terrain collision) + _GET_NPC_BODY_SIZE script getter. No observable effect.
+        internal float? BodyWidth;
+        // +0x024: body HEIGHT — confirmed in-game: GetScrPosFromChar anchors the off-lock marker/name above the body.
+        internal float? BodyHeight;
+        // +0x028: body DEPTH (60 ground, 0 ranged/flying) — only the _GET_NPC_BODY_SIZE script getter; gameplay-inert.
+        internal float? BodyDepth;
         // +0x048: enemy-specific int (474–1454); likely mesh or animation data count.
         internal int?   ModelDataSize;
         // +0x370: animation clip cap — setting below true count freezes higher-index animations (attacks); Setting above true count does not change default behavior.
@@ -563,7 +566,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=80,  ThunderRes=100, WindRes=80,  HolyRes=130,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.3f, StealItemId=177, ItemResA=100, ItemResB=80,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1123, ModelAnimCount=20, AttackPower=150, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1123, ModelAnimCount=20, AttackPower=150, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{35,30}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults SkeletonSoldier = new EnemyDefaults {
@@ -571,7 +574,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=90,  ThunderRes=100, WindRes=100, HolyRes=160,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.3f, StealItemId=null, ItemResA=100, ItemResB=90,
-            ModelUnk020=7.0f, ModelUnk024=18.0f, ModelUnk028=60.0f, ModelDataSize=1080, ModelAnimCount=19, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f, ModelDataSize=1080, ModelAnimCount=19, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{20,21}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Statue = new EnemyDefaults {
@@ -579,7 +582,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=20,
             ReticleWidth=1.2f, ReticleHeight=1.7f, StealItemId=160, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=22.0f, ModelUnk028=60.0f, ModelDataSize=792,  ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=22.0f, BodyDepth=60.0f, ModelDataSize=792,  ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{26,25,26,25}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Dasher = new EnemyDefaults {
@@ -587,7 +590,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=1, WeaponDefense=0,
             ReticleWidth=1.7f, ReticleHeight=1.7f, StealItemId=148, ItemResA=100, ItemResB=90,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{22}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Werewolf = new EnemyDefaults {
@@ -595,7 +598,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
             EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=5, WeaponDefense=0,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=174, ItemResA=90,  ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1111, ModelAnimCount=19, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=1111, ModelAnimCount=19, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{68,62}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults FliFli = new EnemyDefaults {
@@ -603,6 +606,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=180, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=169, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=3.0f, BodyHeight=21.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{37}, ProjectileDamage=new int[]{35} };
 
         internal static readonly EnemyDefaults Hornet = new EnemyDefaults {
@@ -610,7 +614,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=120, ThunderRes=100, WindRes=120, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.2f, StealItemId=151, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=10.0f, BodyDepth=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{42,40}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Halloween = new EnemyDefaults {
@@ -618,7 +622,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.3f, ReticleHeight=1.3f, StealItemId=168, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=850,  ModelAnimCount=18, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=850,  ModelAnimCount=18, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{57,57}, ProjectileDamage=new int[]{60} };
 
         internal static readonly EnemyDefaults CannibalPlant = new EnemyDefaults {
@@ -626,7 +630,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=180, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=167, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=21.0f, ModelUnk028=60.0f, ModelDataSize=474,  ModelAnimCount=7, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=21.0f, BodyDepth=60.0f, ModelDataSize=474,  ModelAnimCount=7, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{28,28,36}, ProjectileDamage=new int[]{30} };
 
         internal static readonly EnemyDefaults EarthDigger = new EnemyDefaults {
@@ -634,7 +638,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=80,  WindRes=80,  HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.3f, StealItemId=188, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=936,  ModelAnimCount=19, AttackPower=197, ElemAtkFire=50, ElemAtkIce=50, ElemAtkThunder=120, ElemAtkWind=50, ElemAtkHoly=50, ElemAtkDark=50,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=936,  ModelAnimCount=19, AttackPower=197, ElemAtkFire=50, ElemAtkIce=50, ElemAtkThunder=120, ElemAtkWind=50, ElemAtkHoly=50, ElemAtkDark=50,
             MeleeDamage=new int[]{52}, ProjectileDamage=new int[]{37} };
 
         internal static readonly EnemyDefaults Sunday = new EnemyDefaults {
@@ -642,7 +646,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=170, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1454, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1454, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{36,26}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Monday = new EnemyDefaults {
@@ -650,7 +654,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=146, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1424, ModelAnimCount=19, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{32,12}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Tuesday = new EnemyDefaults {
@@ -658,7 +662,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=151, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1427, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1427, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{31}, ProjectileDamage=new int[]{31} };
 
         internal static readonly EnemyDefaults Wednesday = new EnemyDefaults {
@@ -666,7 +670,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=146, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1438, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1438, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{30,28}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Thursday = new EnemyDefaults {
@@ -674,6 +678,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{29}, ProjectileDamage=new int[]{30} };
 
         internal static readonly EnemyDefaults Friday = new EnemyDefaults {
@@ -681,7 +686,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=148, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1438, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1438, ModelAnimCount=19, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{29,29}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Saturday = new EnemyDefaults {
@@ -689,6 +694,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=148, ItemResA=100, ItemResB=70, AttackPower=145, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{29,29,25}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults WitchHellza = new EnemyDefaults {
@@ -696,6 +702,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=70,  IceRes=70,  ThunderRes=70,  WindRes=70,  HolyRes=100,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=169, ItemResA=85, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{73}, ProjectileDamage=new int[]{73} };
 
         internal static readonly EnemyDefaults WitchIllza = new EnemyDefaults {
@@ -703,7 +710,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=90,  IceRes=90,  ThunderRes=90,  WindRes=90,  HolyRes=100,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=169, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=868,  ModelAnimCount=18, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=868,  ModelAnimCount=18, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{47}, ProjectileDamage=new int[]{47} };
 
         internal static readonly EnemyDefaults Gunny = new EnemyDefaults {
@@ -711,7 +718,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=120, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=153, ItemResA=95,  ItemResB=70,
-            ModelUnk020=14.0f, ModelUnk024=20.0f, ModelUnk028=0.0f,  ModelDataSize=1270, ModelAnimCount=19, AttackPower=193, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=14.0f, BodyHeight=20.0f, BodyDepth=0.0f,  ModelDataSize=1270, ModelAnimCount=19, AttackPower=193, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{44,44}, ProjectileDamage=new int[]{26} };
 
         internal static readonly EnemyDefaults Gyon = new EnemyDefaults {
@@ -719,7 +726,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=134, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=25.0f, ModelUnk028=60.0f, ModelDataSize=849,  ModelAnimCount=16, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f, ModelDataSize=849,  ModelAnimCount=16, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{59,59}, ProjectileDamage=new int[]{59} };
 
         internal static readonly EnemyDefaults PiratesChariot = new EnemyDefaults {
@@ -727,7 +734,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=120, IceRes=80,  ThunderRes=140, WindRes=100, HolyRes=100,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=5, WeaponDefense=30,
             ReticleWidth=1.9f, ReticleHeight=1.8f, StealItemId=159, ItemResA=95,  ItemResB=60,
-            ModelUnk020=7.0f, ModelUnk024=25.0f, ModelUnk028=60.0f, ModelDataSize=835,  ModelAnimCount=19, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f, ModelDataSize=835,  ModelAnimCount=19, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{69} };
 
         // Unk150/154/158 (0x150/154/158) read as 0 for regular Auntie Medu; observed non-zero (127.5/80.0/15.0) when the mod's miniboss process was active on this enemy species.
@@ -736,7 +743,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=100, IceRes=140, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.4f, StealItemId=166, ItemResA=100, ItemResB=60,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=944,  ModelAnimCount=19, AttackPower=245, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=944,  ModelAnimCount=19, AttackPower=245, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{74}, ProjectileDamage=new int[]{60} };
 
         internal static readonly EnemyDefaults Captain = new EnemyDefaults {
@@ -744,7 +751,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=80,  WindRes=80,  HolyRes=150,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=0,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=177, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=873,  ModelAnimCount=19, AttackPower=227, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=873,  ModelAnimCount=19, AttackPower=227, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{74,74,72,72}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Corcea = new EnemyDefaults {
@@ -752,7 +759,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=140, HolyRes=130,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.4f, StealItemId=152, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=18.0f, ModelUnk028=60.0f, ModelDataSize=871,  ModelAnimCount=19, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f, ModelDataSize=871,  ModelAnimCount=19, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{43,43,42,42}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Golem = new EnemyDefaults {
@@ -760,7 +767,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             ReticleWidth=2.4f, ReticleHeight=2.4f, StealItemId=177, ItemResA=100, ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=33.0f, ModelUnk028=60.0f, ModelDataSize=1071, ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=33.0f, BodyDepth=60.0f, ModelDataSize=1071, ModelAnimCount=18, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{64,34} };
 
         internal static readonly EnemyDefaults MrBlare = new EnemyDefaults {
@@ -768,6 +775,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=0,   IceRes=170, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=10,
             StealItemId=161, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{81,81}, ProjectileDamage=new int[]{80,90} };
 
         internal static readonly EnemyDefaults Dune = new EnemyDefaults {
@@ -775,6 +783,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=80,  WindRes=120, HolyRes=100,
             EntityScale=11.0f, EntityScaleCopy=11.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{85,85,85}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Titan = new EnemyDefaults {
@@ -782,6 +791,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{105,105,105,105,90,75,60}, ProjectileDamage=new int[]{90,90} };
 
         internal static readonly EnemyDefaults KingMimicDBC = new EnemyDefaults {
@@ -789,7 +799,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.9f, ReticleHeight=1.65f, StealItemId=175, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=28.0f, ModelUnk028=60.0f, ModelDataSize=1012, ModelAnimCount=23, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f, ModelDataSize=1012, ModelAnimCount=23, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{35,30,35}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicDBC = new EnemyDefaults {
@@ -797,7 +807,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=1, WeaponDefense=10,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=920,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=920,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{33,33}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicSMT = new EnemyDefaults {
@@ -805,6 +815,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=20,
             StealItemId=174, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{101,102,45}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicSMT = new EnemyDefaults {
@@ -812,7 +823,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=918,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=918,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{71,71}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicMS = new EnemyDefaults {
@@ -820,6 +831,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=8, WeaponDefense=30,
             StealItemId=176, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{118,96,90}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicMS = new EnemyDefaults {
@@ -827,6 +839,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=8, WeaponDefense=30,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{83,83}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Arthur = new EnemyDefaults {
@@ -834,6 +847,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=80,  IceRes=100, ThunderRes=150, WindRes=80,  HolyRes=80,
             EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=30.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{116,116}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Ghost = new EnemyDefaults {
@@ -841,7 +855,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=3.6f, EntityScaleCopy=3.6f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.1f, ReticleHeight=1.1f, StealItemId=135, ItemResA=100, ItemResB=90,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1220, ModelAnimCount=21, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1220, ModelAnimCount=21, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{20,20}, ProjectileDamage=new int[]{21} };
 
         internal static readonly EnemyDefaults Alexander = new EnemyDefaults {
@@ -849,6 +863,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=150, IceRes=130, ThunderRes=100, WindRes=120, HolyRes=130,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=164, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=32.0f, BodyHeight=30.0f, BodyDepth=0.0f,
             MeleeDamage=new int[]{120}, ProjectileDamage=new int[]{124} };
 
         internal static readonly EnemyDefaults Heart = new EnemyDefaults {
@@ -856,6 +871,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=150, ItemResA=80, ItemResB=50, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{107}, ProjectileDamage=new int[]{107} };
 
         internal static readonly EnemyDefaults Club = new EnemyDefaults {
@@ -863,6 +879,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=150, IceRes=100, ThunderRes=100, WindRes=50,  HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=147, ItemResA=80, ItemResB=50, AttackPower=134, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{104}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Diamond = new EnemyDefaults {
@@ -870,6 +887,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=50,  WindRes=150, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=151, ItemResA=80, ItemResB=50, AttackPower=135, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{110,110}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Spade = new EnemyDefaults {
@@ -877,6 +895,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=150, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=152, ItemResA=80, ItemResB=50, AttackPower=132, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{113,113}, ProjectileDamage=new int[]{} };
 
         // fire=50/ice=50/thu=50/win=50 (resistant to all), holy=150; all-element-resistant mage
@@ -885,6 +904,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=150,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=3, WeaponDefense=0,
             StealItemId=149, ItemResA=50, ItemResB=10, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{115}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults BomberHead = new EnemyDefaults {
@@ -892,7 +912,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=75,  ThunderRes=125, WindRes=100, HolyRes=75,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=8, WeaponDefense=20,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=159, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=18.0f, ModelUnk028=60.0f, ModelDataSize=1663, ModelAnimCount=23, AttackPower=159, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f, ModelDataSize=1663, ModelAnimCount=23, AttackPower=159, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{61,61}, ProjectileDamage=new int[]{64} };
 
         internal static readonly EnemyDefaults Mummy = new EnemyDefaults {
@@ -900,7 +920,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=150, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.3f, ReticleHeight=1.4f, StealItemId=null, ItemResA=100, ItemResB=70,
-            ModelUnk020=9.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=1029, ModelAnimCount=19, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=9.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=1029, ModelAnimCount=19, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{54,54,54}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Lich = new EnemyDefaults {
@@ -908,6 +928,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=20,  IceRes=20,  ThunderRes=20,  WindRes=20,  HolyRes=160,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=5, WeaponDefense=0,
             StealItemId=176, ItemResA=80, ItemResB=30, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{114,114}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults CurseDancer = new EnemyDefaults {
@@ -915,6 +936,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=160,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=166, ItemResA=100, ItemResB=70, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{90,90,90,90}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults LivingArmor = new EnemyDefaults {
@@ -922,6 +944,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=80,  HolyRes=80,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=null, ItemResA=100, ItemResB=50, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{95,95,95,95}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults WhiteFang = new EnemyDefaults {
@@ -929,6 +952,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
             EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=0, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{90,84}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MoonBug = new EnemyDefaults {
@@ -936,6 +960,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=50,  IceRes=120, ThunderRes=150, WindRes=50,  HolyRes=100,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=8, WeaponDefense=40,
             StealItemId=159, ItemResA=90, ItemResB=70, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{70,70}, ProjectileDamage=new int[]{70} };
 
         internal static readonly EnemyDefaults Phantom = new EnemyDefaults {
@@ -943,7 +968,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=125, ThunderRes=100, WindRes=125, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.2f, StealItemId=151, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=10.0f, BodyDepth=60.0f, ModelDataSize=1060, ModelAnimCount=21, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{60,54}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Dragon = new EnemyDefaults {
@@ -951,7 +976,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=120, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=5, WeaponDefense=40,
             ReticleWidth=2.9f, ReticleHeight=2.7f, StealItemId=161, ItemResA=90,  ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=32.0f, ModelUnk028=60.0f, ModelDataSize=1422, ModelAnimCount=19, AttackPower=85, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f, ModelDataSize=1422, ModelAnimCount=19, AttackPower=85, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{45,45}, ProjectileDamage=new int[]{50} };
 
         internal static readonly EnemyDefaults CaveBat = new EnemyDefaults {
@@ -959,7 +984,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=100,
             EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=0.8f, ReticleHeight=0.8f, StealItemId=151, ItemResA=100, ItemResB=90,
-            ModelUnk020=7.0f, ModelUnk024=10.0f, ModelUnk028=60.0f, ModelDataSize=940,  ModelAnimCount=21, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=10.0f, BodyDepth=60.0f, ModelDataSize=940,  ModelAnimCount=21, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{17,16}, ProjectileDamage=new int[]{} };
 
         // shares scale=3.0 with CaveBat
@@ -968,6 +993,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=120, HolyRes=100,
             EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=149, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=10.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{86,85}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults HellPockle = new EnemyDefaults {
@@ -975,6 +1001,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=120, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=6.0f, BodyHeight=17.0f, BodyDepth=0.0f,
             MeleeDamage=new int[]{64,64}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults RashDasher = new EnemyDefaults {
@@ -982,6 +1009,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=50,  IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=2, WeaponDefense=10,
             StealItemId=149, ItemResA=100, ItemResB=70, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{102}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults SteelGiant = new EnemyDefaults {
@@ -989,6 +1017,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=80,  IceRes=100, ThunderRes=125, WindRes=80,  HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=177, ItemResA=95, ItemResB=50, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=33.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{93,93,98,98,80,70,60}, ProjectileDamage=new int[]{64,64} };
 
         internal static readonly EnemyDefaults Blizzard = new EnemyDefaults {
@@ -996,6 +1025,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=140, WindRes=140, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=5, WeaponDefense=0,
             StealItemId=162, ItemResA=100, ItemResB=50, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{119,119,119,119,105,90,75}, ProjectileDamage=new int[]{105,105} };
 
         internal static readonly EnemyDefaults MoonDigger = new EnemyDefaults {
@@ -1003,6 +1033,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=150, IceRes=125, ThunderRes=80,  WindRes=80,  HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=0,
             StealItemId=187, ItemResA=100, ItemResB=70, AttackPower=197, ElemAtkFire=45, ElemAtkIce=45, ElemAtkThunder=130, ElemAtkWind=45, ElemAtkHoly=45, ElemAtkDark=45,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{83}, ProjectileDamage=new int[]{72} };
 
         internal static readonly EnemyDefaults DarkFlower = new EnemyDefaults {
@@ -1010,6 +1041,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=5, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=147, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{90,90,94}, ProjectileDamage=new int[]{85} };
 
         internal static readonly EnemyDefaults CursedRose = new EnemyDefaults {
@@ -1017,7 +1049,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=130,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=2, WeaponDefense=0,
             ReticleWidth=1.4f, ReticleHeight=1.6f, StealItemId=null, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=22.0f, ModelUnk028=60.0f, ModelDataSize=476,  ModelAnimCount=7, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=22.0f, BodyDepth=60.0f, ModelDataSize=476,  ModelAnimCount=7, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{49,49,48}, ProjectileDamage=new int[]{46} };
 
         // thunder=0 (immune)
@@ -1026,6 +1058,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=0,   WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=163, ItemResA=100, ItemResB=70, AttackPower=83, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{93,93}, ProjectileDamage=new int[]{93,110} };
 
         // fire=65486 (0xFFCE — effectively absorbs fire damage)
@@ -1034,6 +1067,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=65486, IceRes=180, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=5, WeaponDefense=40,
             StealItemId=81, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{88,94,94}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults CrabbyHermit = new EnemyDefaults {
@@ -1041,7 +1075,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=100, IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
             EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.9f, ReticleHeight=1.9f, StealItemId=166, ItemResA=95,  ItemResB=70,
-            ModelUnk020=14.0f, ModelUnk024=22.0f, ModelUnk028=100.0f, ModelDataSize=1612, ModelAnimCount=22, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=14.0f, BodyHeight=22.0f, BodyDepth=100.0f, ModelDataSize=1612, ModelAnimCount=22, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{83,83,80}, ProjectileDamage=new int[]{76} };
 
         internal static readonly EnemyDefaults SpaceGyon = new EnemyDefaults {
@@ -1049,6 +1083,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=75,  IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             StealItemId=153, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{78,78}, ProjectileDamage=new int[]{75} };
 
         internal static readonly EnemyDefaults BlueDragon = new EnemyDefaults {
@@ -1056,6 +1091,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=125, IceRes=50,  ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=5, WeaponDefense=30,
             StealItemId=162, ItemResA=80, ItemResB=50, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{90,90}, ProjectileDamage=new int[]{90} };
 
         internal static readonly EnemyDefaults BlackDragon = new EnemyDefaults {
@@ -1063,6 +1099,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=130,
             EntityScale=17.5f, EntityScaleCopy=17.5f, DamageReduction=10, WeaponDefense=60,
             StealItemId=154, ItemResA=50, ItemResB=40, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130,130}, ProjectileDamage=new int[]{135} };
 
         internal static readonly EnemyDefaults MaskOfPrajna = new EnemyDefaults {
@@ -1070,7 +1107,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=145,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=5, WeaponDefense=10,
             ReticleWidth=1.0f, ReticleHeight=1.0f, StealItemId=151, ItemResA=80,  ItemResB=70,
-            ModelUnk020=32.0f, ModelUnk024=26.0f, ModelUnk028=0.0f,  ModelDataSize=1398, ModelAnimCount=19, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=32.0f, BodyHeight=26.0f, BodyDepth=0.0f,  ModelDataSize=1398, ModelAnimCount=19, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{80,78}, ProjectileDamage=new int[]{65} };
 
         internal static readonly EnemyDefaults CrescentBaron = new EnemyDefaults {
@@ -1078,6 +1115,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=null, ItemResA=80, ItemResB=70, AttackPower=170, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{98,98,94,94}, ProjectileDamage=new int[]{70} };
 
         internal static readonly EnemyDefaults Rockanoff = new EnemyDefaults {
@@ -1085,7 +1123,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.7f, ReticleHeight=1.7f, StealItemId=160, ItemResA=90,  ItemResB=60,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=954,  ModelAnimCount=19, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=954,  ModelAnimCount=19, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{35,35}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicWOF = new EnemyDefaults {
@@ -1093,6 +1131,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=10,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{67,56,45,50}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicWOF = new EnemyDefaults {
@@ -1100,7 +1139,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=2, WeaponDefense=10,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=914,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=914,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{47,47}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicSW = new EnemyDefaults {
@@ -1108,7 +1147,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.9f, ReticleHeight=1.65f, StealItemId=175, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=28.0f, ModelUnk028=60.0f, ModelDataSize=1012, ModelAnimCount=23, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f, ModelDataSize=1012, ModelAnimCount=23, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{84,78,56}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicSW = new EnemyDefaults {
@@ -1116,7 +1155,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=20,
             ReticleWidth=1.1f, ReticleHeight=1.0f, StealItemId=177, ItemResA=90,  ItemResB=50,
-            ModelUnk020=7.0f, ModelUnk024=20.0f, ModelUnk028=60.0f, ModelDataSize=918,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f, ModelDataSize=918,  ModelAnimCount=20, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{59,59}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicGoT = new EnemyDefaults {
@@ -1124,6 +1163,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=5, WeaponDefense=30,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{134,120,98}, ProjectileDamage=new int[]{} };
 
         // code=kori (Japanese for "ice" — may be official name)
@@ -1132,6 +1172,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=5, WeaponDefense=20,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{100,100}, ProjectileDamage=new int[]{} };
 
         // SW boss — projectile/summon entity of Ice Queen; not a standalone fight.
@@ -1140,6 +1181,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=2.0f,  EntityScaleCopy=2.0f,  DamageReduction=5,  WeaponDefense=0,
             StealItemId=65535, ItemResA=70, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{69}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Sam = new EnemyDefaults {
@@ -1147,7 +1189,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0,   ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0,
             ReticleWidth=1.2f, ReticleHeight=1.6f, StealItemId=162, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=19.0f, ModelUnk028=0.0f,  ModelDataSize=871,  ModelAnimCount=19, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=19.0f, BodyDepth=0.0f,  ModelDataSize=871,  ModelAnimCount=19, AttackPower=82, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{64,64,80}, ProjectileDamage=new int[]{58,58} };
 
         // All bosses have MinGoldDrop=0, DropChance=0, StealItemId=65535 (can't steal).
@@ -1156,6 +1198,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=150, ThunderRes=100, WindRes=100, HolyRes=50,
             EntityScale=45.0f, EntityScaleCopy=45.0f, DamageReduction=10, WeaponDefense=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=60.0f, BodyHeight=60.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{45,45,45,25,25,25,25,25,25,25,25,25,25}, ProjectileDamage=new int[]{17} };
 
         internal static readonly EnemyDefaults MasterUtan = new EnemyDefaults {
@@ -1163,6 +1206,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=35.0f, EntityScaleCopy=35.0f, DamageReduction=12, WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=42.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{62,47}, ProjectileDamage=new int[]{13} };
 
         // SW boss — ice=65486 (0xFFCE, -50 as int16) = fire-absorbing (same encoding as Vulcan's fire)
@@ -1171,6 +1215,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=150, IceRes=65486, ThunderRes=80, WindRes=80, HolyRes=120,
             EntityScale=13.0f, EntityScaleCopy=13.0f, DamageReduction=10, WeaponDefense=0,
             StealItemId=65535, ItemResA=40, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=24.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingsCurseCoffin = new EnemyDefaults {
@@ -1178,6 +1223,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=125,
             EntityScale=6.0f,  EntityScaleCopy=6.0f,  DamageReduction=10, WeaponDefense=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=52.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // Unlisted phase entity — code=c15b; not in Enemies.cs; suspected SMT King's-Curse scripted phase.
@@ -1186,6 +1232,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=4.0f,  EntityScaleCopy=4.0f,  DamageReduction=10, WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=52.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{91,91,71}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MinotaurJoe = new EnemyDefaults {
@@ -1193,6 +1240,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=100, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
             EntityScale=25.0f, EntityScaleCopy=25.0f, DamageReduction=12, WeaponDefense=40,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=45.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{100,125,100,100,100}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults DarkGenie = new EnemyDefaults {
@@ -1200,6 +1248,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=25, WeaponDefense=30,
             StealItemId=65535, ItemResA=30, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=62.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{85}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults DarkGenieForm2 = new EnemyDefaults {
@@ -1207,6 +1256,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=8.0f,  EntityScaleCopy=8.0f,  DamageReduction=0,  WeaponDefense=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=57.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{125}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults RightHand = new EnemyDefaults {
@@ -1214,6 +1264,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=8.0f,  EntityScaleCopy=8.0f,  DamageReduction=0,  WeaponDefense=20,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=57.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{125}, ProjectileDamage=new int[]{} };
 
         // Left Hand has no EID=120 record in the table; its HP (90) is stored in Right Hand's u98
@@ -1223,6 +1274,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f,  EntityScaleCopy=5.0f,  DamageReduction=0,  WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{125}, ProjectileDamage=new int[]{} };  // idx=87 is the anonymous EID=0 record
 
         // These are ATTACK/EFFECT entities (projectiles, beams, barriers, summons), not standalone enemies —
@@ -1234,16 +1286,19 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults DGComp88 = new EnemyDefaults {
             Id=0, TableIndex=88, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=90, AttackPower=65535,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100, EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=20, Abs=20, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults DGComp89 = new EnemyDefaults {
             Id=0, TableIndex=89, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=90, AttackPower=65535,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100, EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=20, Abs=17, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults DGComp90 = new EnemyDefaults {
             Id=0, TableIndex=90, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=90, AttackPower=65535,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100, EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=20, Abs=20, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults WineKeg = new EnemyDefaults {
@@ -1251,6 +1306,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=7.0f,  EntityScaleCopy=7.0f,  DamageReduction=0,  WeaponDefense=0,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{8}, ProjectileDamage=new int[]{} };
 
         // code=b3_r → b3_reiki.chr (霊気 "aura/spirit") @ data.dat 0x1a8c1800 — 1 motion: 0 reiki (aura).
@@ -1259,11 +1315,13 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,  // reiki: fully neutral (unlike the ice-immune siblings)
             EntityScale=5.0f, EntityScaleCopy=5.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=0, WeaponDefense=0, Abs=0, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{74}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults DGComp93 = new EnemyDefaults {
             Id=0, TableIndex=93, ModelCode="c17_", Name="(DG companion c17_)", MaxHp=80, AttackPower=65535,
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100, EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=0, WeaponDefense=0, Abs=0, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // listed as non-drop in Enemies.cs
@@ -1272,6 +1330,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90,  ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{62} };
 
         // listed as non-drop in Enemies.cs
@@ -1280,6 +1339,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=90,  IceRes=120, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=0,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{62} };
 
         internal static readonly EnemyDefaults Yammich = new EnemyDefaults {
@@ -1287,6 +1347,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=70,  HolyRes=130,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=0, WeaponDefense=1,
             StealItemId=160, ItemResA=90, ItemResB=100, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{35}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults StatueDog = new EnemyDefaults {
@@ -1294,7 +1355,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=60,
             EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.5f, ReticleHeight=1.5f, StealItemId=160, ItemResA=90,  ItemResB=100,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=667,  ModelAnimCount=12, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=667,  ModelAnimCount=12, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{35}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Opar = new EnemyDefaults {
@@ -1302,6 +1363,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=100, IceRes=60,  ThunderRes=130, WindRes=100, HolyRes=100,
             EntityScale=15.0f, EntityScaleCopy=15.0f, DamageReduction=1, WeaponDefense=2,
             StealItemId=227, ItemResA=90, ItemResB=100, AttackPower=190, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=50.0f, BodyHeight=56.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{35,35}, ProjectileDamage=new int[]{35,35} };
 
         internal static readonly EnemyDefaults HaleyHoley = new EnemyDefaults {
@@ -1309,7 +1371,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=140, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=3, WeaponDefense=10,
             ReticleWidth=1.0f, ReticleHeight=1.1f, StealItemId=186, ItemResA=100, ItemResB=70,
-            ModelUnk020=7.0f, ModelUnk024=17.0f, ModelUnk028=60.0f, ModelDataSize=1046, ModelAnimCount=19, AttackPower=189, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, ModelDataSize=1046, ModelAnimCount=19, AttackPower=189, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
             MeleeDamage=new int[]{37,37,37}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingPrickly = new EnemyDefaults {
@@ -1317,6 +1379,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=150, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=3, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=199, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=10.0f, BodyHeight=110.0f, BodyDepth=0.0f,
             MeleeDamage=new int[]{50,50,50}, ProjectileDamage=new int[]{} };
 
         // IceQueen (SW floor 18) fight companions — all id=0, boss sentinels. Ice-attack effect entities.
@@ -1326,6 +1389,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=5, WeaponDefense=0, Abs=17, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=70, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // code=kori → kori.chr (ice arrow); motions documented above at IceArrow (0 ice appear / 1 ice burst).
@@ -1334,6 +1398,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=5, WeaponDefense=0, Abs=17, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=70, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // code=i_me → i_meteo.chr (ice meteor) @ data.dat 0x1e37a000 — 0 氷生成(ice form) / 1 ループ / 2 爆発(explode).
@@ -1342,6 +1407,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=5, WeaponDefense=0, Abs=17, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=70, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{69}, ProjectileDamage=new int[]{} };
 
         // code=i_ta → i_tatumaki.chr (ice tornado) @ data.dat 0x1e38b800 — 0 柱出現(pillar) / 1 竜巻(tornado) / 2 竜巻消える(vanish).
@@ -1350,6 +1416,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=0, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=2.0f, EntityScaleCopy=2.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=5, WeaponDefense=0, Abs=17, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=70, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=100, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{74}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults Gacious = new EnemyDefaults {
@@ -1357,6 +1424,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=70,  IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=null, ItemResA=100, ItemResB=90, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130,130,130,130,130}, ProjectileDamage=new int[]{} };
 
         // Dark Genie — FINAL FORM (EID 223, model c23a); the endgame Dark Genie battle, distinct from the earlier
@@ -1370,6 +1438,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=70, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=0,
             StealItemId=65535, ItemResA=100, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{85,85,85,85,85}, ProjectileDamage=new int[]{130} };
 
         // code=last_mc → last_mc.chr @ data.dat 0x203C9000 — 発射(fire) / 召喚(summon) / 待ち(wait). No own damage script (pure visual).
@@ -1378,6 +1447,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=70, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
             EntityScale=14.0f, EntityScaleCopy=14.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=8, WeaponDefense=0, Abs=5, MinGoldDrop=5, DropChance=30, StealItemId=65535, ItemResA=100, ItemResB=90, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // code=last_gw1 → last_gw1.chr @ data.dat 0x20397000 — グランドウェイブ(ground wave). No own damage script.
@@ -1386,6 +1456,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=70, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=140,
             EntityScale=14.0f, EntityScaleCopy=14.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=8, WeaponDefense=0, Abs=5, MinGoldDrop=5, DropChance=30, StealItemId=65535, ItemResA=100, ItemResB=90, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
         // code=c23_beem → c23_beem.chr @ data.dat 0x203A7800 — 発射(fire) / ループ(loop) / 消滅(vanish). Beam, 175 dmg (= the c17_beem Dark Genie beam).
@@ -1394,6 +1465,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=0, WeaponDefense=20, Abs=17, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
 
         // code=c23_beem_s → c23_beem_s.chr @ data.dat 0x20851000 — 発動(activate) / ループ(loop) / 消滅(vanish). Beam variant, 175 dmg.
@@ -1402,6 +1474,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, ReticleWidth=1.0f, ReticleHeight=1.0f,
             DamageReduction=0, WeaponDefense=20, Abs=20, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=0, ElemAtkIce=0, ElemAtkThunder=0, ElemAtkWind=0, ElemAtkHoly=0, ElemAtkDark=0,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults GemronFire = new EnemyDefaults {
@@ -1409,6 +1482,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=0,   IceRes=150, ThunderRes=30,  WindRes=30,  HolyRes=30,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=10, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=161, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults Nikapous = new EnemyDefaults {
@@ -1416,6 +1490,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50,  IceRes=100, ThunderRes=100, WindRes=125, HolyRes=125,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=133, ItemResA=100, ItemResB=70, AttackPower=84, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=27.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{150,150,150,150}, ProjectileDamage=new int[]{150} };
 
         // These reuse base-game species IDs with new model codes and scaled stats.
@@ -1425,6 +1500,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=10, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=155, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{122,122}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults ArthurEnhanced = new EnemyDefaults {
@@ -1432,6 +1508,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=50, IceRes=50, ThunderRes=150, WindRes=80, HolyRes=80,
             EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=30.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130,130}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults SilEnhanced = new EnemyDefaults {
@@ -1439,6 +1516,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=10, WeaponDefense=60,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{111,111,115,115,102,95,85}, ProjectileDamage=new int[]{102} };
 
         internal static readonly EnemyDefaults HalloweenEnhanced = new EnemyDefaults {
@@ -1446,6 +1524,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=150, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=50,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=168, ItemResA=100, ItemResB=70, AttackPower=148, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{100,100}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults MasterJacketEnhanced = new EnemyDefaults {
@@ -1453,6 +1532,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=80, ThunderRes=100, WindRes=80, HolyRes=130,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=177, ItemResA=100, ItemResB=80, AttackPower=150, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{110,110}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults VulcanEnhanced = new EnemyDefaults {
@@ -1460,6 +1540,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=0, IceRes=180, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=10, WeaponDefense=40,
             StealItemId=81, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{114,114,114}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MummyEnhanced = new EnemyDefaults {
@@ -1467,6 +1548,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=150, IceRes=50, ThunderRes=100, WindRes=100, HolyRes=120,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=10, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=9.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{98,98}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults DiamondEnhanced = new EnemyDefaults {
@@ -1474,6 +1556,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=50, WindRes=150, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=10, WeaponDefense=50,
             StealItemId=151, ItemResA=80, ItemResB=50, AttackPower=135, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{123,123}, ProjectileDamage=new int[]{} };
 
         // Gemron (Ice) — tier 2
@@ -1482,6 +1565,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0,   ThunderRes=30,  WindRes=30,  HolyRes=30,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=15, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=162, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{120} };
 
         internal static readonly EnemyDefaults HornHead = new EnemyDefaults {
@@ -1489,6 +1573,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=100, IceRes=20,  ThunderRes=20,  WindRes=20,  HolyRes=150,
             EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=100, AttackPower=186, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130,130,130}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults AuntieMeduEnhanced = new EnemyDefaults {
@@ -1496,6 +1581,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=30, IceRes=150, ThunderRes=30, WindRes=30, HolyRes=30,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=166, ItemResA=100, ItemResB=60, AttackPower=245, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{122}, ProjectileDamage=new int[]{122} };
 
         internal static readonly EnemyDefaults RockanoffEnhanced = new EnemyDefaults {
@@ -1503,6 +1589,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=15, WeaponDefense=50,
             StealItemId=160, ItemResA=90, ItemResB=60, AttackPower=160, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130,130}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults YammichEnhanced = new EnemyDefaults {
@@ -1510,6 +1597,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=20, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=130,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=160, ItemResA=90, ItemResB=100, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{110}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults WitchHellzaEnhanced = new EnemyDefaults {
@@ -1517,6 +1605,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=50,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=169, ItemResA=85, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{100}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults SteelGiantEnhanced = new EnemyDefaults {
@@ -1524,6 +1613,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=80, IceRes=80, ThunderRes=150, WindRes=80, HolyRes=80,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=15, WeaponDefense=70,
             StealItemId=177, ItemResA=95, ItemResB=50, AttackPower=154, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=80, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=33.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{163,163,178,178,163,162,161}, ProjectileDamage=new int[]{164,164} };
 
         internal static readonly EnemyDefaults ClubEnhanced = new EnemyDefaults {
@@ -1531,6 +1621,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=150, IceRes=100, ThunderRes=100, WindRes=50, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=147, ItemResA=80, ItemResB=50, AttackPower=134, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{114}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults CorceaEnhanced = new EnemyDefaults {
@@ -1538,6 +1629,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=130,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=152, ItemResA=100, ItemResB=70, AttackPower=91, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{110,110,110,110}, ProjectileDamage=new int[]{} };
 
         // Demon Shaft enemies reuse base-game eids with new model codes and scaled stats.
@@ -1550,6 +1642,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=15, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{} };
 
         // King Mimic (Demon Shaft) — tier 1
@@ -1558,6 +1651,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=15, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{170,170,170}, ProjectileDamage=new int[]{} };
 
         // Gemron (Thunder) — tier 3
@@ -1566,6 +1660,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=30,  IceRes=30,  ThunderRes=0,   WindRes=150, HolyRes=30,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=20, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=163, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{130} };
 
         internal static readonly EnemyDefaults BishopQ = new EnemyDefaults {
@@ -1573,6 +1668,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=40,  IceRes=40,  ThunderRes=40,  WindRes=40,  HolyRes=140,
             EntityScale=11.0f, EntityScaleCopy=11.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=null, ItemResA=50, ItemResB=50, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=20.0f, BodyHeight=19.0f, BodyDepth=0.0f,
             MeleeDamage=new int[]{130,130}, ProjectileDamage=new int[]{130,130} };
 
         internal static readonly EnemyDefaults CaveBatEnhanced = new EnemyDefaults {
@@ -1580,6 +1676,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=150, HolyRes=100,
             EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=151, ItemResA=100, ItemResB=90, AttackPower=0, ElemAtkFire=100, ElemAtkIce=150, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=10.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{95,95}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults GolEnhanced = new EnemyDefaults {
@@ -1587,6 +1684,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=30, WeaponDefense=80,
             StealItemId=177, ItemResA=100, ItemResB=50, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{131,131,135,135,132,125,125}, ProjectileDamage=new int[]{132} };
 
         internal static readonly EnemyDefaults MaskOfPrajnaEnhanced = new EnemyDefaults {
@@ -1594,6 +1692,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=145,
             EntityScale=7.5f, EntityScaleCopy=7.5f, DamageReduction=20, WeaponDefense=10,
             StealItemId=151, ItemResA=80, ItemResB=70, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=32.0f, BodyHeight=26.0f, BodyDepth=0.0f,
             MeleeDamage=new int[]{140,138}, ProjectileDamage=new int[]{146} };
 
         internal static readonly EnemyDefaults GyonEnhanced = new EnemyDefaults {
@@ -1601,6 +1700,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=120, IceRes=100, ThunderRes=150, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=134, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{100,100}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults SpadeEnhanced = new EnemyDefaults {
@@ -1608,6 +1708,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=150, IceRes=50, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=152, ItemResA=80, ItemResB=50, AttackPower=132, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{110,110}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults RashDasherEnhanced = new EnemyDefaults {
@@ -1615,6 +1716,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Beast, FireRes=50, IceRes=150, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=149, ItemResA=100, ItemResB=70, AttackPower=93, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{102}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults CaptainEnhanced = new EnemyDefaults {
@@ -1622,6 +1724,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=110, IceRes=100, ThunderRes=80, WindRes=80, HolyRes=150,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=227, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{99,99,99,99}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicDSEnhanced = new EnemyDefaults {
@@ -1629,6 +1732,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=20, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicDSEnhanced = new EnemyDefaults {
@@ -1636,6 +1740,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=20, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{170,170,170}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults GemronWind = new EnemyDefaults {
@@ -1643,6 +1748,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=100, IceRes=100, ThunderRes=140, WindRes=0,   HolyRes=100,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=164, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{140} };
 
         internal static readonly EnemyDefaults SilverGear = new EnemyDefaults {
@@ -1650,6 +1756,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=30,  IceRes=30,  ThunderRes=30,  WindRes=30,  HolyRes=150,
             EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=100, AttackPower=190, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{110} };
 
         internal static readonly EnemyDefaults AlexanderEnhanced = new EnemyDefaults {
@@ -1657,6 +1764,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=120, WindRes=100, HolyRes=100,
             EntityScale=7.0f, EntityScaleCopy=7.0f, DamageReduction=23, WeaponDefense=50,
             StealItemId=164, ItemResA=100, ItemResB=70, AttackPower=81, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=32.0f, BodyHeight=30.0f, BodyDepth=0.0f,
             MeleeDamage=new int[]{122}, ProjectileDamage=new int[]{122} };
 
         internal static readonly EnemyDefaults HeartEnhanced = new EnemyDefaults {
@@ -1664,6 +1772,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=0, IceRes=0, ThunderRes=0, WindRes=0, HolyRes=0,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=150, ItemResA=80, ItemResB=50, AttackPower=133, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=10.0f,
             MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{130} };
 
         internal static readonly EnemyDefaults BomberHeadEnhanced = new EnemyDefaults {
@@ -1671,6 +1780,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=200, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=20,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=23, WeaponDefense=20,
             StealItemId=159, ItemResA=100, ItemResB=70, AttackPower=159, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=18.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{160,160}, ProjectileDamage=new int[]{160} };
 
         internal static readonly EnemyDefaults CrabbyHermitEnhanced = new EnemyDefaults {
@@ -1678,6 +1788,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=100, IceRes=100, ThunderRes=125, WindRes=100, HolyRes=100,
             EntityScale=10.0f, EntityScaleCopy=10.0f, DamageReduction=23, WeaponDefense=20,
             StealItemId=166, ItemResA=95, ItemResB=70, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=14.0f, BodyHeight=22.0f, BodyDepth=100.0f,
             MeleeDamage=new int[]{130,130,130}, ProjectileDamage=new int[]{130} };
 
         internal static readonly EnemyDefaults CursedRoseEnhanced = new EnemyDefaults {
@@ -1685,6 +1796,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Plant, FireRes=130, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=150,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=23, WeaponDefense=10,
             StealItemId=null, ItemResA=100, ItemResB=70, AttackPower=146, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=22.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{140,140,140}, ProjectileDamage=new int[]{140} };
 
         internal static readonly EnemyDefaults PiratesChariotEnhanced = new EnemyDefaults {
@@ -1692,6 +1804,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Metal, FireRes=120, IceRes=80, ThunderRes=140, WindRes=100, HolyRes=100,
             EntityScale=8.0f, EntityScaleCopy=8.0f, DamageReduction=23, WeaponDefense=60,
             StealItemId=159, ItemResA=95, ItemResB=60, AttackPower=92, ElemAtkFire=80, ElemAtkIce=80, ElemAtkThunder=150, ElemAtkWind=80, ElemAtkHoly=20, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{114} };
 
         internal static readonly EnemyDefaults SpaceGyonEnhanced = new EnemyDefaults {
@@ -1699,6 +1812,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Marine, FireRes=0, IceRes=0, ThunderRes=20, WindRes=0, HolyRes=0,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=153, ItemResA=100, ItemResB=70, AttackPower=226, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{160,160}, ProjectileDamage=new int[]{160} };
 
         internal static readonly EnemyDefaults MimicDSEnhancedTwice = new EnemyDefaults {
@@ -1706,6 +1820,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=23, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicDSEnhancedTwice = new EnemyDefaults {
@@ -1713,6 +1828,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=23, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{170,170,170}, ProjectileDamage=new int[]{} };
 
         // Gemron (Holy) — tier 5
@@ -1721,6 +1837,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=50,  IceRes=50,  ThunderRes=50,  WindRes=50,  HolyRes=0,
             EntityScale=6.5f, EntityScaleCopy=6.5f, DamageReduction=30, WeaponDefense=10,
             StealItemId=null, ItemResA=70, ItemResB=60, AttackPower=165, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{150} };
 
         internal static readonly EnemyDefaults GaciousEnhanced = new EnemyDefaults {
@@ -1728,6 +1845,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=0, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=140,
             EntityScale=11.0f, EntityScaleCopy=11.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=189, ItemResA=100, ItemResB=90, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{180,180,180,180,180}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults EvilBatEnhanced = new EnemyDefaults {
@@ -1735,6 +1853,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=150, IceRes=150, ThunderRes=150, WindRes=150, HolyRes=200,
             EntityScale=3.0f, EntityScaleCopy=3.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=151, ItemResA=100, ItemResB=70, AttackPower=149, ElemAtkFire=100, ElemAtkIce=200, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=10.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{122,122}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults CrescentBaronEnhanced = new EnemyDefaults {
@@ -1742,6 +1861,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Sky, FireRes=100, IceRes=100, ThunderRes=100, WindRes=110, HolyRes=100,
             EntityScale=6.0f, EntityScaleCopy=6.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=null, ItemResA=80, ItemResB=70, AttackPower=170, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{150,150,150,150}, ProjectileDamage=new int[]{150} };
 
         internal static readonly EnemyDefaults StatueDogEnhanced = new EnemyDefaults {
@@ -1749,6 +1869,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=60,
             EntityScale=9.0f, EntityScaleCopy=9.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=160, ItemResA=90, ItemResB=100, AttackPower=92, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{110}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults JokerEnhanced = new EnemyDefaults {
@@ -1756,6 +1877,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=150,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=149, ItemResA=50, ItemResB=10, AttackPower=154, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=11.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{170}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults LichEnhanced = new EnemyDefaults {
@@ -1763,6 +1885,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Undead, FireRes=20, IceRes=20, ThunderRes=20, WindRes=20, HolyRes=160,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=176, ItemResA=80, ItemResB=30, AttackPower=94, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{110,110}, ProjectileDamage=new int[]{110} };
 
         internal static readonly EnemyDefaults TitanEnhanced = new EnemyDefaults {
@@ -1770,6 +1893,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=110, WindRes=110, HolyRes=100,
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=177, ItemResA=100, ItemResB=70, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{155,155,160,160,150,145,140}, ProjectileDamage=new int[]{160,160} };
 
         internal static readonly EnemyDefaults LivingArmorEnhanced = new EnemyDefaults {
@@ -1777,6 +1901,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Rock, FireRes=100, IceRes=100, ThunderRes=100, WindRes=80, HolyRes=80,
             EntityScale=4.0f, EntityScaleCopy=4.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=null, ItemResA=100, ItemResB=50, AttackPower=160, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=25.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{150,150,150,150}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults MimicDSEnhancedThrice = new EnemyDefaults {
@@ -1784,6 +1909,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=5.0f, EntityScaleCopy=5.0f, DamageReduction=30, WeaponDefense=10,
             StealItemId=177, ItemResA=90, ItemResB=50, AttackPower=235, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=100,
+            BodyWidth=7.0f, BodyHeight=20.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults KingMimicDSEnhancedThrice = new EnemyDefaults {
@@ -1791,6 +1917,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mimic, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             EntityScale=12.0f, EntityScaleCopy=12.0f, DamageReduction=30, WeaponDefense=50,
             StealItemId=175, ItemResA=90, ItemResB=50, AttackPower=181, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=150, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=20,
+            BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{170,170,170}, ProjectileDamage=new int[]{} };
 
         internal static readonly EnemyDefaults BlackKnight = new EnemyDefaults {
@@ -1799,12 +1926,14 @@ namespace Dark_Cloud_Improved_Version
             EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=100,
             StealItemId=65535, ItemResA=50, ItemResB=0, AttackPower=65535, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50,
             // Projectile = the `engetu` crescent-slash boss behavior (BST idx30, 150); `terepo` (idx33) is teleport (no dmg).
+            BodyWidth=20.0f, BodyHeight=35.0f, BodyDepth=200.0f,
             MeleeDamage=new int[]{170,170}, ProjectileDamage=new int[]{150} };
 
         internal static readonly EnemyDefaults BlackKnightMount = new EnemyDefaults {
             // Projectile = the `g_center` _SET_SHOT (BST default 170, = the `dash` charge idx31); `kamai` (idx32) is a stance (no dmg).
             Id=221, TableIndex=166, ModelCode="c22a", Name="Black Knight Mount", MaxHp=50000, AttackPower=0,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100, EntityScale=14.0f, EntityScaleCopy=14.0f, DamageReduction=8, WeaponDefense=100, Abs=5, MinGoldDrop=0, DropChance=0, StealItemId=65535, ItemResA=50, ItemResB=0, ElemAtkFire=100, ElemAtkIce=100, ElemAtkThunder=100, ElemAtkWind=100, ElemAtkHoly=100, ElemAtkDark=50,
+            BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{170}, ProjectileDamage=new int[]{170} };
 
         // CUT ENEMY — no species table entry and no CHR model file (e53a.chr/e54a.chr absent).

@@ -110,6 +110,18 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(enemyZeroWidth  + (scaleOffset * slot), scaleSize);
             Memory.WriteFloat(enemyZeroHeight + (scaleOffset * slot), scaleSize);
             Memory.WriteFloat(enemyZeroDepth  + (scaleOffset * slot), scaleSize);
+
+            // Grow the DAMAGE HITBOX by the same factor as the visual scale, so the bigger miniboss body is hittable
+            // across its new size. These are the per-bone _SET_BODY_COL sphere radii (see EnemyAddresses.BodyCollision):
+            // CheckDmg rebuilds the live collision from them each frame, so scaling them once here persists. Each
+            // enemy uses 1+ body parts; unused parts read 0 and are skipped. Default visual scale is 1.0, so scaleSize
+            // is the growth factor (e.g. Skeleton radius 6.0 → 9.0 at 1.5×).
+            for (int bodyPart = 0; bodyPart < BodyCollision.MaxBodyParts; bodyPart++)
+            {
+                long radiusAddr = BodyCollision.RadiusAddr(slot, bodyPart);
+                float radius = Memory.ReadFloat(radiusAddr);
+                if (radius > 0f) Memory.WriteFloat(radiusAddr, radius * scaleSize);
+            }
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp),           startBossHP * enemyHPMult);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MaxHp),        startBossHP * enemyHPMult);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs),          startAbs * enemyABSMult);

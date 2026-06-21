@@ -152,6 +152,42 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// The enemy DAMAGE HITBOX — the per-bone collision spheres your weapon must reach to hurt the enemy
+    /// (RE'd 2026-06-20 + confirmed in-game). NOT EntityScale and NOT the BODY_SIZE triple; this is its own system.
+    ///
+    /// PIPELINE:
+    ///   • At spawn the enemy's STB script issues <c>_SET_BODY_COL(boneName, radius, …)</c> (cmd 0x82, handler ELF
+    ///     0x1E39F0), which records, per (slot, bodyPart): the bone CFrame ptr + this RADIUS into the arrays below.
+    ///     Simple enemies = 1 sphere (Skeleton Soldier r=6.0, Cave Bat 6.5); bosses = many (Dran: body 20, arms 7…).
+    ///   • Every frame <c>CMonstorUnit::CheckDmg</c> (ELF 0x1D9F10) reads this DEFINITION radius + the bone's current
+    ///     world position and calls <c>CCollisionData::Set</c> (0x1B57A0) to (re)build a live collision sphere, whose
+    ///     radius lands at the CCollisionData element +0x3C.
+    ///   • When the player swings, <c>BtCheckDamageProc</c> (dun overlay 0x1DBAFD0) calls
+    ///     <c>CCollisionData::CheckHitUser</c> (0x1B5920) → a hit registers when dist(weaponPoint, bonePos) ≤ radius.
+    ///
+    /// Because CheckDmg rebuilds the sphere each frame FROM this definition, a SINGLE write here (at spawn) changes
+    /// the hitbox permanently — no per-frame patching needed (confirmed: writing 30.0 once let a sword hit a skeleton
+    /// from ~5× its body radius). Patching the STB literal does NOT work (it only runs at init); patch this instead.
+    /// Per-species sphere bone+radius lists are in /enemy-body-collision-table.md (by TableIndex).
+    /// </summary>
+    internal static class BodyCollision
+    {
+        // Per-slot body-collision DEFINITION block within CMainMonstorUnit (G = MainMonstorUnit.Base). The sub-arrays
+        // are parallel, each indexed by slot*SlotStride + bodyPart*BodyPartStride; up to ~16 body parts per enemy.
+        internal const long FramePtrArray = 0x55350; // CFrame* of the bone the sphere is attached to
+        internal const long RadiusArray   = 0x55390; // ★ float — the sphere radius = the hittable size (the knob)
+        internal const long Param1Array   = 0x553D0; // float — _SET_BODY_COL 3rd arg (0 unless argc==4); height band?
+        internal const long Param2Array   = 0x55410; // float — _SET_BODY_COL 4th arg (0 unless argc==4)
+        internal const int  SlotStride     = 0x510;
+        internal const int  BodyPartStride = 4;
+        internal const int  MaxBodyParts   = 16;     // each sub-array spans 0x40 (= 16 floats) before the next one
+
+        /// <summary>EE address of (slot, bodyPart)'s hitbox sphere radius. Write once at/after spawn to resize it.</summary>
+        internal static long RadiusAddr(int slot, int bodyPart = 0) =>
+            EnemyAddresses.MainMonstorUnit.Base + RadiusArray + (long)slot * SlotStride + (long)bodyPart * BodyPartStride;
+    }
+
+    /// <summary>
     /// Cached per-slot PROJECTILE (shot) damage — the field that <c>_SET_SHOT</c> (STB cmd 134, handler ELF
     /// 0x1E4120) and <c>_SET_SHOT2</c> (STB cmd 136, handler 0x1E4310) write each time the enemy fires. A per-slot
     /// sub-array of CMainMonstorUnit, stride 0x30 (one entry per FloorSlots/CCharacter slot):
@@ -545,17 +581,35 @@ namespace Dark_Cloud_Improved_Version
         // +0x010: 0x002A12B0 — shared pointer, identical across all 16 slots and both
         // dungeons tested. Likely a global model resource table pointer or vtable entry.
 
-        // +0x020: unknown float; 7.0 for most ground/melee enemies, 14.0 for Gunny, 32.0 for Mask of Prajna.
-        // Semantics unconfirmed — x5 write at floor load had no visual or gameplay effect.
-        internal const int Unk020 = 0x020;
+        // ── "BODY SIZE" triple (+0x020/+0x024/+0x028) — RE'd 2026-06-20 from SCUS_971.11 ──────────────
+        // These three floats are the enemy's BODY-COLLISION/SIZE descriptor. SOURCE (confirmed): the text line
+        // `BODY_SIZE <height>,<width>,<depth>` in the model's info.cfg, embedded in dun/monstor/<code>.chr in
+        // data.dat (same config block as the KEY motion list). The .chr loader dispatches it to CommandBODY_SIZE
+        // (ELF 0x13a8d0), which stores the three args onto the live CCharacter at +0xB0/+0xB4/+0xB8 (= ModelBase
+        // +0x20/+0x24/+0x28, since ModelBase = CCharacter+0x90). Arg→field: arg0(height)→+0xB4, arg1(width)→+0xB0,
+        // arg2(depth)→+0xB8. (The matching STB command is the per-body-part _SET_BODY_COL family, 0x1e39f0.)
+        // Fixed per species; populated in EnemyData.cs by tools/extract_bodysize.py (validated vs 41 live dumps).
+        // Read LIVE (not cached at spawn — a one-shot write to height took effect immediately in-game). The genuine
+        // CCharacter-pointer readers (confirmed by disassembly, after discarding offset-collision false positives —
+        // CHitMark/CEffect/ClsMes/CFrame all have their OWN +0xB0/B4/B8): GetScrPosFromChar (height), CCharacter::
+        // PickUpPoly (width+height), and the _GET_NPC_BODY_SIZE script getter (all three). See each field below.
 
-        // +0x024: unknown float (10.0–32.0); correlates with model height. NOT a visual scale — x5 write had no effect.
-        // Semantics unconfirmed.
-        internal const int Unk024 = 0x024;
+        // +0x020 (CCharacter+0xB0): body WIDTH / girth radius (7.0 small → 14.0 Gunny → 32.0 Mask of Prajna). BODY_SIZE
+        // arg1. Read by CCharacter::PickUpPoly (ELF 0x156710) as the floor-poly pickup RADIUS, clamped to a min of 2.0
+        // — i.e. TERRAIN/floor collision; and by _GET_NPC_BODY_SIZE. NO OBSERVABLE in-game effect: a live x200 write
+        // produced no visible change on a flyer (Cave Bat) OR a ground enemy (Skeleton Soldier). Not used by the
+        // lock-on reticle (that's the slot's ReticleWidth/Height / EntityScale).
+        internal const int BodyWidth = 0x020;
 
-        // +0x028: unknown float; 60.0 for ground enemies, 0.0 for ranged/flying (Gunny, Sam, Mask of Prajna).
-        // Inversely paired with +0x020. Semantics unconfirmed — x5 write had no effect.
-        internal const int Unk028 = 0x028;
+        // +0x024 (CCharacter+0xB4): body HEIGHT. BODY_SIZE arg0. CONFIRMED IN-GAME (x5 raised the un-locked marker):
+        // GetScrPosFromChar (ELF 0x14c980) adds const×(+0xB4) to world Y before 2D projection — anchors the name /
+        // off-lock target marker / talk bubble at the top of the body. Also read by PickUpPoly and _GET_NPC_BODY_SIZE.
+        internal const int BodyHeight = 0x024;
+
+        // +0x028 (CCharacter+0xB8): body DEPTH. 60.0 for ground enemies, 0.0 for ranged/flying (Gunny, Sam, Prajna).
+        // BODY_SIZE arg2. Read ONLY by the _GET_NPC_BODY_SIZE script getter — effectively inert in gameplay (a live
+        // x5 write produced no observable change, consistent with no draw/collision/marker consumer).
+        internal const int BodyDepth = 0x028;
 
         // +0x048: enemy-specific int (474–1454); likely total keyframe count or mesh triangle count.
         internal const int DataSize = 0x048;

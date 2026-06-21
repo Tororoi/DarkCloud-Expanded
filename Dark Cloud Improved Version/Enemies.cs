@@ -187,14 +187,14 @@ namespace Dark_Cloud_Improved_Version
                 float reticleH = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleHeight);
 
                 int   scaleBase = ModelScaleOffsets.ModelBase + ModelScaleOffsets.ModelStride * i;
-                float unk020    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.Unk020);
-                float unk024    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.Unk024);
-                float unk028    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.Unk028);
+                float bodyWidth    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.BodyWidth);
+                float bodyHeight    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.BodyHeight);
+                float bodyDepth    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.BodyDepth);
                 int   dataSize  = Memory.ReadInt  (scaleBase + ModelScaleOffsets.DataSize);
                 int   animCount = Memory.ReadInt  (scaleBase + ModelScaleOffsets.AnimCount);
 
                 Console.WriteLine($"[EnemyInfo] slot={i} {name} (id={nameId}) hp={maxHp} abs={abs} gold={minGold} drop={dropChance}% | type={res1} fire={fire} ice={ice} thun={thun} wind={wind} holy={holy}");
-                Console.WriteLine($"[EnemyInfo] slot={i} {name} scale={scale:F1} def={u90a}/{u90b} steal=0x{stealId:X3} itemRes={irA}/{irB} reticle={reticleW:F2}x{reticleH:F2} | unk020={unk020:F1} unk024={unk024:F1} unk028={unk028:F1} dataSize={dataSize} animCount={animCount}");
+                Console.WriteLine($"[EnemyInfo] slot={i} {name} scale={scale:F1} def={u90a}/{u90b} steal=0x{stealId:X3} itemRes={irA}/{irB} reticle={reticleW:F2}x{reticleH:F2} | bodyWidth={bodyWidth:F1} bodyHeight={bodyHeight:F1} bodyDepth={bodyDepth:F1} dataSize={dataSize} animCount={animCount}");
             }
         }
 
