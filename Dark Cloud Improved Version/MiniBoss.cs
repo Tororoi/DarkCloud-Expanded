@@ -19,6 +19,7 @@ namespace Dark_Cloud_Improved_Version
         const float minibossHpFactor = 3.0F;      //Miniboss max-HP multiplier (×3)
         const float minibossDefenseFactor = 1.5F; //Miniboss defense multiplier — DamageReduction + WeaponDefense (×1.5)
         const float minibossAttackFactor = 1.5F;  //Miniboss melee-damage multiplier (×1.5). Projectile damage is per-SPECIES (shared STB) so it is intentionally left unscaled.
+        const float minibossReticleFactor = 1.5F; //Miniboss lock-on reticle size multiplier — visual marker (model is already scaleSize bigger)
         const int enemyABSMult = 4;               //Miniboss ABS multiplier
         const int enemyItemResistMulti = 10;      //Miniboss Item Resistance multiplier %
         const int enemyGoldMult = 4;              //Miniboss Gilda Loot multiplier
@@ -138,6 +139,14 @@ namespace Dark_Cloud_Improved_Version
                 float radius = Memory.ReadFloat(radiusAddr);
                 if (radius > 0f) Memory.WriteFloat(radiusAddr, radius * scaleSize);
             }
+
+            // Visual marker: enlarge the lock-on reticle so a targeted miniboss reads as special (its model is already
+            // scaleSize bigger). One-shot like the hitbox; if the engine rewrites these per-frame it won't stick and
+            // we'll move it to per-tick upkeep.
+            float reticleW = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ReticleWidth));
+            float reticleH = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ReticleHeight));
+            if (reticleW > 0f) Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ReticleWidth),  reticleW * minibossReticleFactor);
+            if (reticleH > 0f) Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ReticleHeight), reticleH * minibossReticleFactor);
             // Stat buffs via the shared EnemyStatScaler pipeline: max HP ×3, defense ×1.5, melee damage ×1.5.
             // (Projectile damage is per-species/shared-STB — see EnemyStatScaler.ScaleProjectile — so it's left
             // unscaled to avoid buffing every same-species enemy on the floor.)
