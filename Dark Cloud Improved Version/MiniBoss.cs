@@ -15,13 +15,15 @@ namespace Dark_Cloud_Improved_Version
         public static List<int> miniBossEnemyNumbers = new List<int>();
         public static bool miniBossRolled = false;
 
-        const float scaleSize = 1.5F;           //Sets the total size of the miniboss
-        const int enemyHPMult = 4;              //Miniboss HP multiplier
-        const int enemyABSMult = 4;             //Miniboss ABS multiplier
-        const int enemyItemResistMulti = 10;    //Miniboss Item Resistance multiplier %
-        const int enemyGoldMult = 4;            //Miniboss Gilda Loot multiplier
-        const int enemyLootChance = 100;        //Miniboss Loot chance % (0 - 100)
-        const byte staminaTimer = 79;           //Miniboss Stamina Timer (Currently 79 on the 3rd byte is roughly 1 day)
+        const float scaleSize = 1.5F;             //Miniboss model + damage-hitbox scale
+        const float minibossHpFactor = 3.0F;      //Miniboss max-HP multiplier (×3)
+        const float minibossDefenseFactor = 1.5F; //Miniboss defense multiplier — DamageReduction + WeaponDefense (×1.5)
+        const float minibossAttackFactor = 1.5F;  //Miniboss melee-damage multiplier (×1.5). Projectile damage is per-SPECIES (shared STB) so it is intentionally left unscaled.
+        const int enemyABSMult = 4;               //Miniboss ABS multiplier
+        const int enemyItemResistMulti = 10;      //Miniboss Item Resistance multiplier %
+        const int enemyGoldMult = 4;              //Miniboss Gilda Loot multiplier
+        const int enemyLootChance = 100;          //Miniboss Loot chance % (0 - 100)
+        const bool allowFlyerMinibosses = true;   //Allow flying enemies to become minibosses (hitbox now scales so they're hittable)
 
         static Dictionary<ushort, string> nonKeyEnemies = EnemySlots.GetFlyingEnemies();
 
@@ -49,7 +51,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 ushort id = allIds[i];
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
-                if (id == 0 || nonKeyEnemies.ContainsKey(id) || Enemies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
+                if (id == 0 || (!allowFlyerMinibosses && nonKeyEnemies.ContainsKey(id)) || Enemies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
                     ineligibleCount++;
             }
 
@@ -61,8 +63,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 ushort id = allIds[i];
                 if (id == 0) continue;
-                if (nonKeyEnemies.ContainsKey(id)) continue;
                 if (Enemies.BossEnemies.ContainsKey(id)) continue;   // never promote a boss/boss-companion (e.g. Ice Queen 113, IceArrow 84) to a miniboss
+                if (!allowFlyerMinibosses && nonKeyEnemies.ContainsKey(id)) continue;
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (dropVal != 0 && dropVal != 65535) continue;
                 if (rnd.Next(denominator) == 0)
@@ -103,9 +105,9 @@ namespace Dark_Cloud_Improved_Version
             if (EnemySlots.EnemyHasKey(slot, dungeon))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyMiniBossToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
 
-            int startBossHP = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MaxHp));
             int startAbs    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs));
             int startGold   = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop));
+            ushort enemySpeciesId = EnemySlots.GetFloorEnemyId(slot);
 
             Memory.WriteFloat(enemyZeroWidth  + (scaleOffset * slot), scaleSize);
             Memory.WriteFloat(enemyZeroHeight + (scaleOffset * slot), scaleSize);
@@ -122,16 +124,20 @@ namespace Dark_Cloud_Improved_Version
                 float radius = Memory.ReadFloat(radiusAddr);
                 if (radius > 0f) Memory.WriteFloat(radiusAddr, radius * scaleSize);
             }
-            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp),           startBossHP * enemyHPMult);
-            Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MaxHp),        startBossHP * enemyHPMult);
+            // Stat buffs via the shared EnemyStatScaler pipeline: max HP ×3, defense ×1.5, melee damage ×1.5.
+            // (Projectile damage is per-species/shared-STB — see EnemyStatScaler.ScaleProjectile — so it's left
+            // unscaled to avoid buffing every same-species enemy on the floor.)
+            EnemyStatScaler.ScaleHp(slot, minibossHpFactor);
+            EnemyStatScaler.ScaleDefense(slot, minibossDefenseFactor, minibossDefenseFactor);
+            if (Enemies.Defaults.TryGetValue(enemySpeciesId, out EnemyDefaults def))
+                EnemyStatScaler.ScaleMelee(slot, def.MeleeDamage, minibossAttackFactor);
+
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs),          startAbs * enemyABSMult);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ItemResistance), enemyItemResistMulti);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop),  startGold * enemyGoldMult);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.DropChance),   enemyLootChance);
-            Memory.WriteByte(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.StaminaTimer) + 0x2, staminaTimer);
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
-            ushort enemySpeciesId = EnemySlots.GetFloorEnemyId(slot);
 
             if (!TryApplyFlavorLoot(enemySpeciesId, dungeon, slot))
             {

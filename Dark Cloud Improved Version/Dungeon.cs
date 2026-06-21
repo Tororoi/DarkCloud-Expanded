@@ -463,7 +463,7 @@ namespace Dark_Cloud_Improved_Version
                     CheckClown();
                     CheckCurrentSidequests();
                     CheckDungeonLeaving();
-                    CheckMiniBossStamina();
+                    UpdateMiniBossFloorState();
                     if (CheckWeaponChange(currentWeapon))
                     {
                         ReusableFunctions.ClearRecentDamageAndDamageSource();
@@ -1416,17 +1416,8 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        public static void CheckMiniBossStamina()
+        public static void UpdateMiniBossFloorState()
         {
-            if (MiniBoss.miniBossRolled)
-            {
-                foreach (int slot in MiniBoss.miniBossEnemyNumbers)
-                {
-                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.StaminaTimer)) < 60)
-                        Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.StaminaTimer), 60000);
-                }
-            }
-
             bool onBackFloor = Memory.ReadByte(Addresses.dunBackFloorFlag) != 0;
 
             if (onBackFloor && !wasOnBackFloor)
