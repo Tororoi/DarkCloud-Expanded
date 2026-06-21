@@ -115,6 +115,7 @@ namespace Dark_Cloud_Improved_Version
                 // toward the current dungeon's power level. Self-guards to run once per floor; no-op when off.
                 EnemyStatNormalizer.NormalizeStatsForFloor();
                 ShotSourceProbe.Tick();   // TEMP: locate the RAM source of default-shot damage
+                AttackRangeTest.Tick();   // TEMP: 1.5x Skeleton Soldier attack-range (per-species STB threshold)
                 MiniBoss.MaintainProjectileScale();   // per-tick: keep miniboss projectile damage scaled (per-slot)
                 if (Player.InDungeonFloor())
                 {

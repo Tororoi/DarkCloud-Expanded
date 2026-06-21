@@ -362,21 +362,24 @@ namespace Dark_Cloud_Improved_Version
         internal const int FlashColorBlue    = 0x138; // float — 0.0 at rest; 0–255 blue channel
 
         // ── Behavior Ranges (set at spawn, static per enemy species) ─────────────
-        // All observed enemies start with X=10.0, Y=20.0, Z=20.0, AggroRange=128.0.
+        // All observed enemies start with X=10.0, Y=20.0, Z=20.0, Unk14C=128.0.
         // During certain attacks (e.g. Captain lunge) the forward axis expands dramatically:
         //   BehaviorRangeX: 10→137.4, BehaviorRangeY/Z: 20→9.6 (narrows to a forward spike).
         // Engine overwrites these at 60fps; a one-time write at floor load has no lasting effect.
-        internal const int BehaviorRangeX    = 0x140; // float — resting 10.0; expands on attack (forward reach / close-range threshold)
+        // NOTE: none of these gate the attack/aggro DECISION — the AI computes distance fresh each frame via the
+        // STB command _GET_DISTANCE (cmd 10) and compares it to per-species float literals baked in the .stb, not
+        // to any of these slot fields (the overlay AI code reads neither +0x140 nor +0x14C). Purpose unconfirmed.
+        internal const int BehaviorRangeX    = 0x140; // float — resting 10.0; expands on attack (forward reach during the swing)
         internal const int BehaviorRangeY    = 0x144; // float — resting 20.0; narrows during some attacks (lateral range)
         internal const int BehaviorRangeZ    = 0x148; // float — resting 20.0; narrows during some attacks (depth range)
-        internal const int AggroRange        = 0x14C; // float — 128.0 for all observed enemies; constant during attacks; likely max aggro/detection radius
+        internal const int Unk14C            = 0x14C; // float — 128.0 for all observed enemies; constant during attacks; NOT aggro/attack range (purpose unknown)
 
-        // Three additional float fields after AggroRange. Observed as 0.0 for regular Auntie Medu and
+        // Three additional float fields after Unk14C. Observed as 0.0 for regular Auntie Medu and
         // non-zero (127.5, 80.0, 15.0) for the same enemy when the mod's miniboss process was active.
         // The mod process may have indirectly triggered the game engine to write these; they are not
         // believed to be mod-written values. Purpose unknown — possibly secondary AI range tiers used
         // by specific behavior scripts (not all enemy species).
-        internal const int Unk150            = 0x150; // float — 0.0 for most enemies; 127.5 observed (≈AggroRange) during mod miniboss activation
+        internal const int Unk150            = 0x150; // float — 0.0 for most enemies; 127.5 observed (≈Unk14C) during mod miniboss activation
         internal const int Unk154            = 0x154; // float — 0.0 for most enemies; 80.0 observed during mod miniboss activation
         internal const int Unk158            = 0x158; // float — 0.0 for most enemies; 15.0 observed during mod miniboss activation
 
