@@ -465,6 +465,12 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // Faster enemy movement + animation/attack speed (see HarderEnemies). Tune the multipliers there.
+        private void CBox_UserMode_HarderEnemies_Changed(object sender, RoutedEventArgs e)
+        {
+            HarderEnemies.Enabled = CBox_UserMode_HarderEnemies.IsChecked == true;
+        }
+
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)
         {
             if (Cbox_Usermode_AttackSounds.IsChecked == true)

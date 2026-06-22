@@ -73,6 +73,12 @@
       <TabItem Header="Options">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Panel Height="400" Width="500">
+          <CheckBox x:Name="CBox_UserMode_HarderEnemies"
+                    Content="Harder Enemies (faster enemy movement &amp; attacks)"
+                    Margin="46,4,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_HarderEnemies_Changed"/>
           <CheckBox x:Name="CBox_UserMode_Graphics"
                     Content="Enable Graphical Improvements (not compatible in pcsx2 v1.7)"
                     Margin="46,28,0,0"
