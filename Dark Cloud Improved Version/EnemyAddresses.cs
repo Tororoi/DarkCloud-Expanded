@@ -232,6 +232,35 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// Per-slot live MOVE SPEED — the per-frame scalar the engine advances the enemy by. Written by <c>_SET_MOVE</c>
+    /// (STB cmd 32, handler ELF 0x1E27C0): it normalizes the requested move vector and stores its magnitude here
+    /// (store <c>swc1 f0, -0x1BB0(at)</c> with <c>at = MMU.Base + slot*0x3510 + 0x20000</c> ⇒ offset 0x20000−0x1BB0 =
+    /// 0x1E450). The normalized direction sits alongside it at 0x1E430/0x1E434/0x1E438 (x/y/z). Same per-slot 0x3510
+    /// stride as the CCharacter/model arrays.
+    ///
+    /// ★ WHY A PER-SLOT SPEED-UP IS NOT FEASIBLE (RE'd 2026-06-22; a miniboss "move faster" attempt was dropped here).
+    /// <c>CMonstorUnit::Step</c> (ELF 0x1DE540) integrates motion as a plain <c>pos += dir * speed</c> per axis
+    /// (0x1DE60C–0x1DE674: lwc1 dir@-0x1BD0/-0x1BCC/-0x1BC8 × speed@-0x1BB0, add to pos) — there is NO third per-slot
+    /// scale factor to set once. Both dir and speed are REWRITTEN every frame by _SET_MOVE / _CHK_MOVE while an enemy
+    /// steers or chases, straight from the species' SHARED STB literal, so a per-tick PINE write to this field always
+    /// loses the race (verified: even ×5 produced no visible change). The only per-slot speed modifier in _SET_MOVE is
+    /// a boolean "halve" flag (int @ slot 0x1E3E4, store at−0x1C1C: if >0, speed ×0.5) — it can only SLOW, never speed
+    /// up. And same-species slots share one STB native pointer, so there is no per-slot script to patch. ⇒ The only
+    /// race-free speed lever is the shared per-species _SET_MOVE STB literal (what HarderEnemies/"Faster enemies"
+    /// patches); a true per-enemy speed scale does not exist in this engine path. This field remains useful READ-ONLY
+    /// (probe an enemy's live move speed) and for the one-shot "halve" flag if a slow-down is ever wanted.
+    /// </summary>
+    internal static class MoveControl
+    {
+        internal const long SpeedOffset    = 0x1E450; // float — current per-frame move speed (per-slot; rewritten each frame, see notes — not a writable knob)
+        internal const long DirXOffset     = 0x1E430; // float — normalized move direction x (y @ 0x1E434, z @ 0x1E438)
+        internal const long HalveFlagOffset = 0x1E3E4; // int   — if > 0, _SET_MOVE halves this slot's speed (the only per-slot speed modifier; slow-only)
+        internal const int  SlotStride     = 0x3510;  // same per-slot stride as the CCharacter/model arrays
+        internal static long SpeedAddr(int slot) =>
+            EnemyAddresses.MainMonstorUnit.Base + SpeedOffset + (long)slot * SlotStride;
+    }
+
+    /// <summary>
     /// Cached per-slot PROJECTILE (shot) damage — the field that <c>_SET_SHOT</c> (STB cmd 134, handler ELF
     /// 0x1E4120) and <c>_SET_SHOT2</c> (STB cmd 136, handler 0x1E4310) write each time the enemy fires. A per-slot
     /// sub-array of CMainMonstorUnit, stride 0x30 (one entry per FloorSlots/CCharacter slot):

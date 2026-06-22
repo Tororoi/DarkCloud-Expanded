@@ -41,14 +41,19 @@ namespace Dark_Cloud_Improved_Version
                 _stbDone.Clear(); _hitWindows.Clear(); _animWritten.Clear(); _animNatural.Clear();
                 return;
             }
-            if (!Enabled) return;
+            // Run when the toggle is on (global move + animation speed-up) OR when minibosses exist (their walk clip
+            // still needs the stride-sync slow-down, which composes with the toggle in the single animation writer).
+            bool anyMini = MiniBoss.miniBossEnemyNumbers.Count > 0;
+            if (!Enabled && !anyMini) return;
 
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 int eid = EnemySlots.GetFloorEnemyId(s);
                 if (eid == 0) continue;
-                ProcessStb(s, eid);
-                ScaleAnimation(s, eid);
+                bool isMini = MiniBoss.miniBossEnemyNumbers.Contains(s);
+                if (!Enabled && !isMini) continue;   // toggle off: only minibosses (walk-sync) need touching
+                if (Enabled) ProcessStb(s, eid);     // move-speed STB scaling IS the "Faster enemies" feature
+                ScaleAnimation(s, eid, isMini);
             }
         }
 
@@ -103,16 +108,21 @@ namespace Dark_Cloud_Improved_Version
             if (windows.Count > 0) _hitWindows[eid] = windows;
         }
 
-        // ── Per tick: scale playback rate, but DWELL at natural speed across the attack hit window ──
-        private static void ScaleAnimation(int slot, int eid)
+        // ── Per tick: drive PlayingMotionSpeed for one slot. This is the SOLE animation-rate writer, composing two
+        // multiplicative factors: "Faster enemies" speeds every clip ×AnimSpeedMultiplier (with a hit-window DWELL so
+        // attacks still connect), and a miniboss additionally has its WALK clip slowed ×(1/MiniBoss.WalkAnimSyncFactor)
+        // to sync its scaled-up strides. e.g. anim ×2 + walk-sync 1.5 ⇒ ×1.33 walk; anim ×1.5 + 1.5 ⇒ ×1.0 (natural).
+        // A second independent writer would fight the compound guard, which is why both live here. ──
+        private static void ScaleAnimation(int slot, int eid, bool isMini)
         {
             long addr = (long)ModelScaleOffsets.ModelBase
                       + (long)slot * ModelScaleOffsets.ModelStride
                       + ModelScaleOffsets.PlayingMotionSpeed;
             float cur = Memory.ReadFloat(addr);
-            if (cur <= 0f) return;                                          // -1.0 = held/idle: leave it
+            if (cur <= 0f) return;                                          // -1.0 = use KEY speed: leave it
 
-            if (InHitWindow(slot, eid))
+            // Dwell only matters while speeding up (Enabled); walk clips have no hit window so it never fights the sync.
+            if (Enabled && InHitWindow(slot, eid))
             {
                 // hold the clip's natural rate through the contact frames (captured during the wind-up); only ever
                 // slow down, never speed up, and skip once already at natural so we don't fight the engine.
@@ -122,11 +132,27 @@ namespace Dark_Cloud_Improved_Version
             }
 
             if (_animWritten.TryGetValue(slot, out float w) && cur == w) return;   // our value: no compound
+
+            float mult = Enabled ? AnimSpeedMultiplier : 1f;
+            if (isMini && IsWalkMotion(slot) && !MiniBoss.WalkSyncExcluded((ushort)eid))
+                mult /= MiniBoss.WalkAnimSyncFactor;   // miniboss walk: slow to sync stride (skip flyers — see exclude list)
+
+            if (mult == 1f) { _animNatural.Remove(slot); _animWritten.Remove(slot); return; }  // nothing to do: natural
+
             _animNatural[slot] = cur;                                              // capture the natural rate
-            float scaled = cur * AnimSpeedMultiplier;
+            float scaled = cur * mult;
             Memory.WriteFloat(addr, scaled);
             _animWritten[slot] = scaled;
         }
+
+        // The chase locomotion ("walk") clip is motion idx 1 for essentially every enemy (idle=0, locomotion=1, in the
+        // canonical ~30–45 frame slot) regardless of its .chr label — a literal "歩き" at a high index, or idx 0
+        // mislabeled "歩き", are secondary/idle poses, not the chase clip (validated on Captain/Halloween/Bomber Head).
+        private const int WalkMotion = 1;
+        private static bool IsWalkMotion(int slot) =>
+            Memory.ReadInt((long)ModelScaleOffsets.ModelBase
+                         + (long)slot * ModelScaleOffsets.ModelStride
+                         + ModelScaleOffsets.PlayingMotionId) == WalkMotion;
 
         private static bool InHitWindow(int slot, int eid)
         {

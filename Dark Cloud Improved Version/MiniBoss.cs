@@ -30,6 +30,7 @@ namespace Dark_Cloud_Improved_Version
         const float minibossHpFactor = 3.0F;      //Miniboss max-HP multiplier (×3)
         const float minibossDefenseFactor = 1.5F; //Miniboss defense multiplier — DamageReduction + WeaponDefense (×1.5)
         const float minibossAttackFactor = 1.5F;  //Miniboss melee-damage multiplier (×1.5). Projectile damage is per-SPECIES (shared STB) so it is intentionally left unscaled.
+        internal const float WalkAnimSyncFactor = 1.3F; //Slow a miniboss's WALK clip by this divisor so its (scaled-up, longer) strides plant the feet instead of skating. = scaleSize syncs foot-speed to ground-speed; lower = faster legs. Applied in HarderEnemies.ScaleAnimation, composing with the Faster-enemies anim multiplier.
         const float minibossReticleFactor = 1.5F; //Miniboss lock-on reticle size multiplier — visual marker (model is already scaleSize bigger)
         const int enemyABSMult = 4;               //Miniboss ABS multiplier
         const int enemyItemResistMulti = 10;      //Miniboss Item Resistance multiplier %
@@ -116,6 +117,21 @@ namespace Dark_Cloud_Improved_Version
             foreach (int slot in miniBossEnemyNumbers)
                 EnemyStatScaler.MaintainSlotProjectile(slot, minibossAttackFactor);
         }
+
+        // Miniboss WALK-ANIMATION SYNC: a scaled-up miniboss has longer visual strides, but its walk clip plays at the
+        // normal rate while the body moves at normal speed → the feet "skate". Per-slot MOVE speed can't be raised (the
+        // engine rewrites it every frame — see EnemyAddresses.MoveControl), so we sync from the other side by SLOWING the
+        // walk clip ×(1/WalkAnimSyncFactor). Animation speed IS holdable per-slot (set once per motion, not per frame),
+        // so this lives in HarderEnemies.ScaleAnimation — the single PlayingMotionSpeed writer — where it composes
+        // multiplicatively with the Faster-enemies animation multiplier (see WalkAnimSyncFactor above).
+
+        // Species whose motion idx 1 isn't a literal walk but a FLYING/hover loop — slowing it looks wrong (no feet to
+        // skate), so exclude them from the stride-sync. Keyed by species Id (enhanced variants share the base Id).
+        static readonly HashSet<ushort> _walkSyncExclude = new HashSet<ushort>
+        {
+            Enemies.CaveBat.Id, Enemies.EvilBat.Id,
+        };
+        internal static bool WalkSyncExcluded(ushort speciesId) => _walkSyncExclude.Contains(speciesId);
 
         // ── Miniboss ATTACK RANGE (engage/commit distance) ────────────────────────────────────────────────
         // The AI decides when to attack by comparing the live _GET_DISTANCE (cmd 10) result against a float literal
