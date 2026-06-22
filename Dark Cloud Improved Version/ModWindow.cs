@@ -272,77 +272,78 @@ namespace Dark_Cloud_Improved_Version
                 Label_UserMode_PlaceholderText.Text = "Another instance of Enhanced Mod is already active!\n\nYou can close this window.");
         }
 
+        // ── Persisted options, bit-packed into three category-grouped save bytes (all-zero = everything off) ──
+        //   Graphics 0x21CE4490 : bit0 graphical improvements, bit1 FOV          (bits 2-7 free)
+        //   Audio    0x21CE4491 : bit0 weapon beeps, bit1 battle music,
+        //                         bit2 attack sounds, bit3 mute music            (bits 4-7 free)
+        //   Gameplay 0x21CE4492 : bit0 faster enemies, bit1 stronger enemies     (bits 2-7 free)
+        //
+        // FREE SAVE BYTES for new options (no need to re-derive):
+        //   • 0x21CE4493, 0x21CE4494, 0x21CE4495 are fully UNUSED proven-free bytes — grab one for a new
+        //     category, or pack into the spare upper bits of the three bytes above.
+        //   • The proven-free padding block is exactly 0x21CE4490–0x21CE4495 (zero on every save, mod-only).
+        //   • DO NOT use 0x21CE4496 or later: those are LIVE game save data (old saves hold non-zero there;
+        //     a read-breakpoint fires only via the save memcpy, and writing them risks corruption / wrong
+        //     defaults). Verified by comparing a fresh new-game save vs. an existing save.
+        //
+        // Persistence mechanism: each handler read-modify-writes its bit here (these bytes live in the save-
+        // data region, so they ride along to the memory card); ModWindowSettingsCheck reads them back on load.
+        private const int OptGraphicsByte = 0x21CE4490;
+        private const int OptAudioByte    = 0x21CE4491;
+        private const int OptGameplayByte = 0x21CE4492;
+
+        // Read-modify-write a single option bit, preserving the other toggles packed into that byte.
+        private static void WriteOptionBit(int addr, int mask, bool on)
+        {
+            byte v = Memory.ReadByte(addr);
+            v = (byte)(on ? (v | mask) : (v & ~mask));
+            Memory.WriteByte(addr, v);
+        }
+
         void ModWindowSettingsCheck(bool enable)
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (Memory.ReadByte(0x21CE4490) == 1)
-                {
-                    CBox_UserMode_Graphics.IsChecked = true;
-                    Memory.WriteByte(0x21F10034, 1);
-                }
-                else
-                {
-                    CBox_UserMode_Graphics.IsChecked = false;
-                    Memory.WriteByte(0x21F10034, 0);
-                }
+                // Read the three category bytes once; each bit drives one toggle (all-zero = all off).
+                byte gfx  = Memory.ReadByte(OptGraphicsByte);
+                byte aud  = Memory.ReadByte(OptAudioByte);
+                byte play = Memory.ReadByte(OptGameplayByte);
 
-                if (Memory.ReadByte(0x21CE4491) == 1)
-                {
-                    CBox_UserMode_Widescreen.IsChecked = true;
-                    Memory.WriteByte(0x21F10030, 1);
-                }
-                else
-                {
-                    CBox_UserMode_Widescreen.IsChecked = false;
-                    Memory.WriteByte(0x21F10030, 0);
-                }
+                // ── Graphics ──
+                bool graphicsOn = (gfx & 0x01) != 0;
+                CBox_UserMode_Graphics.IsChecked = graphicsOn;
+                Memory.WriteByte(0x21F10034, (byte)(graphicsOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4492) == 1)
-                {
-                    CBox_UserMode_WeaponBeeps.IsChecked = true;
-                    Memory.WriteByte(0x21F10028, 1);
-                }
-                else
-                {
-                    CBox_UserMode_WeaponBeeps.IsChecked = false;
-                    Memory.WriteByte(0x21F10028, 0);
-                }
+                bool fovOn = (gfx & 0x02) != 0;
+                CBox_UserMode_Widescreen.IsChecked = fovOn;
+                Memory.WriteByte(0x21F10030, (byte)(fovOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4493) == 1)
-                {
-                    CBox_UserMode_BattleMusic.IsChecked = true;
-                    Memory.WriteByte(0x21F1002C, 1);
-                }
-                else
-                {
-                    CBox_UserMode_BattleMusic.IsChecked = false;
-                    Memory.WriteByte(0x21F1002C, 0);
-                }
+                // ── Audio ──
+                bool beepsOn = (aud & 0x01) != 0;
+                CBox_UserMode_WeaponBeeps.IsChecked = beepsOn;
+                Memory.WriteByte(0x21F10028, (byte)(beepsOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4495) == 1)
-                {
-                    CBox_UserMode_MuteMusic.IsChecked = true;
-                    Memory.WriteUShort(0x20299F53, 0);
-                }
-                else
-                {
-                    CBox_UserMode_MuteMusic.IsChecked = false;
-                    Memory.WriteUShort(0x20299F53, 25637);
-                }
+                bool battleMusicOn = (aud & 0x02) != 0;
+                CBox_UserMode_BattleMusic.IsChecked = battleMusicOn;
+                Memory.WriteByte(0x21F1002C, (byte)(battleMusicOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4494) == 1)
-                {
-                    Cbox_Usermode_AttackSounds.IsChecked = true;
-                    for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                        Memory.WriteByte(attackSoundAddresses[c], 0);
-                }
-                else
-                {
-                    Cbox_Usermode_AttackSounds.IsChecked = false;
-                    for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                        Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]);
-                }
+                bool attackSoundsOn = (aud & 0x04) != 0;
+                Cbox_Usermode_AttackSounds.IsChecked = attackSoundsOn;
+                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                    Memory.WriteByte(attackSoundAddresses[c], (byte)(attackSoundsOn ? 0 : attackSoundValues[c]));
+
+                bool muteMusicOn = (aud & 0x08) != 0;
+                CBox_UserMode_MuteMusic.IsChecked = muteMusicOn;
+                Memory.WriteUShort(0x20299F53, (ushort)(muteMusicOn ? 0 : 25637));
+
+                // ── Gameplay ──
+                bool fasterOn = (play & 0x01) != 0;
+                CBox_UserMode_FasterEnemies.IsChecked = fasterOn;
+                HarderEnemies.Enabled = fasterOn;
+
+                bool strongerOn = (play & 0x02) != 0;
+                CBox_UserMode_StrongerEnemies.IsChecked = strongerOn;
+                EnemyStatNormalizer.StrongerEnemies = strongerOn;
             });
         }
 
@@ -411,86 +412,55 @@ namespace Dark_Cloud_Improved_Version
 
         private void CBox_UserMode_WeaponBeepsChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_WeaponBeeps.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F10028, 1);
-                Memory.WriteByte(0x21CE4492, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F10028, 0);
-                Memory.WriteByte(0x21CE4492, 0);
-            }
+            bool on = CBox_UserMode_WeaponBeeps.IsChecked == true;
+            Memory.WriteByte(0x21F10028, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptAudioByte, 0x01, on);   // audio bit0
         }
 
         private void CBox_UserMode_GraphicsChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_BattleMusic.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F1002C, 1);
-                Memory.WriteByte(0x21CE4493, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F1002C, 0);
-                Memory.WriteByte(0x21CE4493, 0);
-            }
+            // Handles the Battle Music toggle (legacy method name).
+            bool on = CBox_UserMode_BattleMusic.IsChecked == true;
+            Memory.WriteByte(0x21F1002C, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptAudioByte, 0x02, on);   // audio bit1
         }
 
         private void CBox_UserMode_Widescreen_Changed(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_Widescreen.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F10030, 1);
-                Memory.WriteByte(0x21CE4491, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F10030, 0);
-                Memory.WriteByte(0x21CE4491, 0);
-            }
+            bool on = CBox_UserMode_Widescreen.IsChecked == true;
+            Memory.WriteByte(0x21F10030, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptGraphicsByte, 0x02, on);   // graphics bit1
         }
 
         private void CBox_UserMode_Graphics_Changed(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_Graphics.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F10034, 1);
-                Memory.WriteByte(0x21CE4490, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F10034, 0);
-                Memory.WriteByte(0x21CE4490, 0);
-            }
+            bool on = CBox_UserMode_Graphics.IsChecked == true;
+            Memory.WriteByte(0x21F10034, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptGraphicsByte, 0x01, on);   // graphics bit0
         }
 
         // Difficulty toggles. "Faster enemies" = HarderEnemies (movement + attack speed, with the hit-window dwell);
         // "Stronger enemies" = EnemyStatNormalizer normalizing every enemy to the next dungeon/band up.
         private void CBox_UserMode_FasterEnemies_Changed(object sender, RoutedEventArgs e)
         {
-            HarderEnemies.Enabled = CBox_UserMode_FasterEnemies.IsChecked == true;
+            bool on = CBox_UserMode_FasterEnemies.IsChecked == true;
+            HarderEnemies.Enabled = on;
+            WriteOptionBit(OptGameplayByte, 0x01, on);   // gameplay bit0
         }
 
         private void CBox_UserMode_StrongerEnemies_Changed(object sender, RoutedEventArgs e)
         {
-            EnemyStatNormalizer.StrongerEnemies = CBox_UserMode_StrongerEnemies.IsChecked == true;
+            bool on = CBox_UserMode_StrongerEnemies.IsChecked == true;
+            EnemyStatNormalizer.StrongerEnemies = on;
+            WriteOptionBit(OptGameplayByte, 0x02, on);   // gameplay bit1
         }
 
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (Cbox_Usermode_AttackSounds.IsChecked == true)
-            {
-                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                    Memory.WriteByte(attackSoundAddresses[c], 0);
-                Memory.WriteByte(0x21CE4494, 1);
-            }
-            else
-            {
-                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                    Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]);
-                Memory.WriteByte(0x21CE4494, 0);
-            }
+            bool on = Cbox_Usermode_AttackSounds.IsChecked == true;
+            for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                Memory.WriteByte(attackSoundAddresses[c], (byte)(on ? 0 : attackSoundValues[c]));
+            WriteOptionBit(OptAudioByte, 0x04, on);   // audio bit2
         }
 
         // Sets the current dungeon's spawn roster so every spawn is the given species (by TableIndex).
@@ -541,19 +511,18 @@ namespace Dark_Cloud_Improved_Version
             if (CBox_UserMode_MuteMusic.IsChecked == true)
             {
                 Memory.WriteUShort(0x20299F53, 0);
-                Memory.WriteByte(0x21CE4495, 1);
+                WriteOptionBit(OptAudioByte, 0x08, true);   // audio bit3
 
                 if (CBox_UserMode_BattleMusic.IsChecked == false)
                 {
-                    Memory.WriteByte(0x21F1002C, 1);
-                    Memory.WriteByte(0x21CE4493, 1);
+                    // Muting also forces Battle Music off (its handler writes the effect + audio bit1).
                     CBox_UserMode_BattleMusic.IsChecked = true;
                 }
             }
             else
             {
                 Memory.WriteUShort(0x20299F53, 25637);
-                Memory.WriteByte(0x21CE4495, 0);
+                WriteOptionBit(OptAudioByte, 0x08, false);
             }
         }
 
