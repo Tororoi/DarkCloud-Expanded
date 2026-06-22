@@ -188,6 +188,50 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// Per-slot ATTACK-collision (the enemy's WEAPON hitbox = enemy→player) sphere definitions — the counterpart of
+    /// <see cref="BodyCollision"/>. Built at spawn by <c>_SET_DMG_COL(boneName, radius, startFrame, endFrame)</c>
+    /// (STB cmd 131, handler ELF 0x1E3DB0): for each of up to 16 sphere slots it records the bone CFrame ptr, the
+    /// RADIUS, the active start/end frames, and an "occupied" flag. <c>CMonstorUnit::CheckDmg</c> rebuilds the live
+    /// sphere each frame from the RADIUS + the bone's (model-scaled) world position; <c>BtCheckDamageProc</c> tests it
+    /// against the player during the attack's hit-window frames. A SINGLE write here (at/after spawn) resizes it, same
+    /// as BodyCollision — the STB literal only runs at init.
+    ///
+    /// ★ This is a DIFFERENT array from BodyCollision (0x55390), so the miniboss body-hitbox scaling never touches it.
+    /// When a miniboss model is scaled up, the weapon bone rides higher but this radius stays default → the attack
+    /// sphere overshoots short characters. Scaling this radius compensates.
+    ///
+    /// FULL ARRAY MAP (RE'd from handler 0x1E3DB0). Every field is a parallel sub-array indexed by
+    /// <c>slot*SlotStride + sphere*SphereStride</c> within CMainMonstorUnit (G = MainMonstorUnit.Base); up to 16
+    /// spheres per slot. In the handler the per-sphere store base is <c>at = G + slot*0x350 + sphere*4 + 0x60000</c>
+    /// and each field is a negative displacement off <c>at</c> — converted to a G-relative array offset below:
+    ///   • FramePtr   (CFrame* of the attachment bone)  at−0x5BB0 → 0x5A450   (set from SearchFrame(boneName))
+    ///   • Radius     (float, the sphere size / knob)    at−0x5B70 → 0x5A490
+    ///   • StartFrame (float, hit-window open)           at−0x5A30 → 0x5A5D0
+    ///   • EndFrame   (float, hit-window close)          at−0x59F0 → 0x5A610
+    ///   • Flag       (int, nonzero once sphere in use)  at−0x59B0 → 0x5A650
+    /// Plus a per-SLOT (not per-sphere) field at G + slot*0x350 + 0x5A690 (at−0x5970) holding the index of the sphere
+    /// slot last allocated (a count/cursor), written without the sphere*4 term. Slot stride is 0x350 (confirmed via the
+    /// EE 3-operand <c>mult $s4,$s2,0x350</c>), distinct from BodyCollision's 0x510.
+    /// </summary>
+    internal static class AttackCollision
+    {
+        // Parallel per-(slot,sphere) sub-arrays. G-relative offsets; address = MMU.Base + <Array> + slot*SlotStride + sphere*SphereStride.
+        internal const long FramePtrArray   = 0x5A450; // CFrame* of the bone the attack sphere is attached to
+        internal const long RadiusArray     = 0x5A490; // ★ float — the enemy attack sphere radius (the knob)
+        internal const long StartFrameArray = 0x5A5D0; // float — hit-window open frame
+        internal const long EndFrameArray   = 0x5A610; // float — hit-window close frame
+        internal const long FlagArray       = 0x5A650; // int   — nonzero once this sphere slot is in use
+        internal const int  SlotStride   = 0x350;
+        internal const int  SphereStride = 4;
+        internal const int  MaxSpheres   = 16;
+
+        internal static long RadiusAddr(int slot, int sphere = 0) =>
+            EnemyAddresses.MainMonstorUnit.Base + RadiusArray + (long)slot * SlotStride + (long)sphere * SphereStride;
+        internal static long FlagAddr(int slot, int sphere = 0) =>
+            EnemyAddresses.MainMonstorUnit.Base + FlagArray + (long)slot * SlotStride + (long)sphere * SphereStride;
+    }
+
+    /// <summary>
     /// Cached per-slot PROJECTILE (shot) damage — the field that <c>_SET_SHOT</c> (STB cmd 134, handler ELF
     /// 0x1E4120) and <c>_SET_SHOT2</c> (STB cmd 136, handler 0x1E4310) write each time the enemy fires. A per-slot
     /// sub-array of CMainMonstorUnit, stride 0x30 (one entry per FloorSlots/CCharacter slot):

@@ -24,9 +24,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 0 — Master Jacket `e01a`
 
-*Motions: e01a.chr @ data.dat 0x1b260000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e01a.chr @ data.dat 0x1b260000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 62–64 (m13, r8, dmg35); 77–79 (m16, r8, dmg30) · Attack motions: 13, 15, 16 · Block frames: 100–117*  
+*Hit windows: 62–64 (m13, r8, dmg35); 77–79 (m16, r8, dmg30) · Attack motions: 13, 15, 16 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -53,9 +53,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 1 — Skeleton Soldier `e03a`
 
-*Motions: e03a.chr @ data.dat 0x1b370800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e03a.chr @ data.dat 0x1b370800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 62–64 (m13, r8.5, dmg20); 83–86 (m16, r8.5, dmg21) · Attack motions: 13, 16 · Block frames: 100–117*  
+*Hit windows: 62–64 (m13, r8.5, dmg20); 83–86 (m16, r8.5, dmg21) · Attack motions: 13, 16 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -81,9 +81,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 2 — Statue `e05a`
 
-*Motions: e05a.chr @ data.dat 0x1b4c6000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e05a.chr @ data.dat 0x1b4c6000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 108–109 (m15, r8, dmg26); 72–74 (m12, r8, dmg25); 108–109 (m15, r8, dmg26); 72–74 (m12, r8, dmg25) · Attack motions: 12, 15*  
+*Hit windows: 108–109 (m15, r8, dmg26); 72–74 (m12, r8, dmg25); 108–109 (m15, r8, dmg26); 72–74 (m12, r8, dmg25) · Attack motions: 12, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -108,9 +108,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 3 — Dasher `e06a`
 
-*Motions: e06a.chr @ data.dat 0x1b57c000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e06a.chr @ data.dat 0x1b57c000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 169–170 (m13, r10, dmg22) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 169–170 (m13, r10, dmg22) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -136,9 +136,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 4 — Werewolf `e07a`
 
-*Motions: e07a.chr @ data.dat 0x1b5e7000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e07a.chr @ data.dat 0x1b5e7000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 60–65 (m13, r9.6, dmg68); 80–81 (m16, r9.6, dmg62) · Attack motions: 13, 16 · Block frames: 244–263*  
+*Hit windows: 60–65 (m13, r9.6, dmg68); 80–81 (m16, r9.6, dmg62) · Attack motions: 13, 16 · Block frames: 244–263*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -164,9 +164,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 5 — FliFli `e08a`
 
-*Motions: e08a.chr @ data.dat 0x1b6b2000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e08a.chr @ data.dat 0x1b6b2000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 163–170 (m12, r8.2, dmg37) · Attack motions: 12, 15*  
+*Hit windows: 163–170 (m12, r8.2, dmg37) · Attack motions: 12, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -191,9 +191,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 6 — Hornet `e09a`
 
-*Motions: e09a.chr @ data.dat 0x1b6fd800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e09a.chr @ data.dat 0x1b6fd800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 239–260 (m18, r7.5, dmg42); 192–200 (m15, r7.5, dmg40) · Attack motions: 15, 16, 17, 18, 19, 20*  
+*Hit windows: 239–260 (m18, r7.5, dmg42); 192–200 (m15, r7.5, dmg40) · Attack motions: 15, 16, 17, 18, 19, 20*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -221,9 +221,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 7 — Halloween `e10a`
 
-*Motions: e10a.chr @ data.dat 0x1b75f000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e10a.chr @ data.dat 0x1b75f000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 58–76 (m12, r9.8, dmg57); 57–76 (m12, r6, dmg57) · Attack motions: 12, 15 · Block frames: 170–195*  
+*Hit windows: 58–76 (m12, r9.8, dmg57); 57–76 (m12, r6, dmg57) · Attack motions: 12, 15 · Block frames: 170–195*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -248,9 +248,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 8 — Cannibal Plant `e11a`
 
-*Motions: e11a.chr @ data.dat 0x1b808800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e11a.chr @ data.dat 0x1b808800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 99–110 (m4, r8.4, dmg28); 86–106 (m4, r8.8, dmg28); 147–152 (m5, r8.5, dmg36) · Attack motions: 4, 5, 6*  
+*Hit windows: 99–110 (m4, r8.4, dmg28); 86–106 (m4, r8.8, dmg28); 147–152 (m5, r8.5, dmg36) · Attack motions: 4, 5, 6*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -264,9 +264,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 9 — Earth Digger `e12a`
 
-*Motions: e12a.chr @ data.dat 0x1b87d800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e12a.chr @ data.dat 0x1b87d800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 124–140 (m13, r11, dmg52) · Attack motions: 13, 16*  
+*Hit windows: 124–140 (m13, r11, dmg52) · Attack motions: 13, 16*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -292,9 +292,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 10 — Sunday `e14a`
 
-*Motions: e14a.chr @ data.dat 0x1b964000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e14a.chr @ data.dat 0x1b964000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 262–270 (m13, r9.8, dmg36); 285–297 (m16, r10, dmg26) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–137*  
+*Hit windows: 262–270 (m13, r9.8, dmg36); 285–297 (m16, r10, dmg26) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–137*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -320,9 +320,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 11 — Monday `e15a`
 
-*Motions: e15a.chr @ data.dat 0x1b9e5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e15a.chr @ data.dat 0x1b9e5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 259–266 (m13, r9.5, dmg32); 280–295 (m16, r9, dmg12) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–137*  
+*Hit windows: 259–266 (m13, r9.5, dmg32); 280–295 (m16, r9, dmg12) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–137*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -348,9 +348,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 12 — Tuesday `e16a`
 
-*Motions: e16a.chr @ data.dat 0x1ba63800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e16a.chr @ data.dat 0x1ba63800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 285–297 (m16, r10, dmg31) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 285–297 (m16, r10, dmg31) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -376,9 +376,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 13 — Wednesday `e17a`
 
-*Motions: e17a.chr @ data.dat 0x1bae3000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e17a.chr @ data.dat 0x1bae3000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 267–270 (m13, r9.4, dmg30); 470–484 (r9, dmg28) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 267–270 (m13, r9.4, dmg30); 470–484 (r9, dmg28) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -404,9 +404,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 14 — Thursday `e18a`
 
-*Motions: e18a.chr @ data.dat 0x1bb61000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e18a.chr @ data.dat 0x1bb61000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 285–297 (m16, r12, dmg29) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 285–297 (m16, r12, dmg29) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -432,9 +432,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 15 — Friday `e19a`
 
-*Motions: e19a.chr @ data.dat 0x1bbe0000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e19a.chr @ data.dat 0x1bbe0000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 262–271 (m14, r10.5, dmg29); 285–297 (m16, r9, dmg29) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 262–271 (m14, r10.5, dmg29); 285–297 (m16, r9, dmg29) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -460,9 +460,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 16 — Saturday `e20a`
 
-*Motions: e20a.chr @ data.dat 0x1bc5d800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e20a.chr @ data.dat 0x1bc5d800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 265–271 (m13, r10.3, dmg29); 265–271 (m13, r10.3, dmg29); 290–302 (m16, r10, dmg25) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 265–271 (m13, r10.3, dmg29); 265–271 (m13, r10.3, dmg29); 290–302 (m16, r10, dmg25) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -488,9 +488,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 17 — Witch Hellza `e21a`
 
-*Motions: e21a.chr @ data.dat 0x1bcc9000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e21a.chr @ data.dat 0x1bcc9000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 114–126 (m12, r8.9, dmg73) · Attack motions: 12*  
+*Hit windows: 114–126 (m12, r8.9, dmg73) · Attack motions: 12*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -515,9 +515,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 18 — Witch Illza `e22a`
 
-*Motions: e22a.chr @ data.dat 0x1bd64000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e22a.chr @ data.dat 0x1bd64000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 114–126 (m12, r8.9, dmg47) · Attack motions: 12*  
+*Hit windows: 114–126 (m12, r8.9, dmg47) · Attack motions: 12*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -542,9 +542,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 19 — Gunny `e23a`
 
-*Motions: e23a.chr @ data.dat 0x1bde9000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e23a.chr @ data.dat 0x1bde9000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 205–214 (m13, r8.4, dmg44); 205–214 (m13, r8.4, dmg44) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 132–143*  
+*Hit windows: 205–214 (m13, r8.4, dmg44); 205–214 (m13, r8.4, dmg44) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 132–143*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -570,9 +570,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 20 — Gyon `e24a`
 
-*Motions: e24a.chr @ data.dat 0x1be46000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e24a.chr @ data.dat 0x1be46000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 335–355 (m13, r10.4, dmg59); 394–407 (m15, r9.4, dmg59) · Attack motions: 13, 14, 15*  
+*Hit windows: 335–355 (m13, r10.4, dmg59); 394–407 (m15, r9.4, dmg59) · Attack motions: 13, 14, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -595,9 +595,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 21 — Pirate's Chariot `e25a`
 
-*Motions: e25a.chr @ data.dat 0x1bee3800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e25a.chr @ data.dat 0x1bee3800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: 13, 16, 17*  
+*Hit windows: none · Attack motions: 13, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -623,9 +623,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 22 — Auntie Medu `e26a`
 
-*Motions: e26a.chr @ data.dat 0x1bf24800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e26a.chr @ data.dat 0x1bf24800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 218–222 (m13, r8.5, dmg74) · Attack motions: 13, 16 · Block frames: 123–137*  
+*Hit windows: 218–222 (m13, r8.5, dmg74) · Attack motions: 13, 16 · Block frames: 123–137*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -651,9 +651,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 23 — Captain `e27a`
 
-*Motions: e27a.chr @ data.dat 0x1bfc4800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e27a.chr @ data.dat 0x1bfc4800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 69–73 (m13, r8.5, dmg74); 69–73 (m13, r8.5, dmg74); 96–100 (m16, r9.5, dmg72); 93–96 (m16, r9.5, dmg72) · Attack motions: 13, 16 · Block frames: 180–190*  
+*Hit windows: 69–73 (m13, r8.5, dmg74); 69–73 (m13, r8.5, dmg74); 96–100 (m16, r9.5, dmg72); 93–96 (m16, r9.5, dmg72) · Attack motions: 13, 16 · Block frames: 180–190*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -679,9 +679,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 24 — Corcea `e28a`
 
-*Motions: e28a.chr @ data.dat 0x1c068000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e28a.chr @ data.dat 0x1c068000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 68–73 (m13, r9, dmg43); 68–73 (m13, r9, dmg43); 95–100 (m16, r9, dmg42); 93–96 (m16, r9, dmg42) · Attack motions: 13, 16*  
+*Hit windows: 68–73 (m13, r9, dmg43); 68–73 (m13, r9, dmg43); 95–100 (m16, r9, dmg42); 93–96 (m16, r9, dmg42) · Attack motions: 13, 16*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -707,9 +707,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 25 — Golem `e30a`
 
-*Motions: e30a.chr @ data.dat 0x1c10d000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e30a.chr @ data.dat 0x1c10d000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg71); 145–152 (m15, r9.5, dmg75); 145–152 (m15, r9.5, dmg75); 152–154 (m15, r20.5, dmg62); 154–156 (m15, r35.5, dmg55); 156–158 (m15, r40.5, dmg45) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg71); 145–152 (m15, r9.5, dmg75); 145–152 (m15, r9.5, dmg75); 152–154 (m15, r20.5, dmg62); 154–156 (m15, r35.5, dmg55); 156–158 (m15, r40.5, dmg45) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -734,9 +734,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 26 — Mr. Blare `e31a`
 
-*Motions: e31a.chr @ data.dat 0x1c1b3800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e31a.chr @ data.dat 0x1c1b3800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 195–210 (m14, r8.5, dmg81); 195–210 (m14, r8.5, dmg81) · Attack motions: 11, 14 · Block frames: 120–132*  
+*Hit windows: 195–210 (m14, r8.5, dmg81); 195–210 (m14, r8.5, dmg81) · Attack motions: 11, 14 · Block frames: 120–132*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -760,9 +760,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 27 — Dune `e32a`
 
-*Motions: e32a.chr @ data.dat 0x1c217800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e32a.chr @ data.dat 0x1c217800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 291–300 (m10, r7.5, dmg85); 328–329 (m11, r8.5, dmg85); 329–331 (m11, r8.5, dmg85) · Attack motions: 11 · Block frames: 160–214*  
+*Hit windows: 291–300 (m10, r7.5, dmg85); 328–329 (m11, r8.5, dmg85); 329–331 (m11, r8.5, dmg85) · Attack motions: 11 · Block frames: 160–214*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -781,9 +781,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 28 — Titan `e33a`
 
-*Motions: e33a.chr @ data.dat 0x1c2af000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e33a.chr @ data.dat 0x1c2af000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg105); 145–152 (m15, r9.5, dmg105); 145–152 (m15, r9.5, dmg105); 152–154 (m15, r20.5, dmg90); 154–156 (m15, r35.5, dmg75); 156–158 (m15, r40.5, dmg60) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg105); 145–152 (m15, r9.5, dmg105); 145–152 (m15, r9.5, dmg105); 152–154 (m15, r20.5, dmg90); 154–156 (m15, r35.5, dmg75); 156–158 (m15, r40.5, dmg60) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -808,9 +808,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 29 — King Mimic (Divine Beast Cave) `e34a`
 
-*Motions: e34a.chr @ data.dat 0x1c354800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e34a.chr @ data.dat 0x1c354800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–144 (m12, r8.5, dmg35); 162–167 (m15, r8.5, dmg30); 188–191 (m18, r10.5, dmg35) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–144 (m12, r8.5, dmg35); 162–167 (m15, r8.5, dmg30); 188–191 (m18, r10.5, dmg35) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -840,9 +840,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 30 — Mimic (Divine Beast Cave) `e35a`
 
-*Motions: e35a.chr @ data.dat 0x1c3d0000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e35a.chr @ data.dat 0x1c3d0000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 148–153 (m12, r6, dmg33); 151–153 (m12, r9.5, dmg33) · Attack motions: 12 · Block frames: 173–186*  
+*Hit windows: 148–153 (m12, r6, dmg33); 151–153 (m12, r9.5, dmg33) · Attack motions: 12 · Block frames: 173–186*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -869,9 +869,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 31 — King Mimic (Sun & Moon Temple) `e36a`
 
-*Motions: e36a.chr @ data.dat 0x1c41e000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e36a.chr @ data.dat 0x1c41e000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–144 (m12, r8.5, dmg101); 162–167 (m15, r8.5, dmg102); 187–189 (m18, r8.5, dmg45) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–144 (m12, r8.5, dmg101); 162–167 (m15, r8.5, dmg102); 187–189 (m18, r8.5, dmg45) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -901,9 +901,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 32 — Mimic (Sun & Moon Temple) `e37a`
 
-*Motions: e37a.chr @ data.dat 0x1c499800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e37a.chr @ data.dat 0x1c499800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg71); 151–153 (m12, r9.5, dmg71) · Attack motions: 12 · Block frames: 173–186*  
+*Hit windows: 149–153 (m12, r6, dmg71); 151–153 (m12, r9.5, dmg71) · Attack motions: 12 · Block frames: 173–186*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -930,9 +930,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 33 — King Mimic (Moon Sea) `e38a`
 
-*Motions: e38a.chr @ data.dat 0x1c4e7800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e38a.chr @ data.dat 0x1c4e7800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–144 (m12, r8.5, dmg118); 162–167 (m15, r8.5, dmg96); 187–189 (m18, r9, dmg90) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–144 (m12, r8.5, dmg118); 162–167 (m15, r8.5, dmg96); 187–189 (m18, r9, dmg90) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -962,9 +962,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 34 — Mimic (Moon Sea) `e39a`
 
-*Motions: e39a.chr @ data.dat 0x1c564000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e39a.chr @ data.dat 0x1c564000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg83); 151–153 (m12, r9.5, dmg83) · Attack motions: 12 · Block frames: 173–186*  
+*Hit windows: 149–153 (m12, r6, dmg83); 151–153 (m12, r9.5, dmg83) · Attack motions: 12 · Block frames: 173–186*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -991,9 +991,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 35 — Arthur `e40a`
 
-*Motions: e40a.chr @ data.dat 0x1c5b2800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e40a.chr @ data.dat 0x1c5b2800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 250–261 (m11, r10, dmg116); 287–292 (m12, r10, dmg116) · Attack motions: 11, 12, 13, 14, 15 · Block frames: 114–153*  
+*Hit windows: 250–261 (m11, r10, dmg116); 287–292 (m12, r10, dmg116) · Attack motions: 11, 12, 13, 14, 15 · Block frames: 114–153*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1017,9 +1017,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 36 — Ghost `e42a`
 
-*Motions: e42a.chr @ data.dat 0x1c61a800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e42a.chr @ data.dat 0x1c61a800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 162–180 (m13, r10, dmg20); 162–180 (m13, r10, dmg20) · Attack motions: 13, 14, 15, 16, 17*  
+*Hit windows: 162–180 (m13, r10, dmg20); 162–180 (m13, r10, dmg20) · Attack motions: 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1047,9 +1047,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 37 — Alexander `e43a`
 
-*Motions: e43a.chr @ data.dat 0x1c6a7800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e43a.chr @ data.dat 0x1c6a7800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 217–220 (m13, r9, dmg120) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*  
+*Hit windows: 217–220 (m13, r9, dmg120) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1075,9 +1075,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 38 — Heart `e44a`
 
-*Motions: e44a.chr @ data.dat 0x1c6f6000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e44a.chr @ data.dat 0x1c6f6000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 278–288 (m13, r8.5, dmg107) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 278–288 (m13, r8.5, dmg107) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1103,9 +1103,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 39 — Club `e45a`
 
-*Motions: e45a.chr @ data.dat 0x1c7a0800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e45a.chr @ data.dat 0x1c7a0800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 284–287 (m13, r8.5, dmg104) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 284–287 (m13, r8.5, dmg104) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1131,9 +1131,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 40 — Diamond `e46a`
 
-*Motions: e46a.chr @ data.dat 0x1c84b800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e46a.chr @ data.dat 0x1c84b800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 283–290 (m13, r9.9, dmg110); 283–290 (m13, r8.9, dmg110) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 283–290 (m13, r9.9, dmg110); 283–290 (m13, r8.9, dmg110) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1159,9 +1159,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 41 — Spade `e47a`
 
-*Motions: e47a.chr @ data.dat 0x1c8f2000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e47a.chr @ data.dat 0x1c8f2000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 281–297 (m13, r12, dmg113); 283–297 (m13, r12, dmg113) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 281–297 (m13, r12, dmg113); 283–297 (m13, r12, dmg113) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1187,9 +1187,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 42 — Joker `e48a`
 
-*Motions: e48a.chr @ data.dat 0x1c99b000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e48a.chr @ data.dat 0x1c99b000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 280–289 (m13, r10, dmg115) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 124–144*  
+*Hit windows: 280–289 (m13, r10, dmg115) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 124–144*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1215,9 +1215,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 43 — Bomber Head `e49a`
 
-*Motions: e49a.chr @ data.dat 0x1ca46000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e49a.chr @ data.dat 0x1ca46000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 280–285 (m13, r8.5, dmg61); 280–285 (m13, r8.5, dmg61) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 170–195*  
+*Hit windows: 280–285 (m13, r8.5, dmg61); 280–285 (m13, r8.5, dmg61) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 170–195*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1247,9 +1247,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 44 — Mummy `e50a`
 
-*Motions: e50a.chr @ data.dat 0x1cbaa000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e50a.chr @ data.dat 0x1cbaa000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 372–375 (m13, r8.5, dmg54); 372–375 (m13, r8.5, dmg54); 330–339 (m16, r8.5, dmg54) · Attack motions: 13, 16 · Block frames: 100–117*  
+*Hit windows: 372–375 (m13, r8.5, dmg54); 372–375 (m13, r8.5, dmg54); 330–339 (m16, r8.5, dmg54) · Attack motions: 13, 16 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1275,9 +1275,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 45 — Lich `e51a`
 
-*Motions: e51a.chr @ data.dat 0x1cdd4000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e51a.chr @ data.dat 0x1cdd4000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 158–180 (m13, r9, dmg114); 158–180 (m13, r9, dmg114) · Attack motions: 13, 14, 15, 16, 17*  
+*Hit windows: 158–180 (m13, r9, dmg114); 158–180 (m13, r9, dmg114) · Attack motions: 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1305,9 +1305,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 46 — Curse Dancer `e52a`
 
-*Motions: e52a.chr @ data.dat 0x1cf09800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e52a.chr @ data.dat 0x1cf09800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 249–254 (m13, r9.5, dmg90); 249–254 (m13, r9.5, dmg90); 280–283 (m16, r9.5, dmg90); 280–283 (m16, r9.5, dmg90) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 160–174*  
+*Hit windows: 249–254 (m13, r9.5, dmg90); 249–254 (m13, r9.5, dmg90); 280–283 (m16, r9.5, dmg90); 280–283 (m16, r9.5, dmg90) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 160–174*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1333,9 +1333,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 47 — Living Armor `e55a`
 
-*Motions: e55a.chr @ data.dat 0x1cfde800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e55a.chr @ data.dat 0x1cfde800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 107–111 (m16, r10.2, dmg95); 107–111 (m16, r10, dmg95); 72–74 (m13, r10.5, dmg95); 72–74 (m13, r9, dmg95) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 107–111 (m16, r10.2, dmg95); 107–111 (m16, r10, dmg95); 72–74 (m13, r10.5, dmg95); 72–74 (m13, r9, dmg95) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1361,9 +1361,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 48 — White Fang `e56a`
 
-*Motions: e56a.chr @ data.dat 0x1d098000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e56a.chr @ data.dat 0x1d098000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 62–64 (m13, r9.5, dmg90); 80–84 (m16, r9.5, dmg84) · Attack motions: 13, 16 · Block frames: 240–265*  
+*Hit windows: 62–64 (m13, r9.5, dmg90); 80–84 (m16, r9.5, dmg84) · Attack motions: 13, 16 · Block frames: 240–265*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1389,9 +1389,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 49 — Moon Bug `e57a`
 
-*Motions: e57a.chr @ data.dat 0x1d160000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e57a.chr @ data.dat 0x1d160000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 62–64 (m2, r8.5, dmg70); 145–155 (m6, r12, dmg70) · Attack motions: 5, 6, 7, 8*  
+*Hit windows: 62–64 (m2, r8.5, dmg70); 145–155 (m6, r12, dmg70) · Attack motions: 5, 6, 7, 8*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1407,9 +1407,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 50 — Phantom `e58a`
 
-*Motions: e58a.chr @ data.dat 0x1d1c2800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e58a.chr @ data.dat 0x1d1c2800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 240–246 (m18, r11.5, dmg60); 192–200 (m15, r7.5, dmg54) · Attack motions: 15, 16, 17, 18, 19, 20*  
+*Hit windows: 240–246 (m18, r11.5, dmg60); 192–200 (m15, r7.5, dmg54) · Attack motions: 15, 16, 17, 18, 19, 20*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1437,9 +1437,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 51 — Dragon `e59a`
 
-*Motions: e59a.chr @ data.dat 0x1d223800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e59a.chr @ data.dat 0x1d223800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 325–334 (m13, r9, dmg45); 280–298 (m16, r9, dmg45) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 325–334 (m13, r9, dmg45); 280–298 (m16, r9, dmg45) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1465,9 +1465,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 52 — Cave Bat `e60a`
 
-*Motions: e60a.chr @ data.dat 0x1d2e9800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e60a.chr @ data.dat 0x1d2e9800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 171–189 (m19, r8.9, dmg17); 10–30 (m0, r7.9, dmg16) · Attack motions: 15, 18, 19*  
+*Hit windows: 171–189 (m19, r8.9, dmg17); 10–30 (m0, r7.9, dmg16) · Attack motions: 15, 18, 19*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1495,9 +1495,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 53 — Evil Bat `e61a`
 
-*Motions: e61a.chr @ data.dat 0x1d325000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e61a.chr @ data.dat 0x1d325000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 171–189 (m20, r7.9, dmg86); 10–30 (m0, r7.2, dmg85) · Attack motions: 15, 18, 19, 20*  
+*Hit windows: 171–189 (m20, r7.9, dmg86); 10–30 (m0, r7.2, dmg85) · Attack motions: 15, 18, 19, 20*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1525,9 +1525,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 54 — Hell Pockle `e62a`
 
-*Motions: e62a.chr @ data.dat 0x1d360800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e62a.chr @ data.dat 0x1d360800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 290–302 (m16, r12.5, dmg64); 264–270 (m13, r9.9, dmg64) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 290–302 (m16, r12.5, dmg64); 264–270 (m13, r9.9, dmg64) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1553,9 +1553,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 55 — Rash Dasher `e63a`
 
-*Motions: e63a.chr @ data.dat 0x1d3e1800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e63a.chr @ data.dat 0x1d3e1800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 169–170 (m13, r10, dmg102) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 169–170 (m13, r10, dmg102) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1581,9 +1581,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 56 — Steel Giant `e64a`
 
-*Motions: e64a.chr @ data.dat 0x1d461800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e64a.chr @ data.dat 0x1d461800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg93); 145–152 (m15, r9.5, dmg98); 145–152 (m15, r9.5, dmg98); 152–154 (m15, r20.5, dmg80); 154–156 (m15, r35.5, dmg70); 156–158 (m15, r40.5, dmg60) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg93); 145–152 (m15, r9.5, dmg98); 145–152 (m15, r9.5, dmg98); 152–154 (m15, r20.5, dmg80); 154–156 (m15, r35.5, dmg70); 156–158 (m15, r40.5, dmg60) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1608,9 +1608,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 57 — Blizzard `e65a`
 
-*Motions: e65a.chr @ data.dat 0x1d506800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e65a.chr @ data.dat 0x1d506800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg119); 145–152 (m15, r9.5, dmg119); 145–152 (m15, r9.5, dmg119); 152–154 (m15, r20.5, dmg105); 154–156 (m15, r35.5, dmg90); 156–158 (m15, r40.5, dmg75) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg119); 145–152 (m15, r9.5, dmg119); 145–152 (m15, r9.5, dmg119); 152–154 (m15, r20.5, dmg105); 154–156 (m15, r35.5, dmg90); 156–158 (m15, r40.5, dmg75) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1635,9 +1635,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 58 — Moon Digger `e66a`
 
-*Motions: e66a.chr @ data.dat 0x1d5a5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e66a.chr @ data.dat 0x1d5a5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 120–140 (m13, r12, dmg83) · Attack motions: 13, 16*  
+*Hit windows: 120–140 (m13, r12, dmg83) · Attack motions: 13, 16*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1663,9 +1663,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 59 — Dark Flower `e67a`
 
-*Motions: e67a.chr @ data.dat 0x1d602000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e67a.chr @ data.dat 0x1d602000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 101–110 (m4, r8.4, dmg90); 87–104 (m4, r8.4, dmg90); 147–152 (m5, r10, dmg94) · Attack motions: 4, 5, 6*  
+*Hit windows: 101–110 (m4, r8.4, dmg90); 87–104 (m4, r8.4, dmg90); 147–152 (m5, r10, dmg94) · Attack motions: 4, 5, 6*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1679,9 +1679,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 60 — Cursed Rose `e68a`
 
-*Motions: e68a.chr @ data.dat 0x1d664000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e68a.chr @ data.dat 0x1d664000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 101–110 (m4, r9.8, dmg49); 87–104 (m4, r9.8, dmg49); 147–152 (m5, r8.5, dmg48) · Attack motions: 4, 5, 6*  
+*Hit windows: 101–110 (m4, r9.8, dmg49); 87–104 (m4, r9.8, dmg49); 147–152 (m5, r8.5, dmg48) · Attack motions: 4, 5, 6*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1695,9 +1695,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 61 — Billy `e69a`
 
-*Motions: e69a.chr @ data.dat 0x1d6bc000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e69a.chr @ data.dat 0x1d6bc000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 190–210 (m14, r8.5, dmg93); 190–210 (m14, r8.5, dmg93) · Attack motions: 11, 14 · Block frames: 120–132*  
+*Hit windows: 190–210 (m14, r8.5, dmg93); 190–210 (m14, r8.5, dmg93) · Attack motions: 11, 14 · Block frames: 120–132*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1721,9 +1721,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 62 — Vulcan `e70a`
 
-*Motions: e70a.chr @ data.dat 0x1d71b000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e70a.chr @ data.dat 0x1d71b000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 291–300 (m10, r7.5, dmg88); 328–329 (m11, r8.5, dmg94); 329–331 (m11, r8.5, dmg94) · Attack motions: 11 · Block frames: 160–214*  
+*Hit windows: 291–300 (m10, r7.5, dmg88); 328–329 (m11, r8.5, dmg94); 329–331 (m11, r8.5, dmg94) · Attack motions: 11 · Block frames: 160–214*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1742,9 +1742,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 63 — Crabby Hermit `e71a`
 
-*Motions: e71a.chr @ data.dat 0x1d7b9800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e71a.chr @ data.dat 0x1d7b9800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 202–214 (m13, r9.53, dmg83); 202–214 (m13, r9.3, dmg83); 260–272 (m19, r20.5, dmg80) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 133–143*  
+*Hit windows: 202–214 (m13, r9.53, dmg83); 202–214 (m13, r9.3, dmg83); 260–272 (m19, r20.5, dmg80) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 133–143*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1773,9 +1773,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 64 — Space Gyon `e72a`
 
-*Motions: e72a.chr @ data.dat 0x1d812800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e72a.chr @ data.dat 0x1d812800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 335–355 (m13, r11.5, dmg78); 394–408 (m15, r11.5, dmg78) · Attack motions: 13, 14, 15*  
+*Hit windows: 335–355 (m13, r11.5, dmg78); 394–408 (m15, r11.5, dmg78) · Attack motions: 13, 14, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1798,9 +1798,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 65 — Blue Dragon `e73a`
 
-*Motions: e73a.chr @ data.dat 0x1d8b0000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e73a.chr @ data.dat 0x1d8b0000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 325–334 (m13, r9, dmg90); 280–298 (m15, r9, dmg90) · Attack motions: 13, 14, 15, 16, 17 · Block frames: 120–137*  
+*Hit windows: 325–334 (m13, r9, dmg90); 280–298 (m15, r9, dmg90) · Attack motions: 13, 14, 15, 16, 17 · Block frames: 120–137*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1825,9 +1825,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 66 — Black Dragon `e74a`
 
-*Motions: e74a.chr @ data.dat 0x1d9a5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e74a.chr @ data.dat 0x1d9a5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 325–334 (m13, r9, dmg130); 280–298 (m15, r9, dmg130) · Attack motions: 13, 14, 15, 16, 17 · Block frames: 120–137*  
+*Hit windows: 325–334 (m13, r9, dmg130); 280–298 (m15, r9, dmg130) · Attack motions: 13, 14, 15, 16, 17 · Block frames: 120–137*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1852,9 +1852,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 67 — Mask of Prajna `e75a`
 
-*Motions: e75a.chr @ data.dat 0x1da6d800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e75a.chr @ data.dat 0x1da6d800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 271–276 (m13, r9, dmg80); 247–251 (m16, r9, dmg78) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*  
+*Hit windows: 271–276 (m13, r9, dmg80); 247–251 (m16, r9, dmg78) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1880,9 +1880,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 68 — Crescent Baron `e76a`
 
-*Motions: e76a.chr @ data.dat 0x1dadd800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e76a.chr @ data.dat 0x1dadd800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 294–298 (m16, r9.5, dmg98); 295–298 (m16, r9.5, dmg98); 265–275 (m13, r8, dmg94); 265–275 (m13, r8, dmg94) · Attack motions: 13, 14, 15, 16, 17, 18, 19 · Block frames: 150–165*  
+*Hit windows: 294–298 (m16, r9.5, dmg98); 295–298 (m16, r9.5, dmg98); 265–275 (m13, r8, dmg94); 265–275 (m13, r8, dmg94) · Attack motions: 13, 14, 15, 16, 17, 18, 19 · Block frames: 150–165*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1909,9 +1909,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 69 — Rockanoff `e77a`
 
-*Motions: e77a.chr @ data.dat 0x1db53000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e77a.chr @ data.dat 0x1db53000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 205–227 (m14, r14, dmg35); 247–256 (m16, r13.5, dmg35) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 205–227 (m14, r14, dmg35); 247–256 (m16, r13.5, dmg35) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1937,9 +1937,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 70 — King Mimic (Wise Owl Forest) `e78a`
 
-*Motions: e78a.chr @ data.dat 0x1db86800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e78a.chr @ data.dat 0x1db86800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–144 (m12, r9.5, dmg67); 160–170 (m15, r11, dmg56); 162–167 (m15, r8.5, dmg45); 188–191 (m18, r10.5, dmg50) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–144 (m12, r9.5, dmg67); 160–170 (m15, r11, dmg56); 162–167 (m15, r8.5, dmg45); 188–191 (m18, r10.5, dmg50) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1969,9 +1969,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 71 — Mimic (Wise Owl Forest) `e79a`
 
-*Motions: e79a.chr @ data.dat 0x1dc01800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e79a.chr @ data.dat 0x1dc01800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg47); 151–153 (m12, r9.5, dmg47) · Attack motions: 12 · Block frames: 173–186*  
+*Hit windows: 149–153 (m12, r6, dmg47); 151–153 (m12, r9.5, dmg47) · Attack motions: 12 · Block frames: 173–186*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -1998,9 +1998,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 72 — King Mimic (Shipwreck) `e80a`
 
-*Motions: e80a.chr @ data.dat 0x1dc4f800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e80a.chr @ data.dat 0x1dc4f800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–144 (m12, r8.5, dmg84); 162–167 (m15, r8.5, dmg78); 187–189 (m18, r9, dmg56) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–144 (m12, r8.5, dmg84); 162–167 (m15, r8.5, dmg78); 187–189 (m18, r9, dmg56) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2030,9 +2030,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 73 — Mimic (Shipwreck) `e81a`
 
-*Motions: e81a.chr @ data.dat 0x1dccb000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e81a.chr @ data.dat 0x1dccb000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg59); 151–153 (m12, r9.5, dmg59) · Attack motions: 12 · Block frames: 173–186*  
+*Hit windows: 149–153 (m12, r6, dmg59); 151–153 (m12, r9.5, dmg59) · Attack motions: 12 · Block frames: 173–186*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2059,9 +2059,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 74 — King Mimic (Gallery of Time) `e82a`
 
-*Motions: e82a.chr @ data.dat 0x1dd19000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e82a.chr @ data.dat 0x1dd19000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–145 (m12, r9, dmg134); 162–167 (m15, r9, dmg120); 187–189 (m18, r9.9, dmg98) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–145 (m12, r9, dmg134); 162–167 (m15, r9, dmg120); 187–189 (m18, r9.9, dmg98) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2091,9 +2091,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 75 — Mimic (Gallery of Time) `e83a`
 
-*Motions: e83a.chr @ data.dat 0x1dd94800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e83a.chr @ data.dat 0x1dd94800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg100); 151–153 (m12, r9.5, dmg100) · Attack motions: 12 · Block frames: 172–189*  
+*Hit windows: 149–153 (m12, r6, dmg100); 151–153 (m12, r9.5, dmg100) · Attack motions: 12 · Block frames: 172–189*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2120,11 +2120,11 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 76 — Ice Arrow `korinoya`
 
-*Motions: kori.chr info.cfg @ data.dat 0x1e3a8800 — 2 (projectile; no death anim).*  
+*Motions: kori.chr info.cfg @ data.dat 0x1e3a8800 — 2 (projectile; no death anim).*
 
-*Hit windows: none · Attack motions: none*  
-*NOTE: idx 76's real ModelCode is "korinoya" (STB c13_korinoya) — the flying, damaging ice-arrow*  
-*PROJECTILE, not the static "kori" ice source (that's idx 102). The 4-char "kori" here was a truncation.*  
+*Hit windows: none · Attack motions: none*
+*NOTE: idx 76's real ModelCode is "korinoya" (STB c13_korinoya) — the flying, damaging ice-arrow*
+*PROJECTILE, not the static "kori" ice source (that's idx 102). The 4-char "kori" here was a truncation.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2133,9 +2133,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 77 — Sam `e86a`
 
-*Motions: e86a.chr @ data.dat 0x1ddff000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e86a.chr @ data.dat 0x1ddff000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 196–210 (m14, r8.5, dmg64); 196–210 (m14, r8.5, dmg64); 174–182 (m11, r14.5, dmg80) · Attack motions: 11, 14 · Block frames: 120–132*  
+*Hit windows: 196–210 (m14, r8.5, dmg64); 196–210 (m14, r8.5, dmg64); 174–182 (m11, r14.5, dmg80) · Attack motions: 11, 14 · Block frames: 120–132*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2159,7 +2159,7 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 78 — Dran `c12a`
 
-*DBC boss. Motions: c12a.chr info.cfg @ data.dat 0x1a8d6000.*  
+*DBC boss. Motions: c12a.chr info.cfg @ data.dat 0x1a8d6000.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2179,9 +2179,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 79 — Master Utan `c14a`
 
-*WOF boss. Motions: c14a.chr info.cfg @ data.dat 0x1ad22000.*  
-*NOTE: the .chr's own labels skip 11 (…10, 12, 13, 14, 15); Idx below is the sequential table index*  
-*(the _SET_MOTION arg). So verify death = 13 (sequential) vs the .chr's "14" when wiring CollapseMotion.*  
+*WOF boss. Motions: c14a.chr info.cfg @ data.dat 0x1ad22000.*
+*NOTE: the .chr's own labels skip 11 (…10, 12, 13, 14, 15); Idx below is the sequential table index*
+*(the _SET_MOTION arg). So verify death = 13 (sequential) vs the .chr's "14" when wiring CollapseMotion.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2203,13 +2203,13 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 80 — Ice Queen `c13a`
 
-*Motions: c13a.chr info.cfg @ data.dat 0x1a9f6800.*  
+*Motions: c13a.chr info.cfg @ data.dat 0x1a9f6800.*
 
-*Hit windows: none · Attack motions: 13, 16*  
-*Damage model (confirmed from the genuine fight 2026-06-18): IceRes=65486=0xFFCE=-50 → she ABSORBS ice*  
-*(ice magic HEALS her). Weak to FIRE (150) and HOLY (120); resists thunder/wind (80). So she is damaged with*  
-*fire/holy magic, never ice. Her companions (barrier/arrow/prison/meteor/tornado) are all ice-IMMUNE (IceRes=0)*  
-*and fire-weak (200); reiki/Ice Aura alone is fully neutral. MaxHp 700.*  
+*Hit windows: none · Attack motions: 13, 16*
+*Damage model (confirmed from the genuine fight 2026-06-18): IceRes=65486=0xFFCE=-50 → she ABSORBS ice*
+*(ice magic HEALS her). Weak to FIRE (150) and HOLY (120); resists thunder/wind (80). So she is damaged with*
+*fire/holy magic, never ice. Her companions (barrier/arrow/prison/meteor/tornado) are all ice-IMMUNE (IceRes=0)*
+*and fire-weak (200); reiki/Ice Aura alone is fully neutral. MaxHp 700.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2243,7 +2243,7 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 81 — King's Curse Coffin `c15a`
 
-*SMT boss. Motions: c15a.chr info.cfg @ data.dat 0x1ae5c000.*  
+*SMT boss. Motions: c15a.chr info.cfg @ data.dat 0x1ae5c000.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2257,9 +2257,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 82 — King's Curse `c15b`
 
-*Motions: c15b.chr info.cfg @ data.dat 0x1ae94000 — no "死亡" (transformation entity; no collapse).*  
+*Motions: c15b.chr info.cfg @ data.dat 0x1ae94000 — no "死亡" (transformation entity; no collapse).*
 
-*Hit windows: 72–80 (m2, r10); 80–89 (m2, r10); 190–200 (m8, r30) · Attack motions: 2*  
+*Hit windows: 72–80 (m2, r10); 80–89 (m2, r10); 190–200 (m8, r30) · Attack motions: 2*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2276,7 +2276,7 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 83 — Minotaur Joe `c16a`
 
-*MS boss. Motions: c16a.chr info.cfg @ data.dat 0x1aee3000.*  
+*MS boss. Motions: c16a.chr info.cfg @ data.dat 0x1aee3000.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2294,7 +2294,7 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 84 — Dark Genie `c17a`
 
-*GoT boss (final). Motions: c17a.chr info.cfg @ data.dat 0x1afed000.*  
+*GoT boss (final). Motions: c17a.chr info.cfg @ data.dat 0x1afed000.*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2322,9 +2322,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 85 — Dark Genie (form 2) `c17b`
 
-*Motions: c17b.chr info.cfg @ data.dat 0x1b0d8800 — only 2 (no death anim; defeat is scripted).*  
+*Motions: c17b.chr info.cfg @ data.dat 0x1b0d8800 — only 2 (no death anim; defeat is scripted).*
 
-*Hit windows: 9–10 (m0, r10, dmg125) · Attack motions: 0*  
+*Hit windows: 9–10 (m0, r10, dmg125) · Attack motions: 0*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2333,7 +2333,7 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 86 — Right Hand `c17c`
 
-*Dark Genie hands. Motions: c17c.chr info.cfg @ data.dat 0x1b160800 — only 2 (no death anim).*  
+*Dark Genie hands. Motions: c17c.chr info.cfg @ data.dat 0x1b160800 — only 2 (no death anim).*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2342,15 +2342,15 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 87 — Left Hand `c17_`
 
-*Motions: ModelCode "c17_" has no own .chr (shares the hand model); see Right Hand (c17c) above.*  
+*Motions: ModelCode "c17_" has no own .chr (shares the hand model); see Right Hand (c17c) above.*
 
-*Hit windows: none · Attack motions: none*  
+*Hit windows: none · Attack motions: none*
 
 ### 89 — (DG companion c17_) `c17_`
 
-*Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: none*  
+*Hit windows: none · Attack motions: none*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2360,9 +2360,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 90 — (DG companion c17_) `c17_`
 
-*Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: none*  
+*Hit windows: none · Attack motions: none*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2372,9 +2372,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 91 — Wine Keg `e85a`
 
-*Motions: e85a.chr info.cfg @ data.dat 0x1ddf5000 — 2 (object; no death anim).*  
+*Motions: e85a.chr info.cfg @ data.dat 0x1ddf5000 — 2 (object; no death anim).*
 
-*Hit windows: 5–25 (m0, r6.9, dmg8) · Attack motions: none*  
+*Hit windows: 5–25 (m0, r6.9, dmg8) · Attack motions: none*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2383,9 +2383,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 93 — (DG companion c17_) `c17_`
 
-*Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: c17_beem.chr @ data.dat 0x1b1e9000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: none*  
+*Hit windows: none · Attack motions: none*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2395,9 +2395,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 94 — Gol `e90a`
 
-*Motions: e90a.chr @ data.dat 0x1de72000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e90a.chr @ data.dat 0x1de72000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg71); 145–152 (m15, r9.5, dmg75); 145–152 (m15, r9.5, dmg75); 152–154 (m15, r20.5, dmg62); 154–156 (m15, r35.5, dmg55); 156–158 (m15, r40.5, dmg45) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg71); 145–152 (m15, r9.5, dmg75); 145–152 (m15, r9.5, dmg75); 152–154 (m15, r20.5, dmg62); 154–156 (m15, r35.5, dmg55); 156–158 (m15, r40.5, dmg45) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2422,9 +2422,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 95 — Sil `e91a`
 
-*Motions: e91a.chr @ data.dat 0x1df13800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e91a.chr @ data.dat 0x1df13800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg71); 145–152 (m15, r9.5, dmg75); 145–152 (m15, r9.5, dmg75); 152–154 (m15, r20.5, dmg62); 154–156 (m15, r35.5, dmg55); 156–158 (m15, r40.5, dmg45) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg71); 145–152 (m15, r9.5, dmg75); 145–152 (m15, r9.5, dmg75); 152–154 (m15, r20.5, dmg62); 154–156 (m15, r35.5, dmg55); 156–158 (m15, r40.5, dmg45) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2449,9 +2449,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 96 — Yammich `e101`
 
-*Motions: e101a.chr @ data.dat 0x1e730800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e101a.chr @ data.dat 0x1e730800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 95–105 (m14, r7, dmg35) · Attack motions: 13, 14, 15*  
+*Hit windows: 95–105 (m14, r7, dmg35) · Attack motions: 13, 14, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2474,9 +2474,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 97 — Statue Dog `e103`
 
-*Motions: e103a.chr @ data.dat 0x1e15d000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e103a.chr @ data.dat 0x1e15d000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 168–179 (m11, r8, dmg35) · Attack motions: 11 · Block frames: 93–117*  
+*Hit windows: 168–179 (m11, r8, dmg35) · Attack motions: 11 · Block frames: 93–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2495,9 +2495,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 98 — Opar `e104`
 
-*Motions: e104a.chr @ data.dat 0x1dfb5800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e104a.chr @ data.dat 0x1dfb5800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 138–149 (m16, r20, dmg35); 84–92 (m11, r20, dmg35) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 138–149 (m16, r20, dmg35); 84–92 (m11, r20, dmg35) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2523,9 +2523,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 99 — Haley Holey `e105`
 
-*Motions: e105a.chr @ data.dat 0x1e789800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e105a.chr @ data.dat 0x1e789800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 300–310 (m14, r9, dmg37); 300–310 (m14, r9, dmg37); 300–310 (m14, r4, dmg37) · Attack motions: 13, 14, 16 · Block frames: 75–85*  
+*Hit windows: 300–310 (m14, r9, dmg37); 300–310 (m14, r9, dmg37); 300–310 (m14, r4, dmg37) · Attack motions: 13, 14, 16 · Block frames: 75–85*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2549,9 +2549,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 100 — King Prickly `e106`
 
-*Motions: e106a.chr @ data.dat 0x1e242800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e106a.chr @ data.dat 0x1e242800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 203–225 (m14, r9, dmg50); 250–260 (m17, r8.9, dmg50); 280–305 (m20, r8, dmg50) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 115–125, 248–252*  
+*Hit windows: 203–225 (m14, r9, dmg50); 250–260 (m17, r8.9, dmg50); 280–305 (m20, r8, dmg50) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 115–125, 248–252*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2580,9 +2580,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 102 — Ice Prison `kori`
 
-*Motions: kori.chr @ data.dat 0x1e3a8800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: kori.chr @ data.dat 0x1e3a8800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: none*  
+*Hit windows: none · Attack motions: none*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2591,9 +2591,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 105 — Gacious `e124`
 
-*Motions: e124a.chr @ data.dat 0x1ec15000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e124a.chr @ data.dat 0x1ec15000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 50–90 (m14, r5, dmg130); 64–82 (m14, r6, dmg130); 310–360 (m17, r5, dmg130); 310–360 (m17, r6, dmg130); 310–360 (m17, r6, dmg130) · Attack motions: 13, 14, 16, 17 · Block frames: 100–117*  
+*Hit windows: 50–90 (m14, r5, dmg130); 64–82 (m14, r6, dmg130); 310–360 (m17, r5, dmg130); 310–360 (m17, r6, dmg130); 310–360 (m17, r6, dmg130) · Attack motions: 13, 14, 16, 17 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2619,27 +2619,27 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 106 — Dark Genie (Final Form) `c23a`
 
-*Motions: c23a.chr info.cfg.*  
+*Motions: c23a.chr info.cfg.*
 
-*Hit windows: 5–140 (r19, dmg85); 5–140 (r19, dmg85); 5–140 (r14, dmg85); 5–140 (r19, dmg85); 5–140 (r14, dmg85) · Attack motions: 8, 9, 10*  
-*Idx  Frames    Name (JP)        Meaning*  
-*0    5–20      基本立ち          basic idle*  
-*1    26–30     肩開き            shoulder open*  
-*2    30–40     開きループ        open loop*  
-*3    40–44     肩閉じ            shoulder close*  
-*4    51–70     左手ひっぱたき     left-hand slap*  
-*5    76–94     右手ひっぱたき     right-hand slap*  
-*6    100–107   口開け            mouth open*  
-*7    107–115   溜                charge*  
-*8    115–123   発射体制に        firing stance*  
-*9    123–130   発射ループ        firing loop*  
-*10   130–140   発射戻り          firing return*  
+*Hit windows: 5–140 (r19, dmg85); 5–140 (r19, dmg85); 5–140 (r14, dmg85); 5–140 (r19, dmg85); 5–140 (r14, dmg85) · Attack motions: 8, 9, 10*
+*Idx  Frames    Name (JP)        Meaning*
+*0    5–20      基本立ち          basic idle*
+*1    26–30     肩開き            shoulder open*
+*2    30–40     開きループ        open loop*
+*3    40–44     肩閉じ            shoulder close*
+*4    51–70     左手ひっぱたき     left-hand slap*
+*5    76–94     右手ひっぱたき     right-hand slap*
+*6    100–107   口開け            mouth open*
+*7    107–115   溜                charge*
+*8    115–123   発射体制に        firing stance*
+*9    123–130   発射ループ        firing loop*
+*10   130–140   発射戻り          firing return*
 
 ### 111 — Gemron (Fire) `e111`
 
-*Motions: e111a.chr @ data.dat 0x1e860000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e111a.chr @ data.dat 0x1e860000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 136–147 (m13, r8, dmg100) · Attack motions: 13, 16 · Block frames: 157–185*  
+*Hit windows: 136–147 (m13, r8, dmg100) · Attack motions: 13, 16 · Block frames: 157–185*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2665,9 +2665,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 112 — Nikapous `e108`
 
-*Motions: e108a.chr @ data.dat 0x1e028000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e108a.chr @ data.dat 0x1e028000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 162–188 (m13, r5, dmg150); 162–188 (m13, r5, dmg150); 195–222 (m16, r5, dmg150); 195–222 (m16, r5, dmg150) · Attack motions: 13, 16 · Block frames: 70–100, 25–35*  
+*Hit windows: 162–188 (m13, r5, dmg150); 162–188 (m13, r5, dmg150); 195–222 (m16, r5, dmg150); 195–222 (m16, r5, dmg150) · Attack motions: 13, 16 · Block frames: 70–100, 25–35*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2693,9 +2693,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 113 — White Fang (Enhanced) `e125`
 
-*Motions: e125a.chr @ data.dat 0x1ec7d000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e125a.chr @ data.dat 0x1ec7d000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 62–64 (m13, r9.5, dmg122); 80–84 (m16, r9.5, dmg122) · Attack motions: 13, 16 · Block frames: 240–265*  
+*Hit windows: 62–64 (m13, r9.5, dmg122); 80–84 (m16, r9.5, dmg122) · Attack motions: 13, 16 · Block frames: 240–265*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2721,9 +2721,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 114 — Arthur (Enhanced) `e126`
 
-*Motions: e126a.chr @ data.dat 0x1ed6b000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e126a.chr @ data.dat 0x1ed6b000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 250–261 (m11, r10, dmg130); 287–292 (m12, r10, dmg130) · Attack motions: 11, 12, 13, 14, 15 · Block frames: 114–153*  
+*Hit windows: 250–261 (m11, r10, dmg130); 287–292 (m12, r10, dmg130) · Attack motions: 11, 12, 13, 14, 15 · Block frames: 114–153*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2747,9 +2747,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 115 — Sil (Enhanced) `e127`
 
-*Motions: e127a.chr @ data.dat 0x1edd3000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e127a.chr @ data.dat 0x1edd3000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg111); 145–152 (m15, r9.5, dmg115); 145–152 (m15, r9.5, dmg115); 152–154 (m15, r20.5, dmg102); 154–156 (m15, r35.5, dmg95); 156–158 (m15, r40.5, dmg85) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg111); 145–152 (m15, r9.5, dmg115); 145–152 (m15, r9.5, dmg115); 152–154 (m15, r20.5, dmg102); 154–156 (m15, r35.5, dmg95); 156–158 (m15, r40.5, dmg85) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2774,9 +2774,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 116 — Halloween (Enhanced) `e128`
 
-*Motions: e128a.chr @ data.dat 0x1ee7a800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e128a.chr @ data.dat 0x1ee7a800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 58–76 (m12, r9.8, dmg100); 57–76 (m12, r6, dmg100) · Attack motions: 12, 15 · Block frames: 170–195*  
+*Hit windows: 58–76 (m12, r9.8, dmg100); 57–76 (m12, r6, dmg100) · Attack motions: 12, 15 · Block frames: 170–195*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2801,9 +2801,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 117 — Master Jacket (Enhanced) `e129`
 
-*Motions: e129a.chr @ data.dat 0x1ef24000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e129a.chr @ data.dat 0x1ef24000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 62–64 (m13, r8, dmg110); 77–79 (m16, r8, dmg110) · Attack motions: 13, 15, 16 · Block frames: 100–117*  
+*Hit windows: 62–64 (m13, r8, dmg110); 77–79 (m16, r8, dmg110) · Attack motions: 13, 15, 16 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2830,9 +2830,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 118 — Vulcan (Enhanced) `e130`
 
-*Motions: e130a.chr @ data.dat 0x1f034800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e130a.chr @ data.dat 0x1f034800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 291–300 (m10, r7.5, dmg114); 328–329 (m11, r8.5, dmg114); 329–331 (m11, r8.5, dmg114) · Attack motions: 11 · Block frames: 160–214*  
+*Hit windows: 291–300 (m10, r7.5, dmg114); 328–329 (m11, r8.5, dmg114); 329–331 (m11, r8.5, dmg114) · Attack motions: 11 · Block frames: 160–214*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2851,9 +2851,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 119 — Mummy (Enhanced) `e131`
 
-*Motions: e131a.chr @ data.dat 0x1f0d3000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e131a.chr @ data.dat 0x1f0d3000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 372–375 (m13, r8.5, dmg98); 372–375 (m13, r8.5, dmg98) · Attack motions: 13, 16 · Block frames: 100–117*  
+*Hit windows: 372–375 (m13, r8.5, dmg98); 372–375 (m13, r8.5, dmg98) · Attack motions: 13, 16 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2879,9 +2879,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 120 — Diamond (Enhanced) `e132`
 
-*Motions: e132a.chr @ data.dat 0x1f218000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e132a.chr @ data.dat 0x1f218000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 283–290 (m13, r9.9, dmg123); 283–290 (m13, r8.9, dmg123) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 283–290 (m13, r9.9, dmg123); 283–290 (m13, r8.9, dmg123) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2907,9 +2907,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 121 — Gemron (Ice) `e112`
 
-*Motions: e112a.chr @ data.dat 0x1e8ba000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e112a.chr @ data.dat 0x1e8ba000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 136–147 (m13, r8, dmg120) · Attack motions: 13, 16 · Block frames: 157–185*  
+*Hit windows: 136–147 (m13, r8, dmg120) · Attack motions: 13, 16 · Block frames: 157–185*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2935,9 +2935,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 122 — Horn Head `e119`
 
-*Motions: e119a.chr @ data.dat 0x1eb74000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e119a.chr @ data.dat 0x1eb74000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 304–312 (m13, r3, dmg130); 304–315 (m13, r9, dmg130); 340–350 (m16, r9, dmg130) · Attack motions: 13, 16 · Block frames: 100–118*  
+*Hit windows: 304–312 (m13, r3, dmg130); 304–315 (m13, r9, dmg130); 340–350 (m16, r9, dmg130) · Attack motions: 13, 16 · Block frames: 100–118*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2963,9 +2963,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 123 — Auntie Medu (Enhanced) `e133`
 
-*Motions: e133a.chr @ data.dat 0x1f2be800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e133a.chr @ data.dat 0x1f2be800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 218–222 (m13, r8.5, dmg122) · Attack motions: 13, 16 · Block frames: 123–137*  
+*Hit windows: 218–222 (m13, r8.5, dmg122) · Attack motions: 13, 16 · Block frames: 123–137*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -2991,9 +2991,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 124 — Rockanoff (Enhanced) `e134`
 
-*Motions: e134a.chr @ data.dat 0x1f35e800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e134a.chr @ data.dat 0x1f35e800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 205–227 (m14, r14, dmg130); 247–256 (m16, r13.5, dmg130) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 205–227 (m14, r14, dmg130); 247–256 (m16, r13.5, dmg130) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3019,9 +3019,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 125 — Yammich (Enhanced) `e135`
 
-*Motions: e135a.chr @ data.dat 0x1f392000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e135a.chr @ data.dat 0x1f392000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 95–105 (m14, r7, dmg110) · Attack motions: 13, 14, 15*  
+*Hit windows: 95–105 (m14, r7, dmg110) · Attack motions: 13, 14, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3044,9 +3044,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 126 — Witch Hellza (Enhanced) `e136`
 
-*Motions: e136a.chr @ data.dat 0x1f3eb800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e136a.chr @ data.dat 0x1f3eb800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 114–126 (m12, r8.9, dmg100) · Attack motions: 12*  
+*Hit windows: 114–126 (m12, r8.9, dmg100) · Attack motions: 12*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3071,9 +3071,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 127 — Steel Giant (Enhanced) `e137`
 
-*Motions: e137a.chr @ data.dat 0x1f486800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e137a.chr @ data.dat 0x1f486800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg163); 145–152 (m15, r9.5, dmg178); 145–152 (m15, r9.5, dmg178); 152–154 (m15, r20.5, dmg163); 154–156 (m15, r35.5, dmg162); 156–158 (m15, r40.5, dmg161) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg163); 145–152 (m15, r9.5, dmg178); 145–152 (m15, r9.5, dmg178); 152–154 (m15, r20.5, dmg163); 154–156 (m15, r35.5, dmg162); 156–158 (m15, r40.5, dmg161) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3098,9 +3098,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 128 — Club (Enhanced) `e138`
 
-*Motions: e138a.chr @ data.dat 0x1f52b800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e138a.chr @ data.dat 0x1f52b800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 284–287 (m13, r8.5, dmg114) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 284–287 (m13, r8.5, dmg114) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3126,9 +3126,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 129 — Corcea (Enhanced) `e139`
 
-*Motions: e139a.chr @ data.dat 0x1f5d6800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e139a.chr @ data.dat 0x1f5d6800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 68–73 (m13, r9, dmg110); 68–73 (m13, r9, dmg110); 95–100 (m16, r9, dmg110); 93–96 (m16, r9, dmg110) · Attack motions: 13, 16*  
+*Hit windows: 68–73 (m13, r9, dmg110); 68–73 (m13, r9, dmg110); 95–100 (m16, r9, dmg110); 93–96 (m16, r9, dmg110) · Attack motions: 13, 16*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3154,9 +3154,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 130 — Mimic (Demon Shaft) `e109`
 
-*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*  
+*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3183,9 +3183,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 131 — King Mimic (Demon Shaft) `e110`
 
-*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3215,9 +3215,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 132 — Gemron (Thunder) `e113`
 
-*Motions: e113a.chr @ data.dat 0x1e914000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e113a.chr @ data.dat 0x1e914000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 136–147 (m13, r8, dmg130) · Attack motions: 13, 16 · Block frames: 157–185*  
+*Hit windows: 136–147 (m13, r8, dmg130) · Attack motions: 13, 16 · Block frames: 157–185*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3243,9 +3243,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 133 — Bishop Q `e116`
 
-*Motions: e116a.chr @ data.dat 0x1ea22000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e116a.chr @ data.dat 0x1ea22000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 255–285 (m12, r8, dmg130); 295–322 (m14, r8, dmg130) · Attack motions: 12, 13, 14, 15, 16 · Block frames: 110–125*  
+*Hit windows: 255–285 (m12, r8, dmg130); 295–322 (m14, r8, dmg130) · Attack motions: 12, 13, 14, 15, 16 · Block frames: 110–125*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3269,9 +3269,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 134 — Cave Bat (Enhanced) `e140`
 
-*Motions: e140a.chr @ data.dat 0x1f67a000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e140a.chr @ data.dat 0x1f67a000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 171–182 (m19, r8.7, dmg95); 10–30 (m0, r7.8, dmg95) · Attack motions: 15, 18, 19*  
+*Hit windows: 171–182 (m19, r8.7, dmg95); 10–30 (m0, r7.8, dmg95) · Attack motions: 15, 18, 19*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3299,9 +3299,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 135 — Gol (Enhanced) `e141`
 
-*Motions: e141a.chr @ data.dat 0x1f6b5800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e141a.chr @ data.dat 0x1f6b5800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg131); 145–152 (m15, r9.5, dmg135); 145–152 (m15, r9.5, dmg135); 152–154 (m15, r20.5, dmg132); 154–156 (m15, r35.5, dmg125); 156–158 (m15, r40.5, dmg125) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg131); 145–152 (m15, r9.5, dmg135); 145–152 (m15, r9.5, dmg135); 152–154 (m15, r20.5, dmg132); 154–156 (m15, r35.5, dmg125); 156–158 (m15, r40.5, dmg125) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3326,9 +3326,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 136 — Mask of Prajna (Enhanced) `e142`
 
-*Motions: e142a.chr @ data.dat 0x1f75d000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e142a.chr @ data.dat 0x1f75d000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 271–276 (m13, r9, dmg140); 247–251 (m16, r9, dmg138) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*  
+*Hit windows: 271–276 (m13, r9, dmg140); 247–251 (m16, r9, dmg138) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3354,9 +3354,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 137 — Gyon (Enhanced) `e143`
 
-*Motions: e143a.chr @ data.dat 0x1f7cd000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e143a.chr @ data.dat 0x1f7cd000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 335–355 (m13, r10.4, dmg100); 394–407 (m15, r9.4, dmg100) · Attack motions: 13, 14, 15*  
+*Hit windows: 335–355 (m13, r10.4, dmg100); 394–407 (m15, r9.4, dmg100) · Attack motions: 13, 14, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3379,9 +3379,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 138 — Spade (Enhanced) `e144`
 
-*Motions: e144a.chr @ data.dat 0x1f86a800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e144a.chr @ data.dat 0x1f86a800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 281–297 (m13, r12, dmg110); 284–297 (m13, r12, dmg110) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 281–297 (m13, r12, dmg110); 284–297 (m13, r12, dmg110) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3407,9 +3407,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 139 — Rash Dasher (Enhanced) `e145`
 
-*Motions: e145a.chr @ data.dat 0x1f913800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e145a.chr @ data.dat 0x1f913800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 169–170 (m13, r10, dmg102) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 169–170 (m13, r10, dmg102) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3435,9 +3435,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 140 — Captain (Enhanced) `e146`
 
-*Motions: e146a.chr @ data.dat 0x1f994000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e146a.chr @ data.dat 0x1f994000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 69–73 (m13, r8.5, dmg99); 69–73 (m13, r8.5, dmg99); 96–100 (m16, r9.5, dmg99); 93–96 (m16, r9.5, dmg99) · Attack motions: 13, 16 · Block frames: 180–190*  
+*Hit windows: 69–73 (m13, r8.5, dmg99); 69–73 (m13, r8.5, dmg99); 96–100 (m16, r9.5, dmg99); 93–96 (m16, r9.5, dmg99) · Attack motions: 13, 16 · Block frames: 180–190*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3463,9 +3463,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 141 — Mimic (Demon Shaft) (Enhanced) `e109`
 
-*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*  
+*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3492,9 +3492,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 142 — King Mimic (Demon Shaft) (Enhanced) `e110`
 
-*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3524,9 +3524,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 143 — Gemron (Wind) `e114`
 
-*Motions: e114a.chr @ data.dat 0x1e96e000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e114a.chr @ data.dat 0x1e96e000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 136–147 (m13, r8, dmg140) · Attack motions: 13, 16 · Block frames: 157–185*  
+*Hit windows: 136–147 (m13, r8, dmg140) · Attack motions: 13, 16 · Block frames: 157–185*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3552,9 +3552,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 144 — Silver Gear `e118`
 
-*Motions: e118a.chr @ data.dat 0x1eab7800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e118a.chr @ data.dat 0x1eab7800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: 13, 16, 17 · Block frames: 100–118*  
+*Hit windows: none · Attack motions: 13, 16, 17 · Block frames: 100–118*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3578,11 +3578,11 @@ Regenerate via `tools/augment_motion_table.py`.
 | 17 | 60–75 | 0.2 | 発射 | launch |
 | 18 | 50–75 | 0.2 | ダミー | (dummy) |
 
-### 145 — Alexnder (Enhanced) `e149`
+### 145 — Alexander (Enhanced) `e149`
 
-*Motions: e149a.chr @ data.dat 0x1fb03800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e149a.chr @ data.dat 0x1fb03800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 217–220 (m13, r9, dmg122) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*  
+*Hit windows: 217–220 (m13, r9, dmg122) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 112–128*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3608,9 +3608,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 146 — Heart (Enhanced) `e150`
 
-*Motions: e150a.chr @ data.dat 0x1fb54000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e150a.chr @ data.dat 0x1fb54000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 278–288 (m13, r8.5, dmg130) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*  
+*Hit windows: 278–288 (m13, r8.5, dmg130) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 120–142*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3636,9 +3636,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 147 — Bomber Head (Enhanced) `e151`
 
-*Motions: e151a.chr @ data.dat 0x1fbfe800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e151a.chr @ data.dat 0x1fbfe800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 280–285 (m13, r8.5, dmg160); 280–285 (m13, r8.5, dmg160) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 170–195*  
+*Hit windows: 280–285 (m13, r8.5, dmg160); 280–285 (m13, r8.5, dmg160) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 170–195*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3668,9 +3668,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 148 — Crabby Hermit (Enhanced) `e152`
 
-*Motions: e152a.chr @ data.dat 0x1fcc1000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e152a.chr @ data.dat 0x1fcc1000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 202–214 (m13, r9.53, dmg130); 202–214 (m13, r9.3, dmg130); 260–272 (m19, r20.5, dmg130) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 133–143*  
+*Hit windows: 202–214 (m13, r9.53, dmg130); 202–214 (m13, r9.3, dmg130); 260–272 (m19, r20.5, dmg130) · Attack motions: 13, 14, 15, 16, 17, 18, 19, 20, 21 · Block frames: 133–143*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3699,9 +3699,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 149 — Cursed Rose (Enhanced) `e153`
 
-*Motions: e153a.chr @ data.dat 0x1fd1a000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e153a.chr @ data.dat 0x1fd1a000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 101–110 (m4, r9.8, dmg140); 87–104 (m4, r9.8, dmg140); 147–152 (m5, r8.5, dmg140) · Attack motions: 4, 5, 6*  
+*Hit windows: 101–110 (m4, r9.8, dmg140); 87–104 (m4, r9.8, dmg140); 147–152 (m5, r8.5, dmg140) · Attack motions: 4, 5, 6*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3715,9 +3715,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 150 — Pirate's Chariot (Enhanced) `e154`
 
-*Motions: e154a.chr @ data.dat 0x1fd72800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e154a.chr @ data.dat 0x1fd72800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: none · Attack motions: 13, 16, 17*  
+*Hit windows: none · Attack motions: 13, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3743,9 +3743,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 151 — Space Gyon (Enhanced) `e155`
 
-*Motions: e155a.chr @ data.dat 0x1fdb3800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e155a.chr @ data.dat 0x1fdb3800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 335–355 (m13, r11.5, dmg160); 394–408 (m15, r11.5, dmg160) · Attack motions: 13, 14, 15*  
+*Hit windows: 335–355 (m13, r11.5, dmg160); 394–408 (m15, r11.5, dmg160) · Attack motions: 13, 14, 15*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3768,9 +3768,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 152 — Mimic (Demon Shaft) (Enhanced x2) `e109`
 
-*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*  
+*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3797,9 +3797,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 153 — King Mimic (Demon Shaft) (Enhanced x2) `e110`
 
-*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3829,9 +3829,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 154 — Gemron (Holy) `e115`
 
-*Motions: e115a.chr @ data.dat 0x1e9c8000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e115a.chr @ data.dat 0x1e9c8000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 136–147 (m13, r8, dmg150) · Attack motions: 13, 16 · Block frames: 157–185*  
+*Hit windows: 136–147 (m13, r8, dmg150) · Attack motions: 13, 16 · Block frames: 157–185*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3857,9 +3857,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 155 — Gacious (Enhanced) `e117`
 
-*Motions: e117a.chr @ data.dat 0x1e2d6800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e117a.chr @ data.dat 0x1e2d6800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 50–90 (m14, r5, dmg180); 64–82 (m14, r6, dmg180); 310–360 (m17, r5, dmg180); 310–360 (m17, r6, dmg180); 310–360 (m17, r6, dmg180) · Attack motions: 13, 14, 16, 17 · Block frames: 100–117*  
+*Hit windows: 50–90 (m14, r5, dmg180); 64–82 (m14, r6, dmg180); 310–360 (m17, r5, dmg180); 310–360 (m17, r6, dmg180); 310–360 (m17, r6, dmg180) · Attack motions: 13, 14, 16, 17 · Block frames: 100–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3885,9 +3885,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 156 — Evil Bat (Enhanced) `e158`
 
-*Motions: e158a.chr @ data.dat 0x1ff1e800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e158a.chr @ data.dat 0x1ff1e800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 170–200 (m20, r7.9, dmg122); 10–30 (m0, r7.8, dmg122) · Attack motions: 15, 18, 19, 20*  
+*Hit windows: 170–200 (m20, r7.9, dmg122); 10–30 (m0, r7.8, dmg122) · Attack motions: 15, 18, 19, 20*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3915,9 +3915,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 157 — Crescent Baron (Enhanced) `e159`
 
-*Motions: e159a.chr @ data.dat 0x1ff5a000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e159a.chr @ data.dat 0x1ff5a000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 294–298 (m16, r9.5, dmg150); 295–298 (m16, r9.5, dmg150); 265–275 (m13, r8, dmg150); 265–275 (m13, r8, dmg150) · Attack motions: 13, 14, 15, 16, 17, 18, 19 · Block frames: 150–165*  
+*Hit windows: 294–298 (m16, r9.5, dmg150); 295–298 (m16, r9.5, dmg150); 265–275 (m13, r8, dmg150); 265–275 (m13, r8, dmg150) · Attack motions: 13, 14, 15, 16, 17, 18, 19 · Block frames: 150–165*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3944,9 +3944,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 158 — Statue Dog (Enhanced) `e160`
 
-*Motions: e160a.chr @ data.dat 0x1ffcf800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e160a.chr @ data.dat 0x1ffcf800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 168–179 (m11, r8, dmg110) · Attack motions: 11 · Block frames: 93–117*  
+*Hit windows: 168–179 (m11, r8, dmg110) · Attack motions: 11 · Block frames: 93–117*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3965,9 +3965,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 159 — Joker (Enhanced) `e161`
 
-*Motions: e161a.chr @ data.dat 0x20023800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e161a.chr @ data.dat 0x20023800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 280–289 (m13, r10, dmg170) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 124–144*  
+*Hit windows: 280–289 (m13, r10, dmg170) · Attack motions: 13, 14, 15, 16, 17, 18 · Block frames: 124–144*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -3993,9 +3993,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 160 — Lich (Enhanced) `e162`
 
-*Motions: e162a.chr @ data.dat 0x200ce800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e162a.chr @ data.dat 0x200ce800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 162–180 (m13, r9, dmg110); 162–180 (m13, r9, dmg110) · Attack motions: 13, 14, 15, 16, 17*  
+*Hit windows: 162–180 (m13, r9, dmg110); 162–180 (m13, r9, dmg110) · Attack motions: 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -4023,9 +4023,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 161 — Titan (Enhanced) `e163`
 
-*Motions: e163a.chr @ data.dat 0x2016c000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e163a.chr @ data.dat 0x2016c000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg155); 145–152 (m15, r9.5, dmg160); 145–152 (m15, r9.5, dmg160); 152–154 (m15, r20.5, dmg150); 154–156 (m15, r35.5, dmg145); 156–158 (m15, r40.5, dmg140) · Attack motions: 12, 13, 14, 15, 16, 17*  
+*Hit windows: 100–108 (m12, r15.5); 95–100 (m12, r15.5, dmg155); 145–152 (m15, r9.5, dmg160); 145–152 (m15, r9.5, dmg160); 152–154 (m15, r20.5, dmg150); 154–156 (m15, r35.5, dmg145); 156–158 (m15, r40.5, dmg140) · Attack motions: 12, 13, 14, 15, 16, 17*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -4050,9 +4050,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 162 — Living Armor (Enhanced) `e164`
 
-*Motions: e164a.chr @ data.dat 0x20211800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e164a.chr @ data.dat 0x20211800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 107–111 (m16, r10.2, dmg150); 107–111 (m16, r10, dmg150); 72–74 (m13, r10.5, dmg150); 72–74 (m13, r9, dmg150) · Attack motions: 13, 14, 15, 16, 17, 18*  
+*Hit windows: 107–111 (m16, r10.2, dmg150); 107–111 (m16, r10, dmg150); 72–74 (m13, r10.5, dmg150); 72–74 (m13, r9, dmg150) · Attack motions: 13, 14, 15, 16, 17, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -4078,9 +4078,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 163 — Mimic (Demon Shaft) (Enhanced x3) `e109`
 
-*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e109a.chr @ data.dat 0x1e09c000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*  
+*Hit windows: 149–153 (m12, r6, dmg130) · Attack motions: 12 · Block frames: 170–189*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -4107,9 +4107,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 164 — King Mimic (Demon Shaft) (Enhanced x3) `e110`
 
-*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e110a.chr @ data.dat 0x1e0e5000  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*  
+*Hit windows: 140–145 (m12, r9, dmg170); 162–167 (m15, r9, dmg170); 187–189 (m18, r9.9, dmg170) · Attack motions: 12, 15, 18*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -4139,9 +4139,9 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 165 — Black Knight `c21a`
 
-*Motions: c21a.chr info.cfg @ data.dat 0x1e3d5800. (c22a is the same list + motion 27; see below.)*  
+*Motions: c21a.chr info.cfg @ data.dat 0x1e3d5800. (c22a is the same list + motion 27; see below.)*
 
-*Hit windows: 445–645 (m22, r6, dmg170); 445–645 (m22, r6, dmg170) · Attack motions: 11, 12, 13, 24, 25, 26 · Block frames: 535–555*  
+*Hit windows: 445–645 (m22, r6, dmg170); 445–645 (m22, r6, dmg170) · Attack motions: 11, 12, 13, 24, 25, 26 · Block frames: 535–555*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
@@ -4175,19 +4175,19 @@ Regenerate via `tools/augment_motion_table.py`.
 
 ### 166 — Black Knight Mount `c22a`
 
-*Motions: c22a.chr info.cfg @ data.dat 0x1e565800 — identical to c21a (0–26, death=7) plus:*  
+*Motions: c22a.chr info.cfg @ data.dat 0x1e565800 — identical to c21a (0–26, death=7) plus:*
 
-*Hit windows: 50–70 (m2, r30, dmg170) · Attack motions: 11, 12, 13, 24, 25, 26, 27*  
+*Hit windows: 50–70 (m2, r30, dmg170) · Attack motions: 11, 12, 13, 24, 25, 26, 27*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
 | 27 | 595–645 | 0.25 | 攻撃３（強攻撃） | attack 3 (heavy attack) |
 
-### — — Killer Snake 
+### — — Killer Snake
 
-*Motions: e55a.chr @ data.dat 0x1cfde800  (idx = _SET_MOTION; 死亡 = death)*  
+*Motions: e55a.chr @ data.dat 0x1cfde800  (idx = _SET_MOTION; 死亡 = death)*
 
-*Hit windows: 50–70 (m2, r30, dmg170) · Attack motions: 11, 12, 13, 24, 25, 26, 27*  
+*Hit windows: 50–70 (m2, r30, dmg170) · Attack motions: 11, 12, 13, 24, 25, 26, 27*
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|

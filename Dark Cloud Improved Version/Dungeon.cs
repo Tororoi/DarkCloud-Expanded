@@ -116,6 +116,7 @@ namespace Dark_Cloud_Improved_Version
                 EnemyStatNormalizer.NormalizeStatsForFloor();
                 HarderEnemies.Tick();       // "Harder Enemies" difficulty: faster enemy movement + animation, with attack-window dwell (Options toggle)
                 MiniBoss.MaintainProjectileScale();   // per-tick: keep miniboss projectile damage scaled (per-slot)
+                MiniBoss.MaintainAttackRange();        // per-tick: miniboss attack/engage range via shared-STB nearest-enemy trick
                 if (Player.InDungeonFloor())
                 {
                     // Evilcise curse applies immediately on equip, even from the pause menu

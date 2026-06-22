@@ -16,6 +16,17 @@ namespace Dark_Cloud_Improved_Version
         public static bool miniBossRolled = false;
 
         const float scaleSize = 1.5F;             //Miniboss model + damage-hitbox scale
+        const float weaponHitboxFactor = 1.6F;    //Miniboss WEAPON (attack) hitbox scale — intentionally > scaleSize: the 1.5× model raises the weapon bone, so the attack sphere needs extra radius to still reach short characters
+        const float attackRangeFactor = 1.3F;     //Miniboss attack/engage RANGE multiplier — how much farther out a miniboss commits to its attack (shared-STB _GET_DISTANCE threshold, applied per-species to the nearest miniboss)
+        const float attackRangeFactorWide = 1.5F; //Wider attack-range factor for the long-reach species in _attackRangeWide (plants / chariot)
+        // Species that use attackRangeFactorWide instead of attackRangeFactor. Keyed by species Id — enhanced variants
+        // reuse the base Id (e.g. Cursed Rose + Cursed Rose (Enhanced) are both Id 68), so they're covered automatically.
+        static readonly HashSet<ushort> _attackRangeWide = new HashSet<ushort>
+        {
+            Enemies.CursedRose.Id, Enemies.DarkFlower.Id, Enemies.CannibalPlant.Id,
+            Enemies.Opar.Id, Enemies.KingPrickly.Id, Enemies.Rockanoff.Id,
+            Enemies.PiratesChariot.Id,
+        };
         const float minibossHpFactor = 3.0F;      //Miniboss max-HP multiplier (×3)
         const float minibossDefenseFactor = 1.5F; //Miniboss defense multiplier — DamageReduction + WeaponDefense (×1.5)
         const float minibossAttackFactor = 1.5F;  //Miniboss melee-damage multiplier (×1.5). Projectile damage is per-SPECIES (shared STB) so it is intentionally left unscaled.
@@ -25,6 +36,7 @@ namespace Dark_Cloud_Improved_Version
         const int enemyGoldMult = 4;              //Miniboss Gilda Loot multiplier
         const int enemyLootChance = 100;          //Miniboss Loot chance % (0 - 100)
         const bool allowFlyerMinibosses = true;   //Allow flying enemies to become minibosses (hitbox now scales so they're hittable)
+        const bool forceAllMinibosses = true;    //TEST ONLY: promote EVERY eligible enemy to a miniboss (easier testing of miniboss changes); keep false for normal play
 
         static Dictionary<ushort, string> nonKeyEnemies = EnemySlots.GetFlyingEnemies();
 
@@ -69,7 +81,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!allowFlyerMinibosses && nonKeyEnemies.ContainsKey(id)) continue;
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (dropVal != 0 && dropVal != 65535) continue;
-                if (rnd.Next(denominator) == 0)
+                if (forceAllMinibosses || rnd.Next(denominator) == 0)
                     winners.Add(i);
             }
 
@@ -105,6 +117,124 @@ namespace Dark_Cloud_Improved_Version
                 EnemyStatScaler.MaintainSlotProjectile(slot, minibossAttackFactor);
         }
 
+        // ── Miniboss ATTACK RANGE (engage/commit distance) ────────────────────────────────────────────────
+        // The AI decides when to attack by comparing the live _GET_DISTANCE (cmd 10) result against a float literal
+        // baked in the species' loaded STB, re-read every frame. That literal is SHARED by every enemy of the species,
+        // so we can't give one enemy its own reach — BUT only the enemy NEAREST the player drives the engaged-attack
+        // decision. So each tick, for every species that has a miniboss on the floor, we find its nearest live enemy
+        // and set the shared threshold to match THAT enemy's status: nearest is a miniboss → thresholds ×attackRangeFactor
+        // (longer reach, matching its bigger body/attack hitbox); nearest is a regular → exact vanilla literals (regulars
+        // feel untouched). The STB is only rewritten when the nearest's status flips (dedup). Caveat: while scaled, farther
+        // same-species enemies briefly share the longer reach. Self-reverts on floor reload (STB reloads vanilla + the
+        // per-floor cache clear below); no snapshot/restore needed.
+        private const int FnGetDistance = 10;   // _GET_DISTANCE STB command
+        private static readonly Dictionary<int, List<(int off, int origBits)>> _arThresholds = new(); // per loaded STB: _GET_DISTANCE literals (byte offset + vanilla IEEE-754 bits)
+        private static readonly Dictionary<int, bool> _arScaled = new();                               // per loaded STB: currently scaled (miniboss reach) vs vanilla
+        private static int _arLastFloorKey = -1;
+
+        /// <summary>
+        /// Per-tick: maintain miniboss ATTACK RANGE for every miniboss species on the floor, via the shared-STB
+        /// "nearest enemy" trick above. No-op when no minibosses are rolled; reverts for free on floor change.
+        /// </summary>
+        public static void MaintainAttackRange()
+        {
+            if (!Player.InDungeonFloor()) { _arThresholds.Clear(); _arScaled.Clear(); _arLastFloorKey = -1; return; }
+
+            int floorKey = (Memory.ReadByte(Addresses.checkDungeon) << 8) | Memory.ReadByte(Addresses.checkFloor);
+            if (floorKey != _arLastFloorKey) { _arThresholds.Clear(); _arScaled.Clear(); _arLastFloorKey = floorKey; }  // STB reloads fresh each floor
+
+            if (!miniBossRolled || miniBossEnemyNumbers.Count == 0) return;
+
+            // Species that currently have at least one miniboss on the floor.
+            HashSet<ushort> mbSpecies = new HashSet<ushort>();
+            foreach (int slot in miniBossEnemyNumbers)
+            {
+                ushort sid = EnemySlots.GetFloorEnemyId(slot);
+                if (sid != 0) mbSpecies.Add(sid);
+            }
+            if (mbSpecies.Count == 0) return;
+
+            // One pass over the slots: the nearest live enemy of each miniboss-species.
+            Dictionary<ushort, int>   nearestSlot = new Dictionary<ushort, int>();
+            Dictionary<ushort, float> nearestDist = new Dictionary<ushort, float>();
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                ushort id = EnemySlots.GetFloorEnemyId(s);
+                if (id == 0 || !mbSpecies.Contains(id)) continue;
+                float dist = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, 0) + EnemySlotOffsets.DistanceToPlayer);
+                if (!nearestDist.TryGetValue(id, out float cur) || dist < cur) { nearestDist[id] = dist; nearestSlot[id] = s; }
+            }
+
+            foreach (int slot in nearestSlot.Values)
+                ApplyNearestRange(slot);
+        }
+
+        // Set the (shared) STB _GET_DISTANCE thresholds to scaled iff this nearest slot is a miniboss; rewrite only on flip.
+        private static void ApplyNearestRange(int nearestSlot)
+        {
+            int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(nearestSlot));
+            if (stbNative == 0 || stbNative == -1) return;
+
+            bool wantScaled = miniBossEnemyNumbers.Contains(nearestSlot);
+            bool isScaled   = _arScaled.TryGetValue(stbNative, out bool cur) && cur;
+            if (isScaled == wantScaled) return;   // nearest's status unchanged → nothing to do
+
+            // Long-reach species get a wider factor than the default.
+            float factor = _attackRangeWide.Contains(EnemySlots.GetFloorEnemyId(nearestSlot))
+                ? attackRangeFactorWide : attackRangeFactor;
+
+            long stb = Memory.ToMmu(stbNative);
+            foreach (var (off, origBits) in AttackRangeThresholds(stbNative))
+            {
+                int bits = wantScaled
+                    ? BitConverter.SingleToInt32Bits(BitConverter.Int32BitsToSingle(origBits) * factor)
+                    : origBits;
+                Memory.WriteInt(stb + off, bits);
+            }
+            _arScaled[stbNative] = wantScaled;
+        }
+
+        // Walk a loaded STB once to record each _GET_DISTANCE threshold literal (byte offset + floor-fresh vanilla bits).
+        private static List<(int off, int origBits)> AttackRangeThresholds(int stbNative)
+        {
+            if (_arThresholds.TryGetValue(stbNative, out var list)) return list;
+            list = new List<(int, int)>();
+            _arThresholds[stbNative] = list;
+
+            long stb = Memory.ToMmu(stbNative);
+            if (Memory.ReadInt(stb) != StbVm.Magic) return list;
+            byte[] d = Memory.ReadByteArray(stb, 0xC000);
+            if (d == null || d.Length < 0x10) return list;
+            int Word(int i) => d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24);
+            int code = Word(StbVm.CodeSectionOff);
+            if (code < StbVm.LabelTableOff || code >= d.Length) return list;
+
+            for (int x = code; x + StbVm.InstrSize <= d.Length; x += 4)
+            {
+                if (Word(x) != StbVm.OpExt || Word(x + StbVm.OperandB) != 0) continue;   // op21 ext-call
+                int argc = Word(x + StbVm.OperandA);
+                if (argc < 1 || argc > 10) continue;
+                int fp = x - argc * StbVm.InstrSize;                                     // first pushed arg = funcId
+                if (fp < code || Word(fp) != StbVm.OpPush3 || Word(fp + StbVm.OperandA) != StbVm.TypeInt) continue;
+                if (Word(fp + StbVm.OperandB) != FnGetDistance) continue;
+
+                // threshold = first op3 FLOAT literal within ~4 records after the call (skip variable comparisons)
+                for (int k = 1; k <= 4; k++)
+                {
+                    int r = x + k * StbVm.InstrSize;
+                    if (r + StbVm.InstrSize > d.Length) break;
+                    if (Word(r) == StbVm.OpPush3 && Word(r + StbVm.OperandA) == StbVm.TypeFloat)
+                    {
+                        int litOff = r + StbVm.OperandB;
+                        if (BitConverter.Int32BitsToSingle(Word(litOff)) > 0f)
+                            list.Add((litOff, Word(litOff)));
+                        break;
+                    }
+                }
+            }
+            return list;
+        }
+
         /// <summary>
         /// Applies miniboss stat multipliers and rolls loot for a single enemy slot.
         /// Also registers the slot in miniBossEnemyNumbers.
@@ -138,6 +268,19 @@ namespace Dark_Cloud_Improved_Version
                 long radiusAddr = BodyCollision.RadiusAddr(slot, bodyPart);
                 float radius = Memory.ReadFloat(radiusAddr);
                 if (radius > 0f) Memory.WriteFloat(radiusAddr, radius * scaleSize);
+            }
+
+            // Grow the WEAPON (attack) hitbox too. This is a SEPARATE per-slot array from the body hitbox above
+            // (see EnemyAddresses.AttackCollision), so the body loop never touched it: at 1.5× model scale the weapon
+            // bone rides higher while its attack sphere stayed default-size, overshooting short characters (only tall
+            // ones like Ungaga got hit). Scale every occupied attack sphere by weaponHitboxFactor (> scaleSize) to
+            // reach back down. Guarded to a plausible radius range so a bad read can't write garbage.
+            for (int sphere = 0; sphere < AttackCollision.MaxSpheres; sphere++)
+            {
+                long rAddr = AttackCollision.RadiusAddr(slot, sphere);
+                float r = Memory.ReadFloat(rAddr);
+                if (r > 0f && r < 200f)
+                    Memory.WriteFloat(rAddr, r * weaponHitboxFactor);
             }
 
             // Visual marker: enlarge the lock-on reticle so a targeted miniboss reads as special (its model is already
