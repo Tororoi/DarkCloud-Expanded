@@ -41,6 +41,11 @@ namespace Dark_Cloud_Improved_Version
         internal static float NormalizationStrength = 1.0f;  // k ∈ [0,1]: 0 = strong enemies run wild (weak still buffed), 1 = flatten all to current
         internal static bool  NormalizeDamage       = true;  // also rescale attack damage (melee + projectile)
         internal static bool  LogNormalize          = true;  // verbose per-enemy logging (TESTING)
+        // "Stronger enemies" difficulty (Options → Harder Enemies → Stronger enemies). When on, normalize EVERY
+        // enemy (native included) to the tier ONE ABOVE the current — HP/defense to the next HP/def tier (Demon
+        // Shaft band), attack to the next dungeon — extrapolating a hypothetical band past the top when already at
+        // the highest. Overrides the gradient knob while active. Scales HP, defense AND attack.
+        internal static bool  StrongerEnemies       = false;
 
         private const int DungeonCount = 7;
 
@@ -210,6 +215,9 @@ namespace Dark_Cloud_Improved_Version
         // ════════════════════════════════════════════════════════════════════════════════════════════
         private static float EffectiveTier(int nativeTier, int currentDungeon)
         {
+            // "Stronger enemies": every enemy targets the tier ABOVE the current floor's, regardless of its native
+            // tier or the knob. currentDungeon+1 can exceed the top tier (Demon Shaft) — Lerp extrapolates it.
+            if (StrongerEnemies) return currentDungeon + 1;
             float k = Math.Max(0f, Math.Min(1f, NormalizationStrength));
             return Math.Max(currentDungeon, nativeTier - (nativeTier - currentDungeon) * k);
         }
@@ -217,7 +225,16 @@ namespace Dark_Cloud_Improved_Version
         private static float Lerp(float[] baseline, float effectiveTier)
         {
             if (effectiveTier <= 0) return baseline[0];
-            if (effectiveTier >= baseline.Length - 1) return baseline[^1];
+            int last = baseline.Length - 1;
+            if (effectiveTier >= last)
+            {
+                // At/above the top tier: extrapolate along the last segment's slope (the hypothetical dungeon/region
+                // a "Stronger" target asks for past Demon Shaft / its highest band). effectiveTier == last → baseline[last].
+                float vLast = baseline[last], vPrev = baseline[last - 1];
+                if (vLast <= 0) return vPrev;
+                if (vPrev <= 0) return vLast;
+                return vLast + (effectiveTier - last) * (vLast - vPrev);
+            }
             int i = (int)Math.Floor(effectiveTier);
             float frac = effectiveTier - i;
             float v0 = baseline[i], v1 = baseline[i + 1];
@@ -246,7 +263,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void NormalizeStatsForFloor()
         {
-            if (!NormalizeEnemyStats) return;
+            if (!NormalizeEnemyStats && !StrongerEnemies) return;
             // Leaving the floor (town / dungeon exit) must invalidate the cached key, so that RE-entering the same
             // dungeon+floor re-runs the sweep. The game reloads fresh native-value STBs/slots on every entry, so a
             // persisted key (same floor number) would otherwise skip normalization on the 2nd+ visit.
@@ -306,13 +323,15 @@ namespace Dark_Cloud_Improved_Version
                 EnemyDefaults enemyDefaults = _byTableIndex[tableIndex];
                 bool hasHp  = _hpdefTier.TryGetValue(tableIndex, out int nativeHpTier);
                 bool hasAtk = _atkTier.TryGetValue(tableIndex, out int nativeAtkTier);
+                // "Stronger" targets one tier ABOVE current, so it must scale NATIVE enemies too (the gradient
+                // randomizer mode only ever touches non-native ones, where native factor = 1).
                 bool native = (!hasHp || nativeHpTier == curHpDef) && (!hasAtk || nativeAtkTier == curAtk);
                 if (LogNormalize)
-                    Console.WriteLine($"[Normalize] slot {s} {enemyDefaults.Name} (id {id}, ti {tableIndex}): nativeTier(HpDef={(hasHp ? nativeHpTier : -1)},Atk={(hasAtk ? nativeAtkTier : -1)}) curTier(HpDef={curHpDef},Atk={curAtk}){(native ? " — native, skip" : "")}");
-                if (native) continue;
+                    Console.WriteLine($"[Normalize] slot {s} {enemyDefaults.Name} (id {id}, ti {tableIndex}): nativeTier(HpDef={(hasHp ? nativeHpTier : -1)},Atk={(hasAtk ? nativeAtkTier : -1)}) curTier(HpDef={curHpDef},Atk={curAtk}){(native && !StrongerEnemies ? " — native, skip" : "")}");
+                if (native && !StrongerEnemies) continue;
 
                 // HP / defense (HP/def tier) — per-slot scaling via the shared EnemyStatScaler pipeline.
-                if (hasHp && nativeHpTier != curHpDef)
+                if (hasHp && (StrongerEnemies || nativeHpTier != curHpDef))
                 {
                     if (enemyDefaults.MaxHp.HasValue)
                         EnemyStatScaler.ScaleHp(s, Factor(_bHp, nativeHpTier, curHpDef));
@@ -321,7 +340,7 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 // Damage — melee (per-slot cache) + projectile (per-species STB / BST), via the shared pipeline.
-                if (NormalizeDamage && hasAtk && nativeAtkTier != curAtk)
+                if ((NormalizeDamage || StrongerEnemies) && hasAtk && (StrongerEnemies || nativeAtkTier != curAtk))
                 {
                     EnemyStatScaler.ScaleMelee(s, enemyDefaults.MeleeDamage, Factor(_bMelee, nativeAtkTier, curAtk));
                     EnemyStatScaler.ScaleProjectile(s, tableIndex, Factor(_bProj, nativeAtkTier, curAtk));

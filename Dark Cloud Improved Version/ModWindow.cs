@@ -465,10 +465,16 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // Faster enemy movement + animation/attack speed (see HarderEnemies). Tune the multipliers there.
-        private void CBox_UserMode_HarderEnemies_Changed(object sender, RoutedEventArgs e)
+        // Difficulty toggles. "Faster enemies" = HarderEnemies (movement + attack speed, with the hit-window dwell);
+        // "Stronger enemies" = EnemyStatNormalizer normalizing every enemy to the next dungeon/band up.
+        private void CBox_UserMode_FasterEnemies_Changed(object sender, RoutedEventArgs e)
         {
-            HarderEnemies.Enabled = CBox_UserMode_HarderEnemies.IsChecked == true;
+            HarderEnemies.Enabled = CBox_UserMode_FasterEnemies.IsChecked == true;
+        }
+
+        private void CBox_UserMode_StrongerEnemies_Changed(object sender, RoutedEventArgs e)
+        {
+            EnemyStatNormalizer.StrongerEnemies = CBox_UserMode_StrongerEnemies.IsChecked == true;
         }
 
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)
