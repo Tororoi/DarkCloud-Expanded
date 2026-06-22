@@ -30,13 +30,13 @@ namespace Dark_Cloud_Improved_Version
         static bool hasClearMessageShown = false;
 
         private static readonly EnemyDefaults[] _bossSpecies = {
-            Enemies.IceArrow, Enemies.Dran, Enemies.IceQueen, Enemies.MasterUtan,
-            Enemies.KingsCurseCoffin, Enemies.MinotaurJoe, Enemies.DarkGenie, Enemies.DarkGenieForm2,
-            Enemies.RightHand, Enemies.LeftHand, Enemies.WineKeg, Enemies.KingsCurse,
-            Enemies.BlackKnight,
+            EnemySpecies.IceArrow, EnemySpecies.Dran, EnemySpecies.IceQueen, EnemySpecies.MasterUtan,
+            EnemySpecies.KingsCurseCoffin, EnemySpecies.MinotaurJoe, EnemySpecies.DarkGenie, EnemySpecies.DarkGenieForm2,
+            EnemySpecies.RightHand, EnemySpecies.LeftHand, EnemySpecies.WineKeg, EnemySpecies.KingsCurse,
+            EnemySpecies.BlackKnight,
             // Dark Genie (Final Form) + its spawned attack-effect entities.
-            Enemies.DarkGenieFinal, Enemies.DGFinalSummon, Enemies.DGFinalGroundWave,
-            Enemies.DGFinalBeam, Enemies.DGFinalBeamS,
+            EnemySpecies.DarkGenieFinal, EnemySpecies.DGFinalSummon, EnemySpecies.DGFinalGroundWave,
+            EnemySpecies.DGFinalBeam, EnemySpecies.DGFinalBeamS,
         };
         static byte[] wepLevelArray = new byte[10];
         public static bool monsterQuestMachoActive = false;
@@ -98,7 +98,7 @@ namespace Dark_Cloud_Improved_Version
                 cheatCodeThread.Start();
                 Resources.initiateRubyMemeFix();
             }
-            // EnemySlots.RedirectEnemyModel(Enemies.Dasher, Enemies.MinotaurJoe);
+            // Enemies.RedirectEnemyModel(EnemySpecies.Dasher, EnemySpecies.MinotaurJoe);
             while (true)
             {
                 // Runs every tick (incl. during floor load) so it can NOP MinotaurJoe's arena-init in the
@@ -128,10 +128,10 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
-                    // EnemySlots.PollEnemyDynamics();
-                    // EnemySlots.MonitorFlashTimer();
-                    // EnemySlots.TeleportEnemiesDebug();        // DEBUG: remove when done
-                    EnemySlots.DumpModelTableForRenderPosition(); // DEBUG: remove when done
+                    // Enemies.PollEnemyDynamics();
+                    // Enemies.MonitorFlashTimer();
+                    // Enemies.TeleportEnemiesDebug();        // DEBUG: remove when done
+                    Enemies.DumpModelTableForRenderPosition(); // DEBUG: remove when done
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
@@ -493,7 +493,7 @@ namespace Dark_Cloud_Improved_Version
                         if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not ingame anymore! Exited from Dungeon!");
-                            EnemySlots.RestoreRedirectedEnemies();
+                            Enemies.RestoreRedirectedEnemies();
                             EnemyModelInjector.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
                             break;
                         }
@@ -773,20 +773,20 @@ namespace Dark_Cloud_Improved_Version
             if(Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.RenderStatus)) > 0) enemiesSpawn = true;
 
             //Get all the current floor enemy ids
-            List<ushort> enemyFloorIds = EnemySlots.GetFloorEnemiesIds();
+            List<ushort> enemyFloorIds = Enemies.GetFloorEnemiesIds();
 
             //Count miniboss-eligible enemies on the floor — any real non-boss enemy (flyers now drop, so they qualify too)
             foreach (ushort enemy in enemyFloorIds)
             {
-                if (enemy != 0 && !Enemies.BossEnemies.ContainsKey(enemy)) numEligibleEnemies++;
+                if (enemy != 0 && !EnemySpecies.BossEnemies.ContainsKey(enemy)) numEligibleEnemies++;
             }
 
             //Only roll minibosses if there are more than 3 eligible enemies. Wise Owl floors have 3 key-holders, so
             //we need >3 to guarantee at least one non-key enemy is free to become a miniboss (avoids a failed roll).
-            // EnemySlots.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
-            // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
-            EnemySlots.LogEnemySpawns();
-            EnemySlots.LogFloorDataForTileMapSearch();
+            // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
+            // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
+            Enemies.LogEnemySpawns();
+            Enemies.LogFloorDataForTileMapSearch();
             EnemyModelInjector.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
 
             if (numEligibleEnemies > 3)
@@ -813,9 +813,9 @@ namespace Dark_Cloud_Improved_Version
 
             // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
             minibossProcess?.Join(2000);
-            // EnemySlots.ApplyTestModifications();
-            EnemySlots.ResetPollState();
-            // EnemySlots.FixModelRedirectSpawnPositions();
+            // Enemies.ApplyTestModifications();
+            Enemies.ResetPollState();
+            // Enemies.FixModelRedirectSpawnPositions();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
         }
 

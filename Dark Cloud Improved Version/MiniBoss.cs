@@ -23,9 +23,9 @@ namespace Dark_Cloud_Improved_Version
         // reuse the base Id (e.g. Cursed Rose + Cursed Rose (Enhanced) are both Id 68), so they're covered automatically.
         static readonly HashSet<ushort> _attackRangeWide = new HashSet<ushort>
         {
-            Enemies.CursedRose.Id, Enemies.DarkFlower.Id, Enemies.CannibalPlant.Id,
-            Enemies.Opar.Id, Enemies.KingPrickly.Id, Enemies.Rockanoff.Id,
-            Enemies.PiratesChariot.Id,
+            EnemySpecies.CursedRose.Id, EnemySpecies.DarkFlower.Id, EnemySpecies.CannibalPlant.Id,
+            EnemySpecies.Opar.Id, EnemySpecies.KingPrickly.Id, EnemySpecies.Rockanoff.Id,
+            EnemySpecies.PiratesChariot.Id,
         };
         const float minibossHpFactor = 3.0F;      //Miniboss max-HP multiplier (×3)
         const float minibossDefenseFactor = 1.5F; //Miniboss defense multiplier — DamageReduction + WeaponDefense (×1.5)
@@ -58,12 +58,12 @@ namespace Dark_Cloud_Improved_Version
 
             // Count all enemies ineligible to become a miniboss (ID 0, boss, or holds the floor key)
             int ineligibleCount = 0;
-            List<ushort> allIds = EnemySlots.GetFloorEnemiesIds();
+            List<ushort> allIds = Enemies.GetFloorEnemiesIds();
             for (int i = 0; i < allIds.Count; i++)
             {
                 ushort id = allIds[i];
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
-                if (id == 0 || Enemies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
+                if (id == 0 || EnemySpecies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
                     ineligibleCount++;
             }
 
@@ -75,7 +75,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 ushort id = allIds[i];
                 if (id == 0) continue;
-                if (Enemies.BossEnemies.ContainsKey(id)) continue;   // never promote a boss/boss-companion (e.g. Ice Queen 113, IceArrow 84) to a miniboss
+                if (EnemySpecies.BossEnemies.ContainsKey(id)) continue;   // never promote a boss/boss-companion (e.g. Ice Queen 113, IceArrow 84) to a miniboss
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (dropVal != 0 && dropVal != 65535) continue;
                 if (forceAllMinibosses || rnd.Next(denominator) == 0)
@@ -125,7 +125,7 @@ namespace Dark_Cloud_Improved_Version
         // skate), so exclude them from the stride-sync. Keyed by species Id (enhanced variants share the base Id).
         static readonly HashSet<ushort> _walkSyncExclude = new HashSet<ushort>
         {
-            Enemies.CaveBat.Id, Enemies.EvilBat.Id,
+            EnemySpecies.CaveBat.Id, EnemySpecies.EvilBat.Id,
         };
         internal static bool WalkSyncExcluded(ushort speciesId) => _walkSyncExclude.Contains(speciesId);
 
@@ -161,7 +161,7 @@ namespace Dark_Cloud_Improved_Version
             HashSet<ushort> mbSpecies = new HashSet<ushort>();
             foreach (int slot in miniBossEnemyNumbers)
             {
-                ushort sid = EnemySlots.GetFloorEnemyId(slot);
+                ushort sid = Enemies.GetFloorEnemyId(slot);
                 if (sid != 0) mbSpecies.Add(sid);
             }
             if (mbSpecies.Count == 0) return;
@@ -171,7 +171,7 @@ namespace Dark_Cloud_Improved_Version
             Dictionary<ushort, float> nearestDist = new Dictionary<ushort, float>();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                ushort id = EnemySlots.GetFloorEnemyId(s);
+                ushort id = Enemies.GetFloorEnemyId(s);
                 if (id == 0 || !mbSpecies.Contains(id)) continue;
                 float dist = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(s, 0) + EnemySlotOffsets.DistanceToPlayer);
                 if (!nearestDist.TryGetValue(id, out float cur) || dist < cur) { nearestDist[id] = dist; nearestSlot[id] = s; }
@@ -192,7 +192,7 @@ namespace Dark_Cloud_Improved_Version
             if (isScaled == wantScaled) return;   // nearest's status unchanged → nothing to do
 
             // Long-reach species get a wider factor than the default.
-            float factor = _attackRangeWide.Contains(EnemySlots.GetFloorEnemyId(nearestSlot))
+            float factor = _attackRangeWide.Contains(Enemies.GetFloorEnemyId(nearestSlot))
                 ? attackRangeFactorWide : attackRangeFactor;
 
             long stb = Memory.ToMmu(stbNative);
@@ -255,16 +255,16 @@ namespace Dark_Cloud_Improved_Version
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 "\nApplying miniboss to slot: " + slot +
-                "\nEnemy ID: " + EnemySlots.GetFloorEnemyId(slot) + "\n");
+                "\nEnemy ID: " + Enemies.GetFloorEnemyId(slot) + "\n");
 
             // Eligibility filtering should prevent a key-holder from ever being chosen.
             // This block should be unreachable — log a warning if it fires.
-            if (EnemySlots.EnemyHasKey(slot, dungeon))
+            if (Enemies.EnemyHasKey(slot, dungeon))
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss ApplyMiniBossToSlot: slot " + slot + " holds a key — this should not happen with the current eligibility filter!");
 
             int startAbs    = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs));
             int startGold   = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop));
-            ushort enemySpeciesId = EnemySlots.GetFloorEnemyId(slot);
+            ushort enemySpeciesId = Enemies.GetFloorEnemyId(slot);
 
             Memory.WriteFloat(enemyZeroWidth  + (scaleOffset * slot), scaleSize);
             Memory.WriteFloat(enemyZeroHeight + (scaleOffset * slot), scaleSize);
@@ -307,7 +307,7 @@ namespace Dark_Cloud_Improved_Version
             // unscaled to avoid buffing every same-species enemy on the floor.)
             EnemyStatScaler.ScaleHp(slot, minibossHpFactor);
             EnemyStatScaler.ScaleDefense(slot, minibossDefenseFactor, minibossDefenseFactor);
-            if (Enemies.Defaults.TryGetValue(enemySpeciesId, out EnemyDefaults def))
+            if (EnemySpecies.Defaults.TryGetValue(enemySpeciesId, out EnemyDefaults def))
                 EnemyStatScaler.ScaleMelee(slot, def.MeleeDamage, minibossAttackFactor);
 
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Abs),          startAbs * enemyABSMult);
@@ -315,7 +315,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop),  startGold * enemyGoldMult);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.DropChance),   enemyLootChance);
 
-            // EnemySlots.EnableEnemyDrops patches the static species table on game load, so every spawn — minibosses
+            // Enemies.EnableEnemyDrops patches the static species table on game load, so every spawn — minibosses
             // included — inherits the death-drop flag. See EnemySpeciesTable.StealFlag.)
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
@@ -359,7 +359,7 @@ namespace Dark_Cloud_Improved_Version
             foreach (int slot in miniBossEnemyNumbers)
             {
                 if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0)
-                    snap.Add(new MiniBossSnapshot { Slot = slot, TypeId = EnemySlots.GetFloorEnemyId(slot) });
+                    snap.Add(new MiniBossSnapshot { Slot = slot, TypeId = Enemies.GetFloorEnemyId(slot) });
             }
             miniBossRolled = false;
             miniBossEnemyNumbers.Clear();
@@ -379,20 +379,20 @@ namespace Dark_Cloud_Improved_Version
             var restoredSlots = new HashSet<int>();
             foreach (var entry in snapshot)
             {
-                if (EnemySlots.GetFloorEnemyId(entry.Slot) == entry.TypeId)
+                if (Enemies.GetFloorEnemyId(entry.Slot) == entry.TypeId)
                     restoredSlots.Add(entry.Slot);
             }
 
             foreach (var entry in snapshot)
             {
-                if (EnemySlots.GetFloorEnemyId(entry.Slot) != entry.TypeId)
+                if (Enemies.GetFloorEnemyId(entry.Slot) != entry.TypeId)
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[WARNING] Miniboss restore: type mismatch at slot " + entry.Slot + ", skipping.");
                     continue;
                 }
 
                 // If the respawned enemy was assigned the key, transfer it away before applying stats
-                if (EnemySlots.EnemyHasKey(entry.Slot, dungeon))
+                if (Enemies.EnemyHasKey(entry.Slot, dungeon))
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Miniboss restore: key conflict at slot " + entry.Slot + ", transferring key.");
                     ushort keyId = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(entry.Slot, EnemySlotOffsets.ForceItemDrop));
@@ -400,8 +400,8 @@ namespace Dark_Cloud_Improved_Version
                     for (int i = 0; i < 15; i++)
                     {
                         if (restoredSlots.Contains(i) || i == entry.Slot) continue;
-                        if (EnemySlots.GetFloorEnemyId(i) == 0) continue;
-                        if (EnemySlots.EnemyHasKey(i, dungeon)) continue;
+                        if (Enemies.GetFloorEnemyId(i) == 0) continue;
+                        if (Enemies.EnemyHasKey(i, dungeon)) continue;
                         newSlot = i;
                         break;
                     }

@@ -237,7 +237,7 @@ namespace Dark_Cloud_Improved_Version
         // all floors) and a few species records IN PLACE. Nothing reloads them, so without this they persist
         // for the whole session. We snapshot the original bytes on the FIRST edit (per dungeon / per record)
         // and write them back on dungeon exit. Dungeon.cs calls RestoreSpawnRoster() there, next to
-        // EnemySlots.RestoreRedirectedEnemies(). Mirrors the RedirectEnemyModel snapshot pattern.
+        // Enemies.RestoreRedirectedEnemies(). Mirrors the RedirectEnemyModel snapshot pattern.
         private static int _rosterSnapDungeon = -1;
         private static byte[] _rosterSnapNormal, _rosterSnapUra;
         private static readonly System.Collections.Generic.Dictionary<int, byte[]> _speciesRecordSnaps = new();
@@ -528,7 +528,7 @@ namespace Dark_Cloud_Improved_Version
                 if (armedBoss < 0 && BossScriptPatcher.IsPatchable(tableIndices[i])) armedBoss = tableIndices[i];
             }
             BossScriptPatcher.ArmedBoss = armedBoss;
-            if (armedBoss == Enemies.IceQueen.TableIndex.Value) BossScriptPatcher.TagCompanions();   // name Ice Queen's eid-0 companions in logs
+            if (armedBoss == EnemySpecies.IceQueen.TableIndex.Value) BossScriptPatcher.TagCompanions();   // name Ice Queen's eid-0 companions in logs
             if (armedBoss >= 0)
                 Console.WriteLine($"[BossPatch] armed for boss {armedBoss} — will NOP its label-1 _INITIALIZE in the loaded STB.");
 
@@ -610,13 +610,13 @@ namespace Dark_Cloud_Improved_Version
             // (count, tableIndex/id, weight) — verbatim from the real SW floor-18 BtEnemyLayout block.
             var block = new (int cnt, int id, int wt)[]
             {
-                (1, Enemies.IceQueen.TableIndex.Value,  40),   // Ice Queen
-                (1, Enemies.IQComp101.TableIndex.Value, 10),   // baria
-                (1, Enemies.IceArrow.TableIndex.Value,  10),   // korinoya
-                (1, Enemies.IQComp102.TableIndex.Value, 10),   // kori
-                (1, Enemies.IQComp103.TableIndex.Value, 10),   // i_meteo
-                (1, Enemies.SWComp92.TableIndex.Value,  10),   // reiki
-                (1, Enemies.IQComp104.TableIndex.Value, 10),   // i_tatumaki
+                (1, EnemySpecies.IceQueen.TableIndex.Value,  40),   // Ice Queen
+                (1, EnemySpecies.IQComp101.TableIndex.Value, 10),   // baria
+                (1, EnemySpecies.IceArrow.TableIndex.Value,  10),   // korinoya
+                (1, EnemySpecies.IQComp102.TableIndex.Value, 10),   // kori
+                (1, EnemySpecies.IQComp103.TableIndex.Value, 10),   // i_meteo
+                (1, EnemySpecies.SWComp92.TableIndex.Value,  10),   // reiki
+                (1, EnemySpecies.IQComp104.TableIndex.Value, 10),   // i_tatumaki
             };
             int floors = BtEnemyLayout.FloorCount[dungeon];
             SnapshotRosterIfNeeded(dungeon);
@@ -631,7 +631,7 @@ namespace Dark_Cloud_Improved_Version
                 if (armed < 0 && BossScriptPatcher.IsPatchable(id)) armed = id;
             }
             BossScriptPatcher.ArmedBoss = armed;
-            if (armed == Enemies.IceQueen.TableIndex.Value) BossScriptPatcher.TagCompanions();   // name Ice Queen's eid-0 companions in logs
+            if (armed == EnemySpecies.IceQueen.TableIndex.Value) BossScriptPatcher.TagCompanions();   // name Ice Queen's eid-0 companions in logs
             foreach (int layoutBase in new[] { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] })
                 for (int floor = 0; floor < floors; floor++)
                     for (int e = 0; e < BtEnemyLayout.EntriesPerFloor; e++)
@@ -659,7 +659,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void RosterIndexTest(int bossTableIndex)
         {
-            int carrier = Enemies.Dasher.TableIndex.Value;   // regular DBC enemy, not boss-gated
+            int carrier = EnemySpecies.Dasher.TableIndex.Value;   // regular DBC enemy, not boss-gated
             SetSpawnRosterToSpecies(carrier);                // make every spawn use the carrier index
             // copy boss ModelCode (0x000) -> carrier ModelCode, so the carrier renders as the boss
             byte[] bossCode = Memory.ReadByteArray(
@@ -712,7 +712,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void SetCarrierBossAI(int bossTableIndex)
         {
-            int carrier = Enemies.Dasher.TableIndex.Value;
+            int carrier = EnemySpecies.Dasher.TableIndex.Value;
             byte[] bossCode = Memory.ReadByteArray(
                 EnemySpeciesTable.RecordAddress(bossTableIndex) + EnemySpeciesTable.ModelCode, 4);
             Memory.WriteByteArray(
@@ -880,12 +880,12 @@ namespace Dark_Cloud_Improved_Version
         // c22a (166) has no _RUN_SCRIPT in label-120 (different death mechanism) -> runScriptOff 0, not yet fixed.
         private static readonly System.Collections.Generic.Dictionary<int, (uint codeOff, int initOff, int runScriptOff)> _bossInfo = new()
         {
-            [Enemies.Dran.TableIndex.Value]             = (0x3AC8u, 0x419C, 0x3A3C),  // Dran        (c12a)
-            [Enemies.MasterUtan.TableIndex.Value]       = (0x4484u, 0x4F48, 0x438C),  // Master Utan (c14a)
-            [Enemies.IceQueen.TableIndex.Value]         = (0x2914u, 0x2B44, 0x288C),  // Ice Queen   (c13a) — codeOff@0x54; label-1 _SET_POSITION; label-120 _RUN_SCRIPT
-            [Enemies.KingsCurseCoffin.TableIndex.Value] = (0x778u,  0x8BC,  0x70C),   // King's Curse(c15a) — label-1 SET_POS origin-reset @0x8BC; label-120 _RUN_SCRIPT(510) cutscene cmdId(0x6F) @0x70C (op1 push1, not op3)
-            [Enemies.MinotaurJoe.TableIndex.Value]      = (0x575Cu, 0x631C, 0x5700),  // MinotaurJoe (c16a)
-            [Enemies.BlackKnightMount.TableIndex.Value] = (0x60C0u, 0x6C20, 0),       // c22a (no label-120 _RUN_SCRIPT; cutscene fix TBD)
+            [EnemySpecies.Dran.TableIndex.Value]             = (0x3AC8u, 0x419C, 0x3A3C),  // Dran        (c12a)
+            [EnemySpecies.MasterUtan.TableIndex.Value]       = (0x4484u, 0x4F48, 0x438C),  // Master Utan (c14a)
+            [EnemySpecies.IceQueen.TableIndex.Value]         = (0x2914u, 0x2B44, 0x288C),  // Ice Queen   (c13a) — codeOff@0x54; label-1 _SET_POSITION; label-120 _RUN_SCRIPT
+            [EnemySpecies.KingsCurseCoffin.TableIndex.Value] = (0x778u,  0x8BC,  0x70C),   // King's Curse(c15a) — label-1 SET_POS origin-reset @0x8BC; label-120 _RUN_SCRIPT(510) cutscene cmdId(0x6F) @0x70C (op1 push1, not op3)
+            [EnemySpecies.MinotaurJoe.TableIndex.Value]      = (0x575Cu, 0x631C, 0x5700),  // MinotaurJoe (c16a)
+            [EnemySpecies.BlackKnightMount.TableIndex.Value] = (0x60C0u, 0x6C20, 0),       // c22a (no label-120 _RUN_SCRIPT; cutscene fix TBD)
         };
         private static (uint codeOff, int initOff, int runScriptOff) BossInfo(int tableIndex) =>
             _bossInfo.TryGetValue(tableIndex, out var info) ? info : (0u, 0, 0);
@@ -949,11 +949,11 @@ namespace Dark_Cloud_Improved_Version
         private static readonly System.Collections.Generic.Dictionary<int, BossDeathData> _bossDeath = new()
         {
             //                                            collapse(mot,start,end)  roar(mot,start,end)  label120
-            [Enemies.Dran.TableIndex.Value]             = new(6,  100, 120,        -1, 0,   0,          -1),
-            [Enemies.MasterUtan.TableIndex.Value]       = new(13, 360, 385,        -1, 0,   0,          -1),
-            [Enemies.IceQueen.TableIndex.Value]         = new(11, 165, 185,        -1, 0,   0,          -1),
-            [Enemies.KingsCurseCoffin.TableIndex.Value] = new(5,  90,  110,        -1, 0,   0,          0x624),
-            [Enemies.MinotaurJoe.TableIndex.Value]      = new(9,  300, 330,         4, 210, 260,        -1),
+            [EnemySpecies.Dran.TableIndex.Value]             = new(6,  100, 120,        -1, 0,   0,          -1),
+            [EnemySpecies.MasterUtan.TableIndex.Value]       = new(13, 360, 385,        -1, 0,   0,          -1),
+            [EnemySpecies.IceQueen.TableIndex.Value]         = new(11, 165, 185,        -1, 0,   0,          -1),
+            [EnemySpecies.KingsCurseCoffin.TableIndex.Value] = new(5,  90,  110,        -1, 0,   0,          0x624),
+            [EnemySpecies.MinotaurJoe.TableIndex.Value]      = new(9,  300, 330,         4, 210, 260,        -1),
         };
         private static BossDeathData BossDeath(int tableIndex) =>
             _bossDeath.TryGetValue(tableIndex, out var d) ? d : new BossDeathData(-1, 0, 0, -1, 0, 0, -1);
@@ -1011,7 +1011,7 @@ namespace Dark_Cloud_Improved_Version
                 //  TrySlotSwap: physically reorder all 7 entities to their NATIVE slots (0-6) so the real companion
                 //    scripts run unmodified (no remap, no stand-ins) — gives the real arrow flight + reiki damage.
                 //  else: leave them scattered and drive the fight via the _GET_MONSTOR remap + global stand-ins.
-                if (bossTableIndex == Enemies.IceQueen.TableIndex.Value)
+                if (bossTableIndex == EnemySpecies.IceQueen.TableIndex.Value)
                 {
                     if (TrySlotSwap)
                     {
@@ -1031,7 +1031,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else { if (TranslateCompanions) PatchCompanionPositions(); PatchShieldTarget(); KorinoyaStandIn(); }
                 }
-                if (bossTableIndex == Enemies.KingsCurseCoffin.TableIndex.Value) ReorderKingsCurseOnce();   // coffin(115)->slot0, king(100)->slot1 once both are live
+                if (bossTableIndex == EnemySpecies.KingsCurseCoffin.TableIndex.Value) ReorderKingsCurseOnce();   // coffin(115)->slot0, king(100)->slot1 once both are live
                 // Locate the boss's STB PRE-SPAWN (so the label-1 _SET_POSITION patch lands before it runs its
                 // init). CRunScript+0x3C can't be used here — it only resolves post-spawn. Order:
                 //   1) KnownAddrs[(boss,dungeon)] — instant, no scan.  2) cached base (cheap re-validate).
@@ -1045,7 +1045,7 @@ namespace Dark_Cloud_Improved_Version
                     stb = ScanRange(ScanLo, ScanHi, codeOff);
                     if (stb >= 0) Console.WriteLine($"[BossPatch] boss {bossTableIndex} STB @ 0x{stb:X8} (dungeon {dungeon}, scan) — add to KnownAddrs for instant patch.");
                 }
-                if (stb >= 0) { _stbBase = stb; EnsureNopped(stb, initOff, bossTableIndex); if (bossTableIndex == Enemies.MasterUtan.TableIndex.Value) DumpUtanLivePos(stb, initOff); }
+                if (stb >= 0) { _stbBase = stb; EnsureNopped(stb, initOff, bossTableIndex); if (bossTableIndex == EnemySpecies.MasterUtan.TableIndex.Value) DumpUtanLivePos(stb, initOff); }
             }
             catch { /* transient PINE read; retry next tick */ }
         }
@@ -1057,7 +1057,7 @@ namespace Dark_Cloud_Improved_Version
         private static void DumpUtanLivePos(long stbBase, int initOff)
         {
             if (_utanPosLogged) return;
-            int slot = FindSlotByEid(Enemies.MasterUtan.Id);
+            int slot = FindSlotByEid(EnemySpecies.MasterUtan.Id);
             if (slot < 0) return;
             _utanPosLogged = true;
             long blk = stbBase + initOff;
@@ -1089,27 +1089,27 @@ namespace Dark_Cloud_Improved_Version
         private static readonly System.Collections.Generic.Dictionary<(int tableIndex, int dungeon), long[]> _knownAddrs = new()
         {
             // Divine Beast Cave
-            [(Enemies.Dran.TableIndex.Value,             Dungeons.DivineBeastCave.Id)] = [0x012166D0],             // Dran
-            [(Enemies.MasterUtan.TableIndex.Value,       Dungeons.DivineBeastCave.Id)] = [0x01211A90],             // Master Utan
-            [(Enemies.IceQueen.TableIndex.Value,         Dungeons.DivineBeastCave.Id)] = [0x013C4C50],             // Ice Queen
-            [(Enemies.KingsCurseCoffin.TableIndex.Value, Dungeons.DivineBeastCave.Id)] = [0x0108ADD0],             // King's Curse
-            [(Enemies.KingsCurse.TableIndex.Value,       Dungeons.DivineBeastCave.Id)] = [0x210E5830],             // King's Curse phase entity
-            [(Enemies.MinotaurJoe.TableIndex.Value,      Dungeons.DivineBeastCave.Id)] = [0x011A8990, 0x011A8950], // Minotaur Joe
-            [(Enemies.BlackKnightMount.TableIndex.Value, Dungeons.DivineBeastCave.Id)] = [0x011C3C80],             // Black Knight Mount
+            [(EnemySpecies.Dran.TableIndex.Value,             Dungeons.DivineBeastCave.Id)] = [0x012166D0],             // Dran
+            [(EnemySpecies.MasterUtan.TableIndex.Value,       Dungeons.DivineBeastCave.Id)] = [0x01211A90],             // Master Utan
+            [(EnemySpecies.IceQueen.TableIndex.Value,         Dungeons.DivineBeastCave.Id)] = [0x013C4C50],             // Ice Queen
+            [(EnemySpecies.KingsCurseCoffin.TableIndex.Value, Dungeons.DivineBeastCave.Id)] = [0x0108ADD0],             // King's Curse
+            [(EnemySpecies.KingsCurse.TableIndex.Value,       Dungeons.DivineBeastCave.Id)] = [0x210E5830],             // King's Curse phase entity
+            [(EnemySpecies.MinotaurJoe.TableIndex.Value,      Dungeons.DivineBeastCave.Id)] = [0x011A8990, 0x011A8950], // Minotaur Joe
+            [(EnemySpecies.BlackKnightMount.TableIndex.Value, Dungeons.DivineBeastCave.Id)] = [0x011C3C80],             // Black Knight Mount
             // Wise Owl Forest
-            [(Enemies.MinotaurJoe.TableIndex.Value,      Dungeons.WiseOwlForest.Id)]    = [0x013B7190, 0x013B7250],           // Minotaur Joe
+            [(EnemySpecies.MinotaurJoe.TableIndex.Value,      Dungeons.WiseOwlForest.Id)]    = [0x013B7190, 0x013B7250],           // Minotaur Joe
             // Shipwreck (3 sections)
-            [(Enemies.MinotaurJoe.TableIndex.Value,      Dungeons.Shipwreck.Id)]        = [0x012BF210, 0x012BF190, 0x012CACD0], // Minotaur Joe
+            [(EnemySpecies.MinotaurJoe.TableIndex.Value,      Dungeons.Shipwreck.Id)]        = [0x012BF210, 0x012BF190, 0x012CACD0], // Minotaur Joe
             // Sun & Moon Temple
-            [(Enemies.MinotaurJoe.TableIndex.Value,      Dungeons.SunAndMoonTemple.Id)] = [0x01137750],            // Minotaur Joe
+            [(EnemySpecies.MinotaurJoe.TableIndex.Value,      Dungeons.SunAndMoonTemple.Id)] = [0x01137750],            // Minotaur Joe
             // Moon Sea
-            [(Enemies.IceQueen.TableIndex.Value,  Dungeons.MoonSea.Id)] = [0x015860D0], // Ice Queen
-            [(Enemies.IQComp101.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x015A2990], // baria      (codeOff 0x874)
-            [(Enemies.IceArrow.TableIndex.Value,  Dungeons.MoonSea.Id)] = [0x015BF790], // korinoya   (codeOff 0x7D0)
-            [(Enemies.IQComp102.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x015DC890], // kori       (codeOff 0x5EC)
-            [(Enemies.IQComp103.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x015F9920], // i_meteo    (codeOff 0x5EC)
-            [(Enemies.SWComp92.TableIndex.Value,  Dungeons.MoonSea.Id)] = [0x01646B50], // reiki      (codeOff 0x3AC)
-            [(Enemies.IQComp104.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x01646B50], // i_tatumaki (codeOff 0x3AC)
+            [(EnemySpecies.IceQueen.TableIndex.Value,  Dungeons.MoonSea.Id)] = [0x015860D0], // Ice Queen
+            [(EnemySpecies.IQComp101.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x015A2990], // baria      (codeOff 0x874)
+            [(EnemySpecies.IceArrow.TableIndex.Value,  Dungeons.MoonSea.Id)] = [0x015BF790], // korinoya   (codeOff 0x7D0)
+            [(EnemySpecies.IQComp102.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x015DC890], // kori       (codeOff 0x5EC)
+            [(EnemySpecies.IQComp103.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x015F9920], // i_meteo    (codeOff 0x5EC)
+            [(EnemySpecies.SWComp92.TableIndex.Value,  Dungeons.MoonSea.Id)] = [0x01646B50], // reiki      (codeOff 0x3AC)
+            [(EnemySpecies.IQComp104.TableIndex.Value, Dungeons.MoonSea.Id)] = [0x01646B50], // i_tatumaki (codeOff 0x3AC)
         };
         private static long[] KnownAddrs(int tableIndex, int dungeon) =>
             _knownAddrs.TryGetValue((tableIndex, dungeon), out var addrs) ? addrs : [];
@@ -1283,7 +1283,7 @@ namespace Dark_Cloud_Improved_Version
         // (CRunScript+0x3C = the STB base). Confirmed by codeOff(+0x54)==0x2fdc. -1 until live.
         private static long LiveKcPhaseStb()
         {
-            int slot = FindSlotByEid(Enemies.KingsCurse.Id);
+            int slot = FindSlotByEid(EnemySpecies.KingsCurse.Id);
             if (slot < 0) return -1;
             long stb = SlotStbBase(slot);
             return stb >= 0 && (uint)Memory.ReadInt(stb + 0x54) == 0x2FDCu ? stb : -1;
@@ -1641,9 +1641,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static readonly (int nativeSlot, ushort eid)[] _nativeLayout =
         {
-            (0, Enemies.IceQueen.Id), // Ice Queen
+            (0, EnemySpecies.IceQueen.Id), // Ice Queen
             (1, EidBaria),            // baria (shield)   — genuine slot 1 (the damageable companion)
-            (2, Enemies.IceArrow.Id), // korinoya (ice arrow)
+            (2, EnemySpecies.IceArrow.Id), // korinoya (ice arrow)
             (3, EidKori),             // kori (ice source)
             (4, EidIMeteo),           // i_meteo (meteor)
             (5, EidReiki),            // reiki (aura)     — genuine slot 5 (hp 80, scale 5)
@@ -1661,7 +1661,7 @@ namespace Dark_Cloud_Improved_Version
         // each step since swaps shuffle things). Runs once per fight; re-armed when Ice Queen despawns.
         private static void ReorderToNativeOnce()
         {
-            if (FindSlotByEid(Enemies.IceQueen.Id) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _anchorSet = false; _shieldSlot = -1; return; }   // Ice Queen gone — re-arm
+            if (FindSlotByEid(EnemySpecies.IceQueen.Id) < 0) { _swapDone = false; _korPatched = false; _bariaPatched = false; _mapDumped = false; _anchorSet = false; _shieldSlot = -1; return; }   // Ice Queen gone — re-arm
             if (_swapDone) return;
             foreach (var (_, eid) in _nativeLayout)
                 if (FindSlotByEid(eid) < 0) return;                       // wait until all 7 are present
@@ -1686,13 +1686,13 @@ namespace Dark_Cloud_Improved_Version
         // spawn that scrambles them breaks the fight. Physically move them to native slots once both are live.
         private static readonly (int nativeSlot, ushort eid)[] _kcNativeLayout =
         {
-            (0, Enemies.KingsCurseCoffin.Id),   // coffin (c15a) — the HP/kill target
-            (1, Enemies.KingsCurse.Id),         // king   (c15b) — the active, lockable attacker
+            (0, EnemySpecies.KingsCurseCoffin.Id),   // coffin (c15a) — the HP/kill target
+            (1, EnemySpecies.KingsCurse.Id),         // king   (c15b) — the active, lockable attacker
         };
         private static bool _kcSwapDone;
         private static void ReorderKingsCurseOnce()
         {
-            if (FindSlotByEid(Enemies.KingsCurseCoffin.Id) < 0 && FindSlotByEid(Enemies.KingsCurse.Id) < 0) { _kcSwapDone = false; return; }   // both gone — re-arm
+            if (FindSlotByEid(EnemySpecies.KingsCurseCoffin.Id) < 0 && FindSlotByEid(EnemySpecies.KingsCurse.Id) < 0) { _kcSwapDone = false; return; }   // both gone — re-arm
             if (_kcSwapDone) return;
             foreach (var (_, eid) in _kcNativeLayout)
                 if (FindSlotByEid(eid) < 0) return;                       // wait until BOTH are present
@@ -1806,15 +1806,15 @@ namespace Dark_Cloud_Improved_Version
 
         // Ice Queen's companions ship with EnemySpeciesId 0 in their table records (only korinoya/IceQueen have
         // real ids), so logs show them as "Unknown id=0". Write a synthetic id into each record BEFORE spawn (the
-        // slot inherits the record's id at spawn) so [EnemyInfo]/the observer name them via Enemies.BossEnemies,
+        // slot inherits the record's id at spawn) so [EnemyInfo]/the observer name them via EnemySpecies.BossEnemies,
         // which also excludes them from miniboss scaling. Idempotent (only writes records still at 0).
         private static readonly (int tableIndex, ushort eid)[] _companionTags =
         {
-            (Enemies.IQComp101.TableIndex.Value, EidBaria),      // baria
-            (Enemies.IQComp102.TableIndex.Value, EidKori),       // kori
-            (Enemies.IQComp103.TableIndex.Value, EidIMeteo),     // i_meteo
-            (Enemies.IQComp104.TableIndex.Value, EidITatumaki),  // i_tatumaki
-            (Enemies.SWComp92.TableIndex.Value,  EidReiki),      // reiki
+            (EnemySpecies.IQComp101.TableIndex.Value, EidBaria),      // baria
+            (EnemySpecies.IQComp102.TableIndex.Value, EidKori),       // kori
+            (EnemySpecies.IQComp103.TableIndex.Value, EidIMeteo),     // i_meteo
+            (EnemySpecies.IQComp104.TableIndex.Value, EidITatumaki),  // i_tatumaki
+            (EnemySpecies.SWComp92.TableIndex.Value,  EidReiki),      // reiki
         };
         internal static void TagCompanions()
         {
@@ -1883,7 +1883,7 @@ namespace Dark_Cloud_Improved_Version
         private static void DiagnoseIQ(int iqSlot)
         {
             if (_iqDiagDone) return;
-            var (codeOff, initOff, _) = BossInfo(Enemies.IceQueen.TableIndex.Value);
+            var (codeOff, initOff, _) = BossInfo(EnemySpecies.IceQueen.TableIndex.Value);
             if (_stbBase < 0 || !IsBossStb(_stbBase, codeOff)) return;
             long b = _stbBase + initOff;   // _SET_POSITION block: args at +20/+32/+44, operands at +16/+28/+40
             int o1 = Memory.ReadInt(b + 16), v1 = Memory.ReadInt(b + 20);
@@ -1947,7 +1947,7 @@ namespace Dark_Cloud_Improved_Version
             int iq = -1;
             for (int s = 0; s < n; s++)
                 if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1
-                    && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == Enemies.IceQueen.Id) { iq = s; break; }
+                    && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == EnemySpecies.IceQueen.Id) { iq = s; break; }
             if (iq < 0) { _remappedForSlot = -1; return; }   // Ice Queen gone — re-arm the remap for next floor
 
             DiagnoseIQ(iq);
@@ -2094,7 +2094,7 @@ namespace Dark_Cloud_Improved_Version
                 int iq = -1;
                 for (int s = 0; s < n; s++)
                     if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) != -1
-                        && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == Enemies.IceQueen.Id)
+                        && Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId)) == EnemySpecies.IceQueen.Id)
                     { iq = s; break; }
                 if (iq < 0)
                 {
@@ -2137,12 +2137,12 @@ namespace Dark_Cloud_Improved_Version
                     int pmNow = live ? Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + InjectorAddresses.PlayingMotionIdOff) : -1;
                     if (pmNow != _obsMot[s])
                     {
-                        if (live) Console.WriteLine($"{ts} [IQobs] slot {s}{(s == iq ? "(IceQueen)" : eid == Enemies.IceArrow.Id ? "(IceArrow)" : "")} playMot {_obsMot[s]} -> {pmNow}");
+                        if (live) Console.WriteLine($"{ts} [IQobs] slot {s}{(s == iq ? "(IceQueen)" : eid == EnemySpecies.IceArrow.Id ? "(IceArrow)" : "")} playMot {_obsMot[s]} -> {pmNow}");
                         _obsMot[s] = pmNow;
                     }
                 }
                 // On any roster change (entity spawns / clears / changes eid), print a clean readable slot snapshot.
-                if (rosterChanged) EnemySlots.BossInfo($"roster @ {ts}");
+                if (rosterChanged) Enemies.BossInfo($"roster @ {ts}");
                 // Per-frame HP watch — log the instant ANY slot's HP changes, so a landed hit is unmistakable and we
                 // learn which entity takes which damage type. In the GENUINE fight this reveals baria's real eid and
                 // its physical break threshold; the Queen should only drop to Ruby's MAGIC, baria only to PHYSICAL.
@@ -2187,7 +2187,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == -1) continue;
                         ushort sid = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-                        if (sid == Enemies.IceArrow.Id) LogChar("korinoya", s);
+                        if (sid == EnemySpecies.IceArrow.Id) LogChar("korinoya", s);
                         else if (sid == 240) LogChar("baria/shield", s);   // expect IQ.pos + facing×15 (just in front of her)
                     }
                 }
@@ -2234,7 +2234,7 @@ namespace Dark_Cloud_Improved_Version
         private static void EnsureNopped(long stbBase, int initOff, int tableIndex)
         {
             long setPosCmdAddr = stbBase + initOff;
-            if (tableIndex == Enemies.IceQueen.TableIndex.Value)
+            if (tableIndex == EnemySpecies.IceQueen.TableIndex.Value)
             {
                 // Capture her native _SET_POSITION coords once (constant across floors). worldX = arg1 (direct),
                 // arg3 = z (worldY = -z). Used so we can nudge her by a fixed offset relative to native.
@@ -2262,7 +2262,7 @@ namespace Dark_Cloud_Improved_Version
                     if (!_iqXlateLogged) { Console.WriteLine($"[IQxlate] Ice Queen STB 0x{stbBase:X8} -> chest ({cx:F0},{cy:F0})"); _iqXlateLogged = true; }
                 }
             }
-            else if (tableIndex == Enemies.KingsCurseCoffin.TableIndex.Value)
+            else if (tableIndex == EnemySpecies.KingsCurseCoffin.TableIndex.Value)
             {
                 // King's Curse: OFFSET both him and the phase entity c15b to the largest room by the same delta (like Ice
                 // Queen) so they spawn together on walkable ground. This needs a REAL room — if the grid was wiped/arena-
@@ -2276,7 +2276,7 @@ namespace Dark_Cloud_Improved_Version
                     Console.WriteLine($"[BossPatch] boss 81: no usable room (anchorSet={_anchorSet} room={_anchorRoomW}x{_anchorRoomH}) — NOPed _SET_POSITION @ 0x{setPosCmdAddr:X8} (engine ArrangementPos)");
                 }
             }
-            else if (tableIndex == Enemies.MasterUtan.TableIndex.Value)
+            else if (tableIndex == EnemySpecies.MasterUtan.TableIndex.Value)
             {
                 // Master Utan: instead of NOPing his _SET_POSITION (which left him at the arena origin and
                 // mispositioned the NEXT roster enemy), relocate it to the largest room — same as King's Curse.

@@ -112,11 +112,11 @@ namespace Dark_Cloud_Improved_Version
         private static int HpDefTierOf(int dungeon, int floor) =>
             dungeon < DemonShaft ? dungeon : DemonShaft + DsBand(floor);
 
-        // Reflect over every `static EnemyDefaults` field on Enemies so we capture all 162 entries (incl.
-        // enhanced variants that share an Id and so collide in Enemies.Defaults). Keyed by unique TableIndex.
+        // Reflect over every `static EnemyDefaults` field on EnemySpecies so we capture all 162 entries (incl.
+        // enhanced variants that share an Id and so collide in EnemySpecies.Defaults). Keyed by unique TableIndex.
         private static void BuildTableIndexMap()
         {
-            foreach (FieldInfo field in typeof(Enemies).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+            foreach (FieldInfo field in typeof(EnemySpecies).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (field.FieldType != typeof(EnemyDefaults)) continue;
                 var enemyDefaults = (EnemyDefaults)field.GetValue(null);

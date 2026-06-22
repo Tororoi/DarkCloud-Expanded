@@ -337,7 +337,7 @@ namespace Dark_Cloud_Improved_Version
         // callback is believed to sit at a low word index within that table. Nulling the relevant
         // pointer prevents the boss-defeat sequence from firing without touching the species table.
         // Add 0x20000000 to convert the PS2-native pointer to a PCSX2-readable address.
-        // See LogBossSlotSpeciesDataPtrs() in Enemies.cs for live-dump diagnostic.
+        // See LogBossSlotSpeciesDataPtrs() in EnemySpecies.cs for live-dump diagnostic.
         internal const int SpeciesDataPtr    = 0x04C; // int   — PS2-native ptr to loaded species behavior block (shared across all slots of same species)
         internal const int AiStateCounter    = 0x050; // int   — AI substate tick counter; small value oscillating ~6–25; updates each game frame; not monotonically increasing
 
@@ -585,7 +585,7 @@ namespace Dark_Cloud_Improved_Version
         // ★ The DEATH-DROP gate (RE'd): copied to the slot's StealItemId high word (0xDA) at spawn, which gates the
         // whole drop block (ELF 0x1DF4C0). 1 = enemy drops on death, 0 = never drops. It is independent of the steal
         // item at 0x080 (Cave Bat has steal item 151 but this flag 0). 0 for flyers + Gol/Sil → those never drop;
-        // setting it to 1 (see EnemySlots.EnableEnemyDrops) permanently enables their drops via the static species table.
+        // setting it to 1 (see Enemies.EnableEnemyDrops) permanently enables their drops via the static species table.
         internal const int StealFlag  = 0x082; // ushort — death-drop enable (1=drops, 0=no drop)
 
         internal const int ItemResA   = 0x084; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance

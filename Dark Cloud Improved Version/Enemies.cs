@@ -3,18 +3,8 @@ using System.Collections.Generic;
 
 namespace Dark_Cloud_Improved_Version
 {
-    class EnemySlots
+    class Enemies
     {
-        public static Dictionary<ushort, string> GetNormalEnemies()
-        {
-            return Enemies.NormalEnemies;
-        }
-
-        public static Dictionary<ushort, string> GetFlyingEnemies()
-        {
-            return Enemies.FlyingEnemies;
-        }
-
         /// <summary>
         /// Permanently enable death-drops for the regular enemy species that ship unable to drop (flyers, Gol/Sil, …).
         /// The engine skips the entire death-drop block when a species' StealFlag (record +0x82) is 0 — copied to the
@@ -45,7 +35,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static Dictionary<ushort, string> GetOverseasEnemies()
         {
-            return Enemies.OverseasEnemies;
+            return EnemySpecies.OverseasEnemies;
         }
 
         /// <summary>
@@ -54,16 +44,16 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static string GetEnemyName(ushort typeId)
         {
-            if (Enemies.NormalEnemies.TryGetValue(typeId, out string name))   return name;
-            if (Enemies.FlyingEnemies.TryGetValue(typeId, out name))          return name;
-            if (Enemies.BossEnemies.TryGetValue(typeId, out name))            return name;
-            if (Enemies.OverseasEnemies.TryGetValue(typeId, out name))        return name;
+            if (EnemySpecies.NormalEnemies.TryGetValue(typeId, out string name))   return name;
+            if (EnemySpecies.FlyingEnemies.TryGetValue(typeId, out name))          return name;
+            if (EnemySpecies.BossEnemies.TryGetValue(typeId, out name))            return name;
+            if (EnemySpecies.OverseasEnemies.TryGetValue(typeId, out name))        return name;
             return "Unknown";
         }
 
         public static Dictionary<ushort, string> GetBossEnemies()
         {
-            return Enemies.BossEnemies;
+            return EnemySpecies.BossEnemies;
         }
 
         /// <summary>
@@ -605,7 +595,7 @@ namespace Dark_Cloud_Improved_Version
         /// Corrects the world position of any boss-model slot that was displaced by the
         /// model-redirect spawn logic (which sets position to the boss arena origin instead
         /// of a floor spawn point). Targets any slot whose species ID appears in
-        /// <see cref="Enemies.BossEnemies"/>, since <see cref="RedirectEnemyModel"/>
+        /// <see cref="EnemySpecies.BossEnemies"/>, since <see cref="RedirectEnemyModel"/>
         /// now writes the redirected boss's own ID into the patched species table entry.
         ///
         /// Teleports displaced slots to a random active chest position — chests are guaranteed
@@ -645,7 +635,7 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadInt(slotBase) <= 0) continue;
                 if (MiniBoss.miniBossEnemyNumbers.Contains(i)) continue;
                 ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
-                if (Enemies.BossEnemies.ContainsKey(id)) continue;
+                if (EnemySpecies.BossEnemies.ContainsKey(id)) continue;
                 sumZ += Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
                 zCount++;
             }
@@ -662,7 +652,7 @@ namespace Dark_Cloud_Improved_Version
                 int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
                 if (Memory.ReadInt(slotBase) <= 0) continue;
                 ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
-                if (!Enemies.BossEnemies.ContainsKey(id)) continue;
+                if (!EnemySpecies.BossEnemies.ContainsKey(id)) continue;
 
                 float x = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
                 float y = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);

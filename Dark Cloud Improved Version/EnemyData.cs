@@ -555,7 +555,7 @@ namespace Dark_Cloud_Improved_Version
     /// Never populate defaults from miniboss slot data; minibosses share the same species ID
     /// as their normal counterpart but have different stats.
     /// </summary>
-    internal static class Enemies
+    internal static class EnemySpecies
     {
         // Per-species animation / motion lists (decoded from each model's <code>.chr info.cfg KEY block) live in
         // /enemy-motion-table.md, ordered by TableIndex. "死亡" marks the death/collapse motion used by
@@ -1226,7 +1226,7 @@ namespace Dark_Cloud_Improved_Version
             BodyWidth=7.0f, BodyHeight=52.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
-        // Unlisted phase entity — code=c15b; not in Enemies.cs; suspected SMT King's-Curse scripted phase.
+        // Unlisted phase entity — code=c15b; not in EnemySpecies.cs; suspected SMT King's-Curse scripted phase.
         internal static readonly EnemyDefaults KingsCurse = new EnemyDefaults {
             Id=100, TableIndex=82, ModelCode="c15b", Name="King's Curse", MaxHp=1000, Abs=40, MinGoldDrop=0, DropChance=0,
             Category=EnemyCategory.Undead, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1324,7 +1324,7 @@ namespace Dark_Cloud_Improved_Version
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
 
-        // listed as non-drop in Enemies.cs
+        // listed as non-drop in EnemySpecies.cs
         internal static readonly EnemyDefaults Gol = new EnemyDefaults {
             Id=90, TableIndex=94, ModelCode="e90a", Name="Gol",              MaxHp=600, Abs=5,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=120, IceRes=90,  ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1333,7 +1333,7 @@ namespace Dark_Cloud_Improved_Version
             BodyWidth=7.0f, BodyHeight=32.0f, BodyDepth=60.0f,
             MeleeDamage=new int[]{71,71,75,75,62,55,45}, ProjectileDamage=new int[]{62} };
 
-        // listed as non-drop in Enemies.cs
+        // listed as non-drop in EnemySpecies.cs
         internal static readonly EnemyDefaults Sil = new EnemyDefaults {
             Id=91, TableIndex=95, ModelCode="e91a", Name="Sil",              MaxHp=500, Abs=5,  MinGoldDrop=5,  DropChance=30,
             Category=EnemyCategory.Rock, FireRes=90,  IceRes=120, ThunderRes=100, WindRes=100, HolyRes=100,
@@ -1947,7 +1947,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Lookup by species ID ──────────────────────────────────────────────────
         internal static readonly Dictionary<ushort, EnemyDefaults> Defaults;
-        static Enemies()
+        static EnemySpecies()
         {
             EnemyDefaults[] all =
             {

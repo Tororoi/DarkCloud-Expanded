@@ -21,33 +21,33 @@ namespace Dark_Cloud_Improved_Version
 
         private static readonly HashSet<int> FrozenTunaIceEnemies = new()
         {
-            Enemies.Blizzard.Id,   // 65
-            Enemies.Sam.Id,        // 85
-            Enemies.GemronIce.Id,  // 312
+            EnemySpecies.Blizzard.Id,   // 65
+            EnemySpecies.Sam.Id,        // 85
+            EnemySpecies.GemronIce.Id,  // 312
         };
 
         private static readonly HashSet<int> CactusImmuneNameTags = new()
         {
-            Enemies.MasterJacket.Id,    // 1
-            Enemies.SkeletonSoldier.Id, // 3
-            Enemies.Statue.Id,          // 5
-            Enemies.PiratesChariot.Id,  // 25
-            Enemies.Golem.Id,           // 30
-            Enemies.MrBlare.Id,         // 31
-            Enemies.Dune.Id,            // 32
-            Enemies.Titan.Id,           // 33
-            Enemies.Arthur.Id,          // 40
-            Enemies.LivingArmor.Id,     // 55
-            Enemies.SteelGiant.Id,      // 64
-            Enemies.Billy.Id,           // 69
-            Enemies.Vulcan.Id,          // 70
-            Enemies.Rockanoff.Id,       // 77
-            Enemies.Gol.Id,             // 90
-            Enemies.Sil.Id,             // 91
-            Enemies.StatueDog.Id,       // 303
-            Enemies.Gacious.Id,         // 317
-            Enemies.SilverGear.Id,      // 318
-            Enemies.HornHead.Id,        // 319
+            EnemySpecies.MasterJacket.Id,    // 1
+            EnemySpecies.SkeletonSoldier.Id, // 3
+            EnemySpecies.Statue.Id,          // 5
+            EnemySpecies.PiratesChariot.Id,  // 25
+            EnemySpecies.Golem.Id,           // 30
+            EnemySpecies.MrBlare.Id,         // 31
+            EnemySpecies.Dune.Id,            // 32
+            EnemySpecies.Titan.Id,           // 33
+            EnemySpecies.Arthur.Id,          // 40
+            EnemySpecies.LivingArmor.Id,     // 55
+            EnemySpecies.SteelGiant.Id,      // 64
+            EnemySpecies.Billy.Id,           // 69
+            EnemySpecies.Vulcan.Id,          // 70
+            EnemySpecies.Rockanoff.Id,       // 77
+            EnemySpecies.Gol.Id,             // 90
+            EnemySpecies.Sil.Id,             // 91
+            EnemySpecies.StatueDog.Id,       // 303
+            EnemySpecies.Gacious.Id,         // 317
+            EnemySpecies.SilverGear.Id,      // 318
+            EnemySpecies.HornHead.Id,        // 319
         };
 
         /// <summary>
@@ -191,7 +191,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Floor {currentFloor} key guardians:");
                         foreach (var (slot, key) in keyEnemies)
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"  Enemy {slot} ({EnemySlots.GetEnemyName(EnemySlots.GetFloorEnemyId(slot))}): forceItemDrop = {key}");
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"  Enemy {slot} ({Enemies.GetEnemyName(Enemies.GetFloorEnemyId(slot))}): forceItemDrop = {key}");
 
                         floorMessageSent = true;
                     }
@@ -205,7 +205,7 @@ namespace Dark_Cloud_Improved_Version
 
                 for (int e = 0; e < 15; e++)
                 {
-                    if (EnemySlots.GetFloorEnemyId(e) == 0) continue;
+                    if (Enemies.GetFloorEnemyId(e) == 0) continue;
                     if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.Hp)) <= 0) continue;
 
                     byte drop = Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.ForceItemDrop));
@@ -245,7 +245,7 @@ namespace Dark_Cloud_Improved_Version
                 if (hint != null)
                 {
                     Dayuppy.DisplayMessage(hint, 1, 40, 3000);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {EnemySlots.GetEnemyName(EnemySlots.GetFloorEnemyId(nearestKeySlot))} (slot {nearestKeySlot}, dist {nearestKeyDist:F1}, key {nearestDrop})");
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {Enemies.GetEnemyName(Enemies.GetFloorEnemyId(nearestKeySlot))} (slot {nearestKeySlot}, dist {nearestKeyDist:F1}, key {nearestDrop})");
                 }
             }
         }

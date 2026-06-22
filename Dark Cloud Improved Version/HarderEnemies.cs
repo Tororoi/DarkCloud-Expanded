@@ -48,7 +48,7 @@ namespace Dark_Cloud_Improved_Version
 
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                int eid = EnemySlots.GetFloorEnemyId(s);
+                int eid = Enemies.GetFloorEnemyId(s);
                 if (eid == 0) continue;
                 bool isMini = MiniBoss.miniBossEnemyNumbers.Contains(s);
                 if (!Enabled && !isMini) continue;   // toggle off: only minibosses (walk-sync) need touching

@@ -305,54 +305,54 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FloorSpawnPool[] DBC_Front = new FloorSpawnPool[]
         {
             // [0] floor 0
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Dasher.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Dasher.TableIndex),
             // [1] floor 1
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Dasher.TableIndex, Enemies.Yammich.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Dasher.TableIndex, EnemySpecies.Yammich.TableIndex),
             // [2] floor 2
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Dasher.TableIndex, Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Dasher.TableIndex, EnemySpecies.Statue.TableIndex, EnemySpecies.StatueDog.TableIndex),
             // [3] floor 3 — EVENT: skeleton encounter (SkeletonSoldier:100%)
-            SP.Pool(Enemies.SkeletonSoldier.TableIndex),
+            SP.Pool(EnemySpecies.SkeletonSoldier.TableIndex),
             // [4] floor 4
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dasher.TableIndex, Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex, Enemies.Yammich.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Dasher.TableIndex, EnemySpecies.Statue.TableIndex, EnemySpecies.StatueDog.TableIndex, EnemySpecies.Yammich.TableIndex),
             // [5] floor 5
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Statue.TableIndex, Enemies.MimicDBC.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Statue.TableIndex, EnemySpecies.MimicDBC.TableIndex),
             // [6] floor 6
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex, Enemies.Opar.TableIndex, Enemies.MasterJacket.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Ghost.TableIndex, EnemySpecies.Opar.TableIndex, EnemySpecies.MasterJacket.TableIndex),
             // [7] floor 7 — EVENT: story (no enemy spawns)
             SP.Empty(),
             // [8] floor 8
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Ghost.TableIndex, Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex, Enemies.MimicDBC.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Ghost.TableIndex, EnemySpecies.Statue.TableIndex, EnemySpecies.StatueDog.TableIndex, EnemySpecies.MimicDBC.TableIndex),
             // [9] floor 9
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dasher.TableIndex, Enemies.Ghost.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.Rockanoff.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Dasher.TableIndex, EnemySpecies.Ghost.TableIndex, EnemySpecies.MasterJacket.TableIndex, EnemySpecies.Rockanoff.TableIndex),
             // [10] floor 10
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dasher.TableIndex, Enemies.Opar.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.Dragon.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Dasher.TableIndex, EnemySpecies.Opar.TableIndex, EnemySpecies.MasterJacket.TableIndex, EnemySpecies.Dragon.TableIndex),
             // [11] floor 11
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Statue.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.KingMimicDBC.TableIndex, Enemies.Rockanoff.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Statue.TableIndex, EnemySpecies.MasterJacket.TableIndex, EnemySpecies.KingMimicDBC.TableIndex, EnemySpecies.Rockanoff.TableIndex),
             // [12] floor 12
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Opar.TableIndex, Enemies.MasterJacket.TableIndex, Enemies.Rockanoff.TableIndex, Enemies.Dragon.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Opar.TableIndex, EnemySpecies.MasterJacket.TableIndex, EnemySpecies.Rockanoff.TableIndex, EnemySpecies.Dragon.TableIndex),
             // [13] floor 13
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Ghost.TableIndex, Enemies.KingMimicDBC.TableIndex, Enemies.Rockanoff.TableIndex, Enemies.Dragon.TableIndex),
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Ghost.TableIndex, EnemySpecies.KingMimicDBC.TableIndex, EnemySpecies.Rockanoff.TableIndex, EnemySpecies.Dragon.TableIndex),
             // [14] floor 14 — BOSS: Dran
-            SP.Pool(Enemies.Dran.TableIndex),
+            SP.Pool(EnemySpecies.Dran.TableIndex),
         };
 
         // Back-floor pools for DBC slots 0-13 (index N here = back for Front[N]).
         internal static readonly FloorSpawnPool[] DBC_Back = new FloorSpawnPool[]
         {
-            SP.Pool(Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex, Enemies.Yammich.TableIndex),        // back for floor 0
-            SP.Pool(Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex),                      // back for floor 1
-            SP.Pool(Enemies.SkeletonSoldier.TableIndex, Enemies.Ghost.TableIndex),                      // back for floor 2
+            SP.Pool(EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Ghost.TableIndex, EnemySpecies.Yammich.TableIndex),        // back for floor 0
+            SP.Pool(EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Ghost.TableIndex),                      // back for floor 1
+            SP.Pool(EnemySpecies.SkeletonSoldier.TableIndex, EnemySpecies.Ghost.TableIndex),                      // back for floor 2
             SP.Empty(),                                               // back for floor 3 (event)
-            SP.Pool(Enemies.MimicDBC.TableIndex, Enemies.KingMimicDBC.TableIndex),                     // back for floor 4
-            SP.Pool(Enemies.Statue.TableIndex, Enemies.StatueDog.TableIndex),                      // back for floor 5
-            SP.Pool(Enemies.Dasher.TableIndex, Enemies.Rockanoff.TableIndex),                      // back for floor 6
+            SP.Pool(EnemySpecies.MimicDBC.TableIndex, EnemySpecies.KingMimicDBC.TableIndex),                     // back for floor 4
+            SP.Pool(EnemySpecies.Statue.TableIndex, EnemySpecies.StatueDog.TableIndex),                      // back for floor 5
+            SP.Pool(EnemySpecies.Dasher.TableIndex, EnemySpecies.Rockanoff.TableIndex),                      // back for floor 6
             SP.Empty(),                                               // back for floor 7 (event)
-            SP.Pool(Enemies.CaveBat.TableIndex),                                  // back for floor 8
-            SP.Pool(Enemies.MimicDBC.TableIndex, Enemies.KingMimicDBC.TableIndex, Enemies.Rockanoff.TableIndex),        // back for floor 9
-            SP.Pool(Enemies.Ghost.TableIndex, Enemies.MimicDBC.TableIndex, Enemies.MasterJacket.TableIndex),         // back for floor 10
-            SP.Pool(Enemies.CaveBat.TableIndex, Enemies.Dragon.TableIndex),                     // back for floor 11
-            SP.Pool(Enemies.MimicDBC.TableIndex, Enemies.KingMimicDBC.TableIndex),                     // back for floor 12
-            SP.Pool(Enemies.Rockanoff.TableIndex),                                  // back for floor 13
+            SP.Pool(EnemySpecies.CaveBat.TableIndex),                                  // back for floor 8
+            SP.Pool(EnemySpecies.MimicDBC.TableIndex, EnemySpecies.KingMimicDBC.TableIndex, EnemySpecies.Rockanoff.TableIndex),        // back for floor 9
+            SP.Pool(EnemySpecies.Ghost.TableIndex, EnemySpecies.MimicDBC.TableIndex, EnemySpecies.MasterJacket.TableIndex),         // back for floor 10
+            SP.Pool(EnemySpecies.CaveBat.TableIndex, EnemySpecies.Dragon.TableIndex),                     // back for floor 11
+            SP.Pool(EnemySpecies.MimicDBC.TableIndex, EnemySpecies.KingMimicDBC.TableIndex),                     // back for floor 12
+            SP.Pool(EnemySpecies.Rockanoff.TableIndex),                                  // back for floor 13
         };
 
         // ── Dungeon 1 : Wise Owl Forest (WOF) ─────────────────────────────────────────────
@@ -366,60 +366,60 @@ namespace Dark_Cloud_Improved_Version
             // [0] descriptor (empty)
             SP.Empty(),
             // [1] floor 1
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Saturday.TableIndex, Enemies.Friday.TableIndex, Enemies.Thursday.TableIndex, Enemies.Wednesday.TableIndex),
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.Saturday.TableIndex, EnemySpecies.Friday.TableIndex, EnemySpecies.Thursday.TableIndex, EnemySpecies.Wednesday.TableIndex),
             // [2] floor 2
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.FliFli.TableIndex),
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.Tuesday.TableIndex, EnemySpecies.Monday.TableIndex, EnemySpecies.FliFli.TableIndex),
             // [3] floor 3
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Thursday.TableIndex, Enemies.Sunday.TableIndex, Enemies.Hornet.TableIndex, Enemies.KingPrickly.TableIndex),
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.Thursday.TableIndex, EnemySpecies.Sunday.TableIndex, EnemySpecies.Hornet.TableIndex, EnemySpecies.KingPrickly.TableIndex),
             // [4] floor 4
-            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Sunday.TableIndex, Enemies.FliFli.TableIndex, Enemies.Hornet.TableIndex, Enemies.KingPrickly.TableIndex),
+            SP.Pool(EnemySpecies.Thursday.TableIndex, EnemySpecies.Sunday.TableIndex, EnemySpecies.FliFli.TableIndex, EnemySpecies.Hornet.TableIndex, EnemySpecies.KingPrickly.TableIndex),
             // [5] floor 5
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Friday.TableIndex, Enemies.Wednesday.TableIndex, Enemies.MimicWOF.TableIndex, Enemies.HaleyHoley.TableIndex),
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.Friday.TableIndex, EnemySpecies.Wednesday.TableIndex, EnemySpecies.MimicWOF.TableIndex, EnemySpecies.HaleyHoley.TableIndex),
             // [6] floor 6
-            SP.Pool(Enemies.Saturday.TableIndex, Enemies.Thursday.TableIndex, Enemies.FliFli.TableIndex, Enemies.Hornet.TableIndex, Enemies.WitchIllza.TableIndex),
+            SP.Pool(EnemySpecies.Saturday.TableIndex, EnemySpecies.Thursday.TableIndex, EnemySpecies.FliFli.TableIndex, EnemySpecies.Hornet.TableIndex, EnemySpecies.WitchIllza.TableIndex),
             // [7] floor 7
-            SP.Pool(Enemies.Wednesday.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.Sunday.TableIndex, Enemies.WitchIllza.TableIndex),
+            SP.Pool(EnemySpecies.Wednesday.TableIndex, EnemySpecies.Tuesday.TableIndex, EnemySpecies.Monday.TableIndex, EnemySpecies.Sunday.TableIndex, EnemySpecies.WitchIllza.TableIndex),
             // [8] floor 8 — EVENT
-            SP.Pool(Enemies.FliFli.TableIndex, Enemies.Hornet.TableIndex, Enemies.MimicWOF.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.KingPrickly.TableIndex),
+            SP.Pool(EnemySpecies.FliFli.TableIndex, EnemySpecies.Hornet.TableIndex, EnemySpecies.MimicWOF.TableIndex, EnemySpecies.WitchIllza.TableIndex, EnemySpecies.KingPrickly.TableIndex),
             // [9] floor 9
             SP.Empty(),
             // [10] floor 10
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Hornet.TableIndex, Enemies.MimicWOF.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.HaleyHoley.TableIndex),
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.Hornet.TableIndex, EnemySpecies.MimicWOF.TableIndex, EnemySpecies.EarthDigger.TableIndex, EnemySpecies.HaleyHoley.TableIndex),
             // [11] floor 11
-            SP.Pool(Enemies.FliFli.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.Halloween.TableIndex, Enemies.HaleyHoley.TableIndex),
+            SP.Pool(EnemySpecies.FliFli.TableIndex, EnemySpecies.WitchIllza.TableIndex, EnemySpecies.EarthDigger.TableIndex, EnemySpecies.Halloween.TableIndex, EnemySpecies.HaleyHoley.TableIndex),
             // [12] floor 12
-            SP.Pool(Enemies.Hornet.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.KingMimicWOF.TableIndex),
+            SP.Pool(EnemySpecies.Hornet.TableIndex, EnemySpecies.WitchIllza.TableIndex, EnemySpecies.EarthDigger.TableIndex, EnemySpecies.KingMimicWOF.TableIndex),
             // [13] floor 13
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.FliFli.TableIndex, Enemies.EarthDigger.TableIndex),
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.FliFli.TableIndex, EnemySpecies.EarthDigger.TableIndex),
             // [14] floor 14
-            SP.Pool(Enemies.Sunday.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.Halloween.TableIndex, Enemies.Werewolf.TableIndex),
+            SP.Pool(EnemySpecies.Sunday.TableIndex, EnemySpecies.WitchIllza.TableIndex, EnemySpecies.Halloween.TableIndex, EnemySpecies.Werewolf.TableIndex),
             // [15] floor 15
-            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Hornet.TableIndex, Enemies.Halloween.TableIndex, Enemies.KingMimicWOF.TableIndex, Enemies.KingPrickly.TableIndex),
+            SP.Pool(EnemySpecies.Thursday.TableIndex, EnemySpecies.Hornet.TableIndex, EnemySpecies.Halloween.TableIndex, EnemySpecies.KingMimicWOF.TableIndex, EnemySpecies.KingPrickly.TableIndex),
             // [16] floor 16
-            SP.Pool(Enemies.WitchIllza.TableIndex, Enemies.EarthDigger.TableIndex, Enemies.Halloween.TableIndex, Enemies.KingMimicWOF.TableIndex, Enemies.Werewolf.TableIndex),
+            SP.Pool(EnemySpecies.WitchIllza.TableIndex, EnemySpecies.EarthDigger.TableIndex, EnemySpecies.Halloween.TableIndex, EnemySpecies.KingMimicWOF.TableIndex, EnemySpecies.Werewolf.TableIndex),
             // [17] floor 17 — BOSS: MasterUtan
-            SP.Pool(Enemies.MasterUtan.TableIndex),
+            SP.Pool(EnemySpecies.MasterUtan.TableIndex),
         };
 
         // Back-floor pools for WOF floors 1-16 (index N here = back for floor N).
         internal static readonly FloorSpawnPool[] WOF_Back = new FloorSpawnPool[]
         {
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.Hornet.TableIndex),                                // back for floor 1
-            SP.Pool(Enemies.EarthDigger.TableIndex),                                            // back for floor 2
-            SP.Pool(Enemies.FliFli.TableIndex, Enemies.WitchIllza.TableIndex),                               // back for floor 3
-            SP.Pool(Enemies.MimicWOF.TableIndex, Enemies.KingMimicWOF.TableIndex),                              // back for floor 4
-            SP.Pool(Enemies.FliFli.TableIndex, Enemies.WitchIllza.TableIndex, Enemies.Halloween.TableIndex),                  // back for floor 5
-            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.Sunday.TableIndex),   // back for floor 6
-            SP.Pool(Enemies.EarthDigger.TableIndex, Enemies.KingPrickly.TableIndex),                              // back for floor 7
-            SP.Pool(Enemies.MimicWOF.TableIndex, Enemies.KingMimicWOF.TableIndex),                              // back for floor 8
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.Hornet.TableIndex),                                // back for floor 1
+            SP.Pool(EnemySpecies.EarthDigger.TableIndex),                                            // back for floor 2
+            SP.Pool(EnemySpecies.FliFli.TableIndex, EnemySpecies.WitchIllza.TableIndex),                               // back for floor 3
+            SP.Pool(EnemySpecies.MimicWOF.TableIndex, EnemySpecies.KingMimicWOF.TableIndex),                              // back for floor 4
+            SP.Pool(EnemySpecies.FliFli.TableIndex, EnemySpecies.WitchIllza.TableIndex, EnemySpecies.Halloween.TableIndex),                  // back for floor 5
+            SP.Pool(EnemySpecies.Thursday.TableIndex, EnemySpecies.Tuesday.TableIndex, EnemySpecies.Monday.TableIndex, EnemySpecies.Sunday.TableIndex),   // back for floor 6
+            SP.Pool(EnemySpecies.EarthDigger.TableIndex, EnemySpecies.KingPrickly.TableIndex),                              // back for floor 7
+            SP.Pool(EnemySpecies.MimicWOF.TableIndex, EnemySpecies.KingMimicWOF.TableIndex),                              // back for floor 8
             SP.Empty(),                                                        // back for floor 9
-            SP.Pool(Enemies.Werewolf.TableIndex),                                            // back for floor 10
-            SP.Pool(Enemies.Halloween.TableIndex),                                            // back for floor 11
-            SP.Pool(Enemies.CannibalPlant.TableIndex, Enemies.FliFli.TableIndex),                               // back for floor 12
-            SP.Pool(Enemies.Thursday.TableIndex, Enemies.Tuesday.TableIndex, Enemies.Monday.TableIndex, Enemies.Sunday.TableIndex, Enemies.Halloween.TableIndex), // back for floor 13
-            SP.Pool(Enemies.EarthDigger.TableIndex),                                            // back for floor 14
-            SP.Pool(Enemies.MimicWOF.TableIndex, Enemies.KingMimicWOF.TableIndex),                              // back for floor 15
-            SP.Pool(Enemies.Saturday.TableIndex, Enemies.Friday.TableIndex, Enemies.Thursday.TableIndex, Enemies.Wednesday.TableIndex),   // back for floor 16
+            SP.Pool(EnemySpecies.Werewolf.TableIndex),                                            // back for floor 10
+            SP.Pool(EnemySpecies.Halloween.TableIndex),                                            // back for floor 11
+            SP.Pool(EnemySpecies.CannibalPlant.TableIndex, EnemySpecies.FliFli.TableIndex),                               // back for floor 12
+            SP.Pool(EnemySpecies.Thursday.TableIndex, EnemySpecies.Tuesday.TableIndex, EnemySpecies.Monday.TableIndex, EnemySpecies.Sunday.TableIndex, EnemySpecies.Halloween.TableIndex), // back for floor 13
+            SP.Pool(EnemySpecies.EarthDigger.TableIndex),                                            // back for floor 14
+            SP.Pool(EnemySpecies.MimicWOF.TableIndex, EnemySpecies.KingMimicWOF.TableIndex),                              // back for floor 15
+            SP.Pool(EnemySpecies.Saturday.TableIndex, EnemySpecies.Friday.TableIndex, EnemySpecies.Thursday.TableIndex, EnemySpecies.Wednesday.TableIndex),   // back for floor 16
         };
 
         // ── Dungeon 2 : Shipwreck (SW) ────────────────────────────────────────────────────
@@ -434,62 +434,62 @@ namespace Dark_Cloud_Improved_Version
             // [0] descriptor (empty)
             SP.Empty(),
             // [1] floor 1
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Gunny.TableIndex),
             // [2] floor 2
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Gunny.TableIndex, EnemySpecies.CursedRose.TableIndex),
             // [3] floor 3
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Gunny.TableIndex, EnemySpecies.CursedRose.TableIndex),
             // [4] floor 4
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex, Enemies.MimicSW.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Gunny.TableIndex, EnemySpecies.CursedRose.TableIndex, EnemySpecies.MimicSW.TableIndex),
             // [5] floor 5
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gunny.TableIndex, Enemies.MimicSW.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Gunny.TableIndex, EnemySpecies.MimicSW.TableIndex),
             // [6] floor 6
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.CursedRose.TableIndex, Enemies.MimicSW.TableIndex, Enemies.Gyon.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.CursedRose.TableIndex, EnemySpecies.MimicSW.TableIndex, EnemySpecies.Gyon.TableIndex),
             // [7] floor 7
-            SP.Pool(Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex, Enemies.Gyon.TableIndex, Enemies.Sam.TableIndex),
+            SP.Pool(EnemySpecies.Gunny.TableIndex, EnemySpecies.CursedRose.TableIndex, EnemySpecies.Gyon.TableIndex, EnemySpecies.Sam.TableIndex),
             // [8] floor 8 — EVENT
-            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.Gyon.TableIndex, Enemies.Sam.TableIndex, Enemies.Captain.TableIndex),
+            SP.Pool(EnemySpecies.MimicSW.TableIndex, EnemySpecies.Gyon.TableIndex, EnemySpecies.Sam.TableIndex, EnemySpecies.Captain.TableIndex),
             // [9] floor 9
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.PiratesChariot.TableIndex),
             // [10] floor 10
-            SP.Pool(Enemies.Gunny.TableIndex, Enemies.CursedRose.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex),
+            SP.Pool(EnemySpecies.Gunny.TableIndex, EnemySpecies.CursedRose.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.PiratesChariot.TableIndex),
             // [11] floor 11
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Gyon.TableIndex, Enemies.PiratesChariot.TableIndex, Enemies.KingMimicSW.TableIndex),
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Gyon.TableIndex, EnemySpecies.PiratesChariot.TableIndex, EnemySpecies.KingMimicSW.TableIndex),
             // [12] floor 12
-            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.MimicSW.TableIndex, Enemies.Captain.TableIndex, Enemies.KingMimicSW.TableIndex),
+            SP.Pool(EnemySpecies.CursedRose.TableIndex, EnemySpecies.MimicSW.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.KingMimicSW.TableIndex),
             // [13] floor 13
-            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex, Enemies.AuntieMedu.TableIndex),
+            SP.Pool(EnemySpecies.MimicSW.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.PiratesChariot.TableIndex, EnemySpecies.AuntieMedu.TableIndex),
             // [14] floor 14
-            SP.Pool(Enemies.Sam.TableIndex, Enemies.KingMimicSW.TableIndex, Enemies.AuntieMedu.TableIndex, Enemies.MaskOfPrajna.TableIndex),
+            SP.Pool(EnemySpecies.Sam.TableIndex, EnemySpecies.KingMimicSW.TableIndex, EnemySpecies.AuntieMedu.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),
             // [15] floor 15
-            SP.Pool(Enemies.Gyon.TableIndex, Enemies.Captain.TableIndex, Enemies.AuntieMedu.TableIndex, Enemies.MaskOfPrajna.TableIndex),
+            SP.Pool(EnemySpecies.Gyon.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.AuntieMedu.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),
             // [16] floor 16
-            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex, Enemies.MaskOfPrajna.TableIndex),
+            SP.Pool(EnemySpecies.CursedRose.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.PiratesChariot.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),
             // [17] floor 17
-            SP.Pool(Enemies.PiratesChariot.TableIndex, Enemies.KingMimicSW.TableIndex, Enemies.AuntieMedu.TableIndex, Enemies.MaskOfPrajna.TableIndex),
+            SP.Pool(EnemySpecies.PiratesChariot.TableIndex, EnemySpecies.KingMimicSW.TableIndex, EnemySpecies.AuntieMedu.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),
             // [18] floor 18 — BOSS: IceQueen + companions (kori, i_me, i_ta, c17_, e124)
-            SP.Pool(Enemies.IceQueen.TableIndex, Enemies.IQComp101.TableIndex, Enemies.IceArrow.TableIndex, Enemies.IQComp102.TableIndex, Enemies.IQComp103.TableIndex, Enemies.SWComp92.TableIndex, Enemies.IQComp104.TableIndex),
+            SP.Pool(EnemySpecies.IceQueen.TableIndex, EnemySpecies.IQComp101.TableIndex, EnemySpecies.IceArrow.TableIndex, EnemySpecies.IQComp102.TableIndex, EnemySpecies.IQComp103.TableIndex, EnemySpecies.SWComp92.TableIndex, EnemySpecies.IQComp104.TableIndex),
         };
 
         internal static readonly FloorSpawnPool[] SW_Back = new FloorSpawnPool[]
         {
-            SP.Pool(Enemies.Gunny.TableIndex, Enemies.Gyon.TableIndex),                             // back for floor 1
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Captain.TableIndex),                             // back for floor 2
-            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.Captain.TableIndex),                             // back for floor 3
-            SP.Pool(Enemies.Sam.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 4
-            SP.Pool(Enemies.PiratesChariot.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 5
-            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.KingMimicSW.TableIndex),                             // back for floor 6
-            SP.Pool(Enemies.CursedRose.TableIndex, Enemies.AuntieMedu.TableIndex),                             // back for floor 7
-            SP.Pool(Enemies.Gyon.TableIndex, Enemies.AuntieMedu.TableIndex),                             // back for floor 8
+            SP.Pool(EnemySpecies.Gunny.TableIndex, EnemySpecies.Gyon.TableIndex),                             // back for floor 1
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Captain.TableIndex),                             // back for floor 2
+            SP.Pool(EnemySpecies.CursedRose.TableIndex, EnemySpecies.Captain.TableIndex),                             // back for floor 3
+            SP.Pool(EnemySpecies.Sam.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),                             // back for floor 4
+            SP.Pool(EnemySpecies.PiratesChariot.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),                             // back for floor 5
+            SP.Pool(EnemySpecies.MimicSW.TableIndex, EnemySpecies.KingMimicSW.TableIndex),                             // back for floor 6
+            SP.Pool(EnemySpecies.CursedRose.TableIndex, EnemySpecies.AuntieMedu.TableIndex),                             // back for floor 7
+            SP.Pool(EnemySpecies.Gyon.TableIndex, EnemySpecies.AuntieMedu.TableIndex),                             // back for floor 8
             SP.Empty(),                                                       // back for floor 9
-            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.KingMimicSW.TableIndex),                             // back for floor 10
-            SP.Pool(Enemies.Sam.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 11
-            SP.Pool(Enemies.PiratesChariot.TableIndex, Enemies.MaskOfPrajna.TableIndex),                             // back for floor 12
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.CursedRose.TableIndex),                             // back for floor 13
-            SP.Pool(Enemies.MaskOfPrajna.TableIndex),                                          // back for floor 14  [tier 5, not 7]
-            SP.Pool(Enemies.Gyon.TableIndex, Enemies.AuntieMedu.TableIndex),                             // back for floor 15
-            SP.Pool(Enemies.MimicSW.TableIndex, Enemies.KingMimicSW.TableIndex),                             // back for floor 16
-            SP.Pool(Enemies.Corcea.TableIndex, Enemies.Captain.TableIndex, Enemies.PiratesChariot.TableIndex),               // back for floor 17
+            SP.Pool(EnemySpecies.MimicSW.TableIndex, EnemySpecies.KingMimicSW.TableIndex),                             // back for floor 10
+            SP.Pool(EnemySpecies.Sam.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),                             // back for floor 11
+            SP.Pool(EnemySpecies.PiratesChariot.TableIndex, EnemySpecies.MaskOfPrajna.TableIndex),                             // back for floor 12
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.CursedRose.TableIndex),                             // back for floor 13
+            SP.Pool(EnemySpecies.MaskOfPrajna.TableIndex),                                          // back for floor 14  [tier 5, not 7]
+            SP.Pool(EnemySpecies.Gyon.TableIndex, EnemySpecies.AuntieMedu.TableIndex),                             // back for floor 15
+            SP.Pool(EnemySpecies.MimicSW.TableIndex, EnemySpecies.KingMimicSW.TableIndex),                             // back for floor 16
+            SP.Pool(EnemySpecies.Corcea.TableIndex, EnemySpecies.Captain.TableIndex, EnemySpecies.PiratesChariot.TableIndex),               // back for floor 17
         };
 
         // ── Dungeon 3 : Sun & Moon Temple (SMT) ──────────────────────────────────────────
@@ -501,45 +501,45 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FloorSpawnPool[] SMT_Front = new FloorSpawnPool[]
         {
             SP.Empty(),                                                                                   // [0] descriptor
-            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex),                                                         // [1] floor 1
-            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex),                                            // [2] floor 2
-            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.MimicSMT.TableIndex),                               // [3] floor 3
-            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex),                               // [4] floor 4
-            SP.Pool(Enemies.Mummy.TableIndex, Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex),                                            // [5] floor 5
-            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Phantom.TableIndex, Enemies.Golem.TableIndex, Enemies.MrBlare.TableIndex),                               // [6] floor 6
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex, Enemies.CrabbyHermit.TableIndex),                               // [7] floor 7
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                                                         // [8] floor 8 — EVENT
-            SP.Pool(Enemies.Gol.TableIndex, Enemies.Sil.TableIndex),                                                         // [9] floor 9
-            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.Golem.TableIndex, Enemies.Dune.TableIndex),                               // [10] floor 10
-            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.CrabbyHermit.TableIndex, Enemies.Dune.TableIndex),                                            // [11] floor 11
-            SP.Pool(Enemies.Mummy.TableIndex, Enemies.Golem.TableIndex, Enemies.Dune.TableIndex, Enemies.KingMimicSMT.TableIndex),                               // [12] floor 12
-            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex, Enemies.Dune.TableIndex),                               // [13] floor 13
-            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.Golem.TableIndex, Enemies.CrabbyHermit.TableIndex, Enemies.KingMimicSMT.TableIndex, Enemies.BlueDragon.TableIndex),                  // [14] floor 14
-            SP.Pool(Enemies.Phantom.TableIndex, Enemies.BomberHead.TableIndex, Enemies.Dune.TableIndex, Enemies.SteelGiant.TableIndex),                               // [15] floor 15
-            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                                                         // [16] floor 16
-            SP.Pool(Enemies.Dune.TableIndex, Enemies.KingMimicSMT.TableIndex, Enemies.BlueDragon.TableIndex, Enemies.SteelGiant.TableIndex),                               // [17] floor 17
-            SP.Pool(Enemies.KingsCurseCoffin.TableIndex, Enemies.KingsCurse.TableIndex),                                                         // [18] floor 18 — BOSS: KingsCurseCoffin + PhaseEntity100
+            SP.Pool(EnemySpecies.Mummy.TableIndex, EnemySpecies.Phantom.TableIndex),                                                         // [1] floor 1
+            SP.Pool(EnemySpecies.Mummy.TableIndex, EnemySpecies.Phantom.TableIndex, EnemySpecies.BomberHead.TableIndex),                                            // [2] floor 2
+            SP.Pool(EnemySpecies.Mummy.TableIndex, EnemySpecies.Phantom.TableIndex, EnemySpecies.BomberHead.TableIndex, EnemySpecies.MimicSMT.TableIndex),                               // [3] floor 3
+            SP.Pool(EnemySpecies.Phantom.TableIndex, EnemySpecies.BomberHead.TableIndex, EnemySpecies.MimicSMT.TableIndex, EnemySpecies.Golem.TableIndex),                               // [4] floor 4
+            SP.Pool(EnemySpecies.Mummy.TableIndex, EnemySpecies.MimicSMT.TableIndex, EnemySpecies.Golem.TableIndex),                                            // [5] floor 5
+            SP.Pool(EnemySpecies.Mummy.TableIndex, EnemySpecies.Phantom.TableIndex, EnemySpecies.Golem.TableIndex, EnemySpecies.MrBlare.TableIndex),                               // [6] floor 6
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.MimicSMT.TableIndex, EnemySpecies.Golem.TableIndex, EnemySpecies.CrabbyHermit.TableIndex),                               // [7] floor 7
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.MrBlare.TableIndex),                                                         // [8] floor 8 — EVENT
+            SP.Pool(EnemySpecies.Gol.TableIndex, EnemySpecies.Sil.TableIndex),                                                         // [9] floor 9
+            SP.Pool(EnemySpecies.Phantom.TableIndex, EnemySpecies.BomberHead.TableIndex, EnemySpecies.Golem.TableIndex, EnemySpecies.Dune.TableIndex),                               // [10] floor 10
+            SP.Pool(EnemySpecies.MimicSMT.TableIndex, EnemySpecies.CrabbyHermit.TableIndex, EnemySpecies.Dune.TableIndex),                                            // [11] floor 11
+            SP.Pool(EnemySpecies.Mummy.TableIndex, EnemySpecies.Golem.TableIndex, EnemySpecies.Dune.TableIndex, EnemySpecies.KingMimicSMT.TableIndex),                               // [12] floor 12
+            SP.Pool(EnemySpecies.Phantom.TableIndex, EnemySpecies.BomberHead.TableIndex, EnemySpecies.MrBlare.TableIndex, EnemySpecies.Dune.TableIndex),                               // [13] floor 13
+            SP.Pool(EnemySpecies.MimicSMT.TableIndex, EnemySpecies.Golem.TableIndex, EnemySpecies.CrabbyHermit.TableIndex, EnemySpecies.KingMimicSMT.TableIndex, EnemySpecies.BlueDragon.TableIndex),                  // [14] floor 14
+            SP.Pool(EnemySpecies.Phantom.TableIndex, EnemySpecies.BomberHead.TableIndex, EnemySpecies.Dune.TableIndex, EnemySpecies.SteelGiant.TableIndex),                               // [15] floor 15
+            SP.Pool(EnemySpecies.MimicSMT.TableIndex, EnemySpecies.KingMimicSMT.TableIndex),                                                         // [16] floor 16
+            SP.Pool(EnemySpecies.Dune.TableIndex, EnemySpecies.KingMimicSMT.TableIndex, EnemySpecies.BlueDragon.TableIndex, EnemySpecies.SteelGiant.TableIndex),                               // [17] floor 17
+            SP.Pool(EnemySpecies.KingsCurseCoffin.TableIndex, EnemySpecies.KingsCurse.TableIndex),                                                         // [18] floor 18 — BOSS: KingsCurseCoffin + PhaseEntity100
         };
 
         internal static readonly FloorSpawnPool[] SMT_Back = new FloorSpawnPool[]
         {
-            SP.Pool(Enemies.Golem.TableIndex),                                          // back for floor 1
-            SP.Pool(Enemies.Phantom.TableIndex, Enemies.CrabbyHermit.TableIndex, Enemies.Dune.TableIndex),                // back for floor 2
-            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                             // back for floor 3
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                             // back for floor 4
-            SP.Pool(Enemies.Golem.TableIndex, Enemies.Dune.TableIndex, Enemies.SteelGiant.TableIndex),               // back for floor 5
-            SP.Pool(Enemies.CrabbyHermit.TableIndex, Enemies.Dune.TableIndex),                             // back for floor 6
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                             // back for floor 7
-            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                             // back for floor 8
+            SP.Pool(EnemySpecies.Golem.TableIndex),                                          // back for floor 1
+            SP.Pool(EnemySpecies.Phantom.TableIndex, EnemySpecies.CrabbyHermit.TableIndex, EnemySpecies.Dune.TableIndex),                // back for floor 2
+            SP.Pool(EnemySpecies.MimicSMT.TableIndex, EnemySpecies.KingMimicSMT.TableIndex),                             // back for floor 3
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.MrBlare.TableIndex),                             // back for floor 4
+            SP.Pool(EnemySpecies.Golem.TableIndex, EnemySpecies.Dune.TableIndex, EnemySpecies.SteelGiant.TableIndex),               // back for floor 5
+            SP.Pool(EnemySpecies.CrabbyHermit.TableIndex, EnemySpecies.Dune.TableIndex),                             // back for floor 6
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.MrBlare.TableIndex),                             // back for floor 7
+            SP.Pool(EnemySpecies.MimicSMT.TableIndex, EnemySpecies.KingMimicSMT.TableIndex),                             // back for floor 8
             SP.Empty(),                                                       // back for floor 9
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.SteelGiant.TableIndex),                             // back for floor 10
-            SP.Pool(Enemies.BomberHead.TableIndex),                                          // back for floor 11
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.SteelGiant.TableIndex),                             // back for floor 12
-            SP.Pool(Enemies.BomberHead.TableIndex, Enemies.MrBlare.TableIndex),                             // back for floor 13
-            SP.Pool(Enemies.Mummy.TableIndex),                                          // back for floor 14  [tier 5, not 7]
-            SP.Pool(Enemies.Phantom.TableIndex),                                          // back for floor 15
-            SP.Pool(Enemies.MimicSMT.TableIndex, Enemies.KingMimicSMT.TableIndex),                             // back for floor 16
-            SP.Pool(Enemies.BlueDragon.TableIndex),                                          // back for floor 17
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.SteelGiant.TableIndex),                             // back for floor 10
+            SP.Pool(EnemySpecies.BomberHead.TableIndex),                                          // back for floor 11
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.SteelGiant.TableIndex),                             // back for floor 12
+            SP.Pool(EnemySpecies.BomberHead.TableIndex, EnemySpecies.MrBlare.TableIndex),                             // back for floor 13
+            SP.Pool(EnemySpecies.Mummy.TableIndex),                                          // back for floor 14  [tier 5, not 7]
+            SP.Pool(EnemySpecies.Phantom.TableIndex),                                          // back for floor 15
+            SP.Pool(EnemySpecies.MimicSMT.TableIndex, EnemySpecies.KingMimicSMT.TableIndex),                             // back for floor 16
+            SP.Pool(EnemySpecies.BlueDragon.TableIndex),                                          // back for floor 17
         };
 
         // ── Dungeon 4 : Moon Sea (MS) ─────────────────────────────────────────────────────
@@ -551,39 +551,39 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FloorSpawnPool[] MS_Front = new FloorSpawnPool[]
         {
             SP.Empty(),                                                                      // [0] descriptor
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonBug.TableIndex, Enemies.WitchHellza.TableIndex),                               // [1] floor 1
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonBug.TableIndex, Enemies.WitchHellza.TableIndex, Enemies.SpaceGyon.TableIndex),                  // [2] floor 2
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonBug.TableIndex, Enemies.SpaceGyon.TableIndex, Enemies.MimicMS.TableIndex),                  // [3] floor 3
-            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.WitchHellza.TableIndex, Enemies.SpaceGyon.TableIndex, Enemies.MimicMS.TableIndex),                  // [4] floor 4
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonDigger.TableIndex),                                             // [5] floor 5
-            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.SpaceGyon.TableIndex, Enemies.MimicMS.TableIndex, Enemies.WhiteFang.TableIndex),                  // [6] floor 6
-            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.MoonDigger.TableIndex, Enemies.WhiteFang.TableIndex, Enemies.Vulcan.TableIndex),                  // [7] floor 7 — EVENT
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MoonBug.TableIndex, EnemySpecies.WitchHellza.TableIndex),                               // [1] floor 1
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MoonBug.TableIndex, EnemySpecies.WitchHellza.TableIndex, EnemySpecies.SpaceGyon.TableIndex),                  // [2] floor 2
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MoonBug.TableIndex, EnemySpecies.SpaceGyon.TableIndex, EnemySpecies.MimicMS.TableIndex),                  // [3] floor 3
+            SP.Pool(EnemySpecies.MoonBug.TableIndex, EnemySpecies.WitchHellza.TableIndex, EnemySpecies.SpaceGyon.TableIndex, EnemySpecies.MimicMS.TableIndex),                  // [4] floor 4
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MoonDigger.TableIndex),                                             // [5] floor 5
+            SP.Pool(EnemySpecies.WitchHellza.TableIndex, EnemySpecies.SpaceGyon.TableIndex, EnemySpecies.MimicMS.TableIndex, EnemySpecies.WhiteFang.TableIndex),                  // [6] floor 6
+            SP.Pool(EnemySpecies.MoonBug.TableIndex, EnemySpecies.MoonDigger.TableIndex, EnemySpecies.WhiteFang.TableIndex, EnemySpecies.Vulcan.TableIndex),                  // [7] floor 7 — EVENT
             SP.Empty(),                                                                      // [8] floor 8
-            SP.Pool(Enemies.SpaceGyon.TableIndex, Enemies.MoonDigger.TableIndex, Enemies.Vulcan.TableIndex, Enemies.KingMimicMS.TableIndex),                  // [9] floor 9
-            SP.Pool(Enemies.MoonDigger.TableIndex, Enemies.WhiteFang.TableIndex, Enemies.Vulcan.TableIndex, Enemies.Titan.TableIndex),                  // [10] floor 10
-            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.Titan.TableIndex),                                             // [11] floor 11
-            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.Vulcan.TableIndex, Enemies.Titan.TableIndex, Enemies.CrescentBaron.TableIndex),                  // [12] floor 12
-            SP.Pool(Enemies.MoonDigger.TableIndex, Enemies.Vulcan.TableIndex, Enemies.CrescentBaron.TableIndex, Enemies.Arthur.TableIndex),                  // [13] floor 13
-            SP.Pool(Enemies.KingMimicMS.TableIndex, Enemies.Titan.TableIndex, Enemies.CrescentBaron.TableIndex, Enemies.Arthur.TableIndex),                  // [14] floor 14
-            SP.Pool(Enemies.MinotaurJoe.TableIndex, Enemies.WineKeg.TableIndex),                                             // [15] floor 15 — BOSS: MinotaurJoe + WineKeg
+            SP.Pool(EnemySpecies.SpaceGyon.TableIndex, EnemySpecies.MoonDigger.TableIndex, EnemySpecies.Vulcan.TableIndex, EnemySpecies.KingMimicMS.TableIndex),                  // [9] floor 9
+            SP.Pool(EnemySpecies.MoonDigger.TableIndex, EnemySpecies.WhiteFang.TableIndex, EnemySpecies.Vulcan.TableIndex, EnemySpecies.Titan.TableIndex),                  // [10] floor 10
+            SP.Pool(EnemySpecies.MoonBug.TableIndex, EnemySpecies.Titan.TableIndex),                                             // [11] floor 11
+            SP.Pool(EnemySpecies.WitchHellza.TableIndex, EnemySpecies.Vulcan.TableIndex, EnemySpecies.Titan.TableIndex, EnemySpecies.CrescentBaron.TableIndex),                  // [12] floor 12
+            SP.Pool(EnemySpecies.MoonDigger.TableIndex, EnemySpecies.Vulcan.TableIndex, EnemySpecies.CrescentBaron.TableIndex, EnemySpecies.Arthur.TableIndex),                  // [13] floor 13
+            SP.Pool(EnemySpecies.KingMimicMS.TableIndex, EnemySpecies.Titan.TableIndex, EnemySpecies.CrescentBaron.TableIndex, EnemySpecies.Arthur.TableIndex),                  // [14] floor 14
+            SP.Pool(EnemySpecies.MinotaurJoe.TableIndex, EnemySpecies.WineKeg.TableIndex),                                             // [15] floor 15 — BOSS: MinotaurJoe + WineKeg
         };
 
         internal static readonly FloorSpawnPool[] MS_Back = new FloorSpawnPool[]
         {
-            SP.Pool(Enemies.MoonDigger.TableIndex),                                          // back for floor 1
-            SP.Pool(Enemies.Titan.TableIndex, Enemies.Arthur.TableIndex),                             // back for floor 2
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.CrescentBaron.TableIndex),                             // back for floor 3
-            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.Titan.TableIndex),                             // back for floor 4
-            SP.Pool(Enemies.MoonBug.TableIndex),                                          // back for floor 5
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MimicMS.TableIndex, Enemies.KingMimicMS.TableIndex),               // back for floor 6
-            SP.Pool(Enemies.MoonBug.TableIndex, Enemies.CrescentBaron.TableIndex),                             // back for floor 7
+            SP.Pool(EnemySpecies.MoonDigger.TableIndex),                                          // back for floor 1
+            SP.Pool(EnemySpecies.Titan.TableIndex, EnemySpecies.Arthur.TableIndex),                             // back for floor 2
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.CrescentBaron.TableIndex),                             // back for floor 3
+            SP.Pool(EnemySpecies.WitchHellza.TableIndex, EnemySpecies.Titan.TableIndex),                             // back for floor 4
+            SP.Pool(EnemySpecies.MoonBug.TableIndex),                                          // back for floor 5
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MimicMS.TableIndex, EnemySpecies.KingMimicMS.TableIndex),               // back for floor 6
+            SP.Pool(EnemySpecies.MoonBug.TableIndex, EnemySpecies.CrescentBaron.TableIndex),                             // back for floor 7
             SP.Empty(),                                                       // back for floor 8
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MoonDigger.TableIndex),                             // back for floor 9
-            SP.Pool(Enemies.Vulcan.TableIndex),                                          // back for floor 10
-            SP.Pool(Enemies.Arthur.TableIndex),                                          // back for floor 11
-            SP.Pool(Enemies.SpaceGyon.TableIndex),                                          // back for floor 12
-            SP.Pool(Enemies.HellPockle.TableIndex, Enemies.MimicMS.TableIndex, Enemies.KingMimicMS.TableIndex),               // back for floor 13
-            SP.Pool(Enemies.WitchHellza.TableIndex, Enemies.WhiteFang.TableIndex, Enemies.CrescentBaron.TableIndex),               // back for floor 14  [tier 5, not 7]
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MoonDigger.TableIndex),                             // back for floor 9
+            SP.Pool(EnemySpecies.Vulcan.TableIndex),                                          // back for floor 10
+            SP.Pool(EnemySpecies.Arthur.TableIndex),                                          // back for floor 11
+            SP.Pool(EnemySpecies.SpaceGyon.TableIndex),                                          // back for floor 12
+            SP.Pool(EnemySpecies.HellPockle.TableIndex, EnemySpecies.MimicMS.TableIndex, EnemySpecies.KingMimicMS.TableIndex),               // back for floor 13
+            SP.Pool(EnemySpecies.WitchHellza.TableIndex, EnemySpecies.WhiteFang.TableIndex, EnemySpecies.CrescentBaron.TableIndex),               // back for floor 14  [tier 5, not 7]
         };
 
         // ── Dungeon 5 : Gallery of Time (GoT) ────────────────────────────────────────────
@@ -596,67 +596,67 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly FloorSpawnPool[] GoT_Front = new FloorSpawnPool[]
         {
             SP.Empty(),                                                                                    // [0] descriptor
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.DarkFlower.TableIndex),                                             // [1] floor 1
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.Billy.TableIndex),                                // [2] floor 2
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.Billy.TableIndex, Enemies.LivingArmor.TableIndex),                                // [3] floor 3
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex),                                // [4] floor 4
-            SP.Pool(Enemies.CurseDancer.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.RashDasher.TableIndex),                                // [5] floor 5
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.Billy.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.Club.TableIndex),                                // [6] floor 6
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.RashDasher.TableIndex, Enemies.Heart.TableIndex),                                // [7] floor 7
-            SP.Pool(Enemies.DarkFlower.TableIndex, Enemies.Billy.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.Diamond.TableIndex),                                // [8] floor 8
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex, Enemies.RashDasher.TableIndex, Enemies.Spade.TableIndex),                                // [9] floor 9
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.RashDasher.TableIndex, Enemies.Joker.TableIndex),                                // [10] floor 10
-            SP.Pool(Enemies.Club.TableIndex, Enemies.Heart.TableIndex, Enemies.Diamond.TableIndex, Enemies.Spade.TableIndex, Enemies.Joker.TableIndex),                   // [11] floor 11
-            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Heart.TableIndex, Enemies.Joker.TableIndex, Enemies.KingMimicGoT.TableIndex),                                // [12] floor 12
-            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Club.TableIndex, Enemies.Diamond.TableIndex, Enemies.Lich.TableIndex),                                // [13] floor 13
-            SP.Pool(Enemies.DarkFlower.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Lich.TableIndex, Enemies.Blizzard.TableIndex),                                // [14] floor 14
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Lich.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex),                                // [15] floor 15
-            SP.Pool(Enemies.KingMimicGoT.TableIndex, Enemies.Lich.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [16] floor 16
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [17] floor 17
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex),                                             // [18] floor 18
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.CurseDancer.TableIndex, Enemies.Billy.TableIndex, Enemies.Lich.TableIndex),                                // [19] floor 19
-            SP.Pool(Enemies.DarkFlower.TableIndex, Enemies.LivingArmor.TableIndex, Enemies.RashDasher.TableIndex, Enemies.BlackDragon.TableIndex),                                // [20] floor 20
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.Billy.TableIndex, Enemies.Heart.TableIndex, Enemies.Blizzard.TableIndex),                                // [21] floor 21
-            SP.Pool(Enemies.Joker.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [22] floor 22
-            SP.Pool(Enemies.Club.TableIndex, Enemies.Heart.TableIndex, Enemies.Diamond.TableIndex, Enemies.Spade.TableIndex, Enemies.Joker.TableIndex),                   // [23] floor 23
-            SP.Pool(Enemies.Lich.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),                                // [24] floor 24
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.CurseDancer.TableIndex, EnemySpecies.DarkFlower.TableIndex),                                             // [1] floor 1
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.CurseDancer.TableIndex, EnemySpecies.DarkFlower.TableIndex, EnemySpecies.Billy.TableIndex),                                // [2] floor 2
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.DarkFlower.TableIndex, EnemySpecies.Billy.TableIndex, EnemySpecies.LivingArmor.TableIndex),                                // [3] floor 3
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.CurseDancer.TableIndex, EnemySpecies.LivingArmor.TableIndex, EnemySpecies.MimicGoT.TableIndex),                                // [4] floor 4
+            SP.Pool(EnemySpecies.CurseDancer.TableIndex, EnemySpecies.DarkFlower.TableIndex, EnemySpecies.LivingArmor.TableIndex, EnemySpecies.RashDasher.TableIndex),                                // [5] floor 5
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.Billy.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.Club.TableIndex),                                // [6] floor 6
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.RashDasher.TableIndex, EnemySpecies.Heart.TableIndex),                                // [7] floor 7
+            SP.Pool(EnemySpecies.DarkFlower.TableIndex, EnemySpecies.Billy.TableIndex, EnemySpecies.LivingArmor.TableIndex, EnemySpecies.Diamond.TableIndex),                                // [8] floor 8
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.DarkFlower.TableIndex, EnemySpecies.RashDasher.TableIndex, EnemySpecies.Spade.TableIndex),                                // [9] floor 9
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.RashDasher.TableIndex, EnemySpecies.Joker.TableIndex),                                // [10] floor 10
+            SP.Pool(EnemySpecies.Club.TableIndex, EnemySpecies.Heart.TableIndex, EnemySpecies.Diamond.TableIndex, EnemySpecies.Spade.TableIndex, EnemySpecies.Joker.TableIndex),                   // [11] floor 11
+            SP.Pool(EnemySpecies.RashDasher.TableIndex, EnemySpecies.Heart.TableIndex, EnemySpecies.Joker.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),                                // [12] floor 12
+            SP.Pool(EnemySpecies.RashDasher.TableIndex, EnemySpecies.Club.TableIndex, EnemySpecies.Diamond.TableIndex, EnemySpecies.Lich.TableIndex),                                // [13] floor 13
+            SP.Pool(EnemySpecies.DarkFlower.TableIndex, EnemySpecies.KingMimicGoT.TableIndex, EnemySpecies.Lich.TableIndex, EnemySpecies.Blizzard.TableIndex),                                // [14] floor 14
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.Lich.TableIndex, EnemySpecies.Blizzard.TableIndex, EnemySpecies.Alexander.TableIndex),                                // [15] floor 15
+            SP.Pool(EnemySpecies.KingMimicGoT.TableIndex, EnemySpecies.Lich.TableIndex, EnemySpecies.Alexander.TableIndex, EnemySpecies.BlackDragon.TableIndex),                                // [16] floor 16
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.Blizzard.TableIndex, EnemySpecies.Alexander.TableIndex, EnemySpecies.BlackDragon.TableIndex),                                // [17] floor 17
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),                                             // [18] floor 18
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.CurseDancer.TableIndex, EnemySpecies.Billy.TableIndex, EnemySpecies.Lich.TableIndex),                                // [19] floor 19
+            SP.Pool(EnemySpecies.DarkFlower.TableIndex, EnemySpecies.LivingArmor.TableIndex, EnemySpecies.RashDasher.TableIndex, EnemySpecies.BlackDragon.TableIndex),                                // [20] floor 20
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.Billy.TableIndex, EnemySpecies.Heart.TableIndex, EnemySpecies.Blizzard.TableIndex),                                // [21] floor 21
+            SP.Pool(EnemySpecies.Joker.TableIndex, EnemySpecies.KingMimicGoT.TableIndex, EnemySpecies.Alexander.TableIndex, EnemySpecies.BlackDragon.TableIndex),                                // [22] floor 22
+            SP.Pool(EnemySpecies.Club.TableIndex, EnemySpecies.Heart.TableIndex, EnemySpecies.Diamond.TableIndex, EnemySpecies.Spade.TableIndex, EnemySpecies.Joker.TableIndex),                   // [23] floor 23
+            SP.Pool(EnemySpecies.Lich.TableIndex, EnemySpecies.Blizzard.TableIndex, EnemySpecies.Alexander.TableIndex, EnemySpecies.BlackDragon.TableIndex),                                // [24] floor 24
         };
 
         // Back-floor pools for GoT floors 1-24.
         internal static readonly FloorSpawnPool[] GoT_Back = new FloorSpawnPool[]
         {
-            SP.Pool(Enemies.Heart.TableIndex, Enemies.Lich.TableIndex),                             // back for floor 1
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Alexander.TableIndex),                             // back for floor 2
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.BlackDragon.TableIndex),                             // back for floor 3
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex),                             // back for floor 4
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex),  // back for floor 5
-            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),  // back for floor 6
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Alexander.TableIndex),                             // back for floor 7
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.BlackDragon.TableIndex),                             // back for floor 8
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.Alexander.TableIndex),                             // back for floor 9
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex),                             // back for floor 10
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex),  // back for floor 11
-            SP.Pool(Enemies.RashDasher.TableIndex, Enemies.Blizzard.TableIndex, Enemies.Alexander.TableIndex, Enemies.BlackDragon.TableIndex),  // back for floor 12
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.BlackDragon.TableIndex),                             // back for floor 13  [tier 5, not 7]
-            SP.Pool(Enemies.CurseDancer.TableIndex, Enemies.Billy.TableIndex),                             // back for floor 14
-            SP.Pool(Enemies.LivingArmor.TableIndex, Enemies.MimicGoT.TableIndex, Enemies.KingMimicGoT.TableIndex, Enemies.Alexander.TableIndex),  // back for floor 15
-            SP.Pool(Enemies.EvilBat.TableIndex),                                          // back for floor 16
-            SP.Pool(Enemies.EvilBat.TableIndex, Enemies.DarkFlower.TableIndex),                             // back for floor 17
-            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Diamond.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 18
-            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Club.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 19
-            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Heart.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 20
-            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Spade.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 21
-            SP.Pool(Enemies.MimicGoT.TableIndex, Enemies.Joker.TableIndex, Enemies.KingMimicGoT.TableIndex),               // back for floor 22
-            SP.Pool(Enemies.Club.TableIndex, Enemies.Heart.TableIndex, Enemies.Diamond.TableIndex, Enemies.Spade.TableIndex, Enemies.Joker.TableIndex), // back for floor 23
-            SP.Pool(Enemies.EvilBat.TableIndex),                                          // back for floor 24
+            SP.Pool(EnemySpecies.Heart.TableIndex, EnemySpecies.Lich.TableIndex),                             // back for floor 1
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.Alexander.TableIndex),                             // back for floor 2
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.BlackDragon.TableIndex),                             // back for floor 3
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.DarkFlower.TableIndex),                             // back for floor 4
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.KingMimicGoT.TableIndex, EnemySpecies.Alexander.TableIndex),  // back for floor 5
+            SP.Pool(EnemySpecies.RashDasher.TableIndex, EnemySpecies.Blizzard.TableIndex, EnemySpecies.Alexander.TableIndex, EnemySpecies.BlackDragon.TableIndex),  // back for floor 6
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.Alexander.TableIndex),                             // back for floor 7
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.BlackDragon.TableIndex),                             // back for floor 8
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.Alexander.TableIndex),                             // back for floor 9
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.DarkFlower.TableIndex),                             // back for floor 10
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.KingMimicGoT.TableIndex, EnemySpecies.Alexander.TableIndex),  // back for floor 11
+            SP.Pool(EnemySpecies.RashDasher.TableIndex, EnemySpecies.Blizzard.TableIndex, EnemySpecies.Alexander.TableIndex, EnemySpecies.BlackDragon.TableIndex),  // back for floor 12
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.BlackDragon.TableIndex),                             // back for floor 13  [tier 5, not 7]
+            SP.Pool(EnemySpecies.CurseDancer.TableIndex, EnemySpecies.Billy.TableIndex),                             // back for floor 14
+            SP.Pool(EnemySpecies.LivingArmor.TableIndex, EnemySpecies.MimicGoT.TableIndex, EnemySpecies.KingMimicGoT.TableIndex, EnemySpecies.Alexander.TableIndex),  // back for floor 15
+            SP.Pool(EnemySpecies.EvilBat.TableIndex),                                          // back for floor 16
+            SP.Pool(EnemySpecies.EvilBat.TableIndex, EnemySpecies.DarkFlower.TableIndex),                             // back for floor 17
+            SP.Pool(EnemySpecies.MimicGoT.TableIndex, EnemySpecies.Diamond.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),               // back for floor 18
+            SP.Pool(EnemySpecies.MimicGoT.TableIndex, EnemySpecies.Club.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),               // back for floor 19
+            SP.Pool(EnemySpecies.MimicGoT.TableIndex, EnemySpecies.Heart.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),               // back for floor 20
+            SP.Pool(EnemySpecies.MimicGoT.TableIndex, EnemySpecies.Spade.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),               // back for floor 21
+            SP.Pool(EnemySpecies.MimicGoT.TableIndex, EnemySpecies.Joker.TableIndex, EnemySpecies.KingMimicGoT.TableIndex),               // back for floor 22
+            SP.Pool(EnemySpecies.Club.TableIndex, EnemySpecies.Heart.TableIndex, EnemySpecies.Diamond.TableIndex, EnemySpecies.Spade.TableIndex, EnemySpecies.Joker.TableIndex), // back for floor 23
+            SP.Pool(EnemySpecies.EvilBat.TableIndex),                                          // back for floor 24
         };
 
         // DarkGenie boss pool — belongs to DS but stored in the binary after GoT's last
         // front floor (slot 190) and before GoT's back floors.  The companion empty slot
         // (slot 191) occupies the back-floor position for this boss encounter.
         internal static readonly FloorSpawnPool GoT_DarkGenieBoss =
-            SP.Pool(Enemies.DarkGenie.TableIndex, Enemies.DarkGenieForm2.TableIndex, Enemies.RightHand.TableIndex, Enemies.LeftHand.TableIndex,
-                       Enemies.DGComp88.TableIndex, Enemies.DGComp89.TableIndex, Enemies.DGComp90.TableIndex, Enemies.DGComp93.TableIndex);
+            SP.Pool(EnemySpecies.DarkGenie.TableIndex, EnemySpecies.DarkGenieForm2.TableIndex, EnemySpecies.RightHand.TableIndex, EnemySpecies.LeftHand.TableIndex,
+                       EnemySpecies.DGComp88.TableIndex, EnemySpecies.DGComp89.TableIndex, EnemySpecies.DGComp90.TableIndex, EnemySpecies.DGComp93.TableIndex);
 
         // ── Dungeon 6 : Demon Shaft (DS) ────────────────────────────────────────────────
         // 100 floors.  Boss: BlackKnight + tbl_165 (floor 100); DarkGenie is the true final
@@ -685,116 +685,116 @@ namespace Dark_Cloud_Improved_Version
             p[0] = SP.Empty(); // descriptor
 
             // Floors 1-20: GemronFire group
-            p[1]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            p[2]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            p[3]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[4]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            p[5]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            p[6]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            p[7]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[8]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            p[9]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            p[10] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[11] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[12] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            p[13] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[14] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            p[15] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            p[16] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[17] = SP.Pool(Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            p[18] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex);
-            p[19] = SP.Pool(Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            p[20] = SP.Pool(Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
+            p[1]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            p[2]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            p[3]  = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[4]  = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            p[5]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            p[6]  = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            p[7]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[8]  = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            p[9]  = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            p[10] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[11] = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[12] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            p[13] = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[14] = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            p[15] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            p[16] = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[17] = SP.Pool(EnemySpecies.GemronFire.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            p[18] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex);
+            p[19] = SP.Pool(EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            p[20] = SP.Pool(EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
 
             // Floors 21-40: GemronIce group
-            p[21] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
-            p[22] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.MimicDS.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            p[23] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.KingMimicDS.TableIndex);
-            p[24] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[25] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
-            p[26] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            p[27] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
-            p[28] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[29] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            p[30] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
-            p[31] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.KingMimicDS.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[32] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[33] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            p[34] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[35] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[36] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
-            p[37] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[38] = SP.Pool(Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            p[39] = SP.Pool(Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            p[40] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex); // same as floor 37
+            p[21] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex);
+            p[22] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.HornHead.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            p[23] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            p[24] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[25] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex);
+            p[26] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            p[27] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            p[28] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[29] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            p[30] = SP.Pool(EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            p[31] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.KingMimicDS.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[32] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[33] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            p[34] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.HornHead.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[35] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[36] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            p[37] = SP.Pool(EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[38] = SP.Pool(EnemySpecies.MimicDS.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            p[39] = SP.Pool(EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            p[40] = SP.Pool(EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex); // same as floor 37
 
             // Floors 41-60: GemronThunder group
-            p[41] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex);
-            p[42] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            p[43] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            p[44] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[45] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex);
-            p[46] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.BishopQ.TableIndex);
-            p[47] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            p[48] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[49] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            p[50] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            p[51] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[52] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[53] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            p[54] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[55] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[56] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            p[57] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[58] = SP.Pool(Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            p[59] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            p[60] = SP.Pool(Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            p[41] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex);
+            p[42] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            p[43] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            p[44] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[45] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex);
+            p[46] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            p[47] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            p[48] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[49] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            p[50] = SP.Pool(EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            p[51] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[52] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[53] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            p[54] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[55] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[56] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            p[57] = SP.Pool(EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[58] = SP.Pool(EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            p[59] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            p[60] = SP.Pool(EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
 
             // Floors 61-80: GemronWind group
-            p[61] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
-            p[62] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            p[63] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            p[64] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[65] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
-            p[66] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            p[67] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            p[68] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[69] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            p[70] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            p[71] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[72] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[73] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            p[74] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[75] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[76] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            p[77] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[78] = SP.Pool(Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            p[79] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            p[80] = SP.Pool(Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            p[61] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex);
+            p[62] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            p[63] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            p[64] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[65] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex);
+            p[66] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            p[67] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            p[68] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[69] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            p[70] = SP.Pool(EnemySpecies.SilverGear.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            p[71] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[72] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[73] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            p[74] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[75] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[76] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            p[77] = SP.Pool(EnemySpecies.SilverGear.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[78] = SP.Pool(EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            p[79] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            p[80] = SP.Pool(EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
 
             // Floors 81-99: GemronHoly group
-            p[81] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex);
-            p[82] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.EvilBatEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            p[83] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            p[84] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[85] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex);
-            p[86] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            p[87] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            p[88] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[89] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            p[90] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            p[91] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[92] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[93] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            p[94] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[95] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[96] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            p[97] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            p[98] = SP.Pool(Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            p[99] = SP.Pool(Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            p[81] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex);
+            p[82] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            p[83] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            p[84] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[85] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.JokerEnhanced.TableIndex);
+            p[86] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            p[87] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            p[88] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[89] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            p[90] = SP.Pool(EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            p[91] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[92] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[93] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            p[94] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[95] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[96] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            p[97] = SP.Pool(EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            p[98] = SP.Pool(EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            p[99] = SP.Pool(EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
 
             // Floor 100 — BOSS: BlackKnight (tbl_165) + garbage padding (tbl_166, as extracted from binary)
-            p[100] = SP.Pool(Enemies.BlackKnightMount.TableIndex, Enemies.BlackKnight.TableIndex);
+            p[100] = SP.Pool(EnemySpecies.BlackKnightMount.TableIndex, EnemySpecies.BlackKnight.TableIndex);
 
             return p;
         }
@@ -805,115 +805,115 @@ namespace Dark_Cloud_Improved_Version
             var b = new FloorSpawnPool[99];
 
             // Back floors 1-20: GemronFire group variants
-            b[0]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[1]  = SP.Pool(Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            b[2]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex);
-            b[3]  = SP.Pool(Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[4]  = SP.Pool(Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[5]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            b[6]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            b[7]  = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[8]  = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            b[9]  = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            b[10] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            b[11] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[12] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            b[13] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            b[14] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.Nikapous.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[15] = SP.Pool(Enemies.DiamondEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[16] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.GemronFire.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
-            b[17] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.MasterJacketEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.ArthurEnhanced.TableIndex);
-            b[18] = SP.Pool(Enemies.MummyEnhanced.TableIndex, Enemies.HalloweenEnhanced.TableIndex, Enemies.WhiteFangEnhanced.TableIndex, Enemies.VulcanEnhanced.TableIndex);
-            b[19] = SP.Pool(Enemies.HalloweenEnhanced.TableIndex, Enemies.DiamondEnhanced.TableIndex, Enemies.SilEnhanced.TableIndex, Enemies.Nikapous.TableIndex);
+            b[0]  = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[1]  = SP.Pool(EnemySpecies.GemronFire.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            b[2]  = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex);
+            b[3]  = SP.Pool(EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[4]  = SP.Pool(EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[5]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            b[6]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            b[7]  = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[8]  = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            b[9]  = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            b[10] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            b[11] = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[12] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            b[13] = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            b[14] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.Nikapous.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[15] = SP.Pool(EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[16] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.GemronFire.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
+            b[17] = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.MasterJacketEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.ArthurEnhanced.TableIndex);
+            b[18] = SP.Pool(EnemySpecies.MummyEnhanced.TableIndex, EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.WhiteFangEnhanced.TableIndex, EnemySpecies.VulcanEnhanced.TableIndex);
+            b[19] = SP.Pool(EnemySpecies.HalloweenEnhanced.TableIndex, EnemySpecies.DiamondEnhanced.TableIndex, EnemySpecies.SilEnhanced.TableIndex, EnemySpecies.Nikapous.TableIndex);
 
             // Back floors 21-40: GemronIce group variants
-            b[20] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[21] = SP.Pool(Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            b[22] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.GemronIce.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[23] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            b[24] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
-            b[25] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.MimicDS.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            b[26] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.KingMimicDS.TableIndex);
-            b[27] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[28] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.RockanoffEnhanced.TableIndex);
-            b[29] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.GemronIce.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            b[30] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
-            b[31] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[32] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            b[33] = SP.Pool(Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
-            b[34] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.MimicDS.TableIndex, Enemies.KingMimicDS.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[35] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.GemronIce.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[36] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.WitchHellzaEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex);
-            b[37] = SP.Pool(Enemies.CorceaEnhanced.TableIndex, Enemies.HornHead.TableIndex, Enemies.RockanoffEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
+            b[20] = SP.Pool(EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[21] = SP.Pool(EnemySpecies.MimicDS.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            b[22] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[23] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            b[24] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex);
+            b[25] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.HornHead.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            b[26] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            b[27] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[28] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex);
+            b[29] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            b[30] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            b[31] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[32] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            b[33] = SP.Pool(EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
+            b[34] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.MimicDS.TableIndex, EnemySpecies.KingMimicDS.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[35] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.GemronIce.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[36] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.WitchHellzaEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex);
+            b[37] = SP.Pool(EnemySpecies.CorceaEnhanced.TableIndex, EnemySpecies.HornHead.TableIndex, EnemySpecies.RockanoffEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
 
             // Back floors 39-40 bridge gap (the two remaining GemronIce back slots)
-            b[38] = SP.Pool(Enemies.HornHead.TableIndex, Enemies.YammichEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.SteelGiantEnhanced.TableIndex);
-            b[39] = SP.Pool(Enemies.YammichEnhanced.TableIndex, Enemies.ClubEnhanced.TableIndex, Enemies.AuntieMeduEnhanced.TableIndex, Enemies.KingMimicDS.TableIndex);
+            b[38] = SP.Pool(EnemySpecies.HornHead.TableIndex, EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.SteelGiantEnhanced.TableIndex);
+            b[39] = SP.Pool(EnemySpecies.YammichEnhanced.TableIndex, EnemySpecies.ClubEnhanced.TableIndex, EnemySpecies.AuntieMeduEnhanced.TableIndex, EnemySpecies.KingMimicDS.TableIndex);
 
             // Back floors 41-60: GemronThunder group variants
-            b[40] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            b[41] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[42] = SP.Pool(Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            b[43] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[44] = SP.Pool(Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[45] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex);
-            b[46] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            b[47] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            b[48] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[49] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex);
-            b[50] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.BishopQ.TableIndex);
-            b[51] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            b[52] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[53] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            b[54] = SP.Pool(Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex);
-            b[55] = SP.Pool(Enemies.GyonEnhanced.TableIndex, Enemies.MimicDSEnhanced.TableIndex, Enemies.KingMimicDSEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[56] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GemronThunder.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[57] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.SpadeEnhanced.TableIndex, Enemies.RashDasherEnhanced.TableIndex, Enemies.BishopQ.TableIndex);
-            b[58] = SP.Pool(Enemies.CaptainEnhanced.TableIndex, Enemies.CaveBatEnhanced.TableIndex, Enemies.GolEnhanced.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
-            b[59] = SP.Pool(Enemies.CaveBatEnhanced.TableIndex, Enemies.GyonEnhanced.TableIndex, Enemies.BishopQ.TableIndex, Enemies.MaskOfPrajnaEnhanced.TableIndex);
+            b[40] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            b[41] = SP.Pool(EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[42] = SP.Pool(EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            b[43] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[44] = SP.Pool(EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[45] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex);
+            b[46] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            b[47] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            b[48] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[49] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex);
+            b[50] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            b[51] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            b[52] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[53] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            b[54] = SP.Pool(EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex);
+            b[55] = SP.Pool(EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.MimicDSEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[56] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GemronThunder.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[57] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.SpadeEnhanced.TableIndex, EnemySpecies.RashDasherEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex);
+            b[58] = SP.Pool(EnemySpecies.CaptainEnhanced.TableIndex, EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GolEnhanced.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
+            b[59] = SP.Pool(EnemySpecies.CaveBatEnhanced.TableIndex, EnemySpecies.GyonEnhanced.TableIndex, EnemySpecies.BishopQ.TableIndex, EnemySpecies.MaskOfPrajnaEnhanced.TableIndex);
 
             // Back floors 61-80: GemronWind group variants
-            b[60] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            b[61] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[62] = SP.Pool(Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            b[63] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[64] = SP.Pool(Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[65] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
-            b[66] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            b[67] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            b[68] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[69] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex);
-            b[70] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.GemronWind.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            b[71] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            b[72] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[73] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            b[74] = SP.Pool(Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex);
-            b[75] = SP.Pool(Enemies.CursedRoseEnhanced.TableIndex, Enemies.MimicDSEnhancedTwice.TableIndex, Enemies.KingMimicDSEnhancedTwice.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[76] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.GemronWind.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[77] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.SilverGear.TableIndex, Enemies.HeartEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex);
-            b[78] = SP.Pool(Enemies.BomberHeadEnhanced.TableIndex, Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.PiratesChariotEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
-            b[79] = SP.Pool(Enemies.CrabbyHermitEnhanced.TableIndex, Enemies.CursedRoseEnhanced.TableIndex, Enemies.SpaceGyonEnhanced.TableIndex, Enemies.AlexanderEnhanced.TableIndex);
+            b[60] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            b[61] = SP.Pool(EnemySpecies.SilverGear.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[62] = SP.Pool(EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            b[63] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[64] = SP.Pool(EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[65] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex);
+            b[66] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            b[67] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            b[68] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[69] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex);
+            b[70] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            b[71] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            b[72] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[73] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            b[74] = SP.Pool(EnemySpecies.SilverGear.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex);
+            b[75] = SP.Pool(EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedTwice.TableIndex, EnemySpecies.KingMimicDSEnhancedTwice.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[76] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.GemronWind.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[77] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.SilverGear.TableIndex, EnemySpecies.HeartEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex);
+            b[78] = SP.Pool(EnemySpecies.BomberHeadEnhanced.TableIndex, EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.PiratesChariotEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
+            b[79] = SP.Pool(EnemySpecies.CrabbyHermitEnhanced.TableIndex, EnemySpecies.CursedRoseEnhanced.TableIndex, EnemySpecies.SpaceGyonEnhanced.TableIndex, EnemySpecies.AlexanderEnhanced.TableIndex);
 
             // Back floors 81-99: GemronHoly group variants
-            b[80] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[81] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            b[82] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[83] = SP.Pool(Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            b[84] = SP.Pool(Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[85] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex);
-            b[86] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.EvilBatEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            b[87] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            b[88] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[89] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.JokerEnhanced.TableIndex);
-            b[90] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            b[91] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            b[92] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[93] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            b[94] = SP.Pool(Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex);
-            b[95] = SP.Pool(Enemies.LichEnhanced.TableIndex, Enemies.MimicDSEnhancedThrice.TableIndex, Enemies.KingMimicDSEnhancedThrice.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[96] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.GemronHoly.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
-            b[97] = SP.Pool(Enemies.LivingArmorEnhanced.TableIndex, Enemies.StatueDogEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.GaciousEnhanced.TableIndex);
-            b[98] = SP.Pool(Enemies.EvilBatEnhanced.TableIndex, Enemies.TitanEnhanced.TableIndex, Enemies.JokerEnhanced.TableIndex, Enemies.CrescentBaronEnhanced.TableIndex);
+            b[80] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[81] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            b[82] = SP.Pool(EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[83] = SP.Pool(EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            b[84] = SP.Pool(EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[85] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex);
+            b[86] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            b[87] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            b[88] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[89] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.JokerEnhanced.TableIndex);
+            b[90] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            b[91] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            b[92] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[93] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            b[94] = SP.Pool(EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex);
+            b[95] = SP.Pool(EnemySpecies.LichEnhanced.TableIndex, EnemySpecies.MimicDSEnhancedThrice.TableIndex, EnemySpecies.KingMimicDSEnhancedThrice.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[96] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.GemronHoly.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
+            b[97] = SP.Pool(EnemySpecies.LivingArmorEnhanced.TableIndex, EnemySpecies.StatueDogEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.GaciousEnhanced.TableIndex);
+            b[98] = SP.Pool(EnemySpecies.EvilBatEnhanced.TableIndex, EnemySpecies.TitanEnhanced.TableIndex, EnemySpecies.JokerEnhanced.TableIndex, EnemySpecies.CrescentBaronEnhanced.TableIndex);
 
             return b;
         }

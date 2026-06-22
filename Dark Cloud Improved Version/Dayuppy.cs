@@ -1250,7 +1250,7 @@ namespace Dark_Cloud_Improved_Version
 
             //CheckSpecials1();
             //TestBitField(special1, special2);
-            //Memory.WriteUShort(EnemySlots.Enemy13.hp, 1000);
+            //Memory.WriteUShort(Enemies.Enemy13.hp, 1000);
 
             //printItemTableNames(ItemTbl6);
 
