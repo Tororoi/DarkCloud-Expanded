@@ -19,8 +19,8 @@ namespace Dark_Cloud_Improved_Version
     internal static class HarderEnemies
     {
         internal static bool  Enabled             = false;
-        internal static float MoveSpeedMultiplier = 1.5f;   // enemy travel speed (×)
-        internal static float AnimSpeedMultiplier = 1.5f;   // enemy animation / action speed (×)
+        internal static float MoveSpeedMultiplier = 2.0f;   // enemy travel speed (×)
+        internal static float AnimSpeedMultiplier = 2.0f;   // enemy animation / action speed (×)
 
         private const int FnSetMove = 32;   // _SET_MOVE STB command
 

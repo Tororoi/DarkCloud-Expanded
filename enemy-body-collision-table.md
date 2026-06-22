@@ -6,8 +6,12 @@ enemy's behaviour script `dun/monstor/<code>.stb` in `data.dat` (`_SET_BODY_COL`
 
 - At spawn `_SET_BODY_COL(bone, radius)` records the sphere; `CMonstorUnit::CheckDmg` (ELF `0x1D9F10`)
   rebuilds it each frame at the bone's live position, radius → `CCollisionData` element `+0x3C`.
-- A weapon hit registers when `dist(weaponPoint, bonePos) ≤ radius` — `CCollisionData::CheckHitUser`
-  (`0x1B5920`), called from `BtCheckDamageProc` (`0x1DBAFD0`).
+- A player→enemy weapon hit registers when `dist(weaponPoint, bonePos) ≤ radius`, via the generic
+  point-in-sphere helper `CCollisionData::CheckHitUser` (`0x1B5920`). ⚠ Earlier this was attributed to
+  `BtCheckDamageProc` (`0x1DBAFD0`) — that's wrong: `BtCheckDamageProc` is the *reverse* direction
+  (enemy→player), testing the **player's** body point (`0x21EA1D30`) against the shared enemy collision
+  buffer (`gp-0x6210`). It also calls `CheckHitUser` (the helper is direction-agnostic), but the
+  player→enemy weapon-hit caller is a separate, not-yet-pinned function.
 - Live address of a sphere's radius: `EnemyAddresses.BodyCollision.RadiusAddr(slot, bodyPart)`
   (`= MainMonstorUnit.Base + 0x55390 + slot*0x510 + bodyPart*4`). Writing it once resizes the hitbox.
 
