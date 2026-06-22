@@ -25,6 +25,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Weapons.WeaponsBalanceChanges();
             Shop.UpdateShopPrices();
+            EnemySlots.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
         }
 
         public static void CheckEmulatorAndGame()

@@ -15,6 +15,34 @@ namespace Dark_Cloud_Improved_Version
             return Enemies.FlyingEnemies;
         }
 
+        /// <summary>
+        /// Permanently enable death-drops for the regular enemy species that ship unable to drop (flyers, Gol/Sil, …).
+        /// The engine skips the entire death-drop block when a species' StealFlag (record +0x82) is 0 — copied to the
+        /// slot's StealItemId high word at spawn and tested at ELF 0x1DF4C0. Those species have DropChance &gt; 0 yet
+        /// never drop because the flag is 0. We flip it to 1 in the STATIC species table (one ELF segment, persists the
+        /// whole session), so EVERY future spawn inherits it — no per-tick or per-slot work. Idempotent; call once on
+        /// game/dungeon entry. Scope: only 'e####' (regular enemy) records — boss/effect meshes (c####, kori, last, …)
+        /// are left as the game shipped them. Independent of the steal item (record +0x80), so steal is unaffected.
+        /// </summary>
+        public static void EnableEnemyDrops()
+        {
+            const int recordCount = 167;   // valid species records in SCUS_971.11 (TableIndex 0..166)
+            byte[] tbl = Memory.ReadByteArray(EnemySpeciesTable.TableBase, recordCount * EnemySpeciesTable.Stride);
+            if (tbl == null) return;
+
+            int patched = 0;
+            for (int ti = 0; ti < recordCount; ti++)
+            {
+                int rec = ti * EnemySpeciesTable.Stride;
+                if (tbl[rec] != (byte)'e') continue;                       // regular-enemy mesh only (skip bosses/effects)
+                int f = rec + EnemySpeciesTable.StealFlag;
+                if ((tbl[f] | (tbl[f + 1] << 8)) != 0) continue;            // already drops
+                Memory.WriteUShort(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.StealFlag, 1);
+                patched++;
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Enabled death-drops for {patched} previously no-drop enemy species.");
+        }
+
         public static Dictionary<ushort, string> GetOverseasEnemies()
         {
             return Enemies.OverseasEnemies;

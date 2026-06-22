@@ -383,7 +383,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int HitReactionType   = 0x0C8; // READ ONLY — int; 0 at rest; written by engine on hit (Pirate's Chariot=2, Auntie Medu=2 or 5, Mask of Prajna=5); may encode hit type or weapon category rather than a fixed per-type value
 
         // ── Item Drop / Resistance ────────────────────────────────────────────
-        internal const int StealItemId       = 0x0D8; // int   — packed: low ushort = item ID; high ushort = 1 for all observed enemies
+        internal const int StealItemId       = 0x0D8; // int   — packed: low ushort = steal item ID; HIGH ushort (0xDA) = "has drop" gate.
+        // ★ The high ushort (slot 0xDA) GATES the entire enemy death-drop: CMonstorUnit::Step skips the whole drop block
+        // when it reads 0 (exit branch at ELF 0x1DF4C0, `beq high,0 -> 0x1DF9A4`). It is 1 for normal enemies but 0 for
+        // the "can't drop" species (flyers, Gol/Sil) — that, not position/death-path, is why those never drop. Writing
+        // it nonzero (see MiniBoss.ApplyMiniBossToSlot) lets their forced loot spawn.
         // internal const int ItemDropId = 0x404; // UNCONFIRMED — address 0x21E16FA4 was noted as "item dropped by weapon kill"
         //                                         // but offset 0x404 falls between slots (stride is 0x190); needs re-investigation
 
@@ -578,7 +582,11 @@ namespace Dark_Cloud_Improved_Version
         // +0x07E: 2 bytes padding (always 0)
 
         internal const int StealItemId= 0x080; // ushort — item ID for steal mechanic; 65535 if none
-        internal const int StealFlag  = 0x082; // ushort — 1 if enemy has a steal item, 0 if not
+        // ★ The DEATH-DROP gate (RE'd): copied to the slot's StealItemId high word (0xDA) at spawn, which gates the
+        // whole drop block (ELF 0x1DF4C0). 1 = enemy drops on death, 0 = never drops. It is independent of the steal
+        // item at 0x080 (Cave Bat has steal item 151 but this flag 0). 0 for flyers + Gol/Sil → those never drop;
+        // setting it to 1 (see EnemySlots.EnableEnemyDrops) permanently enables their drops via the static species table.
+        internal const int StealFlag  = 0x082; // ushort — death-drop enable (1=drops, 0=no drop)
 
         internal const int ItemResA   = 0x084; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance
         internal const int ItemResB   = 0x086; // ushort — item resistance B

@@ -36,10 +36,7 @@ namespace Dark_Cloud_Improved_Version
         const int enemyItemResistMulti = 10;      //Miniboss Item Resistance multiplier %
         const int enemyGoldMult = 4;              //Miniboss Gilda Loot multiplier
         const int enemyLootChance = 100;          //Miniboss Loot chance % (0 - 100)
-        const bool allowFlyerMinibosses = true;   //Allow flying enemies to become minibosses (hitbox now scales so they're hittable)
         const bool forceAllMinibosses = true;    //TEST ONLY: promote EVERY eligible enemy to a miniboss (easier testing of miniboss changes); keep false for normal play
-
-        static Dictionary<ushort, string> nonKeyEnemies = EnemySlots.GetFlyingEnemies();
 
         public class MiniBossSnapshot
         {
@@ -49,7 +46,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// Picks and transforms enemies on the current floor into Champions (Minibosses).
-        /// Each eligible enemy (non-flying, non-zero ID, no forced item drop) has a
+        /// Each eligible enemy (non-zero ID, non-boss, not holding the floor key) has a
         /// 1-in-(15 minus ineligible count) chance of being chosen. All winners are transformed.
         /// </summary>
         public static bool MiniBossSpawn(byte dungeon = 255, byte floor = 255)
@@ -59,14 +56,14 @@ namespace Dark_Cloud_Improved_Version
             miniBossEnemyNumbers.Clear();
             EnemyStatScaler.ResetSlotProjectile();   // drop last floor's per-slot projectile-scale cache
 
-            // Count all enemies ineligible to become a miniboss (ID 0, flying, or has a forced item drop)
+            // Count all enemies ineligible to become a miniboss (ID 0, boss, or holds the floor key)
             int ineligibleCount = 0;
             List<ushort> allIds = EnemySlots.GetFloorEnemiesIds();
             for (int i = 0; i < allIds.Count; i++)
             {
                 ushort id = allIds[i];
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
-                if (id == 0 || (!allowFlyerMinibosses && nonKeyEnemies.ContainsKey(id)) || Enemies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
+                if (id == 0 || Enemies.BossEnemies.ContainsKey(id) || (dropVal != 0 && dropVal != 65535))
                     ineligibleCount++;
             }
 
@@ -79,7 +76,6 @@ namespace Dark_Cloud_Improved_Version
                 ushort id = allIds[i];
                 if (id == 0) continue;
                 if (Enemies.BossEnemies.ContainsKey(id)) continue;   // never promote a boss/boss-companion (e.g. Ice Queen 113, IceArrow 84) to a miniboss
-                if (!allowFlyerMinibosses && nonKeyEnemies.ContainsKey(id)) continue;
                 ushort dropVal = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop));
                 if (dropVal != 0 && dropVal != 65535) continue;
                 if (forceAllMinibosses || rnd.Next(denominator) == 0)
@@ -318,6 +314,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.ItemResistance), enemyItemResistMulti);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.MinGoldDrop),  startGold * enemyGoldMult);
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.DropChance),   enemyLootChance);
+
+            // EnemySlots.EnableEnemyDrops patches the static species table on game load, so every spawn — minibosses
+            // included — inherits the death-drop flag. See EnemySpeciesTable.StealFlag.)
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
 

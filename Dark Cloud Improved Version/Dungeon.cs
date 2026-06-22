@@ -734,7 +734,7 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Checking spawns...");
 
             int ms = 0;
-            byte numNormalEnemies = 0;
+            byte numEligibleEnemies = 0;
 
             if(prevFloor == 200)
             {
@@ -775,22 +775,21 @@ namespace Dark_Cloud_Improved_Version
             //Get all the current floor enemy ids
             List<ushort> enemyFloorIds = EnemySlots.GetFloorEnemiesIds();
 
-            //Calculate the amount of non-flying enemies in the floor
+            //Count miniboss-eligible enemies on the floor — any real non-boss enemy (flyers now drop, so they qualify too)
             foreach (ushort enemy in enemyFloorIds)
             {
-                if (EnemySlots.GetNormalEnemies().ContainsKey(enemy)) numNormalEnemies++;
+                if (enemy != 0 && !Enemies.BossEnemies.ContainsKey(enemy)) numEligibleEnemies++;
             }
 
-            //Check if there are more than 3 normal enemies in the floor
-            //This is to account for the Wise Owl 3 keys
-            //There needs to be enough normal enemies to roll for the miniboss in order to avoid infinite retries
+            //Only roll minibosses if there are more than 3 eligible enemies. Wise Owl floors have 3 key-holders, so
+            //we need >3 to guarantee at least one non-key enemy is free to become a miniboss (avoids a failed roll).
             // EnemySlots.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
             // EnemySlots.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             EnemySlots.LogEnemySpawns();
             EnemySlots.LogFloorDataForTileMapSearch();
             EnemyModelInjector.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
 
-            if (numNormalEnemies > 3)
+            if (numEligibleEnemies > 3)
             {
                 minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
                 minibossProcess.Start();
