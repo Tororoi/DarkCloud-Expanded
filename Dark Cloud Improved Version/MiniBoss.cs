@@ -32,9 +32,9 @@ namespace Dark_Cloud_Improved_Version
         const float minibossAttackFactor = 1.5F;  //Miniboss melee-damage multiplier (×1.5). Projectile damage is per-SPECIES (shared STB) so it is intentionally left unscaled.
         internal const float WalkAnimSyncFactor = 1.3F; //Slow a miniboss's WALK clip by this divisor so its (scaled-up, longer) strides plant the feet instead of skating. = scaleSize syncs foot-speed to ground-speed; lower = faster legs. Applied in HarderEnemies.ScaleAnimation, composing with the Faster-enemies anim multiplier.
         const float minibossReticleFactor = 1.5F; //Miniboss lock-on reticle size multiplier — visual marker (model is already scaleSize bigger)
-        const int enemyABSMult = 4;               //Miniboss ABS multiplier
+        const int enemyABSMult = 3;               //Miniboss ABS multiplier
         const int enemyItemResistMulti = 10;      //Miniboss Item Resistance multiplier %
-        const int enemyGoldMult = 4;              //Miniboss Gilda Loot multiplier
+        const int enemyGoldMult = 3;              //Miniboss Gilda Loot multiplier
         const int enemyLootChance = 100;          //Miniboss Loot chance % (0 - 100)
         const bool forceAllMinibosses = true;    //TEST ONLY: promote EVERY eligible enemy to a miniboss (easier testing of miniboss changes); keep false for normal play
 
