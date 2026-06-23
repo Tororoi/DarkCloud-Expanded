@@ -12,9 +12,15 @@ using ThreadState = System.Threading.ThreadState;
 
 namespace Dark_Cloud_Improved_Version
 {
+    /// <summary>Launch mode, chosen by a command-line arg (see launchSettings.json / Makefile). Sandbox = User + the Sandbox tab.</summary>
+    public enum LaunchMode { User, Dev, Sandbox }
+
     public partial class ModWindow : Window
     {
         private static ModWindow instance;
+
+        // Set from the command-line arg in Program.Main before the window is created.
+        public static LaunchMode Mode = LaunchMode.User;
 
         private readonly DispatcherTimer _fishStatusTimer;
 
@@ -22,7 +28,8 @@ namespace Dark_Cloud_Improved_Version
         {
             InitializeComponent();
             instance = this;
-            UserModeLaunch();
+            if (Mode == LaunchMode.Dev) DevModeLaunch();
+            else UserModeLaunch();   // User and Sandbox both use the user tabs; Sandbox additionally shows the Sandbox tab
 
             _fishStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _fishStatusTimer.Tick += (_, _) => UpdateFishFarmerStatus();
@@ -272,83 +279,92 @@ namespace Dark_Cloud_Improved_Version
                 Label_UserMode_PlaceholderText.Text = "Another instance of Enhanced Mod is already active!\n\nYou can close this window.");
         }
 
+        // ── Persisted options, bit-packed into three category-grouped save bytes (all-zero = everything off) ──
+        //   Graphics 0x21CE4490 : bit0 graphical improvements, bit1 FOV          (bits 2-7 free)
+        //   Audio    0x21CE4491 : bit0 weapon beeps, bit1 battle music,
+        //                         bit2 attack sounds, bit3 mute music            (bits 4-7 free)
+        //   Gameplay 0x21CE4492 : bit0 faster enemies, bit1 stronger enemies     (bits 2-7 free)
+        //
+        // FREE SAVE BYTES for new options (no need to re-derive):
+        //   • 0x21CE4493, 0x21CE4494, 0x21CE4495 are fully UNUSED proven-free bytes — grab one for a new
+        //     category, or pack into the spare upper bits of the three bytes above.
+        //   • The proven-free padding block is exactly 0x21CE4490–0x21CE4495 (zero on every save, mod-only).
+        //   • DO NOT use 0x21CE4496 or later: those are LIVE game save data (old saves hold non-zero there;
+        //     a read-breakpoint fires only via the save memcpy, and writing them risks corruption / wrong
+        //     defaults). Verified by comparing a fresh new-game save vs. an existing save.
+        //
+        // Persistence mechanism: each handler read-modify-writes its bit here (these bytes live in the save-
+        // data region, so they ride along to the memory card); ModWindowSettingsCheck reads them back on load.
+        private const int OptGraphicsByte = 0x21CE4490;
+        private const int OptAudioByte    = 0x21CE4491;
+        private const int OptGameplayByte = 0x21CE4492;
+
+        // Read-modify-write a single option bit, preserving the other toggles packed into that byte.
+        private static void WriteOptionBit(int addr, int mask, bool on)
+        {
+            byte v = Memory.ReadByte(addr);
+            v = (byte)(on ? (v | mask) : (v & ~mask));
+            Memory.WriteByte(addr, v);
+        }
+
         void ModWindowSettingsCheck(bool enable)
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (Memory.ReadByte(0x21CE4490) == 1)
-                {
-                    CBox_UserMode_Graphics.IsChecked = true;
-                    Memory.WriteByte(0x21F10034, 1);
-                }
-                else
-                {
-                    CBox_UserMode_Graphics.IsChecked = false;
-                    Memory.WriteByte(0x21F10034, 0);
-                }
+                // Read the three category bytes once; each bit drives one toggle (all-zero = all off).
+                byte gfx  = Memory.ReadByte(OptGraphicsByte);
+                byte aud  = Memory.ReadByte(OptAudioByte);
+                byte play = Memory.ReadByte(OptGameplayByte);
 
-                if (Memory.ReadByte(0x21CE4491) == 1)
-                {
-                    CBox_UserMode_Widescreen.IsChecked = true;
-                    Memory.WriteByte(0x21F10030, 1);
-                }
-                else
-                {
-                    CBox_UserMode_Widescreen.IsChecked = false;
-                    Memory.WriteByte(0x21F10030, 0);
-                }
+                // ── Graphics ──
+                bool graphicsOn = (gfx & 0x01) != 0;
+                CBox_UserMode_Graphics.IsChecked = graphicsOn;
+                Memory.WriteByte(0x21F10034, (byte)(graphicsOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4492) == 1)
-                {
-                    CBox_UserMode_WeaponBeeps.IsChecked = true;
-                    Memory.WriteByte(0x21F10028, 1);
-                }
-                else
-                {
-                    CBox_UserMode_WeaponBeeps.IsChecked = false;
-                    Memory.WriteByte(0x21F10028, 0);
-                }
+                bool fovOn = (gfx & 0x02) != 0;
+                CBox_UserMode_Widescreen.IsChecked = fovOn;
+                Memory.WriteByte(0x21F10030, (byte)(fovOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4493) == 1)
-                {
-                    CBox_UserMode_BattleMusic.IsChecked = true;
-                    Memory.WriteByte(0x21F1002C, 1);
-                }
-                else
-                {
-                    CBox_UserMode_BattleMusic.IsChecked = false;
-                    Memory.WriteByte(0x21F1002C, 0);
-                }
+                // ── Audio ──
+                bool beepsOn = (aud & 0x01) != 0;
+                CBox_UserMode_WeaponBeeps.IsChecked = beepsOn;
+                Memory.WriteByte(0x21F10028, (byte)(beepsOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4495) == 1)
-                {
-                    CBox_UserMode_MuteMusic.IsChecked = true;
-                    Memory.WriteUShort(0x20299F53, 0);
-                }
-                else
-                {
-                    CBox_UserMode_MuteMusic.IsChecked = false;
-                    Memory.WriteUShort(0x20299F53, 25637);
-                }
+                bool battleMusicOn = (aud & 0x02) != 0;
+                CBox_UserMode_BattleMusic.IsChecked = battleMusicOn;
+                Memory.WriteByte(0x21F1002C, (byte)(battleMusicOn ? 1 : 0));
 
-                if (Memory.ReadByte(0x21CE4494) == 1)
-                {
-                    Cbox_Usermode_AttackSounds.IsChecked = true;
-                    for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                        Memory.WriteByte(attackSoundAddresses[c], 0);
-                }
-                else
-                {
-                    Cbox_Usermode_AttackSounds.IsChecked = false;
-                    for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                        Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]);
-                }
+                bool attackSoundsOn = (aud & 0x04) != 0;
+                Cbox_Usermode_AttackSounds.IsChecked = attackSoundsOn;
+                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                    Memory.WriteByte(attackSoundAddresses[c], (byte)(attackSoundsOn ? 0 : attackSoundValues[c]));
+
+                bool muteMusicOn = (aud & 0x08) != 0;
+                CBox_UserMode_MuteMusic.IsChecked = muteMusicOn;
+                Memory.WriteUShort(0x20299F53, (ushort)(muteMusicOn ? 0 : 25637));
+
+                // ── Gameplay ──
+                bool fasterOn = (play & 0x01) != 0;
+                CBox_UserMode_FasterEnemies.IsChecked = fasterOn;
+                HarderEnemies.Enabled = fasterOn;
+
+                bool strongerOn = (play & 0x02) != 0;
+                CBox_UserMode_StrongerEnemies.IsChecked = strongerOn;
+                EnemyStatNormalizer.StrongerEnemies = strongerOn;
             });
         }
 
         void UserModeLaunch()
         {
             TabControl_USER.IsVisible = true;
+            Container_MainModes.IsVisible = false;
+            Tab_Sandbox.IsVisible = (Mode == LaunchMode.Sandbox);   // Sandbox tab (roster editor + tools) only in sandbox mode
+            if (!launchThread.IsAlive) launchThread.Start();
+        }
+
+        void DevModeLaunch()
+        {
+            TabControl_DEV.IsVisible = true;
             Container_MainModes.IsVisible = false;
             if (!launchThread.IsAlive) launchThread.Start();
         }
@@ -378,22 +394,9 @@ namespace Dark_Cloud_Improved_Version
 
             DEV_Page2_TextBox_Gilda.Text = Player.Gilda.ToString();
 
-            DEV_Page2_TextBox_Enemy1.Text = Memory.ReadUInt(EnemySlots.Enemy0.hp).ToString();
-            DEV_Page2_TextBox_Enemy2.Text = Memory.ReadUInt(EnemySlots.Enemy1.hp).ToString();
-            DEV_Page2_TextBox_Enemy3.Text = Memory.ReadUInt(EnemySlots.Enemy2.hp).ToString();
-            DEV_Page2_TextBox_Enemy4.Text = Memory.ReadUInt(EnemySlots.Enemy3.hp).ToString();
-            DEV_Page2_TextBox_Enemy5.Text = Memory.ReadUInt(EnemySlots.Enemy4.hp).ToString();
-            DEV_Page2_TextBox_Enemy6.Text = Memory.ReadUInt(EnemySlots.Enemy5.hp).ToString();
-            DEV_Page2_TextBox_Enemy7.Text = Memory.ReadUInt(EnemySlots.Enemy6.hp).ToString();
-            DEV_Page2_TextBox_Enemy8.Text = Memory.ReadUInt(EnemySlots.Enemy7.hp).ToString();
-            DEV_Page2_TextBox_Enemy9.Text = Memory.ReadUInt(EnemySlots.Enemy8.hp).ToString();
-            DEV_Page2_TextBox_Enemy10.Text = Memory.ReadUInt(EnemySlots.Enemy9.hp).ToString();
-            DEV_Page2_TextBox_Enemy11.Text = Memory.ReadUInt(EnemySlots.Enemy10.hp).ToString();
-            DEV_Page2_TextBox_Enemy12.Text = Memory.ReadUInt(EnemySlots.Enemy11.hp).ToString();
-            DEV_Page2_TextBox_Enemy13.Text = Memory.ReadUInt(EnemySlots.Enemy12.hp).ToString();
-            DEV_Page2_TextBox_Enemy14.Text = Memory.ReadUInt(EnemySlots.Enemy13.hp).ToString();
-            DEV_Page2_TextBox_Enemy15.Text = Memory.ReadUInt(EnemySlots.Enemy14.hp).ToString();
-            DEV_Page2_TextBox_Enemy16.Text = Memory.ReadUInt(EnemySlots.Enemy15.hp).ToString();
+            var enemyBoxes = new[] { DEV_Page2_TextBox_Enemy1, DEV_Page2_TextBox_Enemy2, DEV_Page2_TextBox_Enemy3, DEV_Page2_TextBox_Enemy4, DEV_Page2_TextBox_Enemy5, DEV_Page2_TextBox_Enemy6, DEV_Page2_TextBox_Enemy7, DEV_Page2_TextBox_Enemy8, DEV_Page2_TextBox_Enemy9, DEV_Page2_TextBox_Enemy10, DEV_Page2_TextBox_Enemy11, DEV_Page2_TextBox_Enemy12, DEV_Page2_TextBox_Enemy13, DEV_Page2_TextBox_Enemy14, DEV_Page2_TextBox_Enemy15, DEV_Page2_TextBox_Enemy16 };
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+                enemyBoxes[i].Text = Memory.ReadUInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp)).ToString();
         }
 
         #endregion
@@ -424,74 +427,98 @@ namespace Dark_Cloud_Improved_Version
 
         private void CBox_UserMode_WeaponBeepsChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_WeaponBeeps.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F10028, 1);
-                Memory.WriteByte(0x21CE4492, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F10028, 0);
-                Memory.WriteByte(0x21CE4492, 0);
-            }
+            bool on = CBox_UserMode_WeaponBeeps.IsChecked == true;
+            Memory.WriteByte(0x21F10028, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptAudioByte, 0x01, on);   // audio bit0
         }
 
         private void CBox_UserMode_GraphicsChanged(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_BattleMusic.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F1002C, 1);
-                Memory.WriteByte(0x21CE4493, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F1002C, 0);
-                Memory.WriteByte(0x21CE4493, 0);
-            }
+            // Handles the Battle Music toggle (legacy method name).
+            bool on = CBox_UserMode_BattleMusic.IsChecked == true;
+            Memory.WriteByte(0x21F1002C, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptAudioByte, 0x02, on);   // audio bit1
         }
 
         private void CBox_UserMode_Widescreen_Changed(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_Widescreen.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F10030, 1);
-                Memory.WriteByte(0x21CE4491, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F10030, 0);
-                Memory.WriteByte(0x21CE4491, 0);
-            }
+            bool on = CBox_UserMode_Widescreen.IsChecked == true;
+            Memory.WriteByte(0x21F10030, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptGraphicsByte, 0x02, on);   // graphics bit1
         }
 
         private void CBox_UserMode_Graphics_Changed(object sender, RoutedEventArgs e)
         {
-            if (CBox_UserMode_Graphics.IsChecked == true)
-            {
-                Memory.WriteByte(0x21F10034, 1);
-                Memory.WriteByte(0x21CE4490, 1);
-            }
-            else
-            {
-                Memory.WriteByte(0x21F10034, 0);
-                Memory.WriteByte(0x21CE4490, 0);
-            }
+            bool on = CBox_UserMode_Graphics.IsChecked == true;
+            Memory.WriteByte(0x21F10034, (byte)(on ? 1 : 0));
+            WriteOptionBit(OptGraphicsByte, 0x01, on);   // graphics bit0
+        }
+
+        // Difficulty toggles. "Faster enemies" = HarderEnemies (movement + attack speed, with the hit-window dwell);
+        // "Stronger enemies" = EnemyStatNormalizer normalizing every enemy to the next dungeon/band up.
+        private void CBox_UserMode_FasterEnemies_Changed(object sender, RoutedEventArgs e)
+        {
+            bool on = CBox_UserMode_FasterEnemies.IsChecked == true;
+            HarderEnemies.Enabled = on;
+            WriteOptionBit(OptGameplayByte, 0x01, on);   // gameplay bit0
+        }
+
+        private void CBox_UserMode_StrongerEnemies_Changed(object sender, RoutedEventArgs e)
+        {
+            bool on = CBox_UserMode_StrongerEnemies.IsChecked == true;
+            EnemyStatNormalizer.StrongerEnemies = on;
+            WriteOptionBit(OptGameplayByte, 0x02, on);   // gameplay bit1
         }
 
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (Cbox_Usermode_AttackSounds.IsChecked == true)
+            bool on = Cbox_Usermode_AttackSounds.IsChecked == true;
+            for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
+                Memory.WriteByte(attackSoundAddresses[c], (byte)(on ? 0 : attackSoundValues[c]));
+            WriteOptionBit(OptAudioByte, 0x04, on);   // audio bit2
+        }
+
+        // Sets the current dungeon's spawn roster so every spawn is the given species (by TableIndex).
+        // Pure data writes (crash-free); takes effect when you re-enter / descend to a floor.
+        private void Btn_Injector_Test_Click(object sender, RoutedEventArgs e)
+        {
+            // Box accepts "20" or a comma list "20,3,6". A trailing "!" marks a species spawn-once
+            // (at most 1 per floor; the rest fill normally, total stays 15), e.g. "20!,60" = one Gyon + Cursed Roses.
+            // Special token "iq" = write the exact real Ice Queen (SW floor-18) boss block, incl. the Count field.
+            if (Tbox_Injector_Table.Text.Trim().ToLowerInvariant() == "iq")
             {
-                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                    Memory.WriteByte(attackSoundAddresses[c], 0);
-                Memory.WriteByte(0x21CE4494, 1);
+                EnemyModelInjector.SetIceQueenFloorExact();
+                return;
             }
-            else
+            var idx = new System.Collections.Generic.List<int>();
+            var once = new System.Collections.Generic.List<bool>();
+            foreach (string p in Tbox_Injector_Table.Text.Split(','))
             {
-                for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
-                    Memory.WriteByte(attackSoundAddresses[c], attackSoundValues[c]);
-                Memory.WriteByte(0x21CE4494, 0);
+                string t = p.Trim();
+                bool o = t.EndsWith("!");
+                if (o) t = t.Substring(0, t.Length - 1).Trim();
+                if (!int.TryParse(t, out int v)) continue;
+                idx.Add(v); once.Add(o);
             }
+            if (idx.Count == 0)
+            {
+                Console.WriteLine("Injector: enter a TableIndex or list, e.g. 20  |  20,3,6  |  20!,60 (Gyon once)");
+                return;
+            }
+            int population = 0; // 0 (or unparseable) = keep original
+            if (idx.Count == 1) EnemyModelInjector.SetSpawnRosterToSpecies(idx[0], population);
+            else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
+        }
+
+        // Post-spawn cap: keep at most 1 of the TableIndex species on the current floor, remove extras.
+        private void Btn_Injector_BossAI_Click(object sender, RoutedEventArgs e)
+        {
+            if (!int.TryParse(Tbox_Injector_Table.Text, out int tableIndex))
+            {
+                Console.WriteLine("Injector: TableIndex must be an integer (e.g. 20 = Gyon).");
+                return;
+            }
+            EnemyModelInjector.CapSpeciesOnFloor(tableIndex, 1);
         }
 
         private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, RoutedEventArgs e)
@@ -499,19 +526,18 @@ namespace Dark_Cloud_Improved_Version
             if (CBox_UserMode_MuteMusic.IsChecked == true)
             {
                 Memory.WriteUShort(0x20299F53, 0);
-                Memory.WriteByte(0x21CE4495, 1);
+                WriteOptionBit(OptAudioByte, 0x08, true);   // audio bit3
 
                 if (CBox_UserMode_BattleMusic.IsChecked == false)
                 {
-                    Memory.WriteByte(0x21F1002C, 1);
-                    Memory.WriteByte(0x21CE4493, 1);
+                    // Muting also forces Battle Music off (its handler writes the effect + audio bit1).
                     CBox_UserMode_BattleMusic.IsChecked = true;
                 }
             }
             else
             {
                 Memory.WriteUShort(0x20299F53, 25637);
-                Memory.WriteByte(0x21CE4495, 0);
+                WriteOptionBit(OptAudioByte, 0x08, false);
             }
         }
 
@@ -586,118 +612,108 @@ namespace Dark_Cloud_Improved_Version
         private void DEV_Page2_Btn_SetEnemiesMaxHP_Click(object sender, RoutedEventArgs e)
         {
             int max = int.MaxValue;
-            DEV_Page2_TextBox_Enemy1.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy0.hp, max);
-            DEV_Page2_TextBox_Enemy2.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy1.hp, max);
-            DEV_Page2_TextBox_Enemy3.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy2.hp, max);
-            DEV_Page2_TextBox_Enemy4.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy3.hp, max);
-            DEV_Page2_TextBox_Enemy5.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy4.hp, max);
-            DEV_Page2_TextBox_Enemy6.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy5.hp, max);
-            DEV_Page2_TextBox_Enemy7.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy6.hp, max);
-            DEV_Page2_TextBox_Enemy8.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy7.hp, max);
-            DEV_Page2_TextBox_Enemy9.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy8.hp, max);
-            DEV_Page2_TextBox_Enemy10.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy9.hp, max);
-            DEV_Page2_TextBox_Enemy11.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy10.hp, max);
-            DEV_Page2_TextBox_Enemy12.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy11.hp, max);
-            DEV_Page2_TextBox_Enemy13.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy12.hp, max);
-            DEV_Page2_TextBox_Enemy14.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy13.hp, max);
-            DEV_Page2_TextBox_Enemy15.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy14.hp, max);
-            DEV_Page2_TextBox_Enemy16.Text = max.ToString(); Memory.WriteInt(EnemySlots.Enemy15.hp, max);
+            var enemyBoxes = new[] { DEV_Page2_TextBox_Enemy1, DEV_Page2_TextBox_Enemy2, DEV_Page2_TextBox_Enemy3, DEV_Page2_TextBox_Enemy4, DEV_Page2_TextBox_Enemy5, DEV_Page2_TextBox_Enemy6, DEV_Page2_TextBox_Enemy7, DEV_Page2_TextBox_Enemy8, DEV_Page2_TextBox_Enemy9, DEV_Page2_TextBox_Enemy10, DEV_Page2_TextBox_Enemy11, DEV_Page2_TextBox_Enemy12, DEV_Page2_TextBox_Enemy13, DEV_Page2_TextBox_Enemy14, DEV_Page2_TextBox_Enemy15, DEV_Page2_TextBox_Enemy16 };
+            for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
+            {
+                enemyBoxes[i].Text = max.ToString();
+                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp), max);
+            }
         }
 
         private void DEV_Page2_TextBox_Enemy1_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy1.Text == "") DEV_Page2_TextBox_Enemy1.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy1.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy0.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy1.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy2_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy2.Text == "") DEV_Page2_TextBox_Enemy2.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy2.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy1.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy2.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(1, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy3_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy3.Text == "") DEV_Page2_TextBox_Enemy3.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy3.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy2.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy3.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(2, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy4_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy4.Text == "") DEV_Page2_TextBox_Enemy4.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy4.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy3.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy4.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(3, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy5_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy5.Text == "") DEV_Page2_TextBox_Enemy5.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy5.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy4.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy5.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(4, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy6_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy6.Text == "") DEV_Page2_TextBox_Enemy6.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy6.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy5.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy6.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(5, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy7_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy7.Text == "") DEV_Page2_TextBox_Enemy7.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy7.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy6.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy7.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(6, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy8_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy8.Text == "") DEV_Page2_TextBox_Enemy8.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy8.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy7.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy8.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(7, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy9_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy9.Text == "") DEV_Page2_TextBox_Enemy9.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy9.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy8.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy9.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(8, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy10_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy10.Text == "") DEV_Page2_TextBox_Enemy10.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy10.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy9.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy10.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(9, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy11_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy11.Text == "") DEV_Page2_TextBox_Enemy11.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy11.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy10.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy11.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(10, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy12_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy12.Text == "") DEV_Page2_TextBox_Enemy12.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy12.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy11.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy12.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(11, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy13_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy13.Text == "") DEV_Page2_TextBox_Enemy13.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy13.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy12.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy13.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(12, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy14_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy14.Text == "") DEV_Page2_TextBox_Enemy14.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy14.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy13.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy14.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(13, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy15_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy15.Text == "") DEV_Page2_TextBox_Enemy15.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy15.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy14.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy15.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp), v);
         }
 
         private void DEV_Page2_TextBox_Enemy16_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (DEV_Page2_TextBox_Enemy16.Text == "") DEV_Page2_TextBox_Enemy16.Text = "0";
-            if (int.TryParse(DEV_Page2_TextBox_Enemy16.Text, out int v)) Memory.WriteInt(EnemySlots.Enemy15.hp, v);
+            if (int.TryParse(DEV_Page2_TextBox_Enemy16.Text, out int v)) Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(15, EnemySlotOffsets.Hp), v);
         }
 
         #endregion

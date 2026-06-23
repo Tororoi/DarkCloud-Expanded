@@ -238,7 +238,17 @@ namespace Dark_Cloud_Improved_Version
             _writeFailCount = 0;
         }
 
-        private static uint PhysAddr(long address) => (uint)(address & 0x1FFFFFFF);
+        // PCSX2 address-space constants.
+        // The PS2 EE is MIPS: segment bits occupy the upper 3 bits of a 32-bit virtual address
+        // (kseg0/kseg1/kuseg all alias the same physical RAM). Strip them with PhysAddrMask to get the
+        // physical byte offset, then add Pcsx2Base to land in PCSX2's RAM window (where PINE reads/writes).
+        internal const long PhysAddrMask = 0x1FFFFFFF; // strips MIPS segment bits → 29-bit physical address
+        internal const long Pcsx2Base    = 0x20000000; // PCSX2 maps PS2 physical RAM at this offset
+
+        // Convert a PS2-native pointer (read from PS2 RAM) to a PCSX2-addressable address.
+        internal static long ToMmu(long nativePtr) => (nativePtr & PhysAddrMask) | Pcsx2Base;
+
+        private static uint PhysAddr(long address) => (uint)(address & PhysAddrMask);
 
         private static byte[] BuildReadPacket(byte opcode, long address)
         {
@@ -344,6 +354,50 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // Reads <count> consecutive 32-bit words starting at <startAddr> in ONE PINE round-trip
+        // (batched Read32). Mirrors ReadFloatBatch. Use for fast block scans — ReadByteArray is
+        // one round-trip PER BYTE and is far too slow for large ranges.
+        internal static uint[] ReadUIntBatch(long startAddr, int count)
+        {
+            int pktLen = 4 + count * 5;
+            var pkt = new byte[pktLen];
+            BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+            for (int i = 0; i < count; i++)
+            {
+                int off = 4 + i * 5;
+                pkt[off] = 0x02; // Read32
+                BitConverter.GetBytes(PhysAddr(startAddr + (long)i * 4)).CopyTo(pkt, off + 1);
+            }
+            lock (_lock)
+            {
+                if (_stream == null) return new uint[count];
+                try
+                {
+                    _stream.Write(pkt, 0, pkt.Length);
+                    var lenBuf = new byte[4];
+                    ReadFully(lenBuf, 0, 4);
+                    int respLen = BitConverter.ToInt32(lenBuf, 0) - 4;
+                    if (respLen <= 0) return new uint[count];
+                    var resp = new byte[respLen];
+                    ReadFully(resp, 0, respLen);
+                    var results = new uint[count];
+                    if (respLen >= count * 5)                       // fmtA: N × (status + 4 data)
+                    {
+                        for (int i = 0; i < count; i++)
+                            if (resp[i * 5] == 0) results[i] = BitConverter.ToUInt32(resp, i * 5 + 1);
+                    }
+                    else if (respLen >= 1 + count * 4 && resp[0] == 0) // fmtB: status + N × 4 data
+                    {
+                        for (int i = 0; i < count; i++)
+                            results[i] = BitConverter.ToUInt32(resp, 1 + i * 4);
+                    }
+                    return results;
+                }
+                catch (EndOfStreamException) { DisconnectStream(); return new uint[count]; }
+                catch (IOException) { DisconnectStream(); return new uint[count]; }
+            }
+        }
+
         internal static ushort ReadUShort(long address)
         {
             var r = SendBatch(BuildReadPacket(0x01, address));
@@ -418,6 +472,31 @@ namespace Dark_Cloud_Improved_Version
         {
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;
+        }
+
+        // Writes <values.Length> consecutive 32-bit words starting at <startAddr>, packing many Write32 commands
+        // into each PINE packet (chunked) so a large block moves in a handful of round-trips instead of one per
+        // word. Used for slot-block swaps where per-word writes would be far too slow and leave the running game
+        // reading half-written state.
+        internal static void WriteUIntBatch(long startAddr, uint[] values)
+        {
+            const int chunk = 400;                 // 400*9 = 3604 bytes/packet — well under the PINE buffer
+            byte op = OpWrite32;
+            for (int start = 0; start < values.Length; start += chunk)
+            {
+                int n = Math.Min(chunk, values.Length - start);
+                int pktLen = 4 + n * 9;            // header + n*(opcode(1)+addr(4)+value(4))
+                var pkt = new byte[pktLen];
+                BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+                for (int i = 0; i < n; i++)
+                {
+                    int off = 4 + i * 9;
+                    pkt[off] = op;
+                    BitConverter.GetBytes(PhysAddr(startAddr + (long)(start + i) * 4)).CopyTo(pkt, off + 1);
+                    BitConverter.GetBytes(values[start + i]).CopyTo(pkt, off + 5);
+                }
+                SendBatch(pkt);
+            }
         }
 
         internal static bool WriteUInt(long address, uint value)

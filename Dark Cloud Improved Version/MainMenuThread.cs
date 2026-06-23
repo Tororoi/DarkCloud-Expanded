@@ -25,6 +25,7 @@ namespace Dark_Cloud_Improved_Version
         {
             Weapons.WeaponsBalanceChanges();
             Shop.UpdateShopPrices();
+            Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
         }
 
         public static void CheckEmulatorAndGame()
@@ -260,7 +261,7 @@ namespace Dark_Cloud_Improved_Version
                         break;
                     }
                 }
-                
+
                 if (currentFrameCounter < previousFrameCounter || currentFrameCounter > previousFrameCounter + 720 || currentFrameCounter == 0)
                 {
                     Thread.Sleep(200);
@@ -276,9 +277,9 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteByte(Addresses.townSoftReset, 1);
 
                     ModWindow.SaveStateDetected();
-                    
+
                 }
-                
+
                 if (currentFrameCounter > 0)
                 {
                     if (Memory.ReadByte(0x21F10020) != 1) //check PNACH flag

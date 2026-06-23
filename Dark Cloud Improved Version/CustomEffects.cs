@@ -21,33 +21,33 @@ namespace Dark_Cloud_Improved_Version
 
         private static readonly HashSet<int> FrozenTunaIceEnemies = new()
         {
-            EnemySlots.blizzard,   // 65
-            EnemySlots.sam,        // 85
-            EnemySlots.gemronice,  // 312
+            EnemySpecies.Blizzard.Id,   // 65
+            EnemySpecies.Sam.Id,        // 85
+            EnemySpecies.GemronIce.Id,  // 312
         };
 
         private static readonly HashSet<int> CactusImmuneNameTags = new()
         {
-            EnemySlots.masterjacket,    // 1
-            EnemySlots.skeletonsoldier, // 3
-            EnemySlots.statue,          // 5
-            EnemySlots.pirateschariot,  // 25
-            EnemySlots.golem,           // 30
-            EnemySlots.mrblare,         // 31
-            EnemySlots.dune,            // 32
-            EnemySlots.titan,           // 33
-            EnemySlots.arthur,          // 40
-            EnemySlots.livingarmor,     // 55
-            EnemySlots.steelgiant,      // 64
-            EnemySlots.billy,           // 69
-            EnemySlots.vulcan,          // 70
-            EnemySlots.rockanoff,       // 77
-            EnemySlots.gol,             // 90
-            EnemySlots.sil,             // 91
-            EnemySlots.statuedog,       // 303
-            EnemySlots.gacious,         // 317
-            EnemySlots.silvergear,      // 318
-            EnemySlots.hornhead,        // 319
+            EnemySpecies.MasterJacket.Id,    // 1
+            EnemySpecies.SkeletonSoldier.Id, // 3
+            EnemySpecies.Statue.Id,          // 5
+            EnemySpecies.PiratesChariot.Id,  // 25
+            EnemySpecies.Golem.Id,           // 30
+            EnemySpecies.MrBlare.Id,         // 31
+            EnemySpecies.Dune.Id,            // 32
+            EnemySpecies.Titan.Id,           // 33
+            EnemySpecies.Arthur.Id,          // 40
+            EnemySpecies.LivingArmor.Id,     // 55
+            EnemySpecies.SteelGiant.Id,      // 64
+            EnemySpecies.Billy.Id,           // 69
+            EnemySpecies.Vulcan.Id,          // 70
+            EnemySpecies.Rockanoff.Id,       // 77
+            EnemySpecies.Gol.Id,             // 90
+            EnemySpecies.Sil.Id,             // 91
+            EnemySpecies.StatueDog.Id,       // 303
+            EnemySpecies.Gacious.Id,         // 317
+            EnemySpecies.SilverGear.Id,      // 318
+            EnemySpecies.HornHead.Id,        // 319
         };
 
         /// <summary>
@@ -182,7 +182,7 @@ namespace Dark_Cloud_Improved_Version
                     var keyEnemies = new List<(int slot, byte key)>();
                     for (int e = 0; e < 15; e++)
                     {
-                        byte drop = Memory.ReadByte(EnemySlots.Enemy0.forceItemDrop + (EnemySlots.offset * e));
+                        byte drop = Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.ForceItemDrop));
                         if (drop == Items.shinystone || drop == Items.redberry || drop == Items.pointychestnut)
                             keyEnemies.Add((e, drop));
                     }
@@ -191,7 +191,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Floor {currentFloor} key guardians:");
                         foreach (var (slot, key) in keyEnemies)
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"  Enemy {slot} ({EnemySlots.GetEnemyName(EnemySlots.GetFloorEnemyId(slot))}): forceItemDrop = {key}");
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"  Enemy {slot} ({Enemies.GetEnemyName(Enemies.GetFloorEnemyId(slot))}): forceItemDrop = {key}");
 
                         floorMessageSent = true;
                     }
@@ -205,13 +205,13 @@ namespace Dark_Cloud_Improved_Version
 
                 for (int e = 0; e < 15; e++)
                 {
-                    if (EnemySlots.GetFloorEnemyId(e) == 0) continue;
-                    if (Memory.ReadInt(EnemySlots.Enemy0.hp + (EnemySlots.offset * e)) <= 0) continue;
+                    if (Enemies.GetFloorEnemyId(e) == 0) continue;
+                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.Hp)) <= 0) continue;
 
-                    byte drop = Memory.ReadByte(EnemySlots.Enemy0.forceItemDrop + (EnemySlots.offset * e));
+                    byte drop = Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.ForceItemDrop));
                     if (drop != Items.shinystone && drop != Items.redberry && drop != Items.pointychestnut) continue;
 
-                    float dist = Memory.ReadFloat(EnemySlots.Enemy0.distanceToPlayer + (EnemySlots.offset * e));
+                    float dist = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.DistanceToPlayer));
                     if (dist > 0f && dist < nearestKeyDist)
                     {
                         nearestKeyDist = dist;
@@ -233,7 +233,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if (!shouldCheck) continue;
 
-                byte nearestDrop = Memory.ReadByte(EnemySlots.Enemy0.forceItemDrop + (EnemySlots.offset * nearestKeySlot));
+                byte nearestDrop = Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(nearestKeySlot, EnemySlotOffsets.ForceItemDrop));
                 string hint = nearestDrop switch
                 {
                     Items.shinystone      => "Wise Owl senses a shiny stone nearby...",
@@ -245,7 +245,7 @@ namespace Dark_Cloud_Improved_Version
                 if (hint != null)
                 {
                     Dayuppy.DisplayMessage(hint, 1, 40, 3000);
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {EnemySlots.GetEnemyName(EnemySlots.GetFloorEnemyId(nearestKeySlot))} (slot {nearestKeySlot}, dist {nearestKeyDist:F1}, key {nearestDrop})");
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[WiseOwlSword] Key guardian nearby: {Enemies.GetEnemyName(Enemies.GetFloorEnemyId(nearestKeySlot))} (slot {nearestKeySlot}, dist {nearestKeyDist:F1}, key {nearestDrop})");
                 }
             }
         }
@@ -379,7 +379,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             if (random.Next(100) < 50)
                             {
-                                Memory.WriteUShort(EnemySlots.Enemy0.gooeyState + (EnemySlots.offset * i), 1);
+                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.GooeyState), 1);
                             }
                         }
                     }
@@ -498,22 +498,8 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteInt(0x21EC8294 + (0x60 * i), 12);
                     Memory.WriteInt(0x21EC8298 + (0x60 * i), 18);
                 }
-                Memory.WriteFloat(EnemySlots.Enemy0.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy1.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy2.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy3.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy4.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy5.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy6.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy7.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy8.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy9.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy10.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy11.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy12.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy13.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy14.distanceToPlayer, 0);
-                Memory.WriteFloat(EnemySlots.Enemy15.distanceToPlayer, 0);
+                for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+                    Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.DistanceToPlayer), 0);
                 chronicleNewFloor = false;
             }
 
@@ -538,9 +524,9 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Damaged enemy number: " + i);
                         damagedEnemyNum = i;
-                        flashRGB_R = Memory.ReadFloat(EnemySlots.Enemy0.flashColorRed + (i * 0x190));
-                        flashRGB_G = Memory.ReadFloat(EnemySlots.Enemy0.flashColorGreen + (i * 0x190));
-                        flashRGB_B = Memory.ReadFloat(EnemySlots.Enemy0.flashColorBlue + (i * 0x190));
+                        flashRGB_R = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.FlashColorRed));
+                        flashRGB_G = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.FlashColorGreen));
+                        flashRGB_B = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.FlashColorBlue));
                         damageDealt = Memory.ReadInt(0x21DC452C);
                         break;
                     }
@@ -577,15 +563,15 @@ namespace Dark_Cloud_Improved_Version
                 {
                     for (int i = 0; i < enemiesinRange.Count; i++)
                     {
-                        Memory.WriteFloat(EnemySlots.Enemy0.flashColorRed + (0x190 * enemiesinRange[i]), flashRGB_R);
-                        Memory.WriteFloat(EnemySlots.Enemy0.flashColorGreen + (0x190 * enemiesinRange[i]), flashRGB_G);
-                        Memory.WriteFloat(EnemySlots.Enemy0.flashColorBlue + (0x190 * enemiesinRange[i]), flashRGB_B);
-                        Memory.WriteFloat(EnemySlots.Enemy0.flashDuration + (0x190 * enemiesinRange[i]), (float)(0.1));
+                        Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.FlashColorRed), flashRGB_R);
+                        Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.FlashColorGreen), flashRGB_G);
+                        Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.FlashColorBlue), flashRGB_B);
+                        Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.FlashDecayRate), (float)(0.1));
 
 
-                        enemiescoordinateX[i] = Memory.ReadFloat(EnemySlots.Enemy0.locationCoordinateX + (0x190 * enemiesinRange[i]));
-                        enemiescoordinateZ[i] = Memory.ReadFloat(EnemySlots.Enemy0.locationCoordinateZ + (0x190 * enemiesinRange[i]));
-                        enemiescoordinateY[i] = Memory.ReadFloat(EnemySlots.Enemy0.locationCoordinateY + (0x190 * enemiesinRange[i]));
+                        enemiescoordinateX[i] = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.LocationX));
+                        enemiescoordinateZ[i] = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.LocationZ));
+                        enemiescoordinateY[i] = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.LocationY));
 
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Enemy " + enemiesinRange[i] + " XZY coordinates: " + enemiescoordinateX[i] + " " + enemiescoordinateZ[i] + " " + enemiescoordinateY[i]);
 
@@ -668,16 +654,16 @@ namespace Dark_Cloud_Improved_Version
                     for (int i = 0; i < enemiesinRange.Count; i++)
                     {
                         Memory.WriteInt(0x21EC829C + (0x60 * i), 1);
-                        Memory.WriteByte(EnemySlots.Enemy0.flashActivation + (0x190 * enemiesinRange[i]), 1);
+                        Memory.WriteByte(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.FlashActivation), 1);
 
-                        int enemyHP = Memory.ReadInt(EnemySlots.Enemy0.hp + (0x190 * enemiesinRange[i]));
+                        int enemyHP = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.Hp));
                         int newEnemyHP = (int)(enemyHP - effectDamage[i]);
                         if (newEnemyHP < 1)
                         {
                             newEnemyHP = 1;
-                            Memory.WriteByte(EnemySlots.Enemy0.poisonPeriod + (0x190 * enemiesinRange[i]), 1);
+                            Memory.WriteByte(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.PoisonPeriod), 1);
                         }
-                        Memory.WriteInt(EnemySlots.Enemy0.hp + (0x190 * enemiesinRange[i]), newEnemyHP);
+                        Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(enemiesinRange[i], EnemySlotOffsets.Hp), newEnemyHP);
                     }
 
                     if (!damageFadeoutThread.IsAlive)
@@ -945,10 +931,10 @@ namespace Dark_Cloud_Improved_Version
                     {
                         for (int i = 0; i < 15; i++)
                         {
-                            if (Memory.ReadByte(EnemySlots.Enemy0.renderStatus + (EnemySlots.offset * i)) == 2 &&
-                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(EnemySlots.Enemy0.enemySpeciesId + (EnemySlots.offset * i))))
+                            if (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.RenderStatus)) == 2 &&
+                                !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId))))
                             {
-                                Memory.WriteUShort(EnemySlots.Enemy0.freezeTimer + (EnemySlots.offset * i), 300);
+                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.FreezeTimer), 300);
                             }
                         }
                         Player.Goro.SetStatus("freeze", 180); // 3 seconds at 60fps
@@ -1200,22 +1186,9 @@ namespace Dark_Cloud_Improved_Version
                 //Chance to apply stop (6%)
                 if (procChance < 6)
                 {
-                    if(Memory.ReadByte(EnemySlots.Enemy0.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy0.freezeTimer, 300); //Stop duration (300 = 5 seconds)
-                    if (Memory.ReadByte(EnemySlots.Enemy1.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy1.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy2.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy2.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy3.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy3.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy4.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy4.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy5.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy5.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy6.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy6.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy7.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy7.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy8.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy8.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy9.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy9.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy10.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy10.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy11.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy11.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy12.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy12.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy13.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy13.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy14.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy14.freezeTimer, 300);
-                    if (Memory.ReadByte(EnemySlots.Enemy15.renderStatus) == 2) Memory.WriteUShort(EnemySlots.Enemy15.freezeTimer, 300);
+                    for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+                        if (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) == 2)
+                            Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.FreezeTimer), 300); //Stop duration (300 = 5 seconds)
                 }
             }
 
@@ -1249,7 +1222,7 @@ namespace Dark_Cloud_Improved_Version
                     if (former[i] <= 0 || current[i] >= former[i])
                         continue;
 
-                    int enemySpeciesId = Memory.ReadUShort(EnemySlots.Enemy0.enemySpeciesId + (EnemySlots.offset * i));
+                    int enemySpeciesId = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
                     if (CactusImmuneNameTags.Contains(enemySpeciesId))
                         continue;
 
@@ -1300,152 +1273,13 @@ namespace Dark_Cloud_Improved_Version
 
                     if (procChance <= 10)
                     {
-                        switch (id)
+                        int slotBase = EnemyAddresses.FloorSlots.SlotAddr(id, 0);
+                        switch (effect)
                         {
-                            case 0:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy0.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy0.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy0.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy0.gooeyState, 1); break;
-                                }
-                                break;
-                            case 1:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy1.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy1.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy1.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy1.gooeyState, 1); break;
-                                }
-                                break;
-                            case 2:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy2.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy2.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy2.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy2.gooeyState, 1); break;
-                                }
-                                break;
-                            case 3:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy3.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy3.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy3.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy3.gooeyState, 1); break;
-                                }
-                                break;
-                            case 4:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy4.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy4.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy4.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy4.gooeyState, 1); break;
-                                }
-                                break;
-                            case 5:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy5.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy5.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy5.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy5.gooeyState, 1); break;
-                                }
-                                break;
-                            case 6:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy6.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy6.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy6.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy6.gooeyState, 1); break;
-                                }
-                                break;
-                            case 7:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy7.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy7.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy7.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy7.gooeyState, 1); break;
-                                }
-                                break;
-                            case 8:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy8.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy8.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy8.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy8.gooeyState, 1); break;
-                                }
-                                break;
-                            case 9:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy9.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy9.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy9.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy9.gooeyState, 1); break;
-                                }
-                                break;
-                            case 10:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy10.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy10.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy10.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy10.gooeyState, 1); break;
-                                }
-                                break;
-                            case 11:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy11.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy11.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy11.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy11.gooeyState, 1); break;
-                                }
-                                break;
-                            case 12:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy12.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy12.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy12.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy12.gooeyState, 1); break;
-                                }
-                                break;
-                            case 13:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy13.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy13.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy13.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy13.gooeyState, 1); break;
-                                }
-                                break;
-                            case 14:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy14.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy14.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy14.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy14.gooeyState, 1); break;
-                                }
-                                break;
-                            case 15:
-                                switch (effect)
-                                {
-                                    case 0: Memory.WriteUShort(EnemySlots.Enemy15.freezeTimer, 300); break;
-                                    case 1: Memory.WriteUShort(EnemySlots.Enemy15.poisonPeriod, 1); break;
-                                    case 2: Memory.WriteUShort(EnemySlots.Enemy15.staminaTimer, 300); break;
-                                    case 3: Memory.WriteUShort(EnemySlots.Enemy15.gooeyState, 1); break;
-                                }
-                                break;
+                            case 0: Memory.WriteUShort(slotBase + EnemySlotOffsets.FreezeTimer,  300); break;
+                            case 1: Memory.WriteUShort(slotBase + EnemySlotOffsets.PoisonPeriod, 1);   break;
+                            case 2: Memory.WriteUShort(slotBase + EnemySlotOffsets.StaminaTimer, 300); break;
+                            case 3: Memory.WriteUShort(slotBase + EnemySlotOffsets.GooeyState,   1);   break;
                         }
                     }
                 }

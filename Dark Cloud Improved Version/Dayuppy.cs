@@ -228,9 +228,9 @@ namespace Dark_Cloud_Improved_Version
 
                         randomItem = GetRandomLoot(FilterLootTable(itemTable));
 
-                        Memory.Write(EnemySlots.Enemy0.drop, BitConverter.GetBytes(randomItem));
+                        Memory.Write(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.ForceItemDrop), BitConverter.GetBytes(randomItem));
 
-                        currentAddress = EnemySlots.Enemy0.drop;
+                        currentAddress = EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.ForceItemDrop);
 
                         for (int i = 0; i < 16; i++)
                         {
@@ -785,7 +785,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] bytes;
             int addressPointer = Memory.ReadInt(0x202A2DDC);
 
-            addressPointer += 0x20000000;
+            addressPointer += (int)Memory.Pcsx2Base;
 
             switch (currentElem)
             {
@@ -1250,7 +1250,7 @@ namespace Dark_Cloud_Improved_Version
 
             //CheckSpecials1();
             //TestBitField(special1, special2);
-            //Memory.WriteUShort(EnemySlots.Enemy13.hp, 1000);
+            //Memory.WriteUShort(Enemies.Enemy13.hp, 1000);
 
             //printItemTableNames(ItemTbl6);
 

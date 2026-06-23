@@ -152,7 +152,6 @@ Sizes from DATA.HED (Dark Cloud USA):
 > in EE RAM (in the model pointer array at 0x20296570, index 8) but the file was never
 > added to the archive. Writing fish ID 8 to a slot produces an invisible fish. This is the
 > "Missing Fish" — a species cut before its model was created.
-
 ---
 
 ## Practical Path to Adding a Custom Fish

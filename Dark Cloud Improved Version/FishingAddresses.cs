@@ -109,8 +109,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int PointerArrayBase = 0x20296570;
         internal const int Stride           = 4;
         internal const int Count            = 18;
-        /// <summary>Value subtracted from each raw uint32 pointer to get the EE string address.</summary>
-        internal const long PtrBias         = 0x20000000L;
+        /// <summary>Value subtracted from each raw uint32 pointer to get the EE string address (= <see cref="Memory.Pcsx2Base"/>).</summary>
+        internal static long PtrBias => Memory.Pcsx2Base;
 
         /// <summary>Returns the EE RAM address of the pointer for <paramref name="fishId"/>,
         /// or -1 if out of range.</summary>

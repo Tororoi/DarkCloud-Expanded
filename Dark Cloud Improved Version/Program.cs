@@ -12,7 +12,24 @@ namespace Dark_Cloud_Improved_Version
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             Console.WriteLine("Dark Cloud Enhanced - Created by Wordofwind, Dayuppy, MikeZorD, and Plgue");
             Console.WriteLine("Version 1.xxx - Release");
+            ModWindow.Mode = ParseLaunchMode(args);
+            Console.WriteLine($"Launch mode: {ModWindow.Mode}");
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+
+        // Launch mode from the first recognized command-line arg (passed by the launchSettings profile). Defaults to User.
+        private static LaunchMode ParseLaunchMode(string[] args)
+        {
+            foreach (string a in args)
+            {
+                switch (a.Trim().ToLowerInvariant())
+                {
+                    case "dev":     return LaunchMode.Dev;
+                    case "sandbox": return LaunchMode.Sandbox;
+                    case "user":    return LaunchMode.User;
+                }
+            }
+            return LaunchMode.User;
         }
 
         public static AppBuilder BuildAvaloniaApp()

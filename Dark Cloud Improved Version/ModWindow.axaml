@@ -71,56 +71,71 @@
 
       <!-- Options tab -->
       <TabItem Header="Options">
-        <Panel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Panel Height="420" Width="500">
+          <CheckBox x:Name="CBox_UserMode_FasterEnemies"
+                    Content="Faster enemies (movement &amp; attack speed)"
+                    Margin="46,4,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_FasterEnemies_Changed"/>
+          <CheckBox x:Name="CBox_UserMode_StrongerEnemies"
+                    Content="Stronger enemies (stats of the next dungeon up)"
+                    Margin="46,30,0,0"
+                    VerticalAlignment="Top" HorizontalAlignment="Left"
+                    FontWeight="Normal"
+                    IsCheckedChanged="CBox_UserMode_StrongerEnemies_Changed"/>
           <CheckBox x:Name="CBox_UserMode_Graphics"
                     Content="Enable Graphical Improvements (not compatible in pcsx2 v1.7)"
-                    Margin="46,28,0,0"
+                    Margin="46,56,0,0"
                     VerticalAlignment="Top" HorizontalAlignment="Left"
                     FontWeight="Normal"
                     IsCheckedChanged="CBox_UserMode_Graphics_Changed"/>
           <CheckBox x:Name="CBox_UserMode_Widescreen"
                     Content="Enable Increased FOV"
-                    Margin="46,54,0,0"
+                    Margin="46,82,0,0"
                     VerticalAlignment="Top" HorizontalAlignment="Left"
                     FontWeight="Normal"
                     IsCheckedChanged="CBox_UserMode_Widescreen_Changed"/>
           <CheckBox x:Name="CBox_UserMode_WeaponBeeps"
                     Content="Disable Low Weapon HP Beeping Sounds"
-                    Margin="46,80,0,0"
+                    Margin="46,108,0,0"
                     VerticalAlignment="Top" HorizontalAlignment="Left"
                     FontWeight="Normal"
                     IsCheckedChanged="CBox_UserMode_WeaponBeepsChanged"/>
           <CheckBox x:Name="CBox_UserMode_BattleMusic"
                     Content="Disable Battle Music (make sure it's not already playing!)"
-                    Margin="46,106,0,0"
+                    Margin="46,134,0,0"
                     VerticalAlignment="Top" HorizontalAlignment="Left"
                     FontWeight="Normal"
                     IsCheckedChanged="CBox_UserMode_GraphicsChanged"/>
           <CheckBox x:Name="CBox_UserMode_MuteMusic"
                     Content="Mute all music (only updates after changing area)"
-                    Margin="65,132,0,0"
+                    Margin="65,160,0,0"
                     VerticalAlignment="Top" HorizontalAlignment="Left"
                     FontWeight="Normal"
                     IsCheckedChanged="CBox_UserMode_MuteMusic_CheckedChanged"/>
           <CheckBox x:Name="Cbox_Usermode_AttackSounds"
                     Content="Disable Character Attack Sounds"
-                    Margin="46,158,0,0"
+                    Margin="46,186,0,0"
                     VerticalAlignment="Top" HorizontalAlignment="Left"
                     FontWeight="Normal"
                     IsCheckedChanged="Cbox_Usermode_AttackSounds_CheckedChanged"/>
           <TextBlock x:Name="label4"
                      Text="These options will be saved to your save file. When you load a save, the options are loaded in automatically."
-                     Margin="43,192,0,0" Width="434" Height="44"
+                     Margin="43,220,0,0" Width="434" Height="44"
                      VerticalAlignment="Top" HorizontalAlignment="Left"
                      TextWrapping="Wrap" FontWeight="Normal"/>
           <Button x:Name="button1"
                   Content="Submit Bug Report (opens a website)"
                   Width="289" Height="34"
-                  Margin="46,259,0,0"
+                  Margin="46,287,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
                   Click="button1_Click"/>
+
         </Panel>
+        </ScrollViewer>
       </TabItem>
 
       <!-- Quests tab -->
@@ -178,8 +193,8 @@
         </Panel>
       </TabItem>
 
-      <!-- Tools tab -->
-      <TabItem Header="Tools" IsVisible="False">
+      <!-- Sandbox tab (shown only in sandbox mode): power tools — Fish Data Farmer + spawn-roster editor -->
+      <TabItem x:Name="Tab_Sandbox" Header="Sandbox" IsVisible="False">
         <Panel>
           <TextBlock Text="Fish Data Farmer"
                      FontWeight="SemiBold"
@@ -218,6 +233,17 @@
                      VerticalAlignment="Top" HorizontalAlignment="Left"
                      FontWeight="Normal" FontFamily="Courier New"
                      TextWrapping="Wrap"/>
+
+          <!-- Dungeon spawn-roster editor -->
+          <TextBlock Text="Spawn roster (TableIdx list, '!' = spawn-once):"
+                     FontWeight="SemiBold" Margin="46,256,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <TextBox x:Name="Tbox_Injector_Table" Text="80,101!,76!,102!,103!,92!,104!,3" Width="280" Height="24"
+                   Margin="46,280,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <Button x:Name="Btn_Injector_Test" Content="Set roster"
+                  Width="92" Height="26" Margin="336,279,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
+                  Click="Btn_Injector_Test_Click"/>
         </Panel>
       </TabItem>
 
