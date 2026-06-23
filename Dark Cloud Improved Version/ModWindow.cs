@@ -283,7 +283,7 @@ namespace Dark_Cloud_Improved_Version
         //   Graphics 0x21CE4490 : bit0 graphical improvements, bit1 FOV          (bits 2-7 free)
         //   Audio    0x21CE4491 : bit0 weapon beeps, bit1 battle music,
         //                         bit2 attack sounds, bit3 mute music            (bits 4-7 free)
-        //   Gameplay 0x21CE4492 : bit0 faster enemies, bit1 stronger enemies     (bits 2-7 free)
+        //   Gameplay 0x21CE4492 : bit0 faster enemies, bit1 stronger enemies, bit2 randomized enemies (bits 3-7 free)
         //
         // FREE SAVE BYTES for new options (no need to re-derive):
         //   • 0x21CE4493, 0x21CE4494, 0x21CE4495 are fully UNUSED proven-free bytes — grab one for a new
@@ -351,6 +351,10 @@ namespace Dark_Cloud_Improved_Version
                 bool strongerOn = (play & 0x02) != 0;
                 CBox_UserMode_StrongerEnemies.IsChecked = strongerOn;
                 EnemyStatNormalizer.StrongerEnemies = strongerOn;
+
+                bool randomizedOn = (play & 0x04) != 0;
+                CBox_UserMode_RandomizedEnemies.IsChecked = randomizedOn;
+                EnemyModelInjector.RandomizeEnemies = randomizedOn;
             });
         }
 
@@ -468,6 +472,13 @@ namespace Dark_Cloud_Improved_Version
             bool on = CBox_UserMode_StrongerEnemies.IsChecked == true;
             EnemyStatNormalizer.StrongerEnemies = on;
             WriteOptionBit(OptGameplayByte, 0x02, on);   // gameplay bit1
+        }
+
+        private void CBox_UserMode_RandomizedEnemies_Changed(object sender, RoutedEventArgs e)
+        {
+            bool on = CBox_UserMode_RandomizedEnemies.IsChecked == true;
+            EnemyModelInjector.RandomizeEnemies = on;
+            WriteOptionBit(OptGameplayByte, 0x04, on);   // gameplay bit2
         }
 
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)

@@ -98,8 +98,14 @@ namespace Dark_Cloud_Improved_Version
         public const int healingSpeed = 0x202A2B88;             //Counts every 10 frames when the player is inside a fountain
         public const int BoneDoorOpenType = 0x20931768;         //Default value is 21, change it to 5 and the bone door will open by pressing Square
         public const int dungDoorType = 0x21D56770;             //Tells us the type of door when interacting with X or Square
-        public const int checkFloor = 0x21CD954E;               //Tells the current floor player is on, updates when entering the floor
+        public const int checkFloor = 0x21CD954E;               //Tells the current floor player is on, updates when entering the floor (0-indexed: displayed floor = checkFloor+1)
         public const int checkDungeon = 0x202A3594;             //Tells what dungeon we are in. DBC = 0, Wise Owl = 1 etc.
+        // DunEnter floor-select menu (dunMode==4). Authoritative during the menu — use these, NOT currentDungeon,
+        // which is stale at dungeon entry (only refreshed while on a floor). From ELF: DunEnter struct @0x1DA8B80.
+        public const int dunEnterDungeon    = 0x21DA8B80;   // dungeon id being entered (0..6)
+        // Floor cursor: 0-indexed; == checkFloor == BtEnemyLayout floor index of the highlighted floor.
+        // Live as you scroll, set before confirm/load. (From ELF: DunEnterMenuKey writes it; floor list draws row+1.)
+        public const int dunEnterFloorCursor = 0x21DA8B82;
 
         ///<summary>
         ///     1 = Walking Mode

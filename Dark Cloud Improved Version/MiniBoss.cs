@@ -36,7 +36,7 @@ namespace Dark_Cloud_Improved_Version
         const int enemyItemResistMulti = 10;      //Miniboss Item Resistance multiplier %
         const int enemyGoldMult = 3;              //Miniboss Gilda Loot multiplier
         const int enemyLootChance = 100;          //Miniboss Loot chance % (0 - 100)
-        const bool forceAllMinibosses = true;    //TEST ONLY: promote EVERY eligible enemy to a miniboss (easier testing of miniboss changes); keep false for normal play
+        const bool forceAllMinibosses = false;    //TEST ONLY: promote EVERY eligible enemy to a miniboss (easier testing of miniboss changes); keep false for normal play
 
         public class MiniBossSnapshot
         {

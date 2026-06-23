@@ -75,7 +75,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly float[] _bProj  = new float[AtkTierCount];
 
         // ── Per-floor state ───────────────────────────────────────────────────────────────────────────
-        private static int _normalizedKey = -1;   // packed (dungeon<<8 | floor) of the current floor
+        private static int _normalizedKey = -1;   // packed (dungeon<<16 | floor<<8 | backfloorBit) of the current floor context
         private static int _curHpDef, _curAtk;    // current-floor tiers
         private static readonly Dictionary<int, int> _swept = new(); // slot -> species already normalized (patch once on spawn)
         private static bool _sweepDone;     // set once the floor's enemies are loaded + normalized; stops the per-tick sweep
@@ -274,7 +274,11 @@ namespace Dark_Cloud_Improved_Version
             if (dungeon < 0 || dungeon >= DungeonCount) return;
 
             EnsureInit();
-            int key = (dungeon << 8) | (floor & 0xFF);
+            // Include the backfloor bit: floor↔backfloor swaps reload FloorSlots with fresh native-stat enemies but
+            // keep checkFloor the same, so without this the sweep never re-runs and backfloor enemies go un-normalized.
+            // (Each transition respawns fresh, so re-sweeping reads native MaxHp again — no double-scaling.)
+            int back = Memory.ReadByte(Addresses.dunBackFloorFlag) != 0 ? 1 : 0;
+            int key = (dungeon << 16) | ((floor & 0xFF) << 8) | back;
 
             if (key != _normalizedKey)
             {
@@ -284,7 +288,7 @@ namespace Dark_Cloud_Improved_Version
                 _swept.Clear(); EnemyStatScaler.ResetFloor(); _sweepDone = false; _sweepIdle = 0; // new floor: sweep until its enemies are loaded
                 EnemyStatScaler.Verbose = LogNormalize;
                 if (LogNormalize)
-                    Console.WriteLine($"[Normalize] enter dungeon {dungeon} floor {floor} (HP/def tier {_curHpDef}, atk tier {_curAtk}); k={NormalizationStrength:F2}, dmg={(NormalizeDamage ? "on" : "off")}.");
+                    Console.WriteLine($"[Normalize] enter dungeon {dungeon} floor {floor}{(back != 0 ? " BACKFLOOR" : "")} (HP/def tier {_curHpDef}, atk tier {_curAtk}); k={NormalizationStrength:F2}, dmg={(NormalizeDamage ? "on" : "off")}.");
             }
 
             // All of a floor's enemies spawn at load (no respawns), so we just sweep the live slots — patching each
@@ -292,12 +296,15 @@ namespace Dark_Cloud_Improved_Version
             // No species-record patch is needed (nothing spawns late to inherit it). The enemies often spawn a few
             // ticks AFTER the floor-enter event (the floor key updates before BtLoadMonstor populates the slots), so
             // we must NOT give up before any enemy is seen — only settle once enemies have appeared and no new ones
-            // show for several passes. A large absolute cap still bails out on genuinely enemy-less floors.
+            // show for several passes. The no-enemy-yet cap must comfortably exceed worst-case spawn latency: a
+            // RANDOMIZED floor loads up to 9 distinct enemy models, which can take several seconds (well past 200
+            // ticks) — bailing at 200 made the randomizer's late-spawning enemies miss normalization entirely. A
+            // large cap still bails out on genuinely enemy-less floors (event floors), just later.
             if (!_sweepDone)
             {
                 int normalized = SweepLiveSlots(_curHpDef, _curAtk);
                 if (normalized > 0) _sweepIdle = 0; else _sweepIdle++;
-                if ((_swept.Count > 0 && _sweepIdle >= 8) || _sweepIdle >= 200) _sweepDone = true;
+                if ((_swept.Count > 0 && _sweepIdle >= 8) || _sweepIdle >= 1500) _sweepDone = true;
             }
         }
 

@@ -246,6 +246,9 @@ namespace Dark_Cloud_Improved_Version
         // when leaving the floor it was set on, and not mid-load before placement runs).
         private static bool _wasInFloor = false;
         private static bool _rosterAppliedToFloor = false;
+        // Set when the randomizer applies a roster to EVERY floor (not just one): persists for the whole dungeon
+        // visit, so NotifyInFloor must NOT revert it on each floor change — only RestoreSpawnRoster (dungeon exit).
+        private static bool _rosterDungeonWide = false;
 
         /// <summary>Snapshots the dungeon's BtEnemyLayout (normal+Ura, all floors) once, before the first edit.</summary>
         private static void SnapshotRosterIfNeeded(int dungeon)
@@ -282,8 +285,10 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (!inFloor && _wasInFloor)
             {
-                // Left a floor. If the staged roster already had its floor, revert now → next floor / town vanilla.
-                if (_rosterAppliedToFloor)
+                // Left a floor. If the staged single-floor roster already had its floor, revert now → next floor /
+                // town vanilla. A dungeon-wide randomizer roster is NOT reverted here — it spans every floor and
+                // only reverts on dungeon exit (RestoreSpawnRoster).
+                if (_rosterAppliedToFloor && !_rosterDungeonWide)
                 {
                     Console.WriteLine("[EnemyInjector] left the roster's floor — reverting to vanilla spawns.");
                     RestoreSpawnRoster();
@@ -434,12 +439,27 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void RestoreSpawnRoster()
         {
-            if (_rosterSnapDungeon < 0 && _speciesRecordSnaps.Count == 0) return;
-            if (_rosterSnapDungeon >= 0)
+            if (_rosterSnapDungeon < 0 && _speciesRecordSnaps.Count == 0 && _stagedFloors.Count == 0) return;
+            // Whole-dungeon snapshot (sandbox / SetSpawnRoster* paths). The randomizer sets _rosterSnapDungeon for
+            // the mimic gate but leaves these arrays null — it reverts per-floor below instead.
+            if (_rosterSnapDungeon >= 0 && _rosterSnapNormal != null)
             {
                 Memory.WriteByteArray(BtEnemyLayout.FloorAddress(BtEnemyLayout.LayoutBase[_rosterSnapDungeon], 0), _rosterSnapNormal);
                 Memory.WriteByteArray(BtEnemyLayout.FloorAddress(BtEnemyLayout.UraLayoutBase[_rosterSnapDungeon], 0), _rosterSnapUra);
                 Console.WriteLine($"[EnemyInjector] restore: BtEnemyLayout dungeon {_rosterSnapDungeon} reverted (normal+Ura).");
+            }
+            // Randomizer per-floor staging: revert only the floors actually visited.
+            if (_stagedFloors.Count > 0 && _stageDungeon >= 0)
+            {
+                int[] bases = { BtEnemyLayout.LayoutBase[_stageDungeon], BtEnemyLayout.UraLayoutBase[_stageDungeon] };
+                foreach (var kv in _stagedFloors)
+                {
+                    int[][] orig = { kv.Value.normal, kv.Value.ura };
+                    for (int b = 0; b < 2; b++)
+                        for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
+                            Memory.WriteInt(BtEnemyLayout.EntryAddress(bases[b], kv.Key, entry) + BtEnemyLayout.Id, orig[b][entry]);
+                }
+                Console.WriteLine($"[Randomizer] restore: {_stagedFloors.Count} staged floor(s) reverted (dungeon {_stageDungeon}: {string.Join(",", _stagedFloors.Keys)}).");
             }
             if (_speciesRecordSnaps.Count > 0)
             {
@@ -451,8 +471,143 @@ namespace Dark_Cloud_Improved_Version
             _rosterSnapDungeon = -1; _rosterSnapNormal = null; _rosterSnapUra = null;
             _speciesRecordSnaps.Clear();
             _rosterAppliedToFloor = false;
+            _rosterDungeonWide = false;   // next dungeon entry re-randomizes from vanilla
+            _stagedFloors.Clear(); _stageDungeon = -1; _menuFloor = -1;   // next entry re-randomizes whatever floors are picked
             _mimicChestDone.Clear();
             BossScriptPatcher.ArmedBoss = -1;
+        }
+
+        // ── Enemy randomizer ("Randomize Enemies" option) ───────────────────────────────────────────────────
+        // On dungeon entry (floor-select), fill EVERY non-boss/event floor's roster (normal + Ura) with a random
+        // 9-species mix from the eligible pool, weighted to favor the dungeon's NATIVE mimic + king mimic. Re-rolled
+        // each dungeon entry; reverted on dungeon exit via RestoreSpawnRoster. Reuses the snapshot + mimic-chest
+        // machinery (so roster mimics still render as chests) and is marked dungeon-wide so NotifyInFloor doesn't
+        // revert it per-floor. The (mostly non-native) enemies are rescaled to the dungeon's level by EnemyStatNormalizer.
+        internal static bool RandomizeEnemies = false;
+        private const double MimicChance = 0.33, KingMimicChance = 0.25;
+        private static readonly System.Random _randomizerRng = new System.Random();
+        private static int[] _eligiblePool;                       // TableIndices of eligible enemies (base + enhanced; no bosses/mimics)
+        private static (int mimic, int king)[] _mimicByDungeon;   // per dungeon (0..6): native mimic + king-mimic TableIndex
+        // Per-floor staging (lazy): which dungeon is staged, and for each staged floor index its captured VANILLA
+        // Id ints (normal[9], ura[9]) so RestoreSpawnRoster reverts only the floors actually visited. A floor is
+        // staged at most once per dungeon visit (so backfloor toggles / backtracking never re-roll it); the dict
+        // is cleared on dungeon exit so the next entry re-randomizes whatever floors are picked.
+        private static int _stageDungeon = -1;
+        private static readonly System.Collections.Generic.Dictionary<int, (int[] normal, int[] ura)> _stagedFloors = new();
+        private static int _menuFloor = -1;   // the single floor currently staged from the floor-select menu (the highlighted one)
+
+        private static void EnsureRandomizerData()
+        {
+            if (_eligiblePool != null) return;
+            var pool = new System.Collections.Generic.List<int>();
+            foreach (var fld in typeof(EnemySpecies).GetFields(System.Reflection.BindingFlags.Static
+                         | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            {
+                if (fld.FieldType != typeof(EnemyDefaults)) continue;
+                var e = (EnemyDefaults)fld.GetValue(null);
+                if (e.TableIndex == null || e.Id == 0) continue;
+                if (string.IsNullOrEmpty(e.ModelCode) || e.ModelCode[0] != 'e') continue;   // regular enemy mesh only (skip 'c' bosses/effects)
+                if (e.Name != null && e.Name.Contains("Mimic")) continue;                    // mimics handled separately (per dungeon, weighted)
+                if (EnemySpecies.BossEnemies.ContainsKey(e.Id)) continue;                    // exclude bosses + companions (e.g. IceArrow) by Id
+                pool.Add(e.TableIndex.Value);
+            }
+            _eligiblePool = pool.ToArray();
+
+            _mimicByDungeon = new (int, int)[BtEnemyLayout.DungeonCount];
+            _mimicByDungeon[0] = (EnemySpecies.MimicDBC.TableIndex.Value, EnemySpecies.KingMimicDBC.TableIndex.Value);
+            _mimicByDungeon[1] = (EnemySpecies.MimicWOF.TableIndex.Value, EnemySpecies.KingMimicWOF.TableIndex.Value);
+            _mimicByDungeon[2] = (EnemySpecies.MimicSW.TableIndex.Value,  EnemySpecies.KingMimicSW.TableIndex.Value);
+            _mimicByDungeon[3] = (EnemySpecies.MimicSMT.TableIndex.Value, EnemySpecies.KingMimicSMT.TableIndex.Value);
+            _mimicByDungeon[4] = (EnemySpecies.MimicMS.TableIndex.Value,  EnemySpecies.KingMimicMS.TableIndex.Value);
+            _mimicByDungeon[5] = (EnemySpecies.MimicGoT.TableIndex.Value, EnemySpecies.KingMimicGoT.TableIndex.Value);
+            _mimicByDungeon[6] = (EnemySpecies.MimicDS.TableIndex.Value,  EnemySpecies.KingMimicDS.TableIndex.Value);
+
+            Console.WriteLine($"[Randomizer] eligible pool: {_eligiblePool.Length} species.");
+        }
+
+        /// <summary>
+        /// Floor-select menu (dunMode==4): keep exactly ONE floor staged — the highlighted one. The player selects a
+        /// single floor, so as the cursor moves we un-stage the previous highlight and stage the new one; whichever
+        /// floor is confirmed is the one left staged (no per-hover accumulation). Pre-load (the menu precedes load).
+        /// </summary>
+        internal static void StageSelectedFloor(byte dungeon, int floor)
+        {
+            if (!RandomizeEnemies) return;
+            if (_menuFloor == floor) return;                    // highlight unchanged — already handled
+            if (_menuFloor >= 0) RevertStagedFloor(_menuFloor); // un-stage the floor we just moved off
+            _menuFloor = floor;
+            StageFloorRoster(dungeon, floor);
+        }
+
+        /// <summary>Revert a single staged floor (normal + Ura) to its captured vanilla Ids and drop it from the set.</summary>
+        private static void RevertStagedFloor(int floor)
+        {
+            if (_stageDungeon < 0 || !_stagedFloors.TryGetValue(floor, out var orig)) return;
+            int[] bases = { BtEnemyLayout.LayoutBase[_stageDungeon], BtEnemyLayout.UraLayoutBase[_stageDungeon] };
+            int[][] o = { orig.normal, orig.ura };
+            for (int b = 0; b < 2; b++)
+                for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
+                    Memory.WriteInt(BtEnemyLayout.EntryAddress(bases[b], floor, entry) + BtEnemyLayout.Id, o[b][entry]);
+            _stagedFloors.Remove(floor);
+        }
+
+        /// <summary>
+        /// Randomize ONE floor's roster (normal + Ura) just before it loads. Call with the floor index the player
+        /// is about to enter — via StageSelectedFloor on the floor-select cursor (dunMode==4) or checkFloor+1 on the
+        /// next-floor screen (dunMode==7), both of which fire pre-load. 0-indexed (== checkFloor == BtEnemyLayout
+        /// index). Captures the floor's vanilla Ids first (lazy per-floor snapshot) and stages each floor at most once
+        /// per visit, so backfloor toggles and backtracking never re-roll it; reverts on dungeon exit.
+        /// </summary>
+        internal static void StageFloorRoster(byte dungeon, int floor)
+        {
+            if (!RandomizeEnemies || dungeon >= BtEnemyLayout.DungeonCount) return;
+            if (floor < 0 || floor >= BtEnemyLayout.FloorCount[dungeon]) return;
+            EnsureRandomizerData();
+            if (_eligiblePool.Length < BtEnemyLayout.EntriesPerFloor) return;  // safety: need enough to fill a floor
+
+            // Defensive: a new dungeon without a restore in between (shouldn't happen — RestoreSpawnRoster runs on
+            // exit) — revert the old one so its staged floors don't leak.
+            if (_stageDungeon != dungeon && _stageDungeon >= 0) RestoreSpawnRoster();
+            if (_stagedFloors.ContainsKey(floor)) return;   // already randomized this floor this visit
+
+            var exclude = Dungeon.GetDungeonEventFloors(dungeon);   // boss + event floors — left vanilla
+            if (exclude != null && exclude.Contains((byte)floor)) return;
+
+            _stageDungeon = dungeon;
+            _rosterSnapDungeon = dungeon;   // satisfy the mimic-chest gate (ActivateRosterMimics / MakeRosterMimicsChests)
+            _rosterDungeonWide = true;      // multi-floor: NotifyInFloor must NOT revert per-floor (only on dungeon exit)
+
+            var (mimicTI, kingTI) = _mimicByDungeon[dungeon];
+            int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
+            var snap = new int[2][];   // [0]=normal, [1]=Ura — captured vanilla Ids for restore
+            for (int b = 0; b < 2; b++)
+            {
+                snap[b] = new int[BtEnemyLayout.EntriesPerFloor];
+                int[] roster = BuildFloorRoster(mimicTI, kingTI);   // independent roll per layout
+                for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
+                {
+                    long addr = BtEnemyLayout.EntryAddress(bases[b], floor, entry) + BtEnemyLayout.Id;
+                    snap[b][entry] = Memory.ReadInt(addr);   // capture vanilla Id
+                    Memory.WriteInt(addr, roster[entry]);    // write random Id
+                }
+            }
+            _stagedFloors[floor] = (snap[0], snap[1]);
+            Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
+                + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}.");
+        }
+
+        // One floor's 9-entry roster: weighted native mimic/king (each at most once), the rest distinct random eligible.
+        private static int[] BuildFloorRoster(int mimicTI, int kingTI)
+        {
+            var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
+            if (_randomizerRng.NextDouble() < MimicChance)     roster.Add(mimicTI);
+            if (_randomizerRng.NextDouble() < KingMimicChance) roster.Add(kingTI);
+            while (roster.Count < BtEnemyLayout.EntriesPerFloor)
+            {
+                int pick = _eligiblePool[_randomizerRng.Next(_eligiblePool.Length)];
+                if (!roster.Contains(pick)) roster.Add(pick);   // distinct entries → even spawn distribution
+            }
+            return roster.ToArray();
         }
 
         /// <summary>

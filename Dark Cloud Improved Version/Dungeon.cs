@@ -11,9 +11,11 @@ namespace Dark_Cloud_Improved_Version
         static ushort currentWeapon;
         static int currentAddress;
         static int prevFloor = 200;
+        static byte prevBackFloor = 0;   // tracks backfloor-flag edges (the floor↔backfloor swap reloads enemies without changing checkFloor)
         static int currentCharCursor = 0;
         static int prevCharCursor = 0;
         static ushort currentGilda = 0;
+        static byte _prevDunMode = 0;   // tracks dungeonMode edges (floor-select rising edge = new dungeon visit)
         static bool clownOnScreen = false;
         static bool chronicle2 = false;
         static bool[] monstersDead = new bool[15];
@@ -61,6 +63,7 @@ namespace Dark_Cloud_Improved_Version
 //THREADS
         //Runs at the start of each floor
         public static Thread spawnsCheck;
+        public static Thread backfloorLogThread;   // logs enemy slots after a floor↔backfloor swap (which CheckSpawns misses)
         public static Thread minibossProcess;
         public static Thread miniBossMessage;
 
@@ -460,6 +463,21 @@ namespace Dark_Cloud_Improved_Version
                         }
                     }
 
+                    // Floor <-> backfloor swap reloads enemies but keeps checkFloor the same, so the floor-change
+                    // block above (and CheckSpawns) never fire for it. Detect the backfloor-flag edge and log the
+                    // (re)spawned slots so we can compare backfloor vs normal-floor enemy stats.
+                    byte curBackFloor = Memory.ReadByte(Addresses.dunBackFloorFlag);
+                    if (curBackFloor != prevBackFloor)
+                    {
+                        prevBackFloor = curBackFloor;
+                        if (backfloorLogThread == null || !backfloorLogThread.IsAlive)
+                        {
+                            bool onBackFloor = curBackFloor != 0;
+                            backfloorLogThread = new Thread(() => LogBackfloorSpawns(onBackFloor));
+                            backfloorLogThread.Start();
+                        }
+                    }
+
                     CheckUngagaSwap();
                     CheckWepLvlUp();
                     CheckClown();
@@ -478,11 +496,25 @@ namespace Dark_Cloud_Improved_Version
                 else
                 {
                     prevFloor = 200;
+                    prevBackFloor = 0;
                 }
 
-                if (Memory.ReadByte(Addresses.dungeonMode) == 4) //Check if in floor selection menu
+                byte dunMode = Memory.ReadByte(Addresses.dungeonMode);
+                // Floor-select opening = a new dungeon visit begins. Revert any randomizer staging left over from the
+                // previous visit (covers escape powder / warp / death / stairs-out exits that keep you ingame and so
+                // bypass the mode==0/1 RestoreSpawnRoster below). Once-per-entry, before staging fresh this visit.
+                if (dunMode == 4 && _prevDunMode != 4)
+                {
+                    EnemyModelInjector.RestoreSpawnRoster();
+                }
+                _prevDunMode = dunMode;
+                if (dunMode == 4) //Check if in floor selection menu
                 {
                     FloorSelectionScreen();
+                }
+                else if (dunMode == 7) //Next-floor screen: stage the descent target (checkFloor+1) before it loads
+                {
+                    EnemyModelInjector.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
                 }
 
                 if (MainMenuThread.userMode == true)
@@ -817,6 +849,24 @@ namespace Dark_Cloud_Improved_Version
             Enemies.ResetPollState();
             // Enemies.FixModelRedirectSpawnPositions();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
+        }
+
+        /// <summary>
+        /// After a floor↔backfloor swap, wait for the old slots to clear and the new enemies to (re)spawn, then dump
+        /// them via LogEnemySpawns. CheckSpawns only runs on a checkFloor change, which a backfloor swap doesn't cause.
+        /// </summary>
+        public static void LogBackfloorSpawns(bool onBackFloor)
+        {
+            Thread.Sleep(800);   // let the swap clear the previous slots before we wait for the new ones
+            int ms = 0;
+            while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.RenderStatus)) == 255 && ms < 10000)
+            {
+                Thread.Sleep(150);
+                ms += 150;
+            }
+            Thread.Sleep(500);   // settle — let the remaining slots populate
+            if (Player.InDungeonFloor())
+                Enemies.LogEnemySpawns(onBackFloor);
         }
 
         /// <summary>
@@ -1228,6 +1278,13 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FloorSelectionScreen()
         {
+            // "Randomize Enemies": randomize the highlighted floor, before it loads (the menu is pre-load, so
+            // whatever you confirm is already staged). Keeps only ONE floor staged (the cursor's) — moving the cursor
+            // un-stages the previous one. dunEnterFloorCursor == checkFloor == BtEnemyLayout index. Read dungeon+floor
+            // from the DunEnter menu struct (currentDungeon is stale at entry — see Addresses). No-op when off.
+            EnemyModelInjector.StageSelectedFloor(Memory.ReadByte(Addresses.dunEnterDungeon), Memory.ReadByte(Addresses.dunEnterFloorCursor));
+
+            // Exit dungeon from floor selection screen (1 tick for button press and next tick warps to town)
             if (circlePressed == false)
             {
                 if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)
