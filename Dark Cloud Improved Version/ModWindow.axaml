@@ -134,15 +134,6 @@
                   FontWeight="Normal"
                   Click="button1_Click"/>
 
-          <!-- Experimental: dungeon spawn-roster editor -->
-          <TextBlock Text="TableIdx:" Margin="46,360,0,0"
-                     VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"/>
-          <TextBox x:Name="Tbox_Injector_Table" Text="80,101!,76!,102!,103!,92!,104!,3" Width="150" Height="24"
-                   Margin="106,356,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
-          <Button x:Name="Btn_Injector_Test" Content="Set roster"
-                  Width="92" Height="26" Margin="262,355,0,0"
-                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
-                  Click="Btn_Injector_Test_Click"/>
         </Panel>
         </ScrollViewer>
       </TabItem>
@@ -202,8 +193,8 @@
         </Panel>
       </TabItem>
 
-      <!-- Tools tab -->
-      <TabItem Header="Tools" IsVisible="False">
+      <!-- Sandbox tab (shown only in sandbox mode): power tools — Fish Data Farmer + spawn-roster editor -->
+      <TabItem x:Name="Tab_Sandbox" Header="Sandbox" IsVisible="False">
         <Panel>
           <TextBlock Text="Fish Data Farmer"
                      FontWeight="SemiBold"
@@ -242,6 +233,17 @@
                      VerticalAlignment="Top" HorizontalAlignment="Left"
                      FontWeight="Normal" FontFamily="Courier New"
                      TextWrapping="Wrap"/>
+
+          <!-- Dungeon spawn-roster editor -->
+          <TextBlock Text="Spawn roster (TableIdx list, '!' = spawn-once):"
+                     FontWeight="SemiBold" Margin="46,256,0,0"
+                     VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <TextBox x:Name="Tbox_Injector_Table" Text="80,101!,76!,102!,103!,92!,104!,3" Width="280" Height="24"
+                   Margin="46,280,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+          <Button x:Name="Btn_Injector_Test" Content="Set roster"
+                  Width="92" Height="26" Margin="336,279,0,0"
+                  VerticalAlignment="Top" HorizontalAlignment="Left" FontWeight="Normal"
+                  Click="Btn_Injector_Test_Click"/>
         </Panel>
       </TabItem>
 

@@ -48,6 +48,25 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 1. In the root folder, run `dotnet restore`
 2. In the root folder, run `dotnet build "Dark Cloud Improved Version.sln"`
 
+### Quick build & run with `make`
+
+If you have the [.NET 8 **SDK**](https://dotnet.microsoft.com/download/dotnet/8.0) and `make` (preinstalled on macOS and Linux), a `Makefile` in the repo root lets you build and launch in one step from the **repo root** — no need to locate the built `.dll`:
+
+| From the repo root | What it does |
+|--------------------|--------------|
+| `make build` | Compile only (no launch) |
+| `make` &nbsp;or&nbsp; `make user` | Build + launch in **user** mode (normal play) |
+| `make dev` | Build + launch in **dev** mode (developer tabs) |
+| `make sandbox` | Build + launch in **sandbox** mode (user UI + the **Sandbox** tab) |
+
+These wrap dotnet-native launch profiles (`Dark Cloud Improved Version/Properties/launchSettings.json`), which also appear in the run/debug dropdown of IDEs. The equivalent without `make` is:
+
+```
+dotnet run --project "Dark Cloud Improved Version" --launch-profile user   # or dev / sandbox
+```
+
+> As with the manual method, PCSX2 must already be running with PINE enabled, cheats on, and a game loaded.
+
 ### macOS
 
 1. Install .NET 8: `brew install --cask dotnet` (or download the installer from the link above)
@@ -58,7 +77,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
    ```
    dotnet "Dark Cloud Enhanced Mod.dll"
    ```
-6. Click **Launch as User** in the mod window
+6. The mod window opens directly in **user** mode — no further clicks needed. (Dev and sandbox modes are launched via the `make` commands above.)
 
 > **Note:** macOS may require granting the terminal or app network access when prompted by the firewall.
 
@@ -69,7 +88,7 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
 3. Copy `A5C05C78.pnach` to `%APPDATA%\PCSX2\cheats\` and enable cheats in PCSX2 (**System → Enable Cheats**)
 4. Load your Dark Cloud ISO in PCSX2 and reach the main menu or in-game before starting the mod
 5. Run `Dark Cloud Enhanced Mod.exe` (or `dotnet "Dark Cloud Enhanced Mod.dll"` from a terminal)
-6. Click **Launch as User** in the mod window
+6. The mod window opens directly in **user** mode — no further clicks needed. (Dev and sandbox modes are launched via the `make` commands above.)
 
 ### Linux
 
@@ -85,7 +104,38 @@ After copying the file, enable cheats in PCSX2 via **System → Enable Cheats**.
    ```
    dotnet "Dark Cloud Enhanced Mod.dll"
    ```
-6. Click **Launch as User** in the mod window
+6. The mod window opens directly in **user** mode — no further clicks needed. (Dev and sandbox modes are launched via the `make` commands above.)
+
+---
+
+## The mod window
+
+The mod runs as a window alongside PCSX2 and opens in one of three **modes**. Regular players only ever need **user** mode — the others are for contributors and testing. The mode is chosen at launch (via the `make` commands / launch profiles above; running the app with no argument defaults to user mode).
+
+### Modes
+
+| Mode | How to launch | What it gives you |
+|------|---------------|-------------------|
+| **User** (default) | `make` / `make user`, or run the app with no arguments | The normal player UI |
+| **Dev** | `make dev` | Developer tabs: low-level thread and debug controls |
+| **Sandbox** | `make sandbox` | The user UI **plus** a **Sandbox** tab of power tools |
+
+### User-mode tabs
+
+- **General** — welcome message, mod version, Discord link, and Quit.
+- **Options** — toggles that are **saved to your save file** and re-applied when you load it:
+  - *Graphics* — enable graphical improvements; increased FOV
+  - *Audio* — disable low-weapon-HP beeps; disable battle music; disable attack sounds; mute all music
+  - *Gameplay* — **Faster enemies** (enemy movement + attack speed) and **Stronger enemies** (scales enemies toward the next dungeon's power level)
+- **Quests** — a live tracker for active in-game quests (auto-refreshes when you open Manuals in-game).
+- **Credits** — contributor credits.
+
+### Sandbox tab (sandbox mode only)
+
+Power/testing tools kept out of normal play:
+
+- **Spawn-roster editor** — override the current dungeon's spawns with specific enemy species by TableIndex (a trailing `!` marks a species as spawn-once). Handy for testing a particular enemy.
+- **Fish Data Farmer** — an automated fishing-data collection tool.
 
 ---
 

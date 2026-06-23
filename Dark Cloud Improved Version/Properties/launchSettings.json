@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "user": {
+      "commandName": "Project",
+      "commandLineArgs": "user"
+    },
+    "dev": {
+      "commandName": "Project",
+      "commandLineArgs": "dev"
+    },
+    "sandbox": {
+      "commandName": "Project",
+      "commandLineArgs": "sandbox"
+    }
+  }
+}

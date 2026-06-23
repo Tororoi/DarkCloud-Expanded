@@ -12,9 +12,15 @@ using ThreadState = System.Threading.ThreadState;
 
 namespace Dark_Cloud_Improved_Version
 {
+    /// <summary>Launch mode, chosen by a command-line arg (see launchSettings.json / Makefile). Sandbox = User + the Sandbox tab.</summary>
+    public enum LaunchMode { User, Dev, Sandbox }
+
     public partial class ModWindow : Window
     {
         private static ModWindow instance;
+
+        // Set from the command-line arg in Program.Main before the window is created.
+        public static LaunchMode Mode = LaunchMode.User;
 
         private readonly DispatcherTimer _fishStatusTimer;
 
@@ -22,7 +28,8 @@ namespace Dark_Cloud_Improved_Version
         {
             InitializeComponent();
             instance = this;
-            UserModeLaunch();
+            if (Mode == LaunchMode.Dev) DevModeLaunch();
+            else UserModeLaunch();   // User and Sandbox both use the user tabs; Sandbox additionally shows the Sandbox tab
 
             _fishStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _fishStatusTimer.Tick += (_, _) => UpdateFishFarmerStatus();
@@ -350,6 +357,14 @@ namespace Dark_Cloud_Improved_Version
         void UserModeLaunch()
         {
             TabControl_USER.IsVisible = true;
+            Container_MainModes.IsVisible = false;
+            Tab_Sandbox.IsVisible = (Mode == LaunchMode.Sandbox);   // Sandbox tab (roster editor + tools) only in sandbox mode
+            if (!launchThread.IsAlive) launchThread.Start();
+        }
+
+        void DevModeLaunch()
+        {
+            TabControl_DEV.IsVisible = true;
             Container_MainModes.IsVisible = false;
             if (!launchThread.IsAlive) launchThread.Start();
         }
