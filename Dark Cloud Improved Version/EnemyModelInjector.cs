@@ -504,6 +504,15 @@ namespace Dark_Cloud_Improved_Version
         // revert it per-floor. The (mostly non-native) enemies are rescaled to the dungeon's level by EnemyStatNormalizer.
         internal static bool RandomizeEnemies = false;
         private const double MimicChance = 0.50, KingMimicChance = 0.33;
+        // Themed-group mode (coexists with the random mix). Each floor has a ThemeChance of being a single themed
+        // group (cards, days of the week, dragons, …; see EnemySpecies.ThemeGroups) instead of the random mix.
+        // When a theme is chosen: 50% the whole roster is that group (spawn-cap repeatable, so the floor fills with
+        // them); otherwise the group is capped to one-of-each and the rest of the roster is filled 50/50 by the
+        // dungeon's mimic + king mimic or by dungeon-native enemies.
+        internal static bool UseThemedGroups = true;
+        private const double ThemeChance = 0.50;
+        private const double ThemeCapOneChance = 0.50;     // within a theme: chance the group is capped to one-of-each
+        private const double ThemeMimicFillChance = 0.50;  // when capped: chance the rest is mimics (else dungeon natives)
         // Distinct species per floor.
         private const int RosterFillCount = BtEnemyLayout.EntriesPerFloor;
         private static readonly System.Random _randomizerRng = new System.Random();
@@ -523,24 +532,21 @@ namespace Dark_Cloud_Improved_Version
         private static void EnsureRandomizerData()
         {
             if (_eligiblePool != null) return;
-            var pool = new System.Collections.Generic.List<int>();
+            // Per-TableIndex maps for logging + budget-aware fill, over every species with a record.
             _speciesByTI = new System.Collections.Generic.Dictionary<int, (string, string)>();
             _footprintByTI = new System.Collections.Generic.Dictionary<int, int>();
-            foreach (var fld in typeof(EnemySpecies).GetFields(System.Reflection.BindingFlags.Static
-                         | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            foreach (var kv in EnemySpecies.All)
             {
-                if (fld.FieldType != typeof(EnemyDefaults)) continue;
-                var e = (EnemyDefaults)fld.GetValue(null);
-                if (e.TableIndex == null) continue;
-                _speciesByTI[e.TableIndex.Value] = (e.ModelCode ?? "?", e.Name ?? "?");   // for buffer-sample logging
-                if (e.ModelFootprint != null) _footprintByTI[e.TableIndex.Value] = e.ModelFootprint.Value;   // for budget-aware fill
-                if (e.Id == 0) continue;
-                if (string.IsNullOrEmpty(e.ModelCode) || e.ModelCode[0] != 'e') continue;   // regular enemy mesh only (skip 'c' bosses/effects)
-                if (e.Name != null && e.Name.Contains("Mimic")) continue;                    // mimics handled separately (per dungeon, weighted)
-                if (EnemySpecies.BossEnemies.ContainsKey(e.Id)) continue;                    // exclude bosses + companions (e.g. IceArrow) by Id
-                pool.Add(e.TableIndex.Value);
+                EnemyDefaults e = kv.Value;
+                _speciesByTI[kv.Key] = (e.ModelCode ?? "?", e.Name ?? "?");                  // for buffer-sample logging
+                if (e.ModelFootprint != null) _footprintByTI[kv.Key] = e.ModelFootprint.Value;   // for budget-aware fill
             }
-            _eligiblePool = pool.ToArray();
+
+            // Non-themed mix pool: exactly the generic-placement set (bosses, companions, Killer Snake and mimics are
+            // already excluded by EnemySpecies.RandomizerValid; mimics are inserted separately, weighted and always the
+            // current dungeon's pair). RandomizerBosses (e.g. Minotaur Joe) will fold in via a toggle.
+            _eligiblePool = new int[EnemySpecies.RandomizerValid.Count];
+            EnemySpecies.RandomizerValid.Keys.CopyTo(_eligiblePool, 0);
 
             _mimicByDungeon = new (int, int)[BtEnemyLayout.DungeonCount];
             _mimicByDungeon[0] = (EnemySpecies.MimicDBC.TableIndex.Value, EnemySpecies.KingMimicDBC.TableIndex.Value);
@@ -662,11 +668,21 @@ namespace Dark_Cloud_Improved_Version
             var (mimicTI, kingTI) = _mimicByDungeon[dungeon];
             int budget = FloorBufferBudget(dungeon);   // bytes the roster may consume (model buffer cap × safety)
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
+
+            // Decide ONCE per floor whether to use a themed group. A themed floor shares one roster (and one set of
+            // SpawnCap edits) across normal + Ura, so the global per-species caps stay consistent whichever side
+            // loads. A non-themed floor falls back to the existing budget-aware random mix, rolled per layout.
+            var capEdits = new System.Collections.Generic.List<(int ti, int cap)>();
+            string themeName = null;
+            int[] themedRoster = null;
+            if (UseThemedGroups && _randomizerRng.NextDouble() < ThemeChance)
+                themedRoster = BuildThemedRoster(dungeon, mimicTI, kingTI, budget, capEdits, out themeName);
+
             var snap = new int[2][];   // [0]=normal, [1]=Ura — captured vanilla Ids for restore
             for (int b = 0; b < 2; b++)
             {
                 snap[b] = new int[BtEnemyLayout.EntriesPerFloor];
-                int[] roster = BuildFloorRoster(mimicTI, kingTI, budget);
+                int[] roster = themedRoster ?? BuildFloorRoster(mimicTI, kingTI, budget);
                 for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
                 {
                     long addr = BtEnemyLayout.EntryAddress(bases[b], floor, entry) + BtEnemyLayout.Id;
@@ -674,9 +690,20 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteInt(addr, roster[entry]);    // write random Id
                 }
             }
+            // Apply this floor's SpawnCap edits (snapshotted for restore on dungeon exit). Written at stage time —
+            // i.e. just before this floor loads — so the per-species cap is correct when BtLoadMonstor reads it.
+            foreach (var (ti, cap) in capEdits)
+            {
+                SnapshotSpeciesRecordIfNeeded(ti);
+                Memory.WriteInt(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.SpawnCap, cap);
+            }
             _stagedFloors[floor] = (snap[0], snap[1]);
-            Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
-                + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}; budget {budget}B.");
+            if (themedRoster != null)
+                Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
+                    + $"theme \"{themeName}\"; {capEdits.Count} cap edit(s); budget {budget}B.");
+            else
+                Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
+                    + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}; budget {budget}B.");
         }
 
         // ── Budget-aware roster sizing (prevents the floor-load buffer overflow / hang) ──────────────────────────
@@ -729,6 +756,171 @@ namespace Dark_Cloud_Improved_Version
             }
             while (roster.Count < BtEnemyLayout.EntriesPerFloor) roster.Add(-1);   // remaining entries empty (Id -1)
             return roster.ToArray();
+        }
+
+        // ── Themed roster ────────────────────────────────────────────────────────────────────────────────────
+        // Build a floor roster from a single themed group (EnemySpecies.ThemeGroups, plus the per-dungeon "Mimics"
+        // theme). Returns the roster and, via capEdits, the (TableIndex, SpawnCap) writes the caller must apply:
+        //   • whole-group floor (ThemeCapOneChance miss): every group member at SpawnCap 0 (repeatable) so the floor
+        //     fills with them — the roster is just the group, rest empty.
+        //   • capped floor (ThemeCapOneChance hit): every group member at SpawnCap 1 (one-of-each), then the rest of
+        //     the roster is filled by repeatable fillers — the dungeon mimic + king mimic, or dungeon-native regulars
+        //     forced repeatable — added FIRST so the floor always has a repeatable species (else the load hangs).
+        // Theme conditions (data in EnemySpecies):
+        //   • Mimics theme: IS the dungeon mimic + king mimic; always whole-group (never capped/filled) so they aren't
+        //     placed twice. Mimics are otherwise absent from every theme and from the native pools, so they only ever
+        //     enter via this theme or the capped mimic-fill branch — a single dungeon-native concern.
+        //   • requireFullFit themes (cards/days/gemrons): excluded by PickTheme on any floor that can't fit the WHOLE
+        //     group, and placed in full first (never trimmed). They go capped only if a repeatable filler still fits;
+        //     otherwise they stay whole-group so nothing is dropped.
+        //   • ThemeSingleSpawn members (e.g. Captain): pinned to SpawnCap 1 even on a whole-group floor.
+        // Budget-aware like BuildFloorRoster: shuffles candidates and stops adding once the next model would overflow
+        // the model buffer, so an over-budget (non-requireFullFit) theme contributes a random subset; no species twice.
+        private static int[] BuildThemedRoster(int dungeon, int mimicTI, int kingTI, int budget,
+            System.Collections.Generic.List<(int ti, int cap)> capEdits, out string themeName)
+        {
+            PickTheme(dungeon, budget, out themeName, out int[] members, out bool requireFullFit, out bool isMimicTheme);
+            var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
+            int used = 0;
+            bool TryAdd(int ti)
+            {
+                if (roster.Contains(ti)) return true;                             // already present — treat as a no-op success
+                if (roster.Count > 0 && used + Footprint(ti) > budget) return false;
+                roster.Add(ti); used += Footprint(ti); return true;
+            }
+            // Cap for a themed member on a whole-group (repeatable) floor: ThemeSingleSpawn members (e.g. Captain in
+            // Pirates) stay pinned to one spawn; everything else is repeatable so it can carry the population.
+            int WholeGroupCap(int ti) => EnemySpecies.ThemeSingleSpawn.Contains(ti) ? 1 : 0;
+
+            Shuffle(members);
+
+            if (isMimicTheme || requireFullFit)
+            {
+                // The Mimics theme IS the dungeon's mimic + king mimic; a requireFullFit theme (cards/days/gemrons) was
+                // only selected because its WHOLE set fits the buffer. Either way every member is placed in full first
+                // and never trimmed. A non-mimic group may THEN go capped (each member once-per-floor + mimic/native
+                // fillers) — but only if a repeatable filler still fits; otherwise it stays whole-group (all repeatable,
+                // no fillers) so nothing is dropped and the floor can still fill. Mimics never cap/fill (no double-place).
+                foreach (int ti in members)
+                {
+                    if (roster.Count >= RosterFillCount) break;
+                    TryAdd(ti);                          // fits by construction (full set ≤ budget)
+                }
+
+                bool capped = false;
+                if (!isMimicTheme && _randomizerRng.NextDouble() < ThemeCapOneChance)
+                {
+                    int[] fillers = ChooseFillers(dungeon, mimicTI, kingTI);
+                    foreach (int ti in fillers)
+                    {
+                        if (roster.Count >= RosterFillCount) break;
+                        if (roster.Contains(ti)) continue;
+                        if (TryAdd(ti)) { capEdits.Add((ti, 0)); capped = true; }   // repeatable filler carries population
+                    }
+                }
+                foreach (int ti in members)              // finalize themed caps once the mode is known
+                    if (roster.Contains(ti)) capEdits.Add((ti, capped ? 1 : WholeGroupCap(ti)));
+            }
+            else if (_randomizerRng.NextDouble() >= ThemeCapOneChance)
+            {
+                // Whole-group floor: the themed species ARE the roster, repeatable (SpawnCap 0; single-spawn members
+                // excepted) so the floor populates from them. Budget may trim the group.
+                foreach (int ti in members)
+                {
+                    if (roster.Count >= RosterFillCount) break;
+                    if (!TryAdd(ti)) break;              // budget reached
+                    capEdits.Add((ti, WholeGroupCap(ti)));
+                }
+            }
+            else
+            {
+                // Capped floor: each themed species appears at most once (SpawnCap 1). But the floor's population
+                // target exceeds the 9 roster slots, so a roster of ONLY once-per-floor species can never fill every
+                // spawn position and the load hangs forever (the spawn-once retry trap). Repeatable fillers — the
+                // dungeon's mimics, or dungeon natives forced repeatable — must carry the population. Add one filler
+                // FIRST (the first add always fits the buffer) so a repeatable species is guaranteed present even when
+                // the themed models consume the whole budget; then the themed one-offs; then top up with more fillers.
+                int[] fillers = ChooseFillers(dungeon, mimicTI, kingTI);
+
+                int guaranteed = -1;
+                foreach (int ti in fillers)
+                    if (TryAdd(ti)) { capEdits.Add((ti, 0)); guaranteed = ti; break; }
+
+                foreach (int ti in members)             // the themed one-offs (once-per-floor)
+                {
+                    if (roster.Count >= RosterFillCount) break;
+                    if (!TryAdd(ti)) break;             // budget reached
+                    capEdits.Add((ti, 1));
+                }
+
+                foreach (int ti in fillers)             // remaining slots: more repeatable fillers (SpawnCap 0)
+                {
+                    if (roster.Count >= RosterFillCount) break;
+                    if (ti == guaranteed || roster.Contains(ti)) continue;
+                    if (TryAdd(ti)) capEdits.Add((ti, 0));
+                }
+            }
+
+            while (roster.Count < BtEnemyLayout.EntriesPerFloor) roster.Add(-1);
+            return roster.ToArray();
+        }
+
+        // The repeatable fillers for a capped themed floor: a 50/50 roll between the dungeon's mimic + king mimic and
+        // a shuffled list of dungeon natives (mimic-free).
+        private static int[] ChooseFillers(int dungeon, int mimicTI, int kingTI)
+        {
+            if (_randomizerRng.NextDouble() < ThemeMimicFillChance) return new[] { mimicTI, kingTI };
+            int[] natives = NativeFillIndices(dungeon);
+            Shuffle(natives);
+            return natives;
+        }
+
+        // Pick a random theme's member TableIndexes plus its flags. The per-dungeon mimic theme is folded in as one
+        // extra option (resolved to the current dungeon). requireFullFit themes are excluded up front on any floor
+        // whose buffer can't fit the whole group, so they're never partially placed.
+        private static void PickTheme(int dungeon, int budget, out string themeName, out int[] members,
+            out bool requireFullFit, out bool isMimicTheme)
+        {
+            var groups = EnemySpecies.ThemeGroups;
+            var eligible = new System.Collections.Generic.List<int>(groups.Length + 1);
+            for (int i = 0; i < groups.Length; i++)
+                if (!groups[i].requireFullFit || ThemeFootprint(groups[i].members) <= budget) eligible.Add(i);
+            eligible.Add(groups.Length);                 // the per-dungeon Mimics theme (small; always fits)
+
+            int pick = eligible[_randomizerRng.Next(eligible.Count)];
+            System.Collections.Generic.Dictionary<int, EnemyDefaults> dict;
+            if (pick == groups.Length) { themeName = "Mimics"; requireFullFit = false; isMimicTheme = true;  dict = EnemySpecies.MimicsByDungeon[dungeon]; }
+            else                       { themeName = groups[pick].name; requireFullFit = groups[pick].requireFullFit; isMimicTheme = false; dict = groups[pick].members; }
+            members = new System.Collections.Generic.List<int>(dict.Keys).ToArray();
+        }
+
+        // Total model-buffer footprint of a themed group (sum of member footprints).
+        private static int ThemeFootprint(System.Collections.Generic.Dictionary<int, EnemyDefaults> members)
+        {
+            int sum = 0;
+            foreach (int ti in members.Keys) sum += Footprint(ti);
+            return sum;
+        }
+
+        // Dungeon-native regulars eligible to backfill a capped themed floor. The native pools are mimic-free by
+        // construction (EnemySpecies.Native*), so mimics never appear here — they come only from the mimic-fill
+        // branch and the dedicated weighted insertion, keeping mimics a single, dungeon-native concern.
+        private static int[] NativeFillIndices(int dungeon)
+        {
+            var keys = EnemySpecies.NativeByDungeon[dungeon].Keys;
+            int[] arr = new int[keys.Count];
+            keys.CopyTo(arr, 0);
+            return arr;
+        }
+
+        // In-place Fisher-Yates using the randomizer RNG.
+        private static void Shuffle(int[] a)
+        {
+            for (int i = a.Length - 1; i > 0; i--)
+            {
+                int j = _randomizerRng.Next(i + 1);
+                (a[i], a[j]) = (a[j], a[i]);
+            }
         }
 
         /// <summary>

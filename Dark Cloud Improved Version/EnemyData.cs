@@ -2134,53 +2134,210 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly EnemyDefaults KillerSnake = new EnemyDefaults {
             Id=54, Name="Killer Snake" };
 
-        // ── Lookup by species ID ──────────────────────────────────────────────────
+        // ── Lookups ───────────────────────────────────────────────────────────────
+        /// <summary>Every species that owns a static-table record, keyed by physical TableIndex. Unlike
+        /// <see cref="Defaults"/> (keyed by the non-unique species Id) this also holds the Demon-Shaft
+        /// "Enhanced" re-skins and the Id=0 boss companions, since each owns a distinct TableIndex.
+        /// Built by reflection over the EnemyDefaults fields so it never drifts from the declarations.</summary>
+        internal static readonly Dictionary<int, EnemyDefaults> All = new();
+        /// <summary>Lookup by species Id (one curated record per Id; Enhanced re-skins share Ids, so aren't here).</summary>
         internal static readonly Dictionary<ushort, EnemyDefaults> Defaults;
+        /// <summary>Species eligible for generic random placement, keyed by TableIndex: everything in
+        /// <see cref="All"/> except bosses, boss companions, Killer Snake, and mimics. Mimics are excluded because
+        /// they're never placed generically — the randomizer inserts the current dungeon's mimic + king mimic itself
+        /// (weighted, dungeon-aware via <see cref="MimicsByDungeon"/>).</summary>
+        internal static readonly Dictionary<int, EnemyDefaults> RandomizerValid;
+        /// <summary>Bosses that spawn cleanly as regular roster enemies (no multi-part / script glitches), keyed by
+        /// TableIndex. Kept out of <see cref="RandomizerValid"/>; the randomizer will optionally fold these in via a
+        /// toggle. Currently just Minotaur Joe.</summary>
+        internal static readonly Dictionary<int, EnemyDefaults> RandomizerBosses;
         static EnemySpecies()
         {
-            EnemyDefaults[] all =
+            foreach (var f in typeof(EnemySpecies).GetFields(System.Reflection.BindingFlags.Static
+                         | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
             {
-                // DBC
-                SkeletonSoldier, MasterJacket, Statue, Dasher, CaveBat, MimicDBC,
-                Ghost, Dragon, KingMimicDBC, Rockanoff, StatueDog,
-                // WOF
-                CannibalPlant, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday,
-                WitchIllza, WitchHellza, MimicWOF, HaleyHoley,
-                Werewolf, Hornet, Halloween, EarthDigger, KingMimicWOF,
-                // SW
-                Captain, PiratesChariot, Gunny, CursedRose, Gyon, AuntieMedu,
-                Corcea, MaskOfPrajna, Sam, MimicSW, KingMimicSW,
-                // SM
-                Mummy, Phantom, BomberHead, MimicSMT, Golem, CrabbyHermit,
-                FliFli, KingMimicSMT, MrBlare, Dune, Titan,
-                Heart, Club, Diamond, Spade, Joker,
-                // MS
-                KingMimicMS, MimicMS, Lich, CurseDancer, KillerSnake, LivingArmor,
-                WhiteFang, MoonBug,
-                // GoT
-                Arthur, Alexander, EvilBat, HellPockle, RashDasher,
-                SteelGiant, Blizzard, MoonDigger, DarkFlower, Billy,
-                Vulcan, SpaceGyon, BlueDragon, BlackDragon, CrescentBaron,
-                KingMimicGoT, MimicGoT, Gol, Sil,
-                // Overseas
-                Yammich, Opar, KingPrickly, Nikapous,
-                // Demon Shaft
-                MimicDS, KingMimicDS,
-                GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly,
-                BishopQ, Gacious, SilverGear, HornHead,
-                // Bosses
-                IceArrow,
-                Dran, IceQueen, MasterUtan,
-                KingsCurseCoffin,
-                MinotaurJoe,
-                DarkGenie, DarkGenieForm2, RightHand, LeftHand, WineKeg,
-                DarkGenieFinal,   // final-form boss (Id 223); its companions have Id 0 (collide), kept out like the c17_ ones
-                KingsCurse,
-                BlackKnight,
+                if (f.FieldType != typeof(EnemyDefaults)) continue;
+                var e = (EnemyDefaults)f.GetValue(null);
+                if (e.TableIndex != null) All[e.TableIndex.Value] = e;
+            }
+
+            // Derived from All (keyed by TableIndex): one curated record per species Id. Skip the Demon-Shaft
+            // "Enhanced" re-skins (which share their base's Id), the Id-0 boss companions (DG/IQ/SW collide entities),
+            // and the Black Knight mount record (shares Id 221 with Black Knight) — so the base species wins each Id.
+            // Then add Killer Snake, which has no species-table record (TableIndex null), so isn't in All.
+            Defaults = new Dictionary<ushort, EnemyDefaults>(All.Count);
+            foreach (EnemyDefaults e in All.Values)
+            {
+                if (e.Id == 0) continue;
+                if (e.Name != null && (e.Name.Contains("Enhanced") || e.Name.Contains("Mount"))) continue;
+                Defaults[e.Id] = e;
+            }
+            Defaults[KillerSnake.Id] = KillerSnake;
+
+            // Randomizer-eligible set: drop bosses, boss companions, and mimics. Killer Snake is excluded for free
+            // (no record, so absent from All). Tests: Id 0 = collide companion; a non-'e' ModelCode = boss/effect mesh
+            // ('c…'); BossEnemies = the named bosses (also catches Wine Keg, which uniquely has an 'e' boss model);
+            // a "Mimic" name = handled separately by the dungeon-aware mimic insertion, never placed generically.
+            RandomizerValid = new Dictionary<int, EnemyDefaults>(All.Count);
+            foreach (var kv in All)
+            {
+                EnemyDefaults e = kv.Value;
+                if (e.Id == 0) continue;
+                if (string.IsNullOrEmpty(e.ModelCode) || e.ModelCode[0] != 'e') continue;
+                if (BossEnemies.ContainsKey(e.Id)) continue;
+                if (e.Name != null && e.Name.Contains("Mimic")) continue;
+                RandomizerValid[kv.Key] = e;
+            }
+
+            // Bosses the randomizer may optionally include (toggle TBD). Only those that spawn cleanly as a regular
+            // roster enemy — currently just Minotaur Joe.
+            RandomizerBosses = new Dictionary<int, EnemyDefaults>
+            {
+                { MinotaurJoe.TableIndex.Value, MinotaurJoe },
             };
-            Defaults = new Dictionary<ushort, EnemyDefaults>(all.Length);
-            foreach (EnemyDefaults e in all) Defaults[e.Id] = e;
         }
+
+        // ── Species groups, keyed by physical TableIndex ───────────────────────────────────────────────────
+        // Reference sets used by the enemy randomizer's themed-roster mode (EnemyModelInjector.StageFloorRoster):
+        //   • NativeByDungeon[d] = the regular (non-boss) species that natively spawn in dungeon d (0..6 =
+        //     DBC, WOF, SW, SMT, MS, GoT, DS), derived from DungeonData's per-floor spawn pools. Used to fill
+        //     the rest of a capped themed roster with "dungeon natives", and as a convenient source for hand-
+        //     authoring the themed groups below.
+        //   • ThemeGroups / MimicsByDungeon = curated "themed" rosters. A floor in themed mode picks one of
+        //     these as its whole roster. Tweak the membership freely — these are the knobs to tune.
+        private static Dictionary<int, EnemyDefaults> Group(params EnemyDefaults[] members)
+        {
+            var d = new Dictionary<int, EnemyDefaults>(members.Length);
+            foreach (var e in members) if (e.TableIndex != null) d[e.TableIndex.Value] = e;
+            return d;
+        }
+
+        // Native regular species per dungeon. Mimics are deliberately EXCLUDED — they're never sourced from the
+        // native pool; the randomizer's dedicated weighted mimic insertion (always the current dungeon's mimic +
+        // king mimic) is the single source of mimics. Bosses / event-only / Id-0 companions are also excluded.
+        internal static readonly Dictionary<int, EnemyDefaults> NativeDBC = Group(
+            SkeletonSoldier, MasterJacket, Statue, Dasher, CaveBat, Ghost, Dragon, Rockanoff, StatueDog,
+            Yammich, Opar);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeWOF = Group(
+            CannibalPlant, EarthDigger, FliFli, Hornet, Halloween, Werewolf, WitchIllza, KingPrickly, HaleyHoley,
+            Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeSW = Group(
+            Captain, Corcea, Gunny, Gyon, PiratesChariot, AuntieMedu, MaskOfPrajna, CursedRose, Sam);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeSMT = Group(
+            Golem, Mummy, Phantom, BomberHead, CrabbyHermit, Dune, Titan, SteelGiant, BlueDragon, Gol, Sil, MrBlare);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeMS = Group(
+            Arthur, WitchHellza, MoonBug, MoonDigger, SpaceGyon, Vulcan, WhiteFang, Titan, CrescentBaron, HellPockle);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeGoT = Group(
+            Alexander, Billy, BlackDragon, Blizzard, Club, CurseDancer, DarkFlower, Diamond, EvilBat, Heart, Joker,
+            Lich, LivingArmor, RashDasher, Spade);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeDS = Group(
+            GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly, BishopQ, Gacious, SilverGear, HornHead, Nikapous,
+            MasterJacketEnhanced, MummyEnhanced, LichEnhanced, GolEnhanced, SilEnhanced, RockanoffEnhanced, StatueDogEnhanced,
+            YammichEnhanced, CaveBatEnhanced, EvilBatEnhanced, HalloweenEnhanced, CursedRoseEnhanced, RashDasherEnhanced,
+            WhiteFangEnhanced, CrabbyHermitEnhanced, SpaceGyonEnhanced, GyonEnhanced, CaptainEnhanced, CorceaEnhanced,
+            AuntieMeduEnhanced, MaskOfPrajnaEnhanced, PiratesChariotEnhanced, WitchHellzaEnhanced, SteelGiantEnhanced,
+            VulcanEnhanced, TitanEnhanced, LivingArmorEnhanced, CrescentBaronEnhanced, ArthurEnhanced, AlexanderEnhanced,
+            HeartEnhanced, ClubEnhanced, DiamondEnhanced, SpadeEnhanced, JokerEnhanced, BomberHeadEnhanced);
+        // Indexed 0..6 = DBC, WOF, SW, SMT, MS, GoT, DS (matches checkDungeon / BtEnemyLayout order).
+        internal static readonly Dictionary<int, EnemyDefaults>[] NativeByDungeon =
+            { NativeDBC, NativeWOF, NativeSW, NativeSMT, NativeMS, NativeGoT, NativeDS };
+
+        // ── Themed groups ──────────────────────────────────────────────────────────────────────────────────
+        // The trailing "Σ footprint" is the sum of the members' ModelFootprint (bytes) — the worst-case model-buffer
+        // cost if the whole group loads on one floor. Keep it under a dungeon's cap (DungeonData.ModelBufferCapMin,
+        // ~270 KB+) or the randomizer will drop members to fit. Update these if you change a group's membership.
+        // Special conditions (implemented in EnemyModelInjector.BuildThemedRoster):
+        //   • requireFullFit (ThemeGroups flag): Cards, DaysOfTheWeek, GemronElementals are all-or-nothing sets —
+        //     only chosen on a floor whose buffer fits the WHOLE group, and never trimmed. On a tight-but-fitting
+        //     floor they go whole-group (all repeatable, no mimic/native fill); with headroom they may instead cap
+        //     each member to one spawn and fill the rest with mimics/natives.
+        //   • ThemeSingleSpawn: members pinned to a single spawn even on a whole-group floor — currently Captain
+        //     (Pirates), so only one Captain ever appears while Corcea / Pirate's Chariot carry the population.
+        internal static readonly Dictionary<int, EnemyDefaults> Cards =                   // Σ footprint ≈ 254,276 B  (requireFullFit)
+            Group(Heart, Club, Diamond, Spade, Joker);
+        internal static readonly Dictionary<int, EnemyDefaults> DaysOfTheWeek =           // Σ footprint ≈ 295,962 B  (requireFullFit)
+            Group(Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday);
+        internal static readonly Dictionary<int, EnemyDefaults> Outlaws =                 // Σ footprint ≈ 162,546 B
+            Group(Sam, MrBlare, Billy);
+        internal static readonly Dictionary<int, EnemyDefaults> Pirates =                 // Σ footprint ≈ 130,224 B  (Captain: single-spawn)
+            Group(Captain, Corcea, PiratesChariot);
+        internal static readonly Dictionary<int, EnemyDefaults> GemronElementals =        // Σ footprint ≈ 321,783 B  (requireFullFit)
+            Group(GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly);
+
+        // Per-element themes — thematic/by-lore, each anchored by its Gemron (and the suit card / dragon that carries
+        // the matching elemental affinity in the data: Heart=Fire, Spade=Ice, Diamond=Thunder, Club=Wind). Tweak to taste.
+        internal static readonly Dictionary<int, EnemyDefaults> Fire =                    // Σ footprint ≈ 298,875 B
+            Group(GemronFire, VulcanEnhanced, BomberHeadEnhanced, MrBlare, Dragon);
+        internal static readonly Dictionary<int, EnemyDefaults> Ice =                     // Σ footprint ≈ 297,337 B
+            Group(GemronIce, Blizzard, Sam, BlueDragon, MoonDigger);
+        internal static readonly Dictionary<int, EnemyDefaults> Thunder =                 // Σ footprint ≈ 250,197 B
+            Group(GemronThunder, GolEnhanced, EarthDigger, MoonBug, Billy);
+        internal static readonly Dictionary<int, EnemyDefaults> Wind =                    // Σ footprint ≈ 258,406 B
+            Group(GemronWind, Dune, Golem, SilverGear, Phantom);
+        internal static readonly Dictionary<int, EnemyDefaults> Holy =                    // Σ footprint ≈ 225,655 B
+            Group(GemronHoly, GaciousEnhanced, MaskOfPrajnaEnhanced, HornHead, YammichEnhanced);
+
+        // Per-category themes — seeded with every base (non-Enhanced) regular of that EnemyCategory.
+        // These are deliberately broad; trim each to the most representative species to taste.
+        internal static readonly Dictionary<int, EnemyDefaults> Dragons =                 // Σ footprint ≈ 235,494 B
+            Group(Dragon, BlueDragon, BlackDragon);
+        internal static readonly Dictionary<int, EnemyDefaults> Undead =                  // Σ footprint ≈ 298,491 B
+            Group(SkeletonSoldier, MasterJacket, Gacious, HornHead, SilverGear);
+        internal static readonly Dictionary<int, EnemyDefaults> Marine =                  // Σ footprint ≈ 216,801 B
+            Group(CrabbyHermit, Gunny, Gyon, Opar, SpaceGyon);
+        internal static readonly Dictionary<int, EnemyDefaults> Rock =                    // Σ footprint ≈ 144,285 B
+            Group(StatueDog, Dune, Titan, Rockanoff);
+        internal static readonly Dictionary<int, EnemyDefaults> Plants =                  // Σ footprint ≈ 112,106 B
+            Group(CannibalPlant, DarkFlower, CursedRose);
+        internal static readonly Dictionary<int, EnemyDefaults> Beasts =                  // Σ footprint ≈ 156,922 B
+            Group(Dasher, Werewolf, WhiteFang);
+        internal static readonly Dictionary<int, EnemyDefaults> SkyDwellers =             // Σ footprint ≈ 77,545 B
+            Group(CaveBat, EvilBat, CrescentBaron);
+        internal static readonly Dictionary<int, EnemyDefaults> Metal =                   // Σ footprint ≈ 168,108 B
+            Group(Arthur, Alexander, SteelGiant, PiratesChariot);
+        internal static readonly Dictionary<int, EnemyDefaults> Mages =                   // Σ footprint ≈ 218,867 B
+            Group(CurseDancer, WitchIllza, BishopQ, Nikapous);
+
+        // Per-dungeon mimic themes (2 entries each: mimic + king mimic). Indexed 0..6 like NativeByDungeon.
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsDBC = Group(MimicDBC, KingMimicDBC);  // Σ ≈ 63,617 B
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsWOF = Group(MimicWOF, KingMimicWOF);  // Σ ≈ 63,453 B
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsSW  = Group(MimicSW,  KingMimicSW);   // Σ ≈ 63,565 B
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsSMT = Group(MimicSMT, KingMimicSMT);  // Σ ≈ 63,689 B
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsMS  = Group(MimicMS,  KingMimicMS);   // Σ ≈ 64,513 B
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsGoT = Group(MimicGoT, KingMimicGoT);  // Σ ≈ 63,641 B
+        internal static readonly Dictionary<int, EnemyDefaults> MimicsDS  = Group(MimicDS,  KingMimicDS);   // Σ ≈ 65,149 B
+        internal static readonly Dictionary<int, EnemyDefaults>[] MimicsByDungeon =
+            { MimicsDBC, MimicsWOF, MimicsSW, MimicsSMT, MimicsMS, MimicsGoT, MimicsDS };
+
+        // Members pinned to a single spawn (SpawnCap 1) whenever placed as a themed enemy — even on a whole-group
+        // floor — keyed by TableIndex. The rest of the group carries the floor population. Currently just Captain.
+        internal static readonly HashSet<int> ThemeSingleSpawn = new() { Captain.TableIndex.Value };
+
+        // Registry the randomizer draws a random theme from (per-dungeon mimics are handled separately, since
+        // which mimic theme applies depends on the current dungeon). requireFullFit = all-or-nothing: only chosen when
+        // the whole group fits the floor's model buffer, and never trimmed (see EnemySpecies' themed-group notes).
+        internal static readonly (string name, Dictionary<int, EnemyDefaults> members, bool requireFullFit)[] ThemeGroups =
+        {
+            ("Cards",             Cards,            true),
+            ("Days of the Week",  DaysOfTheWeek,    true),
+            ("Dragons",           Dragons,          false),
+            ("Outlaws",           Outlaws,          false),
+            ("Pirates",           Pirates,          false),
+            ("Gemron Elementals", GemronElementals, true),
+            ("Fire",              Fire,             true),
+            ("Ice",               Ice,              true),
+            ("Thunder",           Thunder,          true),
+            ("Wind",              Wind,             true),
+            ("Holy",              Holy,             true),
+            ("Undead",            Undead,           false),
+            ("Marine",            Marine,           false),
+            ("Rock",              Rock,             false),
+            ("Plants",            Plants,           false),
+            ("Beasts",            Beasts,           false),
+            ("Sky Dwellers",      SkyDwellers,      false),
+            ("Metal",             Metal,            false),
+            ("Mages",             Mages,            false),
+        };
 
         internal static readonly Dictionary<ushort, string> NormalEnemies = new()
         {
