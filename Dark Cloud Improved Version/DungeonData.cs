@@ -931,6 +931,14 @@ namespace Dark_Cloud_Improved_Version
         internal string           Name;
         internal FloorSpawnPool[] Front;  // Front[0]=descriptor, Front[N]=floor N
         internal FloorSpawnPool[] Back;   // Back[N]=back for floor N (shorter than Front)
+
+        // Conservative (smallest observed) model-buffer capacity in bytes for this dungeon — the MonstorModelBuffer
+        // cap (CDataAlloc2 @ 0x21F066DC). The randomizer's budget-aware roster filler sums per-species
+        // EnemyDefaults.ModelFootprint and stops before this, to avoid overflowing the buffer (which hangs the floor
+        // load). The live cap actually varies by visual area (e.g. Gallery 324K–349K), so this is the per-dungeon
+        // MINIMUM — used to clamp the live read so a stale cross-dungeon cap can't over-budget a smaller dungeon.
+        // 0 = unmeasured (Demon Shaft) → the randomizer falls back to the live read. See /enemy-model-buffer-footprints.md.
+        internal int              ModelBufferCapMin;
     }
 
     /// <summary>
@@ -945,6 +953,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 0, Name = "Divine Beast Cave",
             Front = SpawnPoolData.DBC_Front,
             Back  = SpawnPoolData.DBC_Back,
+            ModelBufferCapMin = 413608,
         };
 
         internal static readonly DungeonData WiseOwlForest = new DungeonData
@@ -952,6 +961,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 1, Name = "Wise Owl Forest",
             Front = SpawnPoolData.WOF_Front,
             Back  = SpawnPoolData.WOF_Back,
+            ModelBufferCapMin = 278824,
         };
 
         internal static readonly DungeonData Shipwreck = new DungeonData
@@ -959,6 +969,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 2, Name = "Shipwreck",
             Front = SpawnPoolData.SW_Front,
             Back  = SpawnPoolData.SW_Back,
+            ModelBufferCapMin = 342304,
         };
 
         internal static readonly DungeonData SunAndMoonTemple = new DungeonData
@@ -966,6 +977,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 3, Name = "Sun and Moon Temple",
             Front = SpawnPoolData.SMT_Front,
             Back  = SpawnPoolData.SMT_Back,
+            ModelBufferCapMin = 442572,
         };
 
         internal static readonly DungeonData MoonSea = new DungeonData
@@ -973,6 +985,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 4, Name = "Moon Sea",
             Front = SpawnPoolData.MS_Front,
             Back  = SpawnPoolData.MS_Back,
+            ModelBufferCapMin = 298592,
         };
 
         internal static readonly DungeonData GalleryOfTime = new DungeonData
@@ -980,6 +993,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 5, Name = "Gallery of Time",
             Front = SpawnPoolData.GoT_Front,
             Back  = SpawnPoolData.GoT_Back,
+            ModelBufferCapMin = 324208,   // smallest of its area bands (333336 / 324208 / 348672 / 348664)
         };
 
         internal static readonly DungeonData DemonShaft = new DungeonData
@@ -987,6 +1001,7 @@ namespace Dark_Cloud_Improved_Version
             Id = 6, Name = "Demon Shaft",
             Front = SpawnPoolData.DS_Front,
             Back  = SpawnPoolData.DS_Back,
+            ModelBufferCapMin = 0,   // TBD — not yet measured; randomizer falls back to the live cap read for DS
         };
 
         private static readonly Dictionary<byte, DungeonData> ById;

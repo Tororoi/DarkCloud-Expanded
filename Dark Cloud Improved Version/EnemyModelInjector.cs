@@ -523,12 +523,14 @@ namespace Dark_Cloud_Improved_Version
         private static int _menuFloor = -1;   // the single floor currently staged from the floor-select menu (the highlighted one)
 
         private static System.Collections.Generic.Dictionary<int, (string code, string name)> _speciesByTI;
+        private static System.Collections.Generic.Dictionary<int, int> _footprintByTI;   // TableIndex → model-buffer footprint (bytes)
 
         private static void EnsureRandomizerData()
         {
             if (_eligiblePool != null) return;
             var pool = new System.Collections.Generic.List<int>();
             _speciesByTI = new System.Collections.Generic.Dictionary<int, (string, string)>();
+            _footprintByTI = new System.Collections.Generic.Dictionary<int, int>();
             foreach (var fld in typeof(EnemySpecies).GetFields(System.Reflection.BindingFlags.Static
                          | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
             {
@@ -536,6 +538,7 @@ namespace Dark_Cloud_Improved_Version
                 var e = (EnemyDefaults)fld.GetValue(null);
                 if (e.TableIndex == null) continue;
                 _speciesByTI[e.TableIndex.Value] = (e.ModelCode ?? "?", e.Name ?? "?");   // for buffer-sample logging
+                if (e.ModelFootprint != null) _footprintByTI[e.TableIndex.Value] = e.ModelFootprint.Value;   // for budget-aware fill
                 if (e.Id == 0) continue;
                 if (string.IsNullOrEmpty(e.ModelCode) || e.ModelCode[0] != 'e') continue;   // regular enemy mesh only (skip 'c' bosses/effects)
                 if (e.Name != null && e.Name.Contains("Mimic")) continue;                    // mimics handled separately (per dungeon, weighted)
@@ -662,12 +665,13 @@ namespace Dark_Cloud_Improved_Version
             _rosterDungeonWide = true;      // multi-floor: NotifyInFloor must NOT revert per-floor (only on dungeon exit)
 
             var (mimicTI, kingTI) = _mimicByDungeon[dungeon];
+            int budget = FloorBufferBudget(dungeon);   // bytes the roster may consume (model buffer cap × safety)
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
             var snap = new int[2][];   // [0]=normal, [1]=Ura — captured vanilla Ids for restore
             for (int b = 0; b < 2; b++)
             {
                 snap[b] = new int[BtEnemyLayout.EntriesPerFloor];
-                int[] roster = BuildFloorRoster(mimicTI, kingTI);
+                int[] roster = BuildFloorRoster(mimicTI, kingTI, budget);
                 for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
                 {
                     long addr = BtEnemyLayout.EntryAddress(bases[b], floor, entry) + BtEnemyLayout.Id;
@@ -677,21 +681,58 @@ namespace Dark_Cloud_Improved_Version
             }
             _stagedFloors[floor] = (snap[0], snap[1]);
             Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
-                + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}.");
+                + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}; budget {budget}B.");
         }
 
-        // One floor's 9-entry roster: weighted native mimic/king (each at most once), the rest distinct random eligible.
-        private static int[] BuildFloorRoster(int mimicTI, int kingTI)
+        // ── Budget-aware roster sizing (prevents the floor-load buffer overflow / hang) ──────────────────────────
+        // Per-species footprints live in EnemyData.cs (EnemyDefaults.ModelFootprint) and per-dungeon caps in
+        // DungeonData.cs (DungeonData.ModelBufferCapMin); the randomizer just reads them. The roster builder sums the
+        // footprints as it fills a floor and stops before the buffer cap overflows (BtLoadMonstor hangs at ~99.9%).
+        private static int Footprint(int ti) =>
+            (_footprintByTI != null && _footprintByTI.TryGetValue(ti, out int f)) ? f : 60000;   // unknown → conservative
+
+        // Fraction of the cap the roster may fill — headroom for measurement slop + intra-dungeon area variation, so the
+        // load never approaches 100% (the hang was at 99.9%).
+        private const double BufferSafetyFactor = 0.90;
+
+        // Bytes this floor's roster may consume: min(known-dungeon cap, sane live cap) × safety. Robust to the stale cap
+        // reported at dungeon entry (clamped by the per-dungeon constant) and to unmeasured dungeons (falls back to live).
+        private static int FloorBufferBudget(int dungeon)
+        {
+            int known = Dungeons.TryGetValue((byte)dungeon, out var d) ? d.ModelBufferCapMin : 0;
+            int live  = Memory.ReadInt(ModelBufCap);
+            bool liveSane = live > 100_000 && live < 4_000_000;
+            int basis;
+            if (known > 0 && liveSane) basis = System.Math.Min(known, live);
+            else if (known > 0)        basis = known;
+            else if (liveSane)         basis = live;       // e.g. Demon Shaft (no constant yet) — trust the live cap
+            else                       basis = 270_000;    // neither available — conservative floor
+            return (int)(basis * BufferSafetyFactor);
+        }
+
+        // One floor's roster: weighted native mimic/king (each at most once), the rest distinct random eligible species.
+        // Adds species until the next would push the summed model-buffer footprint past `budget`, then STOPS (leaves the
+        // rest empty). It does NOT keep re-rolling for a species that happens to fit — that would bias small species to
+        // appear more often. The first species is always allowed (any single model fits a floor). Duplicate re-rolls are
+        // size-independent (just enforcing distinct entries), so they don't skew the distribution.
+        private static int[] BuildFloorRoster(int mimicTI, int kingTI, int budget)
         {
             var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
-            if (_randomizerRng.NextDouble() < MimicChance)     roster.Add(mimicTI);
-            if (_randomizerRng.NextDouble() < KingMimicChance) roster.Add(kingTI);
+            int used = 0;
+            bool TryAdd(int ti)
+            {
+                if (roster.Count > 0 && used + Footprint(ti) > budget) return false;
+                roster.Add(ti); used += Footprint(ti); return true;
+            }
+            if (_randomizerRng.NextDouble() < MimicChance)     TryAdd(mimicTI);
+            if (_randomizerRng.NextDouble() < KingMimicChance) TryAdd(kingTI);
             while (roster.Count < RosterFillCount)
             {
                 int pick = _eligiblePool[_randomizerRng.Next(_eligiblePool.Length)];
-                if (!roster.Contains(pick)) roster.Add(pick);   // distinct entries → even spawn distribution
+                if (roster.Contains(pick)) continue;   // distinct entries → even spawn distribution (size-independent)
+                if (!TryAdd(pick)) break;              // budget reached — stop rather than seek a smaller-fitting species
             }
-            while (roster.Count < BtEnemyLayout.EntriesPerFloor) roster.Add(-1);   // TEST: leave remaining entries empty (Id -1)
+            while (roster.Count < BtEnemyLayout.EntriesPerFloor) roster.Add(-1);   // remaining entries empty (Id -1)
             return roster.ToArray();
         }
 
