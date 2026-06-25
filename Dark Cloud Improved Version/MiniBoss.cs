@@ -316,7 +316,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.DropChance),   enemyLootChance);
 
             // Enemies.EnableEnemyDrops patches the static species table on game load, so every spawn — minibosses
-            // included — inherits the death-drop flag. See EnemySpeciesTable.StealFlag.)
+            // included — inherits the death-drop flag. See EnemySpeciesTable.DeathDropFlag.)
 
             int[] weaponTable  = CustomChests.GetDungeonWeaponsTable(dungeon, floor);
 

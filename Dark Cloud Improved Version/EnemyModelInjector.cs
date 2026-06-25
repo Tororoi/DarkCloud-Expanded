@@ -212,12 +212,12 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // Tames a boss-class record so a sandbox spawn isn't a damage sponge: lowers HP to 50. Gated on
-        // RareDropItemId==65535 ("no signature drop"), which bosses have, as a cheap boss heuristic. 
+        // RareDropItemId==65535 ("no signature drop"), which bosses have, as a cheap boss heuristic.
         private static void RegularizeBossRecord(int tableIndex)
         {
             long rec = EnemySpeciesTable.RecordAddress(tableIndex);
             if (Memory.ReadUShort(rec + EnemySpeciesTable.RareDropItemId) != 65535) return;
-            Memory.WriteUShort(rec + EnemySpeciesTable.MaxHp, 50);
+            // Memory.WriteUShort(rec + EnemySpeciesTable.MaxHp, 50);
         }
 
         internal static void SetPopulationTarget(int pop)

@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     {
         /// <summary>
         /// Permanently enable death-drops for the regular enemy species that ship unable to drop (flyers, Gol/Sil, …).
-        /// The engine skips the entire death-drop block when a species' StealFlag (record +0x82) is 0 — copied to the
+        /// The engine skips the entire death-drop block when a species' DeathDropFlag (record +0x82) is 0 — copied to the
         /// slot's StealItemId high word at spawn and tested at ELF 0x1DF4C0. Those species have DropChance &gt; 0 yet
         /// never drop because the flag is 0. We flip it to 1 in the STATIC species table (one ELF segment, persists the
         /// whole session), so EVERY future spawn inherits it — no per-tick or per-slot work. Idempotent; call once on
@@ -25,9 +25,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 int rec = ti * EnemySpeciesTable.Stride;
                 if (tbl[rec] != (byte)'e') continue;                       // regular-enemy mesh only (skip bosses/effects)
-                int f = rec + EnemySpeciesTable.StealFlag;
+                int f = rec + EnemySpeciesTable.DeathDropFlag;
                 if ((tbl[f] | (tbl[f + 1] << 8)) != 0) continue;            // already drops
-                Memory.WriteUShort(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.StealFlag, 1);
+                Memory.WriteUShort(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.DeathDropFlag, 1);
                 patched++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Enabled death-drops for {patched} previously no-drop enemy species.");
@@ -536,9 +536,9 @@ namespace Dark_Cloud_Improved_Version
             // Memory.WriteInt   (recordAddr + EnemySpeciesTable.SpawnCap,       Memory.ReadInt   (srcAddr + EnemySpeciesTable.SpawnCap));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.EnemySpeciesId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.EnemySpeciesId));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealItemId,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealItemId));
-            Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealFlag));
-            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResA,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResA));
-            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResB,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResB));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.DeathDropFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.DeathDropFlag));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemDamageRes,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemDamageRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemStatusRes,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemStatusRes));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.RareDropItemId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.RareDropItemId));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkFire,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkFire));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkIce,     Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkIce));
@@ -546,8 +546,7 @@ namespace Dark_Cloud_Improved_Version
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkWind,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkWind));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkHoly,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkHoly));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkPhysical,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkPhysical));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk042,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk042));
-            // Memory.WriteFloat (recordAddr + EnemySpeciesTable.Unk098,         Memory.ReadFloat (srcAddr + EnemySpeciesTable.Unk098));
+            // Memory.WriteFloat (recordAddr + EnemySpeciesTable.KnockbackMult,   Memory.ReadFloat (srcAddr + EnemySpeciesTable.KnockbackMult));
 
             Console.WriteLine($"[ModelRedirect] {target.Name} species table → {source.Name}");
         }
