@@ -329,8 +329,20 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Identity ─────────────────────────────────────────────────────────
         internal const int EnemySpeciesId    = 0x042; // ushort — enemy species ID; used to look up name, stats, and model data
-        internal const int EntityScale       = 0x044; // float — CONFIRMED entity/collision radius; enemy-specific (6.0–8.0); does not affect attack hitbox
-        internal const int EntityScaleCopy   = 0x048; // float — copy of EntityScale set at spawn; secondary reference
+        // EntityScale / EntityScaleCopy = the enemy's PHYSICAL (movement) collision radii — NOT the combat hitbox (the
+        // hittable/attack spheres are STB-driven: _SET_BODY_COL / _SET_DMG_COL, RadiusArray @ MMU+0x55390/0x5A490).
+        // CONFIRMED in-game (2026-06-25, Skeleton Soldier at 10x and at 0):
+        //   • EntityScale (0x044) = the enemy's own movement-CLEARANCE buffer. MoveCheck/MoveCheck2 block the enemy when
+        //     `distance < 6.0 + EntityScale` to walls/the player, keeping it ~EntityScale away. ONE-DIRECTIONAL — it
+        //     gates the ENEMY's movement only; the player can still walk right up to it (player collision is separate),
+        //     and the model/combat are unaffected. At 60 (10x): big berth + a glitch-jump/jitter when forced too close
+        //     (engine snaps it out of the overlap). At 0: normal — walls are still avoided (wall solidity is the
+        //     walkable mesh / pathfinding, independent of this buffer); EntityScale only adds clearance on top.
+        //   • EntityScaleCopy (0x048) = monster-vs-monster separation (MoveChecMonster). At 0: enemies OVERLAP each
+        //     other; large: they can't cluster. Settable per-script via the STB cmd _SET_COLLISION_WIDTH (0x1E5DC0).
+        // Both copied from record +0x060 at spawn. CheckDmg also reads EntityScale (hit-effect radius).
+        internal const int EntityScale       = 0x044; // float — enemy movement-clearance buffer vs walls/player (not the hitbox); see comment
+        internal const int EntityScaleCopy   = 0x048; // float — monster-vs-monster separation radius (settable via STB _SET_COLLISION_WIDTH); see comment
         // SpeciesDataPtr is a PS2-native pointer (0x00xxxxxx range) to the loaded c16a/stb behavior
         // block for this species. All slots of the same species share one block (e.g. every Pirate's
         // Chariot = 0x01C05140). The block begins with a MIPS function pointer table; the on-death
@@ -375,8 +387,8 @@ namespace Dark_Cloud_Improved_Version
 
         // Vertical physics pair, both READ-ONLY (Step recomputes them every frame: HeightAboveGround = enemyZ − GroundZ;
         // Step never writes LocationZ, so these are outputs, not inputs). To move an enemy vertically, write LocationZ (0x104).
-        internal const int HeightAboveGround = 0x0B8; // float — READ ONLY; height above the floor: 0 (≈grounded) at rest, >0 when airborne (knockback launch / jump). CONFIRMED: the STB cmd _STATUS_GET_HEIGHT (ELF 0x1E30F0) returns this. Was Unk0B8.
-        internal const int GroundZ           = 0x0BC; // float — READ ONLY; floor/ground Z under the enemy (subtracted to get HeightAboveGround; also positions the CHitMark spark in CheckDmg). ~10 in DBC; shifts as the enemy slides. Was Unk0BC.
+        internal const int HeightAboveGround = 0x0B8; // float — READ ONLY; height above the floor: 0 (≈grounded) at rest, >0 when airborne (knockback launch / jump). CONFIRMED: the STB cmd _STATUS_GET_HEIGHT (ELF 0x1E30F0) returns this.
+        internal const int GroundZ           = 0x0BC; // float — READ ONLY; floor/ground Z under the enemy (subtracted to get HeightAboveGround; also positions the CHitMark spark in CheckDmg). ~10 in DBC; shifts as the enemy slides.
 
         // ── Attack Phase & Hit Events ─────────────────────────────────────────
         // AttackPhase is -1 at rest; flips to 0 during the active hitbox window of an attack.
@@ -455,14 +467,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int AmbientBaseR      = 0x140; // float — ambient RED (scene ambient via MGGetAmbient, flash-blended); was BehaviorRangeX
         internal const int AmbientBaseG      = 0x144; // float — ambient GREEN; was BehaviorRangeY
         internal const int AmbientBaseB      = 0x148; // float — ambient BLUE; was BehaviorRangeZ
-        internal const int AmbientBaseA      = 0x14C; // float — ambient ALPHA (4th float of the MGGetAmbient vector; ~128; apply uses Opacity 0x120 instead, so inert here); was Unk14C
+        internal const int AmbientBaseA      = 0x14C; // float — ambient ALPHA (4th float of the MGGetAmbient vector; ~128; apply uses Opacity 0x120 instead, so inert here)
 
         // 0x150-0x158: the enemy's STATUS-TINT ambient color (R/G/B). CheckDmg sets it per-frame from the active
         // status condition — Freeze (slot+0x08) → (160,160,160) icy-white; Gooey (+0x14) → (0,37.5,63.8) teal;
         // Poison (+0x0C) / Stamina (+0x10) → their own colors — and flags slot+0x160. PalletSet then applies it to
         // the model's ambient light via MGSetAmbient, overriding the base ambient (0x140-0x148). 0,0,0 = no status =
         // no tint; this is the visual "frozen/poisoned/etc." glow. (The 127.5/80.0/15.0 once seen on Auntie Medu was
-        // just an active status tint.) Were Unk150/154/158.
+        // just an active status tint.)
         internal const int StatusTintR       = 0x150; // float — status-tint ambient RED   (0 = no status); see comment
         internal const int StatusTintG       = 0x154; // float — status-tint ambient GREEN (0 = no status)
         internal const int StatusTintB       = 0x158; // float — status-tint ambient BLUE  (0 = no status)
@@ -488,8 +500,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int HitFacingW        = 0x17C; // READ ONLY — float; W of the hit-facing vector (1.0 at rest = point, 0.0 on hit = direction)
         // Knockback impulse (the active force): set on a hit to (weapon hit-force × the species' record KnockbackMult,
         // record +0x098); each frame Step__CMonstorUnit feeds it into the enemy's velocity (slot+0x80) and subtracts
-        // KnockbackDecay (0x184) until it reaches 0. Higher = bigger launch. 0.0 at rest. (Was Unk180; the prior
-        // "1.0 on hit" observation was just weaponForce×1.0 for a stock Skeleton Soldier.) The per-enemy KnockbackMult
+        // KnockbackDecay (0x184) until it reaches 0. Higher = bigger launch. 0.0 at rest. The per-enemy KnockbackMult
         // copy lives at slot+0x188.
         internal const int KnockbackForce    = 0x180; // float — active knockback impulse, set on hit, decays to 0; see comment
         // Knockback DECAY rate: subtracted from KnockbackForce (0x180) every frame, so HIGHER = the impulse drains
@@ -569,11 +580,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int WindRes    = 0x05C; // short  — wind resistance
         internal const int HolyRes    = 0x05E; // short  — holy resistance
 
-        // +0x060: CONFIRMED entity/collision radius. Varies 2.0–45.0 per enemy species. Copied to
-        // slot EntityScale (0x044) and EntityScaleCopy (0x048) at spawn. Earlier analysis
-        // mistakenly labeled this field Unk00C and assigned EntityScale to the 1.0f constant at
-        // 0x098; this is the corrected placement.
-        internal const int EntityScale = 0x060; // float  — entity/collision radius copied to slot at spawn
+        // +0x060: the enemy's PHYSICAL (movement) collision radius — NOT the combat hitbox. Varies 2.0–45.0 per
+        // species; copied to slot EntityScale (0x044) and EntityScaleCopy (0x048) at spawn. Used by MoveCheck/
+        // MoveCheck2/MoveChecMonster for navigation/separation and by CheckDmg for the hit-effect radius. The combat
+        // hittable/attack collision is a separate, STB-driven system (_SET_BODY_COL/_SET_DMG_COL). See EnemySlotOffsets.EntityScale.
+        internal const int EntityScale = 0x060; // float  — physical/movement collision radius (copied to slot at spawn); not the attack hitbox
 
         // ════════════════════════════════════════════════════════════════════════════════════════════
         // ENEMY → PLAYER DAMAGE (how hard an enemy hits) — RE'd 2026-06-19. The applied damage is computed
