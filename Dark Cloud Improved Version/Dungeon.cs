@@ -131,8 +131,7 @@ namespace Dark_Cloud_Improved_Version
                 BossScriptPatcher.Tick();
                 BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
                 LogBufferUsage();   // DEBUG (DebugBufferUsage): model/script load-buffer used vs capacity — runs during load to catch a hang
-                EnemyModelInjector.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor roster + buffer used/cap, to size species
-                if (EnemyModelInjector.MeasureBufferMode && Player.InDungeonFloor()) GiveFloorKeyAndMap();   // measure: keep map + gate key so floors can be blitzed
+                EnemyModelInjector.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor randomized roster + buffer used/cap
                 // Drives "spawn roster resets on floor change": reverts SetSpawnRoster* edits to vanilla once
                 // the player leaves the floor the roster was applied to. No-op unless a roster is staged.
                 EnemyModelInjector.NotifyInFloor(Player.InDungeonFloor());
@@ -573,29 +572,6 @@ namespace Dark_Cloud_Improved_Version
         /// <br>5 = Gallery of Time</br>
         /// <br>6 = Demon Shaft</br></param>
         /// <returns></returns>
-        // MEASURE MODE helper (called every tick on a floor): reveal the map and keep the dungeon's gate key(s) in the
-        // bag, so the player can run straight to the gate and descend — to walk floors fast for footprint measuring.
-        // Re-asserted per tick because the game resets the map flag each frame; key written by direct bag scan
-        // (Player.Inventory.GetBagItemsFirstAvailableSlot has odd active-item-counting logic that can return -1).
-        private static void GiveFloorKeyAndMap()
-        {
-            Memory.WriteByte(Addresses.map, 1);          // reveal the full floor map
-            Memory.WriteByte(Addresses.miniMap, 1);      // and the minimap
-            Memory.WriteByte(Addresses.magicCrystal, 1); // and the magic crystal (enemy/feature markers)
-            byte invSize = Memory.ReadByte(0x21CDD8AC);   // inventoryTotalSize
-            foreach (byte keyItem in GetDungeonGateKey(currentDungeon))
-            {
-                int emptySlot = -1; bool have = false;
-                for (int slot = 0; slot < invSize + 2; slot++)
-                {
-                    int cur = Memory.ReadUShort(Addresses.firstBagItem + 0x2 * slot);
-                    if (cur == keyItem) { have = true; break; }
-                    if (emptySlot < 0 && (cur < 129 || cur > 256)) emptySlot = slot;   // bag items are ids 129..256; else empty
-                }
-                if (!have && emptySlot >= 0) Memory.WriteUShort(Addresses.firstBagItem + 0x2 * emptySlot, keyItem);
-            }
-        }
-
         public static List<byte> GetDungeonGateKey(byte dungeon)
         {
             List<byte> key = new List<byte>();
