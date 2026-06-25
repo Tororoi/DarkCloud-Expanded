@@ -356,6 +356,20 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadInt(ChestAddresses.ChestStateTable.SlotAddr(i, ChestStateOffsets.Type)) == -1) return i;
             return -1;
         }
+        // True if an active mimic chest (STATE.Type==8 → its linked BOX) is already linked to this enemy slot —
+        // i.e. the engine made a native SetMimicEvent chest at spawn, or we already placed a decoy for it.
+        private static bool MimicChestExistsForEnemy(int enemySlot)
+        {
+            for (int st = 0; st < ChestAddresses.ChestStateTable.Capacity; st++)
+            {
+                if (Memory.ReadInt(ChestAddresses.ChestStateTable.SlotAddr(st, ChestStateOffsets.Type)) != 8) continue;
+                int box = Memory.ReadInt(ChestAddresses.ChestStateTable.SlotAddr(st, ChestStateOffsets.BoxLink));
+                if (box < 0 || box >= ChestAddresses.ChestSlots.Capacity) continue;
+                if (Memory.ReadInt(ChestAddresses.ChestSlots.SlotAddr(box, ChestSlotOffsets.ActiveFlag)) == 0) continue;
+                if (Memory.ReadInt(ChestAddresses.ChestSlots.SlotAddr(box, ChestSlotOffsets.EntityId)) == enemySlot) return true;
+            }
+            return false;
+        }
 
         /// <summary>
         /// Registers a closed-chest disguise for every dormant roster mimic on the floor that doesn't have one
@@ -382,6 +396,15 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (_mimicWaitLogged.Add(s))
                         Console.WriteLine($"[MimicChest] slot {s} mimic CCharacter pos still 0,0,0 — waiting for spawn placement.");
+                    continue;
+                }
+                // PREVENT the duplicate at the source: if this mimic slot already has a mimic chest (Type 8 box
+                // linked to it — either a native SetMimicEvent chest the engine made at spawn, or one we already
+                // placed), do NOT add a second. Both link BOX.EntityId = enemy slot, so we can match exactly.
+                if (MimicChestExistsForEnemy(s))
+                {
+                    Console.WriteLine($"[MimicChest] slot {s} already has a mimic chest — not adding a decoy.");
+                    _mimicChestDone.Add(s);
                     continue;
                 }
                 Console.WriteLine($"[MimicChest] slot {s} mimic placed (CCharacter) at ({px:F1},{pz:F1},{py:F1}) — creating chest.");
@@ -423,6 +446,7 @@ namespace Dark_Cloud_Improved_Version
             }
             return made;
         }
+
 
         /// <summary>Snapshots a species record (full 0x9C) once, before the first edit to it.</summary>
         internal static void SnapshotSpeciesRecordIfNeeded(int tableIndex)
@@ -484,7 +508,10 @@ namespace Dark_Cloud_Improved_Version
         // machinery (so roster mimics still render as chests) and is marked dungeon-wide so NotifyInFloor doesn't
         // revert it per-floor. The (mostly non-native) enemies are rescaled to the dungeon's level by EnemyStatNormalizer.
         internal static bool RandomizeEnemies = false;
-        private const double MimicChance = 0.33, KingMimicChance = 0.25;
+        private const double MimicChance = 0.50, KingMimicChance = 0.33;
+        // Distinct species per floor. Normally BtEnemyLayout.EntriesPerFloor (9). (Temporarily lowered to 8 while
+        // debugging the load-buffer hang; back to 9 now to reproduce it with the buffer-usage logging.)
+        private const int RosterFillCount = BtEnemyLayout.EntriesPerFloor;
         private static readonly System.Random _randomizerRng = new System.Random();
         private static int[] _eligiblePool;                       // TableIndices of eligible enemies (base + enhanced; no bosses/mimics)
         private static (int mimic, int king)[] _mimicByDungeon;   // per dungeon (0..6): native mimic + king-mimic TableIndex
@@ -496,16 +523,21 @@ namespace Dark_Cloud_Improved_Version
         private static readonly System.Collections.Generic.Dictionary<int, (int[] normal, int[] ura)> _stagedFloors = new();
         private static int _menuFloor = -1;   // the single floor currently staged from the floor-select menu (the highlighted one)
 
+        private static System.Collections.Generic.Dictionary<int, (string code, string name)> _speciesByTI;
+
         private static void EnsureRandomizerData()
         {
             if (_eligiblePool != null) return;
             var pool = new System.Collections.Generic.List<int>();
+            _speciesByTI = new System.Collections.Generic.Dictionary<int, (string, string)>();
             foreach (var fld in typeof(EnemySpecies).GetFields(System.Reflection.BindingFlags.Static
                          | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
             {
                 if (fld.FieldType != typeof(EnemyDefaults)) continue;
                 var e = (EnemyDefaults)fld.GetValue(null);
-                if (e.TableIndex == null || e.Id == 0) continue;
+                if (e.TableIndex == null) continue;
+                _speciesByTI[e.TableIndex.Value] = (e.ModelCode ?? "?", e.Name ?? "?");   // for buffer-sample logging
+                if (e.Id == 0) continue;
                 if (string.IsNullOrEmpty(e.ModelCode) || e.ModelCode[0] != 'e') continue;   // regular enemy mesh only (skip 'c' bosses/effects)
                 if (e.Name != null && e.Name.Contains("Mimic")) continue;                    // mimics handled separately (per dungeon, weighted)
                 if (EnemySpecies.BossEnemies.ContainsKey(e.Id)) continue;                    // exclude bosses + companions (e.g. IceArrow) by Id
@@ -523,6 +555,60 @@ namespace Dark_Cloud_Improved_Version
             _mimicByDungeon[6] = (EnemySpecies.MimicDS.TableIndex.Value,  EnemySpecies.KingMimicDS.TableIndex.Value);
 
             Console.WriteLine($"[Randomizer] eligible pool: {_eligiblePool.Length} species.");
+        }
+
+        // ── DEBUG: per-floor model-buffer footprint sampling (to size species for budget-aware selection) ─────────
+        // Once a floor's load settles (model-buffer `used` stops climbing), log one line: the loaded roster (9
+        // TableIndexes → ModelCode/Name) + the model buffer used/cap. Each floor = one data point (sum of its 9
+        // species' footprints = used); collect across floors and solve per-species offline. Captures hangs too
+        // (used stalls at the stuck value). The buffer struct (from SetDataBuffer): used@+0x8, cap@+0xC.
+        internal static bool DebugBufferSamples = true;
+        private const long ModelBufUsed = 0x21F066D8, ModelBufCap = 0x21F066DC;
+        private static int _sampKey = -1, _sampLastUsed = -1, _sampStable = 0;
+        private static int _sampMin = int.MaxValue, _sampPrevUsed = -1;
+        private static bool _sampDone;
+        internal static void SampleBufferUsage()
+        {
+            if (!DebugBufferSamples) return;
+            if (!Player.InDungeonFloor()) { _sampKey = -1; return; }
+            int dungeon = Memory.ReadByte(Addresses.checkDungeon);
+            int floor   = Memory.ReadByte(Addresses.checkFloor);
+            int back    = Memory.ReadByte(Addresses.dunBackFloorFlag) != 0 ? 1 : 0;
+            if (dungeon < 0 || dungeon >= BtEnemyLayout.DungeonCount) return;
+            int key = (dungeon << 16) | (floor << 8) | back;
+            if (key != _sampKey) { _sampKey = key; _sampLastUsed = -1; _sampStable = 0; _sampMin = int.MaxValue; _sampDone = false; }
+            if (_sampDone) return;
+            // Boss/event floors aren't staged (vanilla roster) — sampling them logs garbage AND, in measure mode,
+            // advances the cycle without measuring (skipping species). Skip them: mark done, don't log/advance.
+            var excl = Dungeon.GetDungeonEventFloors((byte)dungeon);
+            if (excl != null && excl.Contains((byte)floor)) { _sampDone = true; return; }
+
+            int used = Memory.ReadInt(ModelBufUsed), cap = Memory.ReadInt(ModelBufCap);
+            if (used <= 0 || cap <= 0 || cap > 8_000_000) return;          // wait for a sane, loaded buffer
+            if (used < _sampMin) _sampMin = used;                          // track this floor's reset/low watermark
+            if (used == _sampLastUsed) _sampStable++; else { _sampStable = 0; _sampLastUsed = used; }
+            if (_sampStable < 40) return;                                  // settled (~1s+ of no change)
+            // Confirm the buffer actually (re)loaded for THIS floor rather than still holding the previous floor's
+            // value (stale read). Accept if: the value differs from the last sample (a different model loaded), OR
+            // the buffer was seen to reset (min < half the settled value — catches genuinely same-size reloads), OR
+            // it's been stable a long time (a pending reload would have happened by now). Ptr-independent (the
+            // allocator reuses addresses for small single-species loads, which broke the earlier ptr-based gate).
+            if (used == _sampPrevUsed && _sampMin >= used / 2 && _sampStable < 200) return;
+            _sampDone = true;
+            _sampPrevUsed = used;
+
+            EnsureRandomizerData();
+            int layoutBase = back != 0 ? BtEnemyLayout.UraLayoutBase[dungeon] : BtEnemyLayout.LayoutBase[dungeon];
+            var parts = new System.Collections.Generic.List<string>();
+            for (int e = 0; e < BtEnemyLayout.EntriesPerFloor; e++)
+            {
+                int ti = Memory.ReadInt(BtEnemyLayout.EntryAddress(layoutBase, floor, e) + BtEnemyLayout.Id);
+                if (ti < 0) { parts.Add("-1"); continue; }
+                parts.Add(_speciesByTI != null && _speciesByTI.TryGetValue(ti, out var sp) ? $"{ti}:{sp.code}:{sp.name}" : $"{ti}:?");
+            }
+            Console.WriteLine($"[BufferSample] dun={dungeon} floor={floor} back={back} used={used} cap={cap} "
+                + $"species=[{string.Join(" | ", parts)}]");
+            AdvanceMeasure();   // measure mode: this floor is done — next staged floor uses the next species
         }
 
         /// <summary>
@@ -579,11 +665,21 @@ namespace Dark_Cloud_Improved_Version
 
             var (mimicTI, kingTI) = _mimicByDungeon[dungeon];
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
+            // MEASURE MODE: stage ONE species (same in both layouts) per floor, cycling — so [BufferSample]'s `used`
+            // is that one species' footprint (minus the empty-floor baseline). _measureIdx advances once per floor.
+            int measTI = MeasureBufferMode ? CurrentMeasureSpecies() : 0;
+            if (MeasureBufferMode && measTI >= 0)
+            {
+                // Make the measured species repeatable so the single-species floor can fill its 15 slots — some
+                // species are spawn-once (e.g. Gacious) and only one spawns, hanging the floor. Snapshot-reverted.
+                SnapshotSpeciesRecordIfNeeded(measTI);
+                Memory.WriteInt(EnemySpeciesTable.RecordAddress(measTI) + EnemySpeciesTable.SpawnCap, 0);
+            }
             var snap = new int[2][];   // [0]=normal, [1]=Ura — captured vanilla Ids for restore
             for (int b = 0; b < 2; b++)
             {
                 snap[b] = new int[BtEnemyLayout.EntriesPerFloor];
-                int[] roster = BuildFloorRoster(mimicTI, kingTI);   // independent roll per layout
+                int[] roster = MeasureBufferMode ? SingleSpeciesRoster(measTI) : BuildFloorRoster(mimicTI, kingTI);
                 for (int entry = 0; entry < BtEnemyLayout.EntriesPerFloor; entry++)
                 {
                     long addr = BtEnemyLayout.EntryAddress(bases[b], floor, entry) + BtEnemyLayout.Id;
@@ -592,8 +688,52 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
             _stagedFloors[floor] = (snap[0], snap[1]);
-            Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
-                + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}.");
+            if (MeasureBufferMode)
+                Console.WriteLine($"[Measure] dungeon {dungeon} floor {floor}: single species {measTI} "
+                    + $"(idx {_measureIdx % _measureList.Length}/{_measureList.Length}).");
+            else
+                Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
+                    + $"native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}.");
+        }
+
+        // ── MEASURE MODE: single-species footprint cycling ───────────────────────────────────────────────────────
+        // Enable to size every species' model-buffer footprint: each floor loads exactly ONE species (the rest empty)
+        // so [BufferSample]'s `used` = baseline + that species. The list starts with -1 (empty floor) to measure the
+        // baseline, then every eligible species + the 14 mimics/kings. Descend floors to walk the list.
+        internal static bool MeasureBufferMode = true;   // DEBUG: single-species footprint measurement (needs RandomizeEnemies on)
+        private static int[] _measureList;
+        private static int _measureIdx;
+        // The species the CURRENT floor measures. Does NOT advance here — AdvanceMeasure() (called once per floor that
+        // actually loads, from SampleBufferUsage) does — so floor-select hovering reuses the same species instead of
+        // burning through the list. (Baseline isn't cycled here; it's derived offline from the 9-species floor samples
+        // + these single-species totals: baseline = (Σused_single − used_floor)/(N−1).)
+        // Already-measured TableIndexes (footprints recorded in /enemy-model-buffer-footprints.md) — skipped so a
+        // measure run continues with the unmeasured species. ALL species TI 0..166 are now measured (complete set,
+        // incl. composite Black Knight rider c21a + mount c22a).
+        private static readonly System.Collections.Generic.HashSet<int> _measuredTI =
+            new(System.Linq.Enumerable.Range(0, 167));
+        private static int CurrentMeasureSpecies()
+        {
+            if (_measureList == null)
+            {
+                // EVERY species with a TableIndex (eligible + mimics + companions + bosses) for a complete footprint
+                // set. Bosses load fine here because the spawn-cap fix below forces the measured species to repeatable
+                // (multiple instances), so the floor fills. Already-measured ones are skipped.
+                var list = new System.Collections.Generic.List<int>(_speciesByTI.Keys);
+                list.Sort();
+                _measureList = list.ToArray();
+            }
+            // skip species already measured (deterministic, so floor-select hovering is still idempotent)
+            for (int g = 0; g < _measureList.Length && _measuredTI.Contains(_measureList[_measureIdx % _measureList.Length]); g++)
+                _measureIdx++;
+            return _measureList[_measureIdx % _measureList.Length];
+        }
+        private static void AdvanceMeasure() { if (MeasureBufferMode && _measureList != null) _measureIdx++; }
+        private static int[] SingleSpeciesRoster(int ti)
+        {
+            var r = new int[BtEnemyLayout.EntriesPerFloor];
+            for (int i = 0; i < r.Length; i++) r[i] = (i == 0) ? ti : -1;
+            return r;
         }
 
         // One floor's 9-entry roster: weighted native mimic/king (each at most once), the rest distinct random eligible.
@@ -602,11 +742,12 @@ namespace Dark_Cloud_Improved_Version
             var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
             if (_randomizerRng.NextDouble() < MimicChance)     roster.Add(mimicTI);
             if (_randomizerRng.NextDouble() < KingMimicChance) roster.Add(kingTI);
-            while (roster.Count < BtEnemyLayout.EntriesPerFloor)
+            while (roster.Count < RosterFillCount)
             {
                 int pick = _eligiblePool[_randomizerRng.Next(_eligiblePool.Length)];
                 if (!roster.Contains(pick)) roster.Add(pick);   // distinct entries → even spawn distribution
             }
+            while (roster.Count < BtEnemyLayout.EntriesPerFloor) roster.Add(-1);   // TEST: leave remaining entries empty (Id -1)
             return roster.ToArray();
         }
 

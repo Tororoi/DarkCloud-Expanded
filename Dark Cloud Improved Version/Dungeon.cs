@@ -90,6 +90,28 @@ namespace Dark_Cloud_Improved_Version
         public static Thread dunEscapeConfirmThread;
 
         public static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
+
+        // DEBUG: model + script load-buffer usage. SetupBaseModel loads each roster species' mesh into the
+        // MonstorModelBuffer (CDataAlloc2 @ PS2 0x01F066D0 → 0x21F066D0) and its AI script into MonstorScriptBuffer
+        // (0x21F066E0). From SetDataBuffer's disasm each CDataAlloc2 is { +0x0 bufPtr, +0x8 used, +0xC capacity }
+        // (model cap = 1,690,000). Logs on change so we watch both fill during a floor load and see the last state
+        // before a hang (an over-budget roster overflows one of these). Set false to silence.
+        internal static bool DebugBufferUsage = true;
+        private static uint[] _bufLast;
+        private static void LogBufferUsage()
+        {
+            if (!DebugBufferUsage) return;
+            uint[] w = Memory.ReadUIntBatch(0x21F066D0, 8);   // model struct (4 words) + script struct (4 words)
+            if (w == null || w.Length != 8) return;
+            if (_bufLast != null && w[0] == _bufLast[0] && w[2] == _bufLast[2] && w[3] == _bufLast[3]
+                && w[4] == _bufLast[4] && w[6] == _bufLast[6] && w[7] == _bufLast[7]) return;   // gate on ptr/used/cap of both
+            _bufLast = w;
+            string pct(uint used, uint cap) => cap != 0 ? $"{100.0 * (int)used / (int)cap:F1}%" : "n/a";
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[Buffer] model@0x21F066D0 ptr=0x{w[0]:X8} used={(int)w[2]} cap={(int)w[3]} ({pct(w[2], w[3])})  |  " +
+                $"script@0x21F066E0 ptr=0x{w[4]:X8} used={(int)w[6]} cap={(int)w[7]} ({pct(w[6], w[7])})");
+        }
+
         public static void InsideDungeonThread()
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Dungeon Thread Activated");
@@ -108,6 +130,9 @@ namespace Dark_Cloud_Improved_Version
                 // loaded c16a.stb before the boss spawns. No-op unless a c16a boss is in the roster.
                 BossScriptPatcher.Tick();
                 BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
+                LogBufferUsage();   // DEBUG (DebugBufferUsage): model/script load-buffer used vs capacity — runs during load to catch a hang
+                EnemyModelInjector.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor roster + buffer used/cap, to size species
+                if (EnemyModelInjector.MeasureBufferMode && Player.InDungeonFloor()) GiveFloorKeyAndMap();   // measure: keep map + gate key so floors can be blitzed
                 // Drives "spawn roster resets on floor change": reverts SetSpawnRoster* edits to vanilla once
                 // the player leaves the floor the roster was applied to. No-op unless a roster is staged.
                 EnemyModelInjector.NotifyInFloor(Player.InDungeonFloor());
@@ -548,6 +573,29 @@ namespace Dark_Cloud_Improved_Version
         /// <br>5 = Gallery of Time</br>
         /// <br>6 = Demon Shaft</br></param>
         /// <returns></returns>
+        // MEASURE MODE helper (called every tick on a floor): reveal the map and keep the dungeon's gate key(s) in the
+        // bag, so the player can run straight to the gate and descend — to walk floors fast for footprint measuring.
+        // Re-asserted per tick because the game resets the map flag each frame; key written by direct bag scan
+        // (Player.Inventory.GetBagItemsFirstAvailableSlot has odd active-item-counting logic that can return -1).
+        private static void GiveFloorKeyAndMap()
+        {
+            Memory.WriteByte(Addresses.map, 1);          // reveal the full floor map
+            Memory.WriteByte(Addresses.miniMap, 1);      // and the minimap
+            Memory.WriteByte(Addresses.magicCrystal, 1); // and the magic crystal (enemy/feature markers)
+            byte invSize = Memory.ReadByte(0x21CDD8AC);   // inventoryTotalSize
+            foreach (byte keyItem in GetDungeonGateKey(currentDungeon))
+            {
+                int emptySlot = -1; bool have = false;
+                for (int slot = 0; slot < invSize + 2; slot++)
+                {
+                    int cur = Memory.ReadUShort(Addresses.firstBagItem + 0x2 * slot);
+                    if (cur == keyItem) { have = true; break; }
+                    if (emptySlot < 0 && (cur < 129 || cur > 256)) emptySlot = slot;   // bag items are ids 129..256; else empty
+                }
+                if (!have && emptySlot >= 0) Memory.WriteUShort(Addresses.firstBagItem + 0x2 * emptySlot, keyItem);
+            }
+        }
+
         public static List<byte> GetDungeonGateKey(byte dungeon)
         {
             List<byte> key = new List<byte>();
