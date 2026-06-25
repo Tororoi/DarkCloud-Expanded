@@ -539,7 +539,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealFlag));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResA,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResA));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResB,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResB));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.AttackPower,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.AttackPower));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.RareDropItemId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.RareDropItemId));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkFire,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkFire));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkIce,     Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkIce));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkThunder, Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkThunder));

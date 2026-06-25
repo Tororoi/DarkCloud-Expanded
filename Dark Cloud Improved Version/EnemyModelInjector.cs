@@ -190,13 +190,10 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteInt(BtEnemyLayout.EntryAddress(layoutBase, floor, entry) + BtEnemyLayout.Id, -1);
                 }
             }
-            // De-sentinel boss-class species before the floor spawns it. AttackPower == 65535 in the
-            // species record is the "boss-class" marker; it makes the engine run boss-spawn handling
-            // (arena-origin placement + encounter/arena setup) that stalls a normal floor load (black
-            // screen). Setting it to a normal value (100) makes the engine spawn it as an ordinary
-            // enemy. This edits the shared species record (persists for the session, like RedirectEnemyModel).
-            // A single-species roster MUST be repeatable, or ArrangementPos can't fill the floor and hangs
-            // (the spawn-once retry trap). Force SpawnCap repeatable, then regularize if it's a boss.
+            // Tame a boss-class species before the floor spawns it. Boss detection is by ModelCode 'c'
+            // inside RegularizeBossRecord. This edits the shared species record (persists for the session, like
+            // RedirectEnemyModel). A single-species roster MUST be repeatable, or ArrangementPos can't fill
+            // the floor and hangs (the spawn-once retry trap). Force SpawnCap repeatable, then regularize.
             SnapshotSpeciesRecordIfNeeded(tableIndex);
             Memory.WriteInt(EnemySpeciesTable.RecordAddress(tableIndex) + EnemySpeciesTable.SpawnCap, 0);
             RegularizeBossRecord(tableIndex);
@@ -214,15 +211,13 @@ namespace Dark_Cloud_Improved_Version
                 + $"TableIndex {tableIndex} on every spawn. Re-enter a floor to see it.");
         }
 
-        // De-sentinels a boss-class record's AttackPower (65535 -> 100) so it isn't treated as a melee
-        // one-shot. (The boss-spawn origin-displacement is NOT driven by the attack-block fields — tested.)
+        // Tames a boss-class record so a sandbox spawn isn't a damage sponge: lowers HP to 50. Gated on
+        // RareDropItemId==65535 ("no signature drop"), which bosses have, as a cheap boss heuristic. 
         private static void RegularizeBossRecord(int tableIndex)
         {
             long rec = EnemySpeciesTable.RecordAddress(tableIndex);
-            if (Memory.ReadUShort(rec + EnemySpeciesTable.AttackPower) != 65535) return;
-            // Memory.WriteUShort(rec + EnemySpeciesTable.AttackPower, 100);
+            if (Memory.ReadUShort(rec + EnemySpeciesTable.RareDropItemId) != 65535) return;
             Memory.WriteUShort(rec + EnemySpeciesTable.MaxHp, 50);
-            // Console.WriteLine($"[EnemyInjector] de-sentineled AttackPower (65535->100) for TableIndex {tableIndex}.");
         }
 
         internal static void SetPopulationTarget(int pop)
@@ -795,14 +790,13 @@ namespace Dark_Cloud_Improved_Version
             {
                 long rec = EnemySpeciesTable.RecordAddress(tableIndices[i]);
                 // Boss-class = ModelCode starts with 'c' (cNNx); stable across RegularizeBossRecord (which
-                // only touches AttackPower). Multi-part bosses share one skeleton, so >1 instance glitches —
+                // only lowers HP). Multi-part bosses share one skeleton, so >1 instance glitches —
                 // force them spawn-once regardless of the '!' flag.
                 bool isBossClass = Memory.ReadByte(rec + EnemySpeciesTable.ModelCode) == (byte)'c';
                 bool isOnce = (spawnOnce != null && i < spawnOnce.Length && spawnOnce[i]) || isBossClass;
                 SnapshotSpeciesRecordIfNeeded(tableIndices[i]);
                 Memory.WriteInt(rec + EnemySpeciesTable.SpawnCap, isOnce ? 2 : 0);
-                // De-sentinel ONLY the boss (cNNx). Companions are sentinels by design (AttackPower 65535 = effect
-                // entity, not a melee attacker); de-sentineling them breaks their attack behavior.
+                // Tame ONLY the boss (cNNx) — lowers its HP. Companions are left untouched so their behavior is intact.
                 if (isBossClass) RegularizeBossRecord(tableIndices[i]);
                 // Arm the script patch for the first boss that has a known _INITIALIZE fix (Dran/Master Utan/
                 // MinotaurJoe/c22a). Other 'c' bosses still spawn (spawn-once) but may be displaced — WIP.

@@ -364,7 +364,7 @@ namespace Dark_Cloud_Improved_Version
         // much damage the enemy TAKES, and are the real per-dungeon DURABILITY scalers (e.g. Mimic DBC 1/10 ->
         // Moon Sea 8/30). CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them: low is subtracted from incoming
         // damage (flat reduction), high is passed to SwordDmgCheck1 (the player-weapon damage check). See the
-        // ATTACK/DAMAGE block above EnemySpeciesTable.AttackPower for the full enemy→player formula.
+        // ENEMY → PLAYER DAMAGE block above EnemySpeciesTable.DamageReduction for the full enemy→player formula.
         internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
         internal const int HitStunTimer      = 0x098; // int   — 0 at rest; set to a positive value on hit (e.g. 966 observed); presumably a stun or invincibility-frame countdown
@@ -549,10 +549,21 @@ namespace Dark_Cloud_Improved_Version
         // 0x098; this is the corrected placement.
         internal const int EntityScale = 0x060; // float  — entity/collision radius copied to slot at spawn
 
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+        // ENEMY → PLAYER DAMAGE (how hard an enemy hits) — RE'd 2026-06-19. The applied damage is computed
+        // in BtCheckDamageProc (dun overlay 0x01DBAFD0) as:
+        //     damage = baseAttack − playerDefense      (clamped > 0; halved in some block/guard cases)
+        //     then applied via AddNowLife(player, −damage)  (ELF 0x1BE710)
+        // baseAttack is set PER-ATTACK by the enemy's STB behavior script (via the _SET_DMG_PARA command,
+        // ELF 0x1E3FD0) — it is NOT read from any species-table field. So per-dungeon attack strength lives
+        // in each species' STB script, and normalizing it would require runtime STB patching (BossScript-
+        // Patcher-style), not a field write. DURABILITY (HP + DamageReduction/WeaponDefense) IS field-driven.
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+
         // +0x064/+0x066: the enemy DEFENSE pair, copied into the live slot's DefenseStats (0x090) low/high at
         // spawn. CONFIRMED 2026-06-19 (damage RE) as the real per-dungeon DURABILITY scalers — they grow with
-        // dungeon depth where the attack fields stay flat (e.g. regular Mimic: DBC 1/10 → WOF 2/10 → SW 5/20 →
-        // Moon Sea 8/30). CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them when the enemy TAKES damage:
+        // dungeon depth (e.g. regular Mimic: DBC 1/10 → WOF 2/10 → SW 5/20 → Moon Sea 8/30).
+        // CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them when the enemy TAKES damage:
         //   DamageReduction (0x064): subtracted from the incoming damage (flat reduction; halved for one damage
         //     type). Higher = enemy takes less damage.
         //   WeaponDefense   (0x066): passed as the int arg to SwordDmgCheck1 (the player-weapon damage check);
@@ -591,44 +602,27 @@ namespace Dark_Cloud_Improved_Version
         internal const int ItemResA   = 0x084; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance
         internal const int ItemResB   = 0x086; // ushort — item resistance B
 
-        // ════════════════════════════════════════════════════════════════════════════════════════════
-        // ENEMY → PLAYER DAMAGE (how hard an enemy hits) — RE'd 2026-06-19. KEY RESULT: AttackPower below
-        // does NOT control actual hit damage. The applied damage is computed in BtCheckDamageProc (dun
-        // overlay 0x01DBAFD0) as:
-        //     damage = baseAttack − playerDefense      (clamped > 0; halved in some block/guard cases)
-        //     then applied via AddNowLife(player, −damage)  (ELF 0x1BE710)
-        // baseAttack is set PER-ATTACK by the enemy's STB behavior script (via the _SET_DMG_PARA command,
-        // ELF 0x1E3FD0) — it is NOT read from any species-table field. Proof: across all regular mimics
-        // (which hit for very different amounts) every attack field here is IDENTICAL (AttackPower=235,
-        // all elementals=100); only HP (0x050), DamageReduction (0x064), WeaponDefense (0x066), XP (0x06C)
-        // and gold (0x070) differ. So per-dungeon attack strength lives in each species' STB script, and
-        // normalizing it would require runtime STB patching (BossScriptPatcher-style), not a field write.
-        // DURABILITY (HP + DamageReduction/WeaponDefense) IS field-driven and can be normalized directly.
-        // ════════════════════════════════════════════════════════════════════════════════════════════
+
         //
-        // +0x088: base melee attack power. Regular enemies: 82–200. Bosses: 65535 (sentinel; use
-        // only behavior-script attacks). 0 if enemy has no melee attack (e.g. pure-projectile flyers).
-        // NOTE: this field is NOT the real hit damage (see the block above) — treat it as a category marker.
-        // +0x08A–+0x094: six elemental attack-output multipliers in the same element order as the
-        // resistance fields: [fire, ice, thunder, wind, holy, unknown(dark?)]. Scale: 100=neutral,
-        // >100=enemy's primary attack element, <100=reduced output of that element.
-        // Example: thunder-beast eid=12 → [50,50,120,50,50,50] (strong thunder, weak others).
-        // Bosses (atk=65535) all have these at 0; pure-projectile enemies may have them at 0 too.
-        //
-        // IMPORTANT — AttackPower = 65535 does NOT drive the boss-defeat sequence by itself.
-        // It is a sentinel that signals "boss-class enemy" to the engine (no melee damage), but the
-        // defeat callback that triggers the exit cutscene lives in the SpeciesDataPtr behavior block.
-        // ModelCodeCopy (0x040) determines which behavior script the engine dispatches; that script
-        // contains the on-death hook pointer that ultimately calls the defeat function at ELF 0x0F5DF0.
-        // Writing 150 to AttackPower on a redirected boss slot prevents melee one-shots but does NOT
-        // prevent the defeat sequence from firing — the callback is loaded independently of this field.
-        internal const int AttackPower    = 0x088; // ushort — base melee attack power; 82–200 normal; 0 no melee; 65535 boss (sentinel only, see block comment)
-        internal const int ElemAtkFire    = 0x08A; // ushort — fire    attack multiplier (100=neutral)
-        internal const int ElemAtkIce     = 0x08C; // ushort — ice     attack multiplier
-        internal const int ElemAtkThunder = 0x08E; // ushort — thunder attack multiplier (spike for rock/beast/metal/mimic categories)
-        internal const int ElemAtkWind    = 0x090; // ushort — wind    attack multiplier
-        internal const int ElemAtkHoly    = 0x092; // ushort — holy    attack multiplier
-        internal const int ElemAtkDark    = 0x094; // ushort — dark(?) attack multiplier; 20 for some physical types
+        // +0x088: RARE DROP ITEM ID — the enemy's signature bonus drop. RE'd 2026-06-24 by full-ELF dataflow:
+        // SetupViewMonstor (ELF 0x1E02B0) copies this to live enemy slot +0xE0 at spawn;
+        // CMonstorUnit::Step's death-drop block (gated at ELF 0x1DF4C0) is the ONLY reader —
+        // with a rand() < ~10% roll it seeds ForceItemDrop (slot +0xA0) = this id, then
+        // SetGateKey-Stack (ELF 0x1B5680, a 32-entry de-dupe set so a unique item drops only once) + CRandomItem::Set
+        // (ELF 0x1D71F0) spawn it; if unset the enemy does its normal random drop (SelectAttachi).
+        // King Mimic = 181 = "Treasure Chest Key", regular Mimic = 235 = "Dran's Feather" (ItemNameTbl).
+        // Bosses = 65535 (= -1 signed) = "no signature drop" — that −1 is why the engine skips the block.
+        // +0x08A–+0x094: formerly labeled "6 elemental attack multipliers" — DEBUNKED in the same RE pass.
+        // The engine NEVER reads +0x08C..+0x094 (dead data). +0x08A is read once at spawn (SetupViewMonstor
+        // ELF 0x1e1410) into a per-slot indexed array; role unconfirmed but it is NOT elemental attack.
+        // (Names below kept for now; values still mirror EnemyData — pending a confirmed re-label.)
+        internal const int RareDropItemId = 0x088; // ushort — signature/rare drop item ID; 65535(-1)=none (bosses); see block comment
+        internal const int ElemAtkFire    = 0x08A; // ushort — UNVERIFIED: read once at spawn, role unknown (NOT elemental attack)
+        internal const int ElemAtkIce     = 0x08C; // ushort — UNUSED: engine never reads this offset
+        internal const int ElemAtkThunder = 0x08E; // ushort — UNUSED: engine never reads this offset
+        internal const int ElemAtkWind    = 0x090; // ushort — UNUSED: engine never reads this offset
+        internal const int ElemAtkHoly    = 0x092; // ushort — UNUSED: engine never reads this offset
+        internal const int ElemAtkDark    = 0x094; // ushort — UNUSED: engine never reads this offset
         internal const int Unk042         = 0x096; // ushort — 0 for all observed valid enemies
 
         // +0x098: constant 1.0f for all observed enemies. Purpose unknown; do not use as EntityScale.

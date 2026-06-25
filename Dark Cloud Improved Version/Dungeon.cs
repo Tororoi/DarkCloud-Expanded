@@ -475,8 +475,6 @@ namespace Dark_Cloud_Improved_Version
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered an event floor!");
                             }
 
-                            SetBossDefeatAllowed(currentDungeon, currentFloor);
-
                             FixUngagaDoors(currentDungeon);
 
                             //Save current weapon
@@ -633,20 +631,6 @@ namespace Dark_Cloud_Improved_Version
                 default:
                     return byte.MaxValue;
             }
-        }
-
-        private static void SetBossDefeatAllowed(byte dungeon, byte floor)
-        {
-            bool onBossFloor = floor == GetDungeonBossFloor(dungeon);
-            ushort atk = onBossFloor ? (ushort)65535 : (ushort)150;
-            foreach (var boss in _bossSpecies)
-            {
-                if (!boss.TableIndex.HasValue) continue;
-                int addr = EnemySpeciesTable.FieldAddress(boss.TableIndex.Value, EnemySpeciesTable.AttackPower);
-                Memory.WriteUShort(addr, atk);
-            }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BossGate] Boss defeat {(onBossFloor ? "ENABLED" : "SUPPRESSED")} (dun={dungeon} floor={floor})");
         }
 
         public static byte GetDungeonBossFloor(byte dungeon)
