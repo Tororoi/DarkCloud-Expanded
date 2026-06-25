@@ -373,8 +373,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int RenderDistance    = 0x0A4; // float — CONFIRMED controls render distance and map-dot appearance threshold
         internal const int Abs               = 0x0B0; // int   — XP reward granted to the player on kill
 
-        internal const int Unk0B8            = 0x0B8; // float — 0.0 at rest; set to a small near-zero value (~3.8e-5, raw 0x35800000) at activation alongside Unk0BC; purpose unknown
-        internal const int Unk0BC            = 0x0BC; // float — 10.0 at activation (same as resting AmbientBaseR, but unrelated); decreases to a smaller positive value on hit (~2.8–6.97 observed); not a pure hit-driven field
+        // Vertical physics pair, both READ-ONLY (Step recomputes them every frame: HeightAboveGround = enemyZ − GroundZ;
+        // Step never writes LocationZ, so these are outputs, not inputs). To move an enemy vertically, write LocationZ (0x104).
+        internal const int HeightAboveGround = 0x0B8; // float — READ ONLY; height above the floor: 0 (≈grounded) at rest, >0 when airborne (knockback launch / jump). CONFIRMED: the STB cmd _STATUS_GET_HEIGHT (ELF 0x1E30F0) returns this. Was Unk0B8.
+        internal const int GroundZ           = 0x0BC; // float — READ ONLY; floor/ground Z under the enemy (subtracted to get HeightAboveGround; also positions the CHitMark spark in CheckDmg). ~10 in DBC; shifts as the enemy slides. Was Unk0BC.
 
         // ── Attack Phase & Hit Events ─────────────────────────────────────────
         // AttackPhase is -1 at rest; flips to 0 during the active hitbox window of an attack.
@@ -421,8 +423,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int ReticleWidth      = 0x110; // float — CONFIRMED controls horizontal lock-on reticle width
         internal const int ReticleHeight     = 0x114; // float — CONFIRMED lock-on reticle height; may also set hitbox height
         internal const int LockOnDistance    = 0x118; // float — CONFIRMED distance at which lock-on becomes available; default 120.0
-        internal const int Opacity           = 0x120; // float — CONFIRMED enemy opacity; default 128.0; lower = more translucent; drops to ~44.0 on the hit frame alongside FlashColorRed; recovers after flash
-        internal const int Unk124            = 0x124; // float — 0.0 at rest; becomes 4.0 on the hit frame alongside Opacity drop; purpose unknown
+        internal const int Opacity           = 0x120; // float — CONFIRMED enemy opacity; default 128.0; lower = more translucent; PalletStep subtracts OpacityFadeStep (0x124) each frame; drops to ~44 on hit then recovers
+        // Per-frame opacity FADE STEP: PalletStep does Opacity (0x120) -= this every frame (while OpacityFadeGate 0x128
+        // == 0). + fades the enemy OUT, − fades it IN, 0 = hold. Set by the STB command _STATUS_SET_ALPHA (ELF
+        // 0x1E2C60). 0.0 at rest.
+        internal const int OpacityFadeStep   = 0x124; // float — per-frame Opacity decrement (fade rate); see comment
+        internal const int OpacityFadeGate   = 0x128; // int — when nonzero, PalletStep PAUSES the opacity fade (skips the -= step)
 
         // ── Flash Overlay System ──────────────────────────────────────────────
         // CONFIRMED: write FlashColorRGB → FlashDecayRate → FlashTimer → FlashActivation to trigger a flash.
