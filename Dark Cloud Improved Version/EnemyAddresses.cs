@@ -612,17 +612,31 @@ namespace Dark_Cloud_Improved_Version
         // (ELF 0x1D71F0) spawn it; if unset the enemy does its normal random drop (SelectAttachi).
         // King Mimic = 181 = "Treasure Chest Key", regular Mimic = 235 = "Dran's Feather" (ItemNameTbl).
         // Bosses = 65535 (= -1 signed) = "no signature drop" — that −1 is why the engine skips the block.
-        // +0x08A–+0x094: formerly labeled "6 elemental attack multipliers" — DEBUNKED in the same RE pass.
-        // The engine NEVER reads +0x08C..+0x094 (dead data). +0x08A is read once at spawn (SetupViewMonstor
-        // ELF 0x1e1410) into a per-slot indexed array; role unconfirmed but it is NOT elemental attack.
-        // (Names below kept for now; values still mirror EnemyData — pending a confirmed re-label.)
         internal const int RareDropItemId = 0x088; // ushort — signature/rare drop item ID; 65535(-1)=none (bosses); see block comment
-        internal const int ElemAtkFire    = 0x08A; // ushort — UNVERIFIED: read once at spawn, role unknown (NOT elemental attack)
-        internal const int ElemAtkIce     = 0x08C; // ushort — UNUSED: engine never reads this offset
-        internal const int ElemAtkThunder = 0x08E; // ushort — UNUSED: engine never reads this offset
-        internal const int ElemAtkWind    = 0x090; // ushort — UNUSED: engine never reads this offset
-        internal const int ElemAtkHoly    = 0x092; // ushort — UNUSED: engine never reads this offset
-        internal const int ElemAtkDark    = 0x094; // ushort — UNUSED: engine never reads this offset
+
+        // +0x08A–+0x094: SIX per-element multipliers (×value/100; 100 = neutral) that the engine READS but which
+        // have NO observable gameplay effect — CONCLUSIVELY DORMANT (2026-06-25). History: an interim pass called
+        // them dead; a disasm pass then "confirmed" them as elemental attack multipliers; in-game tests then REFUTED
+        // that — ElemAtkFire=x300 on Mr. Blare (fire projectile), ElemAtkPhysical=x300 on Tuesday & Skeleton Soldier
+        // (physical melee AND projectile) all changed damage by ZERO. Mechanics: at spawn SetupViewMonstor (ELF loop
+        // @0x1e13f0, 16 body-parts × 6 elements) broadcasts all six into the per-slot body-collision struct
+        // (MMU+slot*0x510+0x555D0). CMonstorUnit::CheckDmg reads that table EXACTLY ONCE (@0x1dc08c), only on the
+        // enemy→player path (dmg = dmg/100 * EA[s3] → AddNowLife(player)) and gated `beq s3,-1 -> skip`; there is NO
+        // EA read on the player→enemy path, so it is NOT a hidden damage-taken resistance either. In practice every
+        // enemy attack reaches it with s3 = -1 (no element), so the multiply never runs — matching the game having
+        // no elemental enemy attacks / no element-resist gear. The non-100 spikes (Earth Digger thunder 120, Evil
+        // Bat Enhanced ice 200, Enhanced physical 20) are leftover design data that never fires. Bosses = all-0.
+        // ELEMENT ENUM (index → element) CONFIRMED 2026-06-25 from CWeaponElement::Set dispatch (@0x1b7840) AND the
+        // resistance-field order (0x056..0x05E): 0=Fire, 1=Ice, 2=Thunder, 3=Wind, 4=Holy, 5=NONE/PHYSICAL.
+        // (GetWeaponElementAttr @0x1b69f0 maps weapon-element id 5 → 0 = "no element bit".)
+        // NB: Ice Queen's ice-named projectiles genuinely sit in the WIND channel (slot 3) per the data, consistent
+        // with this enum — surprising, but our mapping is correct (a game-data quirk, not a label error).
+        internal const int ElemAtkFire    = 0x08A; // ushort — elemental attack-output multiplier (×/100, 100=neutral); see block
+        internal const int ElemAtkIce     = 0x08C; // ushort — elemental attack-output multiplier
+        internal const int ElemAtkThunder = 0x08E; // ushort — elemental attack-output multiplier (common signature spike: 120–150)
+        internal const int ElemAtkWind    = 0x090; // ushort — elemental attack-output multiplier
+        internal const int ElemAtkHoly    = 0x092; // ushort — elemental attack-output multiplier
+        internal const int ElemAtkPhysical = 0x094; // ushort — NON-ELEMENTAL (physical) attack multiplier; element id 5 = "none" (NOT dark — see block)
         internal const int Unk042         = 0x096; // ushort — 0 for all observed valid enemies
 
         // +0x098: constant 1.0f for all observed enemies. Purpose unknown; do not use as EntityScale.
