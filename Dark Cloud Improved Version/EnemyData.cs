@@ -572,7 +572,7 @@ namespace Dark_Cloud_Improved_Version
     {
         // Per-species animation / motion lists (decoded from each model's <code>.chr info.cfg KEY block) live in
         // /enemy-motion-table.md, ordered by TableIndex. "死亡" marks the death/collapse motion used by
-        // EnemyModelInjector.BossScriptPatcher.CollapseMotion. See the datadat-index-and-chr-motions note.
+        // BossScriptPatcher.CollapseMotion. See the datadat-index-and-chr-motions note.
 
         internal static readonly EnemyDefaults MasterJacket = new EnemyDefaults {
             Id=1, TableIndex=0, Name="Master Jacket", ModelCode="e01a", ModelFootprint=78158, ModelAnimCount=20, ModelDataSize=1123,
@@ -2198,7 +2198,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Species groups, keyed by physical TableIndex ───────────────────────────────────────────────────
-        // Reference sets used by the enemy randomizer's themed-roster mode (EnemyModelInjector.StageFloorRoster):
+        // Reference sets used by the enemy randomizer's themed-roster mode (EnemyRandomizer.StageFloorRoster):
         //   • NativeByDungeon[d] = the regular (non-boss) species that natively spawn in dungeon d (0..6 =
         //     DBC, WOF, SW, SMT, MS, GoT, DS), derived from DungeonData's per-floor spawn pools. Used to fill
         //     the rest of a capped themed roster with "dungeon natives", and as a convenient source for hand-
@@ -2266,7 +2266,7 @@ namespace Dark_Cloud_Improved_Version
         // The trailing "Σ footprint" is the sum of the members' ModelFootprint (bytes) — the worst-case model-buffer
         // cost if the whole group loads on one floor. Keep it under a dungeon's cap (DungeonData.ModelBufferCapMin,
         // ~270 KB+) or the randomizer will drop members to fit. Update these if you change a group's membership.
-        // Special conditions (implemented in EnemyModelInjector.BuildThemedRoster):
+        // Special conditions (implemented in EnemyRandomizer.BuildThemedRoster):
         //   • requireFullFit (ThemeGroups flag): Cards, DaysOfTheWeek, GemronElementals are all-or-nothing sets —
         //     only chosen on a floor whose buffer fits the WHOLE group, and never trimmed. On a tight-but-fitting
         //     floor they go whole-group (all repeatable, no mimic/native fill); with headroom they may instead cap
@@ -2393,7 +2393,7 @@ namespace Dark_Cloud_Improved_Version
         // Themes native to a specific dungeon (0..6 = DBC,WOF,SW,SMT,MS,GoT,DS), keyed by display name. A native
         // theme's pick weight ramps down the further the current dungeon is from its home (down to ThemeFarWeight in
         // the most distant dungeon) and is multiplied by ThemeNativeBoost when you're IN its home dungeon. Themes not
-        // listed here are non-native (constant weight 1). See EnemyModelInjector.ThemeWeight. Currently the five
+        // listed here are non-native (constant weight 1). See EnemyRandomizer.ThemeWeight. Currently the five
         // Demon Shaft depth regions (home = DS).
         internal static readonly Dictionary<string, int> ThemeHomeDungeon = new()
         {

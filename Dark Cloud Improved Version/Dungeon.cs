@@ -131,13 +131,13 @@ namespace Dark_Cloud_Improved_Version
                 BossScriptPatcher.Tick();
                 BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
                 LogBufferUsage();   // DEBUG (DebugBufferUsage): model/script load-buffer used vs capacity — runs during load to catch a hang
-                EnemyModelInjector.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor randomized roster + buffer used/cap
+                EnemyRandomizer.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor randomized roster + buffer used/cap
                 // Drives "spawn roster resets on floor change": reverts SetSpawnRoster* edits to vanilla once
                 // the player leaves the floor the roster was applied to. No-op unless a roster is staged.
-                EnemyModelInjector.NotifyInFloor(Player.InDungeonFloor());
+                SpawnRoster.NotifyInFloor(Player.InDungeonFloor());
                 // Authentic mimic chests: register a chest disguise for each placed roster mimic (no-op off
                 // custom-roster floors; dedups + waits for placement). Engine renders + wakes on open.
-                EnemyModelInjector.SpawnMimicChestsOnFloor();
+                SpawnRoster.SpawnMimicChestsOnFloor();
                 // Gradient stat normalization: rescale non-native enemies' HP/defense (and optionally damage)
                 // toward the current dungeon's power level. Self-guards to run once per floor; no-op when off.
                 EnemyStatNormalizer.NormalizeStatsForFloor();
@@ -527,7 +527,7 @@ namespace Dark_Cloud_Improved_Version
                 // bypass the mode==0/1 RestoreSpawnRoster below). Once-per-entry, before staging fresh this visit.
                 if (dunMode == 4 && _prevDunMode != 4)
                 {
-                    EnemyModelInjector.RestoreSpawnRoster();
+                    SpawnRoster.RestoreSpawnRoster();
                 }
                 _prevDunMode = dunMode;
                 if (dunMode == 4) //Check if in floor selection menu
@@ -536,7 +536,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 else if (dunMode == 7) //Next-floor screen: stage the descent target (checkFloor+1) before it loads
                 {
-                    EnemyModelInjector.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
+                    EnemyRandomizer.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
                 }
 
                 if (MainMenuThread.userMode == true)
@@ -548,7 +548,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not ingame anymore! Exited from Dungeon!");
                             Enemies.RestoreRedirectedEnemies();
-                            EnemyModelInjector.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
+                            SpawnRoster.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
                             break;
                         }
                     }
@@ -827,7 +827,7 @@ namespace Dark_Cloud_Improved_Version
             // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             Enemies.LogEnemySpawns();
             Enemies.LogFloorDataForTileMapSearch();
-            EnemyModelInjector.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
+            SpawnRoster.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
 
             if (numEligibleEnemies > 3)
             {
@@ -1290,7 +1290,7 @@ namespace Dark_Cloud_Improved_Version
             // whatever you confirm is already staged). Keeps only ONE floor staged (the cursor's) — moving the cursor
             // un-stages the previous one. dunEnterFloorCursor == checkFloor == BtEnemyLayout index. Read dungeon+floor
             // from the DunEnter menu struct (currentDungeon is stale at entry — see Addresses). No-op when off.
-            EnemyModelInjector.StageSelectedFloor(Memory.ReadByte(Addresses.dunEnterDungeon), Memory.ReadByte(Addresses.dunEnterFloorCursor));
+            EnemyRandomizer.StageSelectedFloor(Memory.ReadByte(Addresses.dunEnterDungeon), Memory.ReadByte(Addresses.dunEnterFloorCursor));
 
             // Exit dungeon from floor selection screen (1 tick for button press and next tick warps to town)
             if (circlePressed == false)

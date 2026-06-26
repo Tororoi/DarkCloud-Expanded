@@ -29,7 +29,7 @@ namespace Dark_Cloud_Improved_Version
     ///     event it reads STATE.BoxLink → box idx, reads BOX.EntityId (-0x4980) → linked enemy slot idx,
     ///     and if valid (0..16) does `sh 1, enemySlot+0xD4` — i.e. sets the linked enemy's view gate to 1,
     ///     which un-skips it in CheckViewLevel so the dormant mimic wakes/becomes visible. (Same slot+0xD4
-    ///     gate as EnemyModelInjector.ActivateMimicSlots; native writes 1, any nonzero works.)
+    ///     gate as SpawnRoster.ActivateMimicSlots; native writes 1, any nonzero works.)
     ///
     /// FULL CHAIN (all data-driven): SetMimicEvent populates BOX+STATE(Type=8) + count++ → DrawItemBox
     /// renders the chest → proximity (CheckTreasureBox / GetActiveIvent) → OPAnalyz sets enemy slot+0xD4=1

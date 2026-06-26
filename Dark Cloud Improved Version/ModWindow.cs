@@ -354,7 +354,7 @@ namespace Dark_Cloud_Improved_Version
 
                 bool randomizedOn = (play & 0x04) != 0;
                 CBox_UserMode_RandomizedEnemies.IsChecked = randomizedOn;
-                EnemyModelInjector.RandomizeEnemies = randomizedOn;
+                EnemyRandomizer.RandomizeEnemies = randomizedOn;
             });
         }
 
@@ -477,7 +477,7 @@ namespace Dark_Cloud_Improved_Version
         private void CBox_UserMode_RandomizedEnemies_Changed(object sender, RoutedEventArgs e)
         {
             bool on = CBox_UserMode_RandomizedEnemies.IsChecked == true;
-            EnemyModelInjector.RandomizeEnemies = on;
+            EnemyRandomizer.RandomizeEnemies = on;
             WriteOptionBit(OptGameplayByte, 0x04, on);   // gameplay bit2
         }
 
@@ -498,7 +498,7 @@ namespace Dark_Cloud_Improved_Version
             // Special token "iq" = write the exact real Ice Queen (SW floor-18) boss block, incl. the Count field.
             if (Tbox_Injector_Table.Text.Trim().ToLowerInvariant() == "iq")
             {
-                EnemyModelInjector.SetIceQueenFloorExact();
+                SpawnRoster.SetIceQueenFloorExact();
                 return;
             }
             var idx = new System.Collections.Generic.List<int>();
@@ -517,8 +517,8 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
             int population = 0; // 0 (or unparseable) = keep original
-            if (idx.Count == 1) EnemyModelInjector.SetSpawnRosterToSpecies(idx[0], population);
-            else EnemyModelInjector.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
+            if (idx.Count == 1) SpawnRoster.SetSpawnRosterToSpecies(idx[0], population);
+            else SpawnRoster.SetSpawnRosterMix(idx.ToArray(), once.ToArray(), population);
         }
 
         // Post-spawn cap: keep at most 1 of the TableIndex species on the current floor, remove extras.
@@ -529,7 +529,7 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine("Injector: TableIndex must be an integer (e.g. 20 = Gyon).");
                 return;
             }
-            EnemyModelInjector.CapSpeciesOnFloor(tableIndex, 1);
+            SpawnRoster.CapSpeciesOnFloor(tableIndex, 1);
         }
 
         private void CBox_UserMode_MuteMusic_CheckedChanged(object sender, RoutedEventArgs e)
