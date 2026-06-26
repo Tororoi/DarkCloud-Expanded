@@ -13,12 +13,18 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 ## Mod Window
 
 - **Quest Tracker** — Added a quest tracker panel to the mod window that displays active quests and their completion state.
+- **Launch modes** — The mod window now opens directly into one of three modes instead of requiring a "Launch as User" click: **user** (normal play), **dev** (low-level thread/debug tabs), and **sandbox** (user UI plus a **Sandbox** tab of power tools). Modes are selected via dotnet launch profiles and a `Makefile` (`make` / `make user` / `make dev` / `make sandbox`).
+- **Sandbox tab** — Sandbox mode adds a tab with testing tools kept out of normal play: a spawn-roster editor (override the current dungeon's spawns by TableIndex, with a trailing `!` to mark a species spawn-once) and the Fish Data Farmer.
+- **Difficulty options** — Added Gameplay toggles: **Faster enemies** (enemy movement + animation/action speed, with an attack-hit-window dwell so fast swings still connect) and **Stronger enemies** (scales enemies toward the next dungeon's power level). Saved to the save file and re-applied on load.
+- **Randomize enemies option** — New Gameplay toggle that re-rolls every non-boss/event floor's spawns on dungeon entry (see Enemy System → Randomized enemies). Saved to the save file and re-applied on load.
+- **Bit-packed option storage** — Persisted option toggles are now bit-packed into three category-grouped save bytes (Graphics / Audio / Gameplay) instead of one byte each, freeing proven-unused save bytes for future options. Each toggle read-modify-writes a single bit, preserving the others in its byte.
 
 ---
 
 ## Fixes
 
 - **Max Thirst memory addresses** — Corrected the memory addresses used to read and write Max Thirst value.
+- **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
 
 ---
 
@@ -32,9 +38,20 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Smooth native fish size distribution** — Every non-Arise fishing session smooths the size the game rolls, filling the sparse region just below the species max so the distribution ramps into the cap instead of spiking at it. Does not change the max. Arise Mardan sessions include this smoothing internally.
 - **Rerolled slots use the native size formula** — Mardan Twei/Arise slot rerolls now roll size via the game's native slot-init formula (12-draw Irwin-Hall RNG, asymmetric slope, clamped to `[0.5×BaseSize, MaxSize]`) instead of a flat uniform draw, then receive the smoothing/Arise effect like any other slot.
 
+### Enemy System
+
+- **Randomized enemies** — When enabled, each non-boss/event floor (normal + Ura) is staged with a fresh 9-species roster on dungeon entry, weighted toward the dungeon's native mimic and king mimic. Floors are staged lazily (at most once per visit, so backtracking never re-rolls) and reverted on dungeon exit. Out-of-place spawns are rescaled by the stat normalizer so they stay fair.
+- **Themed floors** — A randomized floor has a chance to spawn a single themed group (cards, days of the week, dragons, …) instead of the random mix — either filling the whole floor with the group or capping it to one-of-each and backfilling with mimics or dungeon natives.
+- **Spawn any species on regular floors** — Replacing spawn-table entity IDs/models lets any enemy — including bosses and minibosses (Master Utan, Minotaur Joe, Black Knight Mount, King's Curse, Ice Queen, Dark Genie final form) and mimics — appear on normal dungeon floors. Boss behavior scripts are patched in loaded memory so a non-native boss spawns at its floor position instead of snapping to its arena origin, and on death it collapses/fades and interrupts its motion instead of triggering a victory cutscene. Multi-part bosses are forced spawn-once (one skeleton).
+- **Mesh-buffer guard** — Randomized rosters are budgeted against measured per-species model footprints so a floor never overruns the engine's mesh buffer.
+- **Mimic visibility** — Roster-spawned mimics had their view-gate baked off in the model template and rendered invisible; the gate is now set after spawn so they appear correctly.
+- **Stat normalization** — Non-native / randomized spawns are rescaled toward the current dungeon's power level (HP, defense, and damage), so out-of-place enemies aren't trivial or unfair.
+- **Reusable stat scaling** — Live per-slot / per-species stat scaling (HP, defense, melee, projectile) is driven through one shared pipeline used by the normalizer, the difficulty options, and miniboss buffs.
+
 ### Miniboss System
 
-- **Stat multipliers** — Miniboss HP, ABS reward, and Gilda drop increased from 3× to 5× base enemy values.
+- **Stamina status removed** - Minibosses no longer have Stamina status by default.
+- **Combat scaling** — Minibosses now get a scaled hitbox, dynamically buffed projectile damage, and aggro/reticle ranges enlarged to match their size, with walking animation synced to their scale.
 - **Thematic loot** — Each dungeon has per-enemy flavor drops: 5% rare drop and 30% common drop tables with dungeon-appropriate items. See tables below.
 - **Boosted weapon drops** — Minibosses can drop weapons with preset stats written directly to the weapon slot on pickup. Boost monitor cancels cleanly on floor change.
 

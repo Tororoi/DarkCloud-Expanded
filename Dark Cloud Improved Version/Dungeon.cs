@@ -11,9 +11,11 @@ namespace Dark_Cloud_Improved_Version
         static ushort currentWeapon;
         static int currentAddress;
         static int prevFloor = 200;
+        static byte prevBackFloor = 0;   // tracks backfloor-flag edges (the floor↔backfloor swap reloads enemies without changing checkFloor)
         static int currentCharCursor = 0;
         static int prevCharCursor = 0;
         static ushort currentGilda = 0;
+        static byte _prevDunMode = 0;   // tracks dungeonMode edges (floor-select rising edge = new dungeon visit)
         static bool clownOnScreen = false;
         static bool chronicle2 = false;
         static bool[] monstersDead = new bool[15];
@@ -61,6 +63,7 @@ namespace Dark_Cloud_Improved_Version
 //THREADS
         //Runs at the start of each floor
         public static Thread spawnsCheck;
+        public static Thread backfloorLogThread;   // logs enemy slots after a floor↔backfloor swap (which CheckSpawns misses)
         public static Thread minibossProcess;
         public static Thread miniBossMessage;
 
@@ -87,6 +90,28 @@ namespace Dark_Cloud_Improved_Version
         public static Thread dunEscapeConfirmThread;
 
         public static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
+
+        // DEBUG: model + script load-buffer usage. SetupBaseModel loads each roster species' mesh into the
+        // MonstorModelBuffer (CDataAlloc2 @ PS2 0x01F066D0 → 0x21F066D0) and its AI script into MonstorScriptBuffer
+        // (0x21F066E0). From SetDataBuffer's disasm each CDataAlloc2 is { +0x0 bufPtr, +0x8 used, +0xC capacity }
+        // (model cap = 1,690,000). Logs on change so we watch both fill during a floor load and see the last state
+        // before a hang (an over-budget roster overflows one of these). Set false to silence.
+        internal static bool DebugBufferUsage = true;
+        private static uint[] _bufLast;
+        private static void LogBufferUsage()
+        {
+            if (!DebugBufferUsage) return;
+            uint[] w = Memory.ReadUIntBatch(0x21F066D0, 8);   // model struct (4 words) + script struct (4 words)
+            if (w == null || w.Length != 8) return;
+            if (_bufLast != null && w[0] == _bufLast[0] && w[2] == _bufLast[2] && w[3] == _bufLast[3]
+                && w[4] == _bufLast[4] && w[6] == _bufLast[6] && w[7] == _bufLast[7]) return;   // gate on ptr/used/cap of both
+            _bufLast = w;
+            string pct(uint used, uint cap) => cap != 0 ? $"{100.0 * (int)used / (int)cap:F1}%" : "n/a";
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[Buffer] model@0x21F066D0 ptr=0x{w[0]:X8} used={(int)w[2]} cap={(int)w[3]} ({pct(w[2], w[3])})  |  " +
+                $"script@0x21F066E0 ptr=0x{w[4]:X8} used={(int)w[6]} cap={(int)w[7]} ({pct(w[6], w[7])})");
+        }
+
         public static void InsideDungeonThread()
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Dungeon Thread Activated");
@@ -105,12 +130,14 @@ namespace Dark_Cloud_Improved_Version
                 // loaded c16a.stb before the boss spawns. No-op unless a c16a boss is in the roster.
                 BossScriptPatcher.Tick();
                 BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
+                LogBufferUsage();   // DEBUG (DebugBufferUsage): model/script load-buffer used vs capacity — runs during load to catch a hang
+                EnemyRandomizer.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor randomized roster + buffer used/cap
                 // Drives "spawn roster resets on floor change": reverts SetSpawnRoster* edits to vanilla once
                 // the player leaves the floor the roster was applied to. No-op unless a roster is staged.
-                EnemyModelInjector.NotifyInFloor(Player.InDungeonFloor());
+                SpawnRoster.NotifyInFloor(Player.InDungeonFloor());
                 // Authentic mimic chests: register a chest disguise for each placed roster mimic (no-op off
                 // custom-roster floors; dedups + waits for placement). Engine renders + wakes on open.
-                EnemyModelInjector.SpawnMimicChestsOnFloor();
+                SpawnRoster.SpawnMimicChestsOnFloor();
                 // Gradient stat normalization: rescale non-native enemies' HP/defense (and optionally damage)
                 // toward the current dungeon's power level. Self-guards to run once per floor; no-op when off.
                 EnemyStatNormalizer.NormalizeStatsForFloor();
@@ -448,8 +475,6 @@ namespace Dark_Cloud_Improved_Version
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered an event floor!");
                             }
 
-                            SetBossDefeatAllowed(currentDungeon, currentFloor);
-
                             FixUngagaDoors(currentDungeon);
 
                             //Save current weapon
@@ -457,6 +482,21 @@ namespace Dark_Cloud_Improved_Version
 
                             //Once everything is done, we set this so it wont reroll again in same floor
                             prevFloor = currentFloor;
+                        }
+                    }
+
+                    // Floor <-> backfloor swap reloads enemies but keeps checkFloor the same, so the floor-change
+                    // block above (and CheckSpawns) never fire for it. Detect the backfloor-flag edge and log the
+                    // (re)spawned slots so we can compare backfloor vs normal-floor enemy stats.
+                    byte curBackFloor = Memory.ReadByte(Addresses.dunBackFloorFlag);
+                    if (curBackFloor != prevBackFloor)
+                    {
+                        prevBackFloor = curBackFloor;
+                        if (backfloorLogThread == null || !backfloorLogThread.IsAlive)
+                        {
+                            bool onBackFloor = curBackFloor != 0;
+                            backfloorLogThread = new Thread(() => LogBackfloorSpawns(onBackFloor));
+                            backfloorLogThread.Start();
                         }
                     }
 
@@ -478,11 +518,25 @@ namespace Dark_Cloud_Improved_Version
                 else
                 {
                     prevFloor = 200;
+                    prevBackFloor = 0;
                 }
 
-                if (Memory.ReadByte(Addresses.dungeonMode) == 4) //Check if in floor selection menu
+                byte dunMode = Memory.ReadByte(Addresses.dungeonMode);
+                // Floor-select opening = a new dungeon visit begins. Revert any randomizer staging left over from the
+                // previous visit (covers escape powder / warp / death / stairs-out exits that keep you ingame and so
+                // bypass the mode==0/1 RestoreSpawnRoster below). Once-per-entry, before staging fresh this visit.
+                if (dunMode == 4 && _prevDunMode != 4)
+                {
+                    SpawnRoster.RestoreSpawnRoster();
+                }
+                _prevDunMode = dunMode;
+                if (dunMode == 4) //Check if in floor selection menu
                 {
                     FloorSelectionScreen();
+                }
+                else if (dunMode == 7) //Next-floor screen: stage the descent target (checkFloor+1) before it loads
+                {
+                    EnemyRandomizer.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
                 }
 
                 if (MainMenuThread.userMode == true)
@@ -494,7 +548,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not ingame anymore! Exited from Dungeon!");
                             Enemies.RestoreRedirectedEnemies();
-                            EnemyModelInjector.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
+                            SpawnRoster.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
                             break;
                         }
                     }
@@ -577,20 +631,6 @@ namespace Dark_Cloud_Improved_Version
                 default:
                     return byte.MaxValue;
             }
-        }
-
-        private static void SetBossDefeatAllowed(byte dungeon, byte floor)
-        {
-            bool onBossFloor = floor == GetDungeonBossFloor(dungeon);
-            ushort atk = onBossFloor ? (ushort)65535 : (ushort)150;
-            foreach (var boss in _bossSpecies)
-            {
-                if (!boss.TableIndex.HasValue) continue;
-                int addr = EnemySpeciesTable.FieldAddress(boss.TableIndex.Value, EnemySpeciesTable.AttackPower);
-                Memory.WriteUShort(addr, atk);
-            }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[BossGate] Boss defeat {(onBossFloor ? "ENABLED" : "SUPPRESSED")} (dun={dungeon} floor={floor})");
         }
 
         public static byte GetDungeonBossFloor(byte dungeon)
@@ -787,7 +827,7 @@ namespace Dark_Cloud_Improved_Version
             // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             Enemies.LogEnemySpawns();
             Enemies.LogFloorDataForTileMapSearch();
-            EnemyModelInjector.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
+            SpawnRoster.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
 
             if (numEligibleEnemies > 3)
             {
@@ -817,6 +857,24 @@ namespace Dark_Cloud_Improved_Version
             Enemies.ResetPollState();
             // Enemies.FixModelRedirectSpawnPositions();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
+        }
+
+        /// <summary>
+        /// After a floor↔backfloor swap, wait for the old slots to clear and the new enemies to (re)spawn, then dump
+        /// them via LogEnemySpawns. CheckSpawns only runs on a checkFloor change, which a backfloor swap doesn't cause.
+        /// </summary>
+        public static void LogBackfloorSpawns(bool onBackFloor)
+        {
+            Thread.Sleep(800);   // let the swap clear the previous slots before we wait for the new ones
+            int ms = 0;
+            while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.RenderStatus)) == 255 && ms < 10000)
+            {
+                Thread.Sleep(150);
+                ms += 150;
+            }
+            Thread.Sleep(500);   // settle — let the remaining slots populate
+            if (Player.InDungeonFloor())
+                Enemies.LogEnemySpawns(onBackFloor);
         }
 
         /// <summary>
@@ -1228,6 +1286,13 @@ namespace Dark_Cloud_Improved_Version
 
         public static void FloorSelectionScreen()
         {
+            // "Randomize Enemies": randomize the highlighted floor, before it loads (the menu is pre-load, so
+            // whatever you confirm is already staged). Keeps only ONE floor staged (the cursor's) — moving the cursor
+            // un-stages the previous one. dunEnterFloorCursor == checkFloor == BtEnemyLayout index. Read dungeon+floor
+            // from the DunEnter menu struct (currentDungeon is stale at entry — see Addresses). No-op when off.
+            EnemyRandomizer.StageSelectedFloor(Memory.ReadByte(Addresses.dunEnterDungeon), Memory.ReadByte(Addresses.dunEnterFloorCursor));
+
+            // Exit dungeon from floor selection screen (1 tick for button press and next tick warps to town)
             if (circlePressed == false)
             {
                 if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)

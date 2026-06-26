@@ -101,6 +101,24 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Scene/dungeon lighting — STUB for a later pass (not yet fully decoded). The ambient color and directional
+        /// lights are global renderer state, set per-draw (MGSetAmbient runs before nearly every Draw), so there is NO
+        /// stable "write once" ambient field — the per-enemy AmbientBase* slot fields are just a per-frame copy of the
+        /// global ambient. The STB script command _LOAD_LIGHT(idx) loads a LIGHTING PRESET — it copies two directional-
+        /// light matrices (@LightBuffers +0x00/+0x40) and one ambient (R,G,B,A) vector (+0x80) from a preset table into
+        /// the active light buffers. This is the lead for changing dungeon lighting at its source. (Addresses: routines
+        /// are ELF vaddrs; data are EE addresses.)
+        /// </summary>
+        internal static class Lighting
+        {
+            internal const long LoadLight     = 0x1938B0;   // _LOAD_LIGHT__FP12RS_STACKDATAi (STB cmd) — load lighting preset[idx]
+            internal const long MGGetAmbient  = 0x12DD30;   // MGGetAmbient(float*) — read global ambient (RGBA) into a buffer
+            internal const long MGSetAmbient  = 0x12DD00;   // MGSetAmbient(float*) — set global ambient; called before nearly every draw (volatile)
+            internal const long GlobalAmbient = 0x21C756B0; // EE — 4-float (R,G,B,A) renderer ambient register; rewritten per draw
+            internal const long LightBuffers  = 0x21D3D500; // EE — active lights: dir-light matrices @ +0x00/+0x40, ambient vec @ +0x80
+        }
+
+        /// <summary>
         /// Placement-exclusion objects embedded in the CDungeonMap. ArrangementPos rejects any enemy spawn cell that
         /// lands near one of these (CheckTreasureBox/CheckAtra/CheckTrapCircle, each via DistVector). We mirror that
         /// when relocating Ice Queen so neither she nor a companion spawns on a chest/atra/trap. Each entry's world

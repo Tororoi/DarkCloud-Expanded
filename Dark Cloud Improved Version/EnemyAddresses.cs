@@ -329,8 +329,20 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Identity ─────────────────────────────────────────────────────────
         internal const int EnemySpeciesId    = 0x042; // ushort — enemy species ID; used to look up name, stats, and model data
-        internal const int EntityScale       = 0x044; // float — CONFIRMED entity/collision radius; enemy-specific (6.0–8.0); does not affect attack hitbox
-        internal const int EntityScaleCopy   = 0x048; // float — copy of EntityScale set at spawn; secondary reference
+        // EntityScale / EntityScaleCopy = the enemy's PHYSICAL (movement) collision radii — NOT the combat hitbox (the
+        // hittable/attack spheres are STB-driven: _SET_BODY_COL / _SET_DMG_COL, RadiusArray @ MMU+0x55390/0x5A490).
+        // CONFIRMED in-game (2026-06-25, Skeleton Soldier at 10x and at 0):
+        //   • EntityScale (0x044) = the enemy's own movement-CLEARANCE buffer. MoveCheck/MoveCheck2 block the enemy when
+        //     `distance < 6.0 + EntityScale` to walls/the player, keeping it ~EntityScale away. ONE-DIRECTIONAL — it
+        //     gates the ENEMY's movement only; the player can still walk right up to it (player collision is separate),
+        //     and the model/combat are unaffected. At 60 (10x): big berth + a glitch-jump/jitter when forced too close
+        //     (engine snaps it out of the overlap). At 0: normal — walls are still avoided (wall solidity is the
+        //     walkable mesh / pathfinding, independent of this buffer); EntityScale only adds clearance on top.
+        //   • EntityScaleCopy (0x048) = monster-vs-monster separation (MoveChecMonster). At 0: enemies OVERLAP each
+        //     other; large: they can't cluster. Settable per-script via the STB cmd _SET_COLLISION_WIDTH (0x1E5DC0).
+        // Both copied from record +0x060 at spawn. CheckDmg also reads EntityScale (hit-effect radius).
+        internal const int EntityScale       = 0x044; // float — enemy movement-clearance buffer vs walls/player (not the hitbox); see comment
+        internal const int EntityScaleCopy   = 0x048; // float — monster-vs-monster separation radius (settable via STB _SET_COLLISION_WIDTH); see comment
         // SpeciesDataPtr is a PS2-native pointer (0x00xxxxxx range) to the loaded c16a/stb behavior
         // block for this species. All slots of the same species share one block (e.g. every Pirate's
         // Chariot = 0x01C05140). The block begins with a MIPS function pointer table; the on-death
@@ -364,7 +376,7 @@ namespace Dark_Cloud_Improved_Version
         // much damage the enemy TAKES, and are the real per-dungeon DURABILITY scalers (e.g. Mimic DBC 1/10 ->
         // Moon Sea 8/30). CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them: low is subtracted from incoming
         // damage (flat reduction), high is passed to SwordDmgCheck1 (the player-weapon damage check). See the
-        // ATTACK/DAMAGE block above EnemySpeciesTable.AttackPower for the full enemy→player formula.
+        // ENEMY → PLAYER DAMAGE block above EnemySpeciesTable.DamageReduction for the full enemy→player formula.
         internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
         internal const int HitStunTimer      = 0x098; // int   — 0 at rest; set to a positive value on hit (e.g. 966 observed); presumably a stun or invincibility-frame countdown
@@ -373,8 +385,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int RenderDistance    = 0x0A4; // float — CONFIRMED controls render distance and map-dot appearance threshold
         internal const int Abs               = 0x0B0; // int   — XP reward granted to the player on kill
 
-        internal const int Unk0B8            = 0x0B8; // float — 0.0 at rest; set to a small near-zero value (~3.8e-5, raw 0x35800000) at activation alongside Unk0BC; purpose unknown
-        internal const int Unk0BC            = 0x0BC; // float — 10.0 at activation (identical to resting BehaviorRangeX); decreases to a smaller positive value on hit (~2.8–6.97 observed); not a pure hit-driven field
+        // Vertical physics pair, both READ-ONLY (Step recomputes them every frame: HeightAboveGround = enemyZ − GroundZ;
+        // Step never writes LocationZ, so these are outputs, not inputs). To move an enemy vertically, write LocationZ (0x104).
+        internal const int HeightAboveGround = 0x0B8; // float — READ ONLY; height above the floor: 0 (≈grounded) at rest, >0 when airborne (knockback launch / jump). CONFIRMED: the STB cmd _STATUS_GET_HEIGHT (ELF 0x1E30F0) returns this.
+        internal const int GroundZ           = 0x0BC; // float — READ ONLY; floor/ground Z under the enemy (subtracted to get HeightAboveGround; also positions the CHitMark spark in CheckDmg). ~10 in DBC; shifts as the enemy slides.
 
         // ── Attack Phase & Hit Events ─────────────────────────────────────────
         // AttackPhase is -1 at rest; flips to 0 during the active hitbox window of an attack.
@@ -421,8 +435,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int ReticleWidth      = 0x110; // float — CONFIRMED controls horizontal lock-on reticle width
         internal const int ReticleHeight     = 0x114; // float — CONFIRMED lock-on reticle height; may also set hitbox height
         internal const int LockOnDistance    = 0x118; // float — CONFIRMED distance at which lock-on becomes available; default 120.0
-        internal const int Opacity           = 0x120; // float — CONFIRMED enemy opacity; default 128.0; lower = more translucent; drops to ~44.0 on the hit frame alongside FlashColorRed; recovers after flash
-        internal const int Unk124            = 0x124; // float — 0.0 at rest; becomes 4.0 on the hit frame alongside Opacity drop; purpose unknown
+        internal const int Opacity           = 0x120; // float — CONFIRMED enemy opacity; default 128.0; lower = more translucent; PalletStep subtracts OpacityFadeStep (0x124) each frame; drops to ~44 on hit then recovers
+        // Per-frame opacity FADE STEP: PalletStep does Opacity (0x120) -= this every frame (while OpacityFadeGate 0x128
+        // == 0). + fades the enemy OUT, − fades it IN, 0 = hold. Set by the STB command _STATUS_SET_ALPHA (ELF
+        // 0x1E2C60). 0.0 at rest.
+        internal const int OpacityFadeStep   = 0x124; // float — per-frame Opacity decrement (fade rate); see comment
+        internal const int OpacityFadeGate   = 0x128; // int — when nonzero, PalletStep PAUSES the opacity fade (skips the -= step)
 
         // ── Flash Overlay System ──────────────────────────────────────────────
         // CONFIRMED: write FlashColorRGB → FlashDecayRate → FlashTimer → FlashActivation to trigger a flash.
@@ -438,27 +456,28 @@ namespace Dark_Cloud_Improved_Version
         internal const int FlashColorGreen   = 0x134; // float — 0.0 at rest; 0–255 green channel; 0 for red-only flash types
         internal const int FlashColorBlue    = 0x138; // float — 0.0 at rest; 0–255 blue channel
 
-        // ── Behavior Ranges (set at spawn, static per enemy species) ─────────────
-        // All observed enemies start with X=10.0, Y=20.0, Z=20.0, Unk14C=128.0.
-        // During certain attacks (e.g. Captain lunge) the forward axis expands dramatically:
-        //   BehaviorRangeX: 10→137.4, BehaviorRangeY/Z: 20→9.6 (narrows to a forward spike).
-        // Engine overwrites these at 60fps; a one-time write at floor load has no lasting effect.
-        // NOTE: none of these gate the attack/aggro DECISION — the AI computes distance fresh each frame via the
-        // STB command _GET_DISTANCE (cmd 10) and compares it to per-species float literals baked in the .stb, not
-        // to any of these slot fields (the overlay AI code reads neither +0x140 nor +0x14C). Purpose unconfirmed.
-        internal const int BehaviorRangeX    = 0x140; // float — resting 10.0; expands on attack (forward reach during the swing)
-        internal const int BehaviorRangeY    = 0x144; // float — resting 20.0; narrows during some attacks (lateral range)
-        internal const int BehaviorRangeZ    = 0x148; // float — resting 20.0; narrows during some attacks (depth range)
-        internal const int Unk14C            = 0x14C; // float — 128.0 for all observed enemies; constant during attacks; NOT aggro/attack range (purpose unknown)
+        // ── Ambient lighting (engine-owned working copy; NOT mod-settable) ─────────────
+        // 0x140-0x14C are a 4-float ambient color (R,G,B,A). SOURCE: PalletStep calls MGGetAmbient to read the SCENE's
+        // global ambient (≈10,20,20,128 in dungeons) and sceVu0CopyVectors it here every frame, then interpolates the
+        // RGB (0x140-0x148, a 3-component loop) toward FlashColor (0x130-0x138) by FlashTimer (0x16C) — i.e. the
+        // enemy's ambient = scene ambient flash-blended with the hit color. PalletSet then reads 0x140-0x148 (using
+        // Opacity 0x120 as the alpha, NOT 0x14C) and calls MGSetAmbient to apply it to the model. So the "resting
+        // 10,20,20,128" is just the global scene ambient (same for every enemy), refreshed each frame — a mod write
+        // is overwritten next frame. (Formerly "BehaviorRange"; the "expands during Captain's lunge" was the flash-blend.)
+        internal const int AmbientBaseR      = 0x140; // float — ambient RED (scene ambient via MGGetAmbient, flash-blended); was BehaviorRangeX
+        internal const int AmbientBaseG      = 0x144; // float — ambient GREEN; was BehaviorRangeY
+        internal const int AmbientBaseB      = 0x148; // float — ambient BLUE; was BehaviorRangeZ
+        internal const int AmbientBaseA      = 0x14C; // float — ambient ALPHA (4th float of the MGGetAmbient vector; ~128; apply uses Opacity 0x120 instead, so inert here)
 
-        // Three additional float fields after Unk14C. Observed as 0.0 for regular Auntie Medu and
-        // non-zero (127.5, 80.0, 15.0) for the same enemy when the mod's miniboss process was active.
-        // The mod process may have indirectly triggered the game engine to write these; they are not
-        // believed to be mod-written values. Purpose unknown — possibly secondary AI range tiers used
-        // by specific behavior scripts (not all enemy species).
-        internal const int Unk150            = 0x150; // float — 0.0 for most enemies; 127.5 observed (≈Unk14C) during mod miniboss activation
-        internal const int Unk154            = 0x154; // float — 0.0 for most enemies; 80.0 observed during mod miniboss activation
-        internal const int Unk158            = 0x158; // float — 0.0 for most enemies; 15.0 observed during mod miniboss activation
+        // 0x150-0x158: the enemy's STATUS-TINT ambient color (R/G/B). CheckDmg sets it per-frame from the active
+        // status condition — Freeze (slot+0x08) → (160,160,160) icy-white; Gooey (+0x14) → (0,37.5,63.8) teal;
+        // Poison (+0x0C) / Stamina (+0x10) → their own colors — and flags slot+0x160. PalletSet then applies it to
+        // the model's ambient light via MGSetAmbient, overriding the base ambient (0x140-0x148). 0,0,0 = no status =
+        // no tint; this is the visual "frozen/poisoned/etc." glow. (The 127.5/80.0/15.0 once seen on Auntie Medu was
+        // just an active status tint.)
+        internal const int StatusTintR       = 0x150; // float — status-tint ambient RED   (0 = no status); see comment
+        internal const int StatusTintG       = 0x154; // float — status-tint ambient GREEN (0 = no status)
+        internal const int StatusTintB       = 0x158; // float — status-tint ambient BLUE  (0 = no status)
 
         // AiCycleParity flips 0↔1 at each AI attack cycle.
         // Confirmed alternating pattern across Pirate's Chariot, Auntie Medu, and Mask of Prajna.
@@ -470,14 +489,32 @@ namespace Dark_Cloud_Improved_Version
         internal const int FlashTimer        = 0x16C; // float — CONFIRMED engine-owned countdown; always reset to 1.0 by engine at flash-start; decrements by FlashDecayRate each frame
 
         // ── On-Hit Event Fields ────────────────────────────────────────────────
-        // All written by the engine on the same frame as FlashColorRed; all zero at rest except Unk17C=1.0.
-        // HitFacingX and HitFacingZ are exact snapshots of FacingX/FacingZ at the moment of impact —
-        // confirmed by comparing same-frame poll values.
-        internal const int HitFacingX        = 0x170; // READ ONLY — float; 0.0 at rest; engine snapshots FacingX here at moment of impact (confirmed by same-frame poll comparison)
-        internal const int HitFacingZ        = 0x178; // READ ONLY — float; 0.0 at rest; engine snapshots FacingZ here at moment of impact
-        internal const int Unk17C            = 0x17C; // READ ONLY — float; 1.0 at rest; engine drops to 0.0 on hit; purpose unknown
-        internal const int Unk180            = 0x180; // READ ONLY — float; 0.0 at rest; engine sets to 1.0 on hit (observed Skeleton Soldier); purpose unknown
-        internal const int KnockbackStrength = 0x184; // READ ONLY — float; engine writes per enemy species value at hit time; confirmed not settable (write at floor load overwritten by engine on hit); Pirate's Chariot=0.10, Skel.Soldier=0.20, Auntie Medu=0.20, Dasher=0.30
+        // 0x170-0x17C are one 4-float HIT-FACING / KNOCKBACK-DIRECTION vector (X,Y,Z,W), snapshotted on impact and
+        // used by Step__CMonstorUnit as the knockback launch direction (it sceVu0CopyVectors slot+0x170 = slotbase+
+        // 0x1E540 each knockback frame). HitFacingX/Z are exact snapshots of FacingX/FacingZ (confirmed by same-frame
+        // poll). HitFacingW is the homogeneous W: 1.0 at rest (a "point"/unset) → 0.0 on hit (a direction has W=0) —
+        // it has no standalone meaning, it just rides with X/Y/Z. (CleanViewMonstor zeroes all four on despawn.)
+        internal const int HitFacingX        = 0x170; // READ ONLY — float; FacingX snapshot at moment of impact (0.0 at rest)
+        internal const int HitFacingY        = 0x174; // READ ONLY — float; Y of the hit-facing vector (≈0 for horizontal facing)
+        internal const int HitFacingZ        = 0x178; // READ ONLY — float; FacingZ snapshot at moment of impact (0.0 at rest)
+        internal const int HitFacingW        = 0x17C; // READ ONLY — float; W of the hit-facing vector (1.0 at rest = point, 0.0 on hit = direction)
+        // Knockback impulse (the active force): set on a hit to (weapon hit-force × the species' record KnockbackMult,
+        // record +0x098); each frame Step__CMonstorUnit feeds it into the enemy's velocity (slot+0x80) and subtracts
+        // KnockbackDecay (0x184) until it reaches 0. Higher = bigger launch. 0.0 at rest. The per-enemy KnockbackMult
+        // copy lives at slot+0x188.
+        internal const int KnockbackForce    = 0x180; // float — active knockback impulse, set on hit, decays to 0; see comment
+        // Knockback DECAY rate: subtracted from KnockbackForce (0x180) every frame, so HIGHER = the impulse drains
+        // faster = SHORTER slide (the old "Strength" name was backwards). RECOMPUTED on each hit in CheckDmg as
+        // (weapon decay param × KnockbackMult 0x188), so a one-time floor-load write is overwritten on the next hit.
+        // Observed: Pirate's Chariot=0.10 (slides far), Skel.Soldier/Auntie Medu=0.20, Dasher=0.30. (Was KnockbackStrength.)
+        internal const int KnockbackDecay    = 0x184; // float — knockback decay rate (higher = shorter slide); see comment
+        // Live per-enemy KNOCKBACK multiplier — copy of the species' record KnockbackMult (record +0x098), set at
+        // spawn. CheckDmg reads it on EVERY hit to scale both the impulse (KnockbackForce 0x180 = weaponForce × this)
+        // and its decay (KnockbackDecay 0x184). It is written only at spawn/despawn (NOT refreshed per-hit), so
+        // writing it on a LIVE slot changes that one enemy's knockback on subsequent hits (unlike 0x180/0x184, which
+        // the engine rewrites each hit). 1.0 = normal knockback, 0.0 = immovable (bosses/plants), 0.5-0.8 = heavies.
+        // Can be written to values above 1.0 for extreme knockback. 5.0 moves enemies several steps back.
+        internal const int KnockbackMult     = 0x188; // float — live per-enemy knockback multiplier (settable); see comment
     }
 
     /// <summary>
@@ -543,16 +580,27 @@ namespace Dark_Cloud_Improved_Version
         internal const int WindRes    = 0x05C; // short  — wind resistance
         internal const int HolyRes    = 0x05E; // short  — holy resistance
 
-        // +0x060: CONFIRMED entity/collision radius. Varies 2.0–45.0 per enemy species. Copied to
-        // slot EntityScale (0x044) and EntityScaleCopy (0x048) at spawn. Earlier analysis
-        // mistakenly labeled this field Unk00C and assigned EntityScale to the 1.0f constant at
-        // 0x098; this is the corrected placement.
-        internal const int EntityScale = 0x060; // float  — entity/collision radius copied to slot at spawn
+        // +0x060: the enemy's PHYSICAL (movement) collision radius — NOT the combat hitbox. Varies 2.0–45.0 per
+        // species; copied to slot EntityScale (0x044) and EntityScaleCopy (0x048) at spawn. Used by MoveCheck/
+        // MoveCheck2/MoveChecMonster for navigation/separation and by CheckDmg for the hit-effect radius. The combat
+        // hittable/attack collision is a separate, STB-driven system (_SET_BODY_COL/_SET_DMG_COL). See EnemySlotOffsets.EntityScale.
+        internal const int EntityScale = 0x060; // float  — physical/movement collision radius (copied to slot at spawn); not the attack hitbox
+
+        // ════════════════════════════════════════════════════════════════════════════════════════════
+        // ENEMY → PLAYER DAMAGE (how hard an enemy hits) — RE'd 2026-06-19. The applied damage is computed
+        // in BtCheckDamageProc (dun overlay 0x01DBAFD0) as:
+        //     damage = baseAttack − playerDefense      (clamped > 0; halved in some block/guard cases)
+        //     then applied via AddNowLife(player, −damage)  (ELF 0x1BE710)
+        // baseAttack is set PER-ATTACK by the enemy's STB behavior script (via the _SET_DMG_PARA command,
+        // ELF 0x1E3FD0) — it is NOT read from any species-table field. So per-dungeon attack strength lives
+        // in each species' STB script, and normalizing it would require runtime STB patching (BossScript-
+        // Patcher-style), not a field write. DURABILITY (HP + DamageReduction/WeaponDefense) IS field-driven.
+        // ════════════════════════════════════════════════════════════════════════════════════════════
 
         // +0x064/+0x066: the enemy DEFENSE pair, copied into the live slot's DefenseStats (0x090) low/high at
         // spawn. CONFIRMED 2026-06-19 (damage RE) as the real per-dungeon DURABILITY scalers — they grow with
-        // dungeon depth where the attack fields stay flat (e.g. regular Mimic: DBC 1/10 → WOF 2/10 → SW 5/20 →
-        // Moon Sea 8/30). CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them when the enemy TAKES damage:
+        // dungeon depth (e.g. regular Mimic: DBC 1/10 → WOF 2/10 → SW 5/20 → Moon Sea 8/30).
+        // CMonstorUnit::CheckDmg (ELF 0x1D9F10) reads them when the enemy TAKES damage:
         //   DamageReduction (0x064): subtracted from the incoming damage (flat reduction; halved for one damage
         //     type). Higher = enemy takes less damage.
         //   WeaponDefense   (0x066): passed as the int arg to SwordDmgCheck1 (the player-weapon damage check);
@@ -586,54 +634,69 @@ namespace Dark_Cloud_Improved_Version
         // whole drop block (ELF 0x1DF4C0). 1 = enemy drops on death, 0 = never drops. It is independent of the steal
         // item at 0x080 (Cave Bat has steal item 151 but this flag 0). 0 for flyers + Gol/Sil → those never drop;
         // setting it to 1 (see Enemies.EnableEnemyDrops) permanently enables their drops via the static species table.
-        internal const int StealFlag  = 0x082; // ushort — death-drop enable (1=drops, 0=no drop)
+        internal const int DeathDropFlag  = 0x082; // ushort — death-drop enable (1=drops, 0=no drop)
 
-        internal const int ItemResA   = 0x084; // ushort — item resistance A; semantics unconfirmed; scale resembles elemental resistance
-        internal const int ItemResB   = 0x086; // ushort — item resistance B
+        // +0x084 ItemDamageRes: the enemy's DAMAGE-TAKEN multiplier for thrown items (gems/bombs/etc.) — scale 100 =
+        // neutral, <100 = resistant (same scale as the elemental resistances). Read in CheckDmg (@0x1dc170, on the
+        // non-elemental / s3==-1 damage path). CONFIRMED in-game (2026-06-25) on Minotaur Joe: ItemDamageRes 50->90
+        // raised a thrown fire-gem's damage 14->26 (≈ the 90/50 ratio), and 0 made it deal 0 (fully immune). Bosses
+        // ~30-50 (item-resistant), regulars ~90-100. (Whether it also scales non-item damage on the same path is untested.)
+        internal const int ItemDamageRes   = 0x084; // ushort — thrown-item damage-taken multiplier (×/100, 100=neutral); see comment
+        // +0x086 ItemStatusRes: the enemy's STATUS-EFFECT susceptibility (0 = immune, ~100 = fully susceptible) — NOT a
+        // damage resistance. In CheckDmg, for each player weapon/item status-attribute bit (0x20/0x40/0x100/0x200/
+        // 0x800/0x1000; 0x80 = steal) the engine rolls rand vs ItemStatusRes and, if it passes, sets the matching status
+        // timer on the slot (+0x08 Freeze / +0x0C Poison / +0x10 Stamina / +0x14 Gooey). 0 = the roll never passes =
+        // immune. All bosses ship 0 (status-immune); regulars are 50-90. CONFIRMED in-game (2026-06-25): raising
+        // Minotaur Joe's ItemStatusRes 0->90 made him poison-able, and the landed poison then ticked for real damage
+        // (~12/tick at his normal HP).
+        internal const int ItemStatusRes   = 0x086; // ushort — status-effect susceptibility (0 = immune); see comment
 
-        // ════════════════════════════════════════════════════════════════════════════════════════════
-        // ENEMY → PLAYER DAMAGE (how hard an enemy hits) — RE'd 2026-06-19. KEY RESULT: AttackPower below
-        // does NOT control actual hit damage. The applied damage is computed in BtCheckDamageProc (dun
-        // overlay 0x01DBAFD0) as:
-        //     damage = baseAttack − playerDefense      (clamped > 0; halved in some block/guard cases)
-        //     then applied via AddNowLife(player, −damage)  (ELF 0x1BE710)
-        // baseAttack is set PER-ATTACK by the enemy's STB behavior script (via the _SET_DMG_PARA command,
-        // ELF 0x1E3FD0) — it is NOT read from any species-table field. Proof: across all regular mimics
-        // (which hit for very different amounts) every attack field here is IDENTICAL (AttackPower=235,
-        // all elementals=100); only HP (0x050), DamageReduction (0x064), WeaponDefense (0x066), XP (0x06C)
-        // and gold (0x070) differ. So per-dungeon attack strength lives in each species' STB script, and
-        // normalizing it would require runtime STB patching (BossScriptPatcher-style), not a field write.
-        // DURABILITY (HP + DamageReduction/WeaponDefense) IS field-driven and can be normalized directly.
-        // ════════════════════════════════════════════════════════════════════════════════════════════
+
         //
-        // +0x088: base melee attack power. Regular enemies: 82–200. Bosses: 65535 (sentinel; use
-        // only behavior-script attacks). 0 if enemy has no melee attack (e.g. pure-projectile flyers).
-        // NOTE: this field is NOT the real hit damage (see the block above) — treat it as a category marker.
-        // +0x08A–+0x094: six elemental attack-output multipliers in the same element order as the
-        // resistance fields: [fire, ice, thunder, wind, holy, unknown(dark?)]. Scale: 100=neutral,
-        // >100=enemy's primary attack element, <100=reduced output of that element.
-        // Example: thunder-beast eid=12 → [50,50,120,50,50,50] (strong thunder, weak others).
-        // Bosses (atk=65535) all have these at 0; pure-projectile enemies may have them at 0 too.
-        //
-        // IMPORTANT — AttackPower = 65535 does NOT drive the boss-defeat sequence by itself.
-        // It is a sentinel that signals "boss-class enemy" to the engine (no melee damage), but the
-        // defeat callback that triggers the exit cutscene lives in the SpeciesDataPtr behavior block.
-        // ModelCodeCopy (0x040) determines which behavior script the engine dispatches; that script
-        // contains the on-death hook pointer that ultimately calls the defeat function at ELF 0x0F5DF0.
-        // Writing 150 to AttackPower on a redirected boss slot prevents melee one-shots but does NOT
-        // prevent the defeat sequence from firing — the callback is loaded independently of this field.
-        internal const int AttackPower    = 0x088; // ushort — base melee attack power; 82–200 normal; 0 no melee; 65535 boss (sentinel only, see block comment)
-        internal const int ElemAtkFire    = 0x08A; // ushort — fire    attack multiplier (100=neutral)
-        internal const int ElemAtkIce     = 0x08C; // ushort — ice     attack multiplier
-        internal const int ElemAtkThunder = 0x08E; // ushort — thunder attack multiplier (spike for rock/beast/metal/mimic categories)
-        internal const int ElemAtkWind    = 0x090; // ushort — wind    attack multiplier
-        internal const int ElemAtkHoly    = 0x092; // ushort — holy    attack multiplier
-        internal const int ElemAtkDark    = 0x094; // ushort — dark(?) attack multiplier; 20 for some physical types
-        internal const int Unk042         = 0x096; // ushort — 0 for all observed valid enemies
+        // +0x088: RARE DROP ITEM ID — the enemy's signature bonus drop. RE'd 2026-06-24 by full-ELF dataflow:
+        // SetupViewMonstor (ELF 0x1E02B0) copies this to live enemy slot +0xE0 at spawn;
+        // CMonstorUnit::Step's death-drop block (gated at ELF 0x1DF4C0) is the ONLY reader —
+        // with a rand() < ~10% roll it seeds ForceItemDrop (slot +0xA0) = this id, then
+        // SetGateKey-Stack (ELF 0x1B5680, a 32-entry de-dupe set so a unique item drops only once) + CRandomItem::Set
+        // (ELF 0x1D71F0) spawn it; if unset the enemy does its normal random drop (SelectAttachi).
+        // King Mimic = 181 = "Treasure Chest Key", regular Mimic = 235 = "Dran's Feather" (ItemNameTbl).
+        // Bosses = 65535 (= -1 signed) = "no signature drop" — that −1 is why the engine skips the block.
+        internal const int RareDropItemId = 0x088; // ushort — signature/rare drop item ID; 65535(-1)=none (bosses); see block comment
 
-        // +0x098: constant 1.0f for all observed enemies. Purpose unknown; do not use as EntityScale.
-        // (Earlier analysis mistakenly labeled this EntityScale; the true EntityScale is at 0x060.)
-        internal const int Unk098         = 0x098; // float  — constant 1.0f; purpose unknown
+        // +0x08A–+0x094: SIX per-element attack-output multipliers (ushort each; ×value/100, 100 = neutral), in
+        // element order 0=Fire, 1=Ice, 2=Thunder, 3=Wind, 4=Holy, 5=NONE/PHYSICAL. DORMANT: the engine reads them
+        // but they have no gameplay effect, because no enemy attack ever carries an element. Mechanics:
+        //   • Spawn: SetupViewMonstor copies all six into the per-slot body-collision struct at MMU+slot*0x510+0x555D0
+        //     (a [16 body-part][6 element] table).
+        //   • CMonstorUnit::CheckDmg (0x1D9F10 @0x1dc08c) does dmg = dmg/100 * EA[s3] on the enemy→player path
+        //     (→ AddNowLife), where s3 = the hit's element, gated `beq s3,-1 -> skip`. (No read on the player→enemy
+        //     path, so this is NOT a damage-taken resistance.)
+        //   • s3 = -1 for every enemy attack: melee hits register via CCollisionData::Set (0x1b57a0) which hardcodes
+        //     the collision element +0x58 = -1; enemy projectiles are CSHOT_EFFECT, created in CMonstorUnit::Step
+        //     (@0x1def48) via Set__CSHOT_EFFECT with element arg = -1 (Initialize @0x1ae470 also defaults -1). Only
+        //     the player's special attacks call SetAttribute__CSHOT_EFFECT (@0x1ae350) to give a shot a real element.
+        // So EA[s3] is never reached. Per-species values vary (some non-100 spikes) but are inert. Bosses = all-0.
+        // To use these, an enemy attack would need a real element (the Set__CSHOT_EFFECT element arg, or SetAttribute).
+        // Element enum from CWeaponElement::Set (@0x1b7840) + the resistance-field order (0x056..0x05E);
+        // GetWeaponElementAttr (@0x1b69f0) maps element id 5 → no element bit.
+        internal const int ElemAtkFire    = 0x08A; // ushort — elemental attack-output multiplier (×/100, 100=neutral); see block
+        internal const int ElemAtkIce     = 0x08C; // ushort — elemental attack-output multiplier
+        internal const int ElemAtkThunder = 0x08E; // ushort — elemental attack-output multiplier (common signature spike: 120–150)
+        internal const int ElemAtkWind    = 0x090; // ushort — elemental attack-output multiplier
+        internal const int ElemAtkHoly    = 0x092; // ushort — elemental attack-output multiplier
+        internal const int ElemAtkPhysical = 0x094; // ushort — NON-ELEMENTAL (physical) attack multiplier; element id 5 = "none" (NOT dark — see block)
+
+        // +0x098: per-enemy KNOCKBACK-force multiplier (float; 1.0 for all stock enemies = neutral). On a hit,
+        // CheckDmg computes knockback = weaponHitForce (0x90 of the hit data) * KnockbackMult and writes it to
+        // slot+0x180; Step__CMonstorUnit then drives the enemy's velocity from slot+0x180 each frame and decays it
+        // (slot+0x180 -= slot+0x184) to 0. So lower = knockback-resistant, 0 = immovable on hit, higher = flies
+        // further. (Copied to slot+0x188 at spawn.) CONFIRMED in-game (2026-06-25): Skeleton Soldier at 5.0 was
+        // knocked back noticeably further per hit (scales the impulse, which then decays, so distance grows
+        // sub-linearly). It is a DELIBERATE per-species knockback-resistance stat (read from the ELF table, all 167
+        // records): 0.0 = immovable (every boss + their effect entities, and rooted plants like Cannibal Plant/
+        // Cursed Rose/King Prickly), 0.5 = heavies (Golem, Titan, Dragons, Pirate's Chariot, Gol/Sil), 0.6-0.8 =
+        // stone/rock (Statue, Statue Dog, Rockanoff), 1.0 = normal enemies (119 of 167). (NOT EntityScale; that's 0x060.)
+        internal const int KnockbackMult  = 0x098; // float — per-enemy knockback-force multiplier (1.0 = neutral); see comment
     }
 
     /// <summary>

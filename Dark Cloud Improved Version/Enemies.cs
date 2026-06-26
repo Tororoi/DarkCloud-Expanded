@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     {
         /// <summary>
         /// Permanently enable death-drops for the regular enemy species that ship unable to drop (flyers, Gol/Sil, …).
-        /// The engine skips the entire death-drop block when a species' StealFlag (record +0x82) is 0 — copied to the
+        /// The engine skips the entire death-drop block when a species' DeathDropFlag (record +0x82) is 0 — copied to the
         /// slot's StealItemId high word at spawn and tested at ELF 0x1DF4C0. Those species have DropChance &gt; 0 yet
         /// never drop because the flag is 0. We flip it to 1 in the STATIC species table (one ELF segment, persists the
         /// whole session), so EVERY future spawn inherits it — no per-tick or per-slot work. Idempotent; call once on
@@ -25,9 +25,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 int rec = ti * EnemySpeciesTable.Stride;
                 if (tbl[rec] != (byte)'e') continue;                       // regular-enemy mesh only (skip bosses/effects)
-                int f = rec + EnemySpeciesTable.StealFlag;
+                int f = rec + EnemySpeciesTable.DeathDropFlag;
                 if ((tbl[f] | (tbl[f + 1] << 8)) != 0) continue;            // already drops
-                Memory.WriteUShort(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.StealFlag, 1);
+                Memory.WriteUShort(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.DeathDropFlag, 1);
                 patched++;
             }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Enabled death-drops for {patched} previously no-drop enemy species.");
@@ -164,12 +164,12 @@ namespace Dark_Cloud_Improved_Version
         /// Logs a concise summary of all known database fields for each active non-miniboss slot.
         /// Use this instead of DumpAllActiveEnemySlots for ongoing database population.
         /// </summary>
-        internal static void LogEnemySpawns()
+        internal static void LogEnemySpawns(bool backfloor = false)
         {
             byte dungeon = Memory.ReadByte(Addresses.checkDungeon);
             byte floor   = Memory.ReadByte(Addresses.checkFloor);
             string dungeonName = Dungeons.TryGetValue(dungeon, out DungeonData dd) ? dd.Name : $"dungeon{dungeon}";
-            Console.WriteLine($"[EnemyInfo] {dungeonName} (id={dungeon}) floor={floor + 1}");
+            Console.WriteLine($"[EnemyInfo] {dungeonName} (id={dungeon}) floor={floor + 1}{(backfloor ? " BACKFLOOR" : "")}");
 
             for (int i = 0; i < 16; i++)
             {
@@ -181,38 +181,16 @@ namespace Dark_Cloud_Improved_Version
                 ushort nameId = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
                 string name = GetEnemyName(nameId);
 
-                int maxHp      = Memory.ReadInt(slotBase + EnemySlotOffsets.MaxHp);
-                int abs        = Memory.ReadInt(slotBase + EnemySlotOffsets.Abs);
-                int minGold    = Memory.ReadInt(slotBase + EnemySlotOffsets.MinGoldDrop);
-                int dropChance = Memory.ReadInt(slotBase + EnemySlotOffsets.DropChance);
-
-                int p1 = Memory.ReadInt(slotBase + EnemySlotOffsets.ResistancePack1);
-                int p2 = Memory.ReadInt(slotBase + EnemySlotOffsets.ResistancePack2);
-                int p3 = Memory.ReadInt(slotBase + EnemySlotOffsets.ResistancePack3);
-                ushort res1 = (ushort)(p1 & 0xFFFF); ushort fire = (ushort)(p1 >> 16);
-                ushort ice  = (ushort)(p2 & 0xFFFF); ushort thun = (ushort)(p2 >> 16);
-                ushort wind = (ushort)(p3 & 0xFFFF); ushort holy = (ushort)(p3 >> 16);
-
-                float scale    = Memory.ReadFloat(slotBase + EnemySlotOffsets.EntityScale);
-                int defStats   = Memory.ReadInt(slotBase + EnemySlotOffsets.DefenseStats);
-                ushort u90a    = (ushort)(defStats & 0xFFFF);   // DamageReduction
-                ushort u90b    = (ushort)(defStats >> 16);      // WeaponDefense
+                int maxHp    = Memory.ReadInt(slotBase + EnemySlotOffsets.MaxHp);
+                int abs      = Memory.ReadInt(slotBase + EnemySlotOffsets.Abs);
+                int minGold  = Memory.ReadInt(slotBase + EnemySlotOffsets.MinGoldDrop);
+                int defStats = Memory.ReadInt(slotBase + EnemySlotOffsets.DefenseStats);
+                ushort dr    = (ushort)(defStats & 0xFFFF);   // DamageReduction
+                ushort wd    = (ushort)(defStats >> 16);      // WeaponDefense
                 ushort stealId = (ushort)(Memory.ReadInt(slotBase + EnemySlotOffsets.StealItemId) & 0xFFFF);
-                int itemResRaw = Memory.ReadInt(slotBase + EnemySlotOffsets.ItemResistance);
-                ushort irA     = (ushort)(itemResRaw & 0xFFFF);
-                ushort irB     = (ushort)(itemResRaw >> 16);
-                float reticleW = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleWidth);
-                float reticleH = Memory.ReadFloat(slotBase + EnemySlotOffsets.ReticleHeight);
+                int dataSize = Memory.ReadInt(ModelScaleOffsets.ModelBase + ModelScaleOffsets.ModelStride * i + ModelScaleOffsets.DataSize);
 
-                int   scaleBase = ModelScaleOffsets.ModelBase + ModelScaleOffsets.ModelStride * i;
-                float bodyWidth    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.BodyWidth);
-                float bodyHeight    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.BodyHeight);
-                float bodyDepth    = Memory.ReadFloat(scaleBase + ModelScaleOffsets.BodyDepth);
-                int   dataSize  = Memory.ReadInt  (scaleBase + ModelScaleOffsets.DataSize);
-                int   animCount = Memory.ReadInt  (scaleBase + ModelScaleOffsets.AnimCount);
-
-                Console.WriteLine($"[EnemyInfo] slot={i} {name} (id={nameId}) hp={maxHp} abs={abs} gold={minGold} drop={dropChance}% | type={res1} fire={fire} ice={ice} thun={thun} wind={wind} holy={holy}");
-                Console.WriteLine($"[EnemyInfo] slot={i} {name} scale={scale:F1} def={u90a}/{u90b} steal=0x{stealId:X3} itemRes={irA}/{irB} reticle={reticleW:F2}x{reticleH:F2} | bodyWidth={bodyWidth:F1} bodyHeight={bodyHeight:F1} bodyDepth={bodyDepth:F1} dataSize={dataSize} animCount={animCount}");
+                Console.WriteLine($"[EnemyInfo] slot={i} {name} (id={nameId}) hp={maxHp} def={dr}/{wd} abs={abs} gold={minGold} steal=0x{stealId:X3} dataSize={dataSize}");
             }
         }
 
@@ -558,18 +536,17 @@ namespace Dark_Cloud_Improved_Version
             // Memory.WriteInt   (recordAddr + EnemySpeciesTable.SpawnCap,       Memory.ReadInt   (srcAddr + EnemySpeciesTable.SpawnCap));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.EnemySpeciesId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.EnemySpeciesId));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealItemId,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealItemId));
-            Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealFlag));
-            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResA,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResA));
-            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemResB,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemResB));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.AttackPower,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.AttackPower));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.DeathDropFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.DeathDropFlag));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemDamageRes,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemDamageRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.ItemStatusRes,       Memory.ReadUShort(srcAddr + EnemySpeciesTable.ItemStatusRes));
+            Memory.WriteUShort(recordAddr + EnemySpeciesTable.RareDropItemId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.RareDropItemId));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkFire,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkFire));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkIce,     Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkIce));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkThunder, Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkThunder));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkWind,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkWind));
             // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkHoly,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkHoly));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkDark,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkDark));
-            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.Unk042,         Memory.ReadUShort(srcAddr + EnemySpeciesTable.Unk042));
-            // Memory.WriteFloat (recordAddr + EnemySpeciesTable.Unk098,         Memory.ReadFloat (srcAddr + EnemySpeciesTable.Unk098));
+            // Memory.WriteUShort(recordAddr + EnemySpeciesTable.ElemAtkPhysical,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.ElemAtkPhysical));
+            // Memory.WriteFloat (recordAddr + EnemySpeciesTable.KnockbackMult,   Memory.ReadFloat (srcAddr + EnemySpeciesTable.KnockbackMult));
 
             Console.WriteLine($"[ModelRedirect] {target.Name} species table → {source.Name}");
         }
