@@ -1927,7 +1927,7 @@ namespace Dark_Cloud_Improved_Version
             MeleeDamage=new int[]{}, ProjectileDamage=new int[]{110} };
 
         internal static readonly EnemyDefaults AlexanderEnhanced = new EnemyDefaults {
-            Id=43, TableIndex=145, Name="Alexnder (Enhanced)", ModelCode="e149", ModelFootprint=39711,
+            Id=43, TableIndex=145, Name="Alexander (Enhanced)", ModelCode="e149", ModelFootprint=39711,
             Abs=30, MinGoldDrop=17, DropChance=50, StealItemId=164, RareDropItemId=81,
             MaxHp=7500, DamageReduction=23, WeaponDefense=50, KnockbackMult=1.0f,
             Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=120, WindRes=100, HolyRes=100,
@@ -2212,6 +2212,13 @@ namespace Dark_Cloud_Improved_Version
             return d;
         }
 
+        private static Dictionary<int, EnemyDefaults> Merge(params Dictionary<int, EnemyDefaults>[] groups)
+        {
+            var d = new Dictionary<int, EnemyDefaults>();
+            foreach (var g in groups) foreach (var kv in g) d[kv.Key] = kv.Value;
+            return d;
+        }
+
         // Native regular species per dungeon. Mimics are deliberately EXCLUDED — they're never sourced from the
         // native pool; the randomizer's dedicated weighted mimic insertion (always the current dungeon's mimic +
         // king mimic) is the single source of mimics. Bosses / event-only / Id-0 companions are also excluded.
@@ -2230,14 +2237,27 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly Dictionary<int, EnemyDefaults> NativeGoT = Group(
             Alexander, Billy, BlackDragon, Blizzard, Club, CurseDancer, DarkFlower, Diamond, EvilBat, Heart, Joker,
             Lich, LivingArmor, RashDasher, Spade);
-        internal static readonly Dictionary<int, EnemyDefaults> NativeDS = Group(
-            GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly, BishopQ, Gacious, SilverGear, HornHead, Nikapous,
-            MasterJacketEnhanced, MummyEnhanced, LichEnhanced, GolEnhanced, SilEnhanced, RockanoffEnhanced, StatueDogEnhanced,
-            YammichEnhanced, CaveBatEnhanced, EvilBatEnhanced, HalloweenEnhanced, CursedRoseEnhanced, RashDasherEnhanced,
-            WhiteFangEnhanced, CrabbyHermitEnhanced, SpaceGyonEnhanced, GyonEnhanced, CaptainEnhanced, CorceaEnhanced,
-            AuntieMeduEnhanced, MaskOfPrajnaEnhanced, PiratesChariotEnhanced, WitchHellzaEnhanced, SteelGiantEnhanced,
-            VulcanEnhanced, TitanEnhanced, LivingArmorEnhanced, CrescentBaronEnhanced, ArthurEnhanced, AlexanderEnhanced,
-            HeartEnhanced, ClubEnhanced, DiamondEnhanced, SpadeEnhanced, JokerEnhanced, BomberHeadEnhanced);
+        // Demon Shaft is five 20-floor depth regions, each anchored by a Gemron element (see DungeonData.DS_Front).
+        // Each region is also a selectable theme (registered in ThemeGroups); NativeDS is their union, used as the
+        // DS native-fill pool. Footprints are far over the DS buffer, so as themes they're trimmed to a fitting
+        // subset per floor (non-requireFullFit).
+        internal static readonly Dictionary<int, EnemyDefaults> DSFire =                  // floors 1–20    Σ ≈ 618,970 B
+            Group(GemronFire, MummyEnhanced, SilEnhanced, Nikapous, HalloweenEnhanced, MasterJacketEnhanced,
+                  VulcanEnhanced, DiamondEnhanced, WhiteFangEnhanced, ArthurEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> DSIce =                   // floors 21–40   Σ ≈ 432,321 B
+            Group(GemronIce, CorceaEnhanced, ClubEnhanced, RockanoffEnhanced, HornHead, AuntieMeduEnhanced,
+                  YammichEnhanced, WitchHellzaEnhanced, SteelGiantEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> DSThunder =               // floors 41–60   Σ ≈ 435,830 B
+            Group(GemronThunder, CaptainEnhanced, SpadeEnhanced, GolEnhanced, CaveBatEnhanced, BishopQ,
+                  GyonEnhanced, RashDasherEnhanced, MaskOfPrajnaEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> DSWind =                  // floors 61–80   Σ ≈ 441,039 B
+            Group(GemronWind, BomberHeadEnhanced, SilverGear, PiratesChariotEnhanced, CrabbyHermitEnhanced,
+                  SpaceGyonEnhanced, CursedRoseEnhanced, HeartEnhanced, AlexanderEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> DSHoly =                  // floors 81–99   Σ ≈ 413,561 B
+            Group(GemronHoly, LivingArmorEnhanced, StatueDogEnhanced, JokerEnhanced, EvilBatEnhanced,
+                  GaciousEnhanced, LichEnhanced, TitanEnhanced, CrescentBaronEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> NativeDS =
+            Merge(DSFire, DSIce, DSThunder, DSWind, DSHoly);
         // Indexed 0..6 = DBC, WOF, SW, SMT, MS, GoT, DS (matches checkDungeon / BtEnemyLayout order).
         internal static readonly Dictionary<int, EnemyDefaults>[] NativeByDungeon =
             { NativeDBC, NativeWOF, NativeSW, NativeSMT, NativeMS, NativeGoT, NativeDS };
@@ -2251,25 +2271,27 @@ namespace Dark_Cloud_Improved_Version
         //     only chosen on a floor whose buffer fits the WHOLE group, and never trimmed. On a tight-but-fitting
         //     floor they go whole-group (all repeatable, no mimic/native fill); with headroom they may instead cap
         //     each member to one spawn and fill the rest with mimics/natives.
-        //   • ThemeSingleSpawn: members pinned to a single spawn even on a whole-group floor — currently Captain
-        //     (Pirates), so only one Captain ever appears while Corcea / Pirate's Chariot carry the population.
+        //   • ThemeSingleSpawnByTheme: members pinned to a single spawn within a given theme even on a whole-group
+        //     floor (e.g. Captain/Sil/Gol in Pirates), while the rest of the group carries the population.
         internal static readonly Dictionary<int, EnemyDefaults> Cards =                   // Σ footprint ≈ 254,276 B  (requireFullFit)
             Group(Heart, Club, Diamond, Spade, Joker);
+        internal static readonly Dictionary<int, EnemyDefaults> CardsEnhanced =           // Σ footprint ≈ 254,276 B  (requireFullFit)
+            Group(HeartEnhanced, ClubEnhanced, DiamondEnhanced, SpadeEnhanced, JokerEnhanced);
         internal static readonly Dictionary<int, EnemyDefaults> DaysOfTheWeek =           // Σ footprint ≈ 295,962 B  (requireFullFit)
             Group(Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday);
         internal static readonly Dictionary<int, EnemyDefaults> Outlaws =                 // Σ footprint ≈ 162,546 B
             Group(Sam, MrBlare, Billy);
-        internal static readonly Dictionary<int, EnemyDefaults> Pirates =                 // Σ footprint ≈ 130,224 B  (Captain: single-spawn)
-            Group(Captain, Corcea, PiratesChariot);
+        internal static readonly Dictionary<int, EnemyDefaults> Pirates =                 // Σ footprint ≈ 240,840 B  (Captain: single-spawn; ½× weight)
+            Group(Captain, Corcea, PiratesChariot, Sil, Gol);
         internal static readonly Dictionary<int, EnemyDefaults> GemronElementals =        // Σ footprint ≈ 321,783 B  (requireFullFit)
             Group(GemronFire, GemronIce, GemronThunder, GemronWind, GemronHoly);
 
         // Per-element themes — thematic/by-lore, each anchored by its Gemron (and the suit card / dragon that carries
         // the matching elemental affinity in the data: Heart=Fire, Spade=Ice, Diamond=Thunder, Club=Wind). Tweak to taste.
-        internal static readonly Dictionary<int, EnemyDefaults> Fire =                    // Σ footprint ≈ 298,875 B
-            Group(GemronFire, VulcanEnhanced, BomberHeadEnhanced, MrBlare, Dragon);
-        internal static readonly Dictionary<int, EnemyDefaults> Ice =                     // Σ footprint ≈ 297,337 B
-            Group(GemronIce, Blizzard, Sam, BlueDragon, MoonDigger);
+        internal static readonly Dictionary<int, EnemyDefaults> Fire =                    // Σ footprint ≈ 236,451 B
+            Group(GemronFire, VulcanEnhanced, MrBlare, Dragon);
+        internal static readonly Dictionary<int, EnemyDefaults> Ice =                     // Σ footprint ≈ 261,180 B
+            Group(GemronIce, Blizzard, Sam, BlueDragon);
         internal static readonly Dictionary<int, EnemyDefaults> Thunder =                 // Σ footprint ≈ 250,197 B
             Group(GemronThunder, GolEnhanced, EarthDigger, MoonBug, Billy);
         internal static readonly Dictionary<int, EnemyDefaults> Wind =                    // Σ footprint ≈ 258,406 B
@@ -2281,22 +2303,40 @@ namespace Dark_Cloud_Improved_Version
         // These are deliberately broad; trim each to the most representative species to taste.
         internal static readonly Dictionary<int, EnemyDefaults> Dragons =                 // Σ footprint ≈ 235,494 B
             Group(Dragon, BlueDragon, BlackDragon);
-        internal static readonly Dictionary<int, EnemyDefaults> Undead =                  // Σ footprint ≈ 298,491 B
-            Group(SkeletonSoldier, MasterJacket, Gacious, HornHead, SilverGear);
+        internal static readonly Dictionary<int, EnemyDefaults> Undead =                  // Σ footprint ≈ 353,280 B  (Lich: single-spawn)
+            Group(SkeletonSoldier, MasterJacket, Gacious, HornHead, SilverGear, Lich);
         internal static readonly Dictionary<int, EnemyDefaults> Marine =                  // Σ footprint ≈ 216,801 B
             Group(CrabbyHermit, Gunny, Gyon, Opar, SpaceGyon);
         internal static readonly Dictionary<int, EnemyDefaults> Rock =                    // Σ footprint ≈ 144,285 B
             Group(StatueDog, Dune, Titan, Rockanoff);
-        internal static readonly Dictionary<int, EnemyDefaults> Plants =                  // Σ footprint ≈ 112,106 B
-            Group(CannibalPlant, DarkFlower, CursedRose);
-        internal static readonly Dictionary<int, EnemyDefaults> Beasts =                  // Σ footprint ≈ 156,922 B
-            Group(Dasher, Werewolf, WhiteFang);
+        internal static readonly Dictionary<int, EnemyDefaults> Plants =                  // Σ footprint ≈ 139,688 B
+            Group(CannibalPlant, DarkFlower, CursedRose, FliFli);
+        internal static readonly Dictionary<int, EnemyDefaults> Beasts =                  // Σ footprint ≈ 209,434 B
+            Group(Dasher, Werewolf, WhiteFangEnhanced, RashDasher);
         internal static readonly Dictionary<int, EnemyDefaults> SkyDwellers =             // Σ footprint ≈ 77,545 B
             Group(CaveBat, EvilBat, CrescentBaron);
-        internal static readonly Dictionary<int, EnemyDefaults> Metal =                   // Σ footprint ≈ 168,108 B
-            Group(Arthur, Alexander, SteelGiant, PiratesChariot);
-        internal static readonly Dictionary<int, EnemyDefaults> Mages =                   // Σ footprint ≈ 218,867 B
-            Group(CurseDancer, WitchIllza, BishopQ, Nikapous);
+        internal static readonly Dictionary<int, EnemyDefaults> Metal =                   // Σ footprint ≈ 223,885 B
+            Group(Arthur, Alexander, SteelGiant, PiratesChariot, LivingArmor);
+        internal static readonly Dictionary<int, EnemyDefaults> Mages =                   // Σ footprint ≈ 234,803 B
+            Group(CurseDancer, WitchHellza, BishopQ, Nikapous);
+
+        // Concept / gag themes.
+        internal static readonly Dictionary<int, EnemyDefaults> NotTheBees =              // Σ footprint ≈ 66,587 B
+            Group(Hornet, DarkFlower);
+        internal static readonly Dictionary<int, EnemyDefaults> BombsAway =               // Σ footprint ≈ 62,424 B
+            Group(BomberHeadEnhanced);
+        internal static readonly Dictionary<int, EnemyDefaults> WhackaMole =              // Σ footprint ≈ 102,991 B
+            Group(EarthDigger, HaleyHoley);
+        internal static readonly Dictionary<int, EnemyDefaults> Bait =                    // Σ footprint ≈ 184,592 B  (King Prickly: single-spawn; 3× weight)
+            Group(KingPrickly, MoonDigger, WitchIllza, HaleyHoley);
+        internal static readonly Dictionary<int, EnemyDefaults> HalloweenTheme =          // Σ footprint ≈ 347,863 B  (2× weight)
+            Group(Halloween, Ghost, SkeletonSoldier, MummyEnhanced, Werewolf, EvilBat);
+        internal static readonly Dictionary<int, EnemyDefaults> Gorgon =                  // Σ footprint ≈ 111,843 B
+            Group(AuntieMedu, Statue);
+        internal static readonly Dictionary<int, EnemyDefaults> Precious =                // Σ footprint ≈ 153,570 B  (½× weight)
+            Group(Sil, Gol, HellPockle);
+        internal static readonly Dictionary<int, EnemyDefaults> GraveyardShift =          // Σ footprint ≈ 270,729 B  (2× weight)
+            Group(MasterJacketEnhanced, SkeletonSoldier, HornHead, SilverGear);
 
         // Per-dungeon mimic themes (2 entries each: mimic + king mimic). Indexed 0..6 like NativeByDungeon.
         internal static readonly Dictionary<int, EnemyDefaults> MimicsDBC = Group(MimicDBC, KingMimicDBC);  // Σ ≈ 63,617 B
@@ -2309,20 +2349,17 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly Dictionary<int, EnemyDefaults>[] MimicsByDungeon =
             { MimicsDBC, MimicsWOF, MimicsSW, MimicsSMT, MimicsMS, MimicsGoT, MimicsDS };
 
-        // Members pinned to a single spawn (SpawnCap 1) whenever placed as a themed enemy — even on a whole-group
-        // floor — keyed by TableIndex. The rest of the group carries the floor population. Currently just Captain.
-        internal static readonly HashSet<int> ThemeSingleSpawn = new() { Captain.TableIndex.Value };
-
         // Registry the randomizer draws a random theme from (per-dungeon mimics are handled separately, since
         // which mimic theme applies depends on the current dungeon). requireFullFit = all-or-nothing: only chosen when
         // the whole group fits the floor's model buffer, and never trimmed (see EnemySpecies' themed-group notes).
         internal static readonly (string name, Dictionary<int, EnemyDefaults> members, bool requireFullFit)[] ThemeGroups =
         {
             ("Cards",             Cards,            true),
+            ("Cards (Enhanced)",  CardsEnhanced,    true),
             ("Days of the Week",  DaysOfTheWeek,    true),
             ("Dragons",           Dragons,          false),
             ("Outlaws",           Outlaws,          false),
-            ("Pirates",           Pirates,          false),
+            ("Pirates",           Pirates,          true),
             ("Gemron Elementals", GemronElementals, true),
             ("Fire",              Fire,             true),
             ("Ice",               Ice,              true),
@@ -2337,6 +2374,61 @@ namespace Dark_Cloud_Improved_Version
             ("Sky Dwellers",      SkyDwellers,      false),
             ("Metal",             Metal,            false),
             ("Mages",             Mages,            false),
+            ("Not the Bees",      NotTheBees,       false),
+            ("Bombs Away",        BombsAway,        false),
+            ("Whack-a-Mole",      WhackaMole,       false),
+            ("Bait",              Bait,             false),
+            ("Halloween",         HalloweenTheme,   false),
+            ("Gorgon",            Gorgon,           false),
+            ("Precious",          Precious,         false),
+            ("Graveyard Shift",   GraveyardShift,   false),
+            // Demon Shaft depth regions (over budget — trimmed to a fitting subset per floor).
+            ("Demon Shaft: Fire",    DSFire,        false),
+            ("Demon Shaft: Ice",     DSIce,         false),
+            ("Demon Shaft: Thunder", DSThunder,     false),
+            ("Demon Shaft: Wind",    DSWind,        false),
+            ("Demon Shaft: Holy",    DSHoly,        false),
+        };
+
+        // Themes native to a specific dungeon (0..6 = DBC,WOF,SW,SMT,MS,GoT,DS), keyed by display name. A native
+        // theme's pick weight ramps down the further the current dungeon is from its home (down to ThemeFarWeight in
+        // the most distant dungeon) and is multiplied by ThemeNativeBoost when you're IN its home dungeon. Themes not
+        // listed here are non-native (constant weight 1). See EnemyModelInjector.ThemeWeight. Currently the five
+        // Demon Shaft depth regions (home = DS).
+        internal static readonly Dictionary<string, int> ThemeHomeDungeon = new()
+        {
+            { "Demon Shaft: Fire", 6 }, { "Demon Shaft: Ice",  6 }, { "Demon Shaft: Thunder", 6 },
+            { "Demon Shaft: Wind", 6 }, { "Demon Shaft: Holy", 6 },
+        };
+
+        // Flat per-theme selection-weight multipliers, keyed by display name. Applied on top of ThemeWeight (the
+        // dungeon-proximity weighting), so a value of 4 makes the theme 4x as likely as a plain non-native theme in
+        // every dungeon. Themes not listed default to 1.
+        internal static readonly Dictionary<string, double> ThemeWeightMultiplier = new()
+        {
+            { "Bait", 3.0 },
+            { "Pirates", 0.5 },
+            { "Whack-a-Mole", 0.5 },
+            { "Precious", 0.5 },
+            { "Halloween", 2.0 }, { "Bombs Away", 2.0 }, { "Graveyard Shift", 2.0 },
+            // Per-category themes — 2× chance.
+            { "Dragons", 2.0 }, { "Undead", 2.0 }, { "Marine", 2.0 }, { "Rock", 2.0 }, { "Plants", 2.0 },
+            { "Beasts", 2.0 }, { "Sky Dwellers", 2.0 }, { "Metal", 2.0 }, { "Mages", 2.0 },
+        };
+
+        // Themes that always place BOTH the current dungeon's mimic + king mimic (repeatable) on their floor — a
+        // guaranteed pair instead of the usual random mimic/native fill. Best-effort under the model buffer (on the
+        // tightest floor the pair may not fit alongside a full requireFullFit group). See BuildThemedRoster.
+        internal static readonly HashSet<string> ThemeGuaranteedMimics = new() { "Pirates" };
+
+        // Per-theme single-spawn: members pinned to SpawnCap 1 (one-of-each) only within the named theme, even on a
+        // whole-group floor; the rest of the group carries the floor population. Members spawn normally in their other
+        // themes (e.g. Sil/Gol are one-of-each in Pirates but repeatable in Precious and the Demon Shaft regions).
+        internal static readonly Dictionary<string, HashSet<int>> ThemeSingleSpawnByTheme = new()
+        {
+            { "Pirates", new HashSet<int> { Captain.TableIndex.Value, Sil.TableIndex.Value, Gol.TableIndex.Value } },
+            { "Undead",  new HashSet<int> { Lich.TableIndex.Value } },
+            { "Bait",    new HashSet<int> { KingPrickly.TableIndex.Value } },
         };
 
         internal static readonly Dictionary<ushort, string> NormalEnemies = new()

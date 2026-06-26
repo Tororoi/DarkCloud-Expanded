@@ -503,7 +503,7 @@ namespace Dark_Cloud_Improved_Version
         // machinery (so roster mimics still render as chests) and is marked dungeon-wide so NotifyInFloor doesn't
         // revert it per-floor. The (mostly non-native) enemies are rescaled to the dungeon's level by EnemyStatNormalizer.
         internal static bool RandomizeEnemies = false;
-        private const double MimicChance = 0.50, KingMimicChance = 0.33;
+        private const double MimicChance = 0.40, KingMimicChance = 0.28;
         // Themed-group mode (coexists with the random mix). Each floor has a ThemeChance of being a single themed
         // group (cards, days of the week, dragons, …; see EnemySpecies.ThemeGroups) instead of the random mix.
         // When a theme is chosen: 50% the whole roster is that group (spawn-cap repeatable, so the floor fills with
@@ -773,13 +773,15 @@ namespace Dark_Cloud_Improved_Version
         //   • requireFullFit themes (cards/days/gemrons): excluded by PickTheme on any floor that can't fit the WHOLE
         //     group, and placed in full first (never trimmed). They go capped only if a repeatable filler still fits;
         //     otherwise they stay whole-group so nothing is dropped.
-        //   • ThemeSingleSpawn members (e.g. Captain): pinned to SpawnCap 1 even on a whole-group floor.
+        //   • ThemeSingleSpawnByTheme members (e.g. Captain/Sil/Gol in Pirates): pinned to SpawnCap 1 within that
+        //     theme even on a whole-group floor.
         // Budget-aware like BuildFloorRoster: shuffles candidates and stops adding once the next model would overflow
         // the model buffer, so an over-budget (non-requireFullFit) theme contributes a random subset; no species twice.
         private static int[] BuildThemedRoster(int dungeon, int mimicTI, int kingTI, int budget,
             System.Collections.Generic.List<(int ti, int cap)> capEdits, out string themeName)
         {
             PickTheme(dungeon, budget, out themeName, out int[] members, out bool requireFullFit, out bool isMimicTheme);
+            string theme = themeName;   // local copy: out params can't be captured by the local functions below
             var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
             int used = 0;
             bool TryAdd(int ti)
@@ -788,9 +790,11 @@ namespace Dark_Cloud_Improved_Version
                 if (roster.Count > 0 && used + Footprint(ti) > budget) return false;
                 roster.Add(ti); used += Footprint(ti); return true;
             }
-            // Cap for a themed member on a whole-group (repeatable) floor: ThemeSingleSpawn members (e.g. Captain in
-            // Pirates) stay pinned to one spawn; everything else is repeatable so it can carry the population.
-            int WholeGroupCap(int ti) => EnemySpecies.ThemeSingleSpawn.Contains(ti) ? 1 : 0;
+            // Cap for a themed member on a whole-group (repeatable) floor: members listed in this theme's
+            // ThemeSingleSpawnByTheme set are pinned to one spawn; everything else is repeatable so it can carry
+            // the population.
+            int WholeGroupCap(int ti) =>
+                EnemySpecies.ThemeSingleSpawnByTheme.TryGetValue(theme, out var ss) && ss.Contains(ti) ? 1 : 0;
 
             Shuffle(members);
 
@@ -798,9 +802,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 // The Mimics theme IS the dungeon's mimic + king mimic; a requireFullFit theme (cards/days/gemrons) was
                 // only selected because its WHOLE set fits the buffer. Either way every member is placed in full first
-                // and never trimmed. A non-mimic group may THEN go capped (each member once-per-floor + mimic/native
-                // fillers) — but only if a repeatable filler still fits; otherwise it stays whole-group (all repeatable,
-                // no fillers) so nothing is dropped and the floor can still fill. Mimics never cap/fill (no double-place).
+                // and never trimmed. A non-mimic group then either guarantees the dungeon mimic pair (ThemeGuaranteedMimics)
+                // or may go capped (each member once-per-floor + mimic/native fillers) if a repeatable filler still fits;
+                // otherwise it stays whole-group (all repeatable, no fillers). Mimics never cap/fill (no double-place).
                 foreach (int ti in members)
                 {
                     if (roster.Count >= RosterFillCount) break;
@@ -808,7 +812,14 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 bool capped = false;
-                if (!isMimicTheme && _randomizerRng.NextDouble() < ThemeCapOneChance)
+                if (!isMimicTheme && EnemySpecies.ThemeGuaranteedMimics.Contains(themeName))
+                {
+                    // Always place both the dungeon mimic + king mimic (repeatable), best-effort under budget. On the
+                    // tightest floors a full requireFullFit group can leave no room for the pair.
+                    if (TryAdd(mimicTI)) capEdits.Add((mimicTI, 0));
+                    if (TryAdd(kingTI))  capEdits.Add((kingTI, 0));
+                }
+                else if (!isMimicTheme && _randomizerRng.NextDouble() < ThemeCapOneChance)
                 {
                     int[] fillers = ChooseFillers(dungeon, mimicTI, kingTI);
                     foreach (int ti in fillers)
@@ -875,19 +886,32 @@ namespace Dark_Cloud_Improved_Version
             return natives;
         }
 
-        // Pick a random theme's member TableIndexes plus its flags. The per-dungeon mimic theme is folded in as one
-        // extra option (resolved to the current dungeon). requireFullFit themes are excluded up front on any floor
-        // whose buffer can't fit the whole group, so they're never partially placed.
+        // Pick a theme's member TableIndexes plus its flags, weighted by ThemeWeight: dungeon-native themes (e.g. the
+        // Demon Shaft regions) are rarer far from home and 4x as likely in their home dungeon. The per-dungeon mimic
+        // theme is folded in as one extra option (resolved to the current dungeon, weight 1). requireFullFit themes are
+        // excluded up front on any floor whose buffer can't fit the whole group, so they're never partially placed.
         private static void PickTheme(int dungeon, int budget, out string themeName, out int[] members,
             out bool requireFullFit, out bool isMimicTheme)
         {
             var groups = EnemySpecies.ThemeGroups;
-            var eligible = new System.Collections.Generic.List<int>(groups.Length + 1);
+            // Weighted candidate list: eligible theme indices (+ the Mimics sentinel = groups.Length). Non-native
+            // themes weigh 1; a dungeon-native theme weighs by its proximity to the current dungeon (ThemeWeight).
+            var idx = new System.Collections.Generic.List<int>(groups.Length + 1);
+            var wts = new System.Collections.Generic.List<double>(groups.Length + 1);
+            double total = 0;
+            void AddCand(int i, double w) { idx.Add(i); wts.Add(w); total += w; }
             for (int i = 0; i < groups.Length; i++)
-                if (!groups[i].requireFullFit || ThemeFootprint(groups[i].members) <= budget) eligible.Add(i);
-            eligible.Add(groups.Length);                 // the per-dungeon Mimics theme (small; always fits)
+            {
+                if (groups[i].requireFullFit && ThemeFootprint(groups[i].members) > budget) continue;
+                int home = EnemySpecies.ThemeHomeDungeon.TryGetValue(groups[i].name, out int h) ? h : -1;
+                double mult = EnemySpecies.ThemeWeightMultiplier.TryGetValue(groups[i].name, out double m) ? m : 1.0;
+                AddCand(i, ThemeWeight(home, dungeon) * mult);
+            }
+            AddCand(groups.Length, 1.0);                 // the per-dungeon Mimics theme (small; always fits), unweighted
 
-            int pick = eligible[_randomizerRng.Next(eligible.Count)];
+            double r = _randomizerRng.NextDouble() * total;
+            int pick = idx[idx.Count - 1];
+            for (int k = 0; k < idx.Count; k++) { r -= wts[k]; if (r < 0) { pick = idx[k]; break; } }
             System.Collections.Generic.Dictionary<int, EnemyDefaults> dict;
             if (pick == groups.Length) { themeName = "Mimics"; requireFullFit = false; isMimicTheme = true;  dict = EnemySpecies.MimicsByDungeon[dungeon]; }
             else                       { themeName = groups[pick].name; requireFullFit = groups[pick].requireFullFit; isMimicTheme = false; dict = groups[pick].members; }
@@ -900,6 +924,20 @@ namespace Dark_Cloud_Improved_Version
             int sum = 0;
             foreach (int ti in members.Keys) sum += Footprint(ti);
             return sum;
+        }
+
+        // Selection weight for a theme native to dungeon `home`, when staging a floor in `dungeon`. A non-native
+        // theme (home < 0) weighs 1. A native theme ramps linearly from ThemeFarWeight (in the most distant dungeon)
+        // up to 1.0 at its home dungeon, then gets the ThemeNativeBoost multiplier when you're actually in its home —
+        // so the current dungeon's native theme is ThemeNativeBoost× as likely as any non-native theme.
+        private const double ThemeNativeBoost = 4.0;   // native theme in its home dungeon
+        private const double ThemeFarWeight   = 0.10;  // native theme in the most distant dungeon
+        private static double ThemeWeight(int home, int dungeon)
+        {
+            if (home < 0) return 1.0;
+            int maxDist = BtEnemyLayout.DungeonCount - 1;
+            double prox = ThemeFarWeight + (1.0 - ThemeFarWeight) * (1.0 - System.Math.Abs(dungeon - home) / (double)maxDist);
+            return dungeon == home ? prox * ThemeNativeBoost : prox;
         }
 
         // Dungeon-native regulars eligible to backfill a capped themed floor. The native pools are mimic-free by

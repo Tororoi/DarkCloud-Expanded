@@ -166,7 +166,7 @@ spheres reference messy/comment strings in the source data and fall back to the 
 | 142 | 310 | King Mimic (Demon Shaft) (Enhanced) | `e110` | 10 |
 | 143 | 314 | Gemron (Wind) | `e114` | 7 |
 | 144 | 318 | Silver Gear | `e118` | 7 |
-| 145 | 43 | Alexnder (Enhanced) | `e149` | 5 |
+| 145 | 43 | Alexander (Enhanced) | `e149` | 5 |
 | 146 | 44 | Heart (Enhanced) | `e150` | 6 |
 | 147 | 49 | Bomber Head (Enhanced) | `e151` | 6 |
 | 148 | 71 | Crabby Hermit (Enhanced) | `e152` | 10 |

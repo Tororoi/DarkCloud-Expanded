@@ -181,7 +181,7 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 142 | 310 | King Mimic (Demon Shaft) (Enhanced) | `e110` | 170, 170, 170 | — |  |
 | 143 | 314 | Gemron (Wind) | `e114` | — | 140 |  |
 | 144 | 318 | Silver Gear | `e118` | — | 110 |  |
-| 145 | 43 | Alexnder (Enhanced) | `e149` | 122 | 122 |  |
+| 145 | 43 | Alexander (Enhanced) | `e149` | 122 | 122 |  |
 | 146 | 44 | Heart (Enhanced) | `e150` | 130 | 130 | funcId-229 shot (130); 133 `magic_bin` is a 0-dmg bind |
 | 147 | 49 | Bomber Head (Enhanced) | `e151` | 160, 160 | 160 |  |
 | 148 | 71 | Crabby Hermit (Enhanced) | `e152` | 130, 130, 130 | 130 |  |

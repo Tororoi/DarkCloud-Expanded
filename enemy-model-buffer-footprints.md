@@ -196,7 +196,7 @@ Gallery of Time (dungeon 5) shifts every ~6 floors as its look changes:
 | 142 | e110 | King Mimic (Demon Shaft) (Enhanced) | 39746 |
 | 143 | e114 | Gemron (Wind) | 66562 |
 | 144 | e118 | Silver Gear | 64198 |
-| 145 | e149 | Alexnder (Enhanced) | 39711 |
+| 145 | e149 | Alexander (Enhanced) | 39711 |
 | 146 | e150 | Heart (Enhanced) | 58698 |
 | 147 | e151 | Bomber Head (Enhanced) | 62424 |
 | 148 | e152 | Crabby Hermit (Enhanced) | 32512 |
