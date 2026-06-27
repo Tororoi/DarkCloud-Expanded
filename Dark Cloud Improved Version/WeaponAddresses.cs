@@ -94,4 +94,73 @@ namespace Dark_Cloud_Improved_Version
         internal const int Stride     = 4;
         internal const int Count      = 6; // element 0-5
     }
+
+    /// <summary>
+    /// Player melee REACH (how far a weapon hits). Reach is <b>per-weapon and lives in the weapon
+    /// MODEL's <c>dcol*</c> "damage-collision" frames</b> — NOT a <see cref="WeaponList"/> stat and NOT
+    /// the per-character tolerance at <see cref="PerCharTolerance"/>. Full notes: docs/weapon-reach.md.
+    ///
+    /// Swing -> hit flow (addresses PCSX2 = native + 0x20000000; <c>0x1DB...</c> are dun.bin overlay):
+    ///   1. The per-character swing handler (<c>ToanKey_Play</c> main 0x241690, <c>UngagaKey_Play</c>,
+    ///      <c>GoroKey_Play</c>) calls <c>SearchFrame(equippedWeaponModel,"dcol0".."dcol3")</c>
+    ///      (main 0x128700) -> <c>GetWorldPosition</c> -> <c>CCollisionData::Set</c> (main 0x1B57A0),
+    ///      building the weapon's hit spheres into the global <c>NowColData</c> (0x202A35E0).
+    ///   2. Each enemy's <c>CMonstorUnit::CheckDmg</c> (main 0x1D9F10) tests its body sphere against
+    ///      that collision (reads center +0x58/+0x60), and on a hit calls <c>SwordDmgCheck1</c>
+    ///      (dun 0x1DB9B30) to apply damage + draw the spark at the weapon bone.
+    ///
+    /// A weapon model has frames named <c>dcol0, dcol1, ...</c> placed along the blade; their count and
+    /// offsets differ per weapon (Kitchen Knife c01w08: dcol0-2, z&lt;=~4.2; Chronicle Sword c01w40:
+    /// dcol0-3, z&lt;=~11.6 ~=2.8x -> the longer reach). To change reach, scale the loaded model's
+    /// <c>dcol*</c> translations (see <see cref="WeaponSpawner"/> for the Heaven's Cloud x3 test).
+    /// </summary>
+    internal static class WeaponCollision
+    {
+        /// <summary>PCSX2 address holding the PS2-native pointer to the <b>character</b> model root
+        /// <c>CFrame</c> (the value <c>SwordDmgCheck1</c> passes to <c>SearchFrame</c>; e.g. Toan =
+        /// "c01d_..."). The <c>dcol*</c> frames are NOT in this node — they live in the equipped
+        /// weapon subtree attached under a hand bone, reachable by walking child/next. Convert the
+        /// stored pointer with <c>Memory.ToMmu()</c> before dereferencing.</summary>
+        internal const int EquippedModelPtr = 0x21EA1DDC;
+
+        // ── Runtime CFrame object (confirmed from SearchFrame 0x128700, GetLWMatrix 0x1281b0,
+        //    SetPosition 0x127e80) ──
+        // SearchFrame compares this+0x118 (name) then recurses child(+0x138)/next(+0x13c).
+        // Matrices: +0x150 = WORLD matrix (output cache), +0x1d0 = LOCAL matrix; GetLWMatrix
+        // recomputes +0x150 = parentWorld * local(+0x1d0). The AUTHORITATIVE local position is the
+        // three floats SetPosition writes at +0x220/+0x224/+0x228 (the +0x1d0/+0x150 matrices are
+        // rebuilt from it). To move a frame: write +0x220/4/8 then dirty it (+0x24c=1, +0x240=0).
+        internal const int CFrameParent      = 0x110;
+        internal const int CFrameName        = 0x118; // NUL-terminated char[]
+        internal const int CFrameChild       = 0x138;
+        internal const int CFrameNext        = 0x13C;
+        internal const int CFrameWorldMatrix = 0x150; // computed; do NOT edit (world-space, recomputed)
+        internal const int CFrameLocalMatrix = 0x1D0; // baked at load; its translation row (+0x30) is
+        internal const int CFrameLocalTransX = 0x200; //   the frame's real local offset from its parent.
+        internal const int CFrameLocalTransY = 0x204; //   Edit these + set CFrameDirtyWorld=0 (NOT
+        internal const int CFrameLocalTransZ = 0x208; //   CFrameDirtyTRS, which rebuilds +0x1d0 from TRS).
+        internal const int CFramePosX        = 0x220; // local translation x (read/written by SetPosition)
+        internal const int CFramePosY        = 0x224;
+        internal const int CFramePosZ        = 0x228;
+        internal const int CFrameDirtyTRS    = 0x24C; // set 1 when local TRS changed
+        internal const int CFrameDirtyWorld  = 0x240; // set 0 to force world-matrix recompute
+
+        // Raw MDS model-node layout (in data.dat / the .chr buffer; distinct from the CFrame object):
+        // char name[16] + 4x4 matrix @+0x28; translation = matrix row 3 at +0x58/+0x5C/+0x60.
+        internal const int NodeNameLen = 16;
+        internal const int NodeMatrix  = 0x28;
+        internal const int NodeTransX  = 0x58;
+        internal const int NodeTransY  = 0x5C;
+        internal const int NodeTransZ  = 0x60;
+
+        /// <summary>Per-character hit tolerance (6 floats, idx 0=Toan..5=Osmond), added to hit tests.
+        /// Confirmed in-game [16,14,16,16,18,15] - same across a character's weapons, so NOT reach.</summary>
+        internal const int PerCharTolerance = 0x21DC1B40;
+
+        /// <summary>Active weapon collision object (player path): dun $gp 0x21E00000 - 0x6210.</summary>
+        internal const int PlayerCollision = 0x21DF9DF0;
+
+        // Weapon model assets in data.dat: commenu/weapon/cXXwNN.chr (XX char, NN = WeaponList +0x48).
+        // Heaven's Cloud = c01w14.chr (Toan, within-char idx 14).
+    }
 }
