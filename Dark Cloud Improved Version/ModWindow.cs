@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using MsBox.Avalonia;
 using System;
@@ -487,6 +489,123 @@ namespace Dark_Cloud_Improved_Version
             for (int c = 0; c < attackSoundAddresses.Length && c < attackSoundValues.Length; c++)
                 Memory.WriteByte(attackSoundAddresses[c], (byte)(on ? 0 : attackSoundValues[c]));
             WriteOptionBit(OptAudioByte, 0x04, on);   // audio bit2
+        }
+
+        // ── Weapon reach debug canvas (Sandbox tab): live top-down (X/Y) view ──────────────
+        private DispatcherTimer _reachTimer;
+        private int _reachMaxSeen;        // most weapon spheres ever seen at once (is NowColData the right place?)
+        private double _reachScale = 6.0; // pixels per world unit
+
+        private const long RC_NowColData    = 0x202A35E0; // weapon hit-sphere array (NowColData)
+        private const int  RC_SphereStride  = 0xA0;       // bytes per sphere slot
+        private const int  RC_SphereFlagOff = 0x3C00;     // active-flag (int per slot) at NowColData+this
+        private const int  RC_SphereRadius  = 0x3C;       // float radius within a sphere slot
+        private const int  RC_MaxSpheres    = 64;
+        private const long RC_EnemyBase     = 0x21E16BA0; // enemy state slot 0
+        private const int  RC_EnemyStride   = 0x190;
+        private const int  RC_EnemyRender   = 0x000;      // 0=inactive,1=spawned,2=active
+        private const int  RC_EnemyLocX     = 0x100, RC_EnemyLocY = 0x108;
+        private const long RC_MainUnitBase  = 0x21DF87D0; // body-collision radius array base
+        private const long RC_BodyRadiusArr = 0x55390;
+        private const int  RC_BodySlotStride= 0x510;
+        private const int  RC_MaxEnemies    = 16;
+        private const long RC_PlayerX = 0x21EA1D30, RC_PlayerY = 0x21EA1D38;
+        private const long RC_PlayerColPtr = 0x21DF9DF0; // native ptr to the player weapon collision object
+
+        // Draws every sphere slot with a plausible radius from a candidate collision object; returns the count.
+        private int RC_DrawSpheres(long baseAddr, float px, float py, double scale, double C, IBrush fill, IBrush stroke)
+        {
+            const int NS = 32, FPS = RC_SphereStride / 4;
+            float[] b = Memory.ReadFloatBatch(baseAddr, NS * FPS);
+            if (b.Length < NS * FPS) return 0;
+            int n = 0;
+            for (int i = 0; i < NS; i++)
+            {
+                float r  = b[i * FPS + RC_SphereRadius / 4];
+                float cx = b[i * FPS + 0];
+                float cy = b[i * FPS + 2];
+                if (!(r > 0.05f && r < 200f) || !float.IsFinite(cx) || !float.IsFinite(cy)) continue;
+                double sx = C + (cx - px) * scale, sy = C - (cy - py) * scale;
+                RC_AddCircle(sx, sy, r * scale, fill, stroke);
+                n++;
+            }
+            return n;
+        }
+
+        private void Btn_ReachDebug_Toggle_Click(object sender, RoutedEventArgs e)
+        {
+            if (_reachTimer == null)
+            {
+                _reachTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+                _reachTimer.Tick += (_, _) => { try { UpdateReachCanvas(); } catch { } };
+            }
+            if (_reachTimer.IsEnabled) { _reachTimer.Stop(); Btn_ReachDebug_Toggle.Content = "Start debug view"; }
+            else                       { _reachTimer.Start(); Btn_ReachDebug_Toggle.Content = "Stop debug view"; }
+        }
+
+        private void RC_AddCircle(double sx, double sy, double rpx, IBrush fill, IBrush stroke)
+        {
+            var el = new Ellipse { Width = rpx * 2, Height = rpx * 2, Fill = fill,
+                                   Stroke = stroke, StrokeThickness = stroke == null ? 0 : 1 };
+            Canvas.SetLeft(el, sx - rpx);
+            Canvas.SetTop(el, sy - rpx);
+            ReachCanvas.Children.Add(el);
+        }
+
+        private void UpdateReachCanvas()
+        {
+            if (ReachCanvas == null) return;
+            ReachCanvas.Children.Clear();
+            if (!Memory.IsConnected) { Label_ReachDebug.Text = "not connected"; return; }
+
+            const double C = 230;            // canvas centre (460/2)
+            double scale = _reachScale;
+            float px = Memory.ReadFloat(RC_PlayerX), py = Memory.ReadFloat(RC_PlayerY);
+
+            // faint range rings at 10 / 20 / 30 world units
+            var ring = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+            foreach (int rw in new[] { 10, 20, 30 })
+                RC_AddCircle(C, C, rw * scale, null, ring);
+
+            (double, double) ToScreen(float wx, float wy) => (C + (wx - px) * scale, C - (wy - py) * scale);
+
+            // active enemies + their body-collision radius
+            int enemies = 0;
+            var bodyFill = new SolidColorBrush(Color.FromArgb(70, 230, 60, 60));
+            for (int s = 0; s < RC_MaxEnemies; s++)
+            {
+                long b = RC_EnemyBase + (long)s * RC_EnemyStride;
+                if (Memory.ReadInt(b + RC_EnemyRender) != 2) continue;
+                float ex = Memory.ReadFloat(b + RC_EnemyLocX), ey = Memory.ReadFloat(b + RC_EnemyLocY);
+                float er = Memory.ReadFloat(RC_MainUnitBase + RC_BodyRadiusArr + (long)s * RC_BodySlotStride);
+                if (er <= 0 || er > 100) er = 2; // fallback if body-radius slot not populated
+                var (sx, sy) = ToScreen(ex, ey);
+                RC_AddCircle(sx, sy, er * scale, bodyFill, Brushes.IndianRed);
+                enemies++;
+            }
+
+            // Weapon spheres: read 32 slots' data in one batch (+ the flag array). Show any slot with a
+            // plausible radius near the player. Slot data persists after the flag clears, so last-swing
+            // spheres stay visible (bright = flag live this frame, dim = stale from a recent swing).
+            // Weapon hit points: the cached dcol frames' live WORLD positions (persistent, posed each
+            // frame), each drawn as a circle of the current swing radius. This is the actual blade hit
+            // geometry — if these don't overlap an enemy's red body sphere during a swing, it whiffs.
+            var pts = WeaponSpawner.GetDcolWorldPoints();
+            float wr = WeaponSpawner.CurrentSwingRadius();
+            if (!(wr > 0.1f && wr < 100f)) wr = 3f;
+            var wFill = new SolidColorBrush(Color.FromArgb(60, 90, 230, 230));
+            foreach (var p in pts)
+            {
+                var (sx, sy) = ToScreen(p.x, p.y);
+                RC_AddCircle(sx, sy, wr * scale, wFill, Brushes.Cyan);
+                RC_AddCircle(sx, sy, 2, Brushes.Cyan, null); // center dot
+            }
+            if (pts.Count > _reachMaxSeen) _reachMaxSeen = pts.Count;
+
+            RC_AddCircle(C, C, 4, Brushes.White, Brushes.Black); // player
+
+            Label_ReachDebug.Text =
+                $"enemies:{enemies}  dcol pts:{pts.Count}  radius:{wr:0.#}  (px {px:0.#},{py:0.#})";
         }
 
         // Sets the current dungeon's spawn roster so every spawn is the given species (by TableIndex).

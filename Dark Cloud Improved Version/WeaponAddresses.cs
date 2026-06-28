@@ -127,9 +127,12 @@ namespace Dark_Cloud_Improved_Version
         //    SetPosition 0x127e80) ──
         // SearchFrame compares this+0x118 (name) then recurses child(+0x138)/next(+0x13c).
         // Matrices: +0x150 = WORLD matrix (output cache), +0x1d0 = LOCAL matrix; GetLWMatrix
-        // recomputes +0x150 = parentWorld * local(+0x1d0). The AUTHORITATIVE local position is the
-        // three floats SetPosition writes at +0x220/+0x224/+0x228 (the +0x1d0/+0x150 matrices are
-        // rebuilt from it). To move a frame: write +0x220/4/8 then dirty it (+0x24c=1, +0x240=0).
+        // recomputes +0x150 = parentWorld * local(+0x1d0). For the dcol* frames the position lives
+        // DIRECTLY in the local matrix translation (+0x200/4/8), baked at load — the TRS position
+        // (+0x220/4/8) is (0,0,0) and unused for these frames (confirmed via live dump 2026-06-28).
+        // So to move a dcol frame: write +0x200/4/8 then force a world recompute (+0x240=0). Do NOT
+        // use the +0x220 TRS path here — its base is 0, so writing it would zero the offset, not extend
+        // it. (If the local-matrix edit reverts each frame, the engine re-poses from the upstream MDS.)
         internal const int CFrameParent      = 0x110;
         internal const int CFrameName        = 0x118; // NUL-terminated char[]
         internal const int CFrameChild       = 0x138;

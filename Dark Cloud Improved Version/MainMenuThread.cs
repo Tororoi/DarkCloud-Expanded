@@ -26,16 +26,6 @@ namespace Dark_Cloud_Improved_Version
             Weapons.WeaponsBalanceChanges();
             Shop.UpdateShopPrices();
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
-
-            // ── TEMP TEST: does EntityScale (record +0x60) control physical/movement collision? ──
-            // Skeleton Soldier (TableIndex 1, e03a) normal EntityScale = 6.0; set 10x = 60.0. The record copies to both
-            // slot 0x044 (MoveCheck — walls/player) and 0x048 (MoveChecMonster — other enemies) at spawn, so watch how
-            // skeletons interact with walls, the player, and each other (MoveCheck uses distance < 6.0 + EntityScale).
-            // Expect them to keep a much larger berth (or, if too large, teleport/movement-lock). Remove after the test.
-            Memory.WriteFloat(EnemySpeciesTable.RecordAddress(EnemySpecies.SkeletonSoldier.TableIndex.Value)
-                + EnemySpeciesTable.EntityScale, 0.0f);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog()
-                + "[EntityScaleTest] Skeleton Soldier (TI 1) EntityScale set to 60.0 (10x) in the static species table.");
         }
 
         public static void CheckEmulatorAndGame()

@@ -1,16 +1,62 @@
 # Weapon Reach — research notes
 
+## SOLVED — reach = dcol bone Z in the COMBAT model `.mds` (offline asset edit)
+
+Confirmed 2026-06-28 by parsing `data.dat`. Each weapon has TWO models: `commenu\weapon\cXXwNN.chr`
+(menu/display) and **`dun\item\main_wep\cXXwNN.mds` (the in-combat hitbox — the one that sets reach).**
+Reach = the **max `dcol` bone Z translation** in that combat `.mds`:
+
+| Weapon | combat .mds dcol Z values | max |
+|---|---|---|
+| Kitchen Knife (c01w08) | 0.83, 1.85, 4.19 | 4.2 (short) |
+| Heaven's Cloud (c01w14) | 1.49, 12.51, 5.93, 10.61 | 12.5 |
+| Chronicle Sword (c01w40) | 2.18, 6.19, 14.25, 17.90 | 17.9 (long) |
+
+MDS bone = 112 B: index(4)+size(4)+name[32]+assocMDTOffset(4)+parentIndex(4)+localMatrix(64, row-major).
+Translation = matrix row 3 → **x@bone+0x60, y@+0x64, z@+0x68**. The dcol bones are (0,0,Z) for Toan
+weapons, so only Z matters. To change reach, scale the Z floats.
+
+**Edit procedure (in-ISO, no repack needed — data.dat is uncompressed & contiguous):**
+- data.dat is at ISO byte offset **0x51F000** (ISO9660 LBA 2622) in `Dark Cloud (USA).iso`.
+- HC combat `.mds` (`dun\item\main_wep\c01w14.mds`) is at data.dat 0x190A5000; dcol bone bases (data.dat):
+  dcol0=0x190A50F0, dcol2=0x190A5160, dcol3=0x190A51D0, dcol1=0x190A5240. **Z = base+0x68.**
+- ISO byte offset of a Z = 0x51F000 + (base+0x68). Overwrite the float in place (size unchanged).
+- Scripts: `/tmp/dcol_mds.py` (locate bones), `/tmp/iso_patch.py` (copy-safe patch). Test image:
+  `~/ROMs/Dark Cloud (USA) reach-test.iso` (HC dcol ×3); original ISO untouched.
+
+Runtime patching is NOT viable (all paths proven dead — see STATUS below). If a `data.dat` repack
+step is ever added to the build, this offline edit is the shippable per-weapon reach mechanism.
+
+---
+
+
+
 How far a weapon hits ("reach"). Addresses are native (PS2 EE); **PCSX2 = native + 0x20000000**
 (`Memory.ToMmu(native)` = `(native & 0x1FFFFFFF) | 0x20000000`). Functions in `0x01DB….`/`0x01DC….`
 are in the **dun.bin overlay** (loads at vaddr 0x01DABD00, code at file +0x80). Everything else is
 SCUS_971.11. `$gp` = 0x002A97F0 (main) / 0x01E00000 (dun).
 
-> **STATUS (in progress).** Reach = the world position of the weapon model's `dcol` collision frame.
-> We can find and edit that frame live, BUT **the engine re-poses the weapon frames every frame**, so
-> any edit to the frame's live local matrix (`+0x1d0`) is overwritten within one frame (we measured a
-> continuous reset — see below). The remaining task is to patch the **upstream bind/base matrix** that
-> the per-frame pose copies from. A field dump to locate that source was just kicked off (see
-> "Immediate next step").
+> **STATUS (2026-06-28): geometry-via-runtime EXHAUSTED — pivoted to the tolerance lever.**
+> Reach = the world position of the weapon model's `dcol` bone. We can find/edit it live, but the
+> engine re-poses the bone every frame and we cannot hold an edit at the swing's collision-build frame
+> via polling. End-to-end proof this session:
+> - Writing the runtime CFrame local matrix (`+0x1d0`/`+0x200`) reverts every frame (rescale counter
+>   climbed without bound).
+> - A full 31 MB RAM scan for the dcol translation `(2.6789,_,4.0047)` found exactly **two** copies:
+>   the runtime CFrame (`0x484xxx`) and one other at native `0x5B7170` (a flat matrix-palette-like
+>   entry, rows 0/2 zero, rows 1/3 = the translation; no `dcol` name within 0x220).
+> - Scaling `0x5B7170` ×3 **does propagate** to the runtime dcol local-z (4→~10.6) but **oscillates**
+>   (races our 400 ms poll) and produced **no actual reach change**.
+> So no stable RAM lever exists. The clean fix (bake the dcol bone matrix into `c01w14.chr`) needs a
+> `data.dat`/ISO repack pipeline the project doesn't have; patching the code radius constant crashes
+> PCSX2 (PINE code-patch, per EnemyModelInjector). **Now testing the one race-free, PINE-safe DATA
+> lever: the per-char tolerance `0x21DC1B40` fed to `CheckHitUser` (see Fallback below).**
+>
+> MDS bone format (Specifications/Models/MDS.md): 112-byte bones = index(4)+size(4)+name(32)+
+> assocMDTOffset(4)+parentIndex(4)+localMatrix(64, row-major; translation = row 3). So in the `.chr`
+> the dcol reach offset is bone`+0x60/+0x64/+0x68` (x/y/z) — a plain editable float if a repack path
+> is ever added. `dcol` is a bone; the collision volume is a sphere at its world pos (radius path),
+> NOT the DC_COLLISION_TRIANGLES mesh (that's environment collision).
 
 ---
 
@@ -113,11 +159,28 @@ Once the source is found: scale its translation (hitbox/`dcol`) and/or 3×3 (vis
 per-frame copy will carry the change. For `dcol`, only the translation along the blade matters; for
 `weapon`, scaling one axis (the blade length) rather than the uniform 3×3 avoids a fat blade.
 
-### Immediate next step (a diagnostic is already in the code)
-`WeaponSpawner.DumpFields` logs the `dcol` CFrame's `+0x150..+0x250` as float+hex once. Run with
-Heaven's Cloud equipped and look for a **second** occurrence of the base translation — `4.0` =
-`0x40800000`, `2.68` ≈ `0x402B…` — at an offset other than `+0x200/+0x208`. That offset is the bind
-matrix → scale its translation (`offset+0x30`) instead of `+0x1d0`.
+### Candidate #1 (on-object bind matrix) — RULED OUT (2026-06-28)
+`WeaponSpawner.DumpFields` dumped the full `dcol` CFrame `+0x00..+0x250`. The base translation
+`(2.6789, _, 4.0047)` = `0x402B7379 / 0x408026AE` appears **only** at `+0x200/+0x208` — no second copy
+anywhere in the object. The candidate `+0x190` slot is an identity-ish matrix (`+0x190,+0x1a4,+0x1b8,
++0x1cc` = 1.0), not the offset. So the per-frame source is **not** on the CFrame object → it's the
+upstream Vu1/MDS node (candidate #2). Also confirmed: no back-pointer to a source node in `+0x00..0x150`
+(only `+0x110` parent, `+0x13c` next, and an undocumented node ptr at `+0x140`).
+
+### Disasm tooling caveat
+`tools/dcdis.py` is capstone MIPS32 — it **cannot decode PS2 EE vector/quadword ops** (`sq`/`lq`/COP2),
+which is exactly what the matrix-copy/pose code uses (shows as `.word (undecoded)`). Static tracing of
+the per-frame `+0x1d0` writer with it is unreliable. `CopyFrame__FP6CFrameP14CDataAlloc2<1>` (0x127700)
+does confirm the runtime tree is a deep copy (node alloc 0x260 + `__as__6CFrameFR6CFrame` 0x128eb0 +
+recurse child/next); the MDS template type is `CFrameVu1` (size 0x270, `LoadMDSFileLOD` 0x126eb0).
+
+### Immediate next step (a scanner is already in the code)
+`WeaponSpawner.ScanForSourceMatrix` (one-shot, runs when HC equipped) scans EE RAM
+`0x20100000..0x22000000` for the translation pattern (x=`0x402B7379` with z=`0x408026AE` 8 bytes later)
+and logs every hit, flagging the known runtime CFrame (native `0x4845B0+0x200`). Outcome decides the
+path: **>1 full match** → a static source copy exists, scale the CANDIDATE (geometry path viable);
+**only the runtime CFrame** → the pose recomputes the matrix, geometry-via-RAM is dead → use the
+radius/tolerance fallback below.
 
 ### Find the per-frame `+0x1d0` writer (if the bind-matrix dump is inconclusive)
 Disassemble the motion/calc pass that re-poses frames and see what it copies into `+0x1d0`:
