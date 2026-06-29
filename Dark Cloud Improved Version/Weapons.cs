@@ -3890,8 +3890,9 @@ namespace Dark_Cloud_Improved_Version
         //    (1) setting the "dcol1" frame's local Z from stock 9.2053 to ReachTargetZ (scales the
         //        visible swing AND the hit reach), and
         //    (2) multiplying the 3 swing-radius constants by ReachRadiusFactor while HC is equipped
-        //        (restored when unequipped, so other weapons are unaffected).
-        //  NOTE: the CHARGE attack uses a separate, not-yet-located hit path — this does not affect it.
+        //        (restored when unequipped, so other weapons are unaffected), and
+        //    (3) enlarging the lunge/whirlwind charge hit radii (code immediates) and the whirlwind's
+        //        separate visual effect model (c01_fuusya "kiru" frame) to match — see MaintainWhirlScale.
         //  Addresses: WeaponAddresses.WeaponCollision. RE notes: docs/weapon-reach.md.
         // ════════════════════════════════════════════════════════════════════════════════════════
         const int   HeavensCloudReachId  = 271;
@@ -3902,11 +3903,11 @@ namespace Dark_Cloud_Improved_Version
         // track the ReachTargetZ knob. Negative deadzone = the sphere covers past centre.
         // Vanilla deadzones (dcol1 9.2): combo 6.4 / 3.9 / 3.0, lunge 3.2, whirlwind −2.8. Toan's body ≈ 4.
         // The 3 combo radii are gp data (SwingRadiusAddrs); lunge/whirlwind are code immediates (patched).
-        const float ComboSwing1Deadzone  = 11.0f;   // 1st combo hit (gp 0x202A1C68, vanilla radius 2.8, largest weapon dz 6.64)
-        const float ComboSwing2Deadzone  = 9.0f;   // 2nd combo hit (gp 0x202A1C6C, vanilla radius 5.3, largest weapon dz 4.14)
-        const float ComboSwing3Deadzone  = 8.0f;    // 3rd+ combo hit (gp 0x202A1C70, vanilla radius 6.2, largest weapon dz 3.24)
+        const float ComboSwing1Deadzone  = 12.0f;   // 1st combo hit (gp 0x202A1C68, vanilla radius 2.8, largest weapon dz 6.64)
+        const float ComboSwing2Deadzone  = 10.0f;   // 2nd combo hit (gp 0x202A1C6C, vanilla radius 5.3, largest weapon dz 4.14)
+        const float ComboSwing3Deadzone  = 9.0f;    // 3rd+ combo hit (gp 0x202A1C70, vanilla radius 6.2, largest weapon dz 3.24)
         const float LungeDeadzone        = 7.0f;    // lunge (vanilla radius 6.0, largest weapon dz 3.44)
-        const float WhirlwindDeadzone    = -3.0f;   // whirlwind (vanilla radius 12.0, largest weapon dz -2.56)
+        const float WhirlwindDeadzone    = -9.0f;   // whirlwind (vanilla radius 12.0, largest weapon dz -2.56)
         static readonly float[] ComboDeadzones = { ComboSwing1Deadzone, ComboSwing2Deadzone, ComboSwing3Deadzone };
         const float LungeRadius          = ReachTargetZ - LungeDeadzone;
         const float WhirlwindRadius      = ReachTargetZ - WhirlwindDeadzone;
@@ -3915,6 +3916,18 @@ namespace Dark_Cloud_Improved_Version
         static int  _reachScanBackoff;
         static long _dcol1Addr;                    // MMU name address of the live "dcol1" frame (0 = none)
         static readonly float[] _reachRadiusStock = new float[3];
+
+        // Whirlwind charge effect (c01_fuusya "kiru" root frame) visual scale. The swoosh is a separate
+        // effect model whose mesh isn't editable (undecoded VIF1 verts), so we enlarge it by scaling the
+        // loaded model's root-frame 3x3 — same loaded-template lever as dcol1. HC-gated; see WeaponCollision.
+        // Scale the whirlwind effect model to track the enlarged hit radius: vanilla visual matched the
+        // vanilla 12.0 radius, so scale by (new whirl radius / 12.0) to keep visual and hitbox in step.
+        const float WhirlwindStockRadius = 12.0f;
+        static readonly float WhirlVisualScale = WhirlwindRadius / (WhirlwindStockRadius + 6.0f);
+        static int   _whirlScanBackoff;
+        static long[] _whirlRoots = System.Array.Empty<long>(); // MMU bases of the fuusya "kiru" root(s) we scale
+        static readonly float[] _whirlBind3x3 = new float[9];   // root's bind local-matrix 3x3 (target = bind * scale)
+        static bool _whirlBindRead;
 
         /// <summary>Starts the Heaven's Cloud reach extender background thread (idempotent).</summary>
         public static void StartHeavensCloudReach()
@@ -3925,7 +3938,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Re-arm on floor entry so the freshly reloaded weapon model is re-located.</summary>
-        public static void OnReachFloorEntered() { _reachArmed = false; _dcol1Addr = 0; }
+        public static void OnReachFloorEntered() { _reachArmed = false; _dcol1Addr = 0; _whirlRoots = System.Array.Empty<long>(); _whirlScanBackoff = 0; }
 
         static void ReachLoop()
         {
@@ -3955,6 +3968,68 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_reachScanBackoff <= 0) ScanForDcol1();      // locate the dcol1 frame (once per load)
             else _reachScanBackoff--;
+
+            MaintainWhirlScale();                                 // enlarge the whirlwind effect model
+        }
+
+        // Locate / maintain the whirlwind effect (c01_fuusya). Only the root "kiru" matrix transforms the
+        // VERTEX_ANIME mesh, so we scale the root's local-matrix 3x3. The model is a pool of identical idle
+        // instances; we can't tell which will activate, so the scan scales ALL of them, then we NARROW to the
+        // single live instance once it reveals itself (the only one with a nonzero world position after a
+        // cast). Each cast re-poses that root once; the maintain re-applies the scale.
+        static void MaintainWhirlScale()
+        {
+            if (_whirlRoots.Length > 0)
+            {
+                // Drop the cache if the first root's name vanished (model freed/relocated); else re-apply.
+                if (Memory.ReadUInt(_whirlRoots[0] + WeaponCollision.CFrameName) != WeaponCollision.KiruNameWord)
+                    { _whirlRoots = System.Array.Empty<long>(); return; }
+                if (_whirlRoots.Length > 1) NarrowToLiveWhirl();   // collapse to the one instance that matters
+                float target0 = _whirlBind3x3[0] * WhirlVisualScale;
+                foreach (long root in _whirlRoots)
+                    if (Math.Abs(Memory.ReadFloat(root + WeaponCollision.CFrameLocal3x3[0]) - target0) > 0.01f) WriteWhirlScaled(root);
+            }
+            else if (_whirlScanBackoff <= 0) ScanForWhirl();
+            else _whirlScanBackoff--;
+        }
+
+        // Once a cast has happened, exactly one pool instance has a nonzero world position (it keeps its last
+        // position when idle). Collapse the maintained set to that one — every other root is a dead idle copy.
+        static void NarrowToLiveWhirl()
+        {
+            foreach (long root in _whirlRoots)
+            {
+                float wx = Memory.ReadFloat(root + WeaponCollision.CFrameWorldMatrix + 0x30);
+                float wz = Memory.ReadFloat(root + WeaponCollision.CFrameWorldMatrix + 0x38);
+                if (Math.Abs(wx) <= 0.5f && Math.Abs(wz) <= 0.5f) continue;
+                _whirlRoots = new[] { root };
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"HC whirl: narrowed to live instance @0x{root & 0x1FFFFFFF:X8}");
+                return;
+            }
+        }
+
+        // Scale a fuusya root's local-matrix 3x3 (base+0x1d0) by bind*WhirlVisualScale (the only matrix that
+        // transforms the morph mesh), leaving the translation row (+0x200) anchored. Force a recompute.
+        static void WriteWhirlScaled(long root)
+        {
+            for (int i = 0; i < 9; i++)
+                Memory.WriteFloat(root + WeaponCollision.CFrameLocal3x3[i], _whirlBind3x3[i] * WhirlVisualScale);
+            Memory.WriteInt(root + WeaponCollision.CFrameDirtyWorld, 0);
+        }
+
+        // True if `root` is a fuusya "kiru" instance (next frame +0x270 is "fkiri"). Caches its bind 3x3 once.
+        static bool ValidateWhirlRoot(long root)
+        {
+            if (Memory.ReadUInt(root + WeaponCollision.CFrameName) != WeaponCollision.KiruNameWord) return false;
+            if (Memory.ReadUInt(root + WeaponCollision.FuusyaFrameStride + WeaponCollision.CFrameName) != WeaponCollision.FkiriNameWord) return false;
+            if (!_whirlBindRead)
+            {
+                for (int k = 0; k < 9; k++) _whirlBind3x3[k] = Memory.ReadFloat(root + WeaponCollision.CFrameLocal3x3[k]);
+                if (Math.Abs(_whirlBind3x3[0]) < 0.05f || Math.Abs(_whirlBind3x3[0]) > 4.0f) return false; // already scaled / bad read
+                _whirlBindRead = true;
+            }
+            return true;
         }
 
         // Bump (×factor) / restore the 3 swing hit-sphere radius constants. Stock is read & cached once,
@@ -4025,6 +4100,48 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
             _reachScanBackoff = 8; // not found this pass — wait ~3s before retrying
+        }
+
+        // Locate the fuusya root(s) to scale. Fast path: the known HC live instance — if it validates as
+        // "kiru"+"fkiri", scale it alone (no scan). Fallback: full RAM scan for all pool instances (then
+        // MaintainWhirlScale narrows to the live one after the first cast). Caches the bind 3x3.
+        static void ScanForWhirl()
+        {
+            if (ValidateWhirlRoot(WeaponCollision.KnownWhirlRootMmu))
+            {
+                _whirlRoots = new[] { WeaponCollision.KnownWhirlRootMmu };
+                WriteWhirlScaled(WeaponCollision.KnownWhirlRootMmu);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"HC whirl: scaled root (fast path) @0x{WeaponCollision.KnownWhirlRootMmu & 0x1FFFFFFF:X8} local-3x3 x{WhirlVisualScale:0.##} bind m00={_whirlBind3x3[0]:0.##}");
+                return;
+            }
+
+            var roots = new System.Collections.Generic.List<long>();
+            for (long a = WeaponCollision.ReachScanLo; a < WeaponCollision.ReachScanHi; a += (long)WeaponCollision.ReachScanChunkWords * 4)
+            {
+                int n = WeaponCollision.ReachScanChunkWords + 2;
+                if (a + (long)n * 4 > WeaponCollision.ReachScanHi) n = (int)((WeaponCollision.ReachScanHi - a) / 4);
+                if (n <= 2) break;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 1 < n; i++)
+                {
+                    if (w[i] != WeaponCollision.KiruNameWord) continue;                       // "kiru"
+                    if ((byte)(w[i + 1] & 0xFF) != 0) continue;                               // "kiru\0"
+                    long root = (a + (long)i * 4) - WeaponCollision.CFrameName;               // CFrame base
+                    if (!ValidateWhirlRoot(root)) continue;                                   // fuusya instance + bind
+                    roots.Add(root);
+                }
+            }
+            if (roots.Count == 0)
+            {
+                _whirlScanBackoff = 8; // not found this pass — wait ~3s before retrying
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "HC whirl: fuusya pool not found this pass (effect model not loaded?)");
+                return;
+            }
+            _whirlRoots = roots.ToArray();
+            foreach (long root in _whirlRoots) WriteWhirlScaled(root);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"HC whirl: scaled {_whirlRoots.Length} pool root(s) (scan) local-3x3 x{WhirlVisualScale:0.##} bind m00={_whirlBind3x3[0]:0.##} (first @0x{_whirlRoots[0] & 0x1FFFFFFF:X8})");
         }
 
     }

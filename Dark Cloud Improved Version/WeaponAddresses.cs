@@ -145,6 +145,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int CFrameLocalTransX = 0x200; //   the frame's real local offset from its parent.
         internal const int CFrameLocalTransY = 0x204; //   Edit these + set CFrameDirtyWorld=0 (NOT
         internal const int CFrameLocalTransZ = 0x208; //   CFrameDirtyTRS, which rebuilds +0x1d0 from TRS).
+        internal const int CFrameScaleX      = 0x210; // TRS scale x (written by SetScale; y +0x214, z +0x218)
         internal const int CFramePosX        = 0x220; // local translation x (read/written by SetPosition)
         internal const int CFramePosY        = 0x224;
         internal const int CFramePosZ        = 0x228;
@@ -208,5 +209,40 @@ namespace Dark_Cloud_Improved_Version
         internal const long ReachScanLo = 0x20100000;
         internal const long ReachScanHi = 0x22000000;
         internal const int  ReachScanChunkWords = 2048;
+
+        // ── Whirlwind charge visual (effect model dun/mainchara/wep_eff/c01_fuusya.chr) ──────────────
+        // The charge-2 whirlwind swoosh is a DISCRETE effect model, not the dcol weapon trail and not
+        // weapon/element-keyed (confirmed by xref + user). Its mesh is baked geometry (.cfg has
+        // VERTEX_ANIME; the .mds vertices are undecoded VIF1 packet data, so the mesh is not editable). It
+        // renders through runtime CFrames (CMotionModel.Draw -> MGDraw(rootFrame)). The model's frame tree:
+        // root "kiru" -> fkiri/null1_3/jkiri -> the *__cappz mesh frames. To enlarge the whole formation
+        // (mesh AND child offsets) we scale the ROOT's TRS scale (+0x210), which the world-matrix recompute
+        // applies and propagates to children. Editing a frame's local matrix (+0x1d0) is futile here — the
+        // frames are motion-animated so it's re-posed every frame (TRS scale survives; the motion's type-1
+        // scale track and SetScale both use +0x210).
+        //
+        // "kiru" is too generic (the weapon model has one too, right next to dcol1), so we LOCATE the model
+        // by its unique "fkiri" frame, then walk the parent chain (+0x110, native ptr -> ToMmu) up to the
+        // "kiru" root and scale that. Frame names are inline at CFrame+0x118.
+        internal const uint FkiriNameWord = 0x72696B66; // "fkir" little-endian (frame "fkiri", validates a kiru root)
+        internal const uint KiruNameWord  = 0x7572696B; // "kiru" little-endian (the fuusya root frame)
+        // The fuusya model exists as a POOL of identical instances (≈7); each cast activates one (gives it a
+        // real world position) while the rest stay at world (0,0,0). So we scale EVERY pool root, not just
+        // one. fkiri is the very next frame after kiru in each instance (CFrame stride 0x270) — used to
+        // validate a "kiru" match really is a fuusya root (vs a stray name elsewhere).
+        internal const int  FuusyaFrameStride = 0x270; // CFrame object size; fkiri = kiru + this
+        // The model is a pool of identical instances; one activates per cast. With Heaven's Cloud equipped
+        // the live instance's base is stably native 0x685AA0 (it shifts if a different weapon is loaded), so
+        // we try that first (fast path, name-validated) and scale it alone. If it doesn't validate we fall
+        // back to a full RAM scan of the pool and narrow to the live instance (the only one with a nonzero
+        // world position after a cast). The mesh is VERTEX_ANIME (morph in model space) so ONLY the root's
+        // matrix transforms it — child-frame scaling is inert; scale the root "kiru" local-matrix 3x3.
+        internal const long KnownWhirlRootMmu = 0x20685AA0;
+        // The render uses the LOCAL matrix (+0x1d0), NOT the TRS scale (+0x210) — proven live: a live
+        // instance held scaleX=4.7 with zero visual change. So we scale the root's local-matrix 3x3
+        // (rotation/scale block) by bind*scale; its translation row (+0x200) is left alone so the effect
+        // stays anchored on Toan. Row-major 4x4: rows 0..2 at +0x1d0/+0x1e0/+0x1f0.
+        internal static readonly int[] CFrameLocal3x3 =
+            { 0x1D0, 0x1D4, 0x1D8,   0x1E0, 0x1E4, 0x1E8,   0x1F0, 0x1F4, 0x1F8 };
     }
 }

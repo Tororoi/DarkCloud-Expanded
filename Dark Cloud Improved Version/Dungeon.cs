@@ -158,7 +158,7 @@ namespace Dark_Cloud_Improved_Version
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
                     // Enemies.TeleportEnemiesDebug();        // DEBUG: remove when done
-                    Enemies.DumpModelTableForRenderPosition(); // DEBUG: remove when done
+                    // Enemies.DumpModelTableForRenderPosition(); // DEBUG: remove when done
                     if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
                     {
                         switch (Player.CurrentCharacterNum())
