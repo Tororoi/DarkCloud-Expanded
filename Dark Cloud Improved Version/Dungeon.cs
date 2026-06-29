@@ -838,8 +838,8 @@ namespace Dark_Cloud_Improved_Version
 
             chronicle2 = CustomEffects.CheckChronicle2(chronicle2);
             CustomChests.BasicChestRandomizer(currentDungeon, currentFloor, chronicle2); //Randomize the chest loot (old table-based version)
-            WeaponSpawner.StartReachExtender(); //TEMP: extend Heaven's Cloud reach x3 (dcol* frame scaling)
-            WeaponSpawner.OnFloorEntered();     //TEMP: re-arm the extender for this floor's reloaded model
+            Weapons.StartHeavensCloudReach(); // extend Heaven's Cloud reach (dcol1 frame + swing radii)
+            Weapons.OnReachFloorEntered();    // re-locate the freshly reloaded model on this floor
 
             CheckSidequests();
 

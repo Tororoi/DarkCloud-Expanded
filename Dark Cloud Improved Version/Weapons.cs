@@ -3881,5 +3881,121 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // ════════════════════════════════════════════════════════════════════════════════════════
+        //  Heaven's Cloud reach extension
+        //  Toan's melee hit is built as SearchFrame(equippedModel,"dcol1") -> CCollisionData::Set(pos,
+        //  radius) (verified in SCUS_971.11 / ToanKey_Play). The engine only ever uses the frame named
+        //  "dcol1"; dcol0/2/3 are inert for the player hit. So reach = the "dcol1" frame's swept world
+        //  position + the per-attack swing radius. We extend Heaven's Cloud by:
+        //    (1) setting the "dcol1" frame's local Z from stock 9.2053 to ReachTargetZ (scales the
+        //        visible swing AND the hit reach), and
+        //    (2) multiplying the 3 swing-radius constants by ReachRadiusFactor while HC is equipped
+        //        (restored when unequipped, so other weapons are unaffected).
+        //  NOTE: the CHARGE attack uses a separate, not-yet-located hit path — this does not affect it.
+        //  Addresses: WeaponAddresses.WeaponCollision. RE notes: docs/weapon-reach.md.
+        // ════════════════════════════════════════════════════════════════════════════════════════
+        const int   HeavensCloudReachId  = 271;
+        const float ReachTargetZ         = 15.0f; // dcol1 local Z (stock 9.2053) — reach + visual swing
+        const float ReachRadiusFactor    = 2.0f;  // multiply the 3 swing radii while HC is equipped
+
+        static bool _reachStarted, _reachArmed, _reachRadiusBoosted, _reachStockRead;
+        static int  _reachScanBackoff;
+        static long _dcol1Addr;                    // MMU name address of the live "dcol1" frame (0 = none)
+        static readonly float[] _reachRadiusStock = new float[3];
+
+        /// <summary>Starts the Heaven's Cloud reach extender background thread (idempotent).</summary>
+        public static void StartHeavensCloudReach()
+        {
+            if (_reachStarted) return;
+            _reachStarted = true;
+            new Thread(ReachLoop) { IsBackground = true }.Start();
+        }
+
+        /// <summary>Re-arm on floor entry so the freshly reloaded weapon model is re-located.</summary>
+        public static void OnReachFloorEntered() { _reachArmed = false; _dcol1Addr = 0; }
+
+        static void ReachLoop()
+        {
+            while (true)
+            {
+                try { ReachTick(); }
+                catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "HC reach error: " + ex.Message); }
+                Thread.Sleep(400);
+            }
+        }
+
+        static void ReachTick()
+        {
+            bool hc = Player.CurrentCharacterNum() == Player.ToanId
+                   && Player.Weapon.GetCurrentWeaponId() == HeavensCloudReachId;
+
+            ApplyReachRadii(hc);                                  // bump/restore the swing radii
+            if (!hc) return;
+            if (Memory.ReadInt(WeaponCollision.EquippedModelPtr) == 0) return; // model not loaded
+
+            if (_reachArmed)
+            {
+                // Maintain dcol1 = ReachTargetZ; if the frame's name is gone (model relocated), re-scan.
+                if ((uint)Memory.ReadInt(_dcol1Addr) != WeaponCollision.DcolNameWord) { _reachArmed = false; _dcol1Addr = 0; return; }
+                long zAddr = _dcol1Addr + WeaponCollision.DcolNameToLocalZ;
+                if (Math.Abs(Memory.ReadFloat(zAddr) - ReachTargetZ) > 0.05f) Memory.WriteFloat(zAddr, ReachTargetZ);
+            }
+            else if (_reachScanBackoff <= 0) ScanForDcol1();      // locate the dcol1 frame (once per load)
+            else _reachScanBackoff--;
+        }
+
+        // Bump (×factor) / restore the 3 swing hit-sphere radius constants. Stock is read & cached once,
+        // sanity-checked against the known ~2.8 so we never cache an already-boosted value or a bad $gp.
+        static void ApplyReachRadii(bool hc)
+        {
+            if (!_reachStockRead)
+            {
+                for (int i = 0; i < 3; i++) _reachRadiusStock[i] = Memory.ReadFloat(WeaponCollision.SwingRadiusAddrs[i]);
+                if (Math.Abs(_reachRadiusStock[0] - WeaponCollision.SwingRadiusStock0) > 0.3f) return; // not ready yet
+                _reachStockRead = true;
+            }
+            if (hc && !_reachRadiusBoosted)
+            {
+                for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], _reachRadiusStock[i] * ReachRadiusFactor);
+                _reachRadiusBoosted = true;
+            }
+            else if (!hc && _reachRadiusBoosted)
+            {
+                for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], _reachRadiusStock[i]);
+                _reachRadiusBoosted = false;
+            }
+        }
+
+        // Scan EE RAM for the "dcol1" frame (name "dcol"+'1'+NUL, local translation (0,0,~9.2053)), set
+        // its Z to ReachTargetZ, and cache its address. Backs off ~3s if not found (model not yet loaded).
+        static void ScanForDcol1()
+        {
+            for (long a = WeaponCollision.ReachScanLo; a < WeaponCollision.ReachScanHi; a += (long)WeaponCollision.ReachScanChunkWords * 4)
+            {
+                int n = WeaponCollision.ReachScanChunkWords + 2;
+                if (a + (long)n * 4 > WeaponCollision.ReachScanHi) n = (int)((WeaponCollision.ReachScanHi - a) / 4);
+                if (n <= 2) break;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 1 < n; i++)
+                {
+                    if (w[i] != WeaponCollision.DcolNameWord) continue;                       // "dcol"
+                    byte d = (byte)(w[i + 1] & 0xFF), nul = (byte)((w[i + 1] >> 8) & 0xFF);
+                    if (d != WeaponCollision.Dcol1Digit || nul != 0) continue;                // "dcol1\0"
+                    long name = a + (long)i * 4;
+                    float x = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalX);
+                    float y = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalX + 4);
+                    float z = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalZ);
+                    if (Math.Abs(x) > 0.01f || Math.Abs(y) > 0.01f) continue;                 // (0,0,Z) frame
+                    if (Math.Abs(z - WeaponCollision.Dcol1StockZ) > 0.05f) continue;          // HC's dcol1
+                    Memory.WriteFloat(name + WeaponCollision.DcolNameToLocalZ, ReachTargetZ);
+                    _dcol1Addr = name; _reachArmed = true;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"HC reach: dcol1 @0x{name & 0x1FFFFFFF:X8} z {z:0.##} -> {ReachTargetZ:0.##}, radii ×{ReachRadiusFactor}");
+                    return;
+                }
+            }
+            _reachScanBackoff = 8; // not found this pass — wait ~3s before retrying
+        }
+
     }
 }

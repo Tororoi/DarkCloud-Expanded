@@ -109,10 +109,13 @@ namespace Dark_Cloud_Improved_Version
     ///      that collision (reads center +0x58/+0x60), and on a hit calls <c>SwordDmgCheck1</c>
     ///      (dun 0x1DB9B30) to apply damage + draw the spark at the weapon bone.
     ///
-    /// A weapon model has frames named <c>dcol0, dcol1, ...</c> placed along the blade; their count and
-    /// offsets differ per weapon (Kitchen Knife c01w08: dcol0-2, z&lt;=~4.2; Chronicle Sword c01w40:
-    /// dcol0-3, z&lt;=~11.6 ~=2.8x -> the longer reach). To change reach, scale the loaded model's
-    /// <c>dcol*</c> translations (see <see cref="WeaponSpawner"/> for the Heaven's Cloud x3 test).
+    /// A weapon model has frames named <c>dcol0, dcol1, ...</c> placed along the blade. CONFIRMED via
+    /// disasm: the player melee hit only ever uses the frame named <c>dcol1</c> (every SearchFrame in
+    /// ToanKey_Play passes "dcol1"); dcol0/2/3 are inert for the hit. So reach = the <c>dcol1</c> frame's
+    /// swept world position + the per-attack swing radius. Heaven's Cloud reach is extended by moving the
+    /// <c>dcol1</c> frame's local Z out and enlarging the swing radii — see
+    /// <c>Weapons.StartHeavensCloudReach</c> and the constants below. (The CHARGE attack uses a separate,
+    /// not-yet-located hit path — unaffected.)
     /// </summary>
     internal static class WeaponCollision
     {
@@ -165,5 +168,34 @@ namespace Dark_Cloud_Improved_Version
 
         // Weapon model assets in data.dat: commenu/weapon/cXXwNN.chr (XX char, NN = WeaponList +0x48).
         // Heaven's Cloud = c01w14.chr (Toan, within-char idx 14).
+
+        // ── Heaven's Cloud reach extension (see Weapons.ApplyHeavensCloudReach) ─────────────────────
+        // Reverse-engineered from SCUS_971.11 (ToanKey_Play 0x241690): every Toan melee hit is built as
+        // SearchFrame(equippedModel, "dcol1") -> CCollisionData::Set(pos, radius). The engine only ever
+        // searches the frame named "dcol1" — dcol0/2/3 are never used for the player hit. So reach = the
+        // "dcol1" frame's swept world position + the per-attack swing radius. We extend HC by moving the
+        // "dcol1" frame's Z out (scales the visible swing + the hit) and enlarging the swing radii.
+        // (The CHARGE attack uses a separate, not-yet-located hit path; this does not affect it.)
+
+        /// <summary>The 3 swing hit-sphere radius constants in main $gp data (0x002A97F0 − 0x7b88/7b84/
+        /// 7b80 → MMU below); stock 2.8 / 5.3 / 6.2. All read ONLY by ToanKey_Play, so bumping them while
+        /// HC is equipped is safe and effectively per-weapon (restore on unequip).</summary>
+        internal static readonly long[] SwingRadiusAddrs = { 0x202A1C68, 0x202A1C6C, 0x202A1C70 };
+        internal const float SwingRadiusStock0 = 2.8f; // sanity value at SwingRadiusAddrs[0]
+
+        // The "dcol1" CFrame in the loaded weapon model (commenu template, ~native 0x660xxx; address
+        // varies per session — located by scan). Name is the 4-byte "dcol" + '1' + NUL; the frame's
+        // local-matrix translation is (X,Y,Z) at name+0xE8/+0xEC/+0xF0. For Toan weapons it's (0,0,Z);
+        // editing Z extends reach. Stock dcol1 Z = 9.2053.
+        internal const uint  DcolNameWord     = 0x6C6F6364; // "dcol" little-endian
+        internal const byte  Dcol1Digit       = 0x31;       // '1' (the active hit-point frame)
+        internal const int   DcolNameToLocalX = 0xE8;       // local-matrix X (Y at +0xEC, Z at +0xF0)
+        internal const int   DcolNameToLocalZ = 0xF0;       // local-matrix Z (the reach knob)
+        internal const float Dcol1StockZ      = 9.2053f;    // stock dcol1 distance for Heaven's Cloud (matched in the scan)
+
+        // EE main-RAM scan window (MMU) used to locate the dcol1 frame, in 32 KB-safe chunks.
+        internal const long ReachScanLo = 0x20100000;
+        internal const long ReachScanHi = 0x22000000;
+        internal const int  ReachScanChunkWords = 2048;
     }
 }
