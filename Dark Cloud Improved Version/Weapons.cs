@@ -3895,8 +3895,21 @@ namespace Dark_Cloud_Improved_Version
         //  Addresses: WeaponAddresses.WeaponCollision. RE notes: docs/weapon-reach.md.
         // ════════════════════════════════════════════════════════════════════════════════════════
         const int   HeavensCloudReachId  = 271;
-        const float ReachTargetZ         = 15.0f; // dcol1 local Z (stock 9.2053) — reach + visual swing
-        const float ReachRadiusFactor    = 2.0f;  // multiply the 3 swing radii while HC is equipped
+        const float ReachTargetZ         = 18.0f; // dcol1 local Z (stock 9.2053) — reach + visual swing
+
+        // ALL hit radii are computed from ReachTargetZ to maintain a chosen DEADZONE = the gap between
+        // Toan's centre and the hit sphere's near edge (radius = ReachTargetZ − deadzone), so they auto-
+        // track the ReachTargetZ knob. Negative deadzone = the sphere covers past centre.
+        // Vanilla deadzones (dcol1 9.2): combo 6.4 / 3.9 / 3.0, lunge 3.2, whirlwind −2.8. Toan's body ≈ 4.
+        // The 3 combo radii are gp data (SwingRadiusAddrs); lunge/whirlwind are code immediates (patched).
+        const float ComboSwing1Deadzone  = 11.0f;   // 1st combo hit (gp 0x202A1C68, vanilla radius 2.8, largest weapon dz 6.64)
+        const float ComboSwing2Deadzone  = 9.0f;   // 2nd combo hit (gp 0x202A1C6C, vanilla radius 5.3, largest weapon dz 4.14)
+        const float ComboSwing3Deadzone  = 8.0f;    // 3rd+ combo hit (gp 0x202A1C70, vanilla radius 6.2, largest weapon dz 3.24)
+        const float LungeDeadzone        = 7.0f;    // lunge (vanilla radius 6.0, largest weapon dz 3.44)
+        const float WhirlwindDeadzone    = -3.0f;   // whirlwind (vanilla radius 12.0, largest weapon dz -2.56)
+        static readonly float[] ComboDeadzones = { ComboSwing1Deadzone, ComboSwing2Deadzone, ComboSwing3Deadzone };
+        const float LungeRadius          = ReachTargetZ - LungeDeadzone;
+        const float WhirlwindRadius      = ReachTargetZ - WhirlwindDeadzone;
 
         static bool _reachStarted, _reachArmed, _reachRadiusBoosted, _reachStockRead;
         static int  _reachScanBackoff;
@@ -3956,14 +3969,31 @@ namespace Dark_Cloud_Improved_Version
             }
             if (hc && !_reachRadiusBoosted)
             {
-                for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], _reachRadiusStock[i] * ReachRadiusFactor);
+                for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], ReachTargetZ - ComboDeadzones[i]);
+                PatchRadiusInsn(WeaponCollision.LungeRadiusInsn,     RadiusLuiInsn(LungeRadius));     // lunge radius
+                PatchRadiusInsn(WeaponCollision.WhirlwindRadiusInsn, RadiusLuiInsn(WhirlwindRadius)); // whirlwind radius
                 _reachRadiusBoosted = true;
             }
             else if (!hc && _reachRadiusBoosted)
             {
                 for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], _reachRadiusStock[i]);
+                PatchRadiusInsn(WeaponCollision.LungeRadiusInsn,     WeaponCollision.LungeRadiusStockInsn);     // restore 6.0
+                PatchRadiusInsn(WeaponCollision.WhirlwindRadiusInsn, WeaponCollision.WhirlwindRadiusStockInsn); // restore 12.0
                 _reachRadiusBoosted = false;
             }
+        }
+
+        // Build the `lui $v0, imm` instruction that loads radius r into f12 (r's high 16 bits = a round float).
+        static uint RadiusLuiInsn(float r) => 0x3C020000u | (System.BitConverter.SingleToUInt32Bits(r) >> 16);
+
+        // Overwrite a charge-radius instruction immediate (only if it still looks like `lui $v0, ...`, so a
+        // wrong address can't clobber arbitrary code). PINE writes to EE code RAM; PCSX2 invalidates the
+        // recompiled block on the write so the new immediate takes effect (confirmed working in-game).
+        static void PatchRadiusInsn(long addr, uint insn)
+        {
+            uint cur = (uint)Memory.ReadInt(addr);
+            if ((cur >> 16) != 0x3C02) return;                  // not `lui $v0, _` — bail (safety)
+            if (cur != insn) Memory.WriteInt(addr, (int)insn);
         }
 
         // Scan EE RAM for the "dcol1" frame (name "dcol"+'1'+NUL, local translation (0,0,~9.2053)), set
@@ -3990,7 +4020,7 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteFloat(name + WeaponCollision.DcolNameToLocalZ, ReachTargetZ);
                     _dcol1Addr = name; _reachArmed = true;
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"HC reach: dcol1 @0x{name & 0x1FFFFFFF:X8} z {z:0.##} -> {ReachTargetZ:0.##}, radii ×{ReachRadiusFactor}");
+                        $"HC reach: dcol1 @0x{name & 0x1FFFFFFF:X8} z {z:0.##} -> {ReachTargetZ:0.##}; lunge r{LungeRadius:0.#} whirl r{WhirlwindRadius:0.#}");
                     return;
                 }
             }

@@ -175,13 +175,24 @@ namespace Dark_Cloud_Improved_Version
         // searches the frame named "dcol1" — dcol0/2/3 are never used for the player hit. So reach = the
         // "dcol1" frame's swept world position + the per-attack swing radius. We extend HC by moving the
         // "dcol1" frame's Z out (scales the visible swing + the hit) and enlarging the swing radii.
-        // (The CHARGE attack uses a separate, not-yet-located hit path; this does not affect it.)
+        // The CHARGE attacks use the SAME dcol1 position but radii baked as CODE IMMEDIATES (not the gp
+        // constants): lunge (frame 193-196) = 6.0, whirlwind (720-722) = 12.0. With dcol1 pushed out the
+        // lunge's small radius overshoots a point-blank enemy, so we patch the lunge's immediate too.
 
         /// <summary>The 3 swing hit-sphere radius constants in main $gp data (0x002A97F0 − 0x7b88/7b84/
         /// 7b80 → MMU below); stock 2.8 / 5.3 / 6.2. All read ONLY by ToanKey_Play, so bumping them while
         /// HC is equipped is safe and effectively per-weapon (restore on unequip).</summary>
         internal static readonly long[] SwingRadiusAddrs = { 0x202A1C68, 0x202A1C6C, 0x202A1C70 };
         internal const float SwingRadiusStock0 = 2.8f; // sanity value at SwingRadiusAddrs[0]
+
+        /// <summary>The LUNGE charge's hit radius is a code immediate: <c>lui $v0, 0x40c0</c> (=6.0) at
+        /// MMU 0x20241AC0 (instruction word 0x3C0240C0). Patch the immediate (high 16 bits of the float)
+        /// to raise the lunge radius so it reaches back over the player at extended dcol1. Whirlwind's
+        /// 12.0 is at 0x20241B90 (left alone — not the problem).</summary>
+        internal const long LungeRadiusInsn          = 0x20241AC0;
+        internal const uint LungeRadiusStockInsn     = 0x3C0240C0; // lui $v0, 0x40c0  (radius 6.0)
+        internal const long WhirlwindRadiusInsn      = 0x20241B90;
+        internal const uint WhirlwindRadiusStockInsn = 0x3C024140; // lui $v0, 0x4140  (radius 12.0)
 
         // The "dcol1" CFrame in the loaded weapon model (commenu template, ~native 0x660xxx; address
         // varies per session — located by scan). Name is the 4-byte "dcol" + '1' + NUL; the frame's
