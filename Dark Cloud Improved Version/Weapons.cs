@@ -4003,15 +4003,19 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // Distance-gated enemy hitbox: for each active enemy, if its horizontal distance to the player is within
-        // `reach` (= L), set its body radii to (reach − 2.8) so close swings connect; otherwise restore them to
-        // their cached stock value so far hits never land past the blade. The enemy slot carries both its own
-        // world position (LocationX/Y) and the player's (TargetX/Y mirrors player dunPosition each frame), so the
-        // distance is read entirely from the slot. Caches each part's stock value; forgets it when the slot goes
-        // inactive (next occupant is recaptured from its own stock).
+        // the range gate, ADD a reach bonus to its body radii so close swings connect; otherwise restore them to
+        // their cached stock value so far hits never land past the blade. The whirlwind charge gets a bigger
+        // bonus + a slightly wider gate (see below). The enemy slot carries both its own world position
+        // (LocationX/Y) and the player's (TargetX/Y mirrors player dunPosition each frame), so the distance is
+        // read entirely from the slot. Caches each part's stock value; forgets it when the slot goes inactive
+        // (next occupant is recaptured from its own stock).
         static void MaintainEnemyHitbox(float reach)
         {
-            float target = reach - 5.0f;
-            float reachSq = reach * reach;
+            // The whirlwind charge sweeps a wide arc, so it gets the full `reach` bonus and a slightly wider
+            // range gate; every other attack (combo, lunge) gets reach − 5.0 with the plain gate.
+            bool whirl = Memory.ReadInt(WeaponCollision.ChargeActionState) == 0x18;
+            float bonus  = whirl ? reach : reach - 5.0f;       // added to each enemy's stock body radius
+            float gateSq = whirl ? reach * reach + 5.0f : reach * reach;
             for (int s = 0; s < 16; s++)
             {
                 long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
@@ -4023,7 +4027,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 float dx = Memory.ReadFloat(slot + EnemySlotOffsets.LocationX) - Memory.ReadFloat(slot + EnemySlotOffsets.TargetX);
                 float dy = Memory.ReadFloat(slot + EnemySlotOffsets.LocationY) - Memory.ReadFloat(slot + EnemySlotOffsets.TargetY);
-                bool inRange = dx * dx + dy * dy <= reachSq;
+                bool inRange = dx * dx + dy * dy <= gateSq;
                 for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
                 {
                     long addr = BodyCollision.RadiusAddr(s, p);
@@ -4034,7 +4038,7 @@ namespace Dark_Cloud_Improved_Version
                         if (r <= 0.01f || r >= 1000f) continue;       // no real hitbox on this part
                         orig = _hcHitboxOrig[s, p] = r;
                     }
-                    float want = inRange ? target + orig : orig;             // inflate while close, else stock
+                    float want = inRange ? orig + bonus : orig;        // inflate while close, else stock
                     if (Math.Abs(r - want) > 0.05f) Memory.WriteFloat(addr, want);
                 }
             }
