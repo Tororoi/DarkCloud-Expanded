@@ -3938,7 +3938,15 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Re-arm on floor entry so the freshly reloaded weapon model is re-located.</summary>
-        public static void OnReachFloorEntered() { _reachArmed = false; _dcol1Addr = 0; _whirlRoots = System.Array.Empty<long>(); _whirlScanBackoff = 0; }
+        public static void OnReachFloorEntered()
+        {
+            _reachArmed = false; _dcol1Addr = 0; _whirlRoots = System.Array.Empty<long>(); _whirlScanBackoff = 0;
+            // Apply/restore the charge-radius EE-CODE patches HERE — floor entry is the load window before
+            // the player is walking, the only time writing EE code is safe (doing it during active play or a
+            // weapon-switch reload crashes PCSX2). Consequence: a mid-floor weapon change doesn't update the
+            // lunge/whirlwind hit radius until the next floor; that's the price of not touching live code.
+            ApplyChargeRadiusCode(ChargeWeaponIsHc());
+        }
 
         static void ReachLoop()
         {
@@ -3955,7 +3963,11 @@ namespace Dark_Cloud_Improved_Version
             bool hc = Player.CurrentCharacterNum() == Player.ToanId
                    && Player.Weapon.GetCurrentWeaponId() == HeavensCloudReachId;
 
-            ApplyReachRadii(hc);                                  // bump/restore the swing radii
+            ApplyReachRadii(hc);                                  // bump/restore the swing radii (gp data — safe)
+            // NOTE: the charge-radius EE-CODE patches are NOT done here — writing EE code while the game is
+            // running (incl. the paused weapon menu) crashes PCSX2. They're applied only at floor entry
+            // (OnReachFloorEntered), the load window before the player is walking. See ApplyChargeRadiusCode.
+
             if (!hc) return;
             if (Memory.ReadInt(WeaponCollision.EquippedModelPtr) == 0) return; // model not loaded
 
@@ -3979,6 +3991,11 @@ namespace Dark_Cloud_Improved_Version
         // cast). Each cast re-poses that root once; the maintain re-applies the scale.
         static void MaintainWhirlScale()
         {
+            // Only touch the effect during active in-field gameplay. In the weapon menu / floor transitions
+            // the game reallocates models, and scanning/writing the fuusya structure then can corrupt the
+            // reload and crash the emulator (observed on weapon switch). Resume when walking again.
+            if (!Player.CheckDunIsWalkingMode()) return;
+
             if (_whirlRoots.Length > 0)
             {
                 // Drop the cache if the first root's name vanished (model freed/relocated); else re-apply.
@@ -4045,16 +4062,48 @@ namespace Dark_Cloud_Improved_Version
             if (hc && !_reachRadiusBoosted)
             {
                 for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], ReachTargetZ - ComboDeadzones[i]);
-                PatchRadiusInsn(WeaponCollision.LungeRadiusInsn,     RadiusLuiInsn(LungeRadius));     // lunge radius
-                PatchRadiusInsn(WeaponCollision.WhirlwindRadiusInsn, RadiusLuiInsn(WhirlwindRadius)); // whirlwind radius
                 _reachRadiusBoosted = true;
             }
             else if (!hc && _reachRadiusBoosted)
             {
                 for (int i = 0; i < 3; i++) Memory.WriteFloat(WeaponCollision.SwingRadiusAddrs[i], _reachRadiusStock[i]);
+                _reachRadiusBoosted = false;
+            }
+        }
+
+        static bool _chargeCodeBoosted;   // are the lunge/whirlwind EE-code radius immediates currently patched?
+
+        // The battle in-hand weapon id (GetCurrentWeaponId) only updates once you're back WALKING — too late
+        // to patch EE code safely. The inventory equip slot updates immediately in the weapon menu, so we
+        // derive "the weapon about to be equipped" from it: that's what the charge code should track, and it's
+        // readable in the menu's safe (paused) window. Slot stride 0xF8 from WeaponSlot0.id.
+        const long CurrentWeaponSlotAddr = 0x21CDD88C;
+        const long WeaponSlot0IdAddr     = 0x21CDDA58;
+        const int  WeaponSlotStride      = 0xF8;
+        static bool ChargeWeaponIsHc()
+        {
+            if (Player.CurrentCharacterNum() != Player.ToanId) return false;
+            int slot = Memory.ReadByte(CurrentWeaponSlotAddr);
+            if ((uint)slot > 9) return false;
+            return Memory.ReadUShort(WeaponSlot0IdAddr + slot * WeaponSlotStride) == HeavensCloudReachId;
+        }
+
+        // Apply (HC) / restore (other) the lunge + whirlwind charge-radius CODE immediates. ONLY call this
+        // from a safe window — floor load (OnReachFloorEntered) or the paused weapon menu. Patching EE code
+        // during active play crashes PCSX2.
+        static void ApplyChargeRadiusCode(bool hc)
+        {
+            if (hc && !_chargeCodeBoosted)
+            {
+                PatchRadiusInsn(WeaponCollision.LungeRadiusInsn,     RadiusLuiInsn(LungeRadius));     // lunge radius
+                PatchRadiusInsn(WeaponCollision.WhirlwindRadiusInsn, RadiusLuiInsn(WhirlwindRadius)); // whirlwind radius
+                _chargeCodeBoosted = true;
+            }
+            else if (!hc && _chargeCodeBoosted)
+            {
                 PatchRadiusInsn(WeaponCollision.LungeRadiusInsn,     WeaponCollision.LungeRadiusStockInsn);     // restore 6.0
                 PatchRadiusInsn(WeaponCollision.WhirlwindRadiusInsn, WeaponCollision.WhirlwindRadiusStockInsn); // restore 12.0
-                _reachRadiusBoosted = false;
+                _chargeCodeBoosted = false;
             }
         }
 
