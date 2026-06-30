@@ -4010,8 +4010,8 @@ namespace Dark_Cloud_Improved_Version
         // inactive (next occupant is recaptured from its own stock).
         static void MaintainEnemyHitbox(float reach)
         {
-            float target = reach - 2.8f;       // body radius for in-range enemies
-            float reachSq = target * target;
+            float target = reach - 5.0f;
+            float reachSq = reach * reach;
             for (int s = 0; s < 16; s++)
             {
                 long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
@@ -4034,7 +4034,7 @@ namespace Dark_Cloud_Improved_Version
                         if (r <= 0.01f || r >= 1000f) continue;       // no real hitbox on this part
                         orig = _hcHitboxOrig[s, p] = r;
                     }
-                    float want = inRange ? target : orig;             // inflate while close, else stock
+                    float want = inRange ? target + orig : orig;             // inflate while close, else stock
                     if (Math.Abs(r - want) > 0.05f) Memory.WriteFloat(addr, want);
                 }
             }
@@ -4131,6 +4131,8 @@ namespace Dark_Cloud_Improved_Version
                     {
                         _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
                         WhirlVisualScale = _weaponDcol1Z / (WhirlwindStockRadius / 2.0f); // whirl uses dcol1 (revisit later)
+                        // HC gets the custom blade scale, so grow its whirl to match (without touching WeaponData).
+                        if (wid == HeavensCloudReachId) WhirlVisualScale *= HcVisualScale;
                     }
                 }
                 if (_weaponDcol1Z == 0f) { if (_whirlDcolBackoff <= 0) LocateWeaponDcol1(wid); else _whirlDcolBackoff--; }
