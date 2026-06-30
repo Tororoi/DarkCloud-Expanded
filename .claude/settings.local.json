@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(cd ~/ROMs/dc_extracted && ls -la; echo \"=== find c01w14 / weapon dir ===\"; find . -iname \"c01w14*\" 2>/dev/null | head; echo \"=== weapon dir ===\"; find . -ipath \"*weapon*\" -maxdepth 4 -type d 2>/dev/null | head)",
-      "Read(//Users/thomascantwell/ROMs/dc_extracted/**)"
+      "Read(//Users/thomascantwell/ROMs/dc_extracted/**)",
+      "Bash(dotnet build *)"
     ]
   }
 }

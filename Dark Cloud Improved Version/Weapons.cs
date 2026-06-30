@@ -3896,14 +3896,14 @@ namespace Dark_Cloud_Improved_Version
         //  Addresses: WeaponAddresses.WeaponCollision. RE notes: docs/weapon-reach.md.
         // ════════════════════════════════════════════════════════════════════════════════════════
         const int   HeavensCloudReachId  = 271;
-        const float ReachTargetZ         = 18.0f; // dcol1 local Z (stock 9.2053) — reach + visual swing
+        const float ReachTargetZ         = 9.2053f; // dcol1 local Z (stock 9.2053) — reach + visual swing
 
         // ALL hit radii are computed from ReachTargetZ to maintain a chosen DEADZONE = the gap between
         // Toan's centre and the hit sphere's near edge (radius = ReachTargetZ − deadzone), so they auto-
         // track the ReachTargetZ knob. Negative deadzone = the sphere covers past centre.
         // Vanilla deadzones (dcol1 9.2): combo 6.4 / 3.9 / 3.0, lunge 3.2, whirlwind −2.8. Toan's body ≈ 4.
         // The 3 combo radii are gp data (SwingRadiusAddrs); lunge/whirlwind are code immediates (patched).
-        const float ComboSwing1Deadzone  = 12.0f;   // 1st combo hit (gp 0x202A1C68, vanilla radius 2.8, largest weapon dz 6.64)
+        const float ComboSwing1Deadzone  = 11.0f;   // 1st combo hit (gp 0x202A1C68, vanilla radius 2.8, largest weapon dz 6.64)
         const float ComboSwing2Deadzone  = 10.0f;   // 2nd combo hit (gp 0x202A1C6C, vanilla radius 5.3, largest weapon dz 4.14)
         const float ComboSwing3Deadzone  = 9.0f;    // 3rd+ combo hit (gp 0x202A1C70, vanilla radius 6.2, largest weapon dz 3.24)
         const float LungeDeadzone        = 7.0f;    // lunge (vanilla radius 6.0, largest weapon dz 3.44)
@@ -3917,13 +3917,16 @@ namespace Dark_Cloud_Improved_Version
         static long _dcol1Addr;                    // MMU name address of the live "dcol1" frame (0 = none)
         static readonly float[] _reachRadiusStock = new float[3];
 
-        // Whirlwind charge effect (c01_fuusya "kiru" root frame) visual scale. The swoosh is a separate
-        // effect model whose mesh isn't editable (undecoded VIF1 verts), so we enlarge it by scaling the
-        // loaded model's root-frame 3x3 — same loaded-template lever as dcol1. HC-gated; see WeaponCollision.
-        // Scale the whirlwind effect model to track the enlarged hit radius: vanilla visual matched the
-        // vanilla 12.0 radius, so scale by (new whirl radius / 12.0) to keep visual and hitbox in step.
+        // Whirlwind charge effect (c01_fuusya "kiru" root frame) visual scale, sized to the EQUIPPED weapon's
+        // reach: WhirlVisualScale = (that weapon's runtime dcol1 Z) / (WhirlwindStockRadius/2). dcol1 Z is read
+        // live per weapon (LocateWeaponDcol1) and re-read on weapon swap, so each weapon's whirl tracks its own
+        // reach. 0 until located. (We log each weapon's dcol1 to compare against the combat-model values and
+        // see if a static WeaponData table could replace the live read.)
         const float WhirlwindStockRadius = 12.0f;
-        static readonly float WhirlVisualScale = WhirlwindRadius / (WhirlwindStockRadius + 6.0f);
+        static float WhirlVisualScale;                          // set by LocateWeaponDcol1 (0 = not located yet)
+        static float _weaponDcol1Z;                             // equipped weapon's runtime dcol1 Z (0 = unknown)
+        static int   _whirlWeaponId = -1;                       // weapon id WhirlVisualScale was located for
+        static int   _whirlDcolBackoff;
         static int   _whirlScanBackoff;
         static long[] _whirlRoots = System.Array.Empty<long>(); // MMU bases of the fuusya "kiru" root(s) we scale
         static readonly float[] _whirlBind3x3 = new float[9];   // root's bind local-matrix 3x3 (target = bind * scale)
@@ -3937,15 +3940,161 @@ namespace Dark_Cloud_Improved_Version
             new Thread(ReachLoop) { IsBackground = true }.Start();
         }
 
+        // ── Half-visual consistency reach scheme (runtime, data-side; see docs/weapon-reach.md top section) ──
+        // Scale the visible blade by HcVisualScale, move the hit point to mid-blade, and grow the ENEMY hitbox
+        // by half the visual length so close hits land and far hits stop ~at the visible tip.
+        //   L  = HcVisualScale * stockDcol1Z      (scaled visible blade length)
+        //   1. scale mesh "wNN" by HcVisualScale  → blade + dcol children both grow by HcVisualScale
+        //   2. dcol1 local Z = stockZ/2           → hit point world = L/2 (mid-blade)
+        //   3. enemy body radius += L/2           → effective hit sphere centred at L/2, spans [~0, ~L]
+        // We grow the ENEMY body radius (the other half of `dist <= enemyRadius + weaponColRadius`), NOT the
+        // weapon swing radius, because the charge attacks (lunge/whirl) use CODE-IMMEDIATE weapon radii we
+        // can't safely write live — but the enemy-radius half is shared by combo AND charge, so this one knob
+        // gives consistent reach to both. Persistent while HC is equipped; restored on unequip.
+        const float HcVisualScale = 3.0f;          // w14 mesh scale (test knob)
+        const float HcStockDcol1Z = 9.2053f;       // HC commenu dcol1 Z (== ReachTargetZ)
+        const uint  HcMeshNameWord = 0x00343177;   // "w14\0" (HC's visible-blade mesh frame)
+        static long _hcW14Addr, _hcDcol1Addr;      // cached frame MMU addrs (0 = not located)
+        static float _hcHitboxDelta;               // persistent delta added to enemy body radii (0 = none)
+        static readonly float[,] _hcHitboxOrig = new float[16, BodyCollision.MaxBodyParts];
+
+        static void MaintainHcReachScheme()
+        {
+            // 1. Scale the visible mesh (grows blade + its dcol collision children together). The hit point
+            //    (dcol1) stays at the blade TIP → its world reach = L = HcVisualScale * stockZ. (No step 2.)
+            if (!ScaleWeaponMesh(HcMeshNameWord, HcVisualScale)) return;   // mesh not located yet → try next tick
+
+            // 2. Distance-gated enemy hitbox: only enemies WITHIN L of the player get their body radius set to
+            //    (L − 2.8) so close swings connect; enemies beyond L keep their stock radius so far hits never
+            //    land past the visible blade. Works for combo AND charge (shared hit-test half). Restored on unequip.
+            float reach = HcVisualScale * HcStockDcol1Z;   // L
+            MaintainEnemyHitbox(reach);
+        }
+
+        // Scale the equipped weapon's visible mesh frame (name@0 == nameWord) by factor: write factor to its
+        // CFrameVu1 local-3x3 diagonal (+0xB8/+0xCC/+0xE0; bind is identity). The engine does not re-pose this
+        // template node, so this holds. Returns false until the frame is located. Caches/re-validates by name.
+        static bool ScaleWeaponMesh(uint nameWord, float factor)
+        {
+            if (_hcW14Addr == 0 || (uint)Memory.ReadInt(_hcW14Addr) != nameWord)
+                _hcW14Addr = LocateModelFrame(nameWord, null);
+            if (_hcW14Addr == 0) return false;
+            long m00 = _hcW14Addr + WeaponCollision.Vu1LocalMatrixDiag0;
+            if (Math.Abs(Memory.ReadFloat(m00) - factor) > 0.01f)
+            {
+                Memory.WriteFloat(m00, factor);
+                Memory.WriteFloat(_hcW14Addr + WeaponCollision.Vu1LocalMatrixDiag1, factor);
+                Memory.WriteFloat(_hcW14Addr + WeaponCollision.Vu1LocalMatrixDiag2, factor);
+            }
+            return true;
+        }
+
+        // Set the equipped weapon's "dcol1" frame local Z (the hit point's offset within the mesh, which the
+        // mesh scale then multiplies). Caches/re-validates by name ("dcol" word + '1').
+        static void SetDcol1LocalZ(float localZ)
+        {
+            if (_hcDcol1Addr == 0
+                || (uint)Memory.ReadInt(_hcDcol1Addr) != WeaponCollision.DcolNameWord
+                || (byte)Memory.ReadByte(_hcDcol1Addr + 4) != WeaponCollision.Dcol1Digit)
+                _hcDcol1Addr = LocateModelFrame(WeaponCollision.DcolNameWord, WeaponCollision.Dcol1Digit);
+            if (_hcDcol1Addr == 0) return;
+            long z = _hcDcol1Addr + WeaponCollision.Vu1LocalTransZ;
+            if (Math.Abs(Memory.ReadFloat(z) - localZ) > 0.01f) Memory.WriteFloat(z, localZ);
+        }
+
+        // Distance-gated enemy hitbox: for each active enemy, if its horizontal distance to the player is within
+        // `reach` (= L), set its body radii to (reach − 2.8) so close swings connect; otherwise restore them to
+        // their cached stock value so far hits never land past the blade. The enemy slot carries both its own
+        // world position (LocationX/Y) and the player's (TargetX/Y mirrors player dunPosition each frame), so the
+        // distance is read entirely from the slot. Caches each part's stock value; forgets it when the slot goes
+        // inactive (next occupant is recaptured from its own stock).
+        static void MaintainEnemyHitbox(float reach)
+        {
+            float target = reach - 2.8f;       // body radius for in-range enemies
+            float reachSq = target * target;
+            for (int s = 0; s < 16; s++)
+            {
+                long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                int status = Memory.ReadInt(slot + EnemySlotOffsets.RenderStatus);
+                if (status <= 0)                                       // empty slot → forget cached stock
+                {
+                    for (int p = 0; p < BodyCollision.MaxBodyParts; p++) _hcHitboxOrig[s, p] = 0f;
+                    continue;
+                }
+                float dx = Memory.ReadFloat(slot + EnemySlotOffsets.LocationX) - Memory.ReadFloat(slot + EnemySlotOffsets.TargetX);
+                float dy = Memory.ReadFloat(slot + EnemySlotOffsets.LocationY) - Memory.ReadFloat(slot + EnemySlotOffsets.TargetY);
+                bool inRange = dx * dx + dy * dy <= reachSq;
+                for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                {
+                    long addr = BodyCollision.RadiusAddr(s, p);
+                    float r = Memory.ReadFloat(addr);
+                    float orig = _hcHitboxOrig[s, p];
+                    if (orig <= 0.01f)                                 // capture stock the first time we see it
+                    {
+                        if (r <= 0.01f || r >= 1000f) continue;       // no real hitbox on this part
+                        orig = _hcHitboxOrig[s, p] = r;
+                    }
+                    float want = inRange ? target : orig;             // inflate while close, else stock
+                    if (Math.Abs(r - want) > 0.05f) Memory.WriteFloat(addr, want);
+                }
+            }
+            _hcHitboxDelta = reach;
+        }
+
+        // Restore every inflated enemy body radius to its cached stock base (called when HC is not equipped).
+        // dcol1 local Z and the mesh scale are per-loaded-model templates (reloaded per weapon), no restore.
+        static void RestoreHcSwing()
+        {
+            if (_hcHitboxDelta != 0f)
+            {
+                for (int s = 0; s < 16; s++)
+                    for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                        if (_hcHitboxOrig[s, p] > 0.01f)
+                        {
+                            Memory.WriteFloat(BodyCollision.RadiusAddr(s, p), _hcHitboxOrig[s, p]);
+                            _hcHitboxOrig[s, p] = 0f;
+                        }
+                _hcHitboxDelta = 0f;
+            }
+            _hcW14Addr = 0; _hcDcol1Addr = 0;
+        }
+
+        // Scan the equipped weapon model's window for a CFrameVu1 frame whose name (word@0) == nameWord and,
+        // if fifthByte is given, whose 5th name byte matches (to disambiguate dcol0..dcol3). Returns the frame
+        // MMU addr, or 0 if not found / model not resolvable.
+        static long LocateModelFrame(uint nameWord, byte? fifthByte)
+        {
+            int nw = Memory.ReadInt(NowWeaponPtr);
+            if (!IsRamPtr(nw)) return 0;
+            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponModelRootOffset);
+            if (!IsRamPtr(modelRoot)) return 0;
+            long baseMmu = Memory.ToMmu(modelRoot);
+            long lo = baseMmu - 0x1000, hi = baseMmu + 0x3000;
+            for (long a = lo; a < hi; a += 2048 * 4)
+            {
+                int n = 2048 + 2;
+                if (a + (long)n * 4 > hi) n = (int)((hi - a) / 4);
+                if (n <= 2) break;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i < n; i++)
+                {
+                    if (w[i] != nameWord) continue;
+                    long name = a + (long)i * 4;
+                    if (fifthByte.HasValue && (byte)Memory.ReadByte(name + 4) != fifthByte.Value) continue;
+                    return name;
+                }
+            }
+            return 0;
+        }
+
         /// <summary>Re-arm on floor entry so the freshly reloaded weapon model is re-located.</summary>
         public static void OnReachFloorEntered()
         {
-            _reachArmed = false; _dcol1Addr = 0; _whirlRoots = System.Array.Empty<long>(); _whirlScanBackoff = 0;
-            // Apply/restore the charge-radius EE-CODE patches HERE — floor entry is the load window before
-            // the player is walking, the only time writing EE code is safe (doing it during active play or a
-            // weapon-switch reload crashes PCSX2). Consequence: a mid-floor weapon change doesn't update the
-            // lunge/whirlwind hit radius until the next floor; that's the price of not touching live code.
-            ApplyChargeRadiusCode(ChargeWeaponIsHc());
+            _reachArmed = false; _dcol1Addr = 0; _whirlRoots = System.Array.Empty<long>(); _whirlScanBackoff = 0; _hcW14Addr = 0;
+            // Charge reach is now done by inflating enemy hitboxes during a charge (MaintainChargeHitbox) —
+            // a safe data write that works mid-game on every weapon. We keep the EE-code charge-radius patch
+            // OFF (restore to vanilla here) so the two don't stack while we evaluate the hitbox approach.
+            ApplyChargeRadiusCode(false);
         }
 
         static void ReachLoop()
@@ -3960,28 +4109,48 @@ namespace Dark_Cloud_Improved_Version
 
         static void ReachTick()
         {
-            bool hc = Player.CurrentCharacterNum() == Player.ToanId
-                   && Player.Weapon.GetCurrentWeaponId() == HeavensCloudReachId;
+            bool toan = Player.CurrentCharacterNum() == Player.ToanId;
+            bool hc   = toan && Player.Weapon.GetCurrentWeaponId() == HeavensCloudReachId;
 
-            ApplyReachRadii(hc);                                  // bump/restore the swing radii (gp data — safe)
-            // NOTE: the charge-radius EE-CODE patches are NOT done here — writing EE code while the game is
-            // running (incl. the paused weapon menu) crashes PCSX2. They're applied only at floor entry
-            // (OnReachFloorEntered), the load window before the player is walking. See ApplyChargeRadiusCode.
+            // ApplyReachRadii(hc);                                  // bump/restore the swing radii (gp data — safe)
+            MaintainChargeHitbox(false);                          // OFF: superseded by the persistent enemy-hitbox
+                                                                 // inflation in MaintainHcReachScheme (one knob for
+                                                                 // combo AND charge; the two must not both own the field)
 
-            if (!hc) return;
+            // Whirlwind VISUAL scale applies to ALL of Toan's weapons (the fuusya effect is character-, not
+            // weapon-bound), sized to each weapon's own runtime dcol1 reach. Re-locate dcol1 on weapon swap.
+            if (toan)
+            {
+                int wid = Player.Weapon.GetCurrentWeaponId();
+                if (wid != _whirlWeaponId)
+                {
+                    _whirlWeaponId = wid; _weaponDcol1Z = 0f; WhirlVisualScale = 0f; _whirlDcolBackoff = 0;
+                    // Static table first (offline-extracted dcol1; abs guards mirrored models). Falls back to
+                    // the live scan only for ids not in the table or with no dcol1 frame (e.g. id 277).
+                    if (WeaponDb.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
+                    {
+                        _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
+                        WhirlVisualScale = _weaponDcol1Z / (WhirlwindStockRadius / 2.0f); // whirl uses dcol1 (revisit later)
+                    }
+                }
+                if (_weaponDcol1Z == 0f) { if (_whirlDcolBackoff <= 0) LocateWeaponDcol1(wid); else _whirlDcolBackoff--; }
+                if (WhirlVisualScale > 0f) MaintainWhirlScale();
+            }
+
+            if (!hc) { RestoreHcSwing(); return; }   // unequipped → put the global swing radii back
             if (Memory.ReadInt(WeaponCollision.EquippedModelPtr) == 0) return; // model not loaded
 
-            if (_reachArmed)
-            {
-                // Maintain dcol1 = ReachTargetZ; if the frame's name is gone (model relocated), re-scan.
-                if ((uint)Memory.ReadInt(_dcol1Addr) != WeaponCollision.DcolNameWord) { _reachArmed = false; _dcol1Addr = 0; return; }
-                long zAddr = _dcol1Addr + WeaponCollision.DcolNameToLocalZ;
-                if (Math.Abs(Memory.ReadFloat(zAddr) - ReachTargetZ) > 0.05f) Memory.WriteFloat(zAddr, ReachTargetZ);
-            }
-            else if (_reachScanBackoff <= 0) ScanForDcol1();      // locate the dcol1 frame (once per load)
-            else _reachScanBackoff--;
+            MaintainHcReachScheme();   // scale blade + halve hit point + grow swing sphere (half-visual scheme)
 
-            MaintainWhirlScale();                                 // enlarge the whirlwind effect model
+            // if (_reachArmed)
+            // {
+            //     // Maintain dcol1 = ReachTargetZ; if the frame's name is gone (model relocated), re-scan.
+            //     if ((uint)Memory.ReadInt(_dcol1Addr) != WeaponCollision.DcolNameWord) { _reachArmed = false; _dcol1Addr = 0; return; }
+            //     long zAddr = _dcol1Addr + WeaponCollision.DcolNameToLocalZ;
+            //     if (Math.Abs(Memory.ReadFloat(zAddr) - ReachTargetZ) > 0.05f) Memory.WriteFloat(zAddr, ReachTargetZ);
+            // }
+            // else if (_reachScanBackoff <= 0) ScanForDcol1();      // locate the dcol1 frame (once per load)
+            // else _reachScanBackoff--;
         }
 
         // Locate / maintain the whirlwind effect (c01_fuusya). Only the root "kiru" matrix transforms the
@@ -4107,6 +4276,68 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // ── Charge reach via enemy-hitbox inflation (data-side; no EE-code patching) ─────────────────────
+        // The player→enemy hit test is `dist(enemyBone, weaponPoint) <= enemyBodyRadius + weaponColRadius`.
+        // The weapon radius is a per-frame code immediate (race-prone), but the enemy body radius is a
+        // PERSISTENT field (BodyCollision.RadiusAddr). So while an HC charge is live we add a
+        // delta to every active enemy's body-hitbox radii — the charge then connects from further using the
+        // game's own clean hit handling — and restore them the moment the charge ends. The charge sphere is
+        // localized at dcol1, so only enemies near it actually benefit (far ones stay out of reach).
+        // Separate knobs: the whirlwind sweeps a wide arc (wants more), the lunge is a tight thrust (wants
+        // little). The whirlwind is action-state 0x18; the lunge is the windup / charge-active flag otherwise.
+        const float LungeHitboxDelta     = 3.0f;   // enemy body-hitbox += during a lunge charge (0 = off)
+        const float WhirlwindHitboxDelta = 6.0f;  // enemy body-hitbox += during a whirlwind charge (0 = off)
+        static float _chargeAppliedDelta;          // delta currently added to enemy hitboxes (0 = none)
+        static readonly float[,] _chargeHitboxOrig = new float[16, BodyCollision.MaxBodyParts];
+
+        static void MaintainChargeHitbox(bool hc)
+        {
+            float desired = hc ? ChargeDesiredDelta() : 0f;
+            if (desired == _chargeAppliedDelta) return;        // no change (incl. both 0 = idle)
+            if (_chargeAppliedDelta != 0f) RestoreChargeHitbox();   // undo previous inflation first
+            if (desired != 0f) InflateChargeHitbox(desired);        // apply the new one
+            _chargeAppliedDelta = desired;
+        }
+
+        // Which delta the current charge state wants: whirlwind (0x18) → big; windup (0xE) or the
+        // charge-active flag (lunge in progress) → small; otherwise not charging → 0.
+        static float ChargeDesiredDelta()
+        {
+            int action = Memory.ReadInt(WeaponCollision.ChargeActionState);
+            if (action == 0x18) return WhirlwindHitboxDelta;
+            if (action == 0xE || Memory.ReadInt(WeaponCollision.ChargeActiveFlag) == 1) return LungeHitboxDelta;
+            return 0f;
+        }
+
+        // Add `delta` to every active enemy's body-hitbox radii, caching the originals for restore.
+        static void InflateChargeHitbox(float delta)
+        {
+            for (int s = 0; s < 16; s++)
+            {
+                int status = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus));
+                for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                {
+                    _chargeHitboxOrig[s, p] = 0f;
+                    if (status <= 0) continue;                        // inactive / -1 slot
+                    long addr = BodyCollision.RadiusAddr(s, p);
+                    float r = Memory.ReadFloat(addr);
+                    if (r > 0.01f && r < 1000f) { _chargeHitboxOrig[s, p] = r; Memory.WriteFloat(addr, r + delta); }
+                }
+            }
+        }
+
+        // Write the cached original radii back.
+        static void RestoreChargeHitbox()
+        {
+            for (int s = 0; s < 16; s++)
+                for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                    if (_chargeHitboxOrig[s, p] > 0.01f)
+                    {
+                        Memory.WriteFloat(BodyCollision.RadiusAddr(s, p), _chargeHitboxOrig[s, p]);
+                        _chargeHitboxOrig[s, p] = 0f;
+                    }
+        }
+
         // Build the `lui $v0, imm` instruction that loads radius r into f12 (r's high 16 bits = a round float).
         static uint RadiusLuiInsn(float r) => 0x3C020000u | (System.BitConverter.SingleToUInt32Bits(r) >> 16);
 
@@ -4119,6 +4350,61 @@ namespace Dark_Cloud_Improved_Version
             if ((cur >> 16) != 0x3C02) return;                  // not `lui $v0, _` — bail (safety)
             if (cur != insn) Memory.WriteInt(addr, (int)insn);
         }
+
+        // Locate the EQUIPPED weapon's runtime dcol1 (name "dcol1", local (0,0,Z)) and set WhirlVisualScale
+        // = Z / (WhirlwindStockRadius/2). Logs EVERY (0,0,Z) dcol1 match so we can compare runtime dcol1
+        // across weapons against the combat-model values (looking for a pattern a static WeaponData table
+        // could encode). Uses the first plausible match for the scale. Backs off ~3s if none found.
+        // Locate the EQUIPPED weapon's dcol1 by walking the character model's runtime CFrame tree from the
+        // root (*EquippedModelPtr) — the weapon is attached under the hand bone, so the tree reaches its
+        // dcol1 regardless of where the model loaded in RAM (the flat-scan region isn't stable across swaps,
+        // and a fixed inventory dcol1 set sits elsewhere). Runtime CFrame: name@+0x118, child@+0x138,
+        // next@+0x13c, local trans@+0x200/4/8. dcol1 = name "dcol1" with local (0,0,Z); Z = its reach.
+        // The equipped weapon's model root = *(*NowWeapon + 0xBC) (the CFrameVu1 ToanKey_Play searches "dcol1"
+        // on). Its dcol1 (template: name@0, local (0,0,Z) at +0xE8/+0xF0) is the one to read — the char-model
+        // tree only has the hand "dcol", and the flat scan can't tell the equipped weapon's dcol1 from the
+        // other loaded weapons'. So we resolve the model root and scan a small window around it for dcol1.
+        const long NowWeaponPtr = 0x202A34F0;
+        const long WeaponModelRootOffset = 0xBC;
+        const long WeaponDcolScanBack = 0x4000, WeaponDcolScanFwd = 0x10000;
+        static void LocateWeaponDcol1(int weaponId)
+        {
+            int nw = Memory.ReadInt(NowWeaponPtr);
+            if (!IsRamPtr(nw)) { _whirlDcolBackoff = 8; return; }                            // no equipped weapon yet
+            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponModelRootOffset);
+            if (!IsRamPtr(modelRoot)) { _whirlDcolBackoff = 8; return; }                     // model not loaded yet
+            long baseMmu = Memory.ToMmu(modelRoot);
+            long lo = baseMmu - WeaponDcolScanBack, hi = baseMmu + WeaponDcolScanFwd;
+
+            for (long a = lo; a < hi; a += 2048 * 4)
+            {
+                int n = 2048 + 2;
+                if (a + (long)n * 4 > hi) n = (int)((hi - a) / 4);
+                if (n <= 2) break;
+                uint[] w = Memory.ReadUIntBatch(a, n);
+                for (int i = 0; i + 1 < n; i++)
+                {
+                    if (w[i] != WeaponCollision.DcolNameWord) continue;                       // "dcol"
+                    if ((byte)(w[i + 1] & 0xFF) != WeaponCollision.Dcol1Digit || (byte)((w[i + 1] >> 8) & 0xFF) != 0) continue; // "dcol1\0"
+                    long name = a + (long)i * 4;
+                    float x = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalX);
+                    float y = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalX + 4);
+                    float z = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalZ);
+                    if (Math.Abs(x) > 0.5f || Math.Abs(y) > 0.5f) continue;                   // (0,0,Z)
+                    if (z < 0.1f || z > 40f) continue;                                        // sane reach
+                    _weaponDcol1Z = z;
+                    WhirlVisualScale = z / (WhirlwindStockRadius / 2.0f);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"HC whirl: weapon {weaponId} dcol1 z={z:0.###} @0x{name & 0x1FFFFFFF:X8} (model 0x{baseMmu & 0x1FFFFFFF:X8}) -> WhirlVisualScale {WhirlVisualScale:0.###}");
+                    return;
+                }
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"  dcol1 DIAG: no dcol1 near model 0x{baseMmu & 0x1FFFFFFF:X8} (weapon {weaponId})");
+            _whirlDcolBackoff = 8;
+        }
+
+        static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < 0x2000000;
 
         // Scan EE RAM for the "dcol1" frame (name "dcol"+'1'+NUL, local translation (0,0,~9.2053)), set
         // its Z to ReachTargetZ, and cache its address. Backs off ~3s if not found (model not yet loaded).

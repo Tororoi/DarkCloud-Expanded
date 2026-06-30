@@ -1,5 +1,100 @@
 # Weapon Reach — research notes
 
+## ★ Runtime weapon-model SCALE — the clean lever (CONFIRMED 2026-06-30)
+
+The breakthrough that supersedes the dcol1-only / code-immediate reach hacks below: you can scale the whole
+equipped weapon model at runtime with a pure data write that grows the **visible blade AND its dcol collision
+together**, stably, mid-game, with no EE-code patch and no crash.
+
+**Model root** = `*(*NowWeapon + 0xBC)` where `NowWeapon = 0x202A34F0`. The root is a **CFrameVu1 TEMPLATE
+node** (`name@0`, NOT the +0x118 runtime CFrame). CFrameVu1 layout:
+- `name@0` (NUL-terminated)
+- **LOCAL matrix 3x3 @ +0xB8** (row-major, rows of 0x10 → diagonal at **+0xB8 / +0xCC / +0xE0**)
+- LOCAL translation @ +0xE8 / +0xEC / +0xF0  ← same node type as the dcol1 frame (DcolNameToLocalX/Z = 0xE8/0xF0)
+- WORLD translation @ +0x68
+
+**Frame tree:** root `NN_1_1` → **mesh frame `"wNN"`** (the visible blade; HC = `"w14"`, name word `"w14\0"` =
+`0x00343177`, found this session at native `0x00660468` — address varies, locate by name scan in the model
+window `[root−0x1000, root+0x3000]`) → `dcol0..dcol3` (collision frames, **children of the mesh**).
+
+**To scale:** locate `"wNN"` (name@0), write `factor` to its local-3x3 diagonal (+0xB8/+0xCC/+0xE0; bind is
+identity, so it's `factor*identity`). Maintain by re-applying if it drifts (it doesn't — the engine does NOT
+re-pose this template node). CONFIRMED in-game (HC, factor 1.5): blade visibly bigger, **hit reach grows with
+it**, fully stable. Because dcol0..3 are children of `wNN`, their world positions are multiplied by `factor`
+automatically — visual and collision stay locked together. Code: `Weapons.TestScaleHcWeapon` (→ the reach
+scheme below); addresses `WeaponCollision.Vu1LocalMatrixDiag0/1/2`, `NowWeaponPtr`, `WeaponModelRootOffset`.
+
+### Half-visual consistency scheme (design, 2026-06-30)
+Goal: make hits feel consistent — close (point-blank) hits land AND far hits don't reach past the visible
+blade. With a single hit point at the blade *tip* (`dcol1`), close enemies get missed (the point overshoots
+them) and the only hit is a thin sweep at the end. Fix: center the effective hit sphere on the *middle* of the
+blade. Let `L` = scaled visual length (≈ `factor × stock dcol1 Z`):
+1. **Scale the mesh `wNN` by `factor`** → visible blade length `L`, dcol1 world reach `factor × stockZ`.
+2. **Halve the hit point**: set `dcol1` local Z to `stockZ/2` → dcol1 world reach `= L/2` (mid-blade).
+3. **Grow the hit sphere by `L/2`**: add `L/2` to the swing radius. NOTE the hit test is `dist(enemy,
+   weaponPoint) <= enemyBodyRadius + weaponColRadius` — adding `L/2` to the **weapon swing radius** (gp
+   constants `SwingRadiusAddrs`, safe data write, restored on unequip) is geometrically identical to
+   inflating every enemy's body radius by `L/2`, but with no per-enemy bookkeeping. Prefer the weapon side.
+
+Result: effective hit = sphere centered at `L/2`, radius `≈ R_enemy + L/2 + swing`. Reaches from point-blank
+(close hits ✓) out to `≈ L + R_enemy + swing` (≈ the visible blade length, ✓). Combo swings use the gp radii;
+the lunge/whirl charge radii are code immediates (per-floor patch only).
+
+---
+
+## Charge attacks (lunge + whirlwind) & the whirlwind visual — RE + approaches (2026-06-29)
+
+Toan's charge attacks and the whirlwind's visual effect, reverse-engineered and iterated on. Code lives in
+`Weapons.cs` (the `ReachTick`/`MaintainWhirlScale`/`MaintainChargeHitbox` block); addresses in
+`WeaponAddresses.cs` (`WeaponCollision`). See also memory `toan-charge-states-and-whirl-visual` and
+`whirlwind-fuusya-model`.
+
+### Charge state machine (`ToanKey_Play__Fv`, main 0x241690)
+Action-state global **`DAT_01dc4494` (MMU `0x21DC4494`)**: `0x24-0x28`=normal combo, **`0xE`=charge windup**,
+**`0xF`(+`0x10/3/0x19/0x11`)=lunge**, **`0x18`=whirlwind**. Charge-attack-active flag **`DAT_01dc44f0`
+(MMU `0x21DC44F0`)** = 1 during the lunge/whirl hit window. Animation-frame cursor `DAT_01ea2010`; all hits
+are `if (lo<=frame && frame<=hi)`.
+
+### Charge hit geometry
+Both charge hits are built at the **`dcol1`** frame (string `0x29fd78`="dcol1") — the SAME frame the combo
+uses and that the reach feature extends. So the charge's *position* already follows the dcol1 edit (safe data
+write). What's left is the **radius** (sphere size around dcol1):
+- **Lunge** hit = frame 193-196 collision, radius **code immediate** `lui $v0,0x40c0`=6.0 @ MMU `0x20241AC0`.
+- **Whirlwind** hit = frame 720-722 collision, radius immediate `lui $v0,0x4140`=12.0 @ MMU `0x20241B90`.
+The hit test (`CMonstorUnit::CheckDmg` 0x1d9f10): `dist(enemyBone, weaponPoint) <= enemyBodyRadius +
+weaponColRadius`. `CCollisionData::Set` (0x1b57a0) copies the radius immediate into `NowColData +
+slot*0xa0 + 0x3c`, re-written every active frame (≈3) → that slot is a per-frame race, NOT a safe lever.
+
+### ⚠ EE-CODE writes only safe during floor LOAD (hard-won)
+Patching the radius immediates (`0x20241AC0/0x20241B90`) via PINE **crashes PCSX2 unless done during the
+floor-load window before the player is walking.** Proven by isolation: writing during active play, in the
+weapon menu, OR on menu-exit all crash the *emulator* (not just the game); only `OnReachFloorEntered`'s load
+window is safe. The battle weapon id (`GetCurrentWeaponId`, `0x21EA7590`) also only updates once you're back
+walking — too late to know the new weapon in a safe window. (The inventory equip slot `0x21CDD88C` DOES
+update in the menu, weapon id via `WeaponSlot0.id 0x21CDDA58 + slot*0xF8` — but writing code in the menu
+still crashes, so it doesn't help.) ⇒ code-patched charge radius can only be per-FLOOR, not mid-floor.
+
+### Enemy-hitbox approach (safe data-side alternative)
+Since the weapon radius can't be safely written live, inflate the OTHER half of the hit test — the **enemy
+body hitbox radius**, a PERSISTENT field: `BodyCollision.RadiusAddr(slot, bodyPart)` (= `MainMonstorUnit.Base
++ 0x55390 + slot*0x510 + part*4`, up to 16 parts; see `docs/enemy-body-collision-table.md`). While an HC
+charge is active (`MaintainChargeHitbox`), add a delta to every active enemy's body radii (enumerate 16 slots
+via `FloorSlots` RenderStatus), restore when the charge ends. The game's own clean hit handling then connects
+from further — no code patching, works mid-game on any weapon swap. Detect lunge vs whirl by action state
+(0x18=whirl) for separate deltas. **LIMITATION (why we pivoted):** the enemy sphere grows symmetrically, so
+you can't independently tune near vs far reach — good for the whirlwind (AoE), awkward for the lunge.
+
+### Whirlwind VISUAL = effect model `c01_fuusya.chr` (see whirlwind-fuusya-model memory)
+Separate model (root frame "kiru" 切る, "fuusya"=pinwheel), a POOL of ~7 instances; one activates per cast
+(nonzero world pos). Mesh is VERTEX_ANIME so ONLY the root's LOCAL matrix (+0x1d0) transforms it — NOT the
+TRS scale (+0x210), NOT child frames. `MaintainWhirlScale` finds the root (fast-path `KnownWhirlRootMmu
+0x20685AA0` for HC, else RAM-scan a "kiru" whose +0x270 frame is "fkiri"; narrow to the live instance),
+caches its bind 3x3, writes bind×`WhirlVisualScale`. **WhirlVisualScale = ReachTargetZ /
+(WhirlwindStockRadius/2)** (validated ≈ right for HC vanilla reach 9.2053 → ~1.53). Applied to ALL of Toan's
+weapons (the effect is character-bound). HC will later get an increased scale + the hitbox delta on top.
+
+---
+
 ## SOLVED — reach = dcol bone Z in the COMBAT model `.mds` (offline asset edit)
 
 Confirmed 2026-06-28 by parsing `data.dat`. Each weapon has TWO models: `commenu\weapon\cXXwNN.chr`

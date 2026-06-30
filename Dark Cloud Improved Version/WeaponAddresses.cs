@@ -186,10 +186,14 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly long[] SwingRadiusAddrs = { 0x202A1C68, 0x202A1C6C, 0x202A1C70 };
         internal const float SwingRadiusStock0 = 2.8f; // sanity value at SwingRadiusAddrs[0]
 
-        /// <summary>The LUNGE charge's hit radius is a code immediate: <c>lui $v0, 0x40c0</c> (=6.0) at
-        /// MMU 0x20241AC0 (instruction word 0x3C0240C0). Patch the immediate (high 16 bits of the float)
-        /// to raise the lunge radius so it reaches back over the player at extended dcol1. Whirlwind's
-        /// 12.0 is at 0x20241B90 (left alone — not the problem).</summary>
+        /// <summary>The charge hit radii are CODE IMMEDIATES in ToanKey_Play: lunge <c>lui $v0,0x40c0</c>=6.0
+        /// @ MMU 0x20241AC0, whirlwind <c>lui $v0,0x4140</c>=12.0 @ 0x20241B90. Patch the immediate (high 16
+        /// bits of the float radius) to resize. ⚠ Writing EE code via PINE CRASHES PCSX2 unless done during
+        /// the floor-LOAD window (OnReachFloorEntered) — the menu, menu-exit, and active play all crash the
+        /// emulator. So a code-patched charge radius can only update per-FLOOR, never mid-floor. The safe,
+        /// mid-game alternative is to inflate the enemy BODY hitbox instead (the other half of the hit test):
+        /// see <c>BodyCollision.RadiusAddr</c> + <c>Weapons.MaintainChargeHitbox</c> (gated by ChargeActionState/
+        /// ChargeActiveFlag above). Tradeoff: enemy sphere grows symmetrically (can't tune near vs far apart).</summary>
         internal const long LungeRadiusInsn          = 0x20241AC0;
         internal const uint LungeRadiusStockInsn     = 0x3C0240C0; // lui $v0, 0x40c0  (radius 6.0)
         internal const long WhirlwindRadiusInsn      = 0x20241B90;
@@ -244,5 +248,33 @@ namespace Dark_Cloud_Improved_Version
         // stays anchored on Toan. Row-major 4x4: rows 0..2 at +0x1d0/+0x1e0/+0x1f0.
         internal static readonly int[] CFrameLocal3x3 =
             { 0x1D0, 0x1D4, 0x1D8,   0x1E0, 0x1E4, 0x1E8,   0x1F0, 0x1F4, 0x1F8 };
+
+        // ── Charge attack state (ToanKey_Play DAT_01dc44xx) — used to widen the charge's hit window safely
+        //    by inflating enemy body hitboxes during a charge (data-side, no EE-code patching). ──
+        internal const long ChargeActionState = 0x21DC4494; // 0xE=charge windup, 0xF=lunge, 0x18=whirlwind
+        internal const long ChargeActiveFlag  = 0x21DC44F0; // 1 while a lunge/whirlwind hit is live
+
+        // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED 2026-06-30 ──
+        // The equipped weapon's model root is *(*NowWeapon + 0xBC) (NowWeapon = 0x202A34F0); it is a CFrameVu1
+        // TEMPLATE node (name@0, NOT the +0x118 runtime CFrame). CFrameVu1 layout: name@0, LOCAL matrix 3x3 at
+        // +0xB8 (row-major, rows of 0x10 → diagonal at +0xB8/+0xCC/+0xE0), LOCAL translation at +0xE8/+0xEC/+0xF0
+        // (this is the same node type as the dcol1 frame — see DcolNameToLocalX/Z = 0xE8/0xF0 above), WORLD
+        // translation at +0x68. The model tree: root "NN_1_1" → **mesh frame "wNN"** (the visible blade; e.g.
+        // Heaven's Cloud = "w14", name word "w14\0" = 0x00343177) → dcol0..dcol3 (collision frames, children of
+        // the mesh). So scaling the mesh frame "wNN" scales BOTH the visible blade AND the dcol hit point
+        // (children inherit the parent's world transform).
+        //
+        // To scale at runtime: locate the "wNN" frame (name@0) by scanning the model window around the root,
+        // then write factor to its local-3x3 DIAGONAL (+0xB8/+0xCC/+0xE0; bind is identity so factor*identity).
+        // CONFIRMED: this grows the visual blade AND the melee hit reach by `factor`, and is STABLE (the engine
+        // does NOT re-pose this template node) — a pure data write, mid-game safe, NO EE-code patch, NO crash.
+        // This is the clean lever the old dcol1-only / code-immediate reach hacks were working around.
+        internal const long NowWeaponPtr           = 0x202A34F0; // → native ptr to NowWeapon record
+        internal const int  WeaponModelRootOffset  = 0xBC;       // NowWeapon + 0xBC → native ptr to model root CFrameVu1
+        internal const int  Vu1LocalMatrixDiag0    = 0xB8;       // CFrameVu1 local 3x3 m00 (m11 +0x14=0xCC, m22 +0x28=0xE0)
+        internal const int  Vu1LocalMatrixDiag1    = 0xCC;
+        internal const int  Vu1LocalMatrixDiag2    = 0xE0;
+        internal const int  Vu1LocalTransX         = 0xE8;       // CFrameVu1 local translation (Y +0xEC, Z +0xF0)
+        internal const int  Vu1LocalTransZ         = 0xF0;
     }
 }
