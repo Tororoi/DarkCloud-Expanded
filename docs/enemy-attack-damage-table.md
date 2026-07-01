@@ -124,12 +124,12 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 85 | 118 | Dark Genie (form 2) | `c17b` | 125 | — |  |
 | 86 | 119 | Right Hand | `c17c` | 125 | — |  |
 | 87 | 120 | Left Hand | `c17_` | 125 | — | resolved STB `c17c` |
-| 88 | 0 | (DG companion c17_) | `c17_` | 175 | — | resolved STB `c17_beem` |
-| 89 | 0 | (DG companion c17_) | `c17_` | — | — | resolved STB `c17_kaze` — Dark Genie wind effect entity — no attack |
-| 90 | 0 | (DG companion c17_) | `c17_` | — | — | resolved STB `c17_hikari` — Dark Genie light effect entity — no attack |
+| 88 | 0 | (DG companion c17_) | `c17_` | — | — | non-attacker effect entity (c17_kaze/hikari/syougeki — no damage script) |
+| 89 | 0 | (DG companion c17_) | `c17_` | 175 | — | resolved STB `c17_beem` — footprint 21882/Abs 17 match confirmed `c23_beem` (21938/17); funcId 132 = 175 |
+| 90 | 0 | (DG companion c17_) | `c17_` | 175 | — | resolved STB `c17_beem_s` — footprint 7475/Abs 20 match confirmed `c23_beem_s` (7423/20); funcId 132 = 175 |
 | 91 | 121 | Wine Keg | `e85a` | 8 | — |  |
 | 92 | 0 | Ice Aura | `b3_r` | 74 | — | resolved STB `b3_reiki` |
-| 93 | 0 | (DG companion c17_) | `c17_` | — | — | resolved STB `c17_syougeki` — Dark Genie shock effect entity — no attack |
+| 93 | 0 | (DG companion c17_) | `c17_` | — | — | non-attacker effect entity (c17_kaze/hikari/syougeki — no damage script) |
 | 94 | 90 | Gol | `e90a` | 71, 71, 75, 75, 62, 55, 45 | 62 var |  |
 | 95 | 91 | Sil | `e91a` | 71, 71, 75, 75, 62, 55, 45 | 62 var |  |
 | 96 | 301 | Yammich | `e101` | 35 | — |  |
@@ -147,7 +147,7 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 108 | 0 | DG Final ground wave | `last_gw1` | — | — | Dark Genie Final effect entity; motion グランドウェイブ (ground wave); no own damage |
 | 109 | 0 | DG Final beam | `c23_beem` | 175 | — | Dark Genie Final beam (= the `c17_beem` Dark Genie beam, 175); motions 発射/ループ/消滅 (fire/loop/vanish) |
 | 110 | 0 | DG Final beam (small) | `c23_beem_s` | 175 | — | Dark Genie Final beam variant; motions 発動/ループ/消滅 (activate/loop/vanish) |
-| 111 | 311 | Gemron (Fire) | `e111` | — | 100 |  |
+| 111 | 311 | Gemron (Fire) | `e111` | 100 | 100 | melee swing shares the cast animation (funcId 132) |
 | 112 | 308 | Nikapous | `e108` | 150, 150, 150, 150 | 150 |  |
 | 113 | 56 | White Fang (Enhanced) | `e125` | 122, 122 | — |  |
 | 114 | 40 | Arthur (Enhanced) | `e126` | 130, 130 | — |  |
@@ -157,7 +157,7 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 118 | 70 | Vulcan (Enhanced) | `e130` | 114, 114, 114 | — |  |
 | 119 | 50 | Mummy (Enhanced) | `e131` | 98, 98 | — |  |
 | 120 | 46 | Diamond (Enhanced) | `e132` | 123, 123 | — |  |
-| 121 | 312 | Gemron (Ice) | `e112` | — | 120 |  |
+| 121 | 312 | Gemron (Ice) | `e112` | 120 | 120 | melee swing shares the cast animation (funcId 132) |
 | 122 | 319 | Horn Head | `e119` | 130, 130, 130 | — |  |
 | 123 | 26 | Auntie Medu (Enhanced) | `e133` | 122 | 122 |  |
 | 124 | 77 | Rockanoff (Enhanced) | `e134` | 130, 130 | — |  |
@@ -168,7 +168,7 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 129 | 28 | Corcea (Enhanced) | `e139` | 110, 110, 110, 110 | — |  |
 | 130 | 309 | Mimic (Demon Shaft) | `e109` | 130 | — |  |
 | 131 | 310 | King Mimic (Demon Shaft) | `e110` | 170, 170, 170 | — |  |
-| 132 | 313 | Gemron (Thunder) | `e113` | — | 130 |  |
+| 132 | 313 | Gemron (Thunder) | `e113` | 130 | 130 | melee swing shares the cast animation (funcId 132) |
 | 133 | 316 | Bishop Q | `e116` | 130, 130 | 130, 130 | two shots: funcId-133 (130) + funcId-229 (130) |
 | 134 | 60 | Cave Bat (Enhanced) | `e140` | 95, 95 | — |  |
 | 135 | 90 | Gol (Enhanced) | `e141` | 131, 131, 135, 135, 132, 125, 125 | 132 var |  |
@@ -179,7 +179,7 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 140 | 27 | Captain (Enhanced) | `e146` | 99, 99, 99, 99 | — |  |
 | 141 | 309 | Mimic (Demon Shaft) (Enhanced) | `e109` | 130 | — |  |
 | 142 | 310 | King Mimic (Demon Shaft) (Enhanced) | `e110` | 170, 170, 170 | — |  |
-| 143 | 314 | Gemron (Wind) | `e114` | — | 140 |  |
+| 143 | 314 | Gemron (Wind) | `e114` | 140 | 140 | melee swing shares the cast animation (funcId 132) |
 | 144 | 318 | Silver Gear | `e118` | — | 110 |  |
 | 145 | 43 | Alexander (Enhanced) | `e149` | 122 | 122 |  |
 | 146 | 44 | Heart (Enhanced) | `e150` | 130 | 130 | funcId-229 shot (130); 133 `magic_bin` is a 0-dmg bind |
@@ -190,7 +190,7 @@ through its hands (swipe 125, beam `c17_beem` 175).
 | 151 | 72 | Space Gyon (Enhanced) | `e155` | 160, 160 | 160 var |  |
 | 152 | 309 | Mimic (Demon Shaft) (Enhanced x2) | `e109` | 130 | — |  |
 | 153 | 310 | King Mimic (Demon Shaft) (Enhanced x2) | `e110` | 170, 170, 170 | — |  |
-| 154 | 315 | Gemron (Holy) | `e115` | — | 150 |  |
+| 154 | 315 | Gemron (Holy) | `e115` | 150 | 150 | melee swing shares the cast animation (funcId 132) |
 | 155 | 317 | Gacious (Enhanced) | `e117` | 180, 180, 180, 180, 180 | — |  |
 | 156 | 61 | Evil Bat (Enhanced) | `e158` | 122, 122 | — |  |
 | 157 | 76 | Crescent Baron (Enhanced) | `e159` | 150, 150, 150, 150 | 150 |  |

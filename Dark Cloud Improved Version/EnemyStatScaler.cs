@@ -141,21 +141,25 @@ namespace Dark_Cloud_Improved_Version
         /// shared, so this buffs every live enemy of the species, not just <paramref name="slot"/>. Scaled at most
         /// once per floor per STB (see <see cref="ResetFloor"/>). See EnemyAddresses StbVm / ShotDmgCache for the RE.
         /// </summary>
-        internal static void ScaleProjectile(int slot, int tableIndex, float factor)
+        /// <returns><c>true</c> when the slot's STB was READY and processed (or there was nothing to do), so the
+        /// caller can stop retrying; <c>false</c> when the STB script pointer (CRunScript+0x3C) hasn't attached yet —
+        /// the slot's VM state loads a few ticks AFTER its CCharacter slot goes live, so the caller must retry until
+        /// this returns true or it never will (see EnemyStatNormalizer's projectile-pending retry).</returns>
+        internal static bool ScaleProjectile(int slot, int tableIndex, float factor)
         {
-            if (factor == 1f) return;
+            if (factor == 1f) return true;                   // nothing to scale — done
             int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
-            if (stbNative == 0 || stbNative == -1) return;
-            if (!_projPatchedStb.Add(stbNative)) return;     // this STB's shot literals already scaled this floor
+            if (stbNative == 0 || stbNative == -1) return false;  // STB not attached yet → retry next tick
+            if (!_projPatchedStb.Add(stbNative)) return true;     // this STB's shot literals already scaled this floor
             long stb = Memory.ToMmu(stbNative);
-            if (Memory.ReadInt(stb) != StbVm.Magic) return;
+            if (Memory.ReadInt(stb) != StbVm.Magic) { _projPatchedStb.Remove(stbNative); return false; }  // stale read → retry
 
             const int Window = 0xC000;
             byte[] d = Memory.ReadByteArray(stb, Window);
-            if (d == null || d.Length < 0x10) return;
+            if (d == null || d.Length < 0x10) { _projPatchedStb.Remove(stbNative); return false; }        // read failed → retry
             int Word(int i) => d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24);
             int code = Word(StbVm.CodeSectionOff);
-            if (code < StbVm.LabelTableOff || code >= d.Length) return;
+            if (code < StbVm.LabelTableOff || code >= d.Length) return true;   // malformed but present — won't improve on retry
 
             var callsByTarget = new Dictionary<int, List<int>>();
             for (int i = code; i + StbVm.InstrSize <= d.Length; i += 4)
@@ -225,6 +229,7 @@ namespace Dark_Cloud_Improved_Version
             }
             if (Verbose && hits == 0)
                 Console.WriteLine($"[StatScale]   slot {slot} proj: ×{factor:F2}, no scalable _SET_SHOT literal in STB 0x{stbNative:X8} (computed/default shooter or no shot)");
+            return true;   // STB was ready and fully scanned
         }
 
         // Scale a "default" shooter's BST base damage (BehaviorScriptTable entry +0x3C). Snapshots the boot value

@@ -280,6 +280,7 @@ namespace Dark_Cloud_Improved_Version
         // InventoryWeaponSlot0Id + slot*InventoryWeaponSlotStride (ushort id). See Weapons.GetEquippedWeaponId.
         internal const long InventoryEquipSlotAddr    = 0x21CDD88C; // byte: current equipped weapon slot (0-9)
         internal const long InventoryWeaponSlot0Id    = 0x21CDDA58; // ushort: slot 0's weapon id
+        internal const long InventoryWeaponSlot0Speed = 0x21CDDA60; // ushort: slot 0's SPEED stat (id + 0x08)
         internal const int  InventoryWeaponSlotStride = 0xF8;       // stride between weapon-list slots
     }
 }

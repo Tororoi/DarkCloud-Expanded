@@ -1384,7 +1384,12 @@ namespace Dark_Cloud_Improved_Version
         // 消滅/爆発 (despawn/explode). For these the boss-death system doesn't apply (scripted despawn).
         // Dark Genie fight companions: code=c17_ = DG attack-effect family. The prefix maps to several .chr:
         // c17_beem.chr (発射/ループ/消滅 = launch/loop/despawn), c17_kaze.chr (wind), c17_hikari.chr (light),
-        // c17_syougeki.chr (shock). e.g. c17_beem @ data.dat 0x1b1e9000. Which TableIndex→which is unconfirmed.
+        // c17_syougeki.chr (shock). e.g. c17_beem @ data.dat 0x1b1e9000.
+        // TableIndex→entity resolved by matching footprint + Abs against the CONFIRMED c23 Final-Form beams
+        // (TableIndex 109 c23_beem: fp 21938/Abs 17; 110 c23_beem_s: fp 7423/Abs 20 — both 175 dmg). The two c17
+        // beams line up almost exactly: idx 89 (fp 21882/Abs 17) = c17_beem, idx 90 (fp 7475/Abs 20) = c17_beem_s,
+        // both dealing 175 (funcId 132, verified in c17_beem.stb / c17_beem_s.stb). idx 88 & 93 are the wind/light/
+        // shock effects (c17_kaze/hikari/syougeki .stb have NO damage script) — non-attackers, so no MeleeDamage.
         internal static readonly EnemyDefaults DGComp88 = new EnemyDefaults {
             Id=0, TableIndex=88, Name="(DG companion c17_)", ModelCode="c17_", ModelFootprint=16563,
             Abs=20, MinGoldDrop=0, DropChance=0, StealItemId=65535, RareDropItemId=65535,
@@ -1392,7 +1397,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             ItemDamageRes=50, ItemStatusRes=0,
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=5.0f, EntityScaleCopy=5.0f,
-            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };   // non-attacker effect (kaze/hikari/syougeki)
 
         internal static readonly EnemyDefaults DGComp89 = new EnemyDefaults {
             Id=0, TableIndex=89, Name="(DG companion c17_)", ModelCode="c17_", ModelFootprint=21882,
@@ -1401,7 +1406,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             ItemDamageRes=50, ItemStatusRes=0,
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=5.0f, EntityScaleCopy=5.0f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };  // c17_beem (funcId 132 = 175)
 
         internal static readonly EnemyDefaults DGComp90 = new EnemyDefaults {
             Id=0, TableIndex=90, Name="(DG companion c17_)", ModelCode="c17_", ModelFootprint=7475,
@@ -1410,7 +1415,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             ItemDamageRes=50, ItemStatusRes=0,
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=5.0f, EntityScaleCopy=5.0f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };  // c17_beem_s (funcId 132 = 175)
 
         internal static readonly EnemyDefaults WineKeg = new EnemyDefaults {
             Id=121, TableIndex=91, Name="Wine Keg", ModelCode="e85a", ModelFootprint=3172,
@@ -1617,7 +1622,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=0, IceRes=150, ThunderRes=30, WindRes=30, HolyRes=30,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{100} };
+            MeleeDamage=new int[]{100}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults Nikapous = new EnemyDefaults {
             Id=308, TableIndex=112, Name="Nikapous", ModelCode="e108", ModelFootprint=69755,
@@ -1710,7 +1715,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0, ThunderRes=30, WindRes=30, HolyRes=30,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{120} };
+            MeleeDamage=new int[]{120}, ProjectileDamage=new int[]{120} };
 
         internal static readonly EnemyDefaults HornHead = new EnemyDefaults {
             Id=319, TableIndex=122, Name="Horn Head", ModelCode="e119", ModelFootprint=52419,
@@ -1816,7 +1821,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=30, IceRes=30, ThunderRes=0, WindRes=150, HolyRes=30,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{130} };
+            MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{130} };
 
         internal static readonly EnemyDefaults BishopQ = new EnemyDefaults {
             Id=316, TableIndex=133, Name="Bishop Q", ModelCode="e116", ModelFootprint=67591,
@@ -1915,7 +1920,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=100, IceRes=100, ThunderRes=140, WindRes=0, HolyRes=100,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{140} };
+            MeleeDamage=new int[]{140}, ProjectileDamage=new int[]{140} };
 
         internal static readonly EnemyDefaults SilverGear = new EnemyDefaults {
             Id=318, TableIndex=144, Name="Silver Gear", ModelCode="e118", ModelFootprint=64198,
@@ -2015,7 +2020,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{150} };
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };
 
         internal static readonly EnemyDefaults GaciousEnhanced = new EnemyDefaults {
             Id=317, TableIndex=155, Name="Gacious (Enhanced)", ModelCode="e117", ModelFootprint=45760,

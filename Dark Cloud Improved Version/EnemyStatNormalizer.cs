@@ -78,6 +78,12 @@ namespace Dark_Cloud_Improved_Version
         private static int _normalizedKey = -1;   // packed (dungeon<<16 | floor<<8 | backfloorBit) of the current floor context
         private static int _curHpDef, _curAtk;    // current-floor tiers
         private static readonly Dictionary<int, int> _swept = new(); // slot -> species already normalized (patch once on spawn)
+        // Slots whose HP/def/melee was normalized but whose projectile scaling hasn't landed yet, because the STB
+        // script pointer (CRunScript+0x3C) attaches a few ticks AFTER the CCharacter slot goes live. Retried each
+        // sweep pass until ScaleProjectile reports the STB is ready. Without this, a slot marked _swept on the tick
+        // its STB was still 0 never gets its projectile scaled — full-damage shots (esp. melee-less casters like
+        // Gemron, whose projectile is their whole offense). slot -> (tableIndex, factor).
+        private static readonly Dictionary<int, (int tableIndex, float factor)> _projPending = new();
         private static bool _sweepDone;     // set once the floor's enemies are loaded + normalized; stops the per-tick sweep
         private static int  _sweepIdle;     // consecutive sweep passes with nothing new to patch
         // The actual per-stat RAM writes (HP/defense/melee/projectile + the shared per-floor STB dedup and the static
@@ -285,7 +291,7 @@ namespace Dark_Cloud_Improved_Version
                 _normalizedKey = key;
                 _curHpDef = HpDefTierOf(dungeon, floor); // 0..10
                 _curAtk   = dungeon;                     // 0..6
-                _swept.Clear(); EnemyStatScaler.ResetFloor(); _sweepDone = false; _sweepIdle = 0; // new floor: sweep until its enemies are loaded
+                _swept.Clear(); _projPending.Clear(); EnemyStatScaler.ResetFloor(); _sweepDone = false; _sweepIdle = 0; // new floor: sweep until its enemies are loaded
                 EnemyStatScaler.Verbose = LogNormalize;
                 if (LogNormalize)
                     Console.WriteLine($"[Normalize] enter dungeon {dungeon} floor {floor}{(back != 0 ? " BACKFLOOR" : "")} (HP/def tier {_curHpDef}, atk tier {_curAtk}); k={NormalizationStrength:F2}, dmg={(NormalizeDamage ? "on" : "off")}.");
@@ -304,7 +310,9 @@ namespace Dark_Cloud_Improved_Version
             {
                 int normalized = SweepLiveSlots(_curHpDef, _curAtk);
                 if (normalized > 0) _sweepIdle = 0; else _sweepIdle++;
-                if ((_swept.Count > 0 && _sweepIdle >= 8) || _sweepIdle >= 1500) _sweepDone = true;
+                // Don't settle while any slot still owes a projectile patch (its STB hasn't attached yet); the 1500
+                // hard cap still bails out if an STB never loads, so we can't hang.
+                if ((_swept.Count > 0 && _projPending.Count == 0 && _sweepIdle >= 8) || _sweepIdle >= 1500) _sweepDone = true;
             }
         }
 
@@ -320,7 +328,17 @@ namespace Dark_Cloud_Improved_Version
                 long slotBase = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
                 if (Memory.ReadInt(slotBase + EnemySlotOffsets.RenderStatus) < 0) continue; // empty slot
                 int id = Memory.ReadUShort(slotBase + EnemySlotOffsets.EnemySpeciesId);
-                if (_swept.TryGetValue(s, out int prevSpeciesId) && prevSpeciesId == id) continue;  // this enemy already normalized
+                if (_swept.TryGetValue(s, out int prevSpeciesId) && prevSpeciesId == id)
+                {
+                    // Already normalized (HP/def/melee are one-shot). Only the projectile may still be owed, if its
+                    // STB script pointer wasn't attached when we first swept this slot — retry until it lands.
+                    if (_projPending.TryGetValue(s, out var pending)
+                        && EnemyStatScaler.ScaleProjectile(s, pending.tableIndex, pending.factor))
+                    {
+                        _projPending.Remove(s); normalized++;
+                    }
+                    continue;
+                }
                 if (!_byId.TryGetValue(id, out var tableIndices)) continue;   // not a known species
                 _swept[s] = id; normalized++;                                // normalize once (enemies spawn at load, no respawn)
 
@@ -350,7 +368,9 @@ namespace Dark_Cloud_Improved_Version
                 if ((NormalizeDamage || StrongerEnemies) && hasAtk && (StrongerEnemies || nativeAtkTier != curAtk))
                 {
                     EnemyStatScaler.ScaleMelee(s, enemyDefaults.MeleeDamage, Factor(_bMelee, nativeAtkTier, curAtk));
-                    EnemyStatScaler.ScaleProjectile(s, tableIndex, Factor(_bProj, nativeAtkTier, curAtk));
+                    float projFactor = Factor(_bProj, nativeAtkTier, curAtk);
+                    if (!EnemyStatScaler.ScaleProjectile(s, tableIndex, projFactor))
+                        _projPending[s] = (tableIndex, projFactor);   // STB not attached yet — retry next sweep pass
                 }
             }
             return normalized;
