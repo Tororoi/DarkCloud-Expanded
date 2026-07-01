@@ -222,16 +222,28 @@ namespace Dark_Cloud_Improved_Version
             { 0x1D0, 0x1D4, 0x1D8,   0x1E0, 0x1E4, 0x1E8,   0x1F0, 0x1F4, 0x1F8 };
 
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
-        // Drives CustomEffects.HeavensCloudEffect's charge ramp + MaintainEnemyHitbox's whirl gate.
-        internal const long ChargeActionState = 0x21DC4494; // 0xE=windup, 0xF..0x11=lunge path, 0x18=whirlwind
-        // Charge LEVEL reached during the 0xE windup as the meter (DAT_01dc449c) accumulates: 0=none,
-        // 1=lunge (meter ≥1.5), 2=whirlwind (meter ≥2.5 AND whirlwind unlocked, UserStatus+0x4324≠0).
-        // So "charging FOR the whirlwind" == (action 0xE && level 2). Reset to 0 by ToanKey_On at attack start.
+        // Drives CustomEffects.HeavensCloudEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
+        // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
+        internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
+        internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
+        internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
+        // Charge METER (float, DAT_01dc449c): resets to 1.0 at attack start, accumulates each windup frame,
+        // caps at 3.0. Thresholds: ≥1.5 → lunge available, ≥2.5 → whirlwind available (if unlocked).
+        internal const long ChargeMeter       = 0x21DC449C;
+        // Charge LEVEL (DAT_01dc44dc): the tier the meter has crossed during the 0xE windup — the clean signal
+        // for WHICH charge attack is being built. Reset to 0 by ToanKey_On at attack start.
         internal const long ChargeLevel       = 0x21DC44DC;
-        // Charge-active flag: 1 while a lunge/whirlwind hit is live; cleared to 0 INSIDE the 0x18 block on the
-        // whirlwind's final frame — so (action 0x18 && flag 1) is the true "whirlwind executing" window, and the
-        // flag dropping is the earliest, cleanest "attack finished" signal (the action state itself lingers at
-        // 0x18 for a frame until ToanKey_On resets it).
+        internal const int  ChargeLevelNone     = 0;        // meter < 1.5
+        internal const int  ChargeLevelLunge    = 1;        // meter ≥ 1.5
+        internal const int  ChargeLevelWhirl    = 2;        // meter ≥ 2.5 AND whirlwind unlocked (UserStatus+0x4324≠0)
+        // Whirlwind-unlock gate: the level-2 transition also requires *(int*)(UserStatus + WhirlwindUnlockOffset)
+        // ≠ 0 (the ability learned). Documented for completeness; the level-2 check already folds it in, so code
+        // reads ChargeLevel==2 rather than this directly (UserStatus base not needed).
+        internal const int  WhirlwindUnlockOffset = 0x4324;
+        // Charge-active flag (DAT_01dc44f0): 1 while a lunge/whirlwind hit is live; cleared to 0 INSIDE the 0x18
+        // block on the whirlwind's final frame — so (action 0x18 && flag 1) is the true "whirlwind executing"
+        // window, and the flag dropping is the earliest, cleanest "attack finished" signal (the action state
+        // itself lingers at 0x18 for a frame until ToanKey_On resets it).
         internal const long ChargeActiveFlag  = 0x21DC44F0;
 
         // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED 2026-06-30 ──

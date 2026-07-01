@@ -3953,14 +3953,14 @@ namespace Dark_Cloud_Improved_Version
         /// level 2 — i.e. the meter has passed the whirlwind threshold and it's unlocked). The lunge-level
         /// windup (level 0/1) is excluded, so the blade only grows once the whirlwind charge specifically begins.</summary>
         public static bool IsChargingWhirlwind()
-            => Memory.ReadInt(WeaponCollision.ChargeActionState) == 0xE
-            && Memory.ReadInt(WeaponCollision.ChargeLevel) == 2;
+            => Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWindup
+            && Memory.ReadInt(WeaponCollision.ChargeLevel) == WeaponCollision.ChargeLevelWhirl;
 
         /// <summary>True while the whirlwind attack is actually executing (action 0x18 with the charge-active
         /// flag still set). The flag clears on the final whirlwind frame, so this goes false immediately when the
         /// attack finishes — even though the action state lingers at 0x18 for a frame.</summary>
         public static bool IsWhirlwindActive()
-            => Memory.ReadInt(WeaponCollision.ChargeActionState) == 0x18
+            => Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWhirlwind
             && Memory.ReadInt(WeaponCollision.ChargeActiveFlag) == 1;
 
         // Scale the equipped weapon's visible mesh frame (name@0 == nameWord) by factor: write factor to its
@@ -3992,7 +3992,7 @@ namespace Dark_Cloud_Improved_Version
         {
             // The whirlwind charge sweeps a wide arc, so it gets the full `reach` bonus and a slightly wider
             // range gate; every other attack (combo, lunge) gets reach − 5.0 with the plain gate.
-            bool whirl = Memory.ReadInt(WeaponCollision.ChargeActionState) == 0x18;
+            bool whirl = Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWhirlwind;
             float bonus  = whirl ? reach : reach;       // added to each enemy's stock body radius
             float gateSq = whirl ? reach * reach + 5.0f : reach * reach + 2.8f; // squared distance to player for the bonus to apply
             for (int s = 0; s < 16; s++)
