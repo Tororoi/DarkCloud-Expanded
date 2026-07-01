@@ -170,78 +170,50 @@ namespace Dark_Cloud_Improved_Version
         // Weapon model assets in data.dat: commenu/weapon/cXXwNN.chr (XX char, NN = WeaponList +0x48).
         // Heaven's Cloud = c01w14.chr (Toan, within-char idx 14).
 
-        // ── Heaven's Cloud reach extension (see Weapons.ApplyHeavensCloudReach) ─────────────────────
-        // Reverse-engineered from SCUS_971.11 (ToanKey_Play 0x241690): every Toan melee hit is built as
-        // SearchFrame(equippedModel, "dcol1") -> CCollisionData::Set(pos, radius). The engine only ever
-        // searches the frame named "dcol1" — dcol0/2/3 are never used for the player hit. So reach = the
-        // "dcol1" frame's swept world position + the per-attack swing radius. We extend HC by moving the
-        // "dcol1" frame's Z out (scales the visible swing + the hit) and enlarging the swing radii.
-        // The CHARGE attacks use the SAME dcol1 position but radii baked as CODE IMMEDIATES (not the gp
-        // constants): lunge (frame 193-196) = 6.0, whirlwind (720-722) = 12.0. With dcol1 pushed out the
-        // lunge's small radius overshoots a point-blank enemy, so we patch the lunge's immediate too.
+        // ── Heaven's Cloud melee reach (see Weapons.cs ReachTick) ─────────────────────
+        // RE'd from SCUS_971.11 (ToanKey_Play 0x241690): every Toan melee hit is SearchFrame(equippedModel,
+        // "dcol1") -> CCollisionData::Set(pos, radius); the engine only ever uses the frame named "dcol1".
+        // Reach is extended by scaling the whole blade mesh at runtime (see the "Runtime weapon-model SCALE"
+        // block below) — the dcol hit frames are children of the mesh, so they grow with it.
 
-        /// <summary>The 3 swing hit-sphere radius constants in main $gp data (0x002A97F0 − 0x7b88/7b84/
-        /// 7b80 → MMU below); stock 2.8 / 5.3 / 6.2. All read ONLY by ToanKey_Play, so bumping them while
-        /// HC is equipped is safe and effectively per-weapon (restore on unequip).</summary>
-        internal static readonly long[] SwingRadiusAddrs = { 0x202A1C68, 0x202A1C6C, 0x202A1C70 };
-        internal const float SwingRadiusStock0 = 2.8f; // sanity value at SwingRadiusAddrs[0]
-
-        /// <summary>The charge hit radii are CODE IMMEDIATES in ToanKey_Play: lunge <c>lui $v0,0x40c0</c>=6.0
-        /// @ MMU 0x20241AC0, whirlwind <c>lui $v0,0x4140</c>=12.0 @ 0x20241B90. Patch the immediate (high 16
-        /// bits of the float radius) to resize. ⚠ Writing EE code via PINE CRASHES PCSX2 unless done during
-        /// the floor-LOAD window (OnReachFloorEntered) — the menu, menu-exit, and active play all crash the
-        /// emulator. So a code-patched charge radius can only update per-FLOOR, never mid-floor. The safe,
-        /// mid-game alternative is to inflate the enemy BODY hitbox instead (the other half of the hit test):
-        /// see <c>BodyCollision.RadiusAddr</c> + <c>Weapons.MaintainChargeHitbox</c> (gated by ChargeActionState/
-        /// ChargeActiveFlag above). Tradeoff: enemy sphere grows symmetrically (can't tune near vs far apart).</summary>
-        internal const long LungeRadiusInsn          = 0x20241AC0;
-        internal const uint LungeRadiusStockInsn     = 0x3C0240C0; // lui $v0, 0x40c0  (radius 6.0)
-        internal const long WhirlwindRadiusInsn      = 0x20241B90;
-        internal const uint WhirlwindRadiusStockInsn = 0x3C024140; // lui $v0, 0x4140  (radius 12.0)
-
-        // The "dcol1" CFrame in the loaded weapon model (commenu template, ~native 0x660xxx; address
-        // varies per session — located by scan). Name is the 4-byte "dcol" + '1' + NUL; the frame's
-        // local-matrix translation is (X,Y,Z) at name+0xE8/+0xEC/+0xF0. For Toan weapons it's (0,0,Z);
-        // editing Z extends reach. Stock dcol1 Z = 9.2053.
+        // The "dcol1" CFrame in the loaded weapon model (CFrameVu1 template; name = "dcol"+'1'+NUL, local-matrix
+        // translation (X,Y,Z) at name+0xE8/+0xEC/+0xF0; Toan weapons are (0,0,Z), Z = the reach). Used by
+        // Weapons.LocateWeaponDcol1 to read a weapon's dcol1 Z for sizing its whirl when it's not in WeaponDb.
         internal const uint  DcolNameWord     = 0x6C6F6364; // "dcol" little-endian
         internal const byte  Dcol1Digit       = 0x31;       // '1' (the active hit-point frame)
         internal const int   DcolNameToLocalX = 0xE8;       // local-matrix X (Y at +0xEC, Z at +0xF0)
-        internal const int   DcolNameToLocalZ = 0xF0;       // local-matrix Z (the reach knob)
-        internal const float Dcol1StockZ      = 9.2053f;    // stock dcol1 distance for Heaven's Cloud (matched in the scan)
-
-        // EE main-RAM scan window (MMU) used to locate the dcol1 frame, in 32 KB-safe chunks.
-        internal const long ReachScanLo = 0x20100000;
-        internal const long ReachScanHi = 0x22000000;
-        internal const int  ReachScanChunkWords = 2048;
+        internal const int   DcolNameToLocalZ = 0xF0;       // local-matrix Z (the reach)
 
         // ── Whirlwind charge visual (effect model dun/mainchara/wep_eff/c01_fuusya.chr) ──────────────
         // The charge-2 whirlwind swoosh is a DISCRETE effect model, not the dcol weapon trail and not
-        // weapon/element-keyed (confirmed by xref + user). Its mesh is baked geometry (.cfg has
-        // VERTEX_ANIME; the .mds vertices are undecoded VIF1 packet data, so the mesh is not editable). It
-        // renders through runtime CFrames (CMotionModel.Draw -> MGDraw(rootFrame)). The model's frame tree:
-        // root "kiru" -> fkiri/null1_3/jkiri -> the *__cappz mesh frames. To enlarge the whole formation
-        // (mesh AND child offsets) we scale the ROOT's TRS scale (+0x210), which the world-matrix recompute
-        // applies and propagates to children. Editing a frame's local matrix (+0x1d0) is futile here — the
-        // frames are motion-animated so it's re-posed every frame (TRS scale survives; the motion's type-1
-        // scale track and SetScale both use +0x210).
-        //
-        // "kiru" is too generic (the weapon model has one too, right next to dcol1), so we LOCATE the model
-        // by its unique "fkiri" frame, then walk the parent chain (+0x110, native ptr -> ToMmu) up to the
-        // "kiru" root and scale that. Frame names are inline at CFrame+0x118.
+        // weapon/element-keyed (confirmed by xref + user). Its mesh is baked geometry (.cfg has VERTEX_ANIME;
+        // the .mds vertices are undecoded VIF1 packet data), and it renders through runtime CFrames
+        // (CMotionModel.Draw -> MGDraw(rootFrame)). The model's frame tree: root "kiru" -> fkiri/null1_3/jkiri
+        // -> the *__cappz mesh frames. Since the mesh is VERTEX_ANIME (morph in model space), ONLY the root's
+        // LOCAL matrix transforms it — child-frame scaling is inert; we scale the root "kiru" local-matrix 3x3.
+        // A "kiru" match is validated as a fuusya root by its next frame (+0x270) being "fkiri" (kiru is generic
+        // — the weapon model has one too). Frame names are inline at CFrame+0x118.
         internal const uint FkiriNameWord = 0x72696B66; // "fkir" little-endian (frame "fkiri", validates a kiru root)
         internal const uint KiruNameWord  = 0x7572696B; // "kiru" little-endian (the fuusya root frame)
-        // The fuusya model exists as a POOL of identical instances (≈7); each cast activates one (gives it a
-        // real world position) while the rest stay at world (0,0,0). So we scale EVERY pool root, not just
-        // one. fkiri is the very next frame after kiru in each instance (CFrame stride 0x270) — used to
-        // validate a "kiru" match really is a fuusya root (vs a stray name elsewhere).
-        internal const int  FuusyaFrameStride = 0x270; // CFrame object size; fkiri = kiru + this
-        // The model is a pool of identical instances; one activates per cast. With Heaven's Cloud equipped
-        // the live instance's base is stably native 0x685AA0 (it shifts if a different weapon is loaded), so
-        // we try that first (fast path, name-validated) and scale it alone. If it doesn't validate we fall
-        // back to a full RAM scan of the pool and narrow to the live instance (the only one with a nonzero
-        // world position after a cast). The mesh is VERTEX_ANIME (morph in model space) so ONLY the root's
-        // matrix transforms it — child-frame scaling is inert; scale the root "kiru" local-matrix 3x3.
-        internal const long KnownWhirlRootMmu = 0x20685AA0;
+        internal const int  FuusyaFrameStride = 0x270;  // CFrame object size; fkiri = kiru + this
+
+        // ── Direct POINTER to the fuusya roots (no RAM scan) — RE'd 2026-06-30, offsets CONFIRMED in-game ──
+        // Toan's charge whirl lives in the main-character effect object (a CSHOT_EFFECT) at the FIXED global
+        // 0x1e8da60 (MMU 0x21E8DA60). Set by MainChara_Effect (dun 0x1dba230: Entry2(0x1e8da60,…); gp slot
+        // uGpffff9cfc also points at it). It is a POOL of up to 8 CONCURRENT effect instances (CSHOT_EFFECT::
+        // Step 0x1ac180 and ::Draw 0x1abf20 both loop slots 0..7), NOT one-per-weapon: a cast grabs the next
+        // free slot, so several can be live at once. Layout: a master template CObject at base+0x10, then the
+        // 8 drawable slot objects at base + 0x11C0 + slot*0x11B0 (Entry2 __as__CObject-copies the template into
+        // each). Each object's root CFrame ("kiru") native pointer is at object + 0xBC (the fuusya CFrame tree
+        // is heap-allocated and MOVES per cast, but this pointer stays put). So slot 0's root ptr is at
+        // base + 0x11C0 + 0xBC = base + 0x127C, slot s at base + 0x127C + s*0x11B0. We pre-scale ALL 8 pool
+        // slots (skip null/invalid) so whichever the next cast activates is already scaled — no first-frame
+        // flash, and concurrent casts stay correct. Confirmed live: pointers at +0x127C,+0x242C,+0x35DC …
+        // (0x11B0 apart) → the scanned roots (+ the template's own +0xCC, which we skip since it isn't drawn).
+        internal const long MainCharaEffectBase = 0x21E8DA60; // CSHOT_EFFECT base (fixed global)
+        internal const int  EffectSlotStride    = 0x11B0;     // per-slot object stride
+        internal const int  EffectSlotModelOff  = 0x127C;     // base + slot*stride + this = slot's root CFrame native ptr (object +0xBC)
+        internal const int  EffectSlotCount     = 8;          // concurrent effect-pool slots (Step/Draw loop 0..7)
         // The render uses the LOCAL matrix (+0x1d0), NOT the TRS scale (+0x210) — proven live: a live
         // instance held scaleX=4.7 with zero visual change. So we scale the root's local-matrix 3x3
         // (rotation/scale block) by bind*scale; its translation row (+0x200) is left alone so the effect
@@ -249,10 +221,9 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly int[] CFrameLocal3x3 =
             { 0x1D0, 0x1D4, 0x1D8,   0x1E0, 0x1E4, 0x1E8,   0x1F0, 0x1F4, 0x1F8 };
 
-        // ── Charge attack state (ToanKey_Play DAT_01dc44xx) — used to widen the charge's hit window safely
-        //    by inflating enemy body hitboxes during a charge (data-side, no EE-code patching). ──
+        // ── Charge attack state (ToanKey_Play DAT_01dc4494) — read by MaintainEnemyHitbox to give the
+        //    whirlwind a wider hitbox gate than the combo/lunge. ──
         internal const long ChargeActionState = 0x21DC4494; // 0xE=charge windup, 0xF=lunge, 0x18=whirlwind
-        internal const long ChargeActiveFlag  = 0x21DC44F0; // 1 while a lunge/whirlwind hit is live
 
         // ── Runtime weapon-model SCALE (visual blade + dcol collision, together) — CONFIRMED 2026-06-30 ──
         // The equipped weapon's model root is *(*NowWeapon + 0xBC) (NowWeapon = 0x202A34F0); it is a CFrameVu1
@@ -276,5 +247,18 @@ namespace Dark_Cloud_Improved_Version
         internal const int  Vu1LocalMatrixDiag2    = 0xE0;
         internal const int  Vu1LocalTransX         = 0xE8;       // CFrameVu1 local translation (Y +0xEC, Z +0xF0)
         internal const int  Vu1LocalTransZ         = 0xF0;
+
+        /// <summary>Heaven's Cloud's visible-blade mesh frame name ("w14\0"). Scaling this frame's local 3x3
+        /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
+        internal const uint HcMeshNameWord = 0x00343177;
+
+        // ── Inventory equip slot (early weapon-swap detection) ──
+        // The battle in-hand weapon id (0x21EA7590, Player.Weapon.GetCurrentWeaponId) only refreshes once Toan
+        // is walking again after the menu, so keying off it lags a swap. The inventory equip slot updates
+        // IMMEDIATELY: a byte slot index at InventoryEquipSlotAddr indexes the weapon list at
+        // InventoryWeaponSlot0Id + slot*InventoryWeaponSlotStride (ushort id). See Weapons.GetEquippedWeaponId.
+        internal const long InventoryEquipSlotAddr    = 0x21CDD88C; // byte: current equipped weapon slot (0-9)
+        internal const long InventoryWeaponSlot0Id    = 0x21CDDA58; // ushort: slot 0's weapon id
+        internal const int  InventoryWeaponSlotStride = 0xF8;       // stride between weapon-list slots
     }
 }
