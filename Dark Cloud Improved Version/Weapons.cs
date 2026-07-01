@@ -3914,32 +3914,54 @@ namespace Dark_Cloud_Improved_Version
             new Thread(ReachLoop) { IsBackground = true }.Start();
         }
 
-        // ── HC reach scheme (runtime, data-side; see docs/weapon-reach.md top section) ──
-        // L = HcVisualScale * stockDcol1Z (the scaled blade length / tip reach). Two data writes:
-        //   1. Scale the blade mesh "w14" by HcVisualScale → the visible blade AND its dcol hit point grow.
-        //   2. Distance-gated ENEMY body-radius bonus: enemies within L of the player get their body radius
-        //      inflated so close swings connect; enemies beyond L keep stock so far hits stop ~at the blade tip.
-        // We grow the ENEMY body radius (the other half of `dist <= enemyRadius + weaponColRadius`), not the
-        // weapon swing radius, because that half is shared by combo AND charge — one knob covers both.
-        // Persistent while HC is equipped; restored on unequip.
-        const float HcVisualScale = 2.0f;          // w14 mesh scale (test knob)
+        // ── HC reach control (data-side; driven by CustomEffects.HeavensCloudEffect's charge ramp) ──
+        // Everything is keyed to a blade `factor` (1.0 = original). Three writes:
+        //   • blade mesh "w14" scaled by factor → the visible blade AND its dcol hit point grow together;
+        //   • whirlwind effect (c01_fuusya) scaled to match: WhirlVisualScale = stockZ*factor / visualRadius;
+        //   • enemy body radii inflated (distance-gated) to reach = stockZ*factor.
+        // HeavensCloudEffect grows factor during the charge windup and applies whirl+hitbox on the whirlwind
+        // release, then ResetHeavensCloudReach snaps everything back. (docs/weapon-reach.md top section.)
         const float HcStockDcol1Z = 9.2053f;       // HC commenu dcol1 Z
         static long _hcW14Addr;                    // cached "w14" mesh frame MMU addr (0 = not located)
         static float _hcHitboxDelta;               // persistent delta added to enemy body radii (0 = none)
         static readonly float[,] _hcHitboxOrig = new float[16, BodyCollision.MaxBodyParts];
 
-        static void MaintainHcReachScheme()
-        {
-            // 1. Scale the visible mesh (grows blade + its dcol collision children together). The hit point
-            //    (dcol1) stays at the blade TIP → its world reach = L = HcVisualScale * stockZ.
-            if (!ScaleWeaponMesh(WeaponCollision.HcMeshNameWord, HcVisualScale)) return;   // mesh not located yet → try next tick
+        /// <summary>Scale Heaven's Cloud's blade mesh (visible blade + dcol hit point) to <paramref name="factor"/>×.
+        /// Returns false until the frame is located (model not loaded yet).</summary>
+        public static bool ScaleHeavensCloudBlade(float factor) => ScaleWeaponMesh(WeaponCollision.HcMeshNameWord, factor);
 
-            // 2. Distance-gated enemy hitbox: enemies within L of the player get a reach bonus added to their
-            //    body radius so close swings connect; enemies beyond L keep stock so far hits stop ~at the tip.
-            //    Works for combo AND charge (shared hit-test half). Restored on unequip.
-            float reach = HcVisualScale * HcStockDcol1Z;   // L
-            MaintainEnemyHitbox(reach);
+        /// <summary>Scale the whirlwind visual to match a blade <paramref name="factor"/> and re-apply it to the fuusya roots.</summary>
+        public static void ScaleHeavensCloudWhirl(float factor)
+        {
+            WhirlVisualScale = HcStockDcol1Z * factor / WhirlwindVisualRadius;
+            MaintainWhirlScale();
         }
+
+        /// <summary>Inflate enemy body hitboxes (distance-gated) to match a blade <paramref name="factor"/> (reach = stockZ×factor).</summary>
+        public static void ScaleHeavensCloudHitbox(float factor) => MaintainEnemyHitbox(HcStockDcol1Z * factor);
+
+        /// <summary>Snap Heaven's Cloud back to original: blade 1×, enemy hitboxes restored, whirl at base scale.</summary>
+        public static void ResetHeavensCloudReach()
+        {
+            ScaleWeaponMesh(WeaponCollision.HcMeshNameWord, 1.0f);
+            RestoreEnemyHitbox();
+            ScaleHeavensCloudWhirl(1.0f);
+            _whirlWeaponId = -1;   // force ReachTick to recompute the whirl scale for whatever is equipped next
+        }
+
+        /// <summary>True while the player is winding up a WHIRLWIND charge (action 0xE at whirlwind charge
+        /// level 2 — i.e. the meter has passed the whirlwind threshold and it's unlocked). The lunge-level
+        /// windup (level 0/1) is excluded, so the blade only grows once the whirlwind charge specifically begins.</summary>
+        public static bool IsChargingWhirlwind()
+            => Memory.ReadInt(WeaponCollision.ChargeActionState) == 0xE
+            && Memory.ReadInt(WeaponCollision.ChargeLevel) == 2;
+
+        /// <summary>True while the whirlwind attack is actually executing (action 0x18 with the charge-active
+        /// flag still set). The flag clears on the final whirlwind frame, so this goes false immediately when the
+        /// attack finishes — even though the action state lingers at 0x18 for a frame.</summary>
+        public static bool IsWhirlwindActive()
+            => Memory.ReadInt(WeaponCollision.ChargeActionState) == 0x18
+            && Memory.ReadInt(WeaponCollision.ChargeActiveFlag) == 1;
 
         // Scale the equipped weapon's visible mesh frame (name@0 == nameWord) by factor: write factor to its
         // CFrameVu1 local-3x3 diagonal (+0xB8/+0xCC/+0xE0; bind is identity). The engine does not re-pose this
@@ -4004,20 +4026,17 @@ namespace Dark_Cloud_Improved_Version
 
         // Restore every inflated enemy body radius to its cached stock base (called when HC is not equipped).
         // The mesh scale is a per-loaded-model template (reloaded per weapon), so it needs no restore.
-        static void RestoreHcHitbox()
+        static void RestoreEnemyHitbox()
         {
-            if (_hcHitboxDelta != 0f)
-            {
-                for (int s = 0; s < 16; s++)
-                    for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
-                        if (_hcHitboxOrig[s, p] > 0.01f)
-                        {
-                            Memory.WriteFloat(BodyCollision.RadiusAddr(s, p), _hcHitboxOrig[s, p]);
-                            _hcHitboxOrig[s, p] = 0f;
-                        }
-                _hcHitboxDelta = 0f;
-            }
-            _hcW14Addr = 0;
+            if (_hcHitboxDelta == 0f) return;
+            for (int s = 0; s < 16; s++)
+                for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                    if (_hcHitboxOrig[s, p] > 0.01f)
+                    {
+                        Memory.WriteFloat(BodyCollision.RadiusAddr(s, p), _hcHitboxOrig[s, p]);
+                        _hcHitboxOrig[s, p] = 0f;
+                    }
+            _hcHitboxDelta = 0f;
         }
 
         // Walk the equipped weapon model's CFrame tree (POINTER, no scan) for a frame whose name (word@+0x118)
@@ -4071,39 +4090,30 @@ namespace Dark_Cloud_Improved_Version
 
         static void ReachTick()
         {
-            bool toan = Player.CurrentCharacterNum() == Player.ToanId;
-            bool hc   = toan && GetEquippedWeaponId() == HeavensCloudReachId;
-
             // Whirlwind VISUAL scale applies to ALL of Toan's weapons (the fuusya effect is character-, not
-            // weapon-bound), sized to each weapon's own dcol1 reach. Recompute on weapon swap.
-            if (toan)
+            // weapon-bound), sized to each weapon's own dcol1 reach — EXCEPT Heaven's Cloud, whose blade/whirl/
+            // hitbox are driven per-charge by CustomEffects.HeavensCloudEffect (which owns the shared whirl state
+            // while HC is equipped, so this loop must not also write it). Recompute on weapon swap.
+            if (Player.CurrentCharacterNum() != Player.ToanId) return;
+            int wid = GetEquippedWeaponId();
+            if (wid == HeavensCloudReachId) return;   // HC → HeavensCloudEffect
+
+            if (wid != _whirlWeaponId)
             {
-                int wid = GetEquippedWeaponId();
-                if (wid != _whirlWeaponId)
+                _whirlWeaponId = wid; _weaponDcol1Z = 0f; WhirlVisualScale = 0f; _whirlDcolBackoff = 0;
+                // The fuusya pool relocates when a new weapon model loads — drop the cached root(s) and clear the
+                // locate backoff so the first walking tick re-finds and re-scales it with the NEW scale.
+                _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0;
+                // Static table first (offline-extracted dcol1; abs guards mirrored models). Falls back to a live
+                // tree-walk only for ids not in the table or with no dcol1 frame (e.g. id 277).
+                if (WeaponDb.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
                 {
-                    _whirlWeaponId = wid; _weaponDcol1Z = 0f; WhirlVisualScale = 0f; _whirlDcolBackoff = 0;
-                    // The fuusya pool relocates when a new weapon model loads — drop the cached root(s) and clear
-                    // the locate backoff so the first walking tick re-finds and re-scales it with the NEW scale,
-                    // instead of waiting out a backoff (which let the first post-swap cast render at the old scale).
-                    _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0;
-                    // Static table first (offline-extracted dcol1; abs guards mirrored models). Falls back to
-                    // a live tree-walk only for ids not in the table or with no dcol1 frame (e.g. id 277).
-                    if (WeaponDb.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
-                    {
-                        _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
-                        // D = dcol1 reach × mesh scale (HC's blade is scaled, so its reach — and whirl — grow with it).
-                        float meshScale = (wid == HeavensCloudReachId) ? HcVisualScale : 1.0f;
-                        WhirlVisualScale = (_weaponDcol1Z * meshScale) / WhirlwindVisualRadius;
-                    }
+                    _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
+                    WhirlVisualScale = _weaponDcol1Z / WhirlwindVisualRadius;
                 }
-                if (_weaponDcol1Z == 0f) { if (_whirlDcolBackoff <= 0) LocateWeaponDcol1(); else _whirlDcolBackoff--; }
-                if (WhirlVisualScale > 0f) MaintainWhirlScale();
             }
-
-            if (!hc) { RestoreHcHitbox(); return; }   // unequipped → restore inflated enemy hitboxes
-            if (Memory.ReadInt(WeaponCollision.EquippedModelPtr) == 0) return; // model not loaded
-
-            MaintainHcReachScheme();   // scale HC blade + distance-gated enemy-hitbox inflation
+            if (_weaponDcol1Z == 0f) { if (_whirlDcolBackoff <= 0) LocateWeaponDcol1(); else _whirlDcolBackoff--; }
+            if (WhirlVisualScale > 0f) MaintainWhirlScale();
         }
 
         // Locate / maintain the whirlwind effect (c01_fuusya). Only the root "kiru" matrix transforms the

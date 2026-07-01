@@ -73,7 +73,8 @@ namespace Dark_Cloud_Improved_Version
         public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
-        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
+        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
+        public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
         public static Thread braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
         public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
@@ -202,7 +203,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!heavensCloudThread.IsAlive)
                                         {
-                                            heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloud));
+                                            heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
                                             heavensCloudThread.Start();
                                         }
                                         break;
@@ -385,6 +386,14 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreaker));
                                             starBreakerThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.snail:
+                                        if (!snailThread.IsAlive)
+                                        {
+                                            snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
+                                            snailThread.Start();
                                         }
                                         break;
                                     default:

@@ -359,34 +359,58 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Ability Name: Heightened Perception (Heaven's Cloud)
-        /// Heaven's Cloud effect: 50% chance on hit to inflict gooey on the struck enemy.
+        /// Heaven's Cloud effect (charge scaling). While the whirlwind is being charged the blade grows over
+        /// real time (up to 3x after <c>growSeconds</c>), independent of the polling rate; the whirl visual and
+        /// enemy hitboxes are kept matched to the current size the whole time it's charging AND executing, so
+        /// they're ready the instant the whirlwind fires. When the charge attack finishes the blade snaps back
+        /// to its original size. Scaling reuses the helpers in <see cref="Weapons"/>.
         /// </summary>
-        public static void HeavensCloud()
+        public static void HeavensCloudEffect()
         {
+            const float maxScale = 3.0f;       // blade grows up to 3x
+            const double growSeconds = 4.0;    // wall-clock time to grow from 1x to maxScale
+            var growTimer = new System.Diagnostics.Stopwatch();
+            float factor = 1.0f;
+            bool active = false;               // a non-base scale is applied and still needs resetting
+
             while (Player.Weapon.GetCurrentWeaponId() == Items.heavenscloud &&
                    Player.InDungeonFloor())
             {
-                int[] formerHp = ReusableFunctions.GetEnemiesHp();
-                Thread.Sleep(50);
-                int[] currentHp = ReusableFunctions.GetEnemiesHp();
-
-                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.ToanId)
+                if (Weapons.IsChargingWhirlwind())      // whirlwind charge specifically → grow the blade over time
                 {
-                    for (int i = 0; i < 15; i++)
-                    {
-                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
-                        {
-                            if (random.Next(100) < 50)
-                            {
-                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.GooeyState), 1);
-                            }
-                        }
-                    }
+                    if (!growTimer.IsRunning) growTimer.Restart();   // whirlwind charge just began
+                    float t = (float)Math.Min(1.0, growTimer.Elapsed.TotalSeconds / growSeconds);
+                    factor = 1.0f + t * (maxScale - 1.0f);
+                    active = true;
+                }
+                else if (Weapons.IsWhirlwindActive())   // whirlwind executing → hold the size reached during the charge
+                {
+                    growTimer.Stop();
+                    active = true;
+                }
+                else if (active)                        // charge finished → snap the blade back to its original size
+                {
+                    growTimer.Reset();
+                    factor = 1.0f;
+                    Weapons.ResetHeavensCloudReach();
+                    active = false;
                 }
 
-                ReusableFunctions.ClearRecentDamageAndDamageSource();
+                // Keep blade + whirl + enemy hitboxes matched to the current size for the whole charge→whirlwind
+                // window: pre-scaled while charging (enemies are already inflated and the fuusya pool is already
+                // sized when the whirlwind lands) and maintained while it executes (the effect re-poses its root
+                // on each cast, so the scale must be re-applied while it's live).
+                if (active)
+                {
+                    Weapons.ScaleHeavensCloudBlade(factor);
+                    Weapons.ScaleHeavensCloudWhirl(factor);
+                    Weapons.ScaleHeavensCloudHitbox(factor + 2.0f);
+                }
+
+                Thread.Sleep(30);
             }
+
+            Weapons.ResetHeavensCloudReach();   // unequipped → make sure everything is back to normal
         }
 
         /// <summary>
@@ -1321,5 +1345,34 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>
+        /// Snail effect: 5% chance on hit to inflict gooey on the struck enemy
+        /// </summary>
+        public static void SnailEffect()
+        {
+            while (Player.Weapon.GetCurrentWeaponId() == Items.snail &&
+                   Player.InDungeonFloor())
+            {
+                int[] formerHp = ReusableFunctions.GetEnemiesHp();
+                Thread.Sleep(50);
+                int[] currentHp = ReusableFunctions.GetEnemiesHp();
+
+                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.OsmondId)
+                {
+                    for (int i = 0; i < 15; i++)
+                    {
+                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
+                        {
+                            if (random.Next(100) < 5)
+                            {
+                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.GooeyState), 1);
+                            }
+                        }
+                    }
+                }
+
+                ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
+        }
     }
 }
