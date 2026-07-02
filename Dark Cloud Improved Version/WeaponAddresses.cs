@@ -178,7 +178,7 @@ namespace Dark_Cloud_Improved_Version
 
         // The "dcol1" CFrame in the loaded weapon model (CFrameVu1 template; name = "dcol"+'1'+NUL, local-matrix
         // translation (X,Y,Z) at name+0xE8/+0xEC/+0xF0; Toan weapons are (0,0,Z), Z = the reach). Used by
-        // Weapons.LocateWeaponDcol1 to read a weapon's dcol1 Z for sizing its whirl when it's not in WeaponDb.
+        // Weapons.LocateWeaponDcol1 to read a weapon's dcol1 Z for sizing its whirl when it's not in ToanWeapons.
         internal const uint  DcolNameWord     = 0x6C6F6364; // "dcol" little-endian
         internal const byte  Dcol1Digit       = 0x31;       // '1' (the active hit-point frame)
         internal const int   DcolNameToLocalX = 0xE8;       // local-matrix X (Y at +0xEC, Z at +0xF0)
@@ -280,7 +280,6 @@ namespace Dark_Cloud_Improved_Version
         // InventoryWeaponSlot0Id + slot*InventoryWeaponSlotStride (ushort id). See Weapons.GetEquippedWeaponId.
         internal const long InventoryEquipSlotAddr    = 0x21CDD88C; // byte: current equipped weapon slot (0-9)
         internal const long InventoryWeaponSlot0Id    = 0x21CDDA58; // ushort: slot 0's weapon id
-        internal const long InventoryWeaponSlot0Speed = 0x21CDDA60; // ushort: slot 0's SPEED stat (id + 0x08)
         internal const int  InventoryWeaponSlotStride = 0xF8;       // stride between weapon-list slots
     }
 }

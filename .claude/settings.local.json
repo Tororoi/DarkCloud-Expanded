@@ -3,7 +3,20 @@
     "allow": [
       "Bash(cd ~/ROMs/dc_extracted && ls -la; echo \"=== find c01w14 / weapon dir ===\"; find . -iname \"c01w14*\" 2>/dev/null | head; echo \"=== weapon dir ===\"; find . -ipath \"*weapon*\" -maxdepth 4 -type d 2>/dev/null | head)",
       "Read(//Users/thomascantwell/ROMs/dc_extracted/**)",
-      "Bash(dotnet build *)"
+      "Bash(dotnet build *)",
+      "Bash(python3 -c ' *)",
+      "Bash(xxd emenu.pak)",
+      "Bash(awk -F'off=' 'NR>=100 && NR<=150' allmenu_dump.txt)",
+      "Bash(python3 dumpall.py)",
+      "Bash(bash tools/ghidra/decompile.sh main \"SetSystemMes__FiiiiPiPi\")",
+      "Read(//private/tmp/**)",
+      "Bash(bash tools/ghidra/decompile.sh main \"SetBuff_system__6ClsMesFPs,GetMesLen_system__6ClsMesFi\")",
+      "Bash(bash tools/ghidra/decompile.sh dun \"LoadMessage__Fv\")",
+      "Bash(bash tools/ghidra/decompile.sh main \"InitMenuMesSet__FiPs,InitSystemMes__Fv\")",
+      "Bash(bash tools/ghidra/decompile.sh main \"BattleMenuTexEnter__Fv\")",
+      "Bash(dd if=/Users/thomascantwell/ROMs/dc_extracted/SCUS_971.11 bs=1 skip=$\\(\\(0x29d5a8-0xFFF00\\)\\) count=16)",
+      "Bash(bash tools/ghidra/decompile.sh main \"SetBuff__6ClsMesFPs\")",
+      "Bash(python3)"
     ]
   }
 }

@@ -3912,7 +3912,6 @@ namespace Dark_Cloud_Improved_Version
             if (_reachStarted) return;
             _reachStarted = true;
             new Thread(ReachLoop) { IsBackground = true }.Start();
-            new Thread(AttackAnimSpeedLoop) { IsBackground = true }.Start();
         }
 
         // ── HC reach control (data-side; driven by CustomEffects.HeavensCloudEffect's charge ramp) ──
@@ -4107,7 +4106,7 @@ namespace Dark_Cloud_Improved_Version
                 _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0;
                 // Static table first (offline-extracted dcol1; abs guards mirrored models). Falls back to a live
                 // tree-walk only for ids not in the table or with no dcol1 frame (e.g. id 277).
-                if (WeaponDb.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
+                if (ToanWeapons.TryGetValue(wid, out WeaponData wd) && wd.Dcol1.HasValue)
                 {
                     _weaponDcol1Z = Math.Abs(wd.Dcol1.Value);
                     WhirlVisualScale = _weaponDcol1Z / WhirlwindVisualRadius;
@@ -4178,66 +4177,7 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id + slot * WeaponCollision.InventoryWeaponSlotStride);
         }
 
-        // Equipped weapon's SPEED stat (same inventory slot as GetEquippedWeaponId, +0x08). -1 = no valid slot.
-        static int GetEquippedWeaponSpeed()
-        {
-            int slot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-            if ((uint)slot > 9) return -1;
-            return Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Speed + slot * WeaponCollision.InventoryWeaponSlotStride);
-        }
-
-        // ── Attack-animation speed scaled by the weapon's speed stat (PER-MOTION multiplier) ──
-        // The active character's motion play-rate override (CharacterMotion.MotionSpeedOverride, 0x21EA2980) is
-        // an ABSOLUTE per-frame step that REPLACES the playing motion's baked KEY step when positive (-1.0 = use
-        // the KEY step). To make it a true MULTIPLIER that ONLY affects attack animations, we key off the CURRENT
-        // motion id (CharacterMotion.MotionId): if it's one of Toan's regular-attack motions we write
-        //   override = thatMotion's KEY step × (weaponSpeed / AttackSpeedNeutral)
-        // — so at 60 it equals the motion's own KEY step (neutral), higher = faster, lower = slower, each attack
-        // scaled from its OWN baseline. Any other motion (walk/idle/charge/etc.) → -1.0, untouched. The KEY steps
-        // are the baked c01d.chr values (docs/character-motion-table.md). motionDrive resets the override to -1.0
-        // on each motion change, so AttackAnimSpeedLoop re-applies it every ~frame (fast poll, low lag).
-        const int AttackSpeedNeutral = 70;   // weapon-speed stat that maps to normal animation speed (1.0×)
-
-        // Toan (c01d) regular-attack motion id → baked KEY step (from docs/character-motion-table.md). Only these
-        // motions are scaled. 37-41 = the 5-hit 連続攻撃 combo; 11/12 = 攻撃(1)/(2). Charge motions are excluded
-        // (the charge is handled by CustomEffects.HeavensCloudEffect / stays at KEY speed).
-        static readonly System.Collections.Generic.Dictionary<int, float> _toanAttackKeyStep = new()
-        {
-            { 11, 0.4f }, { 12, 0.5f },
-            { 37, 0.3f }, { 38, 0.3f }, { 39, 0.3f }, { 40, 0.3f }, { 41, 0.3f },
-        };
-
-        static void AttackAnimSpeedLoop()
-        {
-            while (true)
-            {
-                try { MaintainAttackAnimSpeed(); }
-                catch (Exception ex) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "attack anim speed error: " + ex.Message); }
-                Thread.Sleep(12);   // ~frame rate — re-apply the override right after each motion change (low lag)
-            }
-        }
-
-        // If the active character is Toan and a regular-attack motion is playing, scale its play-rate by the
-        // equipped weapon's speed; otherwise leave the motion at its own KEY speed (-1.0).
-        static void MaintainAttackAnimSpeed()
-        {
-            long addr = CharacterMotion.MotionSpeedOverride;
-            int motionId = Memory.ReadInt(CharacterMotion.MotionId);
-            if (_toanAttackKeyStep.TryGetValue(motionId, out float keyStep) &&
-                Player.CurrentCharacterNum() == Player.ToanId)
-            {
-                int spd = GetEquippedWeaponSpeed();
-                if (spd > 0)
-                {
-                    float rate = keyStep * spd / AttackSpeedNeutral;
-                    if (Math.Abs(Memory.ReadFloat(addr) - rate) > 0.001f) Memory.WriteFloat(addr, rate);
-                    return;
-                }
-            }
-            if (Memory.ReadFloat(addr) > 0f) Memory.WriteFloat(addr, CharacterMotion.MotionSpeedUseKey);
-        }
-
-        // Fallback for weapons not in WeaponDb (or with no static dcol1): read the EQUIPPED weapon's dcol1 Z
+        // Fallback for weapons not in ToanWeapons (or with no static dcol1): read the EQUIPPED weapon's dcol1 Z
         // live by tree-walking its model to the "dcol1" frame (LocateModelFrame — POINTER, no scan), and size
         // the whirl from it. The dcol1 frame's local translation is (0,0,Z) at name+0xE8/+0xEC/+0xF0; Z = reach.
         static void LocateWeaponDcol1()
