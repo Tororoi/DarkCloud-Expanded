@@ -16,7 +16,18 @@
       "Bash(bash tools/ghidra/decompile.sh main \"BattleMenuTexEnter__Fv\")",
       "Bash(dd if=/Users/thomascantwell/ROMs/dc_extracted/SCUS_971.11 bs=1 skip=$\\(\\(0x29d5a8-0xFFF00\\)\\) count=16)",
       "Bash(bash tools/ghidra/decompile.sh main \"SetBuff__6ClsMesFPs\")",
-      "Bash(python3)"
+      "Bash(python3)",
+      "Read(//Users/thomascantwell/**)",
+      "Bash(mdfind -name dc_extracted)",
+      "Bash(./decompile.sh dun *)",
+      "Bash(python3 -)",
+      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@21)",
+      "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_main -process SCUS_971.11 -noanalysis -scriptPath . -postScript FindXrefs.java \"0x241370\" /tmp/xrefs_basic.txt)",
+      "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_main -process SCUS_971.11 -noanalysis -scriptPath /Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra -postScript FindXrefs.java \"0x241370,0x1ae310\" /tmp/xrefs_basic.txt)",
+      "Bash(./decompile.sh main *)",
+      "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_main -process SCUS_971.11 -noanalysis -scriptPath /Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra -postScript FindXrefs.java \"0x1ae3c0,0x1ae610\" /tmp/xrefs2.txt)",
+      "Bash(python3 -c \"import capstone; print\\(capstone.__version__\\)\")",
+      "Bash(awk '{n=strtonum\\($1\\)} n>=0x1db2000 && n<=0x1db7000')"
     ]
   }
 }
