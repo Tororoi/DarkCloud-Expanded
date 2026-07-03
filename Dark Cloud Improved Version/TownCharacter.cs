@@ -905,6 +905,10 @@ namespace Dark_Cloud_Improved_Version
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Input] Player buttons: {FormatButtons(buttonRead)}");
                     _prevButtonRead = buttonRead;
 
+                    // One-time (per process) catch-up: dedupe the fishing records list and apply the
+                    // Arise Mardan max-magic bonus as soon as a save is loaded. No-op afterwards.
+                    Fishing.EnsureAriseBonusInitialized();
+
                     int checkFishing = Memory.ReadByte(FishingAddresses.Active);
                     if (fishingActive == false && checkFishing == 1)
                     {

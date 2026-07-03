@@ -275,4 +275,27 @@ namespace Dark_Cloud_Improved_Version
         internal const int AiState_Patrolling  = 9;  // fast patrol movement (>0.3 spd), farther from hook
         internal const int AiState_Hooked      = 11; // fish is on the hook, being reeled in
     }
+
+    /// <summary>
+    /// The native fishing-records ("fish ranking") list inside the <c>CSaveData</c> object.
+    /// RE'd from <c>SetFishingRank__9CSaveDataFif</c> (ELF 0x157DC0) and
+    /// <c>GetFishingRank__9CSaveDataFi</c> (ELF 0x157F40): 64 entries of 16 bytes at
+    /// SaveData+0x1E0, kept sorted by size descending. The native insert fills the first empty
+    /// slot (size &lt;= 0) or evicts the smallest entry when full, then re-sorts. The records
+    /// screen (<c>FishRecordView*</c>) reads entries back via GetFishingRank, which treats
+    /// <c>size &lt;= 0 || fishId &lt; 0</c> as empty — so rewriting this list changes both the
+    /// display and what persists in the save file.
+    /// </summary>
+    internal static class FishingRankList
+    {
+        /// <summary>ELF global <c>CSaveData* SaveData</c> (native 0x2A250C). Holds a PS2-native
+        /// pointer; convert with <c>Memory.ToMmu()</c> before dereferencing. 0 before a save
+        /// is loaded.</summary>
+        internal const int SaveDataPtr = 0x202A250C;
+        internal const int Offset      = 0x1E0; // rank array within CSaveData
+        internal const int Stride      = 0x10;  // 16 bytes per entry
+        internal const int Count       = 64;    // native capacity (0x40 entries)
+        internal const int EntryFishId = 0x0;   // int; -1 = empty
+        internal const int EntrySize   = 0x4;   // float; <= 0 = empty. Display cm = floor(size * 10)
+    }
 }

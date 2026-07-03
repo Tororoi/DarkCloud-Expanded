@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
@@ -43,6 +44,12 @@ namespace Dark_Cloud_Improved_Version
         private static readonly int[]  _originalModelPointers = new int[FishModelTable.Count];
         private static readonly bool[] _modelPointerCached    = new bool[FishModelTable.Count];
 
+        // Arise Mardan fish-record max-magic bonus — see UpdateFishRecordsAndAriseBonus.
+        // _pendingRecordUpdate defers the post-catch update until after the native
+        // SetFishingRank insert has certainly run (it fires during catch resolution).
+        private static DateTime _pendingRecordUpdate  = DateTime.MinValue;
+        private static bool _ariseBonusInitialized = false;
+
         // ---- Session lifecycle ----
 
         /// <summary>
@@ -67,6 +74,7 @@ namespace Dark_Cloud_Improved_Version
                     SmoothFishSizes(areaData.SlotBase, areaData.SlotCount);
                 FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
             }
+            UpdateFishRecordsAndAriseBonus();
             FishDataFarmer.OnSessionDetected();
         }
 
@@ -79,6 +87,9 @@ namespace Dark_Cloud_Improved_Version
             _lastBaitSlot = 0xFFFF;
             _cachedBaitId = 0;
             _fishingAreaId = -1;
+            // Flush any deferred record update from a catch just before quitting the session.
+            _pendingRecordUpdate = DateTime.MinValue;
+            UpdateFishRecordsAndAriseBonus();
             FishDataFarmer.OnSessionEnded();
             FishPhaseLogger.OnSessionEnd();
         }
@@ -91,6 +102,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void OnFishingTick()
         {
+            ProcessPendingRecordUpdate();
             if (_fishingAreaId == -1) return;
             if (!FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
             CheckFishingQuest(areaData);
@@ -133,6 +145,7 @@ namespace Dark_Cloud_Improved_Version
                         $"Fish caught -> slot={slotIndex} ID: {fishArray[slotIndex]} " +
                         $"({Fish.GetName(fishArray[slotIndex])})");
                     FishAcquiredFlag(fishArray[slotIndex]);
+                    NoteFishRecordDirty();
                     if (isQuestActive)
                     {
                         if (Memory.ReadByte(areaData.QuestBase + 1) == 0) // count quest
@@ -193,6 +206,144 @@ namespace Dark_Cloud_Improved_Version
         internal static void FishAcquiredFlag(byte caughtFishId)
         {
             Memory.WriteByte(FishingAddresses.AcquiredFlagsBase + caughtFishId, 1);
+        }
+
+        // ---- Arise Mardan fish-record max-magic bonus ----
+        // Each species' best recorded catch grants Arise Mardan bonus MaxMagic, on a curve fit
+        // through +1 at the vanilla max size, +12 at the "580cm" equivalent, and the full cap at
+        // the Arise 2x size cap: bonus = max(1, round(Cap / (1 + 116 * d^0.954))) where
+        // d = (capCm - recordCm) / vanillaMaxCm. Below vanilla max: 0. All sizes floored to
+        // whole display cm. Full completion: 15*43 + 2*117 = 879 -> MaxMagic 120 + 879 = 999.
+
+        private const double RecordCurveGamma  = 0.954;
+        private const double RecordCurveCoeff  = 116.0;
+        private const int    GarayanRecordCap  = 117;  // Mardan Garayan & Baron Garayan
+        private const int    NormalRecordCap   = 43;   // the other 15 species
+        private const int    AriseBaseMaxMagic = 120;  // vanilla WeaponList[280].MaxMagic
+
+        /// <summary>
+        /// Schedules a records/bonus update a few seconds from now. Called on each detected catch;
+        /// the delay guarantees the native <c>SetFishingRank</c> insert for that catch has landed
+        /// before we dedupe the list.
+        /// </summary>
+        internal static void NoteFishRecordDirty()
+        {
+            _pendingRecordUpdate = DateTime.UtcNow.AddSeconds(3);
+        }
+
+        /// <summary>Runs a scheduled update once its delay has elapsed. Called every fishing tick.</summary>
+        internal static void ProcessPendingRecordUpdate()
+        {
+            if (_pendingRecordUpdate == DateTime.MinValue || DateTime.UtcNow < _pendingRecordUpdate) return;
+            _pendingRecordUpdate = DateTime.MinValue;
+            UpdateFishRecordsAndAriseBonus();
+        }
+
+        /// <summary>
+        /// One-time catch-up so the Arise Mardan MaxMagic bonus (and the deduped records list)
+        /// is in place as soon as a save is loaded, without requiring a fishing session first.
+        /// Cheap no-op after the first successful run; safe to call every main-loop tick.
+        /// </summary>
+        internal static void EnsureAriseBonusInitialized()
+        {
+            if (_ariseBonusInitialized) return;
+            if (Memory.ReadInt(FishingRankList.SaveDataPtr) == 0) return; // no save loaded yet
+            _ariseBonusInitialized = true;
+            UpdateFishRecordsAndAriseBonus();
+        }
+
+        /// <summary>
+        /// Rewrites the native fishing-records list to one best-catch entry per species (still
+        /// sorted largest to smallest — the records screen then shows exactly the per-species
+        /// maxes), and applies the resulting max-magic bonus to Arise Mardan's WeaponList entry.
+        /// Keeping the list deduped also means the native insert always finds a free slot, so
+        /// every new catch enters the list before we fold it in.
+        /// </summary>
+        internal static void UpdateFishRecordsAndAriseBonus()
+        {
+            int saveDataNative = Memory.ReadInt(FishingRankList.SaveDataPtr);
+            if (saveDataNative == 0) return;
+            long listBase = Memory.ToMmu(saveDataNative) + FishingRankList.Offset;
+
+            byte[] raw = Memory.ReadByteArray(listBase, FishingRankList.Count * FishingRankList.Stride);
+            if (raw == null || raw.Length < FishingRankList.Count * FishingRankList.Stride) return;
+
+            // Index of each species' largest entry. Entries carry 8 trailing bytes we don't
+            // understand; tracking indexes lets us preserve them verbatim when compacting.
+            var bestEntry = new Dictionary<int, int>();
+            for (int i = 0; i < FishingRankList.Count; i++)
+            {
+                int off = i * FishingRankList.Stride;
+                int fishId = BitConverter.ToInt32(raw, off + FishingRankList.EntryFishId);
+                float size = BitConverter.ToSingle(raw, off + FishingRankList.EntrySize);
+                if (size <= 0f || fishId < 0 || fishId >= FishModelTable.Count) continue;
+                if (!bestEntry.TryGetValue(fishId, out int bestIdx) ||
+                    size > BitConverter.ToSingle(raw, bestIdx * FishingRankList.Stride + FishingRankList.EntrySize))
+                {
+                    bestEntry[fishId] = i;
+                }
+            }
+
+            var ordered = bestEntry.Values
+                .OrderByDescending(i => BitConverter.ToSingle(raw, i * FishingRankList.Stride + FishingRankList.EntrySize))
+                .ToList();
+
+            byte[] rewritten = new byte[raw.Length];
+            for (int i = 0; i < FishingRankList.Count; i++)
+            {
+                int off = i * FishingRankList.Stride;
+                if (i < ordered.Count)
+                {
+                    Array.Copy(raw, ordered[i] * FishingRankList.Stride, rewritten, off, FishingRankList.Stride);
+                }
+                else
+                {
+                    BitConverter.GetBytes(-1).CopyTo(rewritten, off + FishingRankList.EntryFishId);
+                    // size and trailing bytes stay 0 — GetFishingRank treats the slot as empty
+                }
+            }
+            if (!rewritten.SequenceEqual(raw))
+            {
+                Memory.WriteByteArray(listBase, rewritten);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[FishRecords] deduped rank list to {ordered.Count} per-species entries");
+            }
+
+            int totalBonus = 0;
+            foreach (KeyValuePair<int, int> kv in bestEntry)
+            {
+                float size = BitConverter.ToSingle(raw, kv.Value * FishingRankList.Stride + FishingRankList.EntrySize);
+                totalBonus += RecordMagicBonus((byte)kv.Key, size);
+            }
+            int newMaxMagic = Math.Min(999, AriseBaseMaxMagic + totalBonus);
+            int fieldAddr = WeaponList.FieldAddr(Items.arisemardan, WeaponList.MaxMagic);
+            int oldMaxMagic = Memory.ReadShort(fieldAddr);
+            if (oldMaxMagic != newMaxMagic)
+            {
+                Memory.WriteUShort(fieldAddr, (ushort)newMaxMagic);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[AriseMagic] fish-record bonus +{totalBonus} -> Arise Mardan MaxMagic {oldMaxMagic} -> {newMaxMagic}");
+            }
+        }
+
+        /// <summary>
+        /// Max-magic bonus for one species record. 0 below the vanilla max size, +1 at it, the
+        /// full species cap at the Arise 2x cap, hyperbolic in between (see curve constants).
+        /// </summary>
+        internal static int RecordMagicBonus(byte fishId, float recordSize)
+        {
+            if (!Fish.TryGetValue(fishId, out FishData fishData) || !fishData.MaxSize.HasValue) return 0;
+            int vanillaMaxCm = (int)Math.Floor(fishData.MaxSize.Value * 10f);
+            if (vanillaMaxCm <= 0) return 0;   // MissingFish has MaxSize 0
+            int cap = fishId == Fish.MardanGarayan.Id || fishId == Fish.BaronGarayan.Id
+                ? GarayanRecordCap : NormalRecordCap;
+            int capCm = vanillaMaxCm * 2;
+            int recordCm = (int)Math.Floor(recordSize * 10f);
+            if (recordCm < vanillaMaxCm) return 0;
+            if (recordCm >= capCm) return cap;
+            double d = (capCm - recordCm) / (double)vanillaMaxCm;
+            double f = 1.0 / (1.0 + RecordCurveCoeff * Math.Pow(d, RecordCurveGamma));
+            return Math.Max(1, (int)Math.Round(cap * f, MidpointRounding.AwayFromZero));
         }
 
         // ---- Slot initialization ----
