@@ -227,6 +227,14 @@ namespace Dark_Cloud_Improved_Version
         internal const long ChargeActionState = 0x21DC4494; // DAT_01dc4494 action id (values below)
         internal const int  ActionWindup      = 0xE;        // charge wind-up (meter accumulates; lunge OR whirlwind)
         internal const int  ActionWhirlwind   = 0x18;       // whirlwind executing
+        internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
+        internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
+
+        /// <summary>ELF global <c>hitCnt</c> (native 0x2A2C64): the hit-spark ring counter,
+        /// incremented by <c>CMonstorUnit::CheckDmg</c> (0x1D9F10) each time a player attack
+        /// deals damage to a monster (wraps 0-15). Watching it across a swing is the "did that
+        /// swing connect?" signal. Guarded hits do NOT advance it.</summary>
+        internal const long HitSparkCounter   = 0x202A2C64;
         // Charge METER (float, DAT_01dc449c): resets to 1.0 at attack start, accumulates each windup frame,
         // caps at 3.0. Thresholds: ≥1.5 → lunge available, ≥2.5 → whirlwind available (if unlocked).
         internal const long ChargeMeter       = 0x21DC449C;

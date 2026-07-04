@@ -454,6 +454,105 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Shadow Boxing (Macho Sword)
+        /// Every combo swing that hits nothing but air builds +1 attack, up to +30, for the
+        /// current dungeon floor (stacks reset on floor change). The bonus is written only to the
+        /// in-battle weapon record (<see cref="Player.Weapon.SetCurrentWeaponAttack"/>) — the copy
+        /// the swing code latches damage from — never the inventory record, so menus and build-up
+        /// requirements keep seeing the unboosted stat (the same battle-copy/inventory split the
+        /// Lamb's Sword low-WHP rate uses natively). The boost can exceed the weapon's max attack.
+        ///
+        /// Swing detection: <see cref="WeaponCollision.ChargeActionState"/> combo states 0x24-0x28
+        /// (one per combo hit). A swing counts as a miss when <see cref="WeaponCollision.HitSparkCounter"/>
+        /// hasn't advanced by the time the swing ends. Consequences of that signal: guarded
+        /// (blocked) hits count as misses, and charge attacks (lunge/whirlwind) build no stacks.
+        /// </summary>
+        public static void MachoSword()
+        {
+            const int maxBonus = 30;
+            const ushort rebaseSentinel = 0xFFFF;
+
+            int bonus = 0;
+            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
+            ushort baseAttack = Player.Weapon.GetCurrentWeaponAttack();
+            ushort lastWritten = baseAttack;
+            bool inSwing = false;
+            int prevState = -1;
+            int swingStartHits = 0;
+
+            void SettleMissedSwing(int hitsNow)
+            {
+                if (hitsNow != swingStartHits || bonus >= maxBonus) return;
+                bonus++;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"Macho Sword: whiffed swing — attack bonus {bonus}/{maxBonus}");
+            }
+
+            while (Player.InDungeonFloor())
+            {
+                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
+                if (Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponCollision.InventoryWeaponSlotStride) != Items.machosword)
+                    break;
+
+                // The battle record and action state belong to the ACTIVE character — while a
+                // sidekick is out, hands off entirely and re-baseline when Toan returns.
+                if (Player.CurrentCharacterNum() != Player.ToanId)
+                {
+                    inSwing = false;
+                    lastWritten = rebaseSentinel;
+                    Thread.Sleep(100);
+                    continue;
+                }
+
+                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+                if (currentFloor != lastFloor)
+                {
+                    lastFloor = currentFloor;
+                    bonus = 0;      // fresh floor, warm-up starts over
+                    inSwing = false;
+                }
+
+                // If the engine rewrote the battle record (menu close, re-equip, build-up,
+                // character switch), adopt the rewritten value as the new unboosted baseline.
+                ushort curAttack = Player.Weapon.GetCurrentWeaponAttack();
+                if (curAttack != lastWritten)
+                    baseAttack = curAttack;
+
+                int state = Memory.ReadInt(WeaponCollision.ChargeActionState);
+                int hits  = Memory.ReadInt(WeaponCollision.HitSparkCounter);
+                bool isComboSwing = state >= WeaponCollision.ActionComboFirst &&
+                                    state <= WeaponCollision.ActionComboLast;
+                if (isComboSwing && (!inSwing || state != prevState))
+                {
+                    // A new swing began (possibly chained straight from the previous combo hit):
+                    // settle the previous swing first, then start tracking this one.
+                    if (inSwing) SettleMissedSwing(hits);
+                    inSwing = true;
+                    swingStartHits = hits;
+                }
+                else if (!isComboSwing && inSwing)
+                {
+                    inSwing = false;
+                    SettleMissedSwing(hits);
+                }
+                prevState = state;
+
+                ushort desired = (ushort)(baseAttack + bonus);
+                if (desired != curAttack)
+                    Player.Weapon.SetCurrentWeaponAttack(desired);
+                lastWritten = desired;
+
+                Thread.Sleep(33);
+            }
+
+            // Drop the boost on unequip/exit — but only while the battle record still belongs to
+            // the Macho Sword (after a menu unequip it already holds the NEW weapon's stats).
+            if (Player.Weapon.GetCurrentWeaponId() == Items.machosword)
+                Player.Weapon.SetCurrentWeaponAttack(baseAttack);
+        }
+
+        /// <summary>
         /// Heaven's Cloud effect (charge scaling). While the whirlwind is being charged the blade grows over
         /// real time (up to 3x after <c>growSeconds</c>), independent of the polling rate; the whirl visual and
         /// enemy hitboxes are kept matched to the current size the whole time it's charging AND executing, so

@@ -680,6 +680,17 @@ namespace Dark_Cloud_Improved_Version
                 return Memory.ReadUShort(attack);
             }
 
+            /// <summary>
+            /// Overwrites the in-battle weapon record's Attack. This is the copy the swing code
+            /// latches damage from; the engine rebuilds it from the inventory record on equip
+            /// changes and menu closes, so boosts written here must be re-applied by their effect
+            /// loop and never touch inventory stats (menus/build-up keep seeing the base value).
+            /// </summary>
+            public static void SetCurrentWeaponAttack(ushort newAttack)
+            {
+                Memory.WriteUShort(attack, newAttack);
+            }
+
             public static byte GetCurrentWeaponEndurance()
             //Returns the current equipped weapon Endurance
             {
