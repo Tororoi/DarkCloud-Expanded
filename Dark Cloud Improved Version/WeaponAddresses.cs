@@ -281,5 +281,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long InventoryEquipSlotAddr    = 0x21CDD88C; // byte: current equipped weapon slot (0-9)
         internal const long InventoryWeaponSlot0Id    = 0x21CDDA58; // ushort: slot 0's weapon id
         internal const int  InventoryWeaponSlotStride = 0xF8;       // stride between weapon-list slots
+
+        // ── Runtime weapon-record (WEAPON_HAVE) field offsets, relative to a slot's base
+        // (InventoryWeaponSlot0Id + slot * InventoryWeaponSlotStride) ──
+        internal const int  InventoryWeaponMaxWhpOffset = 0x0C;     // short: max WHP
+        internal const int  InventoryWeaponWhpOffset    = 0x10;     // float: current WHP
+
+        /// <summary>The game's low-durability warning threshold: the HUD WHP gauge blinks while
+        /// <c>WHP &lt;= LowWhpWarningFraction * maxWHP</c> (<c>DrawWepDamageDraw</c> ELF 0x1F8D30,
+        /// float constant at native 0x2A1870). Used by the Maneater drain to match the visible state.</summary>
+        internal const float LowWhpWarningFraction = 0.1f;
     }
 }

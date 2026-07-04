@@ -35,4 +35,28 @@ namespace Dark_Cloud_Improved_Version
 
         internal const float MotionSpeedUseKey = -1.0f; // sentinel = "use the motion's own KEY speed" (default)
     }
+
+    /// <summary>
+    /// Toan's live status/HP fields (same block Player.Toan wraps with getters; exposed here as
+    /// addresses for effects that need raw bit-level status access, e.g. the Evilcise/Maneater
+    /// curse loops). The status word and its single shared countdown timer cover ALL status
+    /// ailments at once — refreshing the timer extends every active status bit.
+    /// </summary>
+    internal static class ToanState
+    {
+        internal const int Hp          = 0x21CD955E; // ushort — current HP
+        internal const int Status      = 0x21CDD814; // ushort — status bit field (see Status* bits)
+        internal const int StatusTimer = 0x21CDD824; // ushort — shared countdown (frames) for all status bits
+
+        // Status bit masks
+        internal const ushort StatusNearDeath = 0x02;
+        internal const ushort StatusFreeze    = 0x04;
+        internal const ushort StatusStamina   = 0x08;
+        internal const ushort StatusPoison    = 0x10;
+        internal const ushort StatusCurse     = 0x20;
+        internal const ushort StatusGoo       = 0x40;
+
+        /// <summary>Timer value the curse effects use when (re)applying a status: 3600 frames = 60s.</summary>
+        internal const ushort StatusDurationFrames = 3600;
+    }
 }

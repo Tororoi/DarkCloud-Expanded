@@ -72,6 +72,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeaven));
         public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+        public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
@@ -156,6 +157,15 @@ namespace Dark_Cloud_Improved_Version
                         evilciseThread.Start();
                     }
 
+                    // Maneater curse likewise applies immediately on equip
+                    if (Player.CurrentCharacterNum() == Player.ToanId &&
+                        Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
+                        !maneaterThread.IsAlive)
+                    {
+                        maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
+                        maneaterThread.Start();
+                    }
+
                     // Enemies.PollEnemyDynamics();
                     // Enemies.MonitorFlashTimer();
                     // Enemies.TeleportEnemiesDebug();        // DEBUG: remove when done
@@ -215,6 +225,16 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
                                             evilciseThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.maneater:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!maneaterThread.IsAlive)
+                                        {
+                                            maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
+                                            maneaterThread.Start();
                                         }
                                         break;
 
