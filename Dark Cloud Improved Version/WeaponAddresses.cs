@@ -297,8 +297,35 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Runtime weapon-record (WEAPON_HAVE) field offsets, relative to a slot's base
         // (InventoryWeaponSlot0Id + slot * InventoryWeaponSlotStride) ──
+        internal const int  InventoryWeaponLevelOffset  = 0x02;     // short: weapon level — increments when an
+                                                                    //   ABS level-up absorbs the attachments
         internal const int  InventoryWeaponMaxWhpOffset = 0x0C;     // short: max WHP
         internal const int  InventoryWeaponWhpOffset    = 0x10;     // float: current WHP
+        internal const int  WeaponAntiOffset            = 0x1C;     // 10 bytes: anti-category values in
+                                                                    //   EnemyCategory order (Dragon..Mage), cap 99
+        internal const int  WeaponAntiCount             = 10;
+        // Attachment slots within a record: 6 ATTACH_LIST entries of 0x20 bytes at +0x28
+        // (layout from WeaponAllValueSet ELF 0x225B60 + PlusAttachmentVolume 0x225810: slots end
+        // at +0xE8 where the per-slot flag bytes + the +0xEE ability word live). Entries are
+        // memcpy'd from the static AttachList template table (native 0x27CA60, indexed via
+        // GetAttachData 0x1D0EF0) when an item is attached, and their VALUES — not the item
+        // templates — are what WeaponAllValueSet accumulates for effective stats and what the
+        // level-up absorb consumes (AttachMentValuePlus 0x235A10, called from
+        // CWeaponLevelUp::SetLevelUpValue/SetStatusBreak). So editing an entry edits that
+        // attachment's contribution everywhere: menus, build-up eligibility, battle, and absorb.
+        internal const int  WeaponAttachSlot0Offset     = 0x28;
+        internal const int  WeaponAttachSlotStride      = 0x20;
+        internal const int  WeaponAttachSlotCount       = 6;
+        // ATTACH_LIST entry fields: +0x00 item id (ushort), +0x08 four stat shorts
+        // (Atk/End/Spd/Mag), +0x10 five element bytes, +0x15 ten anti bytes (Dragon..Mage).
+        internal const int  AttachEntryAntiOffset       = 0x15;
+        /// <summary>Template anti value of every anti-category attachment (Dinoslayer..Mage
+        /// Slayer, items 111-120): +3 to their own category (verified from AttachList).</summary>
+        internal const int  AttachAntiBaseValue         = 3;
+
+        /// <summary>The in-battle WEAPON_HAVE copy of the equipped weapon (id at +0; same field
+        /// layout as the inventory records — <c>Player.Weapon</c> wraps its common fields).</summary>
+        internal const long BattleWeaponRecord          = 0x21EA7590;
 
         /// <summary>The game's low-durability warning threshold: the HUD WHP gauge blinks while
         /// <c>WHP &lt;= LowWhpWarningFraction * maxWHP</c> (<c>DrawWepDamageDraw</c> ELF 0x1F8D30,

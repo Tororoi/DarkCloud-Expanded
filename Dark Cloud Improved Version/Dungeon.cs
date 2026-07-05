@@ -268,6 +268,7 @@ namespace Dark_Cloud_Improved_Version
                                         }
                                         break;
 
+
                                     case Items.sunsword:
                                     case Items.bigbang:   // Big Bang inherits Solar Harvest (Sun Sword lineage);
                                                           // its own unique effect will be added alongside later

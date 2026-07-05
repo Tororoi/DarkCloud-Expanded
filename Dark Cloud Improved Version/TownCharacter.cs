@@ -192,6 +192,10 @@ namespace Dark_Cloud_Improved_Version
 
             while (true)
             {
+                // Buster Sword "True Buster" absorb watcher — runs in every mode (self-gated to
+                // ~2.5 Hz) because ABS level-ups can happen from any menu, sword equipped or not.
+                CustomEffects.BusterSwordTick();
+
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)
                 {
