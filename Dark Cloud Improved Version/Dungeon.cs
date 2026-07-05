@@ -75,6 +75,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
         public static Thread machoSwordThread = new Thread(new ThreadStart(CustomEffects.MachoSword));
         public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
+        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
@@ -218,6 +219,13 @@ namespace Dark_Cloud_Improved_Version
                                             heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
                                             heavensCloudThread.Start();
                                         }
+
+                                        // Heaven's Cloud also inherits Moonlit Focus (Tsukikage lineage)
+                                        if (!tsukikageThread.IsAlive)
+                                        {
+                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
+                                            tsukikageThread.Start();
+                                        }
                                         break;
 
                                     case Items.evilcise:
@@ -247,6 +255,16 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             machoSwordThread = new Thread(new ThreadStart(CustomEffects.MachoSword));
                                             machoSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.tsukikage:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!tsukikageThread.IsAlive)
+                                        {
+                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
+                                            tsukikageThread.Start();
                                         }
                                         break;
 

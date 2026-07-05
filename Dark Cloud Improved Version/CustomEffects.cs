@@ -553,6 +553,52 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Moonlit Focus (Tsukikage, Heaven's Cloud)
+        /// Holding X charges the charge attack twice as fast as normal weapons. The engine adds
+        /// 1/60 to the charge meter (<see cref="WeaponCollision.ChargeMeter"/>) per wind-up frame
+        /// (= 1.0/second); this effect feeds in a second 1.0/second of wall time while the
+        /// wind-up state is active, so lunge readies in ~0.25s and whirlwind in ~0.75s. The
+        /// charge level is re-derived from the meter every wind-up frame by the engine, so the
+        /// flash/tier progression follows automatically. Heaven's Cloud inherits the effect for
+        /// lineage reasons (Tsukikage builds up into it), on top of its own charge-scaling
+        /// effect — firing the whirlwind sooner simply means less time for the blade to grow.
+        /// </summary>
+        public static void Tsukikage()
+        {
+            DateTime lastTick = DateTime.UtcNow;
+
+            while (Player.InDungeonFloor())
+            {
+                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
+                ushort equippedId = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                if (equippedId != Items.tsukikage && equippedId != Items.heavenscloud)
+                    break;
+
+                DateTime now = DateTime.UtcNow;
+                // Clamp so time spent outside the windup (or in a long poll hiccup) never dumps
+                // a big lump into the meter the moment charging starts.
+                float elapsed = Math.Min((float)(now - lastTick).TotalSeconds, 0.1f);
+                lastTick = now;
+
+                if (Player.CurrentCharacterNum() == Player.ToanId &&
+                    !Player.CheckDunIsPaused() &&
+                    Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWindup)
+                {
+                    float meter = Memory.ReadFloat(WeaponCollision.ChargeMeter);
+                    if (meter > 0f && meter < WeaponCollision.ChargeMeterCap)
+                    {
+                        float boosted = Math.Min(WeaponCollision.ChargeMeterCap,
+                            meter + elapsed * WeaponCollision.ChargeMeterPerSecond);
+                        Memory.WriteFloat(WeaponCollision.ChargeMeter, boosted);
+                    }
+                }
+
+                Thread.Sleep(16);
+            }
+        }
+
+        /// <summary>
         /// Ability Name: Solar Harvest (Sun Sword, Big Bang)
         /// While the Sun Sword — or its evolution, Big Bang — is wielded, each enemy on the floor
         /// has a 1% chance (rolled once per slot per floor) to drop a Sun attachment instead of

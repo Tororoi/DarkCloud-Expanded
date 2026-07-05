@@ -238,6 +238,11 @@ namespace Dark_Cloud_Improved_Version
         // Charge METER (float, DAT_01dc449c): resets to 1.0 at attack start, accumulates each windup frame,
         // caps at 3.0. Thresholds: ≥1.5 → lunge available, ≥2.5 → whirlwind available (if unlocked).
         internal const long ChargeMeter       = 0x21DC449C;
+        // Native meter gain: +1/60 per windup frame (float @ native 0x2A1CAC) = 1.0/second at 60 fps.
+        // The charge LEVEL is re-derived from the meter every windup frame, so boosting the meter
+        // (e.g. Tsukikage's double-speed charge) advances the levels automatically.
+        internal const float ChargeMeterPerSecond = 1.0f;
+        internal const float ChargeMeterCap       = 3.0f;
         // Charge LEVEL (DAT_01dc44dc): the tier the meter has crossed during the 0xE windup — the clean signal
         // for WHICH charge attack is being built. Reset to 0 by ToanKey_On at attack start.
         internal const long ChargeLevel       = 0x21DC44DC;
