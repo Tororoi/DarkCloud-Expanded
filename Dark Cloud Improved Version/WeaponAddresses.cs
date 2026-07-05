@@ -301,6 +301,7 @@ namespace Dark_Cloud_Improved_Version
                                                                     //   ABS level-up absorbs the attachments
         internal const int  InventoryWeaponMaxWhpOffset = 0x0C;     // short: max WHP
         internal const int  InventoryWeaponWhpOffset    = 0x10;     // float: current WHP
+        internal const int  InventoryWeaponAbsOffset    = 0x14;     // short: current ABS points
         internal const int  WeaponAntiOffset            = 0x1C;     // 10 bytes: anti-category values in
                                                                     //   EnemyCategory order (Dragon..Mage), cap 99
         internal const int  WeaponAntiCount             = 10;
@@ -326,6 +327,82 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The in-battle WEAPON_HAVE copy of the equipped weapon (id at +0; same field
         /// layout as the inventory records — <c>Player.Weapon</c> wraps its common fields).</summary>
         internal const long BattleWeaponRecord          = 0x21EA7590;
+
+        /// <summary>
+        /// The attachment "board" (attachment inventory): ATTACH_LIST entries at status-base +
+        /// 0x84FC (status base = 0x21CD954C, the object Toan's weapon records at +0x450C =
+        /// 0x21CDDA58 live in). RE'd from GetBoardSpace (ELF 0x2315C0: kind-2 scan, empty = id
+        /// &lt;= 0x50) and SetStatusBreak (0x2368D0), which writes the SynthSphere here: item id
+        /// 0x5A at +0, SOURCE WEAPON id at +2, ability-flag word at +4, source LEVEL byte at +6,
+        /// then the standard ATTACH_LIST values (stats +8, elements +0x10, antis +0x15) at 60%.
+        /// The break's weapon removal (CWeaponLevelUp::Step case 5, ELF 0x237010) zeroes the bag
+        /// record IN PLACE (id → 0xFFFF, no compaction) — which is what makes a post-hoc undo /
+        /// sphere rewrite safe.
+        /// </summary>
+        internal static class AttachBoard
+        {
+            /// <summary>= status base 0x21CD954C + 0x84FC (the board sits right after the six
+            /// characters' weapon arrays: 0x450C + 6×0xAA8 = 0x84FC). Same address the mod has
+            /// long used as <see cref="Addresses.firstBagAttachment"/>.</summary>
+            internal const long Base      = Addresses.firstBagAttachment; // 0x21CE1A48
+            internal const int  Stride    = 0x20;
+            internal const int  ScanCount = Player.inventorySizeAttachments + 2; // 42, mirrors Player.GetBagAttachments
+            internal const int  EntryItemId      = 0x00; // ushort; SynthSphere = 0x5A; empty <= 0x50
+            internal const int  EntrySourceId    = 0x02; // ushort — sphere: source weapon item id
+            internal const int  EntryFlags       = 0x04; // ushort — sphere: ability flags
+            internal const int  EntrySourceLevel = 0x06; // byte   — sphere: source weapon level
+            internal const int  EntryStats       = 0x08; // 4 shorts: Atk/End/Spd/Mag
+            internal const int  EntryElements    = 0x10; // 5 bytes
+            internal const int  EntryAntis       = 0x15; // 10 bytes
+            internal const int  SynthSphereId    = 0x5A;
+        }
+
+        // ── Weapon-menu selection globals (read by GetNowSelectWeapon, ELF 0x1F3F00: selected
+        // record = menu base + char*0xAA8 + 0x450C + slot*0xF8). Values persist (stale) after
+        // the menu closes — gate on them only for things that can't matter outside the menu. ──
+        internal const long MenuSelectedWeaponSlot = 0x21D9EA74; // byte: selected weapon slot (0-9)
+        internal const long MenuSelectedCharacter  = 0x21D9EA75; // byte: selected character (0=Toan)
+        // Weapon-menu submenu state machine (DAT_01d9ea72, driven by WeaponSelectKey ELF 0x1FDF20).
+        internal const long MenuSubMode            = 0x21D9EA72; // byte: submenu state
+        internal const int  MenuSubModeOptionList         = 1;   // the Attach/BuildUp/StatusBreak option list
+        internal const int  MenuSubModeStatusBreakConfirm = 4;   // the "Do status break?" Yes/No dialog
+        // Cursor global (DAT_01d9ea90): the option-list index in state 1, the Yes/No cursor
+        // (0=Yes 1=No) in the confirm states. SetStatusBreak fires only on (cursor==0 && X).
+        internal const long MenuYesNoCursor               = 0x21D9EA90;
+
+        // ── CWeaponLevelUp object (fixed @ 0x21DAA8E0): runs the level-up / status-break /
+        // build-up animation flows (Step ELF 0x237010). Fields RE'd from SetStatusBreak/Step:
+        //   +0x1302 (0x21DABBE2, short): flow KIND — -1 idle, 1 = status break
+        //   +0x1314 (0x21DABBF4, short): flow STATE. Status break: 4 = effect load,
+        //     5 = break animation playing (ON COMPLETION case 5 deletes the bag record, bumps
+        //     the message counter and queues the "SynthSphere created!" presentation),
+        //     6 = quiet wind-down -> native exit.
+        // INTERRUPT LEVER: while in state 5, writing state = 6 skips case 5 entirely — the
+        // weapon is never deleted, no "created" presentation fires, and the flow exits through
+        // its own native wind-down. The sphere (written to the board at confirm by
+        // SetStatusBreak) must be cleared separately. Used by the 7BS below-+7 refusal. ──
+        internal const long LevelUpFlowKind   = 0x21DABBE2;
+        internal const long LevelUpFlowState  = 0x21DABBF4;
+        internal const int  FlowKindStatusBreak   = 1;
+        internal const int  BreakStateAnimation   = 5;
+        internal const int  BreakStateWindDown    = 6;
+
+        // ⚠ LESSON (2026-07-05): PINE writes to EE CODE pages crash PCSX2 outright — the first
+        // value-changing poke to a hot instruction killed the emulator the same second (log:
+        // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
+        // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
+        // (see AttachBoard below + CustomEffects.SevenBranchTick), not by patching
+        // WeaponStatusBreakEnable/SetStatusBreak.
+
+        /// <summary>The status-break stat-transfer factor: a DATA float (0.6f) at native 0x2A1890,
+        /// read live by SetStatusBreak (ELF 0x2368D0) at confirm time — poking it is safe (data,
+        /// not code). SHARED with CCloth::Step (cape physics), FishLineStep and BtSystemScriptInit,
+        /// so it is swapped to 0.77 only while a 7 Branch Sword is the selected menu weapon and
+        /// restored otherwise. Menus freeze the world, so the main exposure is the stale-selection
+        /// window after closing the menu (cape/fishline running with 0.77) — logged for evaluation.</summary>
+        internal const long  StatusBreakFactorFloat   = 0x202A1890;
+        internal const float StatusBreakFactorDefault = 0.6f;
+        internal const float StatusBreakFactorSeven   = 0.77f;
 
         /// <summary>The game's low-durability warning threshold: the HUD WHP gauge blinks while
         /// <c>WHP &lt;= LowWhpWarningFraction * maxWHP</c> (<c>DrawWepDamageDraw</c> ELF 0x1F8D30,

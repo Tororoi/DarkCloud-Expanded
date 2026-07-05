@@ -195,6 +195,9 @@ namespace Dark_Cloud_Improved_Version
                 // Buster Sword "True Buster" absorb watcher — runs in every mode (self-gated to
                 // ~2.5 Hz) because ABS level-ups can happen from any menu, sword equipped or not.
                 CustomEffects.BusterSwordTick();
+                // 7 Branch Sword "Sevenfold Rite" — status-break patch keyed on the weapon-menu
+                // selection; runs in every mode because the menu exists everywhere (self-gated ~10 Hz).
+                CustomEffects.SevenBranchTick();
 
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)

@@ -59,6 +59,59 @@ namespace Dark_Cloud_Improved_Version
         static long _sigAddr;      // address of the first EDITED description word (0 = nothing edited)
         static ushort _sigWord;    // its expected (patched) value — mismatch means the copy reloaded
 
+        // ── Status Break hint (entry 47 in the allmenu banks): dynamic swap for the 7 Branch
+        // Sword's "Sevenfold Rite" (gate +7, 77% transfer — CustomEffects.SevenBranchTick).
+        // Both texts encode to the entry's exact 75-word span. Entry 47 sits BEFORE the weapon
+        // block, so its ordinal is identical in every allmenu variant (dunmenu4's 2 extra
+        // entries come after the block); the shop bank (0x137) doesn't contain it.
+        const int StatusBreakHintEntry = 47;
+        const string StatusBreakHintVanilla = "\n:Seal 60% weapon\nability to sphere.\n(Do w/o attachment.)\n Do status break?";
+        const string StatusBreakHintSeven   = "\n:Seal 77% weapon\nability to sphere.\n(Level 7 or more.)\n Do status break?";
+        static ushort[] _hintVanilla, _hintSeven;
+        static volatile bool _hintSevenActive;
+
+        // ── SynthSphere "acquired" line (entry 179 = ComItemInfo[0x5A].msgNo + 100): the text
+        // the break flow's message window shows (CWeaponLevelUp::DrawMes state 6). Swapped to a
+        // "resists" message while a below-+7 7 Branch Sword is selected, so an interrupted break
+        // explains itself through the game's own popup. The vanilla words contain icon (0xFBxx)
+        // and format codes the encoder can't produce, so they're stored raw (34-word span,
+        // verified against tools/allmenu.mes.bin). ──
+        const int BreakAcquiredEntry = 179;
+        static readonly ushort[] _acquiredVanilla =
+        {
+            0xFF00, 0xFD12, 0xFD57, 0xFBFE, 0xFBFA, 0xFD57, 0xFF00, 0xFD13, 0xFD57, 0xFD33,
+            0xFD53, 0xFD48, 0xFD4E, 0xFD42, 0xFD33, 0xFD4A, 0xFD42, 0xFD3F, 0xFD4C, 0xFD3F,
+            0xFD57, 0xFF00, 0xFF02, 0xFF02, 0xFF02, 0xFD3B, 0xFD3D, 0xFD4B, 0xFD4F, 0xFD43,
+            0xFD4C, 0xFD3F, 0xFD3E, 0xFD6D,
+        };
+        // 34-word span budget. Glyph 0x0B ('+') renders INCONSISTENTLY across the menu bank
+        // variants (a '+' in some, a d-pad icon in others — the town/dungeon/map paks carry
+        // different font pages), so mod text avoids '+' entirely and spells out "level 7".
+        const string BreakAcquiredResists = "\nStatus break fails\nbelow level 7.";
+        static ushort[] _acquiredResists;
+        static volatile bool _acquiredResistsActive;
+
+        /// <summary>Selects which Status Break hint text the menu shows: the 7 Branch Sword
+        /// version (+7 / 77%) or vanilla (60%). Called by CustomEffects.SevenBranchTick as the
+        /// weapon-menu selection changes; a change forces a repatch on the next tick.</summary>
+        public static void SetStatusBreakHint(bool sevenBranch)
+        {
+            if (_hintSevenActive == sevenBranch) return;
+            _hintSevenActive = sevenBranch;
+            _lastCnt = -1;   // force PatchTick to rewrite even though pointer/count are unchanged
+        }
+
+        /// <summary>Swaps the SynthSphere "acquired" message line between vanilla and the
+        /// 7 Branch Sword "resists" text. Keyed proactively on "below-+7 7BS selected" (set
+        /// before any break can be confirmed), so the popup after an interrupted break reads as
+        /// the refusal message; vanilla is restored when the selection changes.</summary>
+        public static void SetBreakResultResists(bool resists)
+        {
+            if (_acquiredResistsActive == resists) return;
+            _acquiredResistsActive = resists;
+            _lastCnt = -1;
+        }
+
         /// <summary>Starts the description patcher thread (idempotent).</summary>
         public static void StartDescriptionPatcher()
         {
@@ -72,6 +125,9 @@ namespace Dark_Cloud_Improved_Version
 
         static void BuildPatches()
         {
+            _hintVanilla = Encode(StatusBreakHintVanilla);
+            _hintSeven   = Encode(StatusBreakHintSeven);
+            _acquiredResists = Encode(BreakAcquiredResists);
             _patches = new List<Patch>();
             foreach (WeaponData[] family in new[] { ToanWeapons.All, XiaoWeapons.All, GoroWeapons.All,
                                                     RubyWeapons.All, UngagaWeapons.All, OsmondWeapons.All })
@@ -182,16 +238,60 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
 
+            // Dynamic system entries (allmenu banks only — the shop bank doesn't contain them):
+            // the Status Break hint (47) and the SynthSphere "acquired" line (179), each swapped
+            // between vanilla and its 7 Branch Sword text. Targets are exact-span replacements;
+            // a span mismatch means an unexpected bank layout and the entry is skipped.
+            var dynamicEntries = new (int Ordinal, ushort[] Target, bool NonVanilla)[]
+            {
+                (StatusBreakHintEntry, PadTo(_hintSevenActive ? _hintSeven : _hintVanilla,
+                                             _hintVanilla.Length), _hintSevenActive),
+                (BreakAcquiredEntry, _acquiredResistsActive ? PadTo(_acquiredResists, _acquiredVanilla.Length)
+                                                            : _acquiredVanilla, _acquiredResistsActive),
+            };
+            if (delta == 0)
+            {
+                foreach (var (ordinal, target, nonVanilla) in dynamicEntries)
+                {
+                    if (ordinal + 1 > found) continue;
+                    int s = starts[ordinal], e = starts[ordinal + 1] - 1;
+                    if (e - s != target.Length || w[s] != 0xFF00)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"WpnDesc: dynamic entry {ordinal} has unexpected shape (span {e - s}) — not patched");
+                        continue;
+                    }
+                    for (int i = 0; i < target.Length; i++)
+                    {
+                        if (w[s + i] == target[i]) continue;
+                        Memory.WriteUShort(b + (s + i) * 2L, target[i]);
+                        words++;
+                        if (sigAddr == 0 && nonVanilla) { sigAddr = b + (s + i) * 2L; sigWord = target[i]; }
+                    }
+                }
+            }
+
             _sigAddr = sigAddr; _sigWord = sigWord;
-            if (patched > 0)
+            if (words > 0)
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"WpnDesc: patched {patched} description(s) ({words} words) in {(delta == 0 ? "menu" : "shop")} bank @0x{p:X8}");
+                    $"WpnDesc: patched {patched} description(s) + status-break hint ({(_hintSevenActive ? "7BS" : "vanilla")}) " +
+                    $"({words} words) in {(delta == 0 ? "menu" : "shop")} bank @0x{p:X8}");
         }
 
         static int SkipNewlines(ushort[] w, int i)
         {
             while (i < w.Length && w[i] == 0xFF00) i++;
             return i < w.Length ? i : -1;
+        }
+
+        /// <summary>Pads an encoded text with spaces (0xFF02) to exactly <paramref name="span"/> words.</summary>
+        static ushort[] PadTo(ushort[] text, int span)
+        {
+            if (text.Length == span) return text;
+            var outw = new ushort[span];
+            Array.Copy(text, outw, Math.Min(text.Length, span));
+            for (int i = text.Length; i < span; i++) outw[i] = 0xFF02;
+            return outw;
         }
 
         // Read `bytes` of the blob at MMU addr `b` as a ushort[] via batched u32 reads.
@@ -226,6 +326,9 @@ namespace Dark_Cloud_Improved_Version
                 {
                     '\'' => 0x55, '"' => 0x57, '&' => 0x5B, '-' => 0x5D, '/' => 0x5F,
                     '(' => 0x61, ')' => 0x62, ',' => 0x6C, '.' => 0x6D,
+                    // Verified from vanilla text (status-break hint, entry 47): NOT on the
+                    // linear '!'..'Z' plane despite falling in its ASCII range.
+                    '%' => 0x60, '?' => 0x59,
                     >= '0' and <= '9' => ch - '0' + 0x6F,
                     >= '!' and <= 'Z' => ch - 0x20,
                     >= 'a' and <= 'z' => ch - 0x26,

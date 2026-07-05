@@ -284,6 +284,32 @@ namespace Dark_Cloud_Improved_Version
             return result;
         }
 
+        /// <summary>
+        /// Bulk byte read via packed Read32 batches (one PINE round-trip per 2048 words instead
+        /// of one per BYTE — use this instead of <see cref="ReadByteArray"/> for anything larger
+        /// than a few bytes). <paramref name="address"/> may be unaligned; alignment is handled
+        /// internally.
+        /// </summary>
+        internal static byte[] ReadBytesBatch(long address, int numBytes)
+        {
+            const int ChunkWords = 2048;   // 8KB of data per round-trip
+            long alignedStart = address & ~3L;
+            int alignedLen = (int)(((address + numBytes + 3) & ~3L) - alignedStart);
+            int totalWords = alignedLen / 4;
+            var buf = new byte[alignedLen];
+            for (int done = 0; done < totalWords; done += ChunkWords)
+            {
+                int words = Math.Min(ChunkWords, totalWords - done);
+                uint[] chunk = ReadUIntBatch(alignedStart + (long)done * 4, words);
+                if (chunk == null || chunk.Length != words) return null;
+                for (int i = 0; i < words; i++)
+                    BitConverter.GetBytes(chunk[i]).CopyTo(buf, (done + i) * 4);
+            }
+            var result = new byte[numBytes];
+            Array.Copy(buf, (int)(address - alignedStart), result, 0, numBytes);
+            return result;
+        }
+
         // Reads <count> consecutive 32-bit floats starting at <startAddr> in one PINE
         // round-trip. Packs N Read32 commands into a single socket packet.
         //

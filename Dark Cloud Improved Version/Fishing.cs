@@ -265,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
             if (saveDataNative == 0) return;
             long listBase = Memory.ToMmu(saveDataNative) + FishingRankList.Offset;
 
-            byte[] raw = Memory.ReadByteArray(listBase, FishingRankList.Count * FishingRankList.Stride);
+            byte[] raw = Memory.ReadBytesBatch(listBase, FishingRankList.Count * FishingRankList.Stride);
             if (raw == null || raw.Length < FishingRankList.Count * FishingRankList.Stride) return;
 
             // Index of each species' largest entry. Entries carry 8 trailing bytes we don't
