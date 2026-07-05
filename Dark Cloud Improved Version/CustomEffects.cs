@@ -553,6 +553,110 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Solar Harvest (Sun Sword, Big Bang)
+        /// While the Sun Sword — or its evolution, Big Bang — is wielded, each enemy on the floor
+        /// has a 1% chance (rolled once per slot per floor) to drop a Sun attachment instead of
+        /// its regular drop when killed. (Big Bang shares this effect for lineage/visual-design
+        /// reasons; it will additionally get its own unique effect later.)
+        /// Implemented by pre-staging the engine's guaranteed-drop field (<see
+        /// cref="EnemySlotOffsets.ForceItemDrop"/> — the same mechanism dungeon keys and miniboss
+        /// loot use, consumed by the death-drop block in CMonstorUnit::Step, ELF 0x1DF4C0) while
+        /// the sword is in hand, and un-staging when it isn't (unequip, character switch), so
+        /// there is no race against the killing blow. Slots already carrying a forced drop
+        /// (dungeon key, miniboss loot, mimic key) are never touched. Engine caveat: the drop
+        /// path runs items through a small de-dupe set, so a second Sun proc on the same floor
+        /// may be swallowed.
+        /// </summary>
+        public static void SunSword()
+        {
+            const int procPercent = 1;
+
+            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
+            int slotCount = EnemyAddresses.FloorSlots.Count;
+            bool[]   rolled       = new bool[slotCount];   // 1% chance consumed for this slot
+            bool[]   winner       = new bool[slotCount];   // slot won the roll
+            bool[]   staged       = new bool[slotCount];   // our Sun id is currently written
+            ushort[] originalDrop = new ushort[slotCount]; // pre-stage value to restore (0 or 65535)
+
+            void UnstageAll()
+            {
+                for (int i = 0; i < slotCount; i++)
+                {
+                    if (!staged[i]) continue;
+                    staged[i] = false;
+                    int dropAddr = EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop);
+                    if (Memory.ReadUShort(dropAddr) == Items.sun)   // still ours → restore
+                        Memory.WriteUShort(dropAddr, originalDrop[i]);
+                }
+            }
+
+            while (Player.InDungeonFloor())
+            {
+                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
+                ushort equippedId = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                if (equippedId != Items.sunsword && equippedId != Items.bigbang)
+                    break;
+
+                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+                if (currentFloor != lastFloor)
+                {
+                    // New floor: the slot array was reinitialized, so forget everything WITHOUT
+                    // restoring (writing stale values into fresh slots would corrupt them).
+                    lastFloor = currentFloor;
+                    Array.Clear(rolled, 0, slotCount);
+                    Array.Clear(winner, 0, slotCount);
+                    Array.Clear(staged, 0, slotCount);
+                }
+
+                // Kills while a sidekick is out aren't Sun Sword kills — keep nothing staged.
+                // Winners keep their win and are re-staged when Toan takes over again.
+                if (Player.CurrentCharacterNum() != Player.ToanId)
+                {
+                    UnstageAll();
+                    Thread.Sleep(250);
+                    continue;
+                }
+
+                for (int i = 0; i < slotCount; i++)
+                {
+                    if (Enemies.GetFloorEnemyId(i) == 0) continue;
+                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp)) <= 0) continue;
+
+                    int dropAddr = EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop);
+                    ushort dropVal = Memory.ReadUShort(dropAddr);
+
+                    if (!rolled[i])
+                    {
+                        rolled[i] = true;
+                        // Slots that already carry a forced drop (key/miniboss/mimic) are off-limits
+                        if (dropVal != 0 && dropVal != 65535) continue;
+                        winner[i] = random.Next(100) < procPercent;
+                        if (winner[i]) originalDrop[i] = dropVal;
+                    }
+                    if (!winner[i] || staged[i]) continue;
+
+                    // Re-check occupancy — a key could have been assigned here after our roll
+                    if (dropVal != 0 && dropVal != 65535 && dropVal != Items.sun)
+                    {
+                        winner[i] = false;
+                        continue;
+                    }
+                    Memory.WriteUShort(dropAddr, (ushort)Items.sun);
+                    staged[i] = true;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"Sun Sword: slot {i} ({Enemies.GetFloorEnemyId(i)}) will drop a Sun attachment");
+                }
+
+                Thread.Sleep(250);
+            }
+
+            // Unequipped or left the floor: revert anything still staged (guarded by a
+            // still-ours check, so stale slots after a floor unload are left alone).
+            UnstageAll();
+        }
+
+        /// <summary>
         /// Heaven's Cloud effect (charge scaling). While the whirlwind is being charged the blade grows over
         /// real time (up to 3x after <c>growSeconds</c>), independent of the polling rate; the whirl visual and
         /// enemy hitboxes are kept matched to the current size the whole time it's charging AND executing, so

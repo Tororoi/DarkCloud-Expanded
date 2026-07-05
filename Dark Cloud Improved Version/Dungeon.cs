@@ -74,6 +74,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
         public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
         public static Thread machoSwordThread = new Thread(new ThreadStart(CustomEffects.MachoSword));
+        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
@@ -246,6 +247,18 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             machoSwordThread = new Thread(new ThreadStart(CustomEffects.MachoSword));
                                             machoSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.sunsword:
+                                    case Items.bigbang:   // Big Bang inherits Solar Harvest (Sun Sword lineage);
+                                                          // its own unique effect will be added alongside later
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!sunSwordThread.IsAlive)
+                                        {
+                                            sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
+                                            sunSwordThread.Start();
                                         }
                                         break;
 
