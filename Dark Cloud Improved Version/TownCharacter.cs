@@ -198,6 +198,9 @@ namespace Dark_Cloud_Improved_Version
                 // 7 Branch Sword "Sevenfold Rite" — status-break patch keyed on the weapon-menu
                 // selection; runs in every mode because the menu exists everywhere (self-gated ~10 Hz).
                 CustomEffects.SevenBranchTick();
+                // Atlamillia Sword "Insurance" — break watcher + dynamic atla + collected-slot
+                // erasure; runs in every mode (self-gated ~2 Hz) so floor-select stays clean too.
+                AtlamilliaInsurance.Tick();
 
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)

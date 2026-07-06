@@ -315,7 +315,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Encode an ASCII description ('\n' = line break) into meswin glyph codes
         /// (docs/weapon-descriptions.md; mirrors tools/mes_decode.py encode()).</summary>
-        static ushort[] Encode(string s)
+        internal static ushort[] Encode(string s)
         {
             var outw = new List<ushort>(s.Length);
             foreach (char ch in s)
