@@ -20,6 +20,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread changesThread = new Thread(new ThreadStart(ApplyNewChanges));
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread));
         public static Thread weaponspecialeffectThread = new Thread(new ThreadStart(Weapons.RerollWeaponSpecialAttributes));
+        public static Thread codeCaveScannerThread = new Thread(new ThreadStart(CodeCaveScanner.Run));
 
         internal static void ApplyNewChanges()
         {
@@ -212,6 +213,7 @@ namespace Dark_Cloud_Improved_Version
                                         if (!townThread.IsAlive) townThread.Start();
                                         if (!dungeonthread.IsAlive) dungeonthread.Start();
                                         if (!weaponspecialeffectThread.IsAlive) weaponspecialeffectThread.Start();
+                                        if (!codeCaveScannerThread.IsAlive) codeCaveScannerThread.Start(); //passive code-cave sweep, findings -> CodeCaveFindings.txt
 
                                         // TEST hook: uncomment to hand a character a weapon on save load
                                         // (Weapons.GiveWeaponIfMissing writes an empty slot at base stats).
