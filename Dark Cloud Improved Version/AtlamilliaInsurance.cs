@@ -45,8 +45,8 @@ namespace Dark_Cloud_Improved_Version
         /// ⚠ Do NOT use ids ≥ 40: getAtraToSaveData routes them to AtraChipGet (0x158760),
         /// which has NO upper bounds check and appends the raw chip index (id-40) into the
         /// 128-short elem list in SAVE DATA (saveData + 0x4CCC + dungeon*0x100). The old
-        /// sentinel 100 polluted saves with garbage value 60 this way (cleaned up by
-        /// AtlamilliaInsurance.CleanChipListPollution).</summary>
+        /// sentinel 100 polluted saves with garbage value 60 this way (affected saves were
+        /// cleaned by a since-removed one-time strip, 2026-07-05).</summary>
         internal const int SentinelPartIdFirst = 24;
         internal const int SentinelPartIdLast  = 39;
 
@@ -64,11 +64,6 @@ namespace Dark_Cloud_Improved_Version
         /// 2 message shown. Returns to 0 in the same step that calls ClearSystemMes — the
         /// safe moment to undo name plumbing used by the message.</summary>
         internal const long AtraGetStatus = 0x202A3524;
-
-        /// <summary>Chips/residents obtained list in save data: saveData + 0x4CCC +
-        /// dungeon*0x100, 128 shorts, first negative value terminates the list.</summary>
-        internal const int SaveElemListOffset = 0x4CCC;
-        internal const int SaveElemListStride = 0x100;
 
         // ── Static ELF tables (int[6] / ptr[6]) ──
         internal const long MaxFloorTbl = 0x20279E40;   // floors per dungeon
@@ -168,13 +163,12 @@ namespace Dark_Cloud_Improved_Version
             if (DateTime.UtcNow < _nextTick) return;
             _nextTick = DateTime.UtcNow.AddMilliseconds(500);
 
-            // Ownership check, name-channel prep/heal and save cleanup, refreshed every ~5s
+            // Ownership check and name-channel prep/heal, refreshed every ~5s
             if (DateTime.UtcNow >= _nextOwnedCheck)
             {
                 _nextOwnedCheck = DateTime.UtcNow.AddSeconds(5);
                 _owned = IsAtlamilliaOwned();
                 PrepareNameChannels();
-                CleanChipListPollution();
             }
 
             DeliverCollected();
@@ -335,42 +329,6 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(words[i]).CopyTo(bytes, i * 2);
             BitConverter.GetBytes((ushort)0xFF01).CopyTo(bytes, words.Length * 2);
             return bytes;
-        }
-
-        /// <summary>Strips garbage value 60 from the save's chips/residents lists — pollution
-        /// left by the old sentinel part id 100 (AtraChipGet(100-40) has no bounds check and
-        /// appended raw 60 on every insurance atla collected). 60 is invalid in every dungeon
-        /// (chips run 0-20ish, residents 40-54), so removal is unambiguous.</summary>
-        private static void CleanChipListPollution()
-        {
-            int native = Memory.ReadInt(FishingRankList.SaveDataPtr);
-            if (native < 0x80000 || native >= 0x2000000) return;   // no save loaded
-            long listsBase = Memory.ToMmu(native) + AtlaSystem.SaveElemListOffset;
-            byte[] all = Memory.ReadBytesBatch(listsBase, AtlaSystem.DungeonCount * AtlaSystem.SaveElemListStride);
-            if (all == null) return;
-            for (int d = 0; d < AtlaSystem.DungeonCount; d++)
-            {
-                int baseOff = d * AtlaSystem.SaveElemListStride;
-                var kept = new List<short>();
-                int len = 0;
-                bool dirty = false;
-                for (; len < 128; len++)
-                {
-                    short v = BitConverter.ToInt16(all, baseOff + len * 2);
-                    if (v < 0) break;
-                    if (v == 60) { dirty = true; continue; }
-                    kept.Add(v);
-                }
-                if (!dirty) continue;
-                byte[] rebuilt = new byte[AtlaSystem.SaveElemListStride];
-                for (int i = 0; i < rebuilt.Length; i += 2)
-                    BitConverter.GetBytes((short)-1).CopyTo(rebuilt, i);
-                for (int i = 0; i < kept.Count; i++)
-                    BitConverter.GetBytes(kept[i]).CopyTo(rebuilt, i * 2);
-                Memory.WriteByteArray(listsBase + baseOff, rebuilt);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[Atlamillia] stripped {len - kept.Count} stray chip-60 entries from dungeon {d}'s save list");
-            }
         }
 
         private static bool IsAtlamilliaOwned()
