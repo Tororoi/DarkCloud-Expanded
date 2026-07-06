@@ -212,6 +212,11 @@ namespace Dark_Cloud_Improved_Version
                                         if (!townThread.IsAlive) townThread.Start();
                                         if (!dungeonthread.IsAlive) dungeonthread.Start();
                                         if (!weaponspecialeffectThread.IsAlive) weaponspecialeffectThread.Start();
+
+                                        // TEST hook: uncomment to hand a character a weapon on save load
+                                        // (Weapons.GiveWeaponIfMissing writes an empty slot at base stats).
+                                        // Weapons.GiveWeaponIfMissing(Player.RubyId, Items.mobiusring)
+
                                         CheckModWindowOptions(currentMode);
                                         ingameFlag = true;
                                     }

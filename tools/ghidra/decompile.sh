@@ -7,8 +7,10 @@
 #
 # First run does a full import+analysis (~20s); set REIMPORT=1 to force re-import.
 set -e
-export JAVA_HOME=/usr/local/opt/openjdk@21
-HEADLESS=/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless
+# Homebrew prefix differs per machine: /usr/local (Intel) vs /opt/homebrew (Apple Silicon)
+BREW="$(brew --prefix 2>/dev/null || echo /usr/local)"
+export JAVA_HOME="$BREW/opt/openjdk@21"
+HEADLESS="$(echo "$BREW"/Cellar/ghidra/*/libexec/support/analyzeHeadless | cut -d' ' -f1)"
 PROJ=/tmp/ghidraproj
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DC=/Users/thomascantwell/ROMs/dc_extracted

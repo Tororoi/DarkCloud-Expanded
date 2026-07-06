@@ -29,7 +29,26 @@
       "Bash(python3 -c \"import capstone; print\\(capstone.__version__\\)\")",
       "Bash(awk '{n=strtonum\\($1\\)} n>=0x1db2000 && n<=0x1db7000')",
       "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_main -process SCUS_971.11 -noanalysis -scriptPath /Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra -postScript FindXrefs.java \"0x1fbeb0,0x20ce30\" /tmp/xrefs4.txt)",
-      "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_main -process SCUS_971.11 -noanalysis -scriptPath /Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra -postScript FindXrefs.java \"0x1c09c0,0x1b7470,0x1c0d20\" /tmp/xb.txt)"
+      "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_main -process SCUS_971.11 -noanalysis -scriptPath /Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra -postScript FindXrefs.java \"0x1c09c0,0x1b7470,0x1c0d20\" /tmp/xb.txt)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/ghidraproj/**)",
+      "Bash(/usr/local/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless /tmp/ghidraproj dc_dun -import /Users/thomascantwell/ROMs/dc_extracted/dun.bin -processor \"r5900:LE:32:default\" -loader BinaryLoader -loader-baseAddr 0x1DABC80 -scriptPath . -preScript ApplySymbols.java -postScript DumpDecomp.java \"Get_Main_EffectPtr__Fii,MainChara_Effect__FP14BT_SHOT_EFFECTPUii,BattleActionOn_Ruby__Fv,BattleActionShotRuby__FP10CCharacterifi\" /tmp/decomp_dun.txt)",
+      "Read(//usr/local/Cellar/**)",
+      "Read(//opt/homebrew/Cellar/**)",
+      "Bash(brew list *)",
+      "Bash(mdfind -name analyzeHeadless)",
+      "Read(//Applications/**)",
+      "Bash(brew install *)",
+      "Bash(curl -sL https://api.github.com/repos/chaoticgd/ghidra-emotionengine-reloaded/releases)",
+      "Bash(python3 -c \"import json,sys; rels=json.load\\(sys.stdin\\); [print\\(r['tag_name'], [a['name'] for a in r['assets']]\\) for r in rels[:5]]\")",
+      "Bash(curl -sLO https://github.com/chaoticgd/ghidra-emotionengine-reloaded/releases/download/v2.1.36/ghidra_12.1.2_PUBLIC_20260607_ghidra-emotionengine-reloaded.zip)",
+      "Bash(unzip -o -q ghidra_12.1.2_PUBLIC_20260607_ghidra-emotionengine-reloaded.zip -d /opt/homebrew/Cellar/ghidra/12.1.2/libexec/Ghidra/Extensions/)",
+      "Read(//opt/homebrew/Cellar/ghidra/12.1.2/libexec/Ghidra/Extensions/**)",
+      "Bash(ls /opt/homebrew/opt/ | grep -i jdk; ls /opt/homebrew/Cellar/ghidra/12.1.2/libexec/support/analyzeHeadless && echo OK)",
+      "Read(//opt/homebrew/opt/**)",
+      "Read(//opt/homebrew/Cellar/ghidra/12.1.2/libexec/support/**)",
+      "Bash(rm -rf /tmp/ghidraproj)",
+      "Bash(awk '$1 >= \"0x001ae1c0\" && $1 <= \"0x001ae450\"' tools/ghidra/symbols.txt)"
     ]
   }
 }

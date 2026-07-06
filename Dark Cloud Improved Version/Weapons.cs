@@ -3881,6 +3881,72 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>TEST utility (no live callers — wire it up temporarily when a test save needs a
+        /// weapon): give <paramref name="character"/> (Player.ToanId..OsmondId) a fresh copy of
+        /// <paramref name="weaponId"/> at WeaponList base stats if they don't already own one. Writes the
+        /// first empty weapon-inventory slot directly (id/stats/elements/antis/specials; level 0, xp 0,
+        /// no attachments) — the same record layout MiniBoss's weapon boost edits. Call only once a save
+        /// is loaded in-game (e.g. from MainMenuThread's "Entered ingame" block, where a commented-out
+        /// example call lives). Returns true if the weapon was added.</summary>
+        public static bool GiveWeaponIfMissing(int character, int weaponId)
+        {
+            int entry = WeaponList.EntryAddr(weaponId);
+            if (entry < 0 || character < Player.ToanId || character > Player.OsmondId) return false;
+
+            const int slotStride = 0xF8;   // per weapon-slot record
+            const int charStride = 0xAA8;  // per character block (11 × 0xF8)
+            long charBase = Addresses.firstBagWeapon + (long)character * charStride;
+
+            // Already owned? Otherwise claim the first empty slot (id outside the weapon range).
+            int free = -1;
+            for (int s = 0; s < 10; s++)
+            {
+                int id = Memory.ReadUShort(charBase + s * slotStride);
+                if (id == weaponId) return false;
+                if (free < 0 && (id < Items.brokendagger || id > Items.swallow)) free = s;
+            }
+            if (free < 0)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"GiveWeaponIfMissing: no free weapon slot for character {character}.");
+                return false;
+            }
+
+            long slot = charBase + free * slotStride;
+            for (int i = 0; i < slotStride; i += 4) Memory.WriteInt(slot + i, 0);   // clean record (no attachments, level 0, xp 0)
+
+            ushort whp = Memory.ReadUShort(entry + WeaponList.Whp);
+            Memory.WriteUShort(slot + 0x00, (ushort)weaponId);
+            Memory.WriteUShort(slot + 0x04, Memory.ReadUShort(entry + WeaponList.Attack));
+            Memory.WriteUShort(slot + 0x06, Memory.ReadUShort(entry + WeaponList.Endurance));
+            Memory.WriteUShort(slot + 0x08, Memory.ReadUShort(entry + WeaponList.Speed));
+            Memory.WriteUShort(slot + 0x0A, Memory.ReadUShort(entry + WeaponList.Magic));
+            Memory.WriteUShort(slot + 0x0C, whp);   // whpMax
+            Memory.WriteUShort(slot + 0x10, whp);   // whp
+
+            // Elements: table shorts → slot bytes (+0x17..0x1B); HUD element (+0x16) = strongest, 5 = none.
+            int hud = 5, best = 0;
+            for (int e = 0; e < 5; e++)
+            {
+                int v = Memory.ReadUShort(entry + WeaponList.Fire + e * 2);
+                Memory.WriteByte(slot + 0x17 + e, (byte)Math.Min(v, 255));
+                if (v > best) { best = v; hud = e; }
+            }
+            Memory.WriteByte(slot + 0x16, (byte)hud);
+
+            // Anti-/slayer stats: table shorts (+0x1C..0x2E) → slot bytes (+0x1C..0x25), same order.
+            for (int a = 0; a < 10; a++)
+            {
+                int v = Memory.ReadUShort(entry + WeaponList.DinoSlayer + a * 2);
+                Memory.WriteByte(slot + 0x1C + a, (byte)Math.Min(v, 255));
+            }
+
+            Memory.WriteByte(slot + 0xEE, Memory.ReadByte(entry + WeaponList.Effect1));  // special1
+            Memory.WriteByte(slot + 0xEF, Memory.ReadByte(entry + WeaponList.Effect2));  // special2
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"GiveWeaponIfMissing: added weapon {weaponId} to character {character} slot {free}.");
+            return true;
+        }
+
         // ════════════════════════════════════════════════════════════════════════════════════════
         //  Heaven's Cloud reach + per-weapon whirlwind visual scale (runtime, data-side; no EE-code patch).
         //  Three features — see docs/weapon-reach.md / WeaponAddresses.WeaponCollision:
@@ -3903,6 +3969,19 @@ namespace Dark_Cloud_Improved_Version
         static long[] _whirlRoots = System.Array.Empty<long>(); // MMU bases of the fuusya "kiru" roots we scale
         static readonly float[] _whirlBind3x3 = new float[9];   // root's bind local-matrix 3x3 (target = bind × scale)
         static bool _whirlBindRead;
+
+        // ── Ruby Mobius-Ring charge-ball scale (Mot_List keyframe patch; see SetRubyBallScale) ──
+        static float _rubyBallApplied = 1.0f;  // factor currently baked into the scale keyframes
+        static long  _rubyChainHead;           // MMU addr of the Mot_List head the factor was applied to
+        static float _rubyOrigKey0;            // original (1×) first scale-key value — reload canary
+        static long  _rubyBtAddr;              // MMU addr of the BT_SHOT_EFFECT the radii were captured from
+        static float _rubyBtFactor = 1.0f;     // factor currently applied to the BT collision radii
+        static readonly float[] _rubyBtOrig = new float[WeaponCollision.BtShotRadiiCount]; // original per-phase radii
+
+        // The exact chain-1 track-type set MotionProc (0x147D20) dispatches on. Anything else in a walked
+        // record means we're not looking at a real Mot_List — stop before touching memory.
+        static bool IsKnownTrackType(int t)
+            => t == 0 || t == 1 || t == 2 || t == 0xC || (t >= 0x1E && t <= 0x21) || t == 0x28 || t == 0x29 || t == 0x32 || t == 0x33;
 
         static bool _reachStarted;
 
@@ -4211,6 +4290,197 @@ namespace Dark_Cloud_Improved_Version
             if (roots.Count == 0) { _whirlLocateBackoff = 8; return; }   // effect not loaded yet → retry later
             _whirlRoots = roots.ToArray();
             foreach (long root in _whirlRoots) WriteWhirlScaled(root);
+        }
+
+        // ════════════════════════════════════════════════════════════════════════════════════════
+        //  Ruby Mobius-Ring charge-ball growth. The ball + fired orbs are CSHOT_EFFECT slots of the
+        //  MainCharaEffectBase pool (decomp-confirmed: RubyOrbs' addresses ARE the pool's per-slot
+        //  fields; the objects are full CCharacters). Three coordinated levers, all engine-fed:
+        //   1. Mot_List SCALE keyframes (ratio-multiply) — the billboard sprite layers, whose size the
+        //      motion animates per frame (CONFIRMED working in-game).
+        //   2. CObject scale (+0x90/94/98) on template + slots — Draw__10CCharacter pushes it into the
+        //      root frame every draw, scaling the whole hierarchy (the ball's core geometry, which the
+        //      sprite tracks don't cover — visibly element-dependent otherwise).
+        //   3. BT_SHOT_EFFECT per-phase collision radii (BT+0x28) — Step builds the shot's damage
+        //      sphere from these, so the hit grows with the visual.
+        //  All slots share one Mot_List/BT, so the fired orbs inherit everything. Layout consts + RE
+        //  notes in WeaponAddresses.cs. Driven from CustomEffects.MobiusRing; restored via factor 1.0.
+        // ════════════════════════════════════════════════════════════════════════════════════════
+
+        /// <summary>Grow Ruby's charge ball / shot orbs (visual + collision) to <paramref name="factor"/>×
+        /// (1.0 = original). Idempotent per factor; detects a reloaded effect (character/floor change) and
+        /// rebases. Only writes during active field play.</summary>
+        public static void SetRubyBallScale(float factor)
+        {
+            if (!Player.CheckDunIsWalkingMode()) return;
+
+            // 1. Sprite layers: ratio-patch the chain-1 SCALE keyframe values. REDUNDANT with the core
+            // object scale (billboards inherit the root scale — live-confirmed 2026-07-06: both together
+            // double-scale the sprite layers), so this lever is normally OFF; kept for experiments.
+            // CHAIN-1 ONLY: chain-2 (MotionProc2) records are vertex-skinning data with a different layout
+            // (+0x10 = blend weights) — patching them corrupts vertex animation (the Read Abort crashes).
+            if (WeaponCollision.RubyBallScaleSprites)
+            {
+                var tracks = new System.Collections.Generic.List<(long Keys, int Count)>();
+                long head = 0;
+                for (int bank = 0; bank < 8; bank++)
+                {
+                    // Trust a bank only if its motion-id range fields look sane (GetMotionParam's own check).
+                    long chr = WeaponCollision.MainCharaEffectBase + WeaponCollision.EffectTemplateOff;
+                    int first = Memory.ReadInt(chr + 0x3E0 + bank * 4);
+                    int end   = Memory.ReadInt(chr + 0x400 + bank * 4);
+                    int mpN   = Memory.ReadInt(chr + 0xC20 + bank * 4);
+                    if (!IsRamPtr(mpN) || first < 0 || end <= first || end > 100) continue;
+                    long mp = Memory.ToMmu(mpN);
+
+                    int headN = Memory.ReadInt(mp + WeaponCollision.MotionParamChain1);
+                    if (!IsRamPtr(headN)) continue;
+                    long rec = Memory.ToMmu(headN);
+                    if (head == 0) head = rec;                                 // identity for the rebase check
+                    for (int i = 0; i < 64 && rec != 0; i++)
+                    {
+                        int frame = Memory.ReadInt(rec + WeaponCollision.MotRecFrameIdx);
+                        int type  = Memory.ReadInt(rec + WeaponCollision.MotRecType);
+                        int cnt   = Memory.ReadInt(rec + WeaponCollision.MotRecKeyCount);
+                        int keysN = Memory.ReadInt(rec + WeaponCollision.MotRecKeysPtr);
+                        int nextN = Memory.ReadInt(rec + WeaponCollision.MotRecNext);
+                        if ((uint)frame >= 32 || cnt <= 0 || cnt > 300 || !IsRamPtr(keysN) || !IsKnownTrackType(type)) break;
+                        if (type == WeaponCollision.MotTypeScale)
+                        {
+                            // Keys must read as keyframes: small non-decreasing integer times at +0 of each 0x20.
+                            long keys = Memory.ToMmu(keysN);
+                            int t0 = Memory.ReadInt(keys);
+                            int t1 = cnt > 1 ? Memory.ReadInt(keys + WeaponCollision.MotKeyStride) : t0;
+                            if (t0 >= 0 && t0 <= 1000 && t1 >= t0 && t1 <= 1000)
+                                tracks.Add((keys, cnt));
+                        }
+                        rec = nextN == 0 ? 0 : Memory.ToMmu(nextN);
+                    }
+                }
+                if (tracks.Count > 0)
+                {
+                    // Rebase on reload: a new chain address, or the canary key reading at its 1× value again
+                    // (same address, freshly rebuilt data), means the keyframes are back at original scale.
+                    float v0 = Memory.ReadFloat(tracks[0].Keys + WeaponCollision.MotKeyValueOff);
+                    if (head != _rubyChainHead) { _rubyChainHead = head; _rubyBallApplied = 1f; _rubyOrigKey0 = v0; }
+                    else if (Math.Abs(v0 - _rubyOrigKey0 * _rubyBallApplied) > Math.Abs(_rubyOrigKey0) * 0.05f + 0.001f)
+                        { _rubyBallApplied = 1f; _rubyOrigKey0 = v0; }
+
+                    float ratio = factor / _rubyBallApplied;
+                    if (Math.Abs(ratio - 1f) >= 0.005f)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"RubyBall: applying sprite keyframe scale {factor:F2} ({tracks.Count} tracks)");
+                        foreach (var (keys, cnt) in tracks)
+                        {
+                            byte[] blk = Memory.ReadBytesBatch(keys, cnt * WeaponCollision.MotKeyStride);
+                            if (blk == null) continue;
+                            for (int k = 0; k < cnt; k++)
+                                for (int c = 0; c < 3; c++)                    // value vec xyz at key+0x10
+                                {
+                                    int off = k * WeaponCollision.MotKeyStride + WeaponCollision.MotKeyValueOff + c * 4;
+                                    BitConverter.GetBytes(BitConverter.ToSingle(blk, off) * ratio).CopyTo(blk, off);
+                                }
+                            Memory.WriteByteArray(keys, blk);
+                        }
+                        _rubyBallApplied = factor;
+                    }
+                }
+            }
+
+            // 2. Core geometry: object scale on the template + every slot. The engine (Draw__10CCharacter)
+            // re-applies it to the root frame each draw, so one write per factor change suffices.
+            long tmpl = WeaponCollision.MainCharaEffectBase + WeaponCollision.EffectTemplateOff;
+            if (WeaponCollision.RubyBallScaleCore &&
+                Math.Abs(Memory.ReadFloat(tmpl + WeaponCollision.EffectObjectScale) - factor) > 0.005f)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"RubyBall: applying core object scale {factor:F2}");
+                for (int o = -1; o < WeaponCollision.EffectSlotCount; o++)
+                {
+                    long obj = o < 0 ? tmpl
+                        : WeaponCollision.MainCharaEffectBase + WeaponCollision.EffectSlotObjectsOff + (long)o * WeaponCollision.EffectSlotStride;
+                    Memory.WriteFloat(obj + WeaponCollision.EffectObjectScale,     factor);
+                    Memory.WriteFloat(obj + WeaponCollision.EffectObjectScale + 4, factor);
+                    Memory.WriteFloat(obj + WeaponCollision.EffectObjectScale + 8, factor);
+                }
+            }
+
+            // 3. Collision via BT radii — ⚠ CRASHES PCSX2 (live-bisected 2026-07-06: this lever alone,
+            // one float write BT+0x2C 5.0→6.25, still Read Abort; mechanism unresolved — the live BT is a
+            // runtime-built registry entry whose static content differs). Kept for reference, toggle OFF.
+            // The shipping collision path is MaintainRubyOrbHitbox (enemy-body inflation — mathematically
+            // equivalent: hit ⇔ dist < orbR + bodyR) driven from CustomEffects.MobiusRing.
+            int btN = Memory.ReadInt(WeaponCollision.MainCharaEffectBase + WeaponCollision.BtShotPtrOff);
+            if (WeaponCollision.RubyBallScaleCollision && IsRamPtr(btN))
+            {
+                long bt = Memory.ToMmu(btN);
+                if (bt != _rubyBtAddr)                                         // new BT (element/char change) → capture originals
+                {
+                    _rubyBtAddr = bt; _rubyBtFactor = 1f;
+                    for (int i = 0; i < WeaponCollision.BtShotRadiiCount; i++)
+                        _rubyBtOrig[i] = Memory.ReadFloat(bt + WeaponCollision.BtShotRadiiOff + i * 4);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"RubyBall: BT 0x{bt:X} radii captured [{_rubyBtOrig[0]:F2}, {_rubyBtOrig[1]:F2}, {_rubyBtOrig[2]:F2}, {_rubyBtOrig[3]:F2}]");
+                }
+                if (Math.Abs(factor - _rubyBtFactor) > 0.005f)
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"RubyBall: applying collision scale {factor:F2} (phases 1..3)");
+                    for (int i = 1; i < WeaponCollision.BtShotRadiiCount; i++) // skip phase 0 (held ball)
+                        if (_rubyBtOrig[i] > 0f && _rubyBtOrig[i] < 100f)      // sane radii only; 0 = phase without a hit
+                            Memory.WriteFloat(bt + WeaponCollision.BtShotRadiiOff + i * 4, _rubyBtOrig[i] * factor);
+                    _rubyBtFactor = factor;
+                }
+            }
+        }
+
+        // ── Ruby orb collision growth via enemy-body inflation (the SAFE collision path) ──
+        // hit ⇔ dist(orb, part) < orbRadius + bodyRadius, so adding (factor−1)×orbRadius to every enemy
+        // body radius is exactly equivalent to growing the orb's damage sphere — with none of the BT
+        // side effects (wall checks stay native). Same machinery as the HC reach hitbox (own snapshot).
+        static readonly float[,] _rubyOrbHitboxOrig = new float[16, BodyCollision.MaxBodyParts];
+        static bool _rubyOrbHitboxActive;
+
+        /// <summary>Inflate every active enemy's body radii to make Ruby's scaled orbs (<paramref name="factor"/>×)
+        /// connect as if their damage sphere had grown. Call while the orbs are in flight; restore when they die.</summary>
+        public static void MaintainRubyOrbHitbox(float factor)
+        {
+            float bonus = (factor - 1f) * WeaponCollision.RubyOrbBaseRadius;
+            if (bonus <= 0.01f || !Player.CheckDunIsWalkingMode()) return;
+            _rubyOrbHitboxActive = true;
+            for (int s = 0; s < 16; s++)
+            {
+                long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                if (Memory.ReadInt(slot + EnemySlotOffsets.RenderStatus) <= 0)  // empty slot → forget cached stock
+                {
+                    for (int p = 0; p < BodyCollision.MaxBodyParts; p++) _rubyOrbHitboxOrig[s, p] = 0f;
+                    continue;
+                }
+                for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                {
+                    long addr = BodyCollision.RadiusAddr(s, p);
+                    float r = Memory.ReadFloat(addr);
+                    float orig = _rubyOrbHitboxOrig[s, p];
+                    if (orig <= 0.01f)                                          // capture stock the first time
+                    {
+                        if (r <= 0.01f || r >= 1000f) continue;                 // no real hitbox on this part
+                        orig = _rubyOrbHitboxOrig[s, p] = r;
+                    }
+                    if (Math.Abs(r - (orig + bonus)) > 0.05f) Memory.WriteFloat(addr, orig + bonus);
+                }
+            }
+        }
+
+        /// <summary>Restore every body radius inflated by <see cref="MaintainRubyOrbHitbox"/> to its stock value.</summary>
+        public static void RestoreRubyOrbHitbox()
+        {
+            if (!_rubyOrbHitboxActive) return;
+            for (int s = 0; s < 16; s++)
+                for (int p = 0; p < BodyCollision.MaxBodyParts; p++)
+                    if (_rubyOrbHitboxOrig[s, p] > 0.01f)
+                    {
+                        Memory.WriteFloat(BodyCollision.RadiusAddr(s, p), _rubyOrbHitboxOrig[s, p]);
+                        _rubyOrbHitboxOrig[s, p] = 0f;
+                    }
+            _rubyOrbHitboxActive = false;
         }
 
     }

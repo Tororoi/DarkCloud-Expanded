@@ -221,6 +221,73 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly int[] CFrameLocal3x3 =
             { 0x1D0, 0x1D4, 0x1D8,   0x1E0, 0x1E4, 0x1E8,   0x1F0, 0x1F4, 0x1F8 };
 
+        // ── Ruby Mobius-Ring charge-ball growth (see Weapons.SetRubyBallScale / CustomEffects.MobiusRing) ──
+        // Ruby's charging ball + fired orbs are CSHOT_EFFECT slots of the MainCharaEffectBase pool (decomp-
+        // confirmed: the RubyOrbs addresses are the pool's per-slot fields). The visible ball is a set of
+        // BILLBOARD sprite frames (c05_<elem>0N.chr "grid*__cappz") sized by per-frame SCALE keyframe tracks
+        // in the .mot — NOT by the root CFrame (root has no tracks; billboards ignore inherited scale, which
+        // is why root-matrix scaling shows nothing). So the ball is grown by patching the RUNTIME Mot_List
+        // SCALE-track keyframe VALUES (built by CreateAnimeDataEX 0x149090, read by MotionProc 0x147D20):
+        // multiply each key's value vec by the factor and the engine animates the bigger ball every frame.
+        // All pool slots share ONE Mot_List (Entry2 copies the pointers), so one patch covers ball + orbs.
+        // The ball only starts growing once the Mobius charge is fully built; size tracks the damage
+        // multiplier M = currentDamage/baseDamage: scale = 1 + (M-1)*RubyBallGrowthPerMultiple, clamped to
+        // RubyBallMaxScale. Both knobs are eyeball-calibration (tune live).
+        internal const float RubyBallMaxScale          = 5.0f;   // hard cap on ball/orb size (M can reach 1000s)
+        internal const float RubyBallGrowthPerMultiple = 1.0f;  // ball-scale gained per +1.0 of damage multiplier
+        // Per-lever toggles (crash triage: each lever logs "RubyBall: applying …" when it writes, so the
+        // last line in the log before a crash names the culprit; flip that one off).
+        // CRASH POST-MORTEM (2026-07-06 "Read Abort" ×3): the sprite walker was patching CHAIN-2 records
+        // too — MotionProc2 (0x148860) chain-2 records are VERTEX-SKINNING data (key +0x00 = vertex index
+        // used to address memory, +0x10 = blend weight), NOT transform tracks, so the ratio-multiply
+        // corrupted vertex animation → EE Read Abort. Present in ALL crash sessions (and v4 — which just
+        // got lucky/used a different element), so neither Core nor Collision was ever properly isolated.
+        // The walker is now chain-1-only with strict record+key validation.
+        // Live bisect (2026-07-06): CORE alone scales EVERYTHING visual (billboards inherit the root
+        // scale) — Sprites ON TOP double-scales the sprite layers, so it stays OFF. Collision via the BT
+        // radii CRASHES even in isolation (one float write → Read Abort; unresolved) — replaced by
+        // enemy-body inflation (Weapons.MaintainRubyOrbHitbox), which is mathematically equivalent.
+        internal const bool  RubyBallScaleSprites   = false;     // 1. Mot_List chain-1 SCALE keyframe patch (redundant with Core)
+        internal const bool  RubyBallScaleCore      = true;      // 2. CObject scale on template+slots (THE visual lever)
+        internal const bool  RubyBallScaleCollision = false;     // 3. BT radii — ⚠ CRASHES, keep off (see Weapons.cs)
+        internal const float RubyOrbBaseRadius      = 5.0f;      // orb damage-sphere radius (BT+0x2C, live-captured [5,5,0,0])
+        // Runtime motion-track chain. The pool's template object (pool+0x10) and its 8 slot copies are full
+        // CCharacters (__ct__12CSHOT_EFFECT: __ct__10CCharacter at +0x10, slot array ctor 0x143530). Motion
+        // data hangs off the CCharacter's MotionParam bank-pointer array at +0xC20 (8 native ptrs, bank motion-
+        // id ranges at +0x3E0/+0x400 — RE'd from GetMotionParam 0x1383B0). Each MotionParam (0x80 bytes):
+        // +0x00 morph data, +0x04 Mot_List chain-1 (MotionProc), +0x08 chain-2 (MotionProc2), +0x10 MOTION_STATE,
+        // +0x60 FRAME_INF, +0x64 MOTION_INFO (from CreateAnimeDataEX 0x149090 + Step__10CCharacter 0x138530).
+        // Entry2 copies the template's MotionParam into every slot SHALLOWLY, so all slots share ONE set of
+        // Mot_List records/keyframes — one patch covers the ball and the fired orbs.
+        // Mot_List record = 6 ints {frameIdx, subIdx, trackType, keyCount, keysPtr, nextPtr}; keys are
+        // 0x20-byte records with the time int at +0 and the value vec (3 floats) at +0x10. Track types as in
+        // MotionProc: 0=rotation(quat), 1=SCALE, 2=translation, 0xC=morph, 0x28/0x29=material, 0x1E-0x21=camera,
+        // 0x32/0x33=visibility.
+        internal const long EffectTemplateMotionParams = 0x10 + 0xC20; // pool + this = template's 8 MotionParam ptrs
+        internal const int  MotionParamChain1 = 0x04;        // MotionParam + this = Mot_List chain-1 head (native ptr)
+        internal const int  MotionParamChain2 = 0x08;        // MotionParam + this = Mot_List chain-2 head (native ptr)
+        // Whole-object scale: Draw__10CCharacter (0x139310) pushes the CObject scale (+0x90/94/98) into the
+        // root frame's TRS scale on EVERY draw — the engine-maintained whole-hierarchy scale (covers the ball's
+        // core geometry, which the per-sprite SCALE tracks don't). Objects: template @pool+0x10, slots
+        // @pool+0x11C0+s*0x11B0 (see EffectSlotStride/EffectSlotCount).
+        internal const int  EffectTemplateOff   = 0x10;      // pool + this = template CCharacter
+        internal const int  EffectSlotObjectsOff= 0x11C0;    // pool + this + s*EffectSlotStride = slot CCharacter
+        internal const int  EffectObjectScale   = 0x90;      // CObject scale x (y +0x94, z +0x98)
+        // Shot collision: Step__12CSHOT_EFFECT (0x1AC180) builds each shot's damage sphere from the pool's
+        // BT_SHOT_EFFECT per-phase radius array — radius = *(float*)(BT + 0x28 + phase*4), phases 0-3; the
+        // same values gate the wall-collision check. BT native ptr = *(pool + 0) (set by Entry2).
+        internal const int  BtShotPtrOff    = 0x00;          // pool + this = BT_SHOT_EFFECT native ptr
+        internal const int  BtShotRadiiOff  = 0x28;          // BT + this = float[4] per-phase collision radius
+        internal const int  BtShotRadiiCount= 4;
+        internal const int  MotRecFrameIdx  = 0x00;
+        internal const int  MotRecType      = 0x08;
+        internal const int  MotRecKeyCount  = 0x0C;
+        internal const int  MotRecKeysPtr   = 0x10;
+        internal const int  MotRecNext      = 0x14;
+        internal const int  MotKeyStride    = 0x20;
+        internal const int  MotKeyValueOff  = 0x10;
+        internal const int  MotTypeScale    = 1;
+
         // ── Charge attack state (ToanKey_Play, RE'd from SCUS_971.11) ──
         // Drives CustomEffects.HeavensCloudEffect's charge ramp + MaintainEnemyHitbox's whirl gate. See
         // Weapons.IsChargingWhirlwind / IsWhirlwindActive and the toan-charge-states memory.
