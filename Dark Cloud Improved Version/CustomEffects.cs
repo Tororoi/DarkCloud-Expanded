@@ -881,6 +881,48 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Ability Name: Quick Draw (Small Sword, Tsukikage, Heaven's Cloud)
+        /// While a Quick Draw sword is wielded, Toan's opening swing comes out almost instantly:
+        /// once the first combo attack (action state 0x24) starts, the animation frame cursor
+        /// (<see cref="WeaponCollision.AnimFrameCursor"/>) is snapped forward past the wind-up
+        /// to just before the hit window. ToanKey_Play gates the forward step-in (frames
+        /// 820–820.5), weapon trail (824–825), swing sound (825) and hit window (825–828) off
+        /// that same cursor, so skipping 820.5 → 824 keeps all of them — only the wind-up
+        /// disappears (~14 game ticks → ~3). Follow-up combo hits (actions 0x25–0x28) and the
+        /// charge attacks are untouched. Tsukikage and Heaven's Cloud inherit the effect for
+        /// lineage reasons (the Small Sword builds up into them), on top of their own effects.
+        /// </summary>
+        public static void SmallSword()
+        {
+            while (Player.InDungeonFloor())
+            {
+                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
+                ushort equippedId = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                if (equippedId != Items.smallsword && equippedId != Items.tsukikage &&
+                    equippedId != Items.heavenscloud)
+                    break;
+
+                if (Player.CurrentCharacterNum() == Player.ToanId &&
+                    !Player.CheckDunIsPaused() &&
+                    Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionComboFirst)
+                {
+                    float frame = Memory.ReadFloat(WeaponCollision.AnimFrameCursor);
+                    // Wait until the engine's one-shot step-in write (820–820.5) has run, then
+                    // fast-forward. The cursor advances 0.3/tick, so at least one poll always
+                    // lands inside the window; a late catch just skips a little less.
+                    if (frame >= WeaponCollision.Combo1WindupSettled &&
+                        frame < WeaponCollision.Combo1QuickDrawTarget)
+                        Memory.WriteFloat(WeaponCollision.AnimFrameCursor,
+                            WeaponCollision.Combo1QuickDrawTarget);
+                }
+
+                // Tighter poll than the other effect loops: latency here directly delays the swing.
+                Thread.Sleep(8);
+            }
+        }
+
+        /// <summary>
         /// Ability Name: Solar Harvest (Sun Sword, Big Bang)
         /// While the Sun Sword — or its evolution, Big Bang — is wielded, each enemy on the floor
         /// has a 1% chance (rolled once per slot per floor) to drop a Sun attachment instead of

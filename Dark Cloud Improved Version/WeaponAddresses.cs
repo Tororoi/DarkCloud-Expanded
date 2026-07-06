@@ -297,6 +297,22 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
         internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
 
+        // ── Quick Draw (Small Sword) — first-swing wind-up skip ──
+        // ToanKey_Play keys EVERYTHING off the active character's animation frame cursor
+        // (DAT_01ea2010 = CCharacter 0x1ea1d20 + 0x2F0, float). First combo swing (action 0x24)
+        // timeline, from the ToanKey_Play decompile + ELF gp-data:
+        //   820.0–820.5  one-shot forward step-in write (speed 0.17 → DAT_01dc4590)
+        //   824.0–825.0  weapon-trail effect spawn (CWeaponEffect)
+        //   825.0        swing whoosh sound
+        //   825.0–828.0  hit window (CCollisionData::Set + basic_damage)
+        //   ~830         motion end → chain to 0x25 / windup / exit
+        // Snapping the cursor forward once it has passed the step-in window preserves the
+        // step-in, trail, sound and hit — only the wind-up frames disappear. See
+        // CustomEffects.SmallSword (Quick Draw).
+        internal const long  AnimFrameCursor        = 0x21EA2010; // float: active-char motion frame cursor
+        internal const float Combo1WindupSettled    = 820.5f;     // past the engine's one-shot step-in write
+        internal const float Combo1QuickDrawTarget  = 824.0f;     // just before trail spawn + hit window
+
         /// <summary>ELF global <c>hitCnt</c> (native 0x2A2C64): the hit-spark ring counter,
         /// incremented by <c>CMonstorUnit::CheckDmg</c> (0x1D9F10) each time a player attack
         /// deals damage to a monster (wraps 0-15). Watching it across a swing is the "did that

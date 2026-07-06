@@ -16,6 +16,11 @@ with no name (frames like `0-0`/`1-1`) are unused/placeholder slots kept for ind
 
 *Motions: c01d.chr @ data.dat 0x19363000 — sword; has 攻撃(1)/(2) + full 溜め攻撃 (charge→whirlwind) chain — the feature's target character*
 
+> NOTE: the source KEY block has one line **commented out** (`// KEY 540, 546, 0.4 //26投げ開始`,
+> throw-start). The loader skips it, so it is NOT a motion slot — the table below matches the RUNTIME
+> ids (verified against `ToanKey_Play`: first combo swing = motion id 0x24 = **36** 連続攻撃1, end frame
+> read from `DAT_01ea2064 + id*0x10 + 4`). Toan is the only playable character with a commented-out KEY.
+
 | Idx | Frames | Speed | Name (JP) | Meaning |
 |---|---|---|---|---|
 | 0 | 10–20 | 0.2 | 立ち | idle |
@@ -44,22 +49,21 @@ with no name (frames like `0-0`/`1-1`) are unused/placeholder slots kept for ind
 | 23 | 460–480 | 0.2 | やられ | downed |
 | 24 | 715–750 | 0.4 | 技２ 24やられ | skill２ 24downed |
 | 25 | 196–196 | 0 | 溜め攻撃loop3 | charge attackloop3 |
-| 26 | 540–546 | 0.4 | 投げ開始 | throw (start) |
-| 27 | 546–546 | 0 | 投げ停止 | throw (stop) |
-| 28 | 546–566 | 0.4 | 投げる | throw |
-| 29 | 620–655 | 0.25 | 飲む | drink |
-| 30 | 690–710 | 0.65 | ダメージ受け走り | run (hit) |
-| 31 | 756–766 | 0.3 | 溜め移動 | charge move |
-| 32 | 660–680 | 0.5 | ダメだし | (dmg-out) |
-| 33 | 570–590 | 0.3 | 落下モーション | fall motion |
-| 34 | 778–788 | 0.3 | ガード移動 | guard move |
-| 35 | 792–802 | 0.3 | Gget In | Gget In |
-| 36 | 805–815 | 0.3 | Gget Loop | Gget Loop |
-| 37 | 820–830 | 0.3 | 連続攻撃1 | combo attack1 |
-| 38 | 830–838 | 0.3 | 連続攻撃2 | combo attack2 |
-| 39 | 838–847 | 0.3 | 連続攻撃1 | combo attack1 |
-| 40 | 847–857 | 0.3 | 連続攻撃2 | combo attack2 |
-| 41 | 856–884 | 0.3 | 連続攻撃3 | combo attack3 |
+| 26 | 546–546 | 0 | 投げ停止 | throw (stop) |
+| 27 | 546–566 | 0.4 | 投げる | throw |
+| 28 | 620–655 | 0.25 | 飲む | drink |
+| 29 | 690–710 | 0.65 | ダメージ受け走り | run (hit) |
+| 30 | 756–766 | 0.3 | 溜め移動 | charge move |
+| 31 | 660–680 | 0.5 | ダメだし | (dmg-out) |
+| 32 | 570–590 | 0.3 | 落下モーション | fall motion |
+| 33 | 778–788 | 0.3 | ガード移動 | guard move |
+| 34 | 792–802 | 0.3 | Gget In | Gget In |
+| 35 | 805–815 | 0.3 | Gget Loop | Gget Loop |
+| 36 | 820–830 | 0.3 | 連続攻撃1 | combo attack1 |
+| 37 | 830–838 | 0.3 | 連続攻撃2 | combo attack2 |
+| 38 | 838–847 | 0.3 | 連続攻撃1 | combo attack1 |
+| 39 | 847–857 | 0.3 | 連続攻撃2 | combo attack2 |
+| 40 | 856–884 | 0.3 | 連続攻撃3 | combo attack3 |
 
 ### Xiao `c04b`
 

@@ -84,7 +84,7 @@ namespace Dark_Cloud_Improved_Version
             new WeaponData { Id = 282, Code = "c01w25", Name = "Evilcise",         Dcol1 =   9.437f, CommenuCombatScale = 1.000f,
                              MesEntry = 457, ModDescription = "Cursed sword\nharboring jealous spirit." },
             new WeaponData { Id = 283, Code = "c01w26", Name = "Small Sword",      Dcol1 =   6.612f, CommenuCombatScale = 1.000f,
-                             MesEntry = 458, ModDescription = "Light and easy to use\nsword." },
+                             MesEntry = 458, ModDescription = "Light and easy to use.\nDraws faster than\nthe eye can see." },
             new WeaponData { Id = 284, Code = "c01w27", Name = "Sand Breaker",     Dcol1 =   9.992f, CommenuCombatScale = 1.000f,
                              MesEntry = 459, ModDescription = "Made of desert sand.\nAbsorbs water." },
             new WeaponData { Id = 285, Code = "c01w28", Name = "Drain Seeker",     Dcol1 =  11.494f, CommenuCombatScale = 1.000f,
