@@ -58,7 +58,7 @@ namespace Dark_Cloud_Improved_Version
         /// that moment CMonstorUnit::CheckDmg (0x1D9F10) blocks the player's hit — plays the guard clink (SE 0xA2),
         /// nudges the enemy back, and SKIPS the damage. Zeroing the flag makes CheckDmg's guard check find no
         /// active window, so the hit lands (the enemy still animates its guard). Written once at spawn (not per
-        /// frame), so a data-side zero holds with no race. Used by CustomEffects.DarkCloud (guard-break).
+        /// frame), so a data-side zero holds with no race. Used by CustomEffects.DarkCloudEffect (guard-break).
         /// </summary>
         internal static class GuardWindows
         {
@@ -81,7 +81,7 @@ namespace Dark_Cloud_Improved_Version
         /// 4=light). CMonstorUnit::CheckDmg (0x1D9F10) rebuilds the enemy's attack CCollisionData entry from these
         /// each frame (reaction → entry +0x4C), which BtCheckDamageProc reads to decide guardability. So writing
         /// ReactionAddr from 3→2 makes that melee attack guardable (the player's guard then blocks it). See
-        /// [[guard-break-and-knockback]] and CustomEffects.SeventhHeaven. Up to 16 cols per enemy.
+        /// [[guard-break-and-knockback]] and CustomEffects.SeventhHeavenEffect. Up to 16 cols per enemy.
         /// </summary>
         internal static class EnemyAttackParams
         {

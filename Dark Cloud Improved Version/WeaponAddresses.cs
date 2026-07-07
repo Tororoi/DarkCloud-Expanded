@@ -221,7 +221,7 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly int[] CFrameLocal3x3 =
             { 0x1D0, 0x1D4, 0x1D8,   0x1E0, 0x1E4, 0x1E8,   0x1F0, 0x1F4, 0x1F8 };
 
-        // ── Ruby Mobius-Ring charge-ball growth (see Weapons.SetRubyBallScale / CustomEffects.MobiusRing) ──
+        // ── Ruby Mobius-Ring charge-ball growth (see Weapons.SetRubyBallScale / CustomEffects.MobiusRingEffect) ──
         // Ruby's charging ball + fired orbs are CSHOT_EFFECT slots of the MainCharaEffectBase pool (decomp-
         // confirmed: the RubyOrbs addresses are the pool's per-slot fields). The visible ball is a set of
         // BILLBOARD sprite frames (c05_<elem>0N.chr "grid*__cappz") sized by per-frame SCALE keyframe tracks
@@ -308,7 +308,7 @@ namespace Dark_Cloud_Improved_Version
         //   ~830         motion end → chain to 0x25 / windup / exit
         // Snapping the cursor forward once it has passed the step-in window preserves the
         // step-in, trail, sound and hit — only the wind-up frames disappear. See
-        // CustomEffects.SmallSword (Quick Draw).
+        // CustomEffects.SmallSwordEffect (Quick Draw).
         internal const long  AnimFrameCursor        = 0x21EA2010; // float: active-char motion frame cursor
         internal const float Combo1WindupSettled    = 820.5f;     // past the engine's one-shot step-in write
         internal const float Combo1QuickDrawTarget  = 824.0f;     // just before trail spawn + hit window
@@ -459,7 +459,7 @@ namespace Dark_Cloud_Improved_Version
         /// the signed char for ~54 weapons). Special cases in the same block: Serpent Sword
         /// (id 268) grants nothing until game flag 0x30 is set, and while the player is
         /// monster-transformed (UserStatusBase+TransformStateOffset == 10) kills DRAIN abs
-        /// instead of granting. Backs CustomEffects.MachoSwordTick (ABS rollover).
+        /// instead of granting. Backs CustomEffects.MachoSwordEffect (ABS rollover).
         /// </summary>
         internal static class AbsRollover
         {
@@ -531,7 +531,7 @@ namespace Dark_Cloud_Improved_Version
         // value-changing poke to a hot instruction killed the emulator the same second (log:
         // 19:24:09). Identical-value writes were benign. ALL patching must stay data-only; the
         // 7 Branch Sword status-break effect is therefore implemented post-hoc on the sphere
-        // (see AttachBoard below + CustomEffects.SevenBranchTick), not by patching
+        // (see AttachBoard below + CustomEffects.SevenBranchSwordEffect), not by patching
         // WeaponStatusBreakEnable/SetStatusBreak.
 
         /// <summary>The status-break stat-transfer factor: a DATA float (0.6f) at native 0x2A1890,

@@ -69,29 +69,29 @@ namespace Dark_Cloud_Improved_Version
 
         //Weapon threads, only 1 should run at a time
         public static Thread boneDoorThread = new Thread(new ThreadStart(CustomEffects.BoneDoorTrigger));
-        public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeaven));
-        public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
-        public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
-        public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
-        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
-        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
-        public static Thread smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
-        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloud));
-        public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
+        public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeavenEffect));
+        public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSwordEffect));
+        public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.EvilciseEffect));
+        public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.ManeaterEffect));
+        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSwordEffect));
+        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomEffects.TsukikageEffect));
+        public static Thread smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
+        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloudEffect));
+        public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGearEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
-        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
-        public static Thread braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
-        public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
-        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
-        public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
-        public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
-        public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrath));
-        public static Thread babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpear));
-        public static Thread cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
-        public static Thread supernovaThread = new Thread(new ThreadStart(CustomEffects.Supernova));
-        public static Thread starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreaker));
-        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSword));
+        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSwordEffect));
+        public static Thread braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArkEffect));
+        public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammerEffect));
+        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTunaEffect));
+        public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.InfernoEffect));
+        public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRingEffect));
+        public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrathEffect));
+        public static Thread babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpearEffect));
+        public static Thread cactusThread = new Thread(new ThreadStart(CustomEffects.CactusEffect));
+        public static Thread supernovaThread = new Thread(new ThreadStart(CustomEffects.SupernovaEffect));
+        public static Thread starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreakerEffect));
+        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSwordEffect));
         public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
 
@@ -157,7 +157,7 @@ namespace Dark_Cloud_Improved_Version
                         Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
                         !evilciseThread.IsAlive)
                     {
-                        evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+                        evilciseThread = new Thread(new ThreadStart(CustomEffects.EvilciseEffect));
                         evilciseThread.Start();
                     }
 
@@ -166,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
                         Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
                         !maneaterThread.IsAlive)
                     {
-                        maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
+                        maneaterThread = new Thread(new ThreadStart(CustomEffects.ManeaterEffect));
                         maneaterThread.Start();
                     }
 
@@ -198,14 +198,14 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!seventhHeavenThread.IsAlive)
                                         {
-                                            seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeaven));
+                                            seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeavenEffect));
                                             seventhHeavenThread.Start();
                                         }
 
                                         // 7th Heaven also inherits Dark Cloud's Guard Crush (lineage)
                                         if (!darkCloudThread.IsAlive)
                                         {
-                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloud));
+                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloudEffect));
                                             darkCloudThread.Start();
                                         }
                                         break;
@@ -214,7 +214,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!chronicleSwordThread.IsAlive)
                                         {
-                                            chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
+                                            chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSwordEffect));
                                             chronicleSwordThread.Start();
                                         }
                                         break;
@@ -231,14 +231,14 @@ namespace Dark_Cloud_Improved_Version
                                         // Heaven's Cloud also inherits Moonlit Focus (Tsukikage lineage)
                                         if (!tsukikageThread.IsAlive)
                                         {
-                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
+                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.TsukikageEffect));
                                             tsukikageThread.Start();
                                         }
 
                                         // ...and Quick Draw (Small Sword lineage)
                                         if (!smallSwordThread.IsAlive)
                                         {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
+                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
                                             smallSwordThread.Start();
                                         }
                                         break;
@@ -248,7 +248,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!evilciseThread.IsAlive)
                                         {
-                                            evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
+                                            evilciseThread = new Thread(new ThreadStart(CustomEffects.EvilciseEffect));
                                             evilciseThread.Start();
                                         }
                                         break;
@@ -258,7 +258,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!maneaterThread.IsAlive)
                                         {
-                                            maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
+                                            maneaterThread = new Thread(new ThreadStart(CustomEffects.ManeaterEffect));
                                             maneaterThread.Start();
                                         }
                                         break;
@@ -268,14 +268,14 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!tsukikageThread.IsAlive)
                                         {
-                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
+                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.TsukikageEffect));
                                             tsukikageThread.Start();
                                         }
 
                                         // Tsukikage also inherits Quick Draw (Small Sword lineage)
                                         if (!smallSwordThread.IsAlive)
                                         {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
+                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
                                             smallSwordThread.Start();
                                         }
                                         break;
@@ -286,7 +286,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!smallSwordThread.IsAlive)
                                         {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
+                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
                                             smallSwordThread.Start();
                                         }
                                         break;
@@ -296,7 +296,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!darkCloudThread.IsAlive)
                                         {
-                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloud));
+                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloudEffect));
                                             darkCloudThread.Start();
                                         }
                                         break;
@@ -308,7 +308,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!sunSwordThread.IsAlive)
                                         {
-                                            sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
+                                            sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSwordEffect));
                                             sunSwordThread.Start();
                                         }
                                         break;
@@ -318,7 +318,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!agasSwordThread.IsAlive)
                                         {
-                                            agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSword));
+                                            agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSwordEffect));
                                             agasSwordThread.Start();
                                         }
                                         break;
@@ -328,7 +328,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!braveArkThread.IsAlive)
                                         {
-                                            braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArk));
+                                            braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArkEffect));
                                             braveArkThread.Start();
                                         }
                                         break;
@@ -349,7 +349,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.angelgear:
                                         if (!angelGearThread.IsAlive)
                                         {
-                                            angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
+                                            angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGearEffect));
                                             angelGearThread.Start();
                                         }
                                         break;
@@ -357,7 +357,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.boneslingshot: // TEMP: test Cactus effect
                                         if (!cactusThread.IsAlive)
                                         {
-                                            cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
+                                            cactusThread = new Thread(new ThreadStart(CustomEffects.CactusEffect));
                                             cactusThread.Start();
                                         }
                                         break;
@@ -374,21 +374,21 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.tallhammer:
                                         if (!tallHammerThread.IsAlive)
                                         {
-                                            tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammer));
+                                            tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammerEffect));
                                             tallHammerThread.Start();
                                         }
                                         break;
                                     case Items.frozentuna:
                                         if (!frozenTunaThread.IsAlive)
                                         {
-                                            frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTuna));
+                                            frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTunaEffect));
                                             frozenTunaThread.Start();
                                         }
                                         break;
                                     case Items.inferno:
                                         if (!infernoHammerThread.IsAlive)
                                         {
-                                            infernoHammerThread = new Thread(new ThreadStart(CustomEffects.Inferno));
+                                            infernoHammerThread = new Thread(new ThreadStart(CustomEffects.InfernoEffect));
                                             infernoHammerThread.Start();
                                         }
                                         break;
@@ -409,7 +409,7 @@ namespace Dark_Cloud_Improved_Version
 
                                         if (!mobiusRingThread.IsAlive)
                                         {
-                                            mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRing));
+                                            mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRingEffect));
                                             mobiusRingThread.Start();
                                         }
                                         break;
@@ -436,7 +436,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.herculeswrath:
                                         if (!herculesWrathThread.IsAlive)
                                         {
-                                            herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrath));
+                                            herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrathEffect));
                                             herculesWrathThread.Start();
                                         }
                                         break;
@@ -444,7 +444,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.babelsspear:
                                         if (!babelSpearThread.IsAlive)
                                         {
-                                            babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpear));
+                                            babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpearEffect));
                                             babelSpearThread.Start();
                                         }
                                         break;
@@ -452,7 +452,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.cactus:
                                         if (!cactusThread.IsAlive)
                                         {
-                                            cactusThread = new Thread(new ThreadStart(CustomEffects.Cactus));
+                                            cactusThread = new Thread(new ThreadStart(CustomEffects.CactusEffect));
                                             cactusThread.Start();
                                         }
                                         break;
@@ -471,7 +471,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.supernova:
                                         if (!supernovaThread.IsAlive)
                                         {
-                                            supernovaThread = new Thread(new ThreadStart(CustomEffects.Supernova));
+                                            supernovaThread = new Thread(new ThreadStart(CustomEffects.SupernovaEffect));
                                             supernovaThread.Start();
                                         }
                                         break;
@@ -479,7 +479,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.starbreaker:
                                         if (!starBreakerThread.IsAlive)
                                         {
-                                            starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreaker));
+                                            starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreakerEffect));
                                             starBreakerThread.Start();
                                         }
                                         break;
@@ -532,7 +532,7 @@ namespace Dark_Cloud_Improved_Version
 
                     if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
                     {
-                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSword));
+                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSwordEffect));
                         wiseOwlSwordThread.Start();
                     }
 

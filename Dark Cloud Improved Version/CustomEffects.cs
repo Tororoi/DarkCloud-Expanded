@@ -154,7 +154,7 @@ namespace Dark_Cloud_Improved_Version
         /// Wise Owl Sword passive: displays a message when an enemy holding a WOF key is nearby,
         /// provided the player owns a Wise Owl Sword anywhere (bag, storage, or equipped).
         /// </summary>
-        public static void WiseOwlSword()
+        public static void WiseOwlSwordEffect()
         {
             const float maxKeyDetectionRange = 500f;
 
@@ -272,7 +272,7 @@ namespace Dark_Cloud_Improved_Version
         /// Breaking the curse with holy water applies poison and sets HP to 1.
         /// The curse is reapplied on each new floor.
         /// </summary>
-        public static void Evilcise()
+        public static void EvilciseEffect()
         {
             bool penalized    = false;
             bool wasNearDeath = false;
@@ -359,7 +359,7 @@ namespace Dark_Cloud_Improved_Version
         /// on Toan: each second it drains 1 HP to restore 1 WHP. It never kills — the drain
         /// stops at 1 HP and pauses during NearDeath.
         /// </summary>
-        public static void Maneater()
+        public static void ManeaterEffect()
         {
             bool cured        = false;
             bool wasNearDeath = false;
@@ -515,7 +515,7 @@ namespace Dark_Cloud_Improved_Version
         /// clamps its abs number to max, and the vanilla "ABS MAX" popup doesn't fire on the
         /// crossing kill (this watcher preempts the engine's clamp path).
         /// </summary>
-        public static void MachoSwordTick()
+        public static void MachoSwordEffect()
         {
             DateTime now = DateTime.UtcNow;
             if (now < _machoNextTick) return;
@@ -946,18 +946,21 @@ namespace Dark_Cloud_Improved_Version
             return (int)max;
         }
 
-        // The engine grants no ABS to the six default weapons (CheckDefaultWeapon) — nor to
-        // their broken forms (id − 1). The Serpent Sword's flag-gated no-ABS state (game flag
-        // 0x30 unset) is NOT replicated: without native grants its abs never approaches max, so
-        // the rollover path self-limits there anyway.
+        // The only weapons the engine denies ABS are each character's BROKEN starting weapon — the
+        // "default weapon" in MenuDefaultWeaponNo (the id−1 broken forms: broken Dagger 257, broken
+        // Wooden Slingshot 299, broken Mallet 314, broken Gold Ring 331, broken Fighting Stick 347,
+        // broken Machine Gun 363). CheckDefaultWeapon (0x1BE4B0) gates the death-block grant on
+        // equipped == defWeapon[char], and defWeapon holds the BROKEN id. So INTACT defaults (Dagger,
+        // Mallet, …) earn ABS and roll over like any weapon — only the broken forms are excluded.
+        // (The Serpent Sword's flag-gated no-ABS state is not replicated; it self-limits anyway.)
         private static bool MachoIsAbslessWeapon(int id)
         {
-            return id == Weapons.daggerid     || id == Weapons.daggerid - 1
-                || id == Weapons.woodenid     || id == Weapons.woodenid - 1
-                || id == Weapons.malletid     || id == Weapons.malletid - 1
-                || id == Weapons.goldringid   || id == Weapons.goldringid - 1
-                || id == Weapons.stickid      || id == Weapons.stickid - 1
-                || id == Weapons.machinegunid || id == Weapons.machinegunid - 1;
+            return id == Item.DaggerBroken.Id
+                || id == Item.WoodenSlingshotBroken.Id
+                || id == Item.MalletBroken.Id
+                || id == Item.GoldRingBroken.Id
+                || id == Item.FightingStickBroken.Id
+                || id == Item.MachineGunBroken.Id;
         }
 
         private static bool PlayerOwnsMachoSword()
@@ -999,7 +1002,7 @@ namespace Dark_Cloud_Improved_Version
         /// original when it isn't (sidekick out, paused, unequipped, or dungeon exit) so enemies block normally
         /// with other weapons. No code patch; the frame values are left untouched.
         /// </summary>
-        public static void DarkCloud()
+        public static void DarkCloudEffect()
         {
             while (Player.InDungeonFloor())
             {
@@ -1075,7 +1078,7 @@ namespace Dark_Cloud_Improved_Version
         /// GetNowWeaponAttachNum == 0). Runs from the mod main loop in ALL modes (self-gated to
         /// ~2.5 Hz) because attaching can happen from any menu, sword equipped or not.
         /// </summary>
-        public static void BusterSwordTick()
+        public static void BusterSwordEffect()
         {
             if (DateTime.UtcNow < _busterNextTick) return;
             _busterNextTick = DateTime.UtcNow.AddMilliseconds(400);
@@ -1141,7 +1144,7 @@ namespace Dark_Cloud_Improved_Version
         ///    the sphere 77%. The break animation still plays on a refused break (cosmetic).
         /// The Status Break hover hint explains the rule whenever a 7BS is selected (mes-data).
         /// </summary>
-        public static void SevenBranchTick()
+        public static void SevenBranchSwordEffect()
         {
             // The selection / factor / cursor-pin logic below runs EVERY call (main loop ~50ms)
             // so the confirm-cursor pin reacts fast enough to beat a Right+X input. Only the
@@ -1346,7 +1349,7 @@ namespace Dark_Cloud_Improved_Version
         /// lineage reasons (Tsukikage builds up into it), on top of its own charge-scaling
         /// effect — firing the whirlwind sooner simply means less time for the blade to grow.
         /// </summary>
-        public static void Tsukikage()
+        public static void TsukikageEffect()
         {
             DateTime lastTick = DateTime.UtcNow;
 
@@ -1393,7 +1396,7 @@ namespace Dark_Cloud_Improved_Version
         /// charge attacks are untouched. Tsukikage and Heaven's Cloud inherit the effect for
         /// lineage reasons (the Small Sword builds up into them), on top of their own effects.
         /// </summary>
-        public static void SmallSword()
+        public static void SmallSwordEffect()
         {
             while (Player.InDungeonFloor())
             {
@@ -1438,7 +1441,7 @@ namespace Dark_Cloud_Improved_Version
         /// path runs items through a small de-dupe set, so a second Sun proc on the same floor
         /// may be swallowed.
         /// </summary>
-        public static void SunSword()
+        public static void SunSwordEffect()
         {
             const int procPercent = 1;
 
@@ -1586,7 +1589,7 @@ namespace Dark_Cloud_Improved_Version
         /// Ability Name: Defensive Legacy (Aga's Sword)
         /// Aga's Sword: +15 defense to Toan while equipped.
         /// </summary>
-        public static void AgasSword()
+        public static void AgasSwordEffect()
         {
             const int boost = 15;
             int baseDefense = Player.Toan.GetDefense();
@@ -1611,7 +1614,7 @@ namespace Dark_Cloud_Improved_Version
         /// Brave Ark: resists Freeze, Poison, Curse, and Goo status effects while equipped.
         /// Clears any of those statuses within the polling interval.
         /// </summary>
-        public static void BraveArk()
+        public static void BraveArkEffect()
         {
             const ushort resistMask = ToanState.StatusFreeze | ToanState.StatusPoison |
                                       ToanState.StatusCurse  | ToanState.StatusGoo;
@@ -1644,9 +1647,9 @@ namespace Dark_Cloud_Improved_Version
         /// — so nothing is unguardable. Side effect (accepted): unguarded, those attacks now knockback instead of
         /// knocking you down (softer). The reaction types are set once at spawn, so this holds with no race; the
         /// originals are restored (3) on unequip / dungeon exit. 7th Heaven also inherits Dark Cloud's Guard Crush
-        /// (its guard-break vs enemies) for lineage reasons — see CustomEffects.DarkCloud + the Dungeon dispatch.
+        /// (its guard-break vs enemies) for lineage reasons — see CustomEffects.DarkCloudEffect + the Dungeon dispatch.
         /// </summary>
-        public static void SeventhHeaven()
+        public static void SeventhHeavenEffect()
         {
             while (Player.InDungeonFloor())
             {
@@ -1731,7 +1734,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Chronicle effect: Attacks now hit all nearby targets for a percentage of the damage.
         /// </summary>
-        public static void ChronicleSword()
+        public static void ChronicleSwordEffect()
         {
             if (chronicleNewFloor == true)
             {
@@ -1951,7 +1954,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Angel Gear effect: Applies the Heal regeneration effect to all allies
         /// </summary>
-        public static void AngelGear()
+        public static void AngelGearEffect()
         {
             //Initialize variables
             ushort HpValueAdd = 1;
@@ -2007,7 +2010,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Tall Hammer effect: Reduces enemies size on hit
         /// </summary>
-        public static void TallHammer()
+        public static void TallHammerEffect()
         {
             //Offset between the enemy's dimension addresses
             int scaleOffset = MiniBoss.scaleOffset;
@@ -2062,7 +2065,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Inferno effect: Increase attack power depending on health and thirst
         /// </summary>
-        public static void Inferno()
+        public static void InfernoEffect()
         {
             float goroMaxHP = Player.Goro.GetMaxHp();
             float goroCurrentHP = Player.Goro.GetHp();
@@ -2105,7 +2108,7 @@ namespace Dark_Cloud_Improved_Version
         /// On hit, 5% chance to stop all non-ice enemies and freeze Goro for 3 seconds.
         /// Ice enemies (Blizzard, Sam, Ice Gemron) are immune to the stop proc.
         /// </summary>
-        public static void FrozenTuna()
+        public static void FrozenTunaEffect()
         {
             float storedHealing = 0f; // HP banked from WHP losses
             float healFraction  = 0f; // sub-integer carry for 1 HP/500ms drain
@@ -2203,7 +2206,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Mobius Ring effect: Increases damage output the longer you charge an attack
         /// </summary>
-        public static void MobiusRing()
+        public static void MobiusRingEffect()
         {
             //Declare inputs
             string message;
@@ -2419,7 +2422,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Hercules Wrath effect: Chance on getting hit to gain Stamina.
         /// </summary>
-        public static void HerculesWrath()
+        public static void HerculesWrathEffect()
         {
             //Check Ungaga's HP
             ushort formerHP = Memory.ReadUShort(Player.Ungaga.hp);
@@ -2446,7 +2449,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Babel Spear effect: Chance on hit to apply stop to all enemies.
         /// </summary>
-        public static void BabelSpear()
+        public static void BabelSpearEffect()
         {
             int hit = ReusableFunctions.GetRecentDamageDealtByPlayer();
 
@@ -2475,7 +2478,7 @@ namespace Dark_Cloud_Improved_Version
         /// 100 damage = 10.0 thirst units = 1 visible water drop.
         /// Rock, metal, and undead types are immune.
         /// </summary>
-        public static void Cactus()
+        public static void CactusEffect()
         {
             while (Player.Weapon.GetCurrentWeaponId() == Items.cactus ||
                    Player.InDungeonFloor())
@@ -2519,7 +2522,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Supernova effect: Chance on hit to apply a random status
         /// </summary>
-        public static void Supernova()
+        public static void SupernovaEffect()
         {
             //Get a read on all the enemies hp on the current floor
             int[] formerEnemyHpList = ReusableFunctions.GetEnemiesHp();
@@ -2565,7 +2568,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers StarBreaker effect: Chance on kill to get an empty synthsphere (Breaks down any weapon)
         /// </summary>
-        public static void StarBreaker()
+        public static void StarBreakerEffect()
         {
             //Save every enemy's HP on the current floor
             int[] formerEnemiesHP = ReusableFunctions.GetEnemiesHp();

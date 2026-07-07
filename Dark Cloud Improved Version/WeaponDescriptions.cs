@@ -60,7 +60,7 @@ namespace Dark_Cloud_Improved_Version
         static ushort _sigWord;    // its expected (patched) value — mismatch means the copy reloaded
 
         // ── Status Break hint (entry 47 in the allmenu banks): dynamic swap for the 7 Branch
-        // Sword's "Sevenfold Rite" (gate +7, 77% transfer — CustomEffects.SevenBranchTick).
+        // Sword's "Sevenfold Rite" (gate +7, 77% transfer — CustomEffects.SevenBranchSwordEffect).
         // Both texts encode to the entry's exact 75-word span. Entry 47 sits BEFORE the weapon
         // block, so its ordinal is identical in every allmenu variant (dunmenu4's 2 extra
         // entries come after the block); the shop bank (0x137) doesn't contain it.
@@ -92,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
         static volatile bool _acquiredResistsActive;
 
         /// <summary>Selects which Status Break hint text the menu shows: the 7 Branch Sword
-        /// version (+7 / 77%) or vanilla (60%). Called by CustomEffects.SevenBranchTick as the
+        /// version (+7 / 77%) or vanilla (60%). Called by CustomEffects.SevenBranchSwordEffect as the
         /// weapon-menu selection changes; a change forces a repatch on the next tick.</summary>
         public static void SetStatusBreakHint(bool sevenBranch)
         {
