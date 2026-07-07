@@ -76,6 +76,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
         public static Thread tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
         public static Thread smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
+        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloud));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGear));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
@@ -280,6 +281,16 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
                                             smallSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.darkcloud:
+                                        CustomEffects.BoneRapierEffect(false);
+
+                                        if (!darkCloudThread.IsAlive)
+                                        {
+                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloud));
+                                            darkCloudThread.Start();
                                         }
                                         break;
 

@@ -47,6 +47,31 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>EE address of the live position triple (X,Z,Y) for <paramref name="slot"/>.</summary>
             internal static long PosAddr(int slot) => CharAddr(slot) + PosOffset;
         }
+
+        /// <summary>
+        /// Enemy GUARD windows — the "guard motion frames" that make a defending enemy block the player's hit.
+        /// RE'd 2026-07-07. Each guarding enemy (69/167 species) registers up to 3 windows once in its STB
+        /// _INITIALIZE via <c>_SET_GUARD_FRAME(startFrame, endFrame)</c> (cmd 244, handler 0x1E60B0), stored in
+        /// CMainMonstorUnit at <c>Base + slot*Stride</c>: a flag short at +0x60550 (per window, stride 2), a start
+        /// frame float at +0x60558 and an end frame float at +0x60564 (per window, stride 4). The enemy is
+        /// "guarding" whenever its current motion frame (CCharacter +0x1FFC0) falls inside an active window; at
+        /// that moment CMonstorUnit::CheckDmg (0x1D9F10) blocks the player's hit — plays the guard clink (SE 0xA2),
+        /// nudges the enemy back, and SKIPS the damage. Zeroing the flag makes CheckDmg's guard check find no
+        /// active window, so the hit lands (the enemy still animates its guard). Written once at spawn (not per
+        /// frame), so a data-side zero holds with no race. Used by CustomEffects.DarkCloud (guard-break).
+        /// </summary>
+        internal static class GuardWindows
+        {
+            internal const int  Stride       = 0x20;      // per enemy slot (matches CheckDmg slot*0x20)
+            internal const int  FlagOffset   = 0x60550;   // short[3] — window active flags (stride 2)
+            internal const int  StartOffset  = 0x60558;   // float[3] — window start frame (stride 4)
+            internal const int  EndOffset    = 0x60564;   // float[3] — window end frame (stride 4)
+            internal const int  WindowCount  = 3;
+
+            /// <summary>EE address of <paramref name="window"/>'s guard-active flag short for <paramref name="slot"/>.</summary>
+            internal static long FlagAddr(int slot, int window)
+                => MainMonstorUnit.Base + (long)slot * Stride + FlagOffset + window * 2;
+        }
     }
 
     /// <summary>

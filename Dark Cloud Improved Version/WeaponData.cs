@@ -64,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
             new WeaponData { Id = 272, Code = "c01w15", Name = "Lamb's Sword",     Dcol1 =  10.015f, CommenuCombatScale = 1.000f,
                              MesEntry = 219, ModDescription = "Timid.Sword like a lamb.\nAppears to be weak but..." }, // combat .mds has no dcol1 bone
             new WeaponData { Id = 273, Code = "c01w16", Name = "Dark Cloud",       Dcol1 =  10.355f, CommenuCombatScale = 1.000f,
-                             MesEntry = 220, ModDescription = "Magical Sword with\npower of darkness." },
+                             MesEntry = 220, ModDescription = "Sword of darkness.\nCuts through any\nenemy's guard." },
             new WeaponData { Id = 274, Code = "c01w17", Name = "Brave Ark",        Dcol1 =   8.492f, CommenuCombatScale = 1.000f,
                              MesEntry = 221, ModDescription = "Sealed against\nevery affliction." },
             new WeaponData { Id = 275, Code = "c01w18", Name = "Big Bang",         Dcol1 =  11.378f, CommenuCombatScale = 1.000f,
