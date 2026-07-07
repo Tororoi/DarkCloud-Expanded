@@ -21,7 +21,7 @@ if [ "$IMG" = "main" ]; then
   PRE=()
 else
   PNAME=dun.bin; FILE="$DC/dun.bin"
-  IMPORT=(-import "$FILE" -processor "r5900:LE:32:default" -loader BinaryLoader -loader-baseAddr 0x1DABC80)
+  IMPORT=(-import "$FILE" -processor "r5900:LE:32:default" -loader BinaryLoader -loader-baseAddr 0x1DABD00)
   PRE=(-preScript ApplySymbols.java)   # name the overlay funcs from symbols.txt
 fi
 OUT="/tmp/decomp_${IMG}.txt"

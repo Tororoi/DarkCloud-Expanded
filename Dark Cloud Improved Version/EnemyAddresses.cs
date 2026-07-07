@@ -981,8 +981,19 @@ namespace Dark_Cloud_Improved_Version
         // overrides it. The shot's BST entry is selected by the species record's +0x68/+0x6A shot-effect indices
         // through PointerArray (0x27FA70), in CMonstorUnit::SetupBaseModel.
         internal const int ShotBaseDamage     = 0x3C; // int   — base damage of a shot behavior (was mislabeled AttackDistance)
-        internal const int BehaviorFlags      = 0x40; // int   — packed flags controlling hit response / VFX
-        internal const int PhaseCount         = 0x44; // int   — number of animation phases in this behavior
+        // +0x40 CONFIRMED 2026-07-07 (guard/knockback RE): the projectile's ATTACK STATUS FLAGS. When a shot hits,
+        // Step__CSHOT_EFFECT (0x1AC180) copies this word into the CCollisionData entry +0x50, and BtCheckDamageProc
+        // (dun 0x1DBAFD0) rolls each set status bit (~65% for amulet-gated ailments, 20% for Steal). Only the bits
+        // in AttackStatusFlag below are ailments; low bits (0x1..0x80) are non-status shot flags (element/VFX).
+        // MELEE attacks carry the SAME flag word via _SET_DMG_PARA's 2nd argument (param array +0x5A590 →
+        // CMonstorUnit::CheckDmg passes it as Set__CCollisionData param_9 → entry +0x50) — e.g. the Days-of-week
+        // imps Steal, Mummy/Curse Dancer Curse, King Mimics HalfHP, Ice Arrow guaranteed-Freeze.
+        internal const int AttackStatusFlags  = 0x40; // int   — projectile status-effect bit flags (see AttackStatusFlag)
+        // +0x44 CONFIRMED 2026-07-07 (guard/knockback RE): the HIT REACTION TYPE (2/3/4), NOT a phase count.
+        // Step__CSHOT_EFFECT passes it as the CCollisionData entry +0x4C reaction type (and special-cases ==3 to set
+        // the launch vector). BtCheckDamageProc keys guard-break + knockdown off it — see AttackReaction below and
+        // docs/enemy-attack-damage-table.md. For melee the same reaction type is the _SET_DMG_PARA 3rd STB arg.
+        internal const int HitReactionType    = 0x44; // int   — hit reaction type: 2=knockback,3=knockdown(guard-break),4=light
         // +0x48: always 1
         internal const int ScriptMode         = 0x4C; // int   — packed mode flags for the behavior FSM
         internal const int PackedFlags2       = 0x50; // int   — secondary packed flags
@@ -990,6 +1001,34 @@ namespace Dark_Cloud_Improved_Version
         internal const int ProjectileSpeed    = 0x58; // float — non-zero only for projectile behaviors
         internal const int ProjectileLifetime = 0x5C; // int   — frames the projectile lives; 0 if no projectile
         // +0x60–+0x6C: four ints, all -1
+
+        /// <summary>Hit reaction type values (CCollisionData entry +0x4C; BST +0x44 for shots,
+        /// _SET_DMG_PARA arg2 for melee). Governs guardability AND knockdown together, resolved in
+        /// BtCheckDamageProc. See docs/enemy-attack-damage-table.md.</summary>
+        internal static class AttackReaction
+        {
+            internal const int Knockback = 2; // guardable; unguarded = medium stagger (~80f)
+            internal const int Knockdown = 3; // UNGUARDABLE (breaks guard) + hard knockdown/launch (~160f); reads a 4th launch arg
+            internal const int Light     = 4; // guardable; unguarded = minimal flinch (~8f), no knockover
+        }
+
+        /// <summary>Attack status-effect bits, shared by melee (_SET_DMG_PARA 2nd arg) and shots (BST +0x40 =
+        /// AttackStatusFlags); both land in CCollisionData entry +0x50 and are resolved by BtCheckDamageProc.
+        /// Amulet-gated ailments roll at ~65% and are blocked by the matching Anti-* amulet. Low bits
+        /// (0x1..0x80) are non-status shot/element flags and are not included here. Full per-attack map in
+        /// docs/enemy-attack-damage-table.md.</summary>
+        internal static class AttackStatusFlag
+        {
+            internal const int Freeze           = 0x100;    // ~65% roll; blocked by Anti-Freeze Amulet (item 0x84)
+            internal const int Poison           = 0x200;    // ~65% roll; blocked by Antidote Amulet (item 0x87)
+            internal const int Curse            = 0x400;    // ~65% roll; blocked by Anti-Curse Amulet (item 0x85)
+            internal const int Goo              = 0x800;    // ~65% roll; blocked by Anti-Goo Amulet (item 0x86)
+            internal const int Stamina          = 0x1000;   // ~65% roll; drains stamina (no amulet)
+            internal const int Steal            = 0x40000;  // 20% roll; steals 1/5 of the player's gold, dropped as loot (Days-of-week imps)
+            internal const int HalfHpDamage     = 0x80000;  // damage = HALF the player's CURRENT HP, replacing the dmg formula (King Mimic bite)
+            internal const int FreezeGuaranteed = 0x100000; // freeze applied unconditionally — no roll, no amulet check (Ice Arrow)
+            internal const int AilmentMask      = Freeze | Poison | Curse | Goo | Stamina | Steal | HalfHpDamage | FreezeGuaranteed;
+        }
     }
 
     /// <summary>
