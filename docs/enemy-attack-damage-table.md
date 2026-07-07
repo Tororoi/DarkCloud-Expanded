@@ -305,7 +305,7 @@ Dark Genie effect entities — those bosses damage you through spawned companion
 | 79 | 114 | 〃 | `c14a` | Melee 2 | Melee | 47 | Knockdown (3) | — |  |
 | 80 | 113 | Ice Queen | `c13a` | — | — | — | — | — | no own attack — deals damage only via spawned companions |
 | 81 | 115 | King's Curse Coffin | `c15a` | — | — | — | — | — | passive/damageable phase of King's Curse — no attack |
-| 82 | 100 | King's Curse | `c15b` | Melee 1 | Melee | 91 | Knockdown (3) | Curse | 2nd-format STB bytecode, hand-decoded |
+| 82 | 100 | King's Curse | `c15b` | Melee 1 | Melee | 91 | Knockdown (3) | Curse | status built inline as `0 \| 0x400` via the STB OR-op (op25) |
 | 82 | 100 | 〃 | `c15b` | Melee 2 | Melee | 91 | Knockdown (3) | Curse |  |
 | 82 | 100 | 〃 | `c15b` | Melee 3 | Melee | 71 | Knockdown (3) | Curse |  |
 | 83 | 116 | Minotaur Joe | `c16a` | Melee 1 | Melee | 100 | Knockdown (3) | — |  |
