@@ -68,30 +68,30 @@ namespace Dark_Cloud_Improved_Version
         public static Thread miniBossMessage;
 
         //Weapon threads, only 1 should run at a time
-        public static Thread boneDoorThread = new Thread(new ThreadStart(CustomEffects.BoneDoorTrigger));
-        public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeavenEffect));
-        public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSwordEffect));
-        public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.EvilciseEffect));
-        public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.ManeaterEffect));
-        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSwordEffect));
-        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomEffects.TsukikageEffect));
-        public static Thread smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
-        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloudEffect));
-        public static Thread angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGearEffect));
-        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
-        public static Thread snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
-        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSwordEffect));
-        public static Thread braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArkEffect));
-        public static Thread tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammerEffect));
-        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTunaEffect));
-        public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomEffects.InfernoEffect));
-        public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRingEffect));
-        public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrathEffect));
-        public static Thread babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpearEffect));
-        public static Thread cactusThread = new Thread(new ThreadStart(CustomEffects.CactusEffect));
-        public static Thread supernovaThread = new Thread(new ThreadStart(CustomEffects.SupernovaEffect));
-        public static Thread starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreakerEffect));
-        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSwordEffect));
+        public static Thread boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
+        public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomToanEffects.SeventhHeavenEffect));
+        public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomToanEffects.ChronicleSwordEffect));
+        public static Thread evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
+        public static Thread maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
+        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
+        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
+        public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
+        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
+        public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
+        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
+        public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
+        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
+        public static Thread braveArkThread = new Thread(new ThreadStart(CustomToanEffects.BraveArkEffect));
+        public static Thread tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
+        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.FrozenTunaEffect));
+        public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
+        public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
+        public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
+        public static Thread babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
+        public static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
+        public static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
+        public static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
+        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
         public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
 
@@ -157,7 +157,7 @@ namespace Dark_Cloud_Improved_Version
                         Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
                         !evilciseThread.IsAlive)
                     {
-                        evilciseThread = new Thread(new ThreadStart(CustomEffects.EvilciseEffect));
+                        evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
                         evilciseThread.Start();
                     }
 
@@ -166,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
                         Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
                         !maneaterThread.IsAlive)
                     {
-                        maneaterThread = new Thread(new ThreadStart(CustomEffects.ManeaterEffect));
+                        maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
                         maneaterThread.Start();
                     }
 
@@ -180,123 +180,123 @@ namespace Dark_Cloud_Improved_Version
                         {
                             //Toan
                             case Player.ToanId:
-                                if(magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                if(magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
                                     case Items.bonerapier:
-                                        CustomEffects.BoneRapierEffect(true);
+                                        CustomToanEffects.BoneRapierEffect(true);
 
                                         if (!boneDoorThread.IsAlive)
                                         {
-                                            boneDoorThread = new Thread(new ThreadStart(CustomEffects.BoneDoorTrigger));
+                                            boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
                                             boneDoorThread.Start();
                                         }
                                         break;
                                     case Items.seventhheaven:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!seventhHeavenThread.IsAlive)
                                         {
-                                            seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeavenEffect));
+                                            seventhHeavenThread = new Thread(new ThreadStart(CustomToanEffects.SeventhHeavenEffect));
                                             seventhHeavenThread.Start();
                                         }
 
                                         // 7th Heaven also inherits Dark Cloud's Guard Crush (lineage)
                                         if (!darkCloudThread.IsAlive)
                                         {
-                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloudEffect));
+                                            darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
                                             darkCloudThread.Start();
                                         }
                                         break;
                                     case Items.chroniclesword:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!chronicleSwordThread.IsAlive)
                                         {
-                                            chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSwordEffect));
+                                            chronicleSwordThread = new Thread(new ThreadStart(CustomToanEffects.ChronicleSwordEffect));
                                             chronicleSwordThread.Start();
                                         }
                                         break;
 
                                     case Items.heavenscloud:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!heavensCloudThread.IsAlive)
                                         {
-                                            heavensCloudThread = new Thread(new ThreadStart(CustomEffects.HeavensCloudEffect));
+                                            heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
                                             heavensCloudThread.Start();
                                         }
 
                                         // Heaven's Cloud also inherits Moonlit Focus (Tsukikage lineage)
                                         if (!tsukikageThread.IsAlive)
                                         {
-                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.TsukikageEffect));
+                                            tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
                                             tsukikageThread.Start();
                                         }
 
                                         // ...and Quick Draw (Small Sword lineage)
                                         if (!smallSwordThread.IsAlive)
                                         {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
+                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
                                             smallSwordThread.Start();
                                         }
                                         break;
 
                                     case Items.evilcise:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!evilciseThread.IsAlive)
                                         {
-                                            evilciseThread = new Thread(new ThreadStart(CustomEffects.EvilciseEffect));
+                                            evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
                                             evilciseThread.Start();
                                         }
                                         break;
 
                                     case Items.maneater:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!maneaterThread.IsAlive)
                                         {
-                                            maneaterThread = new Thread(new ThreadStart(CustomEffects.ManeaterEffect));
+                                            maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
                                             maneaterThread.Start();
                                         }
                                         break;
 
                                     case Items.tsukikage:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!tsukikageThread.IsAlive)
                                         {
-                                            tsukikageThread = new Thread(new ThreadStart(CustomEffects.TsukikageEffect));
+                                            tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
                                             tsukikageThread.Start();
                                         }
 
                                         // Tsukikage also inherits Quick Draw (Small Sword lineage)
                                         if (!smallSwordThread.IsAlive)
                                         {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
+                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
                                             smallSwordThread.Start();
                                         }
                                         break;
 
 
                                     case Items.smallsword:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!smallSwordThread.IsAlive)
                                         {
-                                            smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSwordEffect));
+                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
                                             smallSwordThread.Start();
                                         }
                                         break;
 
                                     case Items.darkcloud:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!darkCloudThread.IsAlive)
                                         {
-                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloudEffect));
+                                            darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
                                             darkCloudThread.Start();
                                         }
                                         break;
@@ -304,91 +304,86 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.sunsword:
                                     case Items.bigbang:   // Big Bang inherits Solar Harvest (Sun Sword lineage);
                                                           // its own unique effect will be added alongside later
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!sunSwordThread.IsAlive)
                                         {
-                                            sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSwordEffect));
+                                            sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
                                             sunSwordThread.Start();
                                         }
                                         break;
 
                                     case Items.agassword:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!agasSwordThread.IsAlive)
                                         {
-                                            agasSwordThread = new Thread(new ThreadStart(CustomEffects.AgasSwordEffect));
+                                            agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
                                             agasSwordThread.Start();
                                         }
                                         break;
 
                                     case Items.braveark:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!braveArkThread.IsAlive)
                                         {
-                                            braveArkThread = new Thread(new ThreadStart(CustomEffects.BraveArkEffect));
+                                            braveArkThread = new Thread(new ThreadStart(CustomToanEffects.BraveArkEffect));
                                             braveArkThread.Start();
                                         }
                                         break;
 
                                     default:
-                                        CustomEffects.BoneRapierEffect(false);
+                                        CustomToanEffects.BoneRapierEffect(false);
                                         break;
                                 }
                                 break;
 
                             //Xiao
                             case Player.XiaoId:
-                                CustomEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
                                     case Items.angelgear:
                                         if (!angelGearThread.IsAlive)
                                         {
-                                            angelGearThread = new Thread(new ThreadStart(CustomEffects.AngelGearEffect));
+                                            angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
                                             angelGearThread.Start();
                                         }
                                         break;
 
-                                    case Items.boneslingshot: // TEMP: test Cactus effect
-                                        if (!cactusThread.IsAlive)
-                                        {
-                                            cactusThread = new Thread(new ThreadStart(CustomEffects.CactusEffect));
-                                            cactusThread.Start();
-                                        }
+                                    default:
                                         break;
                                 }
                                 break;
 
                             //Goro
                             case Player.GoroId:
-                                CustomEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
                                     case Items.tallhammer:
                                         if (!tallHammerThread.IsAlive)
                                         {
-                                            tallHammerThread = new Thread(new ThreadStart(CustomEffects.TallHammerEffect));
+                                            tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
                                             tallHammerThread.Start();
                                         }
                                         break;
                                     case Items.frozentuna:
                                         if (!frozenTunaThread.IsAlive)
                                         {
-                                            frozenTunaThread = new Thread(new ThreadStart(CustomEffects.FrozenTunaEffect));
+                                            frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.FrozenTunaEffect));
                                             frozenTunaThread.Start();
                                         }
                                         break;
                                     case Items.inferno:
                                         if (!infernoHammerThread.IsAlive)
                                         {
-                                            infernoHammerThread = new Thread(new ThreadStart(CustomEffects.InfernoEffect));
+                                            infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
                                             infernoHammerThread.Start();
                                         }
                                         break;
@@ -400,35 +395,35 @@ namespace Dark_Cloud_Improved_Version
 
                             //Ruby
                             case Player.RubyId:
-                                CustomEffects.BoneRapierEffect(false);
+                                CustomToanEffects.BoneRapierEffect(false);
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
                                     case Items.mobiusring:
-                                        if (magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                         if (!mobiusRingThread.IsAlive)
                                         {
-                                            mobiusRingThread = new Thread(new ThreadStart(CustomEffects.MobiusRingEffect));
+                                            mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
                                             mobiusRingThread.Start();
                                         }
                                         break;
                                     case Items.secretarmlet:
                                         if (!magicCircleChanged) {
-                                            bool executed = CustomEffects.SecretArmletEnable();
+                                            bool executed = CustomRubyEffects.SecretArmletEnable();
                                             if(executed) magicCircleChanged = true;
                                         }
                                         break;
                                     default:
-                                        if (magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
                                         break;
                                 }
                                 break;
 
                             //Ungaga
                             case Player.UngagaId:
-                                CustomEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
@@ -436,7 +431,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.herculeswrath:
                                         if (!herculesWrathThread.IsAlive)
                                         {
-                                            herculesWrathThread = new Thread(new ThreadStart(CustomEffects.HerculesWrathEffect));
+                                            herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
                                             herculesWrathThread.Start();
                                         }
                                         break;
@@ -444,7 +439,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.babelsspear:
                                         if (!babelSpearThread.IsAlive)
                                         {
-                                            babelSpearThread = new Thread(new ThreadStart(CustomEffects.BabelSpearEffect));
+                                            babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
                                             babelSpearThread.Start();
                                         }
                                         break;
@@ -452,7 +447,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.cactus:
                                         if (!cactusThread.IsAlive)
                                         {
-                                            cactusThread = new Thread(new ThreadStart(CustomEffects.CactusEffect));
+                                            cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
                                             cactusThread.Start();
                                         }
                                         break;
@@ -463,15 +458,15 @@ namespace Dark_Cloud_Improved_Version
 
                             //Osmond
                             case Player.OsmondId:
-                                CustomEffects.BoneRapierEffect(false);
-                                if (magicCircleChanged) CustomEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
                                     case Items.supernova:
                                         if (!supernovaThread.IsAlive)
                                         {
-                                            supernovaThread = new Thread(new ThreadStart(CustomEffects.SupernovaEffect));
+                                            supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
                                             supernovaThread.Start();
                                         }
                                         break;
@@ -479,7 +474,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.starbreaker:
                                         if (!starBreakerThread.IsAlive)
                                         {
-                                            starBreakerThread = new Thread(new ThreadStart(CustomEffects.StarBreakerEffect));
+                                            starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
                                             starBreakerThread.Start();
                                         }
                                         break;
@@ -487,7 +482,7 @@ namespace Dark_Cloud_Improved_Version
                                     case Items.snail:
                                         if (!snailThread.IsAlive)
                                         {
-                                            snailThread = new Thread(new ThreadStart(CustomEffects.SnailEffect));
+                                            snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
                                             snailThread.Start();
                                         }
                                         break;
@@ -532,7 +527,7 @@ namespace Dark_Cloud_Improved_Version
 
                     if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
                     {
-                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomEffects.WiseOwlSwordEffect));
+                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
                         wiseOwlSwordThread.Start();
                     }
 
@@ -940,14 +935,14 @@ namespace Dark_Cloud_Improved_Version
             }
             else Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not enough normal enemies in floor!");
 
-            chronicle2 = CustomEffects.CheckChronicle2(chronicle2);
+            chronicle2 = CustomToanEffects.CheckChronicle2(chronicle2);
             CustomChests.BasicChestRandomizer(currentDungeon, currentFloor, chronicle2); //Randomize the chest loot (old table-based version)
             Weapons.StartHeavensCloudReach(); // extend Heaven's Cloud reach (dcol1 frame + swing radii)
             Weapons.OnReachFloorEntered();    // re-locate the freshly reloaded model on this floor
 
             CheckSidequests();
 
-            CustomEffects.chronicleNewFloor = true;
+            CustomToanEffects.chronicleNewFloor = true;
             ReusableFunctions.ClearRecentDamageAndDamageSource();
 
             monsterQuestActive = SideQuestManager.CheckCurrentDungeonQuests(currentDungeon);

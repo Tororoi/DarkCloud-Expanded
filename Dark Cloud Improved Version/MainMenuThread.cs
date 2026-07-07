@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
             Shop.UpdateShopPrices();
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
             WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
-            CustomEffects.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
+            CustomToanEffects.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
         }
 
         public static void CheckEmulatorAndGame()

@@ -194,14 +194,14 @@ namespace Dark_Cloud_Improved_Version
             {
                 // Buster Sword "True Buster" absorb watcher — runs in every mode (self-gated to
                 // ~2.5 Hz) because ABS level-ups can happen from any menu, sword equipped or not.
-                CustomEffects.BusterSwordEffect();
+                CustomToanEffects.BusterSwordEffect();
                 // 7 Branch Sword "Sevenfold Rite" — status-break patch keyed on the weapon-menu
                 // selection; runs in every mode because the menu exists everywhere (self-gated ~10 Hz).
-                CustomEffects.SevenBranchSwordEffect();
+                CustomToanEffects.SevenBranchSwordEffect();
                 // Macho Sword "Overtraining" — ownership passive: ABS rollover past max on every
                 // weapon + level-up carry; runs in every mode (level-ups happen from any menu,
                 // self-gated ~10 Hz, kill tracking only while in a dungeon floor).
-                CustomEffects.MachoSwordEffect();
+                CustomToanEffects.MachoSwordEffect();
                 // Atlamillia Sword "Insurance" — break watcher + dynamic atla + collected-slot
                 // erasure; runs in every mode (self-gated ~2 Hz) so floor-select stays clean too.
                 AtlamilliaInsurance.Tick();
