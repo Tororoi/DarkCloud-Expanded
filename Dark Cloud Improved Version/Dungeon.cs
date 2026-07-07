@@ -201,6 +201,13 @@ namespace Dark_Cloud_Improved_Version
                                             seventhHeavenThread = new Thread(new ThreadStart(CustomEffects.SeventhHeaven));
                                             seventhHeavenThread.Start();
                                         }
+
+                                        // 7th Heaven also inherits Dark Cloud's Guard Crush (lineage)
+                                        if (!darkCloudThread.IsAlive)
+                                        {
+                                            darkCloudThread = new Thread(new ThreadStart(CustomEffects.DarkCloud));
+                                            darkCloudThread.Start();
+                                        }
                                         break;
                                     case Items.chroniclesword:
                                         CustomEffects.BoneRapierEffect(false);

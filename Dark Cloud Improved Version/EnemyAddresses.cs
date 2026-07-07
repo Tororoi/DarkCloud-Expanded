@@ -72,6 +72,28 @@ namespace Dark_Cloud_Improved_Version
             internal static long FlagAddr(int slot, int window)
                 => MainMonstorUnit.Base + (long)slot * Stride + FlagOffset + window * 2;
         }
+
+        /// <summary>
+        /// Enemy MELEE attack parameters — the per-damage-collision values an enemy sets once in its STB
+        /// _INITIALIZE via <c>_SET_DMG_PARA(damage, statusFlags, reactionType[, launch])</c>. Stored in
+        /// CMainMonstorUnit at <c>Base + slot*0x350 + col*4</c>: damage int @+0x5A4D0, status-flag int @+0x5A590,
+        /// and the HIT REACTION TYPE int @+0x5A510 (2=knockback/guardable, 3=knockdown/guard-break/unguardable,
+        /// 4=light). CMonstorUnit::CheckDmg (0x1D9F10) rebuilds the enemy's attack CCollisionData entry from these
+        /// each frame (reaction → entry +0x4C), which BtCheckDamageProc reads to decide guardability. So writing
+        /// ReactionAddr from 3→2 makes that melee attack guardable (the player's guard then blocks it). See
+        /// [[guard-break-and-knockback]] and CustomEffects.SeventhHeaven. Up to 16 cols per enemy.
+        /// </summary>
+        internal static class EnemyAttackParams
+        {
+            internal const int SlotStride     = 0x350;
+            internal const int ColStride      = 4;
+            internal const int MaxCols        = 16;
+            internal const int ReactionOffset = 0x5A510; // int — melee hit reaction type (2/3/4)
+
+            /// <summary>EE address of the melee reaction-type int for <paramref name="slot"/>'s dmg-col <paramref name="col"/>.</summary>
+            internal static long ReactionAddr(int slot, int col)
+                => MainMonstorUnit.Base + (long)slot * SlotStride + col * ColStride + ReactionOffset;
+        }
     }
 
     /// <summary>

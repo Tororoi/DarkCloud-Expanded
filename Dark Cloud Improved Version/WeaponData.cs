@@ -108,7 +108,7 @@ namespace Dark_Cloud_Improved_Version
             new WeaponData { Id = 294, Code = "c01w37", Name = "Cross Hinder",     Dcol1 =  10.370f, CommenuCombatScale = 1.000f,
                              MesEntry = 469, ModDescription = "Very powerful double\nhand treasure sword." },
             new WeaponData { Id = 295, Code = "c01w38", Name = "7th Heaven",       Dcol1 =  10.232f, CommenuCombatScale = 1.000f,
-                             MesEntry = 480, ModDescription = "Beautiful sword.\nTears the heavens." },
+                             MesEntry = 480, ModDescription = "Holy sword. Guarding\nblocks all attacks;\ncuts through guards." },
             new WeaponData { Id = 296, Code = "c01w39", Name = "Sword Of Zeus",    Dcol1 =  11.581f, CommenuCombatScale = 1.000f,
                              MesEntry = 481, ModDescription = "Zeus' swords with\nunlimited ability." },
             new WeaponData { Id = 297, Code = "c01w40", Name = "Chronicle Sword",  Dcol1 =   9.437f, CommenuCombatScale = 0.662f,
