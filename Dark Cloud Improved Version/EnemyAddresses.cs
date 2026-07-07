@@ -310,7 +310,8 @@ namespace Dark_Cloud_Improved_Version
     internal static class EnemySlotOffsets
     {
         // ── Status / Timers ──────────────────────────────────────────────────
-        internal const int RenderStatus      = 0x000; // int   — 0=inactive, 1=spawned (not yet aggro'd), 2=active; transitions 1→2 when enemy enters play
+        internal const int RenderStatus      = 0x000; // int   — 0=inactive, 1=spawned (not yet aggro'd), 2=active; transitions 1→2 when enemy enters play; -1 = release/death-processing frame (the CMonstorUnit::Step death block — kill-ABS grant + drop spawn — runs on it)
+        internal const int KillerCharId      = 0x004; // int   — character id of the last damager; the death block grants kill ABS only when this equals the active character
         internal const int FreezeTimer       = 0x008; // int   — freeze status countdown; 0 at rest
         internal const int PoisonPeriod      = 0x00C; // int   — poison tick interval; 0 at rest
         internal const int StaminaTimer      = 0x010; // int   — stamina/status countdown; starts at a large value (e.g. 0x004F0000 ≈ 5.2M) and decrements each frame; 0 when expired

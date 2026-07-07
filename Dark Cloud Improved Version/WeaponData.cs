@@ -56,7 +56,7 @@ namespace Dark_Cloud_Improved_Version
             new WeaponData { Id = 268, Code = "c01w11", Name = "Serpent Sword",    Dcol1 =   9.012f, CommenuCombatScale = 1.000f,
                              MesEntry = 215, ModDescription = "Sword with absolute\npower over snakes.\nExtremely rare." },
             new WeaponData { Id = 269, Code = "c01w12", Name = "Macho Sword",      Dcol1 =   9.382f, CommenuCombatScale = 1.000f,
-                             MesEntry = 216, ModDescription = "Sword with muscle power.\nArming it makes you\nexercise." },
+                             MesEntry = 216, ModDescription = "Sword with muscle power.\nTrain past any limit." },
             new WeaponData { Id = 270, Code = "c01w13", Name = "Shamshir",         Dcol1 =   7.985f, CommenuCombatScale = 1.000f,
                              MesEntry = 217, ModDescription = "Characterized by its\ncurved edge.Light and\neasy to use." },
             new WeaponData { Id = 271, Code = "c01w14", Name = "Heaven's Cloud",   Dcol1 =   9.205f, CommenuCombatScale = 0.868f,

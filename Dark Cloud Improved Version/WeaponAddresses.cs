@@ -440,6 +440,62 @@ namespace Dark_Cloud_Improved_Version
             internal const int  SynthSphereId    = 0x5A;
         }
 
+        /// <summary>
+        /// The kill-ABS grant path, RE'd from the CMonstorUnit::Step death block (the
+        /// GetWeaponMaxExp call at ELF 0x1DF1CC). On an enemy slot's release frame
+        /// (slot field +0x00 == -1) the engine grants the slot's ABS reward to the ACTIVE
+        /// character's equipped INVENTORY record:
+        ///   rec = UserStatusBase + char*CharStride + WeaponArrayOffset + equipSlot*0xF8,
+        ///   equipSlot = byte at UserStatusBase + EquipSlotArrayOffset + char
+        /// gated on (slot.KillerCharId == active char) and the equipped weapon not being a
+        /// default weapon. Grant modifiers: ×2 when the back-floor flag (BackFloorDoubleAddr)
+        /// is set; ×AbsBonusMult (1.2f, DAT_002a1af8) when the slot's status-flag word has
+        /// AbsBonusFlag (0x2000) set. THE KEY BEHAVIOR: the whole grant is SKIPPED when
+        /// abs &gt;= GetWeaponMaxExp — a crossing kill clamps to exactly max and queues the
+        /// "ABS MAX" popup; above max the engine is fully inert. Max ABS is never stored: it is
+        /// COMPUTED per call as table base (+0x30, SIGNED CHAR) + level × step (+0x32, short),
+        /// clamped to 1..999 (the live Weapons.abs / Weapons.absadd table columns — which is
+        /// also why the table can't just be doubled: base values run up to 125, so 2× overflows
+        /// the signed char for ~54 weapons). Special cases in the same block: Serpent Sword
+        /// (id 268) grants nothing until game flag 0x30 is set, and while the player is
+        /// monster-transformed (UserStatusBase+TransformStateOffset == 10) kills DRAIN abs
+        /// instead of granting. Backs CustomEffects.MachoSwordTick (ABS rollover).
+        /// </summary>
+        internal static class AbsRollover
+        {
+            internal const long UserStatusBase       = 0x21CD954C; // CDngStatusData / "status base"
+            internal const int  CharStride           = 0xAA8;      // per-character block stride
+            internal const int  WeaponArrayOffset    = 0x450C;     // char block + this = weapon record 0 (id at +0)
+            internal const int  EquipSlotArrayOffset = 0x4340;     // + char = equipped weapon slot byte (0-9)
+            internal const int  TransformStateOffset = 0x8B10;     // int; 10 = monster-transformed (kills DRAIN abs)
+
+            internal const long BackFloorDoubleAddr  = EnemyAddresses.MainMonstorUnit.Base + 0x44; // int; nonzero = kill ABS ×2 (back floors)
+            // Per-slot status-flag word (same 0x510-stride family as the collision arrays).
+            internal const long SlotStatusFlagsBase  = EnemyAddresses.MainMonstorUnit.Base + 0x55754;
+            internal const int  SlotStatusFlagsStride = 0x510;
+            internal const int  AbsBonusFlag         = 0x2000;     // slot flag: ABS reward ×AbsBonusMult
+            internal const float AbsBonusMult        = 1.2f;       // DAT_002a1af8
+
+            /// <summary>Rollover ceiling: current ABS may grow to this multiple of the weapon's max.</summary>
+            internal const int  RolloverFactor       = 2;
+
+            internal static long SlotStatusFlagsAddr(int slot) => SlotStatusFlagsBase + (long)slot * SlotStatusFlagsStride;
+            /// <summary>Inventory weapon record address for a character's bag slot.</summary>
+            internal static long RecordAddr(int character, int slot)
+                => UserStatusBase + (long)character * CharStride + WeaponArrayOffset + (long)slot * InventoryWeaponSlotStride;
+        }
+
+        // Rollover display behavior (all RE'd, all native — nothing to patch):
+        //   • Weapon menu panel (DrawWeaponStatusTag 0x1FA0B0): gauge width (abs<<7)/max is
+        //     CLAMPED to 0x7E — the bar pins at full length while the NUMBERS draw raw
+        //     ("104/100"), which is exactly the wanted rollover presentation.
+        //   • Item menu weapon panel (DrawWepDamageDraw 0x1F8D30): clamps the abs NUMBER to max
+        //     (shows "100/100" for a rolled weapon) — cosmetic inconsistency only.
+        //   • In-dungeon HUD (topStatusInfo 0x1B04F0): abs gauge width abs*(len/max) is NOT
+        //     clamped — a rolled weapon's HUD abs bar overdraws proportionally (up to 2×).
+        //   • Level-up menu gate (WeaponSelectKey case 3): abs >= max enables a free level-up
+        //     (abs < max consumes a Powerup Powder, item 0xB2) — rollover keeps this working.
+
         // ── Weapon-menu selection globals (read by GetNowSelectWeapon, ELF 0x1F3F00: selected
         // record = menu base + char*0xAA8 + 0x450C + slot*0xF8). Values persist (stale) after
         // the menu closes — gate on them only for things that can't matter outside the menu. ──
@@ -466,6 +522,7 @@ namespace Dark_Cloud_Improved_Version
         // SetStatusBreak) must be cleared separately. Used by the 7BS below-+7 refusal. ──
         internal const long LevelUpFlowKind   = 0x21DABBE2;
         internal const long LevelUpFlowState  = 0x21DABBF4;
+        internal const int  FlowKindLevelUp       = 0;   // set by SetLevelUpValue at the menu confirm
         internal const int  FlowKindStatusBreak   = 1;
         internal const int  BreakStateAnimation   = 5;
         internal const int  BreakStateWindDown    = 6;

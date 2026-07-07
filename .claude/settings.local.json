@@ -48,7 +48,9 @@
       "Read(//opt/homebrew/opt/**)",
       "Read(//opt/homebrew/Cellar/ghidra/12.1.2/libexec/support/**)",
       "Bash(rm -rf /tmp/ghidraproj)",
-      "Bash(awk '$1 >= \"0x001ae1c0\" && $1 <= \"0x001ae450\"' tools/ghidra/symbols.txt)"
+      "Bash(awk '$1 >= \"0x001ae1c0\" && $1 <= \"0x001ae450\"' tools/ghidra/symbols.txt)",
+      "Bash(/Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra/decompile.sh main *)",
+      "Bash(cp /tmp/decomp_main.txt /tmp/decomp_abs3.txt)"
     ]
   }
 }

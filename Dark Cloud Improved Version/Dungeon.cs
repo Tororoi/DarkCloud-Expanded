@@ -73,7 +73,6 @@ namespace Dark_Cloud_Improved_Version
         public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomEffects.ChronicleSword));
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomEffects.Evilcise));
         public static Thread maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
-        public static Thread machoSwordThread = new Thread(new ThreadStart(CustomEffects.MachoSword));
         public static Thread sunSwordThread = new Thread(new ThreadStart(CustomEffects.SunSword));
         public static Thread tsukikageThread = new Thread(new ThreadStart(CustomEffects.Tsukikage));
         public static Thread smallSwordThread = new Thread(new ThreadStart(CustomEffects.SmallSword));
@@ -253,16 +252,6 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             maneaterThread = new Thread(new ThreadStart(CustomEffects.Maneater));
                                             maneaterThread.Start();
-                                        }
-                                        break;
-
-                                    case Items.machosword:
-                                        CustomEffects.BoneRapierEffect(false);
-
-                                        if (!machoSwordThread.IsAlive)
-                                        {
-                                            machoSwordThread = new Thread(new ThreadStart(CustomEffects.MachoSword));
-                                            machoSwordThread.Start();
                                         }
                                         break;
 
