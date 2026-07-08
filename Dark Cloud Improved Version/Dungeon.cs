@@ -78,6 +78,8 @@ namespace Dark_Cloud_Improved_Version
         public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
         public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
+        public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
+        public static Thread superSteveQuickDrawThread = new Thread(new ThreadStart(CustomXiaoEffects.XiaoQuickDrawEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
@@ -341,7 +343,8 @@ namespace Dark_Cloud_Improved_Version
 
                             //Xiao
                             case Player.XiaoId:
-                                CustomToanEffects.BoneRapierEffect(false);
+                                // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier sphere).
+                                if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve) CustomToanEffects.BoneRapierEffect(false);
                                 if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
@@ -351,6 +354,19 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
                                             angelGearThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.supersteve:
+                                        if (!superSteveThread.IsAlive)
+                                        {
+                                            superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
+                                            superSteveThread.Start();
+                                        }
+                                        if (!superSteveQuickDrawThread.IsAlive)
+                                        {
+                                            superSteveQuickDrawThread = new Thread(new ThreadStart(CustomXiaoEffects.XiaoQuickDrawEffect));
+                                            superSteveQuickDrawThread.Start();
                                         }
                                         break;
 

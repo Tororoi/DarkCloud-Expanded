@@ -499,7 +499,7 @@ namespace Dark_Cloud_Improved_Version
             DarkCloudDriveGuards(false);
         }
 
-        private static void DarkCloudDriveGuards(bool breakGuard)
+        internal static void DarkCloudDriveGuards(bool breakGuard)
         {
             for (int slot = 0; slot < EnemyAddresses.FloorSlots.Count; slot++)
             {
@@ -537,79 +537,110 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void EvilciseEffect()
         {
-            bool penalized    = false;
-            bool wasNearDeath = false;
-            byte lastFloor    = Memory.ReadByte(Addresses.checkFloor);
-
-            // Apply curse immediately on equip, but not while in NearDeath
-            ushort cur = Memory.ReadUShort(ToanState.Status);
-            wasNearDeath = (cur & 0x02) != 0;
-            if (!wasNearDeath)
-            {
-                Memory.WriteUShort(ToanState.Status,      (ushort)(cur | 0x20));
-                Memory.WriteUShort(ToanState.StatusTimer, 3600);
-            }
-
+            var st = new CurseState();
+            var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
             while (Player.InDungeonFloor())
             {
                 byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
                 if (Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id + toanSlot * WeaponCollision.InventoryWeaponSlotStride) != Items.evilcise)
                     break;
-                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
-                if (currentFloor != lastFloor)
-                {
-                    // New floor: clear penalty/NearDeath tracking and reapply curse
-                    penalized    = false;
-                    wasNearDeath = false;
-                    lastFloor    = currentFloor;
-                    cur = Memory.ReadUShort(ToanState.Status);
-                    Memory.WriteUShort(ToanState.Status,      (ushort)((cur & 0x02) | 0x20));
-                    Memory.WriteUShort(ToanState.StatusTimer, 3600);
-                }
-
-                cur = Memory.ReadUShort(ToanState.Status);
-                bool nearDeath = (cur & 0x02) != 0;
-
-                if (nearDeath)
-                {
-                    // NearDeath state: suspend curse effect, don't penalize
-                    wasNearDeath = true;
-                }
-                else if (wasNearDeath)
-                {
-                    // Recovered from NearDeath: reapply curse only if holy water wasn't used this floor
-                    wasNearDeath = false;
-                    if (!penalized)
-                    {
-                        Memory.WriteUShort(ToanState.Status,      (ushort)(cur | 0x20));
-                        Memory.WriteUShort(ToanState.StatusTimer, 3600);
-                    }
-                }
-                else if (!penalized)
-                {
-                    if ((cur & 0x20) == 0)
-                    {
-                        // Curse was removed externally (holy water) — penalize
-                        penalized = true;
-                        Memory.WriteUShort(ToanState.Status,      (ushort)(cur | 0x10)); // Poison
-                        Memory.WriteUShort(ToanState.StatusTimer, 3600);
-                        Memory.WriteUShort(ToanState.Hp, 1);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Evilcise: curse broken — poison and HP=1 applied");
-                    }
-                    else
-                    {
-                        // Curse active: strip other statuses and refresh timer
-                        Memory.WriteUShort(ToanState.Status,      (ushort)((cur & 0x02) | 0x20));
-                        Memory.WriteUShort(ToanState.StatusTimer, 3600);
-                    }
-                }
-
+                EvilciseDrive(true, target, st);
                 Thread.Sleep(100);
             }
+            EvilciseDrive(false, target, st);   // strip curse on unequip / dungeon exit
+        }
 
-            // Strip curse on unequip or dungeon exit
-            ushort final = Memory.ReadUShort(ToanState.Status);
-            Memory.WriteUShort(ToanState.Status, (ushort)(final & ~0x20));
+        // ── Shared curse machinery (Evilcise / Maneater — also driven by Super Steve for Xiao) ──
+        /// <summary>The three per-character status/HP addresses a curse effect writes. Status BITS
+        /// and the 3600-frame duration are character-independent (see ToanState); only these
+        /// addresses differ between Toan and, e.g., Xiao.</summary>
+        internal readonly struct CurseAddrs
+        {
+            public readonly int Status, StatusTimer, Hp;
+            public CurseAddrs(int status, int statusTimer, int hp) { Status = status; StatusTimer = statusTimer; Hp = hp; }
+        }
+
+        /// <summary>Per-wielder curse state (no shared statics), so the Toan thread and the Super
+        /// Steve thread never trample each other's tracking.</summary>
+        internal sealed class CurseState
+        {
+            public bool Resolved;       // Evilcise: penalized · Maneater: cleansed (no penalty)
+            public bool WasNearDeath;
+            public byte LastFloor = 0xFF;
+            public bool Applied;        // curse currently owned by this driver (for a clean strip)
+            public DateTime LastDrain = DateTime.MinValue;
+        }
+
+        // Jealous Soul (Evilcise): curse the wielder (immune to other statuses); breaking the curse
+        // with holy water applies Poison + sets HP to 1; reapplied each floor. `active` = the wielder
+        // is the acting character with the weapon in hand; pass false to strip on unequip / switch.
+        internal static void EvilciseDrive(bool active, CurseAddrs a, CurseState st)
+        {
+            if (!active)
+            {
+                if (st.Applied)
+                {
+                    ushort final = Memory.ReadUShort(a.Status);
+                    Memory.WriteUShort(a.Status, (ushort)(final & ~ToanState.StatusCurse));
+                    st.Applied = false;
+                }
+                return;
+            }
+
+            ushort cur = Memory.ReadUShort(a.Status);
+            if (!st.Applied)
+            {
+                // Equip: apply curse immediately, but not while in NearDeath.
+                st.Applied = true; st.Resolved = false;
+                st.LastFloor = Memory.ReadByte(Addresses.checkFloor);
+                st.WasNearDeath = (cur & ToanState.StatusNearDeath) != 0;
+                if (!st.WasNearDeath)
+                {
+                    Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                }
+                return;
+            }
+
+            byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+            if (currentFloor != st.LastFloor)
+            {
+                // New floor: clear penalty/NearDeath tracking and reapply curse.
+                st.Resolved = false; st.WasNearDeath = false; st.LastFloor = currentFloor;
+                cur = Memory.ReadUShort(a.Status);
+                Memory.WriteUShort(a.Status, (ushort)((cur & ToanState.StatusNearDeath) | ToanState.StatusCurse));
+                Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+            }
+
+            cur = Memory.ReadUShort(a.Status);
+            bool nearDeath = (cur & ToanState.StatusNearDeath) != 0;
+            if (nearDeath) { st.WasNearDeath = true; }
+            else if (st.WasNearDeath)
+            {
+                st.WasNearDeath = false;
+                if (!st.Resolved)
+                {
+                    Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                }
+            }
+            else if (!st.Resolved)
+            {
+                if ((cur & ToanState.StatusCurse) == 0)
+                {
+                    // Curse removed externally (holy water) — penalize.
+                    st.Resolved = true;
+                    Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusPoison));
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                    Memory.WriteUShort(a.Hp, 1);
+                }
+                else
+                {
+                    // Curse active: strip other statuses and refresh timer.
+                    Memory.WriteUShort(a.Status, (ushort)((cur & ToanState.StatusNearDeath) | ToanState.StatusCurse));
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                }
+            }
         }
 
         // ── Heaven's Cloud ─────────────────────────────────────────────────────────────────
@@ -1230,96 +1261,103 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void ManeaterEffect()
         {
-            bool cured        = false;
-            bool wasNearDeath = false;
-            byte lastFloor    = Memory.ReadByte(Addresses.checkFloor);
-            DateTime lastDrainCheck = DateTime.UtcNow;
-
-            // Apply curse immediately on equip, but not while in NearDeath
-            ushort cur = Memory.ReadUShort(ToanState.Status);
-            wasNearDeath = (cur & ToanState.StatusNearDeath) != 0;
-            if (!wasNearDeath)
-            {
-                Memory.WriteUShort(ToanState.Status,      (ushort)(cur | ToanState.StatusCurse));
-                Memory.WriteUShort(ToanState.StatusTimer, ToanState.StatusDurationFrames);
-            }
-
+            var st = new CurseState();
+            var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
             while (Player.InDungeonFloor())
             {
                 byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
                 long weaponRecord = WeaponCollision.InventoryWeaponSlot0Id + toanSlot * WeaponCollision.InventoryWeaponSlotStride;
                 if (Memory.ReadUShort(weaponRecord) != Items.maneater)
                     break;
-                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
-                if (currentFloor != lastFloor)
-                {
-                    // New floor: clear cure/NearDeath tracking and reapply curse
-                    cured        = false;
-                    wasNearDeath = false;
-                    lastFloor    = currentFloor;
-                    cur = Memory.ReadUShort(ToanState.Status);
-                    Memory.WriteUShort(ToanState.Status,      (ushort)(cur | ToanState.StatusCurse));
-                    Memory.WriteUShort(ToanState.StatusTimer, ToanState.StatusDurationFrames);
-                }
-
-                cur = Memory.ReadUShort(ToanState.Status);
-                bool nearDeath = (cur & ToanState.StatusNearDeath) != 0;
-
-                if (nearDeath)
-                {
-                    // NearDeath state: suspend curse maintenance
-                    wasNearDeath = true;
-                }
-                else if (wasNearDeath)
-                {
-                    // Recovered from NearDeath: reapply curse only if holy water wasn't used this floor
-                    wasNearDeath = false;
-                    if (!cured)
-                    {
-                        Memory.WriteUShort(ToanState.Status,      (ushort)(cur | ToanState.StatusCurse));
-                        Memory.WriteUShort(ToanState.StatusTimer, ToanState.StatusDurationFrames);
-                    }
-                }
-                else if (!cured)
-                {
-                    if ((cur & ToanState.StatusCurse) == 0)
-                    {
-                        // Curse removed externally (holy water) — no penalty, stays off this floor
-                        cured = true;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            "Maneater: curse cleansed — no penalty");
-                    }
-                    else if ((cur & unchecked((ushort)~(ToanState.StatusNearDeath | ToanState.StatusCurse))) == 0)
-                    {
-                        // Keep the curse alive by refreshing the (shared) status timer — but only
-                        // while curse is the sole timed status, so a poison/freeze/goo the player
-                        // is waiting out is never extended. If the timer expires alongside such a
-                        // status the curse lapses with it and reads as cured for this floor.
-                        Memory.WriteUShort(ToanState.StatusTimer, ToanState.StatusDurationFrames);
-                    }
-                }
-
-                // Blood price: 1 HP -> 1 WHP per second while in the native low-WHP warning state
-                if (DateTime.UtcNow - lastDrainCheck >= TimeSpan.FromSeconds(1))
-                {
-                    lastDrainCheck = DateTime.UtcNow;
-                    float  whp    = Memory.ReadFloat(weaponRecord + WeaponCollision.InventoryWeaponWhpOffset);
-                    short  maxWhp = Memory.ReadShort(weaponRecord + WeaponCollision.InventoryWeaponMaxWhpOffset);
-                    ushort hp     = Memory.ReadUShort(ToanState.Hp);
-                    if (!nearDeath && hp > 1 && maxWhp > 0 &&
-                        whp > 0f && whp <= WeaponCollision.LowWhpWarningFraction * maxWhp)
-                    {
-                        Memory.WriteUShort(ToanState.Hp, (ushort)(hp - 1));
-                        Memory.WriteFloat(weaponRecord + WeaponCollision.InventoryWeaponWhpOffset, Math.Min(whp + 1f, maxWhp));
-                    }
-                }
-
+                ManeaterDrive(true, target, weaponRecord, st);
                 Thread.Sleep(100);
             }
+            ManeaterDrive(false, target, 0, st);   // strip curse on unequip / dungeon exit
+        }
 
-            // Strip curse on unequip or dungeon exit
-            ushort maneaterFinal = Memory.ReadUShort(ToanState.Status);
-            Memory.WriteUShort(ToanState.Status, (ushort)(maneaterFinal & ~ToanState.StatusCurse));
+        // Blood Price (Maneater): curse the wielder (cleansing with holy water carries NO penalty,
+        // stays off for the floor); while the weapon is in its native low-WHP warning state, drain
+        // 1 HP/sec to restore 1 WHP (never kills). `weaponRecord` is the wielded weapon's record
+        // (for the WHP drain); `active` false strips the curse. Shares CurseAddrs/CurseState with Evilcise.
+        internal static void ManeaterDrive(bool active, CurseAddrs a, long weaponRecord, CurseState st)
+        {
+            if (!active)
+            {
+                if (st.Applied)
+                {
+                    ushort final = Memory.ReadUShort(a.Status);
+                    Memory.WriteUShort(a.Status, (ushort)(final & ~ToanState.StatusCurse));
+                    st.Applied = false;
+                }
+                return;
+            }
+
+            ushort cur = Memory.ReadUShort(a.Status);
+            if (!st.Applied)
+            {
+                // Equip: apply curse immediately, but not while in NearDeath.
+                st.Applied = true; st.Resolved = false; st.LastDrain = DateTime.UtcNow;
+                st.LastFloor = Memory.ReadByte(Addresses.checkFloor);
+                st.WasNearDeath = (cur & ToanState.StatusNearDeath) != 0;
+                if (!st.WasNearDeath)
+                {
+                    Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                }
+                return;
+            }
+
+            byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+            if (currentFloor != st.LastFloor)
+            {
+                // New floor: clear cure/NearDeath tracking and reapply curse.
+                st.Resolved = false; st.WasNearDeath = false; st.LastFloor = currentFloor;
+                cur = Memory.ReadUShort(a.Status);
+                Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
+                Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+            }
+
+            cur = Memory.ReadUShort(a.Status);
+            bool nearDeath = (cur & ToanState.StatusNearDeath) != 0;
+            if (nearDeath) { st.WasNearDeath = true; }
+            else if (st.WasNearDeath)
+            {
+                st.WasNearDeath = false;
+                if (!st.Resolved)
+                {
+                    Memory.WriteUShort(a.Status, (ushort)(cur | ToanState.StatusCurse));
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                }
+            }
+            else if (!st.Resolved)
+            {
+                if ((cur & ToanState.StatusCurse) == 0)
+                {
+                    st.Resolved = true;   // cleansed — no penalty, stays off this floor
+                }
+                else if ((cur & unchecked((ushort)~(ToanState.StatusNearDeath | ToanState.StatusCurse))) == 0)
+                {
+                    // Keep the curse alive by refreshing the (shared) status timer — but only while
+                    // curse is the sole timed status, so a poison/freeze/goo being waited out is
+                    // never extended. If the timer expires alongside such a status the curse lapses.
+                    Memory.WriteUShort(a.StatusTimer, ToanState.StatusDurationFrames);
+                }
+            }
+
+            // Blood price: 1 HP -> 1 WHP per second while in the native low-WHP warning state.
+            if (DateTime.UtcNow - st.LastDrain >= TimeSpan.FromSeconds(1))
+            {
+                st.LastDrain = DateTime.UtcNow;
+                float  whp    = Memory.ReadFloat(weaponRecord + WeaponCollision.InventoryWeaponWhpOffset);
+                short  maxWhp = Memory.ReadShort(weaponRecord + WeaponCollision.InventoryWeaponMaxWhpOffset);
+                ushort hp     = Memory.ReadUShort(a.Hp);
+                if (!nearDeath && hp > 1 && maxWhp > 0 &&
+                    whp > 0f && whp <= WeaponCollision.LowWhpWarningFraction * maxWhp)
+                {
+                    Memory.WriteUShort(a.Hp, (ushort)(hp - 1));
+                    Memory.WriteFloat(weaponRecord + WeaponCollision.InventoryWeaponWhpOffset, Math.Min(whp + 1f, maxWhp));
+                }
+            }
         }
 
         // ── 7 Branch Sword "Sevenfold Rite" ────────────────────────────────────────────────
@@ -1596,7 +1634,7 @@ namespace Dark_Cloud_Improved_Version
             SeventhHeavenSoftenAttacks(false);   // restore original reaction types on unequip / exit
         }
 
-        private static void SeventhHeavenSoftenAttacks(bool active)
+        internal static void SeventhHeavenSoftenAttacks(bool active)
         {
             // Projectiles: downgrade every type-3 shot type in the shot-effect table (BST +0x44) to type-2.
             for (int i = 0; i < BehaviorScriptTable.Count; i++)
@@ -1724,27 +1762,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static void SunSwordEffect()
         {
-            const int procPercent = 1;
-
-            byte lastFloor = Memory.ReadByte(Addresses.checkFloor);
-            int slotCount = EnemyAddresses.FloorSlots.Count;
-            bool[]   rolled       = new bool[slotCount];   // 1% chance consumed for this slot
-            bool[]   winner       = new bool[slotCount];   // slot won the roll
-            bool[]   staged       = new bool[slotCount];   // our Sun id is currently written
-            ushort[] originalDrop = new ushort[slotCount]; // pre-stage value to restore (0 or 65535)
-
-            void UnstageAll()
-            {
-                for (int i = 0; i < slotCount; i++)
-                {
-                    if (!staged[i]) continue;
-                    staged[i] = false;
-                    int dropAddr = EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop);
-                    if (Memory.ReadUShort(dropAddr) == Items.sun)   // still ours → restore
-                        Memory.WriteUShort(dropAddr, originalDrop[i]);
-                }
-            }
-
+            var st = new SunHarvestState(EnemyAddresses.FloorSlots.Count);
             while (Player.InDungeonFloor())
             {
                 byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
@@ -1753,62 +1771,80 @@ namespace Dark_Cloud_Improved_Version
                 if (equippedId != Items.sunsword && equippedId != Items.bigbang)
                     break;
 
-                byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
-                if (currentFloor != lastFloor)
-                {
-                    // New floor: the slot array was reinitialized, so forget everything WITHOUT
-                    // restoring (writing stale values into fresh slots would corrupt them).
-                    lastFloor = currentFloor;
-                    Array.Clear(rolled, 0, slotCount);
-                    Array.Clear(winner, 0, slotCount);
-                    Array.Clear(staged, 0, slotCount);
-                }
-
-                // Kills while a sidekick is out aren't Sun Sword kills — keep nothing staged.
-                // Winners keep their win and are re-staged when Toan takes over again.
-                if (Player.CurrentCharacterNum() != Player.ToanId)
-                {
-                    UnstageAll();
-                    Thread.Sleep(250);
-                    continue;
-                }
-
-                for (int i = 0; i < slotCount; i++)
-                {
-                    if (Enemies.GetFloorEnemyId(i) == 0) continue;
-                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp)) <= 0) continue;
-
-                    int dropAddr = EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop);
-                    ushort dropVal = Memory.ReadUShort(dropAddr);
-
-                    if (!rolled[i])
-                    {
-                        rolled[i] = true;
-                        // Slots that already carry a forced drop (key/miniboss/mimic) are off-limits
-                        if (dropVal != 0 && dropVal != 65535) continue;
-                        winner[i] = random.Next(100) < procPercent;
-                        if (winner[i]) originalDrop[i] = dropVal;
-                    }
-                    if (!winner[i] || staged[i]) continue;
-
-                    // Re-check occupancy — a key could have been assigned here after our roll
-                    if (dropVal != 0 && dropVal != 65535 && dropVal != Items.sun)
-                    {
-                        winner[i] = false;
-                        continue;
-                    }
-                    Memory.WriteUShort(dropAddr, (ushort)Items.sun);
-                    staged[i] = true;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"Sun Sword: slot {i} ({Enemies.GetFloorEnemyId(i)}) will drop a Sun attachment");
-                }
-
+                // Kills while a sidekick is out aren't Sun Sword kills — winners keep their win
+                // (state is preserved) and are re-staged when Toan takes over again.
+                SunHarvestDrive(Player.CurrentCharacterNum() == Player.ToanId, st);
                 Thread.Sleep(250);
             }
+            SunHarvestDrive(false, st);   // unequipped / left the floor: revert anything still staged
+        }
 
-            // Unequipped or left the floor: revert anything still staged (guarded by a
-            // still-ours check, so stale slots after a floor unload are left alone).
-            UnstageAll();
+        // Solar Harvest core — shared with Super Steve (an attached Sun Sword / Big Bang sphere).
+        // Per-caller state (no shared statics) so the Toan thread and the Xiao thread never fight
+        // over the staged slots. `active` = the Sun wielder is currently the acting character.
+        internal sealed class SunHarvestState
+        {
+            public byte LastFloor = 0xFF;
+            public readonly bool[] Rolled, Winner, Staged;
+            public readonly ushort[] OriginalDrop;
+            public SunHarvestState(int n)
+            { Rolled = new bool[n]; Winner = new bool[n]; Staged = new bool[n]; OriginalDrop = new ushort[n]; }
+        }
+
+        internal static void SunHarvestDrive(bool active, SunHarvestState st)
+        {
+            const int procPercent = 1;
+            int slotCount = EnemyAddresses.FloorSlots.Count;
+
+            byte currentFloor = Memory.ReadByte(Addresses.checkFloor);
+            if (currentFloor != st.LastFloor)
+            {
+                // New floor: the slot array was reinitialized, so forget everything WITHOUT
+                // restoring (writing stale values into fresh slots would corrupt them).
+                st.LastFloor = currentFloor;
+                Array.Clear(st.Rolled, 0, slotCount);
+                Array.Clear(st.Winner, 0, slotCount);
+                Array.Clear(st.Staged, 0, slotCount);
+            }
+
+            if (!active) { SunUnstageAll(st); return; }
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                if (Enemies.GetFloorEnemyId(i) == 0) continue;
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.Hp)) <= 0) continue;
+
+                int dropAddr = EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop);
+                ushort dropVal = Memory.ReadUShort(dropAddr);
+
+                if (!st.Rolled[i])
+                {
+                    st.Rolled[i] = true;
+                    // Slots that already carry a forced drop (key/miniboss/mimic) are off-limits
+                    if (dropVal != 0 && dropVal != 65535) continue;
+                    st.Winner[i] = random.Next(100) < procPercent;
+                    if (st.Winner[i]) st.OriginalDrop[i] = dropVal;
+                }
+                if (!st.Winner[i] || st.Staged[i]) continue;
+
+                // Re-check occupancy — a key could have been assigned here after our roll
+                if (dropVal != 0 && dropVal != 65535 && dropVal != Items.sun)
+                { st.Winner[i] = false; continue; }
+                Memory.WriteUShort(dropAddr, (ushort)Items.sun);
+                st.Staged[i] = true;
+            }
+        }
+
+        private static void SunUnstageAll(SunHarvestState st)
+        {
+            for (int i = 0; i < st.Staged.Length; i++)
+            {
+                if (!st.Staged[i]) continue;
+                st.Staged[i] = false;
+                int dropAddr = EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.ForceItemDrop);
+                if (Memory.ReadUShort(dropAddr) == Items.sun)   // still ours → restore
+                    Memory.WriteUShort(dropAddr, st.OriginalDrop[i]);
+            }
         }
 
         // ── Tsukikage "Moonlit Focus" ──────────────────────────────────────────────────────

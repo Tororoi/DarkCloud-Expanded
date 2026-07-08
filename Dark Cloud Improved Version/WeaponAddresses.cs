@@ -297,6 +297,22 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ActionComboFirst  = 0x24;       // combo swing states 0x24-0x28 = melee hits 1-5
         internal const int  ActionComboLast   = 0x28;       //   (each combo hit is its own action state)
 
+        // ── Xiao shot states (BattleActionPlay_Jinn, dun 0x1DBC930) — SAME ChargeActionState global ──
+        // Xiao's slingshot shot is three c04b motions: idx 11 構え引き "draw" (frames 240-251, spd 0.7)
+        // = state 0xB; idx 12 構え引きループ "draw hold" (frame 250-250, spd 0) = state 0xC; idx 13 撃ち
+        // "shoot" (frames 251-255, spd 0.7) = state 0xD, pellet released at frame 251.
+        internal const int  XiaoShotDraw     = 0xB;
+        internal const int  XiaoShotHold     = 0xC;  // zero-speed loop parked on frame 250 until release flag flips
+        internal const int  XiaoShotShoot    = 0xD;
+        // iRam01dc4498: reset to 0 by BattleActionOn_Jinn at shot start, set to 1 when the fire input
+        // releases → what makes the 0xC hold advance to the 0xD shoot. Forcing it = fire now (no hold).
+        internal const long XiaoShotReleaseFlag = 0x21DC4498;
+        // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
+        // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
+        // only when it reaches 100.0, then resets it to 0; its fill rate is the weapon's speed stat.
+        internal const long XiaoShotActive = 0x21DC4490;
+        internal const long XiaoShotGauge  = 0x21DC44C8;
+
         // ── Quick Draw (Small Sword) — first-swing wind-up skip ──
         // ToanKey_Play keys EVERYTHING off the active character's animation frame cursor
         // (DAT_01ea2010 = CCharacter 0x1ea1d20 + 0x2F0, float). First combo swing (action 0x24)
@@ -410,6 +426,45 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The in-battle WEAPON_HAVE copy of the equipped weapon (id at +0; same field
         /// layout as the inventory records — <c>Player.Weapon</c> wraps its common fields).</summary>
         internal const long BattleWeaponRecord          = 0x21EA7590;
+        // Effective (post-attachment, POST-CLAMP) stat block inside a WEAPON_HAVE, written by
+        // WeaponAllValueSet (0x225B60): Attack+4 (cap MaxAttack), Endurance+6 (cap 99), Speed+8
+        // (cap 99 = _DAT_00294178), Magic+10 (cap MaxMagic). Writing past the cap in the BATTLE copy
+        // bypasses it for combat while the menu/inventory record still reads 99.
+        internal const int  EffAttackOffset    = 0x04;
+        internal const int  EffEnduranceOffset = 0x06;
+        internal const int  EffSpeedOffset     = 0x08;
+        internal const int  EffMagicOffset     = 0x0A;
+        internal const int  StatCap            = 99;   // _DAT_00294178 / _DAT_00294174
+
+        /// <summary>
+        /// The player shot-effect (CSHOT_EFFECT) pool that ranged attacks fire into — Xiao's
+        /// slingshot pellets, Ruby's/Osmond's shots, etc. The pool BASE is a pointer stored at
+        /// <see cref="BasePtr"/> (native gp-0x621c, gp=0x2A97F0); BattleActionPlay_Jinn (dun 0x1DBC930)
+        /// scans it for a free slot (<see cref="ActiveFlagOffset"/>==0) and writes the new shot's
+        /// position/velocity/damage/scale/lifetime. Struct-of-arrays: the vec fields (pos, vel) use a
+        /// 0x10 stride; the scalar fields (flag, damage, scale, lifetime) use a 4-byte stride.
+        /// </summary>
+        internal static class PlayerShotPool
+        {
+            internal const long BasePtr          = 0x202A35D4; // holds the native pool base pointer
+            internal const int  SlotCount        = 12;
+            // vec arrays (float3, stride 0x10 from the pool base)
+            internal const int  VecStride        = 0x10;
+            internal const int  PosOffset        = 0x40;
+            internal const int  VelOffset        = 0x1C0;
+            // scalar arrays (stride 4 from the pool base)
+            internal const int  ScalarStride     = 0x04;
+            internal const int  LifetimeOffset   = 0x2B0; // int (0x78 = 120 frames at spawn)
+            internal const int  DamageOffset     = 0x2E0; // int
+            internal const int  ScaleOffset      = 0x310; // float (1.0 at spawn)
+            internal const int  ActiveFlagOffset = 0x3D0; // int (nonzero = slot in use)
+
+            internal static long VelAddr(long poolBase, int slot)   => poolBase + VelOffset   + slot * VecStride;
+            internal static long PosAddr(long poolBase, int slot)   => poolBase + PosOffset   + slot * VecStride;
+            internal static long FlagAddr(long poolBase, int slot)  => poolBase + ActiveFlagOffset + slot * ScalarStride;
+            internal static long DamageAddr(long poolBase, int slot)=> poolBase + DamageOffset + slot * ScalarStride;
+            internal static long ScaleAddr(long poolBase, int slot) => poolBase + ScaleOffset  + slot * ScalarStride;
+        }
 
         /// <summary>
         /// The attachment "board" (attachment inventory): ATTACH_LIST entries at status-base +
