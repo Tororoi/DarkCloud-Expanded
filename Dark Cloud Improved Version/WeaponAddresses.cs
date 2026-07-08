@@ -385,6 +385,10 @@ namespace Dark_Cloud_Improved_Version
         /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
         internal const uint HcMeshNameWord = 0x00343177;
 
+        /// <summary>Xiao's slingshot weapon mesh frame name ("c04w"). Scaled by Super Steve's Heaven's Cloud
+        /// charge (Weapons.ScaleWeaponFrameByName).</summary>
+        internal const uint XiaoSlingMeshNameWord = 0x77343063;
+
         // ── Inventory equip slot (early weapon-swap detection) ──
         // The battle in-hand weapon id (0x21EA7590, Player.Weapon.GetCurrentWeaponId) only refreshes once Toan
         // is walking again after the menu, so keying off it lags a swap. The inventory equip slot updates

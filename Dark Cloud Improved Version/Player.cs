@@ -265,6 +265,25 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
+        /// <summary>
+        /// Fires the engine's whole-character ambient "flash" on the ACTIVE unit by writing the same globals
+        /// <c>setUnitAmbientAnime</c> (dun 0x1DC1000) sets. The per-frame <c>unitAmbientAnime</c> then drives
+        /// the unit's ambient colour = (colour × pulse) + 64 for <paramref name="count"/> repeats before it
+        /// self-disables — the same effect the game uses for drink / face-change / Ruby's Mobius charge flash,
+        /// so it works for whoever is active. <paramref name="r"/>/<paramref name="g"/>/<paramref name="b"/>
+        /// are 0-255; enable is written last so the updater never runs mid-setup.
+        /// </summary>
+        public static void FlashActiveCharacter(float r, float g, float b, float speed, int count)
+        {
+            Memory.WriteFloat(CharacterFlash.ColorR, r);
+            Memory.WriteFloat(CharacterFlash.ColorG, g);
+            Memory.WriteFloat(CharacterFlash.ColorB, b);
+            Memory.WriteFloat(CharacterFlash.Speed, speed);
+            Memory.WriteInt(CharacterFlash.Count, count);
+            Memory.WriteFloat(CharacterFlash.Phase, 0f);   // (re)start the pulse
+            Memory.WriteInt(CharacterFlash.Enable, 1);     // enable last
+        }
+
         internal class Inventory
         {
             /// <summary>

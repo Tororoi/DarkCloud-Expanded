@@ -37,6 +37,26 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// The engine's whole-character ambient "flash" — an animated ambient tint applied to the ACTIVE unit
+    /// (RE'd from <c>setUnitAmbientAnime__Ffffff</c> dun 0x1DC1000 + <c>unitAmbientAnime__FPf</c> 0x1DC1050).
+    /// Setting <see cref="Enable"/> makes the per-frame updater drive the unit's ambient colour =
+    /// (colour × pulse) + 64 until the <see cref="Count"/> repeats run out. It is character-agnostic — the
+    /// game uses it for drink/face-change and Ruby's Mobius charge flash — so the same data writes flash any
+    /// active character. Trigger: write colour + speed + count, reset <see cref="Phase"/>, then set Enable.
+    /// gp = 0x2A97F0. See <c>CustomXiaoEffects.TriggerCharacterFlash</c> / the Ruby Mobius flash.
+    /// </summary>
+    internal static class CharacterFlash
+    {
+        internal const long Speed  = 0x202A36F4; // fGpffff9f04 — pulse speed (Ruby's charge flash uses 15.0)
+        internal const long Phase  = 0x202A36F8; // fGpffff9f08 — animation phase; reset to 0 to (re)start
+        internal const long Count  = 0x202A36FC; // iGpffff9f0c — remaining flash repeats
+        internal const long Enable = 0x202A3700; // iGpffff9f10 — 1 = on; the updater clears it when Count runs out
+        internal const long ColorR = 0x21F068D0; // fRam01f068d0 — flash colour RGB (float, 0-255)
+        internal const long ColorG = 0x21F068D4; // fRam01f068d4
+        internal const long ColorB = 0x21F068D8; // fRam01f068d8
+    }
+
+    /// <summary>
     /// Toan's live status/HP fields (same block Player.Toan wraps with getters; exposed here as
     /// addresses for effects that need raw bit-level status access, e.g. the Evilcise/Maneater
     /// curse loops). The status word and its single shared countdown timer cover ALL status

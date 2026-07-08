@@ -99,86 +99,35 @@ namespace Dark_Cloud_Improved_Version
                 long rec = WeaponCollision.AbsRollover.RecordAddr(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) break;
 
-                HashSet<int> spheres = SuperSteveSphereSources(rec);
+                // A weapon holds at most ONE SynthSphere, so its single source weapon id picks the effect.
+                // Every driver is pulsed each tick (enabled or not) so it self-restores the instant the
+                // sphere is swapped — no explicit per-swap teardown needed.
+                int sphere = SuperSteveAttachedSphere(rec);
                 bool active = !Player.CheckDunIsPaused();
 
-                // Divine Guard + Guard Crush (7th Heaven carries Dark Cloud's Guard Crush by lineage).
-                bool divineGuard = spheres.Contains(Items.seventhheaven);
-                bool guardCrush  = divineGuard || spheres.Contains(Items.darkcloud);
-                CustomToanEffects.SeventhHeavenSoftenAttacks(active && divineGuard);
-                CustomToanEffects.DarkCloudDriveGuards(active && guardCrush);
+                // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
+                CustomToanEffects.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
+                CustomToanEffects.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
 
-                // Defensive Legacy (Aga's Sword): +15 defense to Xiao, balanced add/remove.
-                bool wantAgas = active && spheres.Contains(Items.agassword);
-                if (wantAgas && !_ssAgasApplied)
-                { Player.Xiao.SetDefense(Player.Xiao.GetDefense() + AgasDefenseBoost); _ssAgasApplied = true; }
-                else if (!wantAgas && _ssAgasApplied)
-                { Player.Xiao.SetDefense(Player.Xiao.GetDefense() - AgasDefenseBoost); _ssAgasApplied = false; }
+                // Defensive Legacy (Aga's Sword): +15 Xiao defense.
+                DriveAgasDefense(active && sphere == Items.agassword);
 
-                // Hero's Courage (Brave Ark): clear Freeze/Poison/Curse/Goo from Xiao each tick.
-                if (active && spheres.Contains(Items.braveark))
-                {
-                    const ushort resistMask = ToanState.StatusFreeze | ToanState.StatusPoison |
-                                              ToanState.StatusCurse  | ToanState.StatusGoo;
-                    ushort status = Memory.ReadUShort(Player.Xiao.status);
-                    if ((status & resistMask) != 0)
-                        Memory.WriteUShort(Player.Xiao.status, (ushort)(status & ~resistMask));
-                }
+                // Hero's Courage (Brave Ark): clear Freeze/Poison/Curse/Goo each tick.
+                ClearXiaoResistAilments(active && sphere == Items.braveark);
 
-                // Bone Rapier: enable the bone-door bypass while its sphere is attached (the Xiao
-                // dispatcher no longer force-clears it for Super Steve, so this owns the flag).
-                CustomToanEffects.BoneRapierEffect(active && spheres.Contains(Items.bonerapier));
+                // Bone Rapier: bone-door bypass (the Xiao dispatcher no longer force-clears it, so this owns it).
+                CustomToanEffects.BoneRapierEffect(active && sphere == Items.bonerapier);
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
-                bool hasSun = spheres.Contains(Items.sunsword) || spheres.Contains(Items.bigbang);
-                CustomToanEffects.SunHarvestDrive(hasSun, ssSun);
+                CustomToanEffects.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
 
-                // Curses (full inherit): curse Xiao. Not gated on pause — mirrors the Toan loops.
-                CustomToanEffects.EvilciseDrive(spheres.Contains(Items.evilcise), xiaoCurse, ssEvilcise);
-                CustomToanEffects.ManeaterDrive(spheres.Contains(Items.maneater), xiaoCurse, rec, ssManeater);
+                // Curses (full inherit): curse Xiao. Not pause-gated — mirrors the Toan loops.
+                CustomToanEffects.EvilciseDrive(sphere == Items.evilcise, xiaoCurse, ssEvilcise);
+                CustomToanEffects.ManeaterDrive(sphere == Items.maneater, xiaoCurse, rec, ssManeater);
 
-                bool hasMoonlit = spheres.Contains(Items.tsukikage) || spheres.Contains(Items.heavenscloud);
-                bool hasHeavensCloud = spheres.Contains(Items.heavenscloud);
-
-                // Heaven's Cloud is a CHARGE effect: the slingshot + the fired pellet grow the longer the
-                // shot is held (draw 0xB / nocked-hold 0xC), base size on a quick tap. Track the hold time
-                // → 0..1 fraction; freeze it on release so the pellet spawning right after reads the held
-                // amount; reset only when a fresh shot starts.
-                int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
-                bool holding = shotState == WeaponCollision.XiaoShotDraw || shotState == WeaponCollision.XiaoShotHold;
-                if (holding)
-                {
-                    if (!_ssHolding) { _ssHoldStart = DateTime.UtcNow; _ssHolding = true; }
-                    _ssHoldFrac = (float)Math.Min(1.0, (DateTime.UtcNow - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
-                }
-                else _ssHolding = false;   // keep _ssHoldFrac frozen for the pellet that fires
-
-                // Moonlit Focus (×2 speed) + Heaven's Cloud pellet size (scales with the hold fraction).
-                float pelletScale = hasHeavensCloud ? 1f + _ssHoldFrac * (HcPelletScale - 1f) : 1f;
-                SuperSteveShotSpawnDrive(active && hasMoonlit, hasHeavensCloud ? pelletScale : 1f);
-
-                // Slingshot 'c04w' mesh: grow with the hold, then HOLD the charged size through the shoot
-                // motion (0xD, frames 251-255) and snap back to base only once the shot ends. Multiply-scale
-                // preserves the frame's baked rotation. (_ssHoldFrac is frozen for 0xB/0xC, so it stays put
-                // through 0xD — a fresh hold resets it.)
-                bool shooting = shotState == WeaponCollision.XiaoShotShoot;
-                _ssSlingScale = (hasHeavensCloud && (holding || shooting)) ? 1f + _ssHoldFrac * (HcSlingshotScale - 1f) : 1f;
-                Weapons.ScaleWeaponFrameByName(XiaoSlingMeshName, _ssSlingScale);
-
-                // Max-charge FLASH: pulse Xiao's whole-character ambient (Ruby Mobius style) ONCE the moment
-                // she reaches full charge — signals the burst is armed. Edge-latched so it fires a single
-                // flash per charge; rearmed when the shot is released.
-                bool atMaxCharge = hasHeavensCloud && holding && _ssHoldFrac >= BurstMaxChargeThreshold;
-                if (atMaxCharge && !_ssFlashedThisCharge)
-                {
-                    TriggerCharacterFlash(0f, 122f, 208f, 15f, 1);
-                    _ssFlashedThisCharge = true;
-                }
-                else if (!holding) _ssFlashedThisCharge = false;   // rearm for the next charge
-
-                // Heaven's Cloud: each pellet hit bursts into 8 real pellets radiating out from the enemy,
-                // dealing native collision damage to whatever they fly into.
-                HeavensCloudBurstDrive(active && hasHeavensCloud);
+                // Body abilities: Moonlit Focus (×2 shot speed) + Heaven's Cloud (charge → grow + shrapnel burst).
+                bool hasMoonlit = sphere == Items.tsukikage || sphere == Items.heavenscloud;
+                DriveHeavensCloudCharge(active, hasMoonlit, sphere == Items.heavenscloud);
 
                 Thread.Sleep(16);
             }
@@ -190,11 +139,81 @@ namespace Dark_Cloud_Improved_Version
             CustomToanEffects.SunHarvestDrive(false, ssSun);
             CustomToanEffects.EvilciseDrive(false, xiaoCurse, ssEvilcise);
             CustomToanEffects.ManeaterDrive(false, xiaoCurse, 0, ssManeater);
-            SuperSteveShotSpawnDrive(false, 1f);
-            _ssSlingScale = 1f; _ssHolding = false; _ssHoldFrac = 0f;
-            Weapons.ScaleWeaponFrameByName(XiaoSlingMeshName, 1.0f);   // restore the slingshot on unequip / switch / exit
-            if (_ssAgasApplied)
+            DriveHeavensCloudCharge(false, false, false);   // resets slingshot + shot drive + flash latch
+            _ssHolding = false; _ssHoldFrac = 0f;
+            DriveAgasDefense(false);
+        }
+
+        /// <summary>The source weapon id of the single SynthSphere attached to Super Steve's record at
+        /// <paramref name="rec"/> (0 if none). A weapon holds at most one SynthSphere (id 0x5A), so the first
+        /// one found is the only one — its source id (attach-entry +0x02) selects the inherited effect.</summary>
+        private static int SuperSteveAttachedSphere(long rec)
+        {
+            for (int slot = 0; slot < WeaponCollision.WeaponAttachSlotCount; slot++)
+            {
+                long entry = rec + WeaponCollision.WeaponAttachSlot0Offset +
+                             slot * WeaponCollision.WeaponAttachSlotStride;
+                if (Memory.ReadUShort(entry) == WeaponCollision.AttachBoard.SynthSphereId)
+                    return Memory.ReadUShort(entry + WeaponCollision.AttachBoard.EntrySourceId);
+            }
+            return 0;
+        }
+
+        /// <summary>Defensive Legacy (Aga's Sword): balanced ±<see cref="AgasDefenseBoost"/> on Xiao's defense.</summary>
+        private static void DriveAgasDefense(bool want)
+        {
+            if (want && !_ssAgasApplied)
+            { Player.Xiao.SetDefense(Player.Xiao.GetDefense() + AgasDefenseBoost); _ssAgasApplied = true; }
+            else if (!want && _ssAgasApplied)
             { Player.Xiao.SetDefense(Player.Xiao.GetDefense() - AgasDefenseBoost); _ssAgasApplied = false; }
+        }
+
+        /// <summary>Hero's Courage (Brave Ark): while <paramref name="active"/>, clear Freeze/Poison/Curse/Goo
+        /// from Xiao's status word. Stateless (nothing to restore), so it just no-ops when inactive.</summary>
+        private static void ClearXiaoResistAilments(bool active)
+        {
+            if (!active) return;
+            const ushort resistMask = ToanState.StatusFreeze | ToanState.StatusPoison |
+                                      ToanState.StatusCurse  | ToanState.StatusGoo;
+            ushort status = Memory.ReadUShort(Player.Xiao.status);
+            if ((status & resistMask) != 0)
+                Memory.WriteUShort(Player.Xiao.status, (ushort)(status & ~resistMask));
+        }
+
+        /// <summary>Moonlit Focus + Heaven's Cloud charge effect, driven each tick. Tracks the hold → 0..1
+        /// charge fraction (frozen on release so the fired pellet reads it), grows the slingshot mesh + fired
+        /// pellet, flashes Xiao once at full charge, and bursts on hit. Called with all-false to restore
+        /// (snaps the slingshot back and clears the latches).</summary>
+        private static void DriveHeavensCloudCharge(bool active, bool hasMoonlit, bool hasHeavensCloud)
+        {
+            int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
+            bool holding  = shotState == WeaponCollision.XiaoShotDraw || shotState == WeaponCollision.XiaoShotHold;
+            bool shooting = shotState == WeaponCollision.XiaoShotShoot;
+
+            // Hold time → 0..1 charge fraction; frozen on release (draw 0xB / nocked-hold 0xC), base on a tap.
+            if (holding)
+            {
+                if (!_ssHolding) { _ssHoldStart = DateTime.UtcNow; _ssHolding = true; }
+                _ssHoldFrac = (float)Math.Min(1.0, (DateTime.UtcNow - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
+            }
+            else _ssHolding = false;
+
+            // Moonlit ×2 speed + Heaven's Cloud pellet size (scales with the held fraction).
+            float pelletScale = hasHeavensCloud ? 1f + _ssHoldFrac * (HcPelletScale - 1f) : 1f;
+            SuperSteveShotSpawnDrive(active && hasMoonlit, hasHeavensCloud ? pelletScale : 1f);
+
+            // Slingshot 'c04w' mesh: grow with the hold, HOLD through the shoot (0xD), snap back after. Multiply-
+            // scale preserves the frame's baked rotation; _ssHoldFrac stays frozen for 0xB/0xC/0xD.
+            _ssSlingScale = (hasHeavensCloud && (holding || shooting)) ? 1f + _ssHoldFrac * (HcSlingshotScale - 1f) : 1f;
+            Weapons.ScaleWeaponFrameByName(WeaponCollision.XiaoSlingMeshNameWord, _ssSlingScale);
+
+            // Whole-character flash ONCE on reaching full charge (edge-latched; rearms on release) — burst armed.
+            if (hasHeavensCloud && holding && _ssHoldFrac >= BurstMaxChargeThreshold && !_ssFlashedThisCharge)
+            { Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1); _ssFlashedThisCharge = true; }
+            else if (!holding) _ssFlashedThisCharge = false;
+
+            // Each pellet hit bursts into shrapnel radiating from the enemy (real collision damage).
+            HeavensCloudBurstDrive(active && hasHeavensCloud);
         }
 
         // ── Super Steve → Quick Draw (Small Sword / Tsukikage / Heaven's Cloud sphere) ─────────
@@ -269,25 +288,17 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>True if a Small Sword / Tsukikage / Heaven's Cloud SynthSphere (the Quick Draw
-        /// lineage) is attached to the weapon record at <paramref name="rec"/>.</summary>
+        /// <summary>True if the attached SynthSphere is a Small Sword / Tsukikage / Heaven's Cloud (the Quick
+        /// Draw lineage).</summary>
         private static bool SuperSteveHasQuickDrawSphere(long rec)
         {
-            for (int slot = 0; slot < WeaponCollision.WeaponAttachSlotCount; slot++)
-            {
-                long entry = rec + WeaponCollision.WeaponAttachSlot0Offset +
-                             slot * WeaponCollision.WeaponAttachSlotStride;
-                if (Memory.ReadUShort(entry) != WeaponCollision.AttachBoard.SynthSphereId) continue;
-                int src = Memory.ReadUShort(entry + WeaponCollision.AttachBoard.EntrySourceId);
-                if (src == Items.smallsword || src == Items.tsukikage || src == Items.heavenscloud) return true;
-            }
-            return false;
+            int s = SuperSteveAttachedSphere(rec);
+            return s == Items.smallsword || s == Items.tsukikage || s == Items.heavenscloud;
         }
 
         // ── Super Steve → per-pellet effects (Moonlit Focus + Heaven's Cloud pellet scale) ─────
         private const float HcPelletScale    = 8f;         // Heaven's Cloud: pellet at MAX charge (shot-pool +0x310)
         private const float HcSlingshotScale = 2f;          // Heaven's Cloud: slingshot 'c04w' mesh at MAX charge
-        private const uint  XiaoSlingMeshName = 0x77343063; // 'c04w' — Xiao slingshot weapon mesh frame
         private const double ChargeGrowSeconds = 2;       // hold time to reach max charge (base→full)
         // Heaven's Cloud impact = a shrapnel BURST: on a pellet hit, spawn 8 real CSHOT pellets radiating
         // out from the hit enemy along the ground plane. They're actual pellets (collision ENABLED, +0x280=0)
@@ -295,17 +306,8 @@ namespace Dark_Cloud_Improved_Version
         // does the "splash", no faked HP writes. They spawn just outside the hit enemy's body so they don't
         // instantly re-hit it, then fly out and expire.
         private const float HcMaxDamageMult  = 1.5f;        // Heaven's Cloud: pellet damage at full charge (partial-charge payoff)
-        // Max-charge whole-character FLASH — replicates the engine's setUnitAmbientAnime (dun 0x1DC1000) as
-        // data writes: unitAmbientAnime (0x1DC1050) drives the ACTIVE unit's ambient = color×pulse + 64 while
-        // the enable flag is set, self-expiring after the repeat count. Same effect the game uses when a
-        // character drinks / on face-change, so it applies to Xiao. gp = 0x2A97F0. Colors are float 0-255.
-        private const long FlashEnableAddr = 0x202A3700;   // iGpffff9f10 (1 = on; clears itself when the count runs out)
-        private const long FlashPhaseAddr  = 0x202A36F8;   // fGpffff9f08 (reset to 0 to (re)start the pulse)
-        private const long FlashSpeedAddr  = 0x202A36F4;   // fGpffff9f04 (15.0 = Ruby's charge-flash speed)
-        private const long FlashCountAddr  = 0x202A36FC;   // iGpffff9f0c (flash repeat count)
-        private const long FlashColorRAddr = 0x21F068D0;   // fRam01f068d0 / d4 / d8 — flash RGB
-        private const long FlashColorGAddr = 0x21F068D4;
-        private const long FlashColorBAddr = 0x21F068D8;
+        // Max-charge whole-character FLASH — addresses in CharacterAddresses.CharacterFlash (the engine's
+        // setUnitAmbientAnime, applied to the active unit, so it works for Xiao). Written via TriggerCharacterFlash.
         private static bool _ssFlashedThisCharge;            // edge latch: one flash per charge-to-max
         private const int   BurstCount          = 8;      // pellets per burst (8 compass directions)
         private const float BurstSpeed          = 2.5f;   // outward units/frame (matches a normal pellet ~5.0/3.5)
@@ -315,7 +317,7 @@ namespace Dark_Cloud_Improved_Version
         private const float BurstStartOffset    = 16f;    // spawn this far from the enemy center
         private const int   BurstLifetime       = 0x40;   // frames the shrapnel lives → reach ≈ Speed × this
         private const float BurstDamageFraction = 0.5f;   // each shrapnel's +0x2E0 attack = this × the weapon's attack stat
-        private const float BurstScale          = 4f;     // shrapnel sprite scale (+0x310) for visibility
+        private const float BurstScale          = 1f;     // shrapnel sprite scale (+0x310) — normal pellet size (only the charged shot grows)
         // The burst only fires from a MAX-charge shot. A max-charge pellet spawning arms this timestamp; the
         // next Xiao hit within the window bursts and consumes it (covers the pellet's flight time).
         private const float BurstMaxChargeThreshold = 0.95f;                       // charge fraction that counts as "max"
@@ -428,21 +430,6 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < n; s++) _ssSplashPrevHp[s] = cur[s];
         }
 
-        /// <summary>Fire the engine's whole-character ambient flash on the ACTIVE unit (Xiao) by writing the
-        /// same globals <c>setUnitAmbientAnime</c> (dun 0x1DC1000) sets — an animated ambient tint of
-        /// <paramref name="r"/>/<paramref name="g"/>/<paramref name="b"/> (0-255) at <paramref name="speed"/>,
-        /// repeating <paramref name="count"/> times before it self-disables. Enable is written last.</summary>
-        private static void TriggerCharacterFlash(float r, float g, float b, float speed, int count)
-        {
-            Memory.WriteFloat(FlashColorRAddr, r);
-            Memory.WriteFloat(FlashColorGAddr, g);
-            Memory.WriteFloat(FlashColorBAddr, b);
-            Memory.WriteFloat(FlashSpeedAddr, speed);
-            Memory.WriteInt(FlashCountAddr, count);
-            Memory.WriteFloat(FlashPhaseAddr, 0f);   // (re)start the pulse
-            Memory.WriteInt(FlashEnableAddr, 1);     // enable last so the updater doesn't run mid-setup
-        }
-
         /// <summary>Spawn <see cref="BurstCount"/> real pellets fanning out from enemy <paramref name="h"/> in
         /// the ground plane (pos layout: [0]=X @0x100, [1]=height @0x104, [2]=Y @0x108). Each is a genuine
         /// CSHOT pellet — collision ENABLED (+0x280=0) with damage <paramref name="dmg"/> — spawned
@@ -479,22 +466,6 @@ namespace Dark_Cloud_Improved_Version
                 _hcBurstSlots.Add(slot);
             }
             _hcBurstCooldownUntil = DateTime.UtcNow.AddMilliseconds(150);   // settle window after the last shrapnel clears
-        }
-
-        /// <summary>Source weapon ids of every SynthSphere attached to the weapon record at
-        /// <paramref name="rec"/> (reads the six in-record ATTACH_LIST slots at rec+0x28).</summary>
-        private static HashSet<int> SuperSteveSphereSources(long rec)
-        {
-            var set = new HashSet<int>();
-            for (int slot = 0; slot < WeaponCollision.WeaponAttachSlotCount; slot++)
-            {
-                long entry = rec + WeaponCollision.WeaponAttachSlot0Offset +
-                             slot * WeaponCollision.WeaponAttachSlotStride;
-                if (Memory.ReadUShort(entry) != WeaponCollision.AttachBoard.SynthSphereId) continue;
-                int src = Memory.ReadUShort(entry + WeaponCollision.AttachBoard.EntrySourceId);
-                if (src > 0 && src != 0xFFFF) set.Add(src);
-            }
-            return set;
         }
 
     }
