@@ -4157,6 +4157,99 @@ namespace Dark_Cloud_Improved_Version
             _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0; _hcW14Addr = 0;
         }
 
+        static bool _weaponTreeDumped;
+
+        /// <summary>Scale EVERY mesh frame (name starts with 'w') in the equipped weapon model by
+        /// <paramref name="factor"/> — grows the whole weapon. Used for the slingshot (Super Steve +
+        /// Heaven's Cloud sphere), which has no single "blade" mesh like the sword's w14. Mesh frames are
+        /// template nodes the engine doesn't re-pose (unlike the root, which is re-posed to the hand each
+        /// frame), so the scale holds. Writes only when a diagonal differs from <paramref name="factor"/>.
+        /// Pass <paramref name="dumpOnce"/>=true to log the frame tree once (to discover the mesh names).</summary>
+        public static bool ScaleAllWeaponMeshes(float factor, bool dumpOnce = false)
+        {
+            bool dump = dumpOnce && !_weaponTreeDumped;
+            int nw = Memory.ReadInt(WeaponCollision.NowWeaponPtr);
+            if (!IsRamPtr(nw))
+            {
+                if (dump) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] NowWeapon not resolvable (nw=0x{nw:X})"); _weaponTreeDumped = true; }
+                return false;
+            }
+            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponCollision.WeaponModelRootOffset);
+            if (!IsRamPtr(modelRoot))
+            {
+                if (dump) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] modelRoot not resolvable (nw=0x{nw:X} root=0x{modelRoot:X})"); _weaponTreeDumped = true; }
+                return false;
+            }
+            if (dump) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"=== equipped weapon model frame tree (nw=0x{nw:X} root=0x{modelRoot:X}) ===");
+            ScaleMeshFramesRec(Memory.ToMmu(modelRoot), factor, dump, 0);
+            if (dump) _weaponTreeDumped = true;
+            return true;
+        }
+
+        static void ScaleMeshFramesRec(long node, float factor, bool dump, int depth)
+        {
+            if (depth > 32) return;
+            long name = node + WeaponCollision.CFrameName;
+            uint nword = (uint)Memory.ReadInt(name);
+            bool isMesh = (nword & 0xFF) == 0x77;   // name's first char is 'w' (wNN mesh frame)
+            if (dump)
+            {
+                string s = "";
+                for (int b = 0; b < 4; b++) { char c = (char)((nword >> (b * 8)) & 0xFF); s += (c >= 32 && c < 127) ? c : '.'; }
+                Console.WriteLine($"{new string(' ', depth * 2)}[{depth}] '{s}' mesh={isMesh} m00={Memory.ReadFloat(name + WeaponCollision.Vu1LocalMatrixDiag0):F2}");
+            }
+            if (isMesh && Math.Abs(Memory.ReadFloat(name + WeaponCollision.Vu1LocalMatrixDiag0) - factor) > 0.01f)
+            {
+                Memory.WriteFloat(name + WeaponCollision.Vu1LocalMatrixDiag0, factor);
+                Memory.WriteFloat(name + WeaponCollision.Vu1LocalMatrixDiag1, factor);
+                Memory.WriteFloat(name + WeaponCollision.Vu1LocalMatrixDiag2, factor);
+            }
+            for (int c = Memory.ReadInt(node + WeaponCollision.CFrameChild); IsRamPtr(c); )
+            {
+                long cm = Memory.ToMmu(c);
+                ScaleMeshFramesRec(cm, factor, dump, depth + 1);
+                c = Memory.ReadInt(cm + WeaponCollision.CFrameNext);
+            }
+        }
+
+        // Uniform-scale a named model frame by MULTIPLYING its local 3x3 by `factor` (unlike ScaleWeaponMesh
+        // which SETS the diagonal — that only works on an identity/bind matrix; the slingshot's frames carry
+        // rotation, so we scale by multiply to preserve orientation). Snapshots the frame's ORIGINAL matrix
+        // the first time it's located and always writes original×factor, so it's stable across ticks and a
+        // gradual factor eases smoothly; pass factor 1.0 to restore. Re-snapshots when the model reloads.
+        static long _sfFrameNameAddr;
+        static uint _sfNameWord;
+        static readonly float[] _sfOrig = new float[9];
+        static bool _sfHasSnapshot;
+
+        public static bool ScaleWeaponFrameByName(uint nameWord, float factor)
+        {
+            if (_sfFrameNameAddr == 0 || _sfNameWord != nameWord ||
+                (uint)Memory.ReadInt(_sfFrameNameAddr) != nameWord)
+            {
+                _sfFrameNameAddr = LocateModelFrame(nameWord, null);
+                _sfNameWord = nameWord;
+                _sfHasSnapshot = false;
+                if (_sfFrameNameAddr == 0) return false;
+            }
+            long m = _sfFrameNameAddr + WeaponCollision.Vu1LocalMatrixDiag0;   // 3x3 base: row stride 0x10, col stride 4
+            if (!_sfHasSnapshot)
+            {
+                for (int r = 0; r < 3; r++)
+                    for (int c = 0; c < 3; c++)
+                        _sfOrig[r * 3 + c] = Memory.ReadFloat(m + r * 0x10 + c * 4);
+                _sfHasSnapshot = true;
+            }
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                {
+                    long addr = m + r * 0x10 + c * 4;
+                    float want = _sfOrig[r * 3 + c] * factor;
+                    if (Math.Abs(Memory.ReadFloat(addr) - want) > 0.001f) Memory.WriteFloat(addr, want);
+                }
+            return true;
+        }
+
         static void ReachLoop()
         {
             while (true)

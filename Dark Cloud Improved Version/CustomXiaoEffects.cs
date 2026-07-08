@@ -137,9 +137,48 @@ namespace Dark_Cloud_Improved_Version
                 CustomToanEffects.EvilciseDrive(spheres.Contains(Items.evilcise), xiaoCurse, ssEvilcise);
                 CustomToanEffects.ManeaterDrive(spheres.Contains(Items.maneater), xiaoCurse, rec, ssManeater);
 
-                // Moonlit Focus (Tsukikage / Heaven's Cloud sphere): 2× pellet speed.
                 bool hasMoonlit = spheres.Contains(Items.tsukikage) || spheres.Contains(Items.heavenscloud);
-                MoonlitFocusDrive(active && hasMoonlit);
+                bool hasHeavensCloud = spheres.Contains(Items.heavenscloud);
+
+                // Heaven's Cloud is a CHARGE effect: the slingshot + the fired pellet grow the longer the
+                // shot is held (draw 0xB / nocked-hold 0xC), base size on a quick tap. Track the hold time
+                // → 0..1 fraction; freeze it on release so the pellet spawning right after reads the held
+                // amount; reset only when a fresh shot starts.
+                int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
+                bool holding = shotState == WeaponCollision.XiaoShotDraw || shotState == WeaponCollision.XiaoShotHold;
+                if (holding)
+                {
+                    if (!_ssHolding) { _ssHoldStart = DateTime.UtcNow; _ssHolding = true; }
+                    _ssHoldFrac = (float)Math.Min(1.0, (DateTime.UtcNow - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
+                }
+                else _ssHolding = false;   // keep _ssHoldFrac frozen for the pellet that fires
+
+                // Moonlit Focus (×2 speed) + Heaven's Cloud pellet size (scales with the hold fraction).
+                float pelletScale = hasHeavensCloud ? 1f + _ssHoldFrac * (HcPelletScale - 1f) : 1f;
+                SuperSteveShotSpawnDrive(active && hasMoonlit, hasHeavensCloud ? pelletScale : 1f);
+
+                // Slingshot 'c04w' mesh: grow with the hold, then HOLD the charged size through the shoot
+                // motion (0xD, frames 251-255) and snap back to base only once the shot ends. Multiply-scale
+                // preserves the frame's baked rotation. (_ssHoldFrac is frozen for 0xB/0xC, so it stays put
+                // through 0xD — a fresh hold resets it.)
+                bool shooting = shotState == WeaponCollision.XiaoShotShoot;
+                _ssSlingScale = (hasHeavensCloud && (holding || shooting)) ? 1f + _ssHoldFrac * (HcSlingshotScale - 1f) : 1f;
+                Weapons.ScaleWeaponFrameByName(XiaoSlingMeshName, _ssSlingScale);
+
+                // Max-charge FLASH: pulse Xiao's whole-character ambient (Ruby Mobius style) ONCE the moment
+                // she reaches full charge — signals the burst is armed. Edge-latched so it fires a single
+                // flash per charge; rearmed when the shot is released.
+                bool atMaxCharge = hasHeavensCloud && holding && _ssHoldFrac >= BurstMaxChargeThreshold;
+                if (atMaxCharge && !_ssFlashedThisCharge)
+                {
+                    TriggerCharacterFlash(0f, 122f, 208f, 15f, 1);
+                    _ssFlashedThisCharge = true;
+                }
+                else if (!holding) _ssFlashedThisCharge = false;   // rearm for the next charge
+
+                // Heaven's Cloud: each pellet hit bursts into 8 real pellets radiating out from the enemy,
+                // dealing native collision damage to whatever they fly into.
+                HeavensCloudBurstDrive(active && hasHeavensCloud);
 
                 Thread.Sleep(16);
             }
@@ -151,7 +190,9 @@ namespace Dark_Cloud_Improved_Version
             CustomToanEffects.SunHarvestDrive(false, ssSun);
             CustomToanEffects.EvilciseDrive(false, xiaoCurse, ssEvilcise);
             CustomToanEffects.ManeaterDrive(false, xiaoCurse, 0, ssManeater);
-            MoonlitFocusDrive(false);
+            SuperSteveShotSpawnDrive(false, 1f);
+            _ssSlingScale = 1f; _ssHolding = false; _ssHoldFrac = 0f;
+            Weapons.ScaleWeaponFrameByName(XiaoSlingMeshName, 1.0f);   // restore the slingshot on unequip / switch / exit
             if (_ssAgasApplied)
             { Player.Xiao.SetDefense(Player.Xiao.GetDefense() - AgasDefenseBoost); _ssAgasApplied = false; }
         }
@@ -243,39 +284,201 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
-        // ── Super Steve → Moonlit Focus (Tsukikage / Heaven's Cloud sphere) ────────────────────
-        private static readonly bool[] _ssShotDoubled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
-        private static bool _ssMoonlitLogged;   // one-shot confirm log for the pool base
+        // ── Super Steve → per-pellet effects (Moonlit Focus + Heaven's Cloud pellet scale) ─────
+        private const float HcPelletScale    = 8f;         // Heaven's Cloud: pellet at MAX charge (shot-pool +0x310)
+        private const float HcSlingshotScale = 2f;          // Heaven's Cloud: slingshot 'c04w' mesh at MAX charge
+        private const uint  XiaoSlingMeshName = 0x77343063; // 'c04w' — Xiao slingshot weapon mesh frame
+        private const double ChargeGrowSeconds = 2;       // hold time to reach max charge (base→full)
+        // Heaven's Cloud impact = a shrapnel BURST: on a pellet hit, spawn 8 real CSHOT pellets radiating
+        // out from the hit enemy along the ground plane. They're actual pellets (collision ENABLED, +0x280=0)
+        // so they deal real weapon damage + hit reactions to whatever they fly into — the game's own hitbox
+        // does the "splash", no faked HP writes. They spawn just outside the hit enemy's body so they don't
+        // instantly re-hit it, then fly out and expire.
+        private const float HcMaxDamageMult  = 1.5f;        // Heaven's Cloud: pellet damage at full charge (partial-charge payoff)
+        // Max-charge whole-character FLASH — replicates the engine's setUnitAmbientAnime (dun 0x1DC1000) as
+        // data writes: unitAmbientAnime (0x1DC1050) drives the ACTIVE unit's ambient = color×pulse + 64 while
+        // the enable flag is set, self-expiring after the repeat count. Same effect the game uses when a
+        // character drinks / on face-change, so it applies to Xiao. gp = 0x2A97F0. Colors are float 0-255.
+        private const long FlashEnableAddr = 0x202A3700;   // iGpffff9f10 (1 = on; clears itself when the count runs out)
+        private const long FlashPhaseAddr  = 0x202A36F8;   // fGpffff9f08 (reset to 0 to (re)start the pulse)
+        private const long FlashSpeedAddr  = 0x202A36F4;   // fGpffff9f04 (15.0 = Ruby's charge-flash speed)
+        private const long FlashCountAddr  = 0x202A36FC;   // iGpffff9f0c (flash repeat count)
+        private const long FlashColorRAddr = 0x21F068D0;   // fRam01f068d0 / d4 / d8 — flash RGB
+        private const long FlashColorGAddr = 0x21F068D4;
+        private const long FlashColorBAddr = 0x21F068D8;
+        private static bool _ssFlashedThisCharge;            // edge latch: one flash per charge-to-max
+        private const int   BurstCount          = 8;      // pellets per burst (8 compass directions)
+        private const float BurstSpeed          = 2.5f;   // outward units/frame (matches a normal pellet ~5.0/3.5)
+        // MUST spawn outside the origin enemy's hitbox (2.0 + its part_radius, checkCollision 0x1AB740), or the
+        // shrapnel collides with it on frame 1 and dies before moving. Big enemies have radius ~4-8; 16 also
+        // stops the occasional stray pellet re-clipping the hit enemy for a double-hit.
+        private const float BurstStartOffset    = 16f;    // spawn this far from the enemy center
+        private const int   BurstLifetime       = 0x40;   // frames the shrapnel lives → reach ≈ Speed × this
+        private const float BurstDamageFraction = 0.5f;   // each shrapnel's +0x2E0 attack = this × the weapon's attack stat
+        private const float BurstScale          = 4f;     // shrapnel sprite scale (+0x310) for visibility
+        // The burst only fires from a MAX-charge shot. A max-charge pellet spawning arms this timestamp; the
+        // next Xiao hit within the window bursts and consumes it (covers the pellet's flight time).
+        private const float BurstMaxChargeThreshold = 0.95f;                       // charge fraction that counts as "max"
+        private static readonly TimeSpan BurstChargeWindow = TimeSpan.FromSeconds(2.5);
+        private static DateTime _ssMaxChargeFiredAt = DateTime.MinValue;
+        // Movement AND collision share one block in step__5CSHOT (pos+=vel only runs when +0x280==0), so pass-
+        // through pellets can't move. Real shrapnel = collision on (false). true = frozen visibility debug only.
+        internal static bool _hcBurstPassThrough = false;
+        private static float _ssSlingScale = 1f;            // current slingshot mesh scale
+        private static bool  _ssHolding;                    // currently drawing/holding a shot
+        private static DateTime _ssHoldStart;               // when the current hold began
+        private static float _ssHoldFrac;                   // 0..1 charge fraction (frozen on release for the pellet)
 
-        /// <summary>Moonlit Focus for Xiao: doubles each newly-spawned pellet's velocity once (→ 2× shot
-        /// speed). Reads the player shot pool (<see cref="WeaponCollision.PlayerShotPool"/>): for every
-        /// slot that just became active (flag 0→1) it multiplies the +0x1C0 velocity vec by 2. Per-slot
-        /// latch so a shot is doubled exactly once; cleared when the slot frees.</summary>
-        private static void MoonlitFocusDrive(bool active)
+        private static readonly int[] _ssSplashPrevHp = new int[EnemyAddresses.FloorSlots.Count];
+        private static byte _ssSplashFloor = 0xFF;
+        private static readonly bool[] _ssShotHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
+
+        // Slots we spawned as shrapnel, still in flight. While any are alive, hit-detection is suppressed so
+        // the shrapnel's own kills don't spawn more shrapnel (cascade). Plus a short settle cooldown after.
+        private static readonly List<int> _hcBurstSlots = new List<int>();
+        private static DateTime _hcBurstCooldownUntil;
+
+        /// <summary>Applies the per-pellet Super Steve effects at spawn, once each, by watching the player
+        /// shot pool (<see cref="WeaponCollision.PlayerShotPool"/>) for slots that just went active (flag
+        /// 0→1): <paramref name="doubleVel"/> = Moonlit Focus (×2 the +0x1C0 velocity → 2× speed);
+        /// <paramref name="pelletScale"/> = Heaven's Cloud pellet size (the +0x310 scale; >1 only, so a base
+        /// pellet is left alone). Per-slot latched so each is applied exactly once; latch clears on free.</summary>
+        private static void SuperSteveShotSpawnDrive(bool doubleVel, float pelletScale)
         {
+            bool bigPellet = pelletScale > 1.01f;
             long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
             if (poolBase == 0 || poolBase >= 0x02000000) return;   // pool not allocated / bad pointer
             for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
             {
                 bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
-                if (active && live && !_ssShotDoubled[i])
+                if ((doubleVel || bigPellet) && live && !_ssShotHandled[i])
                 {
-                    long vel = WeaponCollision.PlayerShotPool.VelAddr(poolBase, i);
-                    for (int c = 0; c < 3; c++)
-                        Memory.WriteFloat(vel + c * 4, Memory.ReadFloat(vel + c * 4) * 2f);
-                    _ssShotDoubled[i] = true;
-                    if (!_ssMoonlitLogged)
+                    if (doubleVel)
                     {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[Xiao Moonlit] poolBase=0x{poolBase:X} doubled slot {i}");
-                        _ssMoonlitLogged = true;
+                        long vel = WeaponCollision.PlayerShotPool.VelAddr(poolBase, i);
+                        for (int c = 0; c < 3; c++)
+                            Memory.WriteFloat(vel + c * 4, Memory.ReadFloat(vel + c * 4) * 2f);
                     }
+                    if (bigPellet)
+                    {
+                        float chargeFrac = (pelletScale - 1f) / (HcPelletScale - 1f);   // 0..1
+                        Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, i), pelletScale);
+                        // Damage scales up to HcMaxDamageMult with the charge held — the partial-charge payoff.
+                        long dmgA = WeaponCollision.PlayerShotPool.DamageAddr(poolBase, i);
+                        Memory.WriteInt(dmgA, (int)(Memory.ReadInt(dmgA) * (1f + chargeFrac * (HcMaxDamageMult - 1f))));
+                        // A max-charge shot arms the shrapnel burst for its next hit.
+                        if (chargeFrac >= BurstMaxChargeThreshold) _ssMaxChargeFiredAt = DateTime.UtcNow;
+                    }
+                    _ssShotHandled[i] = true;
                 }
                 else if (!live)
                 {
-                    _ssShotDoubled[i] = false;
+                    _ssShotHandled[i] = false;
                 }
             }
+        }
+
+        /// <summary>Heaven's Cloud impact = a shrapnel BURST. When a Xiao pellet hits an enemy (its HP drops
+        /// with the damage source == Xiao), spawn <see cref="BurstCount"/> real CSHOT pellets radiating out
+        /// along the ground plane from the hit enemy. They collide natively (fixed 2.0 hitbox) and deal real
+        /// weapon damage to whatever they fly into — no faked HP writes. Hit-detection is suppressed while any
+        /// shrapnel is still airborne (and briefly after) so the shrapnel's own kills don't spawn more shrapnel.</summary>
+        private static void HeavensCloudBurstDrive(bool active)
+        {
+            int n = EnemyAddresses.FloorSlots.Count;
+            int[] cur = new int[n];
+            for (int s = 0; s < n; s++) cur[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+
+            byte floor = Memory.ReadByte(Addresses.checkFloor);
+            if (floor != _ssSplashFloor)   // new floor: reseat the baseline, forget any in-flight shrapnel
+            {
+                _ssSplashFloor = floor;
+                for (int s = 0; s < n; s++) _ssSplashPrevHp[s] = cur[s];
+                _hcBurstSlots.Clear();
+                return;
+            }
+
+            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            bool poolOk = poolBase != 0 && poolBase < 0x02000000;
+
+            // Prune shrapnel that has hit/expired; while any is still airborne, don't react to HP drops (its
+            // own collision damage would otherwise read as fresh hits → runaway cascade).
+            if (poolOk)
+                _hcBurstSlots.RemoveAll(s => Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, s)) == 0);
+            // Only a MAX-charge shot's hit bursts (armed at fire, valid for the pellet's flight window).
+            bool maxChargeArmed = DateTime.UtcNow - _ssMaxChargeFiredAt < BurstChargeWindow;
+            bool clearToBurst = poolOk && maxChargeArmed && _hcBurstSlots.Count == 0 &&
+                                DateTime.UtcNow >= _hcBurstCooldownUntil;
+
+            if (active && clearToBurst && ReusableFunctions.GetDamageSourceCharacterID() == Player.XiaoId)
+            {
+                // Shrapnel +0x2E0 is an ATTACK value (defense is applied when it lands), so base it on the
+                // weapon's raw attack stat — NOT the direct hit's HP drop (that's already post-defense, so
+                // feeding it back in roughly reconstitutes full attack instead of a fraction).
+                int dmg = (int)(Player.Weapon.GetCurrentWeaponAttack() * BurstDamageFraction);
+                for (int h = 0; h < n && dmg > 0; h++)
+                {
+                    if (_ssSplashPrevHp[h] <= 0 || cur[h] >= _ssSplashPrevHp[h]) continue;   // detect a fresh Xiao hit
+                    SpawnHcBurst(poolBase, h, dmg);
+                    _ssMaxChargeFiredAt = DateTime.MinValue;   // consume — one burst per max-charge shot
+                    break;
+                }
+            }
+
+            for (int s = 0; s < n; s++) _ssSplashPrevHp[s] = cur[s];
+        }
+
+        /// <summary>Fire the engine's whole-character ambient flash on the ACTIVE unit (Xiao) by writing the
+        /// same globals <c>setUnitAmbientAnime</c> (dun 0x1DC1000) sets — an animated ambient tint of
+        /// <paramref name="r"/>/<paramref name="g"/>/<paramref name="b"/> (0-255) at <paramref name="speed"/>,
+        /// repeating <paramref name="count"/> times before it self-disables. Enable is written last.</summary>
+        private static void TriggerCharacterFlash(float r, float g, float b, float speed, int count)
+        {
+            Memory.WriteFloat(FlashColorRAddr, r);
+            Memory.WriteFloat(FlashColorGAddr, g);
+            Memory.WriteFloat(FlashColorBAddr, b);
+            Memory.WriteFloat(FlashSpeedAddr, speed);
+            Memory.WriteInt(FlashCountAddr, count);
+            Memory.WriteFloat(FlashPhaseAddr, 0f);   // (re)start the pulse
+            Memory.WriteInt(FlashEnableAddr, 1);     // enable last so the updater doesn't run mid-setup
+        }
+
+        /// <summary>Spawn <see cref="BurstCount"/> real pellets fanning out from enemy <paramref name="h"/> in
+        /// the ground plane (pos layout: [0]=X @0x100, [1]=height @0x104, [2]=Y @0x108). Each is a genuine
+        /// CSHOT pellet — collision ENABLED (+0x280=0) with damage <paramref name="dmg"/> — spawned
+        /// <see cref="BurstStartOffset"/> out so it clears the hit enemy's body before flying on.</summary>
+        private static void SpawnHcBurst(long poolBase, int h, int dmg)
+        {
+            long ePos = EnemyAddresses.FloorSlots.SlotAddr(h, EnemySlotOffsets.LocationX);   // X, height, Y (contiguous)
+            float ex = Memory.ReadFloat(ePos), eh = Memory.ReadFloat(ePos + 4), ey = Memory.ReadFloat(ePos + 8);
+
+            for (int i = 0; i < BurstCount; i++)
+            {
+                int slot = -1;
+                for (int j = 0; j < WeaponCollision.PlayerShotPool.SlotCount; j++)
+                    if (Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, j)) == 0) { slot = j; break; }
+                if (slot < 0) break;   // pool full — fire as many as we can
+
+                double ang = i * (2.0 * Math.PI / BurstCount);
+                float dx = (float)Math.Cos(ang), dy = (float)Math.Sin(ang);   // ground-plane unit direction
+
+                long pos = WeaponCollision.PlayerShotPool.PosAddr(poolBase, slot);
+                Memory.WriteFloat(pos, ex + dx * BurstStartOffset);
+                Memory.WriteFloat(pos + 4, eh);                               // same height
+                Memory.WriteFloat(pos + 8, ey + dy * BurstStartOffset);
+                long vel = WeaponCollision.PlayerShotPool.VelAddr(poolBase, slot);
+                Memory.WriteFloat(vel, dx * BurstSpeed);
+                Memory.WriteFloat(vel + 4, 0f);                               // no vertical drift
+                Memory.WriteFloat(vel + 8, dy * BurstSpeed);
+                Memory.WriteInt(WeaponCollision.PlayerShotPool.NoCollideAddr(poolBase, slot), _hcBurstPassThrough ? 1 : 0);   // collision ON (0) unless debugging visibility
+                Memory.WriteInt(poolBase + WeaponCollision.PlayerShotPool.LifetimeOffset +
+                                slot * WeaponCollision.PlayerShotPool.ScalarStride, BurstLifetime);
+                Memory.WriteInt(WeaponCollision.PlayerShotPool.DamageAddr(poolBase, slot), dmg);
+                Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, slot), BurstScale);
+                Memory.WriteInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, slot), 1);
+                _hcBurstSlots.Add(slot);
+            }
+            _hcBurstCooldownUntil = DateTime.UtcNow.AddMilliseconds(150);   // settle window after the last shrapnel clears
         }
 
         /// <summary>Source weapon ids of every SynthSphere attached to the weapon record at

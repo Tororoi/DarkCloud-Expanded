@@ -33,6 +33,14 @@ public class DumpDecomp extends GhidraScript {
         println("wrote decomp for " + names.length + " names to " + outpath);
     }
     Function funcByName(FunctionManager fm, SymbolTable st, String nm) {
+        nm = nm.trim();
+        if (nm.startsWith("0x") || nm.startsWith("@")) {   // address → function containing it
+            String hex = nm.startsWith("@") ? nm.substring(1) : nm;
+            ghidra.program.model.address.Address a =
+                currentProgram.getAddressFactory().getAddress(hex);
+            Function f = fm.getFunctionContaining(a);
+            if (f != null) return f;
+        }
         for (Symbol s : st.getGlobalSymbols(nm)) {
             Function f = fm.getFunctionAt(s.getAddress());
             if (f != null) return f;

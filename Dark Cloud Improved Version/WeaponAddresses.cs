@@ -454,9 +454,10 @@ namespace Dark_Cloud_Improved_Version
             internal const int  VelOffset        = 0x1C0;
             // scalar arrays (stride 4 from the pool base)
             internal const int  ScalarStride     = 0x04;
+            internal const int  NoCollideOffset  = 0x280; // int: 0 = pellet runs its (fixed 2.0-radius) collision; nonzero = pass through (step__5CSHOT gate)
             internal const int  LifetimeOffset   = 0x2B0; // int (0x78 = 120 frames at spawn)
             internal const int  DamageOffset     = 0x2E0; // int
-            internal const int  ScaleOffset      = 0x310; // float (1.0 at spawn)
+            internal const int  ScaleOffset      = 0x310; // float (1.0 at spawn) — draw__5CSHOT sprite scale ONLY; does NOT size the hitbox
             internal const int  ActiveFlagOffset = 0x3D0; // int (nonzero = slot in use)
 
             internal static long VelAddr(long poolBase, int slot)   => poolBase + VelOffset   + slot * VecStride;
@@ -464,6 +465,7 @@ namespace Dark_Cloud_Improved_Version
             internal static long FlagAddr(long poolBase, int slot)  => poolBase + ActiveFlagOffset + slot * ScalarStride;
             internal static long DamageAddr(long poolBase, int slot)=> poolBase + DamageOffset + slot * ScalarStride;
             internal static long ScaleAddr(long poolBase, int slot) => poolBase + ScaleOffset  + slot * ScalarStride;
+            internal static long NoCollideAddr(long poolBase, int slot) => poolBase + NoCollideOffset + slot * ScalarStride;
         }
 
         /// <summary>
