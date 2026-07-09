@@ -74,6 +74,8 @@ namespace Dark_Cloud_Improved_Version
         public static Thread evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
         public static Thread maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
         public static Thread sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
+        public static Thread bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
+        public static Thread crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
         public static Thread tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
         public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
         public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
@@ -303,14 +305,37 @@ namespace Dark_Cloud_Improved_Version
                                         break;
 
                                     case Items.sunsword:
-                                    case Items.bigbang:   // Big Bang inherits Solar Harvest (Sun Sword lineage);
-                                                          // its own unique effect will be added alongside later
                                         CustomToanEffects.BoneRapierEffect(false);
 
                                         if (!sunSwordThread.IsAlive)
                                         {
                                             sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
                                             sunSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.bigbang:   // inherits Solar Harvest (Sun Sword lineage) + its own Detonate
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!sunSwordThread.IsAlive)
+                                        {
+                                            sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
+                                            sunSwordThread.Start();
+                                        }
+                                        if (!bigBangThread.IsAlive)
+                                        {
+                                            bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
+                                            bigBangThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.crosshinder:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!crossHinderThread.IsAlive)
+                                        {
+                                            crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
+                                            crossHinderThread.Start();
                                         }
                                         break;
 

@@ -119,10 +119,28 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>Ranges the MOD writes into (in-use code caves, PNACH mailbox). Our own writes must not
+        /// count as the game dirtying a region — chunks here are pinned clean and excluded from tracking.
+        /// (This is also why findings entries overlapping these ranges stay CLEAN in the file: the region
+        /// IS clean as far as the game is concerned; the mod is the only writer.)</summary>
+        private static readonly (long Start, long Size)[] ModReserved =
+        {
+            (0x1F10000, 0x10000), // PNACH mailbox @0x1F10020 + HarderEnemyAI STB cave @0x1F10100 (64KB reserve)
+        };
+
+        private static bool IsReserved(int chunk)
+        {
+            long a = (long)chunk * ChunkSize;
+            foreach (var r in ModReserved)
+                if (a < r.Start + r.Size && a + ChunkSize > r.Start) return true;
+            return false;
+        }
+
         private static void Classify(int chunk, byte[] buf, int offset)
         {
             byte state = chunkState[chunk];
             if (state == StDirty) return;
+            if (IsReserved(chunk)) { chunkState[chunk] = StClean; return; }
 
             bool zero = true;
             ulong hash = 14695981039346656037UL; // FNV-1a 64

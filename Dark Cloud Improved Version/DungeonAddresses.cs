@@ -202,4 +202,33 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const long Base = 0x21D8FC80;
     }
+
+    /// <summary>
+    /// The item-Bomb explosion effect (the visual thrown Bomb items make — resident on EVERY floor) plus
+    /// the ground shockwave ring. RE'd from <c>SetBombEffect</c> @0x1D5940 / <c>SetBomb__15CItemBombEffect</c>
+    /// @0x1D60A0 / <c>CheckBomb</c> @0x1D6190: spawning is PURE DATA WRITES into a 3-slot pool, so the mod
+    /// can fabricate an explosion at any position (the native path's extra steps — SndSePlay(0x6C) and the
+    /// CCollisionData damage — are function calls, replaced mod-side). A slot is FREE when all five
+    /// <see cref="ActiveOffset"/> flags are 0 (CheckBomb's test). Each explosion = five staggered sub-puffs.
+    /// Native SetBomb writes, per sub-puff i (0..4): pos float4 @ +i*0x10 (all five = the blast point),
+    /// state 0 @ +0x50+i*4, timer i*−3 @ +0x64+i*4, 20.0f @ +0x78+i*4, 128.0f @ +0x8C+i*4, active 1
+    /// @ +0xA0+i*4; then scale @ +0xB4, state[0]=2, state[1]=1. The native caller also fires the shockwave
+    /// when scale &gt; 1: pos float4 @ +0, 1.0f @ +0xC, scale×30 @ +0x10/+0x14, 0 @ +0x18, scale×15 @ +0x1C,
+    /// 0 @ +0x20/+0x24, 1 @ +0x28.
+    /// </summary>
+    internal static class BombEffect
+    {
+        internal const long PoolPtr      = 0x202A35E4; // NowBombEffect (gp-0x620C) → 3 slots × 0xC0
+        internal const long ShockWavePtr = 0x202A35E8; // NowShockWave (gp-0x6208) → single struct
+        internal const int  SlotCount    = 3;
+        internal const int  SlotStride   = 0xC0;
+        internal const int  SubPuffs     = 5;
+        internal const int  PosOffset    = 0x00;  // + i*0x10, float4 per sub-puff
+        internal const int  StateOffset  = 0x50;  // + i*4
+        internal const int  TimerOffset  = 0x64;  // + i*4 (int, i*−3 = staggered starts)
+        internal const int  SizeAOffset  = 0x78;  // + i*4 (float, 20.0)
+        internal const int  SizeBOffset  = 0x8C;  // + i*4 (float, 128.0)
+        internal const int  ActiveOffset = 0xA0;  // + i*4 (int; any nonzero = slot busy)
+        internal const int  ScaleOffset  = 0xB4;  // float — whole-explosion scale
+    }
 }

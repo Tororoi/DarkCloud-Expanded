@@ -50,7 +50,9 @@
       "Bash(rm -rf /tmp/ghidraproj)",
       "Bash(awk '$1 >= \"0x001ae1c0\" && $1 <= \"0x001ae450\"' tools/ghidra/symbols.txt)",
       "Bash(/Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra/decompile.sh main *)",
-      "Bash(cp /tmp/decomp_main.txt /tmp/decomp_abs3.txt)"
+      "Bash(cp /tmp/decomp_main.txt /tmp/decomp_abs3.txt)",
+      "Bash(awk '/label 120/{p=1} p&&/--- label 1 /{exit} p' /tmp/e49a_dis.txt)",
+      "Bash(awk '/label 100/{p=1} p' /tmp/e49a_dis.txt)"
     ]
   }
 }

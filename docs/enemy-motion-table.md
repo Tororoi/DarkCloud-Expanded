@@ -22,6 +22,10 @@ Because damage is gated on the hit window, retiming an attack (speeding up its c
 per-frame step jumping over that window needs the motion's **speed + hit-window** — both here.
 Regenerate via `tools/augment_motion_table.py`.
 
+> **⚠ VESTIGIAL get-ups:** a "get up" row whose frame range strictly overlaps another motion's is a
+> placeholder, not a real animation (e.g. Dasher f10-20 == idle, dragons f30-50 == walk) — playing it shows
+> a fragment of the overlapped motion. 39 of 70 get-ups are vestigial; only the 31 unmarked ones are real.
+
 ### 0 — Master Jacket `e01a`
 
 *Motions: e01a.chr @ data.dat 0x1b260000  (idx = _SET_MOTION; 死亡 = death)*
@@ -124,7 +128,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 240–260 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 270–290 | 0.25 | 死亡 | death |
 | 12 | 290 | 0.25 | 死亡ループ | death loop |
 | 13 | 150–180 | 0.35 | 攻撃1(縦振り） | attack1(縦振り) |
@@ -558,7 +562,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 142–146 | 0.25 | ガード戻り | guard (return) |
 | 8 | 150–170 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.2 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.2 | 起き上がり | get up |
+| 10 | 10–20 | 0.2 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–190 | 0.27 | 死亡 | death |
 | 12 | 190 | 0 | 死亡ループ | death loop |
 | 13 | 200–215 | 0.28 | 攻撃1(はさみ） | attack1(はさみ) |
@@ -723,7 +727,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -797,7 +801,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -1033,7 +1037,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.25 | ガード戻り | guard (return) |
 | 8 | 240–260 | 0.25 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.25 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.25 | 起き上がり | get up |
+| 10 | 10–20 | 0.25 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 270–290 | 0.3 | 死亡 | death |
 | 12 | 290 | 0.3 | 死亡 ループ | death (loop) |
 | 13 | 150–190 | 0.3 | 攻撃1 | attack1 |
@@ -1063,7 +1067,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 125–130 | 0.2 | ガード戻り | guard (return) |
 | 8 | 140–150 | 0.28 | ダメージ１ | damage１ |
 | 9 | 160–172 | 0.3 | ダメージ２ (吹っ飛び） | damage２ (吹っ飛び) |
-| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) |
+| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–200 | 0.3 | 死亡 | death |
 | 12 | 200 | 0 | 死亡ループ | death loop |
 | 13 | 210–230 | 0.4 | 攻撃1（切り裂き） | attack1(切り裂き) |
@@ -1231,7 +1235,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 190–200 | 0.45 | ガード戻り | guard (return) |
 | 8 | 210–220 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 230–255 | 0.3 | 死亡 | death |
 | 12 | 255 | 0 | 死亡ループ | death loop |
 | 13 | 270–300 | 0.38 | 攻撃1(殴り） | attack1(殴り) |
@@ -1291,7 +1295,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.25 | ガード戻り | guard (return) |
 | 8 | 240–260 | 0.25 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.25 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.25 | 起き上がり | get up |
+| 10 | 10–20 | 0.25 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 270–290 | 0.3 | 死亡 | death |
 | 12 | 290 | 0.3 | 死亡 ループ | death (loop) |
 | 13 | 150–190 | 0.3 | 攻撃1 | attack1 |
@@ -1349,7 +1353,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.2 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.2 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.2 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.2 | 起き上がり | get up |
+| 10 | 10–20 | 0.2 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–202 | 0.25 | 死亡 | death |
 | 12 | 202 | 0 | 死亡ループ | death loop |
 | 13 | 60–80 | 0.2 | 攻撃1 (横） | attack1 (横) |
@@ -1453,7 +1457,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 135–140 | 0.2 | ガード戻り | guard (return) |
 | 8 | 230–240 | 0.3 | ダメージ１ | damage１ |
 | 9 | 150–160 | 0.25 | ダメージ２（後ろに下がる） | damage２(後ろに下がる) |
-| 10 | 30–50 | 0.3 | 起き上がり(歩きで移動） | get up(walkでmove) |
+| 10 | 30–50 | 0.3 | 起き上がり(歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps walk f30-50) |
 | 11 | 250–260 | 0.25 | 死亡 | death |
 | 12 | 260 | 0 | 死亡ループ | death loop |
 | 13 | 310–350 | 0.35 | 攻撃1 （火の球） | attack1 (fireの球) |
@@ -1569,7 +1573,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 240–260 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 270–290 | 0.25 | 死亡 | death |
 | 12 | 290 | 0.25 | 死亡ループ | death loop |
 | 13 | 150–180 | 0.35 | 攻撃1(縦振り） | attack1(縦振り) |
@@ -1597,7 +1601,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -1624,7 +1628,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -1758,7 +1762,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 142–146 | 0.25 | ガード戻り | guard (return) |
 | 8 | 150–170 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.2 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.2 | 起き上がり | get up |
+| 10 | 10–20 | 0.2 | 起き上がり | get up ⚠ VESTIGIAL (overlaps damage２ f10-20) |
 | 11 | 180–190 | 0.27 | 死亡 | death |
 | 12 | 190 | 0 | 死亡ループ | death loop |
 | 13 | 200–215 | 0.28 | 攻撃1(はさみ） | attack1(はさみ) |
@@ -1814,7 +1818,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 135–140 | 0.2 | ガード戻り | guard (return) |
 | 8 | 230–240 | 0.3 | ダメージ１ | damage１ |
 | 9 | 150–160 | 0.25 | ダメージ２（後ろに下がる） | damage２(後ろに下がる) |
-| 10 | 30–50 | 0.3 | 起き上がり(歩きで移動） | get up(walkでmove) |
+| 10 | 30–50 | 0.3 | 起き上がり(歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps walk f30-50) |
 | 11 | 250–260 | 0.25 | 死亡 | death |
 | 12 | 260 | 0 | 死亡ループ | death loop |
 | 13 | 310–350 | 0.35 | 攻撃1 （火の球） | attack1 (fireの球) |
@@ -1841,7 +1845,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 135–140 | 0.2 | ガード戻り | guard (return) |
 | 8 | 230–240 | 0.3 | ダメージ１ | damage１ |
 | 9 | 150–160 | 0.25 | ダメージ２（後ろに下がる） | damage２(後ろに下がる) |
-| 10 | 30–50 | 0.3 | 起き上がり(歩きで移動） | get up(walkでmove) |
+| 10 | 30–50 | 0.3 | 起き上がり(歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps walk f30-50) |
 | 11 | 250–260 | 0.25 | 死亡 | death |
 | 12 | 260 | 0 | 死亡ループ | death loop |
 | 13 | 310–350 | 0.35 | 攻撃1 （火の球） | attack1 (fireの球) |
@@ -1868,7 +1872,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 125–130 | 0.2 | ガード戻り | guard (return) |
 | 8 | 140–150 | 0.28 | ダメージ１ | damage１ |
 | 9 | 160–172 | 0.3 | ダメージ２ (吹っ飛び） | damage２ (吹っ飛び) |
-| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) |
+| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–200 | 0.3 | 死亡 | death |
 | 12 | 200 | 0 | 死亡ループ | death loop |
 | 13 | 260–290 | 0.4 | 攻撃1（切り裂き） | attack1(切り裂き) |
@@ -2411,7 +2415,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -2438,7 +2442,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -2465,7 +2469,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 5–15 | 0.2 | ガード戻り | guard (return) |
 | 8 | 130–140 | 0.35 | ダメージ1 | damage1 |
 | 9 | 130–140 | 0.35 | ダメージ2 | damage2 |
-| 10 | 130–140 | 0.35 | 起き上がり | get up |
+| 10 | 130–140 | 0.35 | 起き上がり | get up ⚠ VESTIGIAL (overlaps damage1 f130-140) |
 | 11 | 145–165 | 0.2 | 死亡 | death |
 | 12 | 165 | 0 | 死亡ループ | death loop |
 | 13 | 75–90 | 0.35 | 攻撃１入り | attack１(enter) |
@@ -2511,7 +2515,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.13 | ガード戻り | guard (return) |
 | 8 | 60–70 | 0.25 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.13 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.13 | 起き上がり | get up |
+| 10 | 10–20 | 0.13 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 80–100 | 0.2 | 死亡 | death |
 | 12 | 100 | 0 | 死亡ループ | death loop |
 | 13 | 110–120 | 0.4 | 攻撃1（エラからネバネバ液） | attack1(エラからネバネバ液) |
@@ -2653,7 +2657,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 185–195 | 0.15 | ｶﾞｰﾄﾞ戻り | guard (return) |
 | 8 | 85–100 | 0.35 | ﾀﾞﾒｰｼﾞ | damage |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 105–125 | 0.35 | 死亡 | death |
 | 12 | 125 | 0 | 死亡ﾙｰﾌﾟ | deathﾙｰﾌﾟ |
 | 13 | 130–150 | 0.3 | 攻撃１ | attack１ |
@@ -2681,7 +2685,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 100–110 | 0.25 | ｶﾞｰﾄﾞ戻り | guard (return) |
 | 8 | 115–130 | 0.35 | ﾀﾞﾒｰｼﾞ | damage |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 135–155 | 0.35 | 死亡 | death |
 | 12 | 155 | 0 | 死亡ﾙｰﾌﾟ | deathﾙｰﾌﾟ |
 | 13 | 160–190 | 0.33 | 攻撃１ | attack１ |
@@ -2763,7 +2767,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -2923,7 +2927,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 185–195 | 0.15 | ｶﾞｰﾄﾞ戻り | guard (return) |
 | 8 | 85–100 | 0.35 | ﾀﾞﾒｰｼﾞ | damage |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 105–125 | 0.35 | 死亡 | death |
 | 12 | 125 | 0 | 死亡ﾙｰﾌﾟ | deathﾙｰﾌﾟ |
 | 13 | 130–150 | 0.3 | 攻撃１ | attack１ |
@@ -3035,7 +3039,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 5–15 | 0.2 | ガード戻り | guard (return) |
 | 8 | 130–140 | 0.35 | ダメージ1 | damage1 |
 | 9 | 130–140 | 0.35 | ダメージ2 | damage2 |
-| 10 | 130–140 | 0.35 | 起き上がり | get up |
+| 10 | 130–140 | 0.35 | 起き上がり | get up ⚠ VESTIGIAL (overlaps damage1 f130-140) |
 | 11 | 145–165 | 0.2 | 死亡 | death |
 | 12 | 165 | 0 | 死亡ループ | death loop |
 | 13 | 75–90 | 0.35 | 攻撃１入り | attack１(enter) |
@@ -3087,7 +3091,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -3231,7 +3235,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 185–195 | 0.15 | ｶﾞｰﾄﾞ戻り | guard (return) |
 | 8 | 85–100 | 0.35 | ﾀﾞﾒｰｼﾞ | damage |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 105–125 | 0.35 | 死亡 | death |
 | 12 | 125 | 0 | 死亡ﾙｰﾌﾟ | deathﾙｰﾌﾟ |
 | 13 | 130–150 | 0.3 | 攻撃１ | attack１ |
@@ -3315,7 +3319,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -3342,7 +3346,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 125–130 | 0.2 | ガード戻り | guard (return) |
 | 8 | 140–150 | 0.28 | ダメージ１ | damage１ |
 | 9 | 160–172 | 0.3 | ダメージ２ (吹っ飛び） | damage２ (吹っ飛び) |
-| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) |
+| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–200 | 0.3 | 死亡 | death |
 | 12 | 200 | 0 | 死亡ループ | death loop |
 | 13 | 260–290 | 0.4 | 攻撃1（切り裂き） | attack1(切り裂き) |
@@ -3423,7 +3427,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 240–260 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 270–290 | 0.25 | 死亡 | death |
 | 12 | 290 | 0.25 | 死亡ループ | death loop |
 | 13 | 150–180 | 0.35 | 攻撃1(縦振り） | attack1(縦振り) |
@@ -3540,7 +3544,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 185–195 | 0.15 | ｶﾞｰﾄﾞ戻り | guard (return) |
 | 8 | 85–100 | 0.35 | ﾀﾞﾒｰｼﾞ | damage |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 105–125 | 0.35 | 死亡 | death |
 | 12 | 125 | 0 | 死亡ﾙｰﾌﾟ | deathﾙｰﾌﾟ |
 | 13 | 130–150 | 0.3 | 攻撃１ | attack１ |
@@ -3596,7 +3600,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 125–130 | 0.2 | ガード戻り | guard (return) |
 | 8 | 140–150 | 0.28 | ダメージ１ | damage１ |
 | 9 | 160–172 | 0.3 | ダメージ２ (吹っ飛び） | damage２ (吹っ飛び) |
-| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) |
+| 10 | 10–20 | 0.2 | 起き上がり（歩きで移動） | get up(walkでmove) ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–200 | 0.3 | 死亡 | death |
 | 12 | 200 | 0 | 死亡ループ | death loop |
 | 13 | 210–230 | 0.4 | 攻撃1（切り裂き） | attack1(切り裂き) |
@@ -3652,7 +3656,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 190–200 | 0.45 | ガード戻り | guard (return) |
 | 8 | 210–220 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 230–255 | 0.3 | 死亡 | death |
 | 12 | 255 | 0 | 死亡ループ | death loop |
 | 13 | 270–300 | 0.38 | 攻撃1(殴り） | attack1(殴り) |
@@ -3684,7 +3688,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 142–146 | 0.25 | ガード戻り | guard (return) |
 | 8 | 150–170 | 0.3 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.2 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.2 | 起き上がり | get up |
+| 10 | 10–20 | 0.2 | 起き上がり | get up ⚠ VESTIGIAL (overlaps damage２ f10-20) |
 | 11 | 180–190 | 0.27 | 死亡 | death |
 | 12 | 190 | 0 | 死亡ループ | death loop |
 | 13 | 200–215 | 0.28 | 攻撃1(はさみ） | attack1(はさみ) |
@@ -3845,7 +3849,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 185–195 | 0.15 | ｶﾞｰﾄﾞ戻り | guard (return) |
 | 8 | 85–100 | 0.35 | ﾀﾞﾒｰｼﾞ | damage |
 | 9 | 10–20 | 0.15 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.15 | 起き上がり | get up |
+| 10 | 10–20 | 0.15 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 105–125 | 0.35 | 死亡 | death |
 | 12 | 125 | 0 | 死亡ﾙｰﾌﾟ | deathﾙｰﾌﾟ |
 | 13 | 130–150 | 0.3 | 攻撃１ | attack１ |
@@ -4009,7 +4013,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.25 | ガード戻り | guard (return) |
 | 8 | 240–260 | 0.25 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.25 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.25 | 起き上がり | get up |
+| 10 | 10–20 | 0.25 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 270–290 | 0.3 | 死亡 | death |
 | 12 | 290 | 0.3 | 死亡 ループ | death (loop) |
 | 13 | 150–190 | 0.3 | 攻撃1 | attack1 |
@@ -4039,7 +4043,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.1 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.1 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.1 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.1 | 起き上がり | get up |
+| 10 | 10–20 | 0.1 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–210 | 0.25 | 死亡 | death |
 | 12 | 80–125 | 0.3 | 攻撃1(パンチ） | attack1(パンチ) |
 | 13 | 80–125 | 0.3 | 攻撃1予備動作１ | attack1予備動作１ |
@@ -4066,7 +4070,7 @@ Regenerate via `tools/augment_motion_table.py`.
 | 7 | 10–20 | 0.2 | ガード戻り | guard (return) |
 | 8 | 10–20 | 0.2 | ダメージ１ | damage１ |
 | 9 | 10–20 | 0.2 | ダメージ２ | damage２ |
-| 10 | 10–20 | 0.2 | 起き上がり | get up |
+| 10 | 10–20 | 0.2 | 起き上がり | get up ⚠ VESTIGIAL (overlaps idle f10-20) |
 | 11 | 180–202 | 0.25 | 死亡 | death |
 | 12 | 202 | 0 | 死亡ループ | death loop |
 | 13 | 60–80 | 0.2 | 攻撃1 (横） | attack1 (横) |

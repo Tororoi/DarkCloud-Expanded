@@ -355,6 +355,10 @@ namespace Dark_Cloud_Improved_Version
                 bool randomizedOn = (play & 0x04) != 0;
                 CBox_UserMode_RandomizedEnemies.IsChecked = randomizedOn;
                 EnemyRandomizer.RandomizeEnemies = randomizedOn;
+
+                bool harderAiOn = (play & 0x08) != 0;
+                CBox_UserMode_HarderAI.IsChecked = harderAiOn;
+                HarderEnemyAI.Enabled = harderAiOn;
             });
         }
 
@@ -479,6 +483,15 @@ namespace Dark_Cloud_Improved_Version
             bool on = CBox_UserMode_RandomizedEnemies.IsChecked == true;
             EnemyRandomizer.RandomizeEnemies = on;
             WriteOptionBit(OptGameplayByte, 0x04, on);   // gameplay bit2
+        }
+
+        // "Harder enemy AI" — first behavior: every enemy with a get-up motion can revive after death
+        // (HarderEnemyAI splices a revive roll into each loaded death script; native revivers get buffed odds).
+        private void CBox_UserMode_HarderAI_Changed(object sender, RoutedEventArgs e)
+        {
+            bool on = CBox_UserMode_HarderAI.IsChecked == true;
+            HarderEnemyAI.Enabled = on;
+            WriteOptionBit(OptGameplayByte, 0x08, on);   // gameplay bit3
         }
 
         private void Cbox_Usermode_AttackSounds_CheckedChanged(object sender, RoutedEventArgs e)

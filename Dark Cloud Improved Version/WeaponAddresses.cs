@@ -439,6 +439,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  EffSpeedOffset     = 0x08;
         internal const int  EffMagicOffset     = 0x0A;
         internal const int  StatCap            = 99;   // _DAT_00294178 / _DAT_00294174
+        // Anti-enemy (slayer) BYTE array at record +0x1C, indexed by EnemyCategory (0=Dragon..9=Mage).
+        // CheckDmg (docs/game-formulas.md §3.4): dmg += dmg × 0.015 × anti[category] — read LIVE per hit via
+        // the collision entry's pointer (NowWeaponHave+0x1C), so writing the BATTLE copy changes damage
+        // immediately and can exceed the 99 menu cap (byte max 255 ≈ ×4.8).
+        internal const int  AntiArrayOffset    = 0x1C;
 
         /// <summary>
         /// The player shot-effect (CSHOT_EFFECT) pool that ranged attacks fire into — Xiao's

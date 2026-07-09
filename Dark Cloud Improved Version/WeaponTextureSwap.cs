@@ -26,14 +26,12 @@ namespace Dark_Cloud_Improved_Version
     ///    (re)painted independently every tick — this self-heals floor reloads (game restores the vanilla
     ///    CLUT) and catches the weapon menu's separate preview copy (fresh scan on a short cadence while the
     ///    menu is open). Writes go through WriteBytesBatch.
-    /// Fails safe: if the extracted game files aren't at <see cref="DataDir"/>, the swap silently disables.
+    /// Fails safe: if the extracted game files aren't at <see cref="GameDataFiles.DataDir"/>, the swap
+    /// silently disables.
     /// </summary>
     internal static class WeaponTextureSwap
     {
         internal static bool SwapEnabled = true;
-
-        // Extracted game data (data.hed/.hd2/.dat). Missing → feature disables itself.
-        private const string DataDir = "/Users/thomascantwell/ROMs/dc_extracted";
 
         private const int PixBytes  = 0x4000;   // 128×128 8-bit indices
         private const int ClutBytes = 0x400;    // 256 × RGBA32, contiguous after the pixels
@@ -241,11 +239,9 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_initTried) return _filesOk;
             _initTried = true;
-            _filesOk = File.Exists(Path.Combine(DataDir, "data.hed")) &&
-                       File.Exists(Path.Combine(DataDir, "data.hd2")) &&
-                       File.Exists(Path.Combine(DataDir, "data.dat"));
+            _filesOk = GameDataFiles.Available;
             if (!_filesOk)
-                Console.WriteLine($"[TexSwap] extracted game data not found at {DataDir} — palette swap disabled");
+                Console.WriteLine($"[TexSwap] extracted game data not found at {GameDataFiles.DataDir} — palette swap disabled");
             return _filesOk;
         }
 
@@ -271,32 +267,16 @@ namespace Dark_Cloud_Improved_Version
             try
             {
                 string chr = ModelChr(weaponId);
-                if (chr != null)
+                byte[] file = chr != null ? GameDataFiles.TryReadEntry("commenu\\weapon\\" + chr) : null;
+                if (file != null)
                 {
-                    string suffix = "commenu\\weapon\\" + chr;
-                    byte[] hed = File.ReadAllBytes(Path.Combine(DataDir, "data.hed"));
-                    byte[] hd2 = File.ReadAllBytes(Path.Combine(DataDir, "data.hd2"));
-                    for (int i = 0; i < hed.Length / 80; i++)
+                    int t = FindTim2(file);
+                    if (t >= 0)
                     {
-                        int end = Array.IndexOf(hed, (byte)0, i * 80, 80); if (end < 0) end = i * 80 + 80;
-                        string name = System.Text.Encoding.ASCII.GetString(hed, i * 80, end - i * 80);
-                        if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
-
-                        uint off = BitConverter.ToUInt32(hd2, 16 + i * 32);
-                        uint size = BitConverter.ToUInt32(hd2, 16 + i * 32 + 4);
-                        var file = new byte[size];
-                        using (var dat = File.OpenRead(Path.Combine(DataDir, "data.dat")))
-                        { dat.Seek(off, SeekOrigin.Begin); dat.Read(file, 0, (int)size); }
-
-                        int t = FindTim2(file);
-                        if (t >= 0)
-                        {
-                            int hdrSize = BitConverter.ToUInt16(file, t + 0x1C);
-                            int pix = t + 0x10 + hdrSize;
-                            blob = new byte[BlobBytes];
-                            Array.Copy(file, pix, blob, 0, BlobBytes);
-                        }
-                        break;
+                        int hdrSize = BitConverter.ToUInt16(file, t + 0x1C);
+                        int pix = t + 0x10 + hdrSize;
+                        blob = new byte[BlobBytes];
+                        Array.Copy(file, pix, blob, 0, BlobBytes);
                     }
                 }
             }
