@@ -75,6 +75,10 @@ namespace Dark_Cloud_Improved_Version
         /// drivers verbatim (they only touch enemy data); the Xiao body adaptations live in
         /// <see cref="SuperSteveAbilities"/>. Every driver is pulsed each tick (enabled or not) so it
         /// self-restores the instant the sphere is swapped — no explicit per-swap teardown needed.
+        ///
+        /// NOT every weapon's ability transfers. Excluded by design:
+        ///   • Macho Sword, Wise Owl Sword, Chronicle 2 — rely on weapon ownership
+        ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks
         /// </summary>
         public static void SuperSteveEffect()
         {
@@ -82,6 +86,13 @@ namespace Dark_Cloud_Improved_Version
             var xiaoCurse = new CustomToanEffects.CurseAddrs(Player.Xiao.status, Player.Xiao.statusTimer, Player.Xiao.hp);
             var ssEvilcise = new CustomToanEffects.CurseState();
             var ssManeater = new CustomToanEffects.CurseState();
+            var xiaoTuna = new CustomGoroEffects.FrozenTunaWielder(Player.XiaoId, Player.Xiao.hp, Player.Xiao.maxHP,
+                                                                   Player.Xiao.status, Player.Xiao.statusTimer);
+            var ssTuna = new CustomGoroEffects.FrozenTunaState();
+            var ssTallHammer = new CustomGoroEffects.TallHammerState();
+            var ssCactus = new CustomUngagaEffects.CactusState();
+            var ssSnail = new CustomOsmondEffects.SnailState();
+            var ssStarBreaker = new CustomOsmondEffects.StarBreakerState();
             while (Player.InDungeonFloor())
             {
                 int ch = Player.CurrentCharacterNum();
@@ -94,7 +105,10 @@ namespace Dark_Cloud_Improved_Version
 
                 int sphere = SuperSteveAbilities.AttachedSphere(rec);
                 bool active = !Player.CheckDunIsPaused();
+                // (The sphere-palette recolour is NOT driven here — WeaponTextureSwap runs its own always-on
+                // thread so the swap also covers town/menu, where this dungeon dispatcher never runs.)
 
+                // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
                 CustomToanEffects.SeventhHeavenSoftenAttacks(active && sphere == Items.seventhheaven);
                 CustomToanEffects.DarkCloudDriveGuards(active && (sphere == Items.seventhheaven || sphere == Items.darkcloud));
@@ -124,6 +138,40 @@ namespace Dark_Cloud_Improved_Version
                 // Heaven's Cloud (Heaven's Cloud): charge → grow the slingshot + pellet, flash, shrapnel burst.
                 SuperSteveAbilities.DriveHeavensCloud(active && sphere == Items.heavenscloud);
 
+                // Xiao Effects
+
+                // Angel Gear: slow party-wide HP regen.
+                SuperSteveAbilities.DriveAngelGear(active && sphere == Items.angelgear);
+
+                // Goro Effects
+
+                // Cold Storage (Frozen Tuna): WHP losses bank a healing pool that drains after Xiao is hit;
+                // on-hit 5% chance to stop all non-ice enemies at the price of freezing Xiao too.
+                CustomGoroEffects.FrozenTunaDrive(active && sphere == Items.frozentuna, xiaoTuna, equipSlot, ssTuna);
+
+                // Tall Hammer: shrinks enemies Xiao's pellets hit.
+                CustomGoroEffects.TallHammerDrive(active && sphere == Items.tallhammer, Player.XiaoId, ssTallHammer);
+
+                // Ruby Effects
+
+                // Mobius Ring: holding the shot ramps damage ×1.5 per 1.5s (flash per step); the fired
+                // pellet gets the ramped damage + a Ruby-ball-style size to match.
+                SuperSteveAbilities.DriveMobiusRing(active && sphere == Items.mobiusring);
+
+                // Ungaga Effects
+
+                // Absorb (Cactus): pellet hits restore Xiao's thirst scaled by damage (rock/metal/undead immune).
+                CustomUngagaEffects.CactusDrive(active && sphere == Items.cactus, Player.XiaoId,
+                                                Player.Xiao.thirst, Player.Xiao.thirstMax, ssCactus);
+
+                // Osmond Effects
+
+                // Snail: 5% chance on hit to inflict gooey on the struck enemy.
+                CustomOsmondEffects.SnailDrive(active && sphere == Items.snail, Player.XiaoId, ssSnail);
+
+                // Star Breaker: 2% chance on an enemy kill to receive an empty SynthSphere.
+                CustomOsmondEffects.StarBreakerDrive(active && sphere == Items.starbreaker, ssStarBreaker);
+
                 Thread.Sleep(16);
             }
 
@@ -138,6 +186,10 @@ namespace Dark_Cloud_Improved_Version
             SuperSteveAbilities.DriveTsukikage(false);
             SuperSteveAbilities.DriveHeavensCloud(false);   // resets slingshot + flash latch
             SuperSteveAbilities.DriveAgasSword(false);
+            SuperSteveAbilities.DriveMobiusRing(false);   // resets the damage ramp
+            CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
+            // (palette restore is handled by WeaponTextureSwap's own thread — it repaints vanilla the
+            // moment Super Steve is no longer Xiao's equipped weapon)
         }
 
     }

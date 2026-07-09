@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -18,107 +17,145 @@ namespace Dark_Cloud_Improved_Version
             EnemySpecies.GemronIce.Id,  // 312
         };
 
-        /// <summary>
-        /// Ability Name: Cold Storage (Frozen Tuna)
-        /// Frozen Tuna: WHP lost builds a healing pool. When Goro takes damage the pool
-        /// drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; the pool is
-        /// preserved until the next hit. Pool resets on weapon repair or weapon switch.
-        /// On hit, 5% chance to stop all non-ice enemies and freeze Goro for 3 seconds.
-        /// Ice enemies (Blizzard, Sam, Ice Gemron) are immune to the stop proc.
-        /// </summary>
-        public static void FrozenTunaEffect()
+        /// <summary>Who is holding the Frozen Tuna (or its sphere): character id + the raw HP/status
+        /// addresses the driver heals/freezes. Mirrors the CurseAddrs pattern in CustomToanEffects.</summary>
+        internal sealed class FrozenTunaWielder
         {
-            float storedHealing = 0f; // HP banked from WHP losses
-            float healFraction  = 0f; // sub-integer carry for 1 HP/500ms drain
-            bool  healActive    = false;
+            public readonly int CharId; public readonly int Hp, MaxHp, Status, StatusTimer;
+            public FrozenTunaWielder(int charId, int hp, int maxHp, int status, int statusTimer)
+            { CharId = charId; Hp = hp; MaxHp = maxHp; Status = status; StatusTimer = statusTimer; }
+        }
 
-            while (Player.Weapon.GetCurrentWeaponId() == Items.frozentuna && Player.InDungeonFloor())
+        /// <summary>Per-wielder Frozen Tuna state (healing pool, snapshots, self-freeze countdown) so Goro's
+        /// own weapon and Super Steve's inherited copy never share (or fight over) a pool.</summary>
+        internal sealed class FrozenTunaState
+        {
+            public float StoredHealing;     // HP banked from WHP losses
+            public float HealFraction;      // sub-integer carry for the 2 HP/s drain
+            public bool  HealActive;
+            public float  PrevWhp = -1f;    // last tick's WHP (-1 = unseeded)
+            public int    PrevHp  = -1;     // last tick's wielder HP (-1 = unseeded)
+            public int[]  PrevEnemyHp;      // last tick's enemy-HP snapshot
+            public DateTime LastTick = DateTime.MinValue;
+            public int SelfFreezeStartTick = -1;   // ingameTimer tick the self-freeze began (-1 = none)
+        }
+
+        private const float FrozenTunaHealPerWhp   = 2f;    // pool gained per 1 WHP lost
+        private const float FrozenTunaHealPerSec   = 2f;    // pool drain rate (1 HP / 0.5s)
+        private const int   FrozenTunaProcPercent  = 5;     // on-hit stop-proc chance
+        private const ushort FrozenTunaEnemyFreeze = 300;   // enemy FreezeTimer written by the proc
+        private const ushort FrozenTunaSelfFreeze  = 180;   // wielder freeze duration (ticks @60fps)
+
+        /// <summary>
+        /// Ability Name: Cold Storage (Frozen Tuna) — per-tick driver.
+        /// WHP lost builds a healing pool (<see cref="FrozenTunaHealPerWhp"/> HP per WHP). When the wielder
+        /// takes damage the pool drains at <see cref="FrozenTunaHealPerSec"/> HP/s (time-based, so any tick
+        /// rate works); healing pauses at max HP, and the pool resets on weapon repair. On hit, a
+        /// <see cref="FrozenTunaProcPercent"/>% chance to stop all non-ice enemies — at the price of freezing
+        /// the wielder too. Ice enemies (Blizzard, Sam, Ice Gemron) are immune. Called with
+        /// <paramref name="active"/>=false the state resets, so a sphere swap starts clean.
+        /// </summary>
+        internal static void FrozenTunaDrive(bool active, FrozenTunaWielder w, int weaponSlot, FrozenTunaState st)
+        {
+            // Self-freeze countdown runs even while "inactive" so an in-flight freeze always clears.
+            if (st.SelfFreezeStartTick >= 0 &&
+                Memory.ReadInt(Addresses.ingameTimer) - st.SelfFreezeStartTick >= FrozenTunaSelfFreeze)
             {
-                int[] formerHp      = ReusableFunctions.GetEnemiesHp();
-                float whpBefore     = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
-                ushort goroHpBefore = Player.Goro.GetHp();
-
-                Thread.Sleep(50);
-
-                int[] currentHp  = ReusableFunctions.GetEnemiesHp();
-                float whpAfter   = ReusableFunctions.GetCurrentEquippedWhp(Player.GoroId, Player.Goro.GetWeaponSlot());
-                ushort goroHp    = Player.Goro.GetHp();
-                ushort goroMaxHp = Player.Goro.GetMaxHp();
-
-                // WHP lost → bank into healing pool (2 HP per 1 WHP lost)
-                if (whpAfter < whpBefore)
-                    storedHealing += (whpBefore - whpAfter) * 2f;
-
-                // WHP repaired → reset everything
-                if (whpAfter > whpBefore)
+                if (Memory.ReadUShort(w.Status) == 4)   // still frozen (and nothing else) → clear it
                 {
-                    storedHealing = 0f;
-                    healFraction  = 0f;
-                    healActive    = false;
+                    Memory.WriteUShort(w.Status, 0);
+                    Memory.WriteUShort(w.StatusTimer, 0);
+                }
+                st.SelfFreezeStartTick = -1;
+            }
+
+            if (!active)
+            {
+                st.StoredHealing = 0f; st.HealFraction = 0f; st.HealActive = false;
+                st.PrevWhp = -1f; st.PrevHp = -1; st.PrevEnemyHp = null;
+                return;
+            }
+
+            float whp    = ReusableFunctions.GetCurrentEquippedWhp(w.CharId, weaponSlot);
+            ushort hp    = Memory.ReadUShort(w.Hp);
+            ushort maxHp = Memory.ReadUShort(w.MaxHp);
+            int[] enemyHp = ReusableFunctions.GetEnemiesHp();
+            DateTime now = DateTime.UtcNow;
+            double elapsed = st.LastTick == DateTime.MinValue ? 0 : (now - st.LastTick).TotalSeconds;
+            st.LastTick = now;
+
+            if (st.PrevWhp >= 0f)
+            {
+                // WHP lost → bank into the healing pool; WHP repaired → reset the pool.
+                if (whp < st.PrevWhp) st.StoredHealing += (st.PrevWhp - whp) * FrozenTunaHealPerWhp;
+                else if (whp > st.PrevWhp) { st.StoredHealing = 0f; st.HealFraction = 0f; st.HealActive = false; }
+            }
+
+            // Wielder took damage → start draining the pool (if it has anything banked).
+            if (st.PrevHp >= 0 && hp < st.PrevHp && st.StoredHealing > 0f)
+                st.HealActive = true;
+
+            // Drain the pool at FrozenTunaHealPerSec while below max HP.
+            if (st.HealActive && st.StoredHealing > 0f && hp > 0 && hp < maxHp)
+            {
+                float drain = Math.Min((float)(FrozenTunaHealPerSec * elapsed), st.StoredHealing);
+                st.StoredHealing -= drain;
+                st.HealFraction  += drain;
+                int intHeal = (int)st.HealFraction;
+                if (intHeal > 0)
+                {
+                    Memory.WriteUShort(w.Hp, (ushort)Math.Min(hp + intHeal, maxHp));
+                    st.HealFraction -= intHeal;
+                }
+            }
+            if (st.StoredHealing <= 0f) st.HealActive = false;
+
+            // On-hit stop proc: freeze every active non-ice enemy — and the wielder pays the price too.
+            if (st.PrevEnemyHp != null && ReusableFunctions.GetDamageSourceCharacterID() == w.CharId)
+            {
+                bool hitDetected = false;
+                for (int i = 0; i < st.PrevEnemyHp.Length && i < enemyHp.Length; i++)
+                {
+                    if (st.PrevEnemyHp[i] > 0 && enemyHp[i] < st.PrevEnemyHp[i]) { hitDetected = true; break; }
                 }
 
-                // Goro took damage → activate pool drain if pool has anything
-                if (goroHp < goroHpBefore && storedHealing > 0f)
-                    healActive = true;
-
-                // Drain pool at 1 HP per 500ms (0.1 HP per 50ms tick) while below max
-                if (healActive && storedHealing > 0f && goroHp < goroMaxHp)
+                if (hitDetected)
                 {
-                    float drain    = Math.Min(0.1f, storedHealing);
-                    storedHealing -= drain;
-                    healFraction  += drain;
-
-                    int intHeal = (int)healFraction;
-                    if (intHeal > 0)
+                    if (random.Next(100) < FrozenTunaProcPercent)
                     {
-                        Player.Goro.SetHp((ushort)Math.Min(goroHp + intHeal, goroMaxHp));
-                        healFraction -= intHeal;
-                    }
-                }
-
-                if (storedHealing <= 0f)
-                    healActive = false;
-
-                // On-hit 5% stop proc: all non-ice enemies stopped; Goro frozen too
-                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.GoroId)
-                {
-                    bool hitDetected = false;
-                    for (int i = 0; i < 15; i++)
-                    {
-                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
-                        {
-                            hitDetected = true;
-                            break;
-                        }
-                    }
-
-                    if (hitDetected && random.Next(100) < 5)
-                    {
-                        for (int i = 0; i < 15; i++)
+                        for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
                         {
                             if (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.RenderStatus)) == 2 &&
                                 !FrozenTunaIceEnemies.Contains(Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId))))
                             {
-                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.FreezeTimer), 300);
+                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.FreezeTimer), FrozenTunaEnemyFreeze);
                             }
                         }
-                        Player.Goro.SetStatus("freeze", 180); // 3 seconds at 60fps
-                        int freezeStartTick = Memory.ReadInt(Addresses.ingameTimer);
-                        Task.Run(() =>
-                        {
-                            while (Memory.ReadInt(Addresses.ingameTimer) - freezeStartTick < 180)
-                                Thread.Sleep(50);
-                            if (Player.Goro.GetStatus() == 4)
-                            {
-                                Memory.WriteUShort(Player.Goro.status, 0);
-                                Memory.WriteUShort(Player.Goro.statusTimer, 0);
-                            }
-                        });
+                        Memory.WriteUShort(w.Status, 4);   // freeze the wielder (status bit 4 = freeze)
+                        Memory.WriteUShort(w.StatusTimer, FrozenTunaSelfFreeze);
+                        st.SelfFreezeStartTick = Memory.ReadInt(Addresses.ingameTimer);
                     }
+                    ReusableFunctions.ClearRecentDamageAndDamageSource();
                 }
-
-                ReusableFunctions.ClearRecentDamageAndDamageSource();
             }
+
+            st.PrevWhp = whp;
+            st.PrevHp = hp;
+            st.PrevEnemyHp = enemyHp;
+        }
+
+        /// <summary>Goro's own Frozen Tuna weapon: loops the shared driver while it's equipped.</summary>
+        public static void FrozenTunaEffect()
+        {
+            var wielder = new FrozenTunaWielder(Player.GoroId, Player.Goro.hp, Player.Goro.maxHP,
+                                                Player.Goro.status, Player.Goro.statusTimer);
+            var st = new FrozenTunaState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.frozentuna && Player.InDungeonFloor())
+            {
+                FrozenTunaDrive(true, wielder, Player.Goro.GetWeaponSlot(), st);
+                Thread.Sleep(50);
+            }
+            FrozenTunaDrive(false, wielder, 0, st);   // unequipped/left floor: reset the pool
         }
 
         // ── Inferno ────────────────────────────────────────────────────────────────────────
@@ -161,58 +198,53 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Tall Hammer ────────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Triggers Tall Hammer effect: Reduces enemies size on hit
-        /// </summary>
+        private const float TallHammerShrinkStep = 0.1f;   // scale lost per hit (matches the old net -0.1)
+        private const float TallHammerMinScale   = 0.3f;   // don't shrink past 30% of original
+
+        /// <summary>Per-tick enemy-HP snapshot for detecting fresh hits across driver calls.</summary>
+        internal sealed class TallHammerState { public int[] PrevHp; }
+
+        /// <summary>Tall Hammer: shrinks enemies the wielder hits. Compares the enemy-HP snapshot to last
+        /// tick's (<paramref name="st"/>) and, when the damage came from <paramref name="wielderId"/>, shrinks
+        /// each freshly-hit enemy by one step (clamped to <see cref="TallHammerMinScale"/>). Character-agnostic
+        /// apart from the wielder id, so Goro's own weapon and Super Steve both reuse it.</summary>
+        internal static void TallHammerDrive(bool active, int wielderId, TallHammerState st)
+        {
+            int[] cur = ReusableFunctions.GetEnemiesHp();
+            if (st.PrevHp != null && active && ReusableFunctions.GetDamageSourceCharacterID() == wielderId)
+            {
+                foreach (int id in ReusableFunctions.GetEnemiesHitIds(st.PrevHp, cur))
+                    ShrinkEnemy(id);
+            }
+            st.PrevHp = cur;
+        }
+
+        /// <summary>Goro's own Tall Hammer weapon: loops the shared driver while it's equipped.</summary>
         public static void TallHammerEffect()
         {
-            //Offset between the enemy's dimension addresses
-            int scaleOffset = MiniBoss.scaleOffset;
-
-            //Save every enemy's HP on the current floor
-            int[] formerEnemyHpList = ReusableFunctions.GetEnemiesHp();
-
-            Thread.Sleep(250);
-
-            //Re-save every enemy's HP on the current floor
-            int[] currentEnemyHpList = ReusableFunctions.GetEnemiesHp();
-
-            int hit = ReusableFunctions.GetRecentDamageDealtByPlayer();
-
-            bool hasHit = hit > -1 && ReusableFunctions.GetDamageSourceCharacterID() == Player.GoroId;
-
-            if (hasHit)
+            var st = new TallHammerState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.tallhammer && Player.InDungeonFloor())
             {
-                //Store the damaged enemies ID onto a list
-                List<int> enemyIds = ReusableFunctions.GetEnemiesHitIds(formerEnemyHpList, currentEnemyHpList);
+                TallHammerDrive(true, Player.GoroId, st);
+                Thread.Sleep(50);
+            }
+        }
 
-                //Run through the enemies hit
-                foreach (int id in enemyIds)
-                {
-                    //Declare the enemy dimensions based on the enemy that got hit
-                    float enemyZeroWidth = Memory.ReadFloat(0x21E18530 + (scaleOffset * id));
-                    float enemyZeroHeight = Memory.ReadFloat(0x21E18534 + (scaleOffset * id));
-                    float enemyZeroDepth = Memory.ReadFloat(0x21E18538 + (scaleOffset * id));
-
-                    //Set an initial acceleration value
-                    float i = 0.15f;
-
-                    //Set a counter for how many times to change the enemy's dimensions (this acts as a duration variable)
-                    int counter = 0;
-
-                    //Instructions will run for 1000 times (arbitrary number) and only while the enemy's dimensions are between 30% - 100% of their original size
-                    while (counter < 1000 && ((enemyZeroWidth >= 0.3f && enemyZeroWidth <= 1f) || (enemyZeroHeight >= 0.3f && enemyZeroHeight <= 1f) || (enemyZeroDepth >= 0.3f && enemyZeroDepth <= 1f)))
-                    {
-                        //Change each of the enemy axis dimensions (X,Y and Z) based on the offset from the original Enemy 0 address
-                        Memory.WriteFloat(MiniBoss.enemyZeroWidth + (scaleOffset * id), enemyZeroWidth - (i * 0.0001f));
-                        Memory.WriteFloat(MiniBoss.enemyZeroHeight + (scaleOffset * id), enemyZeroHeight - (i * 0.0001f));
-                        Memory.WriteFloat(MiniBoss.enemyZeroDepth + (scaleOffset * id), enemyZeroDepth - (i * 0.0001f));
-                        i++;
-                        counter++;
-                    }
-                }
-
-                ReusableFunctions.ClearRecentDamageAndDamageSource();
+        /// <summary>Shrink one enemy's X/Y/Z scale by <see cref="TallHammerShrinkStep"/>, but only while at
+        /// least one axis is still within [<see cref="TallHammerMinScale"/>, 1] of its original size.</summary>
+        private static void ShrinkEnemy(int id)
+        {
+            int off = MiniBoss.scaleOffset * id;
+            float w = Memory.ReadFloat(MiniBoss.enemyZeroWidth  + off);
+            float h = Memory.ReadFloat(MiniBoss.enemyZeroHeight + off);
+            float d = Memory.ReadFloat(MiniBoss.enemyZeroDepth  + off);
+            if ((w >= TallHammerMinScale && w <= 1f) ||
+                (h >= TallHammerMinScale && h <= 1f) ||
+                (d >= TallHammerMinScale && d <= 1f))
+            {
+                Memory.WriteFloat(MiniBoss.enemyZeroWidth  + off, w - TallHammerShrinkStep);
+                Memory.WriteFloat(MiniBoss.enemyZeroHeight + off, h - TallHammerShrinkStep);
+                Memory.WriteFloat(MiniBoss.enemyZeroDepth  + off, d - TallHammerShrinkStep);
             }
         }
 

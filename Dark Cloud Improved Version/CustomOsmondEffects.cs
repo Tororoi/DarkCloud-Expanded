@@ -11,66 +11,78 @@ namespace Dark_Cloud_Improved_Version
         private static Random random = new Random();
 
         // ── Snail ──────────────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Snail effect: 5% chance on hit to inflict gooey on the struck enemy
-        /// </summary>
-        public static void SnailEffect()
-        {
-            while (Player.Weapon.GetCurrentWeaponId() == Items.snail &&
-                   Player.InDungeonFloor())
-            {
-                int[] formerHp = ReusableFunctions.GetEnemiesHp();
-                Thread.Sleep(50);
-                int[] currentHp = ReusableFunctions.GetEnemiesHp();
+        private const int SnailGooeyPercent = 5;   // on-hit chance to goo the struck enemy
 
-                if (ReusableFunctions.GetDamageSourceCharacterID() == Player.OsmondId)
+        /// <summary>Per-caller Snail state: last tick's enemy-HP snapshot for fresh-hit detection.</summary>
+        internal sealed class SnailState { public int[] PrevHp; }
+
+        /// <summary>Snail — per-tick driver: <see cref="SnailGooeyPercent"/>% chance on hit to inflict gooey
+        /// on the struck enemy. Wielder-agnostic apart from whose hits count, so Osmond's own Snail and Super
+        /// Steve's inherited copy both reuse it.</summary>
+        internal static void SnailDrive(bool active, int wielderId, SnailState st)
+        {
+            int[] cur = ReusableFunctions.GetEnemiesHp();
+            if (st.PrevHp != null && active && ReusableFunctions.GetDamageSourceCharacterID() == wielderId)
+            {
+                bool hit = false;
+                for (int i = 0; i < EnemyAddresses.FloorSlots.Count && i < st.PrevHp.Length && i < cur.Length; i++)
                 {
-                    for (int i = 0; i < 15; i++)
+                    if (st.PrevHp[i] > 0 && cur[i] < st.PrevHp[i])
                     {
-                        if (formerHp[i] > 0 && currentHp[i] < formerHp[i])
-                        {
-                            if (random.Next(100) < 5)
-                            {
-                                Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.GooeyState), 1);
-                            }
-                        }
+                        hit = true;
+                        if (random.Next(100) < SnailGooeyPercent)
+                            Memory.WriteUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.GooeyState), 1);
                     }
                 }
+                if (hit) ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
+            st.PrevHp = cur;
+        }
 
-                ReusableFunctions.ClearRecentDamageAndDamageSource();
+        /// <summary>Osmond's own Snail weapon: loops the shared driver while it's equipped.</summary>
+        public static void SnailEffect()
+        {
+            var st = new SnailState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.snail && Player.InDungeonFloor())
+            {
+                SnailDrive(true, Player.OsmondId, st);
+                Thread.Sleep(50);
             }
         }
 
         // ── Star Breaker ───────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Triggers StarBreaker effect: Chance on kill to get an empty synthsphere (Breaks down any weapon)
-        /// </summary>
-        public static void StarBreakerEffect()
+        private const int StarBreakerProcPercent = 2;   // on-kill chance to receive a synthsphere
+
+        /// <summary>Per-caller Star Breaker state: last tick's enemy-HP snapshot for kill detection.</summary>
+        internal sealed class StarBreakerState { public int[] PrevHp; }
+
+        /// <summary>Star Breaker — per-tick driver: <see cref="StarBreakerProcPercent"/>% chance on an enemy
+        /// kill to receive an empty SynthSphere (breaks down any weapon). Faithful to the original: ANY kill
+        /// on the floor procs (no damage-source check), which only matters while the wielder is active anyway.</summary>
+        internal static void StarBreakerDrive(bool active, StarBreakerState st)
         {
-            //Save every enemy's HP on the current floor
-            int[] formerEnemiesHP = ReusableFunctions.GetEnemiesHp();
-
-            Thread.Sleep(250);
-
-            //Re-save every enemy's HP on the current floor
-            int[] currentEnemiesHP = ReusableFunctions.GetEnemiesHp();
-
-            List<int> enemiesKilled = ReusableFunctions.GetEnemiesKilledIds(formerEnemiesHP, currentEnemiesHP);
-
-            int roll = random.Next(100);
-
-            //Check if an enemy was killed and if the roll chance was met (2%)
-            if(enemiesKilled.Count > 0 && roll < 2)
+            int[] cur = ReusableFunctions.GetEnemiesHp();
+            if (st.PrevHp != null && active)
             {
-                //Check if the player has free inventory slots
-                if (Player.Inventory.GetBagAttachmentsFirstAvailableSlot() >= 0)
+                List<int> killed = ReusableFunctions.GetEnemiesKilledIds(st.PrevHp, cur);
+                if (killed.Count > 0 && random.Next(100) < StarBreakerProcPercent &&
+                    Player.Inventory.GetBagAttachmentsFirstAvailableSlot() >= 0)
                 {
-                    //Place the synth sphere in inventory
                     Player.Inventory.SetBagAttachments(Items.synthsphere);
-
-                    //Display the effect message
                     Dayuppy.DisplayMessage("The Star Breaker sent\nyou a shooting star!", 2, 21);
                 }
+            }
+            st.PrevHp = cur;
+        }
+
+        /// <summary>Osmond's own Star Breaker weapon: loops the shared driver while it's equipped.</summary>
+        public static void StarBreakerEffect()
+        {
+            var st = new StarBreakerState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.starbreaker && Player.InDungeonFloor())
+            {
+                StarBreakerDrive(true, st);
+                Thread.Sleep(50);
             }
         }
 

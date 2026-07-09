@@ -488,6 +488,30 @@ namespace Dark_Cloud_Improved_Version
             Write(address, byteArray);
         }
 
+        // Writes <data.Length> consecutive bytes starting at <startAddr>, packing many Write8 commands into
+        // each PINE packet (chunked) — the byte-wise sibling of WriteUIntBatch, for bulk blobs (e.g. texture
+        // pixels) where per-byte round-trips would take seconds and alignment rules out 32-bit packing.
+        internal static void WriteBytesBatch(long startAddr, byte[] data)
+        {
+            const int chunk = 500;                 // 500*6+4 = 3004 bytes/packet — well under the PINE buffer
+            byte op = OpWrite8;
+            for (int start = 0; start < data.Length; start += chunk)
+            {
+                int n = Math.Min(chunk, data.Length - start);
+                int pktLen = 4 + n * 6;            // header + n*(opcode(1)+addr(4)+value(1))
+                var pkt = new byte[pktLen];
+                BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+                for (int i = 0; i < n; i++)
+                {
+                    int off = 4 + i * 6;
+                    pkt[off] = op;
+                    BitConverter.GetBytes(PhysAddr(startAddr + start + i)).CopyTo(pkt, off + 1);
+                    pkt[off + 5] = data[start + i];
+                }
+                SendBatch(pkt);
+            }
+        }
+
         internal static bool WriteUShort(long address, ushort value)
         {
             SendBatch(BuildWritePacket(OpWrite16, address, BitConverter.GetBytes(value)));

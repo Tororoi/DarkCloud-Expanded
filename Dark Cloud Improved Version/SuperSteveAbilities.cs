@@ -107,6 +107,39 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort(Player.Xiao.status, (ushort)(status & ~resistMask));
         }
 
+        // ── Angel Gear (Xiao's own weapon: slow party-wide HP regen) ──
+        private const double AngelGearHealSeconds = 5.0;   // matches CustomXiaoEffects.AngelGearEffect's 5000ms cadence
+        private const ushort AngelGearHealAmount  = 1;
+        private static DateTime _angelGearNextHeal = DateTime.MinValue;
+
+        /// <summary>Angel Gear: while <paramref name="active"/> and in walking mode, every
+        /// <see cref="AngelGearHealSeconds"/> heal each ally by <see cref="AngelGearHealAmount"/> (skipping the
+        /// dead and the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal
+        /// build-up attribute (Special2 % 16 in 8..11), which already regenerates her — avoids double-healing.
+        /// Stateless apart from the interval timer, so it just no-ops when inactive.</summary>
+        internal static void DriveAngelGear(bool active)
+        {
+            if (!active || !Player.CheckDunIsWalkingMode()) return;
+            if (DateTime.UtcNow < _angelGearNextHeal) return;
+            _angelGearNextHeal = DateTime.UtcNow.AddSeconds(AngelGearHealSeconds);
+
+            HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
+            HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
+            HealAlly(Player.Ruby.GetHp(),   Player.Ruby.GetMaxHp(),   Player.Ruby.SetHp);
+            HealAlly(Player.Ungaga.GetHp(), Player.Ungaga.GetMaxHp(), Player.Ungaga.SetHp);
+            HealAlly(Player.Osmond.GetHp(), Player.Osmond.GetMaxHp(), Player.Osmond.SetHp);
+
+            // Xiao only if the equipped weapon lacks the native Heal attribute (else the game already regens her).
+            int special2 = Player.Weapon.GetCurrentWeaponSpecial2() % 16;
+            if (special2 < 8 || special2 > 11)
+                HealAlly(Player.Xiao.GetHp(), Player.Xiao.GetMaxHp(), Player.Xiao.SetHp);
+        }
+
+        private static void HealAlly(ushort hp, int maxHp, Action<ushort> setHp)
+        {
+            if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
+        }
+
         // ── Moonlit Focus + Heaven's Cloud (charge → grow + shrapnel burst) ──
         private const float HcPelletScale    = 8f;          // Heaven's Cloud: pellet at MAX charge (shot-pool +0x310)
         private const float HcSlingshotScale = 2f;          // Heaven's Cloud: slingshot 'c04w' mesh at MAX charge
@@ -311,6 +344,72 @@ namespace Dark_Cloud_Improved_Version
                 _hcBurstSlots.Add(slot);
             }
             _hcBurstCooldownUntil = DateTime.UtcNow.AddMilliseconds(150);   // settle window after the last shrapnel clears
+        }
+
+        // ── Mobius Ring (Ruby's weapon: damage ramps the longer the attack is charged) ──
+        // Xiao adaptation: Ruby ramps while CHARGING her ball; Xiao ramps while HOLDING the drawn shot
+        // (states 0xB/0xC). Every MobiusCycleSeconds held, the damage multiplier compounds ×MobiusStepMult
+        // (mirroring Ruby's damage += damage/2 per flash cycle) and Xiao flashes — the same repeated-flash
+        // feedback Ruby gets. The fired pellet takes damage ×1.5^cycles (capped at Ruby's 65535) and its
+        // sprite grows with the multiplier using Ruby's own ball-growth formula/constants.
+        private const double MobiusCycleSeconds = 1.5;    // hold time per ramp step (Ruby's flash cadence)
+        private const float  MobiusStepMult     = 1.5f;   // damage multiplier per completed cycle, compounding
+        private const int    MobiusDamageCap    = ushort.MaxValue;   // Ruby's ramp cap
+        private const float  MobiusPelletMaxScale = 15f;  // sprite-size cap — Ruby's ball caps at 5× but a pellet is tiny, so Xiao gets 15×
+        private static bool     _mrHolding;
+        private static DateTime _mrHoldStart;
+        private static int      _mrCycles;   // completed ramp cycles (frozen on release for the pellet that fires)
+        private static readonly bool[] _mrHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
+
+        /// <summary>Mobius Ring: while <paramref name="active"/>, holding the shot ramps a compounding damage
+        /// multiplier (one ×<see cref="MobiusStepMult"/> step + a Ruby-style flash per
+        /// <see cref="MobiusCycleSeconds"/> held); each fired pellet gets the ramped damage and a ball-growth
+        /// sprite scale. The ramp freezes on release (so the pellet that fires reads it) and resets when a
+        /// fresh hold starts, or when the sphere is swapped.</summary>
+        internal static void DriveMobiusRing(bool active)
+        {
+            if (!active)
+            {
+                _mrHolding = false; _mrCycles = 0;
+                Array.Clear(_mrHandled, 0, _mrHandled.Length);
+                return;
+            }
+
+            int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
+            bool holding = shotState == WeaponCollision.XiaoShotDraw || shotState == WeaponCollision.XiaoShotHold;
+            if (holding)
+            {
+                if (!_mrHolding) { _mrHoldStart = DateTime.UtcNow; _mrHolding = true; _mrCycles = 0; }
+                int cycles = (int)((DateTime.UtcNow - _mrHoldStart).TotalSeconds / MobiusCycleSeconds);
+                if (cycles > _mrCycles)
+                {
+                    _mrCycles = cycles;
+                    Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1);   // Ruby's Mobius flash per ramp step
+                }
+            }
+            else _mrHolding = false;   // keep _mrCycles frozen for the pellet that fires
+
+            // Stamp fresh pellets once each: damage ×1.5^cycles (capped) + Ruby's ball-growth sprite scale.
+            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            if (poolBase == 0 || poolBase >= 0x02000000) return;   // pool not allocated / bad pointer
+            float mult = (float)Math.Pow(MobiusStepMult, _mrCycles);
+            for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
+            {
+                bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
+                if (live && !_mrHandled[i])
+                {
+                    if (_mrCycles > 0)
+                    {
+                        long dmgA = WeaponCollision.PlayerShotPool.DamageAddr(poolBase, i);
+                        Memory.WriteInt(dmgA, (int)Math.Min(MobiusDamageCap, Memory.ReadInt(dmgA) * (double)mult));
+                        float scale = 1f + (mult - 1f) * WeaponCollision.RubyBallGrowthPerMultiple;
+                        if (scale > MobiusPelletMaxScale) scale = MobiusPelletMaxScale;
+                        Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, i), scale);
+                    }
+                    _mrHandled[i] = true;
+                }
+                else if (!live) _mrHandled[i] = false;
+            }
         }
     }
 }

@@ -62,50 +62,55 @@ namespace Dark_Cloud_Improved_Version
             EnemySpecies.HornHead.Id,        // 319
         };
 
+        /// <summary>Per-caller Cactus state: last tick's enemy-HP snapshot for fresh-hit detection.</summary>
+        internal sealed class CactusState { public int[] PrevHp; }
+
         /// <summary>
-        /// Ability Name: Absorb (Cactus)
-        /// Cactus: on hit, restore Ungaga's thirst scaled by damage dealt.
-        /// 100 damage = 10.0 thirst units = 1 visible water drop.
-        /// Rock, metal, and undead types are immune.
+        /// Ability Name: Absorb (Cactus) — per-tick driver.
+        /// On hit, restore the wielder's thirst scaled by damage dealt (100 damage = 10.0 thirst units = 1
+        /// visible water drop). Rock, metal, and undead types are immune. Wielder-agnostic: the character id
+        /// picks whose hits count and the raw thirst/thirstMax float addresses pick whose gauge fills, so
+        /// Ungaga's own Cactus and Super Steve's inherited copy both reuse it.
         /// </summary>
-        public static void CactusEffect()
+        internal static void CactusDrive(bool active, int wielderId, int thirstAddr, int thirstMaxAddr, CactusState st)
         {
-            while (Player.Weapon.GetCurrentWeaponId() == Items.cactus ||
-                   Player.InDungeonFloor())
+            int[] cur = ReusableFunctions.GetEnemiesHp();
+            if (st.PrevHp != null && active && ReusableFunctions.GetDamageSourceCharacterID() == wielderId)
             {
-                int[] former = ReusableFunctions.GetEnemiesHp();
-                Thread.Sleep(50);
-                int[] current = ReusableFunctions.GetEnemiesHp();
-
-                if (ReusableFunctions.GetDamageSourceCharacterID() != Player.UngagaId)
+                for (int i = 0; i < EnemyAddresses.FloorSlots.Count && i < st.PrevHp.Length && i < cur.Length; i++)
                 {
-                    ReusableFunctions.ClearRecentDamageAndDamageSource();
-                    continue;
-                }
-
-                for (int i = 0; i < 15; i++)
-                {
-                    if (former[i] <= 0 || current[i] >= former[i])
+                    if (st.PrevHp[i] <= 0 || cur[i] >= st.PrevHp[i])
                         continue;
 
                     int enemySpeciesId = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
                     if (CactusImmuneNameTags.Contains(enemySpeciesId))
                         continue;
 
-                    float curThirst = Player.Ungaga.GetThirst();
-                    float maxThirst = Player.Ungaga.GetMaxThirst();
+                    float curThirst = Memory.ReadFloat(thirstAddr);
+                    float maxThirst = Memory.ReadFloat(thirstMaxAddr);
                     if (maxThirst > 0 && curThirst >= maxThirst)
                         break;
 
-                    float gain = (former[i] - current[i]) / 10.0f;
+                    float gain = (st.PrevHp[i] - cur[i]) / 10.0f;
                     float newThirst = (maxThirst > 0)
                         ? Math.Min(curThirst + gain, maxThirst)
                         : curThirst + gain;
-                    Player.Ungaga.SetThirst(newThirst);
+                    Memory.WriteFloat(thirstAddr, newThirst);
                     break;
                 }
-
                 ReusableFunctions.ClearRecentDamageAndDamageSource();
+            }
+            st.PrevHp = cur;
+        }
+
+        /// <summary>Ungaga's own Cactus weapon: loops the shared driver while it's equipped.</summary>
+        public static void CactusEffect()
+        {
+            var st = new CactusState();
+            while (Player.Weapon.GetCurrentWeaponId() == Items.cactus && Player.InDungeonFloor())
+            {
+                CactusDrive(true, Player.UngagaId, Player.Ungaga.thirst, Player.Ungaga.thirstMax, st);
+                Thread.Sleep(50);
             }
         }
 
