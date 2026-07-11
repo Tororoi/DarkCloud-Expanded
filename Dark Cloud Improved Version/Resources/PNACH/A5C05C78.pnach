@@ -297,6 +297,16 @@ patch=1,EE,20240364,extended,3C024000 //more consistentfishing
 
 patch=1,EE,21F10020,extended,00000001 //pnach active flag
 
+//Ungaga Mirage: NOP the dungeon chara-loop "scene" gate at 0x1DAE8A4 (beq v0,zero = 0x10400037) so the
+//decoy clone draws (Draw__11CSeireiKing's 6-chara loop) while iGpffff9e18 stays 0 and enemies keep moving.
+//PINE can't write this (crashes PCSX2) — PCSX2 applies it. Gated on flag 0x01F10038 (mod sets =1 only while
+//a decoy is active in a dungeon, 0 otherwise) so it never NOPs the town overlay that shares this address.
+patch=1,EE,E1020001,extended,01F10038 //if Mirage scene-gate flag == 1 (apply next 2)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP the chara-loop scene gate (clone draws, enemies keep moving)
+patch=1,EE,21DAE8D4,extended,26060011 //  chara[0] reloads group 0x11 (addiu a2,s0,0x20 -> 0x11): the NPC draw path
+//                                       samples ONE current group, so pick the body group (largest visible surface).
+//                                       0x1d gave right belt/gray body; 0x11 should give right body. player 0x11 untouched.
+
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
 patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag

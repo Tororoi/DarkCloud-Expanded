@@ -79,7 +79,9 @@ namespace Dark_Cloud_Improved_Version
         public static Thread tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
         public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
         public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
+        public static Thread kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
+        public static Thread angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
         public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
@@ -373,11 +375,24 @@ namespace Dark_Cloud_Improved_Version
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
+                                    case Items.kitchenknife:
+                                        if (!kitchenKnifeThread.IsAlive)
+                                        {
+                                            kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
+                                            kitchenKnifeThread.Start();
+                                        }
+                                        break;
+
                                     case Items.angelgear:
                                         if (!angelGearThread.IsAlive)
                                         {
                                             angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
                                             angelGearThread.Start();
+                                        }
+                                        if (!angelGearHaloThread.IsAlive)
+                                        {
+                                            angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
+                                            angelGearHaloThread.Start();
                                         }
                                         break;
 
@@ -592,6 +607,10 @@ namespace Dark_Cloud_Improved_Version
                             // Re-apply the enemy model/AI re-skin cave + hook (the dun overlay reloads
                             // each floor). No-op unless EnemyModelInjector.Enabled is set.
                             EnemyModelInjector.Install();
+
+                            // Ungaga's Mirage scene-gate NOP is NOT applied here: PINE writing the dun-overlay
+                            // code crashes PCSX2 (confirmed). It must go through the PNACH instead (PCSX2 applies
+                            // code patches safely). See Mirage.ApplySceneDrawPatch / SceneGateAddr.
 
                             //Check if player is not on an event floor and call the Mini Boss
                             if (!excludeFloors.Contains(currentFloor))

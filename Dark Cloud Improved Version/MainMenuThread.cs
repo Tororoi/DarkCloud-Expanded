@@ -29,8 +29,10 @@ namespace Dark_Cloud_Improved_Version
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
             WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
             CustomToanEffects.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
+            Mirage.ArmColdPatch();   // Ungaga's Mirage redirect: install the _GET_POSITION patch NOW while it's cold
             WeaponTextureSwap.StartSwapThread();   // Super Steve wears the attached sphere weapon's palette (dungeon + menus)
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
+            Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
         }
 
         public static void CheckEmulatorAndGame()

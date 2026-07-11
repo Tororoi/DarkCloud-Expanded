@@ -607,6 +607,88 @@ namespace Dark_Cloud_Improved_Version
         ///     floor: the revive roll's threshold literal is set to 0 so the revive branch never wins
         ///     (one u32 per script, restored on unequip). No engine call, no per-death watching.
         /// </summary>
+        // ── Kitchen Knife: "Spring-Blessed Blade" ───────────────────────────────────────────
+        private const float KkTargetLength   = 12f;    // blade length while blessed (stock dcol1 = 4.187)
+        private const float KkAttackMult     = 2f;     // battle-copy attack multiplier while blessed
+        private const int   KkBoostSeconds   = 60;     // blessing duration; re-entering the spring refreshes it
+
+        /// <summary>
+        /// Kitchen Knife bonus: stepping into a healing spring blesses the knife — the blade instantly
+        /// grows to length <see cref="KkTargetLength"/> (mesh scale, visual + dcol hit together) and the
+        /// BATTLE-copy attack is doubled (past the menu cap, Quick-Draw style). Lasts
+        /// <see cref="KkBoostSeconds"/>s from the moment the player last stood in the spring; flavor
+        /// messages mark the blessing and its fading (no numbers shown). Scale and attack are re-asserted
+        /// each tick, so floor reloads / battle-record refreshes can't strand a half-applied boost.
+        /// </summary>
+        public static void KitchenKnifeEffect()
+        {
+            bool boosted = false;
+            ushort baseAtk = 0;
+            DateTime deadline = DateTime.MinValue;
+            float factor = KkTargetLength /
+                (ToanWeapons.TryGetValue(Items.kitchenknife, out WeaponData kk) && kk.Dcol1.HasValue
+                    ? Math.Abs(kk.Dcol1.Value) : 4.187f);
+
+            DateTime lastTick = DateTime.UtcNow;
+            while (Player.Weapon.GetCurrentWeaponId() == Items.kitchenknife && Player.InDungeonFloor())
+            {
+                Thread.Sleep(100);
+                DateTime now = DateTime.UtcNow;
+                TimeSpan dt = now - lastTick;
+                lastTick = now;
+                if (Player.CheckDunIsPaused())
+                {
+                    if (boosted) deadline += dt;   // freeze the countdown while paused
+                    continue;
+                }
+
+                bool inSpring = Memory.ReadInt(HealingSpring.InZoneFlag) == 1 &&
+                                Player.CurrentCharacterNum() == Player.ToanId;
+                long atkAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffAttackOffset;
+
+                if (inSpring)
+                {
+                    if (!boosted)
+                    {
+                        baseAtk = Memory.ReadUShort(atkAddr);
+                        Memory.WriteUShort(atkAddr, (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue));
+                        boosted = true;
+                        Dayuppy.DisplayMessage("The spring's blessing surges\nthrough the Kitchen Knife!", 2, 30, 4000);
+                    }
+                    deadline = DateTime.UtcNow.AddSeconds(KkBoostSeconds);   // standing in the water keeps it fresh
+                }
+
+                if (boosted)
+                {
+                    if (DateTime.UtcNow > deadline)
+                    {
+                        ushort cur = Memory.ReadUShort(atkAddr);
+                        if (cur == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
+                            Memory.WriteUShort(atkAddr, baseAtk);            // untouched by reloads → restore
+                        Weapons.ScaleAllWeaponMeshes(1f);
+                        boosted = false;
+                        Dayuppy.DisplayMessage("The spring's blessing fades\nfrom the Kitchen Knife...", 2, 30, 4000);
+                    }
+                    else
+                    {
+                        Weapons.ScaleAllWeaponMeshes(factor);                // re-assert (floor reload re-poses)
+                        ushort cur = Memory.ReadUShort(atkAddr);
+                        if (cur == baseAtk)                                  // battle record was refreshed → re-apply
+                            Memory.WriteUShort(atkAddr, (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue));
+                    }
+                }
+            }
+
+            // Weapon swapped / left the dungeon mid-blessing: quietly put everything back.
+            if (boosted)
+            {
+                long atkAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffAttackOffset;
+                if (Memory.ReadUShort(atkAddr) == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
+                    Memory.WriteUShort(atkAddr, baseAtk);
+                Weapons.ScaleAllWeaponMeshes(1f);
+            }
+        }
+
         public static void CrossHinderEffect()
         {
             int n = EnemyAddresses.FloorSlots.Count;
