@@ -393,7 +393,15 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CharaActive   = 0x146C;      // int — Draw__12CNPCharacter requires !=0
         internal const int  CharaMotionA  = 0x1474;      // Step__12CNPCharacter runs the motion step only if
         internal const int  CharaMotionB  = 0x1478;      //   (+0x1474 || +0x1478) != 0 — zero both to freeze
+        internal const int  CharaRampA    = 0x1484;      // Step__12CNPCharacter opacity-ramp amount (int); 0 = no ramp
+        internal const int  CharaRampB    = 0x1488;      //   ramp amount B (engine sets =-1 each step → falls back to A)
         internal const int  CharaTint     = 0xCE0;       // float3 ambient ADD (tint); alpha/opacity = +0xCEC (NpcOpacity)
+
+        // Motion-speed override (CCharacter+0xC60): Step__10CCharacter REPLACES the current motion's per-frame
+        // advance with this when >0 (see [[player-motion-speed]]). The clone SHARES the player's motion structs
+        // (+0xC20[i], copied), so the animation frame counter is shared: setting the clone's step to a near-zero
+        // advance lets its SetMotionEX POSE the clone tree at the player's live frame without double-advancing it.
+        internal const int  MotionSpeed   = 0xC60;
 
         // ── MotionParts host — the REAL character-draw pass ──────────────────────────────────────────
         // MainDraw draws 4 CMainChara slots (MotionParts, stride 0x11B0) every frame, each via vtable+0xac
@@ -433,15 +441,72 @@ namespace Dark_Cloud_Improved_Version
         // parent/child/sibling from an old→new map, share the mesh ptr @+0x260.
         internal const long NodePool      = 0x21F40000;   // clone node pool (proven-clean cave, clear of RootBuf/tables)
         internal const long NodePoolGuest = 0x01F40000;
-        internal const int  NodeStride    = 0x300;        // per copied node (> 0x270, aligned)
-        internal const int  NodeSize      = 0x270;        // full CFrameVu1 node
-        internal const int  MaxNodes      = 320;          // pool cap (320*0x300 = 0x3C000 → ends 0x21F7C000)
+        internal const int  NodeStride    = 0x270;        // MUST equal the real node size: MotionProc indexes
+        internal const int  NodeSize      = 0x270;        //   bones as root+index*0x270, so the copy is contiguous
+        internal const int  MaxNodes      = 320;          // pool cap (320*0x270 = 0x30C00 → ends 0x21F70C00)
+
+        // Independent motion-struct cave. The CCharacter holds up to 8 motion "channels" as pointers at
+        // +0xC20+i*4 (see GetMotionParam 0x1383b0); each points to a MOTION_TYPE whose embedded MOTION_STATE
+        // (+0x10) is the animation frame counter Step advances. The clone copies the player's CCharacter, so it
+        // SHARES these structs → both steps advance the same frame → 2× speed. Copy each active channel here and
+        // repoint so the clone advances its OWN frame. Internal ptrs (+0x04/+0x08/+0x60/+0x64 → shared keyframe
+        // data) stay as-is. Sits in the pool's clean tail (node pool ends 0x21F70C00, this < 0x21F7C000).
+        internal const long MotionCave      = 0x21F78000;
+        internal const long MotionCaveGuest = 0x01F78000;
+        internal const int  MotionSlots     = 8;
+        internal const int  MotionSlotBase  = 0xC20;      // CCharacter+0xC20+i*4 = channel[i] MOTION_TYPE ptr
+        internal const int  MotionStructSize = 0xC0;      // > highest field used (+0x64); margin for safety
+        internal const int  MotionSkinList  = 0x08;       // MOTION_TYPE+0x08 = MotionProc2 (skinning) list; +0x04 = rigid
+
+        // Independent mesh cave. Only ~3 bones are CVisualMDTVu1 (software-skinned via MotionProc2); the rest
+        // skin on VU1 at draw time (already per-instance). For each MDT bone, copy the visual (0x30) + VU data
+        // (visual+0x1c bytes) + MDT block (MDT+0x08 bytes) here, rebase cross-refs, repoint node+0x260. Then the
+        // clone skins its OWN buffers → fully independent body. ~75KB; sits in the proven-clean cave tail.
+        internal const long MeshCave       = 0x21F80000;
+        internal const long MeshCaveGuest  = 0x01F80000;
+        internal const int  MeshCaveSize   = 0x34000;     // ~213KB (n66 VU alone is ~127KB); fits the clean tail 0x1F80000..0x1FB4300
+        internal const int  VisualSize     = 0x30;        // CVisualMDTVu1
+        internal const int  VisVU          = 0x18;        // visual+0x18 = VU data ptr, +0x1c = size
+        internal const int  VisMDT         = 0x20;        // visual+0x20 = MDT ptr
+        internal const uint MdtMagic       = 0x0054444D;  // "MDT\0" at MDT+0x00 (LE: 4D 44 54 00)
+        internal const int  MdtSizeField   = 0x08;        // MDT+0x08 = total MDT block size
+
+        // FRAME_INF = the per-bone skinning-matrix buffer (channel MOTION_TYPE +0x60), indexed bone*0xD0.
+        // MotionProc2 READS and WRITES it, so the clone must own its own or it fights the player's bone matrices
+        // (body "in two places at once"). One buffer per character, shared across channels → copy once, dedup.
+        // Sits in the clean gap between the motion cave (0x1F78600) and the mesh cave (0x1F80000).
+        internal const long FrameInfCave      = 0x21F79000;
+        internal const long FrameInfCaveGuest = 0x01F79000;
+        internal const int  FrameInfPtr       = 0x60;     // channel MOTION_TYPE +0x60 = FRAME_INF ptr
+        internal const int  FrameInfEntry     = 0xD0;     // per-bone stride
+
+        internal const int  MotionStateOff    = 0x10;     // MOTION_TYPE embedded MOTION_STATE (frame counter + interp)
+        internal const int  MotionStateLen    = 0x40;     // bytes SetMotionEX reads/advances
+
+        // Lever #1 test (dead): clone-private copy of the packet's +0x20 scratch. Region reused below.
+        internal const long MeshScratchCave = 0x21F7D000;   // uncached MMU form (guest 0x01F7D000)
+        internal const int  MeshScratchSlot = 0x1000;       // per-mesh slot
+
+        // Per-bone ANIMATION-matrix buffer, referenced by the channel at +0x00 (MotionProc2 reads *(channel)+bone*0x40).
+        // The clone copies the channel (the pointer) but shared the buffer → clone & player fight over the bone
+        // matrices (the flicker + animation clamp). Copy it (once, dedup) and repoint channel+0x00. Reuses the dead
+        // lever-#1 region (0x21F7D000, 0x3000 free).
+        internal const long BoneMtxCave   = 0x21F7D000;
+        internal const int  BoneMtxPtr    = 0x00;         // channel MOTION_TYPE +0x00 = per-bone matrix buffer ptr
+        internal const int  BoneMtxEntry  = 0x40;         // per-bone stride
         internal const int  TexIndex      = 0x100;        // CFrame node: texture index (short); <0 → DrawVu1 skips texture binding (flat/untextured)
         internal const int  NpcOpacity    = 0xCEC;        // CCharacter: model opacity 0..128 (Step__12CNPCharacter ramps it; Draw folds it into ambient alpha)
         internal const int  Parent        = 0x110;        // CFrame parent ptr (world-matrix chain walks this)
         internal const int  WorldCacheA   = 0x240;        // world-matrix-valid flag (reset to force recompute)
         internal const int  WorldCacheB   = 0x244;
         internal const int  GeomPtr       = 0x260;        // mesh/geometry object (SHARED, not copied)
+
+        // Local (parent-relative) transform block: base matrix +0x1d0, scale +0x210, translation +0x220,
+        // rotation +0x230 — a contiguous 0x70 run [0x1d0..0x240). GetLWMatrix composes this up the parent
+        // chain into +0x140/+0x150. Copying this block from the live player node into the copied clone node
+        // (and zeroing the world cache) re-poses the clone's rigid parts (head/hands) to the player each tick.
+        internal const int  LocalTRS      = 0x1d0;
+        internal const int  LocalTRSLen   = 0x70;
 
         // CCharacter current-motion id. Step__10CCharacter (0x138530) early-outs when this is < 0 → no
         // SetMotionEX, so the model keeps its current bone pose = FROZEN. Setting the host slot's motion id

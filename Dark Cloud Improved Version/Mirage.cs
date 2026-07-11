@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
@@ -19,10 +18,10 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class Mirage
     {
-        private const int   ChargeWindup = WeaponCollision.ActionWindup; // 0xE
         private const double DecoySeconds = 15.0;
         private const int    FastTickMs   = 25;    // table maintenance cadence while armed + in a dungeon
         private const int    IdleTickMs   = 150;
+        private const int    GuardLoopMotion = 9;  // Ungaga's guard-hold loop (spawn here, not on guard-enter)
 
         private static bool _armed;                 // in-place patch installed this session (cold)
         private static bool _armMismatchLogged;
@@ -110,19 +109,8 @@ namespace Dark_Cloud_Improved_Version
                     bool inDun = Player.InDungeonFloor();
                     if (!_armed && !inDun) ArmColdPatch();
 
-                    // One-shot residency check OUTSIDE a dungeon (town/menu) — is the dun overlay resident in
-                    // the cold window? word 0x10400037 present at 0x21DAE8A4 → yes, a main-menu cold patch works.
-                    if (_armed && !inDun && !_sceneVerified)
-                    {
-                        _sceneVerified = true;
-                        Console.WriteLine("[Mirage/patch] residency check in TOWN/MENU (not dungeon):");
-                        VerifySceneGate();
-                    }
-
                     if (_armed && inDun)
                     {
-                        if (!_sceneVerifiedDun) { _sceneVerifiedDun = true; Console.WriteLine("[Mirage/patch] IN-DUNGEON probe:"); VerifySceneGate(); }
-
                         // Keep un-fooled slots on the live player (the patch reads the table for EVERY
                         // enemy, always) and fooled slots on the decoy — one batched write per fast tick.
                         bool ungagaMirage = Player.Weapon.GetCurrentWeaponId() == Items.mirage &&
@@ -130,11 +118,14 @@ namespace Dark_Cloud_Improved_Version
 
                         if (ungagaMirage && !Player.CheckDunIsPaused())
                         {
-                            // Plant the decoy when the player raises GUARD (R1 press = rising edge), refreshed
-                            // by re-guarding — replaces the old charge-release trigger.
+                            // Plant the decoy when the player settles into the guard LOOP (motion 9), not the
+                            // guard-ENTER transition — so the clone captures and loops the clean guard pose.
+                            // Fires on the rising edge of "in guard loop"; refreshes on a new guard.
                             bool guarding = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
-                            if (guarding && !prevGuard) PlaceDecoy();
-                            prevGuard = guarding;
+                            bool inGuardLoop = guarding &&
+                                Memory.ReadInt(MirageClone.PlayerChar + MirageClone.MotionId) == GuardLoopMotion;
+                            if (inGuardLoop && !prevGuard) PlaceDecoy();
+                            prevGuard = inGuardLoop;
                             if (_decoyActive) UpdateDecoyState();
                         }
                         else if (_decoyActive && Player.CheckDunIsPaused())
@@ -174,7 +165,6 @@ namespace Dark_Cloud_Improved_Version
                 if (IsLiveEnemy(s)) _fooled[s] = true;
             _decoyActive = true;
             _decoyDeadline = DateTime.UtcNow.AddSeconds(DecoySeconds);
-            if (!_charaDiagDone) { _charaDiagDone = true; DumpCharaSystem(); }   // is the individual-NPC (chara) system live in combat?
             DespawnClone();   // clear any stale slot from a previous decoy
             SpawnClone();
             if (_cloneSlot >= 0) Memory.WriteInt(SceneGateFlag, 1);   // arm the PNACH scene-gate NOP (clone draws)
@@ -249,55 +239,24 @@ namespace Dark_Cloud_Improved_Version
         //    it for us; see MirageClone). No injected code — pure data. ──────────────────────────────────
         private const bool  CloneEnabled = true;         // MotionParts host: single character-draw slot with its own texture group
         private const bool  GhostSilhouette = true;      // translucent character clone
-        private const bool  DuplicateTextures = false;   // not needed: PNACH redirects chara[0]'s reload to the player's own group 0x1d
-        private const bool  RetagTextures     = false;   // not needed: textures shared by GROUP (clone reloads 0x1d, same as the weapon)
+        private const bool  EngineDrivenAnim = true;     // let the engine's chara-step pose the clone tree natively (no polling)
+        private const bool  IndependentMesh = true;      // copy the software-skinned body meshes → fully independent clone
+        private const bool  SyncMotionToPlayer = false;  // was syncing clone +0xc68 to the player each tick — clamps the clone's animation;
+                                                         // OFF = clone free-runs its own motion (test: does decoupling change the flicker?)
         private const float GhostOpacity = 90f;          // of 128; lower = more see-through
         private const float GhostDim     = 1.0f;         // full lighting so any resident character texture shows
-        private const bool  CloneUseEnemyModel = false;
-        private const bool  MonsterHijackTest = false;   // retired: live-enemy hijack (texture + stability walls)
-        private const bool  HijackActualRoot = false;
-        private static int  _hijackSlot = -1;
-        private static uint _hijackOrigRoot;
-        private const float DimStart = 1.0f;   // TEST: full-bright, no fade — isolate positioning from the dim
-        private const float DimEnd   = 1.0f;
-        private const float CloneOpacity = 96f;   // slightly translucent (of the 128 opaque default); fades → 0 over the decoy life
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
-        private static int _cloneLogTick;
-        private static float _pfX, _pfH, _pfY; // PosField we last wrote (for the reserved-base correction)
         private static uint _srcModelRoot;    // the model root the clone copies/renders (player or test enemy)
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
-        private static byte[] _savedLabel100; // host enemy's original label-100 AI bytes (restored on despawn)
-        private static long   _savedLabel100Addr;
-        private static byte[] _cloneBuf;      // cached CCharacter bytes for the NPC clone (re-asserted each tick)
+        private static int  _meshesCopied;    // # software-skinned meshes given independent copies this spawn
+        private static readonly System.Collections.Generic.List<(long player, long clone)> _chanMap = new();  // motion-channel frame-sync map
 
         /// <summary>The source model root for the clone: the player's, or (TEST) a live enemy's — to check
         /// whether the NPC slot can render ANY geometry at the decoy.</summary>
         private static uint CloneSourceModelRoot()
         {
-            if (CloneUseEnemyModel)
-                for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-                {
-                    if (!IsLiveEnemy(s)) continue;
-                    uint r = (uint)Memory.ReadInt(EnemyAddresses.CharObjects.CharAddr(s) + MirageClone.CharModel);
-                    if (r != 0 && (r & 0x1FFFFFFF) < 0x02000000)
-                    { Console.WriteLine($"[Mirage] TEST: cloning enemy slot {s} model @0x{r:X}"); return r; }
-                }
             return (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel);
-        }
-
-        private static void LogClone(string tag)
-        {
-            float px = Memory.ReadFloat(Addresses.dunPositionX);
-            float ph = Memory.ReadFloat(Addresses.dunPositionZ);
-            float py = Memory.ReadFloat(Addresses.dunPositionY);
-            Console.WriteLine($"[Mirage/{tag}] player=({px:0.#},{ph:0.#},{py:0.#}) decoy=({_dx:0.#},{_dz:0.#},{_dy:0.#}) npcType={_cloneSlot} root=0x{_cloneRootGuest:X} nodes={_cloneNodeCount}");
-        }
-
-        private static long DngMapInstance()
-        {
-            long native = (uint)Memory.ReadInt(MirageClone.NowDngMapPtr) & 0x1FFFFFFF;
-            return (native == 0 || native >= 0x02000000) ? 0 : Memory.ToMmu(native);
         }
 
         private static void SpawnClone()
@@ -306,6 +265,7 @@ namespace Dark_Cloud_Improved_Version
 
             // Independent deep copy of the player's whole frame tree.
             if (!BuildCloneTree()) { _cloneSlot = -1; return; }
+            if (IndependentMesh) CopyMeshNodes();   // give the clone its OWN software-skinned body meshes
 
             // Host = chara slot 0, drawn by the DUNGEON scene draw (Draw__11CSeireiKing) as a single
             // Draw__12CNPCharacter with its own texture group (0x20). Fill the player's draw fields, aim the
@@ -317,7 +277,10 @@ namespace Dark_Cloud_Improved_Version
             if (buf == null) { _cloneSlot = -1; return; }
             BitConverter.GetBytes((uint)MirageClone.ClothStubGuest).CopyTo(buf, MirageClone.ClothList);
             BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, MirageClone.DimFactor);
-            BitConverter.GetBytes(-1).CopyTo(buf, MirageClone.MotionId);   // freeze (body mirrors via shared bones)
+            // Keep the copied player MotionId (+0xC68 >= 0) so the engine's chara-step (unlocked via the PNACH
+            // step-gate NOP) drives SetMotionEX on the clone tree → head/hands animate natively, no polling.
+            // NOTE: leave +0xC60 (motion speed) at the copied player value — native speed. A near-zero override
+            // made MotionProc loop-to-freeze covering a motion span by 0.001-steps.
             BitConverter.GetBytes(GhostSilhouette ? GhostOpacity : 128f).CopyTo(buf, MirageClone.NpcOpacity);  // +0xcec (Draw needs >0)
             for (int o = MirageClone.LightFrom; o < MirageClone.LightTo; o += 4) BitConverter.GetBytes(0).CopyTo(buf, o);
             // Keep the copied tex-anime object (+0xdc) intact — it selects the face/skin textures; zeroing it
@@ -327,157 +290,234 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(_dy).CopyTo(buf, MirageClone.CharPos + 8);   // +0x18 Y
             BitConverter.GetBytes(_cloneRootGuest).CopyTo(buf, MirageClone.CharModel);
 
+            // Give the clone INDEPENDENT motion channels so the engine-step advances its OWN frame counter
+            // (not the player's shared one → the 2× fix). Copy each active channel struct into the cave and
+            // repoint buf's +0xC20[i]. Internal ptrs (shared keyframe data) copy as-is.
+            // When the clone skins its own meshes, it also needs its OWN FRAME_INF bone-matrix buffer (copy
+            // once; shared across channels). Otherwise the clone's MotionProc2 clobbers the player's matrices.
+            bool ownSkin = IndependentMesh && _meshesCopied > 0;
+            uint fiOld = 0, fiNew = 0, bmOld = 0, bmNew = 0;
+            int  fiSize = (_cloneNodeCount + 1) * MirageClone.FrameInfEntry;
+            int  bmSize = (_cloneNodeCount + 1) * MirageClone.BoneMtxEntry;
+            _chanMap.Clear();
+            if (EngineDrivenAnim)
+            {
+                for (int s = 0; s < MirageClone.MotionSlots; s++)
+                {
+                    int po = MirageClone.MotionSlotBase + s * 4;
+                    uint sp = (uint)BitConverter.ToInt32(buf, po) & 0x1FFFFFFF;
+                    if (sp == 0 || sp >= 0x02000000) continue;
+                    byte[] mstr = Memory.ReadBytesBatch(Memory.ToMmu(sp), MirageClone.MotionStructSize);
+                    if (mstr == null) continue;
+
+                    // Give the clone its own FRAME_INF (skinning-matrix buffer), copied once and reused.
+                    if (ownSkin)
+                    {
+                        uint fi = (uint)BitConverter.ToInt32(mstr, MirageClone.FrameInfPtr) & 0x1FFFFFFF;
+                        if (fi != 0 && fi < 0x02000000)
+                        {
+                            if (fiNew == 0 || fi == fiOld)
+                            {
+                                if (fiNew == 0)
+                                {
+                                    byte[] fib = Memory.ReadBytesBatch(Memory.ToMmu(fi), fiSize);
+                                    if (fib != null) { Memory.WriteBytesBatch(MirageClone.FrameInfCave, fib); fiOld = fi; fiNew = (uint)MirageClone.FrameInfCaveGuest; }
+                                }
+                                if (fiNew != 0) BitConverter.GetBytes(fiNew).CopyTo(mstr, MirageClone.FrameInfPtr);
+                            }
+                        }
+
+                        // Give the clone its own per-bone ANIMATION-matrix buffer (channel+0x00), copied once.
+                        uint bm = (uint)BitConverter.ToInt32(mstr, MirageClone.BoneMtxPtr) & 0x1FFFFFFF;
+                        if (bm != 0 && bm < 0x02000000)
+                        {
+                            if (bmNew == 0 || bm == bmOld)
+                            {
+                                if (bmNew == 0)
+                                {
+                                    byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
+                                    if (bmb != null) { Memory.WriteBytesBatch(MirageClone.BoneMtxCave, bmb); bmOld = bm; bmNew = (uint)(MirageClone.BoneMtxCave & 0x1FFFFFFF | 0x01000000); }
+                                }
+                                if (bmNew != 0) BitConverter.GetBytes(bmNew).CopyTo(mstr, MirageClone.BoneMtxPtr);
+                            }
+                        }
+                    }
+                    // The SKINNING list (+0x08) drives MotionProc2, which software-skins the mesh vertex buffer.
+                    // If the clone has its OWN mesh copies (IndependentMesh), let it skin them → fully independent
+                    // body. Otherwise zero the list so it never touches the SHARED mesh (body mirrors the player).
+                    // Only let the clone software-skin if it got its OWN mesh copies; else zero the skin list so
+                    // it never touches the SHARED mesh (safe fallback = body mirrors, player uncorrupted).
+                    if (!IndependentMesh || _meshesCopied == 0) BitConverter.GetBytes(0).CopyTo(mstr, MirageClone.MotionSkinList);
+                    long cloneChan = MirageClone.MotionCave + (long)s * MirageClone.MotionStructSize;
+                    Memory.WriteBytesBatch(cloneChan, mstr);
+                    BitConverter.GetBytes((uint)(MirageClone.MotionCaveGuest + s * MirageClone.MotionStructSize)).CopyTo(buf, po);
+                    _chanMap.Add((Memory.ToMmu(sp), cloneChan));   // player channel → clone channel (for frame sync)
+                }
+            }
+
             Memory.WriteBytesBatch(MirageClone.ClothStub, new byte[16]);
             Memory.WriteBytesBatch(slot, buf);   // fill the CCharacter fields (0..0xD60)
             Memory.WriteInt(slot + MirageClone.CharaActive, 1);    // active (Draw__12CNPCharacter gate; beyond 0xD60)
-            Memory.WriteInt(slot + MirageClone.CharaMotionA, 0);   // no motion step (Step__12CNPCharacter skips)
+            // Engine-driven animation: enable the chara motion step (Step__12CNPCharacter → Step__10CCharacter →
+            // SetMotionEX) and zero the opacity ramp so it doesn't fight our GhostOpacity.
+            Memory.WriteInt(slot + MirageClone.CharaMotionA, EngineDrivenAnim ? 1 : 0);
             Memory.WriteInt(slot + MirageClone.CharaMotionB, 0);
+            Memory.WriteInt(slot + MirageClone.CharaRampA, 0);     // opacity-ramp amount = 0 (no fade drift)
+            Memory.WriteInt(slot + MirageClone.CharaRampB, 0);
             Memory.WriteInt(MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // register → dungeon draw draws it
-            if (DuplicateTextures) DuplicateCharaTextures(MirageClone.PlayerTexGroup, MirageClone.CharaTexBase + _cloneSlot);   // copy char textures → clone's group
-            else if (RetagTextures) RetagGroupToClone(MirageClone.PlayerTexGroup, MirageClone.CharaTexBase + _cloneSlot);       // retag char textures → clone's group (array full)
             Console.WriteLine($"[Mirage] clone in chara slot {_cloneSlot} (texgroup 0x{MirageClone.CharaTexBase + _cloneSlot:X}) @({_dx:0.#},{_dz:0.#},{_dy:0.#}) root=0x{_cloneRootGuest:X}");
         }
 
-        private const long TexMgr = 0x21C75870;
-        private static readonly System.Collections.Generic.List<(long addr, int orig)> _retagged =
-            new System.Collections.Generic.List<(long, int)>();
-
-        /// <summary>Re-tag the ACTIVE character's texture entries (names cNN.. — body cNNa*, weapon cNNw*)
-        /// into the clone's NPC group, so DrawNPCDraw's ReloadTexture(group) actually reloads the character
-        /// textures to their own VRAM slots — texturing the clone AND restoring the character VRAM the
-        /// enemies overwrite. Reversible (originals restored on despawn); safe for the player because its
-        /// textures are resident (its own Draw never reloads by group). Also force loaded=0 so the reload
-        /// uploads the full set.</summary>
-        private static void RetagCharacterTextures(int group)
-        {
-            _retagged.Clear();
-            int count = Memory.ReadInt(TexMgr);
-            if (count <= 0 || count > 4096) return;
-            int done = 0;
-            for (int i = 1; i <= count && done < 32; i++)
-            {
-                long e = TexMgr + 0x1148 + (long)(i - 1) * 0x50;
-                int w0 = Memory.ReadInt(e);
-                byte[] nb = Memory.ReadBytesBatch(e + 8, 4);
-                if (nb == null) continue;
-                // character texture = 'c' + digit + digit (cNN…); enemies are 'e', UI/dungeon differ
-                if ((nb[0] == 'c' || nb[0] == 'C') && nb[1] >= '0' && nb[1] <= '9' && nb[2] >= '0' && nb[2] <= '9')
-                {
-                    _retagged.Add((e, w0));
-                    Memory.WriteInt(e, (w0 & unchecked((int)0xFFFF0000)) | (group & 0xFFFF));
-                    done++;
-                }
-            }
-            Memory.WriteInt(TexMgr + (long)group * 0xF * 4 + 0x10 * 4, 0);   // loaded=0 → full reload
-            Console.WriteLine($"[Mirage] re-tagged {done} character textures → group {group}");
-        }
-
-        private static void RestoreTaggedTextures()
-        {
-            foreach (var (addr, orig) in _retagged) Memory.WriteInt(addr, orig);
-            _retagged.Clear();
-        }
-
-        /// <summary>DIAGNOSTIC: dump the CTextureManager texture list — a per-group histogram plus the
-        /// entries tagged with the clone's NPC group (the stale textures ReloadTexture uploads). Entries
-        /// start at texMgr+0x1148, stride 0x50; group = short@+0, TEX0 reg = u64@+0x28 (encodes the GS
-        /// buffer/CLUT base). Count at texMgr+0.</summary>
-        private static void DumpTextureList(int cloneGroup)
-        {
-            const long tm = 0x21C75870;
-            int count = Memory.ReadInt(tm);
-            if (count <= 0 || count > 4096) { Console.WriteLine($"[Mirage/tex] bad count {count}"); return; }
-            Console.WriteLine($"[Mirage/tex] count={count} cloneGroup={cloneGroup} — name(group) per entry:");
-            // entry i (1..count) at tm + 0x1148 + (i-1)*0x50; group short @+0, name @+8, TEX0 @+0x28
-            var sb = new System.Text.StringBuilder("[Mirage/tex] ");
-            int lineN = 0;
-            for (int i = 1; i <= count; i++)
-            {
-                long e = tm + 0x1148 + (long)(i - 1) * 0x50;
-                int g = (short)(Memory.ReadInt(e) & 0xFFFF);
-                byte[] nb = Memory.ReadBytesBatch(e + 8, 16);
-                string name = "";
-                if (nb != null) { int n = 0; while (n < 16 && nb[n] >= 0x20 && nb[n] < 0x7F) n++; name = System.Text.Encoding.ASCII.GetString(nb, 0, n); }
-                sb.Append($"{name}(g{g}) ");
-                if (++lineN >= 8) { Console.WriteLine(sb.ToString()); sb.Clear(); sb.Append("[Mirage/tex] "); lineN = 0; }
-            }
-            if (lineN > 0) Console.WriteLine(sb.ToString());
-        }
-
-        /// <summary>Copy the player's root CFrame node into the cave as the clone's own root. Its child
-        /// pointer already targets the shared bone subtree (from the copy); zero its sibling so the clone
-        /// root draws just that subtree. Returns false if the player root isn't resolvable.</summary>
-        private static bool BuildCloneRoot()
-        {
-            _srcModelRoot = CloneSourceModelRoot();
-            if (_srcModelRoot == 0 || (_srcModelRoot & 0x1FFFFFFF) >= 0x02000000) return false;
-            byte[] node = Memory.ReadBytesBatch(Memory.ToMmu(_srcModelRoot & 0x1FFFFFFF), MirageClone.RootCopySize);
-            if (node == null) return false;
-            BitConverter.GetBytes(0).CopyTo(node, MirageClone.RootSibling);   // clone root has no sibling
-            Memory.WriteBytesBatch(MirageClone.RootBuf, node);
-            return true;
-        }
-
-        /// <summary>Deep-copy the source model's ENTIRE CFrame tree into the cave node pool, replicating the
-        /// game's own CopyFrameVu1 (0x127610): 0x270 bytes/node, links (parent/child/sibling) fixed up to
-        /// the copied nodes via an old→new map, geometry (+0x260) SHARED. The result is an INDEPENDENT posed
-        /// model whose world matrices resolve up its OWN parent chain (GetLWMatrix walks +0x110), so it
-        /// renders wherever its host CCharacter places it — without dragging or corrupting the player.
-        /// Returns false if the tree isn't resolvable or overflows the pool.</summary>
+        /// <summary>Deep-copy the source model's CFrame tree into the cave pool as a CONTIGUOUS 0x270-stride
+        /// array preserving the player's memory order. This is REQUIRED for engine posing: MotionProc
+        /// (0x147d20) addresses bones as <c>root + boneIndex*0x270</c> — raw array indexing, NOT pointer walks.
+        /// So the copy must keep the same stride (0x270) and order; only the link pointers (parent/child/
+        /// sibling) are re-based by a single offset (clonePool − playerBase). Geometry (+0x260) stays SHARED.
+        /// The result both renders (draw follows the re-based child/sibling) and poses (SetMotionEX indexes the
+        /// contiguous array) correctly. Returns false if the tree isn't resolvable or overflows the pool.</summary>
         private static bool BuildCloneTree()
         {
             _srcModelRoot = CloneSourceModelRoot();
             uint rootPhys = _srcModelRoot & 0x1FFFFFFF;
             if (_srcModelRoot == 0 || rootPhys == 0 || rootPhys >= 0x02000000) return false;
 
-            // DFS collect nodes exactly as CopyFrameVu1 recurses: a node, then every node in its child-list
-            // (child, child.sibling, …). The ROOT's own sibling is never followed (it's a different model).
-            var order = new System.Collections.Generic.List<uint>();
-            var map   = new System.Collections.Generic.Dictionary<uint, int>();
-            var work  = new System.Collections.Generic.Stack<uint>();
+            // DFS over child/sibling to find the tree's address SPAN (the bones form a contiguous 0x270 array
+            // rooted at the model root, so min == rootPhys and the block is [min, max+0x270)).
+            uint min = rootPhys, max = rootPhys;
+            var seen = new System.Collections.Generic.HashSet<uint>();
+            var work = new System.Collections.Generic.Stack<uint>();
             work.Push(rootPhys);
             while (work.Count > 0)
             {
                 uint n = work.Pop();
-                if (n == 0 || n >= 0x02000000 || map.ContainsKey(n)) continue;
-                if (order.Count >= MirageClone.MaxNodes)
+                if (n == 0 || n >= 0x02000000 || !seen.Add(n)) continue;
+                if (n < min) min = n; if (n > max) max = n;
+                if (seen.Count > MirageClone.MaxNodes)
                 { Console.WriteLine($"[Mirage] clone tree > {MirageClone.MaxNodes} nodes — aborting"); return false; }
-                map[n] = order.Count; order.Add(n);
                 for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.RootChild) & 0x1FFFFFFF;
                      c != 0 && c < 0x02000000;
                      c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & 0x1FFFFFFF)
                     work.Push(c);
             }
 
-            // Copy + fix up each node into the pool.
-            for (int i = 0; i < order.Count; i++)
-            {
-                byte[] nb = Memory.ReadBytesBatch(Memory.ToMmu(order[i]), MirageClone.NodeSize);
-                if (nb == null) return false;
-                FixLink(nb, MirageClone.Parent,      map, i == 0);   // root's parent → 0 (top-level frame)
-                FixLink(nb, MirageClone.RootChild,   map, false);
-                FixLink(nb, MirageClone.RootSibling, map, i == 0);   // root's sibling → 0
-                BitConverter.GetBytes(0).CopyTo(nb, MirageClone.WorldCacheA);   // force world recompute
-                BitConverter.GetBytes(0).CopyTo(nb, MirageClone.WorldCacheB);
-                // geometry @+0x260 left as-is (shared mesh)
-                Memory.WriteBytesBatch(MirageClone.NodePool + (long)i * MirageClone.NodeStride, nb);
-            }
+            int nodeCount = (int)((max - min) / MirageClone.NodeStride) + 1;
+            int blockSize = nodeCount * MirageClone.NodeStride;
+            if ((max - min) % MirageClone.NodeStride != 0)
+            { Console.WriteLine($"[Mirage] tree span 0x{max - min:X} not 0x270-aligned — bailing"); return false; }
 
-            _cloneNodeCount = order.Count;
-            _cloneRootGuest = (uint)MirageClone.NodePoolGuest;   // slot 0 = root
-            Console.WriteLine($"[Mirage] deep-copied {order.Count}-node clone tree → root 0x{_cloneRootGuest:X}");
+            byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
+            if (block == null) return false;
+
+            // Re-base every link pointer by (clonePool − playerBase); zero external refs and the root's
+            // parent/sibling; invalidate world caches. Same-offset translation keeps array indexing valid.
+            uint rootOff = rootPhys - min;
+            for (int o = 0; o < blockSize; o += MirageClone.NodeStride)
+            {
+                bool isRoot = (uint)o == rootOff;
+                Rebase(block, o + MirageClone.Parent,      min, max, isRoot);   // root's parent → 0
+                Rebase(block, o + MirageClone.RootChild,   min, max, false);
+                Rebase(block, o + MirageClone.RootSibling, min, max, isRoot);   // root's sibling → 0
+                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheA);
+                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheB);
+            }
+            Memory.WriteBytesBatch(MirageClone.NodePool, block);
+
+            _cloneNodeCount = nodeCount;
+            _cloneRootGuest = (uint)(MirageClone.NodePoolGuest + rootOff);   // clone root = pool + root offset
+            Console.WriteLine($"[Mirage] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}");
             return true;
         }
 
-        /// <summary>Rewrite a node pointer field to the copied node (via the old→new map), or 0 when the
-        /// target is outside the tree (external ref) or forceZero (the root's parent/sibling).</summary>
-        private static void FixLink(byte[] nb, int off, System.Collections.Generic.Dictionary<uint, int> map, bool forceZero)
+        /// <summary>Re-base a node link pointer: if it targets a node inside the copied block [min, max+0x270),
+        /// rewrite it to the clone pool at the same offset; otherwise (external ref, or forceZero for the
+        /// root's parent/sibling) zero it.</summary>
+        private static void Rebase(byte[] block, int off, uint min, uint max, bool forceZero)
         {
-            uint old = (uint)BitConverter.ToInt32(nb, off) & 0x1FFFFFFF;
+            uint old = (uint)BitConverter.ToInt32(block, off) & 0x1FFFFFFF;
             uint neu = 0;
-            if (!forceZero && old != 0 && map.TryGetValue(old, out int idx))
-                neu = (uint)(MirageClone.NodePoolGuest + (long)idx * MirageClone.NodeStride);
-            BitConverter.GetBytes(neu).CopyTo(nb, off);
+            if (!forceZero && old >= min && old <= max)
+                neu = (uint)(MirageClone.NodePoolGuest + (old - min));
+            BitConverter.GetBytes(neu).CopyTo(block, off);
+        }
+
+        /// <summary>Give the clone its own copy of every SOFTWARE-SKINNED mesh (CVisualMDTVu1). Those are the
+        /// only bones whose vertex buffer MotionProc2 deforms in place; copying them (visual + VU data + MDT)
+        /// and repointing node+0x260 lets the clone skin its OWN buffers → a body independent of the player.
+        /// The other bones skin on VU1 at draw time and are already per-instance. Cross-references between the
+        /// three copied blocks are rebased by scanning for words in the old address ranges (safe: model data
+        /// pointers are low 0x00xxxxxx addresses, distinct from vertex floats).</summary>
+        private static void CopyMeshNodes()
+        {
+            long cave = MirageClone.MeshCave, caveGuest = MirageClone.MeshCaveGuest;
+            long caveEnd = MirageClone.MeshCave + MirageClone.MeshCaveSize;
+            int copied = 0;
+            for (int i = 0; i < _cloneNodeCount; i++)
+            {
+                long node = MirageClone.NodePool + (long)i * MirageClone.NodeStride;
+                uint vis = (uint)Memory.ReadInt(node + MirageClone.GeomPtr) & 0x1FFFFFFF;
+                if (vis == 0 || vis >= 0x02000000) continue;
+                uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisMDT) & 0x1FFFFFFF;
+                uint magic = (mdt != 0 && mdt < 0x02000000) ? (uint)Memory.ReadInt(Memory.ToMmu(mdt)) : 0xDEAD;
+                if (mdt == 0 || mdt >= 0x02000000) continue;
+                if (magic != MirageClone.MdtMagic) continue;   // not software-skinned
+
+                uint vu    = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisVU) & 0x1FFFFFFF;
+                int  vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisVU + 4) * 16;   // field is in QWORDS
+                int  mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + MirageClone.MdtSizeField);
+                if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
+
+                int visSz = MirageClone.VisualSize;
+                int need  = Align16(visSz) + Align16(vuSz) + Align16(mdtSz);
+                if (cave + need > caveEnd) { Console.WriteLine($"[Mirage/mesh] cave full at n{i}"); break; }
+
+                long cVis = cave;              uint cVisG = (uint)caveGuest;
+                long cVU  = cave + Align16(visSz); uint cVUG = (uint)(caveGuest + Align16(visSz));
+                long cMDT = cVU + Align16(vuSz);   uint cMDTG = (uint)(caveGuest + Align16(visSz) + Align16(vuSz));
+
+                byte[] visB = Memory.ReadBytesBatch(Memory.ToMmu(vis), visSz);
+                byte[] vuB  = Memory.ReadBytesBatch(Memory.ToMmu(vu),  vuSz);
+                byte[] mdtB = Memory.ReadBytesBatch(Memory.ToMmu(mdt), mdtSz);
+                if (visB == null || vuB == null || mdtB == null) continue;
+
+                // The visual ALWAYS repoints to the clone copies (+0x18 → clone VU, +0x20 → clone MDT).
+                RebaseRange(visB, vu, vuSz, cVUG);
+                RebaseRange(visB, mdt, mdtSz, cMDTG);
+                foreach (byte[] b in new[] { vuB, mdtB })
+                {
+                    RebaseRange(b, vu,  vuSz,  cVUG);
+                    RebaseRange(b, mdt, mdtSz, cMDTG);
+                }
+
+                // Force BOTH double-buffer slots (+0x28/+0x2c) and the current ptr (+0x18) to the clone's single
+                // VU copy. n66 is truly double-buffered (two distinct buffers, DBuffID-toggled); copying only one
+                // left +0x2c aimed at the PLAYER's buffer, so on DBuffID=1 frames the clone wrote the player's
+                // buffer → flicker. Single-buffering the clone (like n64/n65) can't corrupt the player.
+                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x18);
+                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x28);
+                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x2c);
+
+                Memory.WriteBytesBatch(cVU,  vuB);
+                Memory.WriteBytesBatch(cMDT, mdtB);
+                Memory.WriteBytesBatch(cVis, visB);
+                Memory.WriteUInt(node + MirageClone.GeomPtr, cVisG);   // node draws the clone's own mesh
+                cave += need; caveGuest += need; copied++;
+            }
+            _meshesCopied = copied;
+        }
+
+        private static int Align16(int n) => (n + 15) & ~15;
+
+        /// <summary>Rewrite every 4-byte word in <paramref name="b"/> whose value points into [oldBase,
+        /// oldBase+size) to the corresponding offset in the clone copy at newBaseGuest.</summary>
+        private static void RebaseRange(byte[] b, uint oldBase, int size, uint newBaseGuest)
+        {
+            for (int o = 0; o + 4 <= b.Length; o += 4)
+            {
+                uint w = (uint)BitConverter.ToInt32(b, o);
+                uint phys = w & 0x1FFFFFFF;
+                if (phys >= oldBase && phys < oldBase + (uint)size)
+                    BitConverter.GetBytes(newBaseGuest + (phys - oldBase)).CopyTo(b, o);
+            }
         }
 
         private static void MaintainClone()
@@ -495,11 +535,26 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(slot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
             Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);
 
+            // Engine-driven animation: the engine's own chara-step (unlocked via the PNACH step-gate NOP) poses
+            // the clone tree at 60fps — no polling. Re-assert the step flags (game may reset between our ticks)
+            // and mirror the player's current MotionId so the clone plays whatever the player is doing. The
+            // near-zero motion speed keeps it posing at the player's shared frame without double-advancing it.
+            if (EngineDrivenAnim)
+            {
+                Memory.WriteInt  (slot + MirageClone.CharaMotionA, 1);
+                Memory.WriteInt  (slot + MirageClone.CharaRampA,   0);
+                if (SyncMotionToPlayer)
+                {
+                    int pmid = Memory.ReadInt(MirageClone.PlayerChar + MirageClone.MotionId);
+                    if (pmid >= 0) Memory.WriteInt(slot + MirageClone.MotionId, pmid);   // mirror the player's action (clamps clone)
+                }
+            }
+            // (Legacy per-tick TRS poll disabled: it fought the 60fps step and read as jitter.)
+
             // NOTE: iGpffff9e18 (0x202A3608) is the "scene active" flag — setting it draws the chara loop BUT
             // freezes enemies (motionDrive steps enemies only when it's 0). So we DON'T set it here; the clone
             // is drawn instead via an in-place patch of Draw__11CSeireiKing's chara-loop gate (SceneDrawPatch),
             // which lets the loop run while the flag stays 0 so enemies keep moving.
-            _cloneLogTick++;
         }
 
         private static void DespawnClone()
@@ -510,286 +565,10 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister
             Memory.WriteInt (slot + MirageClone.CharaActive, 0);                     // inactive
             Memory.WriteUInt(slot + MirageClone.CharModel, 0);                       // clear model
-            RemoveDuplicateTextures();                                               // drop the appended texture dups
-            RestoreRetag();                                                          // restore any retagged group tags
             _cloneSlot = -1;
         }
 
-        private static void WriteCloneVec(long addr, float x, float z, float y)
-        {
-            Memory.WriteFloat(addr, x); Memory.WriteFloat(addr + 4, z); Memory.WriteFloat(addr + 8, y);
-        }
-
-        /// <summary>Set an enemy slot's render opacity (FloorSlot+0x120; 128 = opaque). We pause the engine's
-        /// own fade (OpacityFadeGate=1, OpacityFadeStep=0) so PalletStep doesn't fight our value, then write
-        /// the level directly — the mod owns the clone's translucency and its fade-to-0 ramp.</summary>
-        private static bool _texDiagDone;
-        private static bool _charaDiagDone;
-        private static bool _gateScanned;
-        private static bool _sceneVerified;
-        private static bool _sceneVerifiedDun;
-
-        /// <summary>READ-ONLY: verify the dungeon overlay's chara-loop gate instruction is where we think, at
-        /// guest 0x1dae8a4 (MMU 0x21DAE8A4) and at +0x80 (the known dun-overlay header-shift ambiguity).
-        /// Expected around the gate: lw v0,-0x61e8(gp)=189e828f, beq v0,zero=37004010, nop, clr s0=28860070.
-        /// Whichever address shows that pattern is the real NOP target (beq→00000000).</summary>
-        private static void VerifySceneGate()
-        {
-            void Dump(long a)
-            {
-                byte[] b = Memory.ReadBytesBatch(a, 16);
-                if (b == null) { Console.WriteLine($"[Mirage/patch] {a:X}: (unreadable)"); return; }
-                var sb = new System.Text.StringBuilder();
-                for (int i = 0; i < 16; i += 4) sb.Append(BitConverter.ToUInt32(b, i).ToString("X8")).Append(' ');
-                Console.WriteLine($"[Mirage/patch] 0x{a:X}: {sb}");
-            }
-            Console.WriteLine("[Mirage/patch] verifying chara-loop gate (want: 189E828F 37004010 00000000 28860070)");
-            Dump(0x21DAE8A0);          // no shift
-            Dump(0x21DAE8A0 + 0x80);   // +0x80 header shift
-
-            // ALT HOST probe: Draw__11CSeireiKing also draws a fixed CCharacter 0x1EA2ED0 in combat, gated only
-            // by DATA (*(iGpffff9c78+4)==1; iGpffff9c78 = gp-0x6388 = 0x202A3468) — NOT the scene flag. If it's
-            // an empty slot here, it's a data-only combat host (no code patch, no enemy freeze).
-            uint altRoot = (uint)Memory.ReadInt(0x21EA2ED0 + 0xBC);   // model root of 0x1ea2ed0
-            uint altVt   = (uint)Memory.ReadInt(0x21EA2ED0 + 0xA0);
-            uint c78     = (uint)Memory.ReadInt(0x202A3468);          // iGpffff9c78 ptr
-            int  flag    = (c78 != 0 && (c78 & 0x1FFFFFFF) < 0x02000000) ? Memory.ReadByte(Memory.ToMmu(c78 & 0x1FFFFFFF) + 4) : -1;
-            Console.WriteLine($"[Mirage/alt] 0x1EA2ED0 root=0x{altRoot:X} vtable=0x{altVt:X}; iGpffff9c78=0x{c78:X} +4flag={flag}");
-        }
-
-        /// <summary>One-shot probe of the individual-NPC (chara) system to see if it's usable during combat:
-        /// chara array base DAT_01d3d228 (stride 0x14a0, count DAT_01d3d3c8), the GetChara(-1) default
-        /// DAT_01d3d21c, and the per-frame draw-registry count DAT_01d3d230. If the array is allocated and
-        /// the default chara has a valid vtable/model root, we can host a single clone here (no crowd).</summary>
-        private static void DumpCharaSystem()
-        {
-            long arr    = (uint)Memory.ReadInt(0x21D3D228);   // chara array base (guest ptr)
-            int  cnt    = Memory.ReadInt(0x21D3D3C8);          // chara count
-            long def    = (uint)Memory.ReadInt(0x21D3D21C);    // GetChara(-1) default chara
-            int  regCnt = Memory.ReadInt(0x21D3D230);          // per-frame NPC draw-registry count
-            Console.WriteLine($"[Mirage/chara] arr=0x{arr:X} count={cnt} regCount={regCnt} default=0x{def:X} stride=0x14A0");
-            void Probe(string tag, long guest)
-            {
-                uint g = (uint)guest & 0x1FFFFFFF;
-                if (g == 0 || g >= 0x02000000) { Console.WriteLine($"[Mirage/chara]   {tag}: (null/invalid 0x{guest:X})"); return; }
-                long m = Memory.ToMmu(g);
-                uint vt = (uint)Memory.ReadInt(m + 0xA0);
-                uint root = (uint)Memory.ReadInt(m + 0xBC);
-                Console.WriteLine($"[Mirage/chara]   {tag} @0x{guest:X}: vtable=0x{vt:X} modelRoot=0x{root:X}");
-            }
-            Probe("default(player)", def);
-            if (arr != 0 && (arr & 0x1FFFFFFF) < 0x02000000)
-                for (int i = 0; i < cnt && i < 4; i++) Probe($"chara[{i}]", arr + (long)i * 0x14A0);
-
-            // MotionParts: MainDraw's 4-slot CHARACTER draw loop — each slot drawn via vtable+0xac with its
-            // OWN texture group (0x1b+i) reloaded first. If the player is a slot and others are empty, an
-            // empty slot is the host we want (correct per-character textures, single instance).
-            uint mpPtr = (uint)Memory.ReadInt(0x212A28EC);   // pointer form of MotionParts
-            Console.WriteLine($"[Mirage/mp] arrayA=0x01D4F030 ptrB=0x{mpPtr:X} (array=guest+i*0x11B0, texgroup=0x1b+i)");
-            for (int i = 0; i < 4; i++) Probe($"MP.A[{i}] tex0x{0x1b + i:X}", 0x01D4F030 + (long)i * 0x11B0);
-            if (mpPtr != 0 && (mpPtr & 0x1FFFFFFF) < 0x02000000)
-                for (int i = 0; i < 4; i++) Probe($"MP.B[{i}]", (long)mpPtr + (long)i * 0x11B0);
-        }
-
-        /// <summary>One-shot diagnostic: per-group texture summary — count, first-name initial (c=character,
-        /// e=enemy), VRAM base (TEX0 &amp; 0x3FFF at entry+0x28), and the group's size/loaded/priority
-        /// metadata (CTextureManager[g*0xF + {0xF,0x10,0x12}]). Tells us whether the player 'c' group and the
-        /// enemy 'e'/current group share VRAM (→ physical conflict) or not (→ co-residence is cheap).</summary>
-        private static void DumpTextureDiag()
-        {
-            const long tm = 0x21C75870;
-            int count = Memory.ReadInt(tm);
-            int curGroup = Memory.ReadInt(tm + 0xC);
-            if (count <= 0 || count > 8192) { Console.WriteLine($"[Mirage/tex] bad count {count}"); return; }
-            var groups = new System.Collections.Generic.Dictionary<int, (int n, char kind, int vram)>();
-            for (int i = 1; i <= count; i++)
-            {
-                long e = tm + 0x1148 + (long)(i - 1) * 0x50;
-                int g = (short)(Memory.ReadInt(e) & 0xFFFF);
-                byte[] nb = Memory.ReadBytesBatch(e + 8, 8);
-                char k = (nb != null && nb[0] >= 0x20 && nb[0] < 0x7F) ? (char)nb[0] : '?';
-                int vram = Memory.ReadInt(e + 0x28) & 0x3FFF;   // GS VRAM buffer base (word address)
-                if (!groups.TryGetValue(g, out var v)) v = (0, k, vram);
-                groups[g] = (v.n + 1, v.kind, v.vram);
-            }
-            Console.WriteLine($"[Mirage/tex] count={count} currentGroup={curGroup}  (g=group, first-name-initial, vram=TEX0 base word)");
-            foreach (var kv in groups.OrderBy(k => k.Key))
-            {
-                int g = kv.Key;
-                int size   = Memory.ReadInt(tm + ((long)g * 0xF + 0xF)  * 4);
-                int loaded = Memory.ReadInt(tm + ((long)g * 0xF + 0x10) * 4);
-                int prio   = Memory.ReadInt(tm + ((long)g * 0xF + 0x12) * 4);
-                Console.WriteLine($"[Mirage/tex] g{g,-3} n={kv.Value.n,-3} first='{kv.Value.kind}' vram=0x{kv.Value.vram:X4} size={size} loaded={loaded} prio={prio}");
-            }
-        }
-
-        private static int _dupCount;   // # of duplicated texture entries currently appended (for cleanup)
-
-        /// <summary>Duplicate the active character's texture entries (group <paramref name="fromGroup"/> =
-        /// the dungeon player group 0x1d) into the clone's chara group <paramref name="toGroup"/> = 0x20, so
-        /// the dungeon's ReloadTexture(0x20) uploads the character's textures for the clone. Appends NEW
-        /// texmgr entries (same image source / TEX0, group changed); the originals stay in 0x1d so the real
-        /// player is unaffected. Entries: texMgr+0x1148 stride 0x50 (group short @+0). Removed on despawn.</summary>
         private const int TexMgrMax = 0xC4;   // 196 CTexture slots (Initialize__15CTextureManager inits 0xC4) — HARD cap
-        private static void DuplicateCharaTextures(int fromGroup, int toGroup)
-        {
-            const long tm = 0x21C75870;
-            RemoveDuplicateTextures();
-            int count = Memory.ReadInt(tm);
-            if (count <= 0 || count >= TexMgrMax) { Console.WriteLine($"[Mirage] texmgr {count}/{TexMgrMax} — no room to duplicate"); return; }
-            int free = TexMgrMax - 1 - count;   // 1-slot margin; NEVER exceed the array (overflow crashed before)
-            if (free <= 0) { Console.WriteLine($"[Mirage] texmgr {count}/{TexMgrMax} — full"); return; }
-            var dups = new System.Collections.Generic.List<byte[]>();
-            for (int i = 1; i <= count && dups.Count < free; i++)
-            {
-                long e = tm + 0x1148 + (long)(i - 1) * 0x50;
-                if ((short)(Memory.ReadInt(e) & 0xFFFF) != fromGroup) continue;
-                byte[] entry = Memory.ReadBytesBatch(e, 0x50);
-                if (entry == null) continue;
-                entry[0] = (byte)(toGroup & 0xFF); entry[1] = (byte)((toGroup >> 8) & 0xFF);   // group short @+0
-                dups.Add(entry);
-            }
-            if (dups.Count == 0) { Console.WriteLine($"[Mirage] no group 0x{fromGroup:X} textures to duplicate"); return; }
-            for (int k = 0; k < dups.Count; k++)   // write entries FIRST, verify each, bump count LAST
-            {
-                long e = tm + 0x1148 + (long)(count + k) * 0x50;
-                Memory.WriteBytesBatch(e, dups[k]);
-                byte[] back = Memory.ReadBytesBatch(e, 2);
-                if (back == null || back[0] != dups[k][0] || back[1] != dups[k][1]) { Console.WriteLine("[Mirage] dup write unverified — aborting"); return; }
-            }
-            Memory.WriteInt(tm, count + dups.Count);                       // bump count LAST (only complete entries visible)
-            Memory.WriteInt(tm + ((long)toGroup * 0xF + 0x10) * 4, 0);     // group loaded=0 → full reload
-            _dupCount = dups.Count;
-            Console.WriteLine($"[Mirage] duplicated {_dupCount}/{free} free textures 0x{fromGroup:X}→0x{toGroup:X} (count {count}→{count + _dupCount}/{TexMgrMax})");
-        }
 
-        private static void RemoveDuplicateTextures()
-        {
-            if (_dupCount <= 0) return;
-            const long tm = 0x21C75870;
-            int count = Memory.ReadInt(tm);
-            if (count >= _dupCount) Memory.WriteInt(tm, count - _dupCount);   // drop the appended dups (they're last)
-            _dupCount = 0;
-        }
-
-        private static readonly System.Collections.Generic.List<long> _retagEntries = new System.Collections.Generic.List<long>();
-        private static readonly System.Collections.Generic.List<int>  _retagOrig   = new System.Collections.Generic.List<int>();
-
-        /// <summary>Retag the active character's BODY textures (name 'c10a…', in groups 0x10/0x11) to the
-        /// clone's chara group <paramref name="toGroup"/> (0x20) so ReloadTexture(0x20) loads them for the
-        /// clone. Skips the WEAPON textures ('c10w…', group 0x1d) so the real weapon stays intact. No new
-        /// entries (array is full) — just the group short @+0, each restored to ITS OWN original group on
-        /// despawn. (<paramref name="_unused"/> kept for the call-site signature.)</summary>
-        private static void RetagGroupToClone(int _unused, int toGroup)
-        {
-            RestoreRetag();
-            const long tm = 0x21C75870;
-            int count = Memory.ReadInt(tm);
-            if (count <= 0 || count > TexMgrMax) return;
-            int n = 0;
-            for (int i = 1; i <= count; i++)
-            {
-                long e = tm + 0x1148 + (long)(i - 1) * 0x50;
-                byte[] nb = Memory.ReadBytesBatch(e + 8, 16);
-                if (nb == null) continue;
-                int c = 0; while (c < 16 && nb[c] >= 0x20 && nb[c] < 0x7F) c++;
-                string name = System.Text.Encoding.ASCII.GetString(nb, 0, c);
-                if (!name.StartsWith("c10")) continue;                                   // Ungaga only
-                if (!(name.Length > 3 && (name[3] == 'w' || name[3] == 'W'))) continue;  // retag ONLY weapon c10w* (these texture the clone body); keep player BODY c10a* intact
-                int orig = (short)(Memory.ReadInt(e) & 0xFFFF);
-                Memory.WriteInt(e, (Memory.ReadInt(e) & unchecked((int)0xFFFF0000)) | (toGroup & 0xFFFF));
-                _retagEntries.Add(e); _retagOrig.Add(orig);
-                Console.WriteLine($"[Mirage/retag] '{name}' 0x{orig:X}→0x{toGroup:X}");
-                n++;
-            }
-            Memory.WriteInt(tm + ((long)toGroup * 0xF + 0x10) * 4, 0);   // group loaded=0 → force reload
-            Console.WriteLine($"[Mirage] retagged {n} c10 BODY textures → 0x{toGroup:X} (weapon c10w* kept)");
-        }
-
-        private static void RestoreRetag()
-        {
-            for (int i = 0; i < _retagEntries.Count; i++)
-            {
-                long e = _retagEntries[i];
-                Memory.WriteInt(e, (Memory.ReadInt(e) & unchecked((int)0xFFFF0000)) | (_retagOrig[i] & 0xFFFF));
-            }
-            _retagEntries.Clear();
-            _retagOrig.Clear();
-        }
-
-        /// <summary>How many texture-manager entries are tagged with a given group (entry group short @+0;
-        /// entries at texMgr+0x1148 stride 0x50; count @texMgr+0).</summary>
-        private static int TextureGroupCount(int group)
-        {
-            const long tm = 0x21C75870;
-            int count = Memory.ReadInt(tm);
-            if (count <= 0 || count > 8192) return -1;
-            int n = 0;
-            for (int i = 1; i <= count; i++)
-                if ((short)(Memory.ReadInt(tm + 0x1148 + (long)(i - 1) * 0x50) & 0xFFFF) == group) n++;
-            return n;
-        }
-
-        private static void SetHostOpacity(int slot, float opacity)
-        {
-            Memory.WriteInt  (EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.OpacityFadeGate), 1);
-            Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.OpacityFadeStep), 0f);
-            Memory.WriteFloat(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Opacity), opacity);
-        }
-
-        /// <summary>Stop the hijacked enemy's AI so it can never commit a motion against our foreign clone
-        /// tree (the crash source). Clobber its STB label-100 (AI program) with a no-op (push 0; RET) — the
-        /// exact mechanism the boss-death system uses to freeze a boss. Original bytes saved for restore.
-        /// Data only; the game's own VM runs the no-op (see [[trick-the-game-principle]]).</summary>
-        private static void HaltHostAi(int slot)
-        {
-            _savedLabel100 = null; _savedLabel100Addr = 0;
-            int stbNative = Memory.ReadInt(CRunScript.StbPtrAddr(slot));
-            if (stbNative == 0) return;
-            long stb = ((long)(uint)stbNative & 0x1FFFFFFF) | 0x20000000;
-            if (Memory.ReadInt(stb) != StbVm.Magic) { Console.WriteLine("[Mirage] host STB invalid — AI not halted"); return; }
-            int coff = LabelCode(stb, 0x64);   // label-100 = AI program
-            if (coff < 0) { Console.WriteLine("[Mirage] host label-100 not found — AI not halted"); return; }
-            long l100 = stb + Memory.ReadInt(stb + StbVm.CodeSectionOff) + Memory.ReadInt(stb + coff);
-            byte[] hold = StbHoldSeq();
-            _savedLabel100 = Memory.ReadBytesBatch(l100, hold.Length);
-            _savedLabel100Addr = l100;
-            Memory.WriteBytesBatch(l100, hold);
-            Console.WriteLine($"[Mirage] halted host AI (label-100 @0x{l100:X})");
-        }
-
-        private static void RestoreHostAi()
-        {
-            if (_savedLabel100 != null && _savedLabel100Addr != 0)
-                Memory.WriteBytesBatch(_savedLabel100Addr, _savedLabel100);
-            _savedLabel100 = null; _savedLabel100Addr = 0;
-        }
-
-        /// <summary>label-table lookup: byte offset of a label's vmcode (relative to the code section).</summary>
-        private static int LabelCode(long stb, int label)
-        {
-            int tblOff = Memory.ReadInt(stb + StbVm.LabelTableOff);
-            int cnt    = Memory.ReadInt(stb + StbVm.LabelCount);
-            for (int i = 0; i < cnt && i < 64; i++)
-            {
-                long e = stb + tblOff + i * 8;
-                if (Memory.ReadInt(e) == label) return Memory.ReadInt(e + 4);
-            }
-            return -1;
-        }
-
-        /// <summary>STB bytecode: push 0; RET — a no-op program (label returns immediately → AI does nothing).</summary>
-        private static byte[] StbHoldSeq()
-        {
-            var recs = new (uint op, uint opnd, uint val)[] { (3, 1, 0), (0xF, 0, 0) };
-            byte[] blk = new byte[recs.Length * 12];
-            for (int i = 0; i < recs.Length; i++)
-            {
-                BitConverter.GetBytes(recs[i].op).CopyTo(blk, i * 12);
-                BitConverter.GetBytes(recs[i].opnd).CopyTo(blk, i * 12 + 4);
-                BitConverter.GetBytes(recs[i].val).CopyTo(blk, i * 12 + 8);
-            }
-            return blk;
-        }
     }
 }

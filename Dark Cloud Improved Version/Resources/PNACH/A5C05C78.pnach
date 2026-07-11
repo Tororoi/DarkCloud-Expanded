@@ -301,11 +301,14 @@ patch=1,EE,21F10020,extended,00000001 //pnach active flag
 //decoy clone draws (Draw__11CSeireiKing's 6-chara loop) while iGpffff9e18 stays 0 and enemies keep moving.
 //PINE can't write this (crashes PCSX2) — PCSX2 applies it. Gated on flag 0x01F10038 (mod sets =1 only while
 //a decoy is active in a dungeon, 0 otherwise) so it never NOPs the town overlay that shares this address.
-patch=1,EE,E1020001,extended,01F10038 //if Mirage scene-gate flag == 1 (apply next 2)
+patch=1,EE,E1030001,extended,01F10038 //if Mirage scene-gate flag == 1 (apply next 3)
 patch=1,EE,21DAE8A4,extended,00000000 //  NOP the chara-loop scene gate (clone draws, enemies keep moving)
 patch=1,EE,21DAE8D4,extended,26060011 //  chara[0] reloads group 0x11 (addiu a2,s0,0x20 -> 0x11): the NPC draw path
 //                                       samples ONE current group, so pick the body group (largest visible surface).
 //                                       0x1d gave right belt/gray body; 0x11 should give right body. player 0x11 untouched.
+patch=1,EE,21DB79C4,extended,00000000 //  NOP ShisaiShadow's chara-STEP gate (beqz v1 = 0x1060001D, gated by the same
+//                                       iGpffff9e18): lets the engine's 6-chara step loop run in combat so it poses the
+//                                       clone tree via SetMotionEX natively (head/hands animate) — no PINE polling.
 
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
