@@ -25,8 +25,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    GuardMoveMotion = 33;  // guard-while-moving; the hold pose oscillates 9<->33 under R1
         private const int    GuardChargeMs   = 500; // hold the guard pose this long before the flash + decoy fire
 
-        private static bool _armed;                 // in-place patch installed this session (cold)
-        private static bool _armMismatchLogged;
+        private static bool _armed;                 // both caves hosted + dispatch repointed this session (cold)
 
         private static bool     _decoyActive;
         private static DateTime _decoyDeadline;
@@ -37,110 +36,61 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Start() => new Thread(Loop) { IsBackground = true }.Start();
 
-        /// <summary>Install the in-place redirect at the COLD window (from ApplyNewChanges at in-game
-        /// entry, and retried from the loop on town visits). Defers while in a dungeon (then _GET_POSITION
-        /// may be hot). Fills the whole table with the current player position first so the very first
-        /// enemy read after entering a dungeon is valid. Strongly location-verified before writing.</summary>
+        /// <summary>Arm both engine redirects at the COLD window (from ApplyNewChanges, retried from the loop).
+        /// _GET_POSITION and _GET_DISTANCE are hosted in COLD-PINE CAVES reached via the STB external-command
+        /// dispatch table — a pure DATA path (see docs/cave-code-execution.md), so there's no in-place code
+        /// surgery and nothing to defer. Fill the per-slot pointer table first so the first enemy read is valid.</summary>
         internal static void ArmColdPatch()
         {
             if (_armed) return;
-            bool ours = true;
-            for (int i = 0; i < MirageDecoy.PosNew.Length; i++)
-                if ((uint)Memory.ReadInt(MirageDecoy.PosAddrs[i]) != MirageDecoy.PosNew[i]) { ours = false; break; }
-            if (ours) { ArmDistPatch(); _armed = true; return; }   // pos patch already live (mod restart) — ensure dist too
-
-            if (Player.InDungeonFloor())
-            {
-                if (!_armMismatchLogged)
-                    Console.WriteLine("[Mirage] in a dungeon at cold-arm time — redirect deferred to next town visit");
-                _armMismatchLogged = true;
-                return;
-            }
-
-            bool ok =
-                (uint)Memory.ReadInt(MirageDecoy.CheckM2Addr)  == MirageDecoy.CheckM2  &&
-                (uint)Memory.ReadInt(MirageDecoy.CheckBneAddr) == MirageDecoy.CheckBne;
-            for (int i = 0; i < MirageDecoy.PosOrig.Length && ok; i++)
-                if ((uint)Memory.ReadInt(MirageDecoy.PosAddrs[i]) != MirageDecoy.PosOrig[i]) ok = false;
-            if (!ok)
-            {
-                if (!_armMismatchLogged)
-                    Console.WriteLine($"[Mirage] _GET_POSITION @0x{MirageDecoy.PosAddrs[0]:X} strong-context check FAILED — redirect disabled");
-                _armMismatchLogged = true;
-                return;
-            }
-
-            FillWholeTablePlayer();                                   // every slot → live-player pointer (valid first read)
-            for (int i = 0; i < MirageDecoy.PosAddrs.Length; i++)     // torn-safe (moot when cold)
-                Memory.WriteUInt(MirageDecoy.PosAddrs[i], MirageDecoy.PosNew[i]);
-            ArmDistPatch();
-
-            _armed = true;
-            Console.WriteLine($"[Mirage] redirect armed COLD (pointer indirection @0x{MirageDecoy.PosAddrs[0]:X})");
+            FillWholeTablePlayer();                 // every slot → live-player pointer (valid before any enemy read)
+            bool pos  = ArmFuncCave(0x201E1DF0, 0x21F34200, 0x01F34200, MirageDecoy.PosDispatch, 0x84, 0x8C, "_GET_POSITION");
+            bool dist = ArmFuncCave(0x201E1D00, 0x21F34000, 0x01F34000, MirageDecoy.DistDispatch, 0x5C, 0x64, "_GET_DISTANCE");
+            _armed = pos && dist;                   // retry from the loop if either couldn't arm (e.g. not vanilla yet)
         }
 
-        /// <summary>Redirect the ATTACK-TRIGGER distance query (_GET_DISTANCE, param==1 player branch) to the
-        /// same per-slot pointer table as the position redirect, so fooled enemies trigger attacks on the DECOY's
-        /// range and un-fooled ones on the live player. Idempotent + strong-context verified; a no-op if already
-        /// applied. Cold-safe (called only from the town-side arm path, before enemy AI runs).</summary>
-        /// <summary>Host a CLEAN _GET_DISTANCE in a cold-PINE cave and repoint the STB dispatch slot at it —
-        /// no in-place surgery. Byte-copies the vanilla function (self-contained: absolute jal, PC-relative
-        /// branches), then detours only the param==1 player branch: `addiu a0,sp,0x40` (dest) stays, but the
-        /// hardcoded `0x1EA1D30` load (+0x5C/+0x60) becomes `j helper / nop`. The helper (cave+0x100) sets
-        /// a1 = *(PtrTable + slot*4) — the per-slot target the mod maintains (fooled→decoy, else→player) —
-        /// and jumps back to the sceVu0CopyVector jal at +0x64. Explicit-coord queries (param!=1) are untouched.
-        /// Reuses the same pointer table _GET_POSITION reads, so distance = engine-fresh DistVector to the
-        /// per-enemy target, with none of the frame-spill fragility the in-place version had.</summary>
-        internal static void ArmDistCave()
+        /// <summary>Host a CLEAN copy of a vanilla STB command function in a cold-PINE cave and repoint its
+        /// dispatch-table slot at the copy — no in-place surgery (see docs/cave-code-execution.md). Byte-copies
+        /// the self-contained function (absolute jal, PC-relative branches), detours only its player branch —
+        /// `addiu a0,sp,0x40` (dest) stays; the hardcoded `0x1EA1D30` load at <paramref name="detourOff"/> becomes
+        /// `j helper / nop` — and adds a helper (cave+0x100) that sets a1 = *(PtrTable + slot*4) (the per-slot
+        /// target: fooled→decoy, else→live player), then jumps back to the sceVu0CopyVector jal at
+        /// <paramref name="jalOff"/>. Explicit-coord queries (param!=1) are untouched. Returns true if armed (or
+        /// already armed). Aborts if the function isn't pristine vanilla (stale in-place patch → restart game).</summary>
+        private static bool ArmFuncCave(long vanillaFn, long cave, uint caveGuest, long dispatch, int detourOff, int jalOff, string name)
         {
-            const long distFn    = 0x201E1D00;   // vanilla _GET_DISTANCE
-            const int  fnSize    = 0xF0;
-            const long cave      = 0x21F34000;   // free gap in the proven-clean region (past RootBuf, before NodePool)
-            const uint caveGuest = 0x01F34000;
-            const long tblEntry  = 0x202918A0;   // dispatch: _GET_DISTANCE funcPtr slot
+            static uint J(uint target) => 0x08000000u | ((target >> 2) & 0x03FFFFFF);   // absolute jump encoding
+            uint vanillaGuest = (uint)(vanillaFn - 0x20000000);
+            uint slot = (uint)Memory.ReadInt(dispatch);
+            if (slot == caveGuest) return true;                                  // already armed
+            if (slot != vanillaGuest) { Console.WriteLine($"[Mirage/cave] {name} dispatch = 0x{slot:X} (expected 0x{vanillaGuest:X}) — abort"); return false; }
+            if ((uint)Memory.ReadInt(vanillaFn) != 0x27BDFFB0 ||                  // vanilla prologue (addiu sp,-0x50)
+                (uint)Memory.ReadInt(vanillaFn + detourOff) != 0x3C0201EA)       // vanilla player-addr load (lui v0,0x1ea)
+            { Console.WriteLine($"[Mirage/cave] {name} not pristine vanilla (stale in-place patch? restart the game) — abort"); return false; }
 
-            uint cur = (uint)Memory.ReadInt(tblEntry);
-            if (cur == caveGuest) { Console.WriteLine("[Mirage/cave] _GET_DISTANCE cave already armed"); return; }
-            if (cur != 0x001E1D00) { Console.WriteLine($"[Mirage/cave] dispatch slot = 0x{cur:X} (expected _GET_DISTANCE) — abort"); return; }
-
-            byte[] fn = Memory.ReadBytesBatch(distFn, fnSize);
-            if (fn == null) { Console.WriteLine("[Mirage/cave] fn read failed"); return; }
-            BitConverter.GetBytes(0x087CD040u).CopyTo(fn, 0x5C);   // j 0x01F34100 (helper) — was lui v0,0x1ea
-            BitConverter.GetBytes(0x00000000u).CopyTo(fn, 0x60);   // nop (j delay) — was addiu a1,v0,0x1d30
+            byte[] fn = Memory.ReadBytesBatch(vanillaFn, 0xF0);
+            if (fn == null) return false;
+            BitConverter.GetBytes(J(caveGuest + 0x100)).CopyTo(fn, detourOff);   // j helper — was lui v0,0x1ea
+            BitConverter.GetBytes(0u).CopyTo(fn, detourOff + 4);                 // nop — was addiu a1,v0,0x1d30 (j delay)
 
             uint[] helper = {
-                0x8F889CE0,  // lw   t0, -0x6320(gp)   ; NowMonstorUnit
-                0x8D080090,  // lw   t0, 0x90(t0)      ; slot
-                0x00084080,  // sll  t0, t0, 2         ; slot*4
-                0x3C0501F3,  // lui  a1, 0x01F3
-                0x00A82821,  // addu a1, a1, t0        ; PtrTable + slot*4
-                0x8CA50000,  // lw   a1, 0(a1)         ; a1 = target pointer (player global or decoy)
-                0x087CD019,  // j    0x01F34064        ; back to the sceVu0CopyVector jal
-                0x00000000   // nop (j delay)
+                0x8F889CE0,                   // lw   t0, -0x6320(gp)   ; NowMonstorUnit
+                0x8D080090,                   // lw   t0, 0x90(t0)      ; current enemy slot
+                0x00084080,                   // sll  t0, t0, 2         ; slot*4
+                0x3C0501F3,                   // lui  a1, 0x01F3
+                0x00A82821,                   // addu a1, a1, t0        ; PtrTable + slot*4
+                0x8CA50000,                   // lw   a1, 0(a1)         ; a1 = per-slot target pointer
+                J(caveGuest + (uint)jalOff),  // j    cave+jalOff       ; back into the sceVu0CopyVector jal
+                0x00000000                    // nop (j delay)
             };
             byte[] hb = new byte[helper.Length * 4];
             for (int i = 0; i < helper.Length; i++) BitConverter.GetBytes(helper[i]).CopyTo(hb, i * 4);
 
             Memory.WriteBytesBatch(cave, fn);
             Memory.WriteBytesBatch(cave + 0x100, hb);
-            Memory.WriteUInt(tblEntry, caveGuest);
-            Console.WriteLine($"[Mirage/cave] _GET_DISTANCE → clean cave @0x{caveGuest:X} (per-slot pointer, no in-place surgery). readback 0x{(uint)Memory.ReadInt(tblEntry):X}");
-        }
-
-        private const bool EnableDistPatch = false;   // in-place _GET_DISTANCE retired — now hosted in the cave (ArmDistCave)
-        private static void ArmDistPatch()
-        {
-            if (!EnableDistPatch) { Console.WriteLine("[Mirage] _GET_DISTANCE patch DISABLED (isolation test — only _GET_POSITION active)"); return; }
-            if ((uint)Memory.ReadInt(MirageDecoy.DistAddrs[0]) == MirageDecoy.DistNew[0]) return;   // frame resize already live
-
-            // Verify EVERY original word before writing ANY — a partial frame resize (prologue without epilogue,
-            // or vice-versa) leaves the stack unbalanced and crashes. Cold window, so no torn-execution risk.
-            for (int i = 0; i < MirageDecoy.DistAddrs.Length; i++)
-                if ((uint)Memory.ReadInt(MirageDecoy.DistAddrs[i]) != MirageDecoy.DistOrig[i])
-                { Console.WriteLine($"[Mirage] _GET_DISTANCE context check FAILED @0x{MirageDecoy.DistAddrs[i]:X} — attack range NOT redirected"); return; }
-            for (int i = 0; i < MirageDecoy.DistAddrs.Length; i++)
-                Memory.WriteUInt(MirageDecoy.DistAddrs[i], MirageDecoy.DistNew[i]);
-            Console.WriteLine("[Mirage] attack-distance redirect armed (_GET_DISTANCE → per-slot pointer table; un-fooled = live player)");
+            Memory.WriteUInt(dispatch, caveGuest);
+            Console.WriteLine($"[Mirage/cave] {name} → clean cave @0x{caveGuest:X} (per-slot pointer). readback 0x{(uint)Memory.ReadInt(dispatch):X}");
+            return true;
         }
 
         /// <summary>Patch the dungeon draw's chara-loop scene gate so the clone draws while enemies keep
@@ -181,7 +131,6 @@ namespace Dark_Cloud_Improved_Version
                     {
                         if (!_clothDiagDone && Player.CurrentCharacterNum() == Player.UngagaId)
                         { _clothDiagDone = true; DumpCloth(); }   // one-shot: UNGAGA's cloth layout (not Toan's)
-                        DumpEnemyAI();   // throttled: Lich/Diamond state to catch the AI mess-up
 
                         // Keep un-fooled slots on the live player (the patch reads the table for EVERY
                         // enemy, always) and fooled slots on the decoy — one batched write per fast tick.
@@ -338,7 +287,6 @@ namespace Dark_Cloud_Improved_Version
         private const float GhostTintB = 65f;
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
         private static bool     _clothDiagDone;   // one-shot cloth-layout dump guard
-        private static DateTime _enemyDiagNext;   // throttle for the enemy-AI dump
         private static uint _srcModelRoot;    // the model root the clone copies/renders (player or test enemy)
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
@@ -750,52 +698,6 @@ namespace Dark_Cloud_Improved_Version
                 uint b2c = (uint)BitConverter.ToInt32(h, 0x2C) & 0x1FFFFFFF;
                 Console.WriteLine($"[Mirage/cloth] [{i}] obj=0x{cloth:X} vtbl=0x{vt:X} vu=0x{vu:X} vuSz={vusz}(={vusz * 16}B) +0x28=0x{b28:X} +0x2c=0x{b2c:X}");
                 Console.WriteLine($"[Mirage/cloth] [{i}] hdr: {BitConverter.ToString(h, 0, 0x40).Replace("-", " ")}");
-            }
-        }
-
-        /// <summary>Throttled (~1s): dump Lich (id 51) / Diamond (id 46) state + their redirect pointer, to catch
-        /// how the AI still misbehaves — slot, motion, position, fooled flag, and which target (PLAYER/DECOY) the
-        /// per-slot pointer resolves to.</summary>
-        private static void DumpEnemyAI()
-        {
-            if (DateTime.UtcNow < _enemyDiagNext) return;
-            _enemyDiagNext = DateTime.UtcNow.AddSeconds(1);
-            // Scene state: iGpffff9e18 (0x202A3608) != 0 freezes ALL enemies (motionDrive skips them); the PNACH
-            // mailbox (0x21F10038) + the two gate instructions show whether the NOPs are stuck applied.
-            uint scene = (uint)Memory.ReadInt(0x202A3608);
-            int  mbox  = Memory.ReadInt(SceneGateFlag);
-            uint sGate = (uint)Memory.ReadInt(0x21DAE8A4);
-            uint tGate = (uint)Memory.ReadInt(0x21DB79C4);
-            // Raw pointer-table[0..3] + the deref'd player position, to prove what enemies actually read.
-            uint p0 = Memory.ReadUInt(MirageDecoy.PtrAddr(0)), p1 = Memory.ReadUInt(MirageDecoy.PtrAddr(1));
-            float plx = Memory.ReadFloat(0x21EA1D30), plz = Memory.ReadFloat(0x21EA1D34), ply = Memory.ReadFloat(0x21EA1D38);
-            float dcx = Memory.ReadFloat(MirageDecoy.DecoyPos), dcy = Memory.ReadFloat(MirageDecoy.DecoyPos + 8);
-            Console.WriteLine($"[Mirage/ai] scene iGpffff9e18=0x{scene:X} mailbox={mbox} sceneGate=0x{sGate:X8} stepGate=0x{tGate:X8} ptr[0]=0x{p0:X} ptr[1]=0x{p1:X} player=({plx:0.#},{plz:0.#},{ply:0.#}) decoyScratch=({dcx:0.#},{dcy:0.#})");
-            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
-            {
-                long sb = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
-                int rs = Memory.ReadInt(sb + EnemySlotOffsets.RenderStatus);
-                if (rs < 0) continue;
-                int id = Memory.ReadUShort(sb + EnemySlotOffsets.EnemySpeciesId);
-                if (id != 46 && id != 51) continue;
-                bool fooled0 = s < MirageDecoy.MaxSlots && _fooled[s];
-                if (rs < 2 && !fooled0) continue;   // skip idle-far enemies; log only active or fooled ones
-                string name = id == 51 ? "Lich" : "Diamond";
-                long ch = EnemyAddresses.CharObjects.CharAddr(s);
-                int mot = Memory.ReadInt(ch + MirageClone.MotionId);
-                float ex = Memory.ReadFloat(ch + 0x10), ez = Memory.ReadFloat(ch + 0x14), ey = Memory.ReadFloat(ch + 0x18);
-                uint ip = (uint)Memory.ReadInt(CRunScript.Base + (long)s * CRunScript.Stride + CRunScript.CurIp) & 0x1FFFFFFF;
-                uint ptr = Memory.ReadUInt(MirageDecoy.PtrAddr(s)) & 0x1FFFFFFF;
-                string tgt = "?";
-                if (ptr != 0 && ptr < 0x02000000)
-                {
-                    float tx = Memory.ReadFloat(Memory.ToMmu(ptr)), ty = Memory.ReadFloat(Memory.ToMmu(ptr) + 8);   // x,y (skip height @+4)
-                    string which = ptr == MirageDecoy.PlayerPosGuest ? "PLAYER" : ptr == MirageDecoy.DecoyPosGuest ? "DECOY" : "??";
-                    tgt = $"{which}@0x{ptr:X}=({tx:0.#},{ty:0.#})";
-                }
-                float plx2 = Memory.ReadFloat(0x21EA1D30), ply2 = Memory.ReadFloat(0x21EA1D38);
-                double dist = Math.Sqrt((ex - plx2) * (ex - plx2) + (ey - ply2) * (ey - ply2));   // real enemy→player XY dist
-                Console.WriteLine($"[Mirage/ai] s{s} {name} rs={rs} mot={mot} ip=0x{ip:X} pos=({ex:0.#},{ez:0.#},{ey:0.#}) realDist={dist:0.#} fooled={fooled0} target={tgt}");
             }
         }
 

@@ -300,8 +300,11 @@ namespace Dark_Cloud_Improved_Version
         // 16-byte position from. An un-fooled slot's pointer IS the live player global, so the enemy reads the
         // engine-live player — bit-identical vanilla, zero staleness, mod NOT in the loop. A fooled slot's pointer
         // is DecoyPos (a stationary decoy the mod writes once). So no-decoy play is untouched; only fooled enemies
-        // chase/attack the decoy, and a mod stall can't affect un-fooled reads (their pointer is static). Both are
-        // IN-PLACE + COLD-applied (PINE can't write hot EE code); the extra deref word rides each bne delay slot.
+        // chase/attack the decoy, and a mod stall can't affect un-fooled reads (their pointer is static).
+        //
+        // Both _GET_POSITION and _GET_DISTANCE now read this table from CLEAN cold-PINE CAVE copies reached via the
+        // STB external-command dispatch (Mirage.ArmFuncCave; see docs/cave-code-execution.md) — no in-place surgery.
+        // Each cave's helper computes a1 = *(PtrTable + slot*4) with the current enemy slot from NowMonstorUnit+0x90.
         internal const long PtrTable       = 0x21F30000; // guest 0x01F30000; entry slot = a 4-byte position POINTER
         internal const int  PtrStride      = 4;
         internal const int  TableSlots     = 256;
@@ -311,42 +314,9 @@ namespace Dark_Cloud_Improved_Version
         internal const uint PlayerPosGuest = 0x01EA1D30;  // the live player global — un-fooled slots point here
         internal static long PtrAddr(int slot) => PtrTable + (long)slot * PtrStride;
 
-        // _GET_POSITION player branch → a1 = *(PtrTable + slot*4). The slot*4 shift lands in the bne delay slot
-        // (0x1E1E6C) so the deref (lw a1) fits; jal 0x1E1E7C stays, a0 dest → its delay slot, and the player path
-        // still falls through to the shared SetStack tail at 0x1E1E84 (jal returns there).
-        //   6C sll at,s2,2 | 70 lui a1,0x01F3 | 74 addu a1,a1,at | 78 lw a1,0(a1) | 7C jal | 80 addiu a0,sp,0x40
-        internal static readonly long[] PosAddrs = { 0x201E1E6C, 0x201E1E70, 0x201E1E74, 0x201E1E78, 0x201E1E7C, 0x201E1E80 };
-        internal static readonly uint[] PosOrig  = { 0x00000000, 0x27A40040, 0x3C0201EA, 0x24451D30, 0x0C04860C, 0x00000000 };
-        internal static readonly uint[] PosNew   = { 0x00120880, 0x3C0501F3, 0x00A12821, 0x8CA50000, 0x0C04860C, 0x27A40040 };
-        internal const long CheckM2Addr  = 0x201E1E64;  internal const uint CheckM2  = 0x2402FFFE; // addiu v0,-2 (context)
-        internal const long CheckBneAddr = 0x201E1E68;  internal const uint CheckBne = 0x16020006; // bne s0,v0 → 0x1E1E84
-
-        // _GET_DISTANCE param==1 branch → same pointer table. The slot lives in $v1 but the monster-position call
-        // clobbers it and no callee-saved reg is free ($s0=param_2, $s1=param_1, and $s1 is reused for SetStack +
-        // the explicit-branch stack ptr). So we SPILL param_1 to an enlarged frame (−0x50→−0x60, spill at sp+0x50
-        // above the copy dest), free $s1 to carry the slot across the call, reload param_1 at its two reuse sites,
-        // and the slot*4 shift rides the bne delay slot (0x1E1D54). Verify ALL before writing ANY (a partial frame
-        // resize = unbalanced stack = crash). 12 cold edits; jal 0x1E1D64 + b 0x1E1D6C stay.
-        internal static readonly long[] DistAddrs = {
-            0x201E1D00, 0x201E1D10, 0x201E1D1C, 0x201E1D24, 0x201E1D54, 0x201E1D58,
-            0x201E1D5C, 0x201E1D60, 0x201E1D68, 0x201E1D74, 0x201E1DC0, 0x201E1DE0 };
-        internal static readonly uint[] DistOrig = {
-            0x27BDFFB0, 0x70808E28, 0x8C830090, 0x00621018, 0x00000000, 0x27A40040,
-            0x3C0201EA, 0x24451D30, 0x00000000, 0x72202628, 0x72202628, 0x27BD0050 };
-        internal static readonly uint[] DistNew = {
-            0x27BDFFA0,  // addiu sp,sp,-0x60         prologue: enlarge frame for the param_1 spill slot
-            0xAFA40050,  // sw a0,0x50(sp)            spill param_1 (was por s1,a0) → frees $s1
-            0x8C910090,  // lw s1,0x90(a0)            slot into $s1 (was $v1)
-            0x02221018,  // mult v0,s1,v0             monster-unit offset now reads the slot from $s1
-            0x00110880,  // sll at,s1,2               bne delay slot: at = slot*4
-            0x3C0501F3,  // lui a1,0x01F3
-            0x00A12821,  // addu a1,a1,at             a1 = PtrTable + slot*4
-            0x8CA50000,  // lw a1,0(a1)               deref → a1 = position pointer (player global or decoy)
-            0x27A40040,  // addiu a0,sp,0x40          dest (jal delay slot; jal 0x1E1D64 + b 0x1E1D6C kept)
-            0x8FA40050,  // lw a0,0x50(sp)            reload param_1 (was por a0,s1) — explicit branch
-            0x8FA40050,  // lw a0,0x50(sp)            reload param_1 (was por a0,s1) — SetStack tail
-            0x27BD0060   // addiu sp,sp,0x60          epilogue: matching frame restore
-        };
+        // STB external-command dispatch slots (8-byte {funcPtr,id} entries) repointed at the cold caves.
+        internal const long PosDispatch  = 0x202918A8;   // _GET_POSITION funcPtr slot
+        internal const long DistDispatch = 0x202918A0;   // _GET_DISTANCE funcPtr slot
     }
 
     /// <summary>

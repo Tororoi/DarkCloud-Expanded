@@ -128,5 +128,10 @@ per-slot helper.
   data-dispatch table you can repoint. Costs a few hundred bytes of cave; buys unlimited
   room and a clean function.
 
-Reference implementation: `Mirage.ArmDistCave()` (Mirage.cs) + the STB dispatch addresses
-in `DungeonAddresses.cs`.
+Reference implementation: `Mirage.ArmFuncCave()` (Mirage.cs) — one generalized helper that
+hosts *both* `_GET_POSITION` and `_GET_DISTANCE` this way (called from `Mirage.ArmColdPatch`),
+parameterized by the vanilla function, cave address, dispatch slot, and detour/jal offsets — plus
+the STB dispatch addresses (`MirageDecoy.PosDispatch`/`DistDispatch`) in `DungeonAddresses.cs`. It
+verifies the function is pristine vanilla (prologue `0x27BDFFB0` + detour word `0x3C0201EA`) before
+copying, so a stale in-place patch from a prior game session can't get cloned — restart the game if
+the check aborts.
