@@ -367,7 +367,7 @@ namespace Dark_Cloud_Improved_Version
         // CCharacter fields we tweak in the copied clone.
         internal const int  CharPos     = 0x10;     // x,z,y (DrawNPCDraw overrides via SetPosition anyway)
         internal const int  CharModel   = 0xBC;     // shared player model root
-        internal const int  ClothList   = 0xC74;    // → 4 cloth ptrs; point at a zero stub to skip cloth
+        internal const int  ClothList   = 0xC74;    // → 4 cloth ptrs; a zero stub skips cloth, a cave list adds it
         internal const int  DimFactor   = 0xCF0;    // <1.0 dims the model (fade lever)
         internal const int  LightFrom   = 0xD00;    // zero the point-light slots so the light loop skips
         internal const int  LightTo     = 0xD60;
@@ -417,6 +417,50 @@ namespace Dark_Cloud_Improved_Version
         internal const long ClothStub      = 0x21F33000;  // 16 zero bytes (clear of the 8KB aggro table @0x1F30000)
         internal const long ClothStubGuest = 0x01F33000;
 
+        // FROZEN-CLOTH cave. Draw__10CCharacter (0x139310) auto-draws every non-null CCloth in the clone's +0xC74
+        // list; nothing in the dungeon chara-loop STEPS them (ClothStep is town/menu/edit only), so a copied cloth
+        // renders as a STATIC snapshot of the player's cloth at spawn. Each CCloth is a fixed 0x8550 object with no
+        // internal cross-refs — the only pointers to fix are its three draw-packet fields (+0x18 active, +0x24/+0x28
+        // double-buffer), which we point at a clone-owned buffer. The packet is WORLD-space (Draw__6CCloth draws at
+        // origin), so the frozen drape lands where the player stood at cast = the decoy plant spot. A frozen cloth's
+        // verts never change, so we SINGLE-buffer it (both +0x24/+0x28 → one buffer) — safe even mid-DMA (same bytes).
+        // Lives in the node-pool tail reclaimed by MaxNodes 320→128 (0x21F54000, before MotionCave @0x21F78000).
+        internal const long ClothListCave  = 0x21F54000;  // the 4-entry cloth-ptr array the clone's +0xC74 points at
+        internal const uint ClothListGuest = 0x01F54000;
+        internal const long ClothObjCave   = 0x21F54100;  // 3 object slots × 0x8550 (0x18FF0 → ends 0x21F6D0F0)
+        internal const uint ClothObjGuest  = 0x01F54100;
+        internal const long ClothBufCave   = 0x21F6E000;  // clone draw buffers, packed (before MotionCave @0x21F78000)
+        internal const uint ClothBufGuest  = 0x01F6E000;
+        internal const int  ClothObjSize   = 0x8550;      // fixed CCloth allocation (__nw 0x8550 in InitCloth)
+        internal const int  ClothObjSlots  = 3;           // Ungaga has exactly 3 cloth pieces (dump: [3] null)
+        internal const int  ClothMaxPieces = 4;           // +0xC74 list length
+        internal const int  ClothActive    = 0x18;        // CCloth+0x18 = active draw packet ptr (set each frame)
+        internal const int  ClothBuf0      = 0x24;        // CCloth+0x24 = DBuffID0 packet; +0x28 = DBuffID1
+        internal const int  ClothAttach    = 0x3C;        // CCloth+0x3c = anchor CFrame (read when STEPPED — physics)
+
+        // PHYSICS anchor cave: the cloth's attach CFrame (+0x3c) drives the sim (Step→GetLWMatrix walks +0x110
+        // parents, recomputing world matrices on-demand). To make a STEPPED clone cloth follow the CLONE skeleton
+        // instead of the player's, resolve each attach frame to clone-space: in-tree frames map by the same offset
+        // the clone tree used (NodePool + (frame − modelRoot)); frames allocated PAST the contiguous tree are copied
+        // here and re-parented to the clone's copy of their first in-tree ancestor. Sits after the cloth draw
+        // buffers, before MotionCave (0x21F78000). Each CFrame is 0x270.
+        internal const long ClothAnchorCave  = 0x21F73000;
+        internal const uint ClothAnchorGuest = 0x01F73000;
+        internal const long ClothAnchorEnd   = 0x21F75000;   // 0x2000 = ~12 CFrames (attach + bound out-of-tree frames)
+
+        // PHYSICS collision: the cloth's CBound list (+0x44, linked via +0x00, each 0x130 bytes) is the body
+        // collision capsules. Each capsule is positioned from two body bones at CBound +0xe4/+0xe8 (via GetLWMatrix
+        // in UpDateDirPos__6CBound). For the clone we copy the list here and re-anchor each bound's +0xe4/+0xe8 to
+        // the clone skeleton (same resolver as +0x3c), so the cloth collides against the CLONE's legs/hips, not the
+        // player's. Shared across a character's cloth pieces (deduped by list head).
+        internal const long ClothBoundCave   = 0x21F75000;
+        internal const uint ClothBoundGuest  = 0x01F75000;
+        internal const long ClothBoundEnd    = 0x21F78000;   // 0x3000 = ~37 CBounds
+        internal const int  BoundSize        = 0x130;        // Sizeof__6CBound
+        internal const int  BoundNext        = 0x00;         // linked-list next
+        internal const int  BoundFrameA      = 0xE4;         // capsule endpoint bone A (CFrame*)
+        internal const int  BoundFrameB      = 0xE8;         // capsule endpoint bone B (CFrame*)
+
         // Separate ROOT frame for the clone. Posing the shared root (via DrawNPCDraw's SetPosition) drags
         // the player (they share +0xBC). So we copy the player's root CFrame node into the cave and point
         // the clone at THE COPY, whose child ptr (+0x138) still targets the shared animated bone subtree —
@@ -442,7 +486,9 @@ namespace Dark_Cloud_Improved_Version
         internal const long NodePoolGuest = 0x01F40000;
         internal const int  NodeStride    = 0x270;        // MUST equal the real node size: MotionProc indexes
         internal const int  NodeSize      = 0x270;        //   bones as root+index*0x270, so the copy is contiguous
-        internal const int  MaxNodes      = 320;          // pool cap (320*0x270 = 0x30C00 → ends 0x21F70C00)
+        internal const int  MaxNodes      = 128;          // pool cap (128*0x270 = 0x13800 → ends 0x21F53800). The clone
+                                                          // is Ungaga-only (Mirage) = 67 nodes, so 128 is ~2× headroom;
+                                                          // the reclaimed tail (0x21F54000+) now hosts the cloth cave.
 
         // Independent motion-struct cave. The CCharacter holds up to 8 motion "channels" as pointers at
         // +0xC20+i*4 (see GetMotionParam 0x1383b0); each points to a MOTION_TYPE whose embedded MOTION_STATE

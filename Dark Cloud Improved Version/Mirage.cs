@@ -127,17 +127,18 @@ namespace Dark_Cloud_Improved_Version
                     bool inDun = Player.InDungeonFloor();
                     if (!_armed && !inDun) ArmColdPatch();
 
+                    if (inDun) ProbeCharacter();   // once per party member: node/mesh/cloth footprint for cave sizing
+
                     if (_armed && inDun)
                     {
-                        if (!_clothDiagDone && Player.CurrentCharacterNum() == Player.UngagaId)
-                        { _clothDiagDone = true; DumpCloth(); }   // one-shot: UNGAGA's cloth layout (not Toan's)
 
                         // Keep un-fooled slots on the live player (the patch reads the table for EVERY
                         // enemy, always) and fooled slots on the decoy — one batched write per fast tick.
                         bool ungagaMirage = Player.Weapon.GetCurrentWeaponId() == Items.mirage &&
                                             Player.CurrentCharacterNum() == Player.UngagaId;
+                        bool paused = IsPaused();   // "PAUSE" screen OR the in-dungeon item menu — freeze the decoy for both
 
-                        if (ungagaMirage && !Player.CheckDunIsPaused())
+                        if (ungagaMirage && !paused)
                         {
                             // Plant the decoy ONCE per guard-hold: the held-guard pose oscillates between motion 9
                             // (loop) and 33 (move) under R1, so we can't edge-trigger on a single motion. Latch on
@@ -161,9 +162,14 @@ namespace Dark_Cloud_Improved_Version
                             }
                             if (_decoyActive) UpdateDecoyState();
                         }
-                        else if (_decoyActive && Player.CheckDunIsPaused())
+                        else if (_decoyActive && paused)
                         {
+                            // Freeze while paused: hold the deadline (timer stops) and keep the clone drawn — the
+                            // flag-3 gate below freezes its step + cloth. Covers BOTH pause types: the item menu
+                            // (engine already freezes the clone there) and the PAUSE screen (where the chara loop
+                            // otherwise keeps stepping the clone).
                             _decoyDeadline = _decoyDeadline.AddMilliseconds(FastTickMs);
+                            MaintainClone();
                         }
                         else if (!ungagaMirage && _decoyActive)
                         {
@@ -175,7 +181,9 @@ namespace Dark_Cloud_Improved_Version
                         // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
                         // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
                         // town overlay at those addresses is never touched.
-                        Memory.WriteInt(SceneGateFlag, (_decoyActive && _cloneSlot >= 0) ? 1 : 2);
+                        // 1 = decoy up & running (NOP scene+step gates); 3 = decoy up but PAUSED (NOP scene only →
+                        // clone still drawn but frozen); 2 = dungeon, no decoy (restore vanilla).
+                        Memory.WriteInt(SceneGateFlag, (_decoyActive && _cloneSlot >= 0) ? (paused ? 3 : 1) : 2);
                         sleep = FastTickMs;
                     }
                     else
@@ -188,6 +196,16 @@ namespace Dark_Cloud_Improved_Version
                 catch (Exception e) { Console.WriteLine("[Mirage] tick failed: " + e.Message); }
                 Thread.Sleep(sleep);
             }
+        }
+
+        /// <summary>True while the game is paused in a way that should freeze the decoy — either the "PAUSE"
+        /// screen (CheckDunIsPaused) or the in-dungeon item menu (mode 3 / dungeonMode 2, same test the other
+        /// effects use for menuOpen). The two pause types freeze different things natively (the menu freezes the
+        /// clone but not our timer; the PAUSE screen freezes our timer but not the clone), so we unify them.</summary>
+        private static bool IsPaused()
+        {
+            if (Player.CheckDunIsPaused()) return true;
+            return Memory.ReadByte(Addresses.mode) == 3 && Memory.ReadByte(Addresses.dungeonMode) == 2;
         }
 
         // ── decoy state (all DATA) ───────────────────────────────────────────────────────────
@@ -278,6 +296,8 @@ namespace Dark_Cloud_Improved_Version
         private const bool  EngineDrivenAnim = true;     // let the engine's chara-step pose the clone tree natively (no polling)
         private const bool  IndependentMesh = true;      // copy the software-skinned body meshes → fully independent clone
         private const bool  WeaponEnabled   = true;      // graft the equipped weapon onto the clone's hand bone
+        private const bool  ClothEnabled    = true;      // copy the player's cloth onto the clone
+        private const bool  ClothPhysics    = true;      // anchor cloth to the clone skeleton for real sim (needs step-injection)
         private const float GhostOpacity = 90f;          // of 128; lower = more see-through
         private const float GhostDim     = 1.0f;         // full lighting so any resident character texture shows
         // Ambient ADD tint (+0xCE0 RGB) folded into the clone's lighting each draw; scene ambient ~128 = neutral,
@@ -286,7 +306,10 @@ namespace Dark_Cloud_Improved_Version
         private const float GhostTintG = 30f;
         private const float GhostTintB = 65f;
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
-        private static bool     _clothDiagDone;   // one-shot cloth-layout dump guard
+        private static int      _probeCid = -1;      // (cid,root) currently being observed for stability
+        private static uint     _probeRoot;
+        private static DateTime _probeSince;         // when the current (cid,root) pair was first seen
+        private static string   _probeLastSig = "";  // last logged footprint signature (dedupe)
         private static uint _srcModelRoot;    // the model root the clone copies/renders (player or test enemy)
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
@@ -320,7 +343,12 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] buf = Memory.ReadBytesBatch(MirageClone.PlayerChar, MirageClone.CharCopySize);
             if (buf == null) { _cloneSlot = -1; return; }
-            BitConverter.GetBytes((uint)MirageClone.ClothStubGuest).CopyTo(buf, MirageClone.ClothList);
+            // Cloth: snapshot the player's cloth pieces into clone-owned copies and hang them off the CLONE's own
+            // +0xC74. The clone's Draw renders them (ghost tint — NO player flash bleed). In PHYSICS mode the
+            // anchor/collision are re-based to the clone skeleton (in CopyCloth) and the clone is ClothStep'd by
+            // the PNACH chara-loop patch (jal ShadowStep→ClothStep while the decoy flag == 1), so they simulate.
+            uint clothListGuest = ClothEnabled ? CopyCloth() : (uint)MirageClone.ClothStubGuest;
+            BitConverter.GetBytes(clothListGuest).CopyTo(buf, MirageClone.ClothList);
             BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, MirageClone.DimFactor);
             // PIN the clone to the guard-loop motion instead of whatever the player was mid-doing at spawn. The
             // engine's chara-step (unlocked via the PNACH step-gate NOP) reads +0xC68 every frame → SetMotionEX,
@@ -418,6 +446,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(slot + MirageClone.CharaRampA, 0);     // opacity-ramp amount = 0 (no fade drift)
             Memory.WriteInt(slot + MirageClone.CharaRampB, 0);
             Memory.WriteInt(MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // register → dungeon draw draws it
+            Memory.WriteInt(MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // un-skip → dungeon step loop steps it (clear the 1 a prior DespawnClone left)
             Console.WriteLine($"[Mirage] clone in chara slot {_cloneSlot} (texgroup 0x{MirageClone.CharaTexBase + _cloneSlot:X}) @({_dx:0.#},{_dz:0.#},{_dy:0.#}) root=0x{_cloneRootGuest:X}");
 
             if (WeaponEnabled) RegisterWeaponChara();   // clone weapon in its own slot 3 / texgroup 0x1d pass
@@ -659,8 +688,13 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(cVis, visB);
                 Memory.WriteUInt(node + MirageClone.GeomPtr, cVisG);   // node draws the clone's own mesh
                 cave += need; caveGuest += need; copied++;
+                Console.WriteLine($"[Mirage/mesh] n{i}: vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} = 0x{need:X}");
             }
             _meshesCopied = copied;
+            // Instrument actual cave usage (character-dependent — needed to right-size MeshCaveSize for BOTH
+            // Ungaga and Xiao/Super Steve once we have real numbers; the reservation stays generous until then).
+            long used = cave - MirageClone.MeshCave;
+            Console.WriteLine($"[Mirage/mesh] {copied} mesh(es), used 0x{used:X} of 0x{MirageClone.MeshCaveSize:X} MeshCave");
         }
 
         private static int Align16(int n) => (n + 15) & ~15;
@@ -678,27 +712,266 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>One-shot: dump the player's cloth list (+0xC74 → array of up to 4 CCloth ptrs) and each cloth
-        /// object's header, to plan copying it onto the clone.</summary>
-        private static void DumpCloth()
+        /// <summary>Read-only footprint probe for the CURRENTLY-ACTIVE party member: DFS the model tree (child
+        /// +0x138 / sibling +0x13C) for node count + span, sum the software-skinned (CVisualMDTVu1) mesh bytes
+        /// the clone would have to copy (→ MeshCave sizing), and read the cloth list (piece count + grids →
+        /// cloth-cave sizing). Latches per character ID only on a STABLE read (a settled model has many bones),
+        /// so the transitional garbage that made the old one-shot DumpCloth unreliable can't lock in bad data.
+        /// Cycle party members in a dungeon to capture all six — needed to make Mirage usable for any character.</summary>
+        private static void ProbeCharacter()
         {
-            uint list = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & 0x1FFFFFFF;
-            Console.WriteLine($"[Mirage/cloth] player +0xC74 listPtr=0x{list:X}");
-            if (list == 0 || list >= 0x02000000) { Console.WriteLine("[Mirage/cloth] no cloth list on this character"); return; }
-            for (int i = 0; i < 4; i++)
+            int cid = Player.CurrentCharacterNum();
+            uint root = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel) & 0x1FFFFFFF;
+            if (cid < 0 || cid >= 6 || root == 0 || root >= 0x02000000) { _probeCid = -1; return; }
+            // Character switching is LAGGED: CurrentCharacterNum() flips to the new id several frames before the
+            // model at +0xBC actually swaps, so a first-valid read latches the PREVIOUS character's model under the
+            // new id (that's why Toan & Xiao read identically). Require the (id,root) pair to hold STABLE for ≥1s
+            // before reading, and log by CHANGED signature (no permanent latch) so a stale read self-corrects when
+            // you settle on the character again.
+            if (cid != _probeCid || root != _probeRoot) { _probeCid = cid; _probeRoot = root; _probeSince = DateTime.UtcNow; return; }
+            if ((DateTime.UtcNow - _probeSince).TotalMilliseconds < 1000) return;   // not settled yet
+
+            var seen = new System.Collections.Generic.HashSet<uint>();
+            var work = new System.Collections.Generic.Stack<uint>();
+            work.Push(root);
+            int meshes = 0; long meshBytes = 0; uint nodeMin = root, nodeMax = root;
+            bool overflow = false;
+            while (work.Count > 0)
             {
-                uint cloth = (uint)Memory.ReadInt(Memory.ToMmu(list) + i * 4) & 0x1FFFFFFF;
-                if (cloth == 0 || cloth >= 0x02000000) { Console.WriteLine($"[Mirage/cloth] [{i}] null"); continue; }
-                byte[] h = Memory.ReadBytesBatch(Memory.ToMmu(cloth), 0x40);
-                if (h == null) continue;
-                uint vt = (uint)BitConverter.ToInt32(h, 0x08) & 0x1FFFFFFF;
-                uint vu = (uint)BitConverter.ToInt32(h, 0x18) & 0x1FFFFFFF;
-                int  vusz = BitConverter.ToInt32(h, 0x1C);
-                uint b28 = (uint)BitConverter.ToInt32(h, 0x28) & 0x1FFFFFFF;
-                uint b2c = (uint)BitConverter.ToInt32(h, 0x2C) & 0x1FFFFFFF;
-                Console.WriteLine($"[Mirage/cloth] [{i}] obj=0x{cloth:X} vtbl=0x{vt:X} vu=0x{vu:X} vuSz={vusz}(={vusz * 16}B) +0x28=0x{b28:X} +0x2c=0x{b2c:X}");
-                Console.WriteLine($"[Mirage/cloth] [{i}] hdr: {BitConverter.ToString(h, 0, 0x40).Replace("-", " ")}");
+                uint nn = work.Pop();
+                if (nn == 0 || nn >= 0x02000000 || !seen.Add(nn)) continue;
+                if (seen.Count > 512) { overflow = true; break; }
+                if (nn < nodeMin) nodeMin = nn; if (nn > nodeMax) nodeMax = nn;
+                uint vis = (uint)Memory.ReadInt(Memory.ToMmu(nn) + MirageClone.GeomPtr) & 0x1FFFFFFF;
+                if (vis != 0 && vis < 0x02000000)
+                {
+                    uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisMDT) & 0x1FFFFFFF;
+                    if (mdt != 0 && mdt < 0x02000000 && (uint)Memory.ReadInt(Memory.ToMmu(mdt)) == MirageClone.MdtMagic)
+                    {
+                        int vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisVU + 4) * 16;
+                        int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + MirageClone.MdtSizeField);
+                        if (vuSz > 0 && vuSz <= 0x40000 && mdtSz > 0 && mdtSz <= 0x40000)
+                        { meshes++; meshBytes += Align16(MirageClone.VisualSize) + Align16(vuSz) + Align16(mdtSz); }
+                    }
+                }
+                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(nn) + MirageClone.RootChild) & 0x1FFFFFFF;
+                     c != 0 && c < 0x02000000;
+                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & 0x1FFFFFFF)
+                    work.Push(c);
             }
+            int nodes = seen.Count;
+            if (overflow || nodes < 20) return;   // transitional / not settled — retry next tick, don't latch
+            int span = (int)((nodeMax - nodeMin) / 0x270) + 1;
+
+            // cloth pieces + grids + buffer bytes (character-dependent; may still be loading — best-effort)
+            uint clist = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & 0x1FFFFFFF;
+            int cpieces = 0; long cbufBytes = 0; var grids = new System.Text.StringBuilder();
+            if (clist != 0 && clist < 0x02000000)
+                for (int i = 0; i < 4; i++)
+                {
+                    uint co = (uint)Memory.ReadInt(Memory.ToMmu(clist) + i * 4) & 0x1FFFFFFF;
+                    if (co == 0 || co >= 0x02000000) continue;
+                    int r = Memory.ReadInt(Memory.ToMmu(co) + 0x2C), cc = Memory.ReadInt(Memory.ToMmu(co) + 0x30);
+                    uint b0 = (uint)Memory.ReadInt(Memory.ToMmu(co) + 0x24) & 0x1FFFFFFF;
+                    uint b1 = (uint)Memory.ReadInt(Memory.ToMmu(co) + 0x28) & 0x1FFFFFFF;
+                    int bs = (int)(b1 - b0);
+                    cpieces++; cbufBytes += (bs > 0 && bs <= 0x4000) ? bs : 0;
+                    grids.Append($" {r}x{cc}");
+                }
+
+            // Dedupe on the full footprint signature so we log once per settled state and re-log if it later
+            // changes (e.g. cloth finishes loading) — but never spam the same reading.
+            string sig = $"{cid}:{root:X}:{nodes}:{meshBytes:X}:{cpieces}:{cbufBytes:X}";
+            if (sig == _probeLastSig) return;
+            _probeLastSig = sig;
+            string[] names = { "Toan", "Xiao", "Goro", "Ruby", "Ungaga", "Osmond" };
+            Console.WriteLine($"[Mirage/probe] {names[cid]} (id{cid}): nodes={nodes} span={span} root=0x{root:X} | {meshes} MDT mesh(es)=0x{meshBytes:X} (MeshCave 0x{MirageClone.MeshCaveSize:X}) | cloth {cpieces}pc={cpieces}×0x{MirageClone.ClothObjSize:X}obj +0x{cbufBytes:X}buf grids:{grids}");
+        }
+
+        /// <summary>Snapshot the player's cloth pieces into clone-owned copies (frozen drape) and return the guest
+        /// address of a cloth-ptr list to hang off the clone's +0xC74. Each CCloth is a self-contained 0x8550 object
+        /// with no internal cross-refs; the only fix-ups are its draw-packet fields (+0x18 active, +0x24/+0x28
+        /// double-buffer) → a single clone-owned buffer (frozen verts never change, so single-buffering is safe).
+        /// Draw__10CCharacter renders the list automatically; nothing steps it in the dungeon, so it stays frozen at
+        /// the world-space pose captured now (= where the player stands as the decoy plants). Returns the zero stub
+        /// on any read failure so the clone simply gets no cloth rather than a bad pointer.</summary>
+        private static uint CopyCloth()
+        {
+            uint listGuest = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & 0x1FFFFFFF;
+            if (listGuest == 0 || listGuest >= 0x02000000) return (uint)MirageClone.ClothStubGuest;
+
+            // Character-adaptive: walk the WHOLE +0xC74 list (up to ClothMaxPieces) rather than a hardcoded count,
+            // so Xiao/Super Steve's cloth works too. Objects are PACKED DENSELY by success count (not source index)
+            // so gaps in the list don't waste object slots, and both the object and buffer caves are capacity-guarded
+            // (skip-and-log on overflow rather than corrupt). Full 0x8550 copy = physics-ready (Step touches +0x7550+).
+            uint[] cloneList = new uint[MirageClone.ClothMaxPieces];   // guest ptrs; 0 = empty (Draw skips)
+            int copied = 0, bufOff = 0, anchorOff = 0, boundOff = 0;
+            int bufCap = (int)MirageClone.ClothAnchorCave - (int)MirageClone.ClothBufCave;   // room before anchor cave
+            uint modelRoot = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel) & 0x1FFFFFFF;
+            var boundDedupe = new System.Collections.Generic.Dictionary<uint, uint>();   // player bound-head → clone head
+
+            for (int i = 0; i < MirageClone.ClothMaxPieces; i++)
+            {
+                uint srcObj = (uint)Memory.ReadInt(Memory.ToMmu(listGuest) + i * 4) & 0x1FFFFFFF;
+                if (srcObj == 0 || srcObj >= 0x02000000) continue;   // empty list slot
+
+                if (copied >= MirageClone.ClothObjSlots)
+                { Console.WriteLine($"[Mirage/cloth] piece {i}: object cave full ({MirageClone.ClothObjSlots} slots) — skip"); continue; }
+
+                byte[] obj = Memory.ReadBytesBatch(Memory.ToMmu(srcObj), MirageClone.ClothObjSize);
+                if (obj == null) { Console.WriteLine($"[Mirage/cloth] piece {i}: obj read (0x{MirageClone.ClothObjSize:X}) failed @0x{srcObj:X} — skip"); continue; }
+
+                int rows = BitConverter.ToInt32(obj, 0x2C), cols = BitConverter.ToInt32(obj, 0x30);
+                // The two draw buffers (+0x24/+0x28) point at external packets; their gap is the allocated size.
+                uint sBuf0 = (uint)BitConverter.ToInt32(obj, MirageClone.ClothBuf0)     & 0x1FFFFFFF;
+                uint sBuf1 = (uint)BitConverter.ToInt32(obj, MirageClone.ClothBuf0 + 4) & 0x1FFFFFFF;
+                int bufSize = (int)(sBuf1 - sBuf0);
+                if (bufSize <= 0 || bufSize > 0x4000)
+                { Console.WriteLine($"[Mirage/cloth] piece {i}: odd buf span 0x{sBuf0:X}..0x{sBuf1:X} → fallback 0x2000"); bufSize = 0x2000; }
+                bufSize = (bufSize + 0x3F) & ~0x3F;                        // qword-align
+                if (bufOff + bufSize > bufCap) { Console.WriteLine($"[Mirage/cloth] piece {i}: buffer cave full — skip"); continue; }
+
+                uint cloneBufGuest = MirageClone.ClothBufGuest + (uint)bufOff;   // single clone-owned buffer
+                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothActive);       // +0x18 active
+                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothBuf0);         // +0x24 DBuffID0
+                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothBuf0 + 4);     // +0x28 DBuffID1
+                // Leave +0x3c (attach frame) pointing at the player's bone: it's never read while unstepped, and a
+                // valid frame is safer than a null if some path ever did step it.
+
+                long cloneObj      = MirageClone.ClothObjCave  + (long)copied * MirageClone.ClothObjSize;   // DENSE
+                uint cloneObjGuest = MirageClone.ClothObjGuest + (uint)(copied * MirageClone.ClothObjSize);
+                Memory.WriteBytesBatch(cloneObj, obj);
+                cloneList[copied] = cloneObjGuest;
+                bufOff += bufSize;
+                Console.WriteLine($"[Mirage/cloth] piece {i}: grid {rows}x{cols} → obj 0x{cloneObjGuest:X}, buf 0x{bufSize:X} @0x{cloneBufGuest:X}");
+
+                // PHYSICS: re-anchor +0x3c to a clone-space frame so the stepped sim tracks the CLONE skeleton.
+                if (ClothPhysics && _cloneNodeCount > 0)
+                {
+                    uint pAttach = (uint)BitConverter.ToInt32(obj, MirageClone.ClothAttach) & 0x1FFFFFFF;
+                    uint cAttach = ResolveCloneAttach(pAttach, modelRoot, ref anchorOff);
+                    if (cAttach != 0)
+                    { Memory.WriteUInt(cloneObj + MirageClone.ClothAttach, cAttach);
+                      Console.WriteLine($"[Mirage/cloth] piece {i}: attach 0x{pAttach:X} → clone 0x{cAttach:X}"); }
+                    else
+                        Console.WriteLine($"[Mirage/cloth] piece {i}: attach resolve FAILED (0x{pAttach:X}) — cloth would follow player");
+
+                    // Re-anchor the body-collision capsules so the cloth collides with the CLONE, not the player.
+                    uint pBounds = (uint)BitConverter.ToInt32(obj, 0x44) & 0x1FFFFFFF;   // CCloth+0x44 = CBound list
+                    uint cBounds = ResolveCloneBounds(pBounds, modelRoot, ref anchorOff, ref boundOff, boundDedupe);
+                    if (cBounds != 0) Memory.WriteUInt(cloneObj + 0x44, cBounds);
+                }
+                copied++;
+            }
+
+            if (copied == 0) return (uint)MirageClone.ClothStubGuest;
+
+            byte[] listBytes = new byte[MirageClone.ClothMaxPieces * 4];
+            for (int i = 0; i < cloneList.Length; i++) BitConverter.GetBytes(cloneList[i]).CopyTo(listBytes, i * 4);
+            Memory.WriteBytesBatch(MirageClone.ClothListCave, listBytes);
+            Console.WriteLine($"[Mirage/cloth] {copied} piece(s) → clone; {copied}×0x{MirageClone.ClothObjSize:X} obj + 0x{bufOff:X} buf bytes");
+            return MirageClone.ClothListGuest;
+        }
+
+        /// <summary>Resolve a player cloth attach CFrame to a CLONE-space frame whose world matrix follows the
+        /// CLONE skeleton. GetLWMatrix (0x1281b0) recomputes world matrices on-demand by walking +0x110 parents,
+        /// so the sim just needs +0x3c to point at a frame that chains up to the clone tree. The clone tree is a
+        /// contiguous same-offset copy (clone = NodePool + (player − modelRoot)); attach frames INSIDE the tree map
+        /// directly, and frames allocated PAST it are copied into the anchor cave and re-parented to the clone's
+        /// copy of their first in-tree ancestor (child/sibling zeroed so GetLWMatrix never walks back into player
+        /// frames; world cache zeroed to force recompute). Returns 0 (caller keeps player attach) on any failure.</summary>
+        private static uint ResolveCloneAttach(uint playerAttach, uint modelRoot, ref int anchorOff)
+        {
+            if (playerAttach == 0 || playerAttach >= 0x02000000 || modelRoot == 0) return 0;
+            uint treeLo = modelRoot, treeHi = modelRoot + (uint)_cloneNodeCount * 0x270;
+            uint CloneOf(uint p) => (uint)MirageClone.NodePoolGuest + (p - modelRoot);   // in-tree same-offset map
+
+            // Walk out-of-tree ancestors (nearest-first) up to the first in-tree frame.
+            var outChain = new System.Collections.Generic.List<uint>();
+            uint n = playerAttach;
+            while (n != 0 && n < 0x02000000 && !(n >= treeLo && n < treeHi))
+            {
+                outChain.Add(n);
+                if (outChain.Count > 32) return 0;   // runaway guard
+                n = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.Parent) & 0x1FFFFFFF;
+            }
+            if (outChain.Count == 0) return CloneOf(playerAttach);   // attach itself is in-tree
+            uint inTreeAncestor = n;
+            if (inTreeAncestor == 0) return 0;   // chain never reached the tree — can't anchor
+
+            // Copy each out-of-tree frame to the anchor cave; build an old→new(guest) map.
+            var map = new System.Collections.Generic.Dictionary<uint, uint>();
+            foreach (uint f in outChain)
+            {
+                if (MirageClone.ClothAnchorCave + anchorOff + 0x270 > MirageClone.ClothAnchorEnd)
+                { Console.WriteLine("[Mirage/cloth] anchor cave full"); return 0; }
+                byte[] fb = Memory.ReadBytesBatch(Memory.ToMmu(f), 0x270);
+                if (fb == null) return 0;
+                Memory.WriteBytesBatch(MirageClone.ClothAnchorCave + anchorOff, fb);
+                map[f] = MirageClone.ClothAnchorGuest + (uint)anchorOff;
+                anchorOff += 0x270;
+            }
+            // Fix each copy: parent → clone-space, zero child/sibling + world cache.
+            foreach (uint f in outChain)
+            {
+                long copyMmu = MirageClone.ClothAnchorCave + (long)(map[f] - MirageClone.ClothAnchorGuest);
+                uint parent  = (uint)Memory.ReadInt(Memory.ToMmu(f) + MirageClone.Parent) & 0x1FFFFFFF;
+                uint newParent = map.TryGetValue(parent, out uint mp) ? mp : CloneOf(parent);
+                Memory.WriteUInt(copyMmu + MirageClone.Parent,      newParent);
+                Memory.WriteInt (copyMmu + MirageClone.RootChild,   0);
+                Memory.WriteInt (copyMmu + MirageClone.RootSibling, 0);
+                Memory.WriteInt (copyMmu + MirageClone.WorldCacheA, 0);
+                Memory.WriteInt (copyMmu + MirageClone.WorldCacheB, 0);
+            }
+            return map[playerAttach];
+        }
+
+        /// <summary>Copy a cloth's CBound collision list (+0x44) into the clone bound cave and re-anchor each
+        /// capsule's endpoint bones (+0xe4/+0xe8) to the clone skeleton, so the cloth collides against the CLONE's
+        /// body (legs/hips) instead of the player's. Deduped by list head (a character's cloth pieces share one
+        /// body-collision list). Returns the clone list head, or 0 (caller keeps the player list) on failure.</summary>
+        private static uint ResolveCloneBounds(uint playerHead, uint modelRoot, ref int anchorOff, ref int boundOff,
+                                               System.Collections.Generic.Dictionary<uint, uint> dedupe)
+        {
+            if (playerHead == 0 || playerHead >= 0x02000000) return 0;
+            if (dedupe.TryGetValue(playerHead, out uint cached)) return cached;
+
+            var list = new System.Collections.Generic.List<uint>();
+            for (uint b = playerHead; b != 0 && b < 0x02000000 && list.Count < 48;
+                 b = (uint)Memory.ReadInt(Memory.ToMmu(b) + MirageClone.BoundNext) & 0x1FFFFFFF)
+                list.Add(b);
+
+            var map = new System.Collections.Generic.Dictionary<uint, uint>();
+            foreach (uint pb in list)
+            {
+                if (MirageClone.ClothBoundCave + boundOff + MirageClone.BoundSize > MirageClone.ClothBoundEnd)
+                { Console.WriteLine("[Mirage/cloth] bound cave full"); break; }
+                byte[] bb = Memory.ReadBytesBatch(Memory.ToMmu(pb), MirageClone.BoundSize);
+                if (bb == null) break;
+                Memory.WriteBytesBatch(MirageClone.ClothBoundCave + boundOff, bb);
+                map[pb] = MirageClone.ClothBoundGuest + (uint)boundOff;
+                boundOff += MirageClone.BoundSize;
+            }
+            if (map.Count == 0) return 0;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (!map.TryGetValue(list[i], out uint copy)) continue;
+                long copyMmu = MirageClone.ClothBoundCave + (long)(copy - MirageClone.ClothBoundGuest);
+                uint next = (i + 1 < list.Count && map.TryGetValue(list[i + 1], out uint nc)) ? nc : 0;
+                Memory.WriteUInt(copyMmu + MirageClone.BoundNext, next);
+                foreach (int fo in new[] { MirageClone.BoundFrameA, MirageClone.BoundFrameB })
+                {
+                    uint pf = (uint)Memory.ReadInt(Memory.ToMmu(list[i]) + fo) & 0x1FFFFFFF;
+                    if (pf == 0) continue;
+                    uint cf = ResolveCloneAttach(pf, modelRoot, ref anchorOff);
+                    if (cf != 0) Memory.WriteUInt(copyMmu + fo, cf);
+                }
+            }
+            uint head = map[list[0]];
+            dedupe[playerHead] = head;
+            Console.WriteLine($"[Mirage/cloth] bounds: {map.Count} CBound → clone list 0x{head:X}");
+            return head;
         }
 
         /// <summary>Re-assert the ghost's ambient-ADD tint (+0xCE0 RGB) on a chara slot — brighter + blue.</summary>
@@ -723,7 +996,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (slot + MirageClone.CharaActive, 1);
             Memory.WriteFloat(slot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
             WriteGhostTint(slot);
-            Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);
+            Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
+            Memory.WriteInt  (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
 
             // Engine-driven animation: the engine's own chara-step (unlocked via the PNACH step-gate NOP) poses
             // the clone tree at 60fps — no polling. Re-assert the step flags (game may reset between our ticks)

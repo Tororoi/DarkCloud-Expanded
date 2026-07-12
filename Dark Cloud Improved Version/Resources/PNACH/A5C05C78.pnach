@@ -304,16 +304,27 @@ patch=1,EE,21F10020,extended,00000001 //pnach active flag
 //vanilla words — PNACH conditionals don't auto-revert, so without this the NOPs persist after the first cast
 //and the chara loops run every frame, freezing enemy AI), 0 = town (touch nothing; the shared town overlay at
 //these addresses is left to its own overlay reload).
-patch=1,EE,E1040001,extended,01F10038 //if flag == 1 (decoy up): NOP the 4 gates (apply next 4)
+patch=1,EE,E1060001,extended,01F10038 //if flag == 1 (decoy up): NOP the gates (apply next 6)
 patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone draws, enemies keep moving)
 patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula: a2 = charaIndex*4 ...)
 patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11  (... + 0x11 -> chara[0]=0x11 body, chara[3]=0x1d weapon)
 patch=1,EE,21DB79C4,extended,00000000 //  NOP step gate (clone steps → head/hands animate natively)
-patch=1,EE,E1040002,extended,01F10038 //if flag == 2 (dungeon, no decoy): RESTORE vanilla (apply next 4)
+patch=1,EE,21DB7A18,extended,0C04E394 //  chara-loop: jal ClothStep (0x138E50) i/o ShadowStep → clone cloth PHYSICS, drawn via clone (ghost tint, no player flash)
+patch=1,EE,21DB7A1C,extended,70002E28 //  its delay slot: por a1,zero,zero (ClothStep param_2=0 = simulate, matches the player's own call)
+patch=1,EE,E1060002,extended,01F10038 //if flag == 2 (dungeon, no decoy): RESTORE vanilla (apply next 6)
 patch=1,EE,21DAE8A4,extended,10400037 //  restore scene gate  (beq v0,zero)
 patch=1,EE,21DAE8D0,extended,00000000 //  restore delay-slot nop
 patch=1,EE,21DAE8D4,extended,26060020 //  restore texgroup formula  (addiu a2,s0,0x20)
-patch=1,EE,21DB79C4,extended,1060001D //  restore step gate  (beqz v1)
+patch=1,EE,21DB79C4,extended,1060001D //  restore step gate  (beqz v1) — loop gated when no decoy
+patch=1,EE,21DB7A18,extended,0C05583C //  restore jal ShadowStep (0x1560F0) — clone's ground shadow (never reached when loop gated)
+patch=1,EE,21DB7A1C,extended,00000000 //  restore its delay-slot nop
+patch=1,EE,E1060003,extended,01F10038 //if flag == 3 (decoy up + PAUSED): draw the clone but FREEZE it = flag 1 minus the step-gate NOP (apply next 6)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone STILL drawn while paused)
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula — weapon pass)
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11
+patch=1,EE,21DB79C4,extended,1060001D //  RESTORE step gate (beqz v1) — loop gated → clone body+cloth frozen (the ONLY diff vs flag 1)
+patch=1,EE,21DB7A18,extended,0C04E394 //  keep jal ClothStep (loop gated → unreached; matches flag 1 to avoid jal churn)
+patch=1,EE,21DB7A1C,extended,70002E28 //  keep por a1,zero,zero
 
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
