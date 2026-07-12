@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// Ungaga's "Mirage" (weapon 354): releasing a charge plants a stationary DECOY at the player's spot.
-    /// While it lives (15s, refreshed by a new charge), enemies path toward the decoy instead of the
+    /// While it lives (10s, refreshed by a new charge), enemies path toward the decoy instead of the
     /// player — PER ENEMY, so an enemy you HIT drops the illusion and re-targets you.
     ///
     /// Hard-won implementation (6 crashes): two independent PCSX2 limits. (1) Patching HOT, actively-
@@ -18,10 +18,12 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class Mirage
     {
-        private const double DecoySeconds = 15.0;
+        private const double DecoySeconds = 10.0;
         private const int    FastTickMs   = 25;    // table maintenance cadence while armed + in a dungeon
         private const int    IdleTickMs   = 150;
-        private const int    GuardLoopMotion = 9;  // Ungaga's guard-hold loop (spawn here, not on guard-enter)
+        private const int    GuardLoopMotion = 9;   // Ungaga's guard-hold loop (spawn here, not on guard-enter)
+        private const int    GuardMoveMotion = 33;  // guard-while-moving; the hold pose oscillates 9<->33 under R1
+        private const int    GuardChargeMs   = 500; // hold the guard pose this long before the flash + decoy fire
 
         private static bool _armed;                 // in-place patch installed this session (cold)
         private static bool _armMismatchLogged;
@@ -43,9 +45,9 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_armed) return;
             bool ours = true;
-            for (int i = 0; i < MirageDecoy.PatchNew.Length; i++)
-                if ((uint)Memory.ReadInt(MirageDecoy.PatchAddr + i * 4L) != MirageDecoy.PatchNew[i]) { ours = false; break; }
-            if (ours) { _armed = true; return; }
+            for (int i = 0; i < MirageDecoy.PosNew.Length; i++)
+                if ((uint)Memory.ReadInt(MirageDecoy.PosAddrs[i]) != MirageDecoy.PosNew[i]) { ours = false; break; }
+            if (ours) { ArmDistPatch(); _armed = true; return; }   // pos patch already live (mod restart) — ensure dist too
 
             if (Player.InDungeonFloor())
             {
@@ -57,23 +59,42 @@ namespace Dark_Cloud_Improved_Version
 
             bool ok =
                 (uint)Memory.ReadInt(MirageDecoy.CheckM2Addr)  == MirageDecoy.CheckM2  &&
-                (uint)Memory.ReadInt(MirageDecoy.CheckBneAddr) == MirageDecoy.CheckBne &&
-                (uint)Memory.ReadInt(MirageDecoy.CheckJalAddr) == MirageDecoy.CheckJal;
-            for (int i = 0; i < MirageDecoy.PatchOrig.Length && ok; i++)
-                if ((uint)Memory.ReadInt(MirageDecoy.PatchAddr + i * 4L) != MirageDecoy.PatchOrig[i]) ok = false;
+                (uint)Memory.ReadInt(MirageDecoy.CheckBneAddr) == MirageDecoy.CheckBne;
+            for (int i = 0; i < MirageDecoy.PosOrig.Length && ok; i++)
+                if ((uint)Memory.ReadInt(MirageDecoy.PosAddrs[i]) != MirageDecoy.PosOrig[i]) ok = false;
             if (!ok)
             {
                 if (!_armMismatchLogged)
-                    Console.WriteLine($"[Mirage] _GET_POSITION @0x{MirageDecoy.PatchAddr:X} strong-context check FAILED — redirect disabled");
+                    Console.WriteLine($"[Mirage] _GET_POSITION @0x{MirageDecoy.PosAddrs[0]:X} strong-context check FAILED — redirect disabled");
                 _armMismatchLogged = true;
                 return;
             }
 
-            FillWholeTablePlayer();                                   // valid before any enemy reads it
-            foreach (int i in MirageDecoy.ApplyOrder)                 // torn-safe (moot when cold, kept anyway)
-                Memory.WriteUInt(MirageDecoy.PatchAddr + i * 4L, MirageDecoy.PatchNew[i]);
+            FillWholeTablePlayer();                                   // every slot → live-player pointer (valid first read)
+            for (int i = 0; i < MirageDecoy.PosAddrs.Length; i++)     // torn-safe (moot when cold)
+                Memory.WriteUInt(MirageDecoy.PosAddrs[i], MirageDecoy.PosNew[i]);
+            ArmDistPatch();
+
             _armed = true;
-            Console.WriteLine($"[Mirage] redirect armed COLD (in-place @0x{MirageDecoy.PatchAddr:X})");
+            Console.WriteLine($"[Mirage] redirect armed COLD (pointer indirection @0x{MirageDecoy.PosAddrs[0]:X})");
+        }
+
+        /// <summary>Redirect the ATTACK-TRIGGER distance query (_GET_DISTANCE, param==1 player branch) to the
+        /// same per-slot pointer table as the position redirect, so fooled enemies trigger attacks on the DECOY's
+        /// range and un-fooled ones on the live player. Idempotent + strong-context verified; a no-op if already
+        /// applied. Cold-safe (called only from the town-side arm path, before enemy AI runs).</summary>
+        private static void ArmDistPatch()
+        {
+            if ((uint)Memory.ReadInt(MirageDecoy.DistAddrs[0]) == MirageDecoy.DistNew[0]) return;   // frame resize already live
+
+            // Verify EVERY original word before writing ANY — a partial frame resize (prologue without epilogue,
+            // or vice-versa) leaves the stack unbalanced and crashes. Cold window, so no torn-execution risk.
+            for (int i = 0; i < MirageDecoy.DistAddrs.Length; i++)
+                if ((uint)Memory.ReadInt(MirageDecoy.DistAddrs[i]) != MirageDecoy.DistOrig[i])
+                { Console.WriteLine($"[Mirage] _GET_DISTANCE context check FAILED @0x{MirageDecoy.DistAddrs[i]:X} — attack range NOT redirected"); return; }
+            for (int i = 0; i < MirageDecoy.DistAddrs.Length; i++)
+                Memory.WriteUInt(MirageDecoy.DistAddrs[i], MirageDecoy.DistNew[i]);
+            Console.WriteLine("[Mirage] attack-distance redirect armed (_GET_DISTANCE → per-slot pointer table; un-fooled = live player)");
         }
 
         /// <summary>Patch the dungeon draw's chara-loop scene gate so the clone draws while enemies keep
@@ -100,7 +121,8 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Loop()
         {
-            bool prevGuard = false;
+            bool guardLatched = false;
+            DateTime guardPoseSince = default;
             while (true)
             {
                 int sleep = IdleTickMs;
@@ -118,14 +140,26 @@ namespace Dark_Cloud_Improved_Version
 
                         if (ungagaMirage && !Player.CheckDunIsPaused())
                         {
-                            // Plant the decoy when the player settles into the guard LOOP (motion 9), not the
-                            // guard-ENTER transition — so the clone captures and loops the clean guard pose.
-                            // Fires on the rising edge of "in guard loop"; refreshes on a new guard.
+                            // Plant the decoy ONCE per guard-hold: the held-guard pose oscillates between motion 9
+                            // (loop) and 33 (move) under R1, so we can't edge-trigger on a single motion. Latch on
+                            // the first hold-pose motion while guarding and only clear the latch when R1 is released
+                            // (guard exited) — so re-entering guard plants a fresh decoy, but 9<->33 doesn't.
                             bool guarding = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
-                            bool inGuardLoop = guarding &&
-                                Memory.ReadInt(MirageClone.PlayerChar + MirageClone.MotionId) == GuardLoopMotion;
-                            if (inGuardLoop && !prevGuard) PlaceDecoy();
-                            prevGuard = inGuardLoop;
+                            int  mid = Memory.ReadInt(MirageClone.PlayerChar + MirageClone.MotionId);
+                            bool inGuardPose = guarding && (mid == GuardLoopMotion || mid == GuardMoveMotion);
+                            if (!guarding) { guardLatched = false; guardPoseSince = default; }   // released guard → re-arm
+                            if (inGuardPose && !guardLatched)
+                            {
+                                // Hold the guard pose for GuardChargeMs, THEN flash the player (Mobius-charge
+                                // style) and plant the decoy at that same moment. One flash+decoy per guard-hold.
+                                if (guardPoseSince == default) guardPoseSince = DateTime.UtcNow;
+                                else if (DateTime.UtcNow - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
+                                {
+                                    Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1);
+                                    PlaceDecoy();
+                                    guardLatched = true;
+                                }
+                            }
                             if (_decoyActive) UpdateDecoyState();
                         }
                         else if (_decoyActive && Player.CheckDunIsPaused())
@@ -138,12 +172,12 @@ namespace Dark_Cloud_Improved_Version
                             DespawnClone();
                         }
 
-                        WriteTable();
+                        WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
                         sleep = FastTickMs;
                     }
                     else
                     {
-                        prevGuard = false;
+                        guardLatched = false;
                         if (_decoyActive || _cloneSlot >= 0) { _decoyActive = false; DespawnClone(); }
                     }
                 }
@@ -158,6 +192,7 @@ namespace Dark_Cloud_Improved_Version
             _dx = Memory.ReadFloat(Addresses.dunPositionX);
             _dz = Memory.ReadFloat(Addresses.dunPositionZ);
             _dy = Memory.ReadFloat(Addresses.dunPositionY);
+            WriteDecoyPos();   // the stationary decoy position fooled slots' pointers reference
             Array.Clear(_fooled, 0, _fooled.Length);
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
             _prevHp = ReusableFunctions.GetEnemiesHp();
@@ -192,40 +227,37 @@ namespace Dark_Cloud_Improved_Version
             _prevHp = hp;
         }
 
-        /// <summary>One batched write of the managed slots: fooled → decoy, otherwise → live player.</summary>
+        /// <summary>One batched write of the managed slots' POINTERS: fooled → DecoyPos, else → the live player
+        /// global. Un-fooled entries are the live-player address itself, so those enemies read the engine-live
+        /// player (vanilla) — the mod only flips a pointer when a slot's fooled state changes.</summary>
         private static void WriteTable()
         {
-            float px = Memory.ReadFloat(Addresses.dunPositionX);
-            float pz = Memory.ReadFloat(Addresses.dunPositionZ);
-            float py = Memory.ReadFloat(Addresses.dunPositionY);
-            var buf = new byte[MirageDecoy.MaxSlots * MirageDecoy.SlotStride];
+            var buf = new byte[MirageDecoy.MaxSlots * MirageDecoy.PtrStride];
             for (int s = 0; s < MirageDecoy.MaxSlots; s++)
-            {
-                int b = s * MirageDecoy.SlotStride;
-                float x = _fooled[s] ? _dx : px, z = _fooled[s] ? _dz : pz, y = _fooled[s] ? _dy : py;
-                BitConverter.GetBytes(x).CopyTo(buf, b);
-                BitConverter.GetBytes(z).CopyTo(buf, b + 4);
-                BitConverter.GetBytes(y).CopyTo(buf, b + 8);
-                BitConverter.GetBytes(1.0f).CopyTo(buf, b + 12);
-            }
-            Memory.WriteBytesBatch(MirageDecoy.TableAddr, buf);
+                BitConverter.GetBytes(_fooled[s] ? MirageDecoy.DecoyPosGuest : MirageDecoy.PlayerPosGuest)
+                    .CopyTo(buf, s * MirageDecoy.PtrStride);
+            Memory.WriteBytesBatch(MirageDecoy.PtrTable, buf);
         }
 
+        /// <summary>Point every slot at the live player global (vanilla) — done at cold-arm before any enemy reads,
+        /// so out-of-range slots and the pre-first-tick window are valid without the mod having run.</summary>
         private static void FillWholeTablePlayer()
         {
-            float px = Memory.ReadFloat(Addresses.dunPositionX);
-            float pz = Memory.ReadFloat(Addresses.dunPositionZ);
-            float py = Memory.ReadFloat(Addresses.dunPositionY);
-            var buf = new byte[MirageDecoy.TableSlots * MirageDecoy.SlotStride];
+            var buf = new byte[MirageDecoy.TableSlots * MirageDecoy.PtrStride];
             for (int s = 0; s < MirageDecoy.TableSlots; s++)
-            {
-                int b = s * MirageDecoy.SlotStride;
-                BitConverter.GetBytes(px).CopyTo(buf, b);
-                BitConverter.GetBytes(pz).CopyTo(buf, b + 4);
-                BitConverter.GetBytes(py).CopyTo(buf, b + 8);
-                BitConverter.GetBytes(1.0f).CopyTo(buf, b + 12);
-            }
-            Memory.WriteBytesBatch(MirageDecoy.TableAddr, buf);
+                BitConverter.GetBytes(MirageDecoy.PlayerPosGuest).CopyTo(buf, s * MirageDecoy.PtrStride);
+            Memory.WriteBytesBatch(MirageDecoy.PtrTable, buf);
+        }
+
+        /// <summary>Write the stationary decoy position (x,z,y,w) that fooled slots' pointers reference.</summary>
+        private static void WriteDecoyPos()
+        {
+            var b = new byte[16];
+            BitConverter.GetBytes(_dx).CopyTo(b, 0);
+            BitConverter.GetBytes(_dz).CopyTo(b, 4);
+            BitConverter.GetBytes(_dy).CopyTo(b, 8);
+            BitConverter.GetBytes(1.0f).CopyTo(b, 12);
+            Memory.WriteBytesBatch(MirageDecoy.DecoyPos, b);
         }
 
         private static bool IsLiveEnemy(int s)
@@ -242,8 +274,6 @@ namespace Dark_Cloud_Improved_Version
         private const bool  EngineDrivenAnim = true;     // let the engine's chara-step pose the clone tree natively (no polling)
         private const bool  IndependentMesh = true;      // copy the software-skinned body meshes → fully independent clone
         private const bool  WeaponEnabled   = true;      // graft the equipped weapon onto the clone's hand bone
-        private const bool  SyncMotionToPlayer = false;  // was syncing clone +0xc68 to the player each tick — clamps the clone's animation;
-                                                         // OFF = clone free-runs its own motion (test: does decoupling change the flicker?)
         private const float GhostOpacity = 90f;          // of 128; lower = more see-through
         private const float GhostDim     = 1.0f;         // full lighting so any resident character texture shows
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
@@ -282,10 +312,15 @@ namespace Dark_Cloud_Improved_Version
             if (buf == null) { _cloneSlot = -1; return; }
             BitConverter.GetBytes((uint)MirageClone.ClothStubGuest).CopyTo(buf, MirageClone.ClothList);
             BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, MirageClone.DimFactor);
-            // Keep the copied player MotionId (+0xC68 >= 0) so the engine's chara-step (unlocked via the PNACH
-            // step-gate NOP) drives SetMotionEX on the clone tree → head/hands animate natively, no polling.
+            // PIN the clone to the guard-loop motion instead of whatever the player was mid-doing at spawn. The
+            // engine's chara-step (unlocked via the PNACH step-gate NOP) reads +0xC68 every frame → SetMotionEX,
+            // so a stale/transition capture would stick. Force motion 9 and set the clean-restart flag (+0xC64
+            // bit2) so the first step starts it at frame 0 with no blend. MaintainClone re-asserts +0xC68 = 9.
             // NOTE: leave +0xC60 (motion speed) at the copied player value — native speed. A near-zero override
             // made MotionProc loop-to-freeze covering a motion span by 0.001-steps.
+            BitConverter.GetBytes(GuardLoopMotion).CopyTo(buf, MirageClone.MotionId);
+            BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, MirageClone.MotionFlags) | (uint)MirageClone.MotionRestart)
+                .CopyTo(buf, MirageClone.MotionFlags);
             BitConverter.GetBytes(GhostSilhouette ? GhostOpacity : 128f).CopyTo(buf, MirageClone.NpcOpacity);  // +0xcec (Draw needs >0)
             for (int o = MirageClone.LightFrom; o < MirageClone.LightTo; o += 4) BitConverter.GetBytes(0).CopyTo(buf, o);
             // Keep the copied tex-anime object (+0xdc) intact — it selects the face/skin textures; zeroing it
@@ -647,17 +682,13 @@ namespace Dark_Cloud_Improved_Version
 
             // Engine-driven animation: the engine's own chara-step (unlocked via the PNACH step-gate NOP) poses
             // the clone tree at 60fps — no polling. Re-assert the step flags (game may reset between our ticks)
-            // and mirror the player's current MotionId so the clone plays whatever the player is doing. The
-            // near-zero motion speed keeps it posing at the player's shared frame without double-advancing it.
+            // and HOLD motion 9 (guard loop) so the clone stays in a clean guard pose regardless of what the
+            // player is doing — the step reads +0xC68 each frame, so pinning it here keeps the motion stable.
             if (EngineDrivenAnim)
             {
-                Memory.WriteInt  (slot + MirageClone.CharaMotionA, 1);
-                Memory.WriteInt  (slot + MirageClone.CharaRampA,   0);
-                if (SyncMotionToPlayer)
-                {
-                    int pmid = Memory.ReadInt(MirageClone.PlayerChar + MirageClone.MotionId);
-                    if (pmid >= 0) Memory.WriteInt(slot + MirageClone.MotionId, pmid);   // mirror the player's action (clamps clone)
-                }
+                Memory.WriteInt(slot + MirageClone.CharaMotionA, 1);
+                Memory.WriteInt(slot + MirageClone.CharaRampA,   0);
+                Memory.WriteInt(slot + MirageClone.MotionId,     GuardLoopMotion);
             }
             // (Legacy per-tick TRS poll disabled: it fought the 60fps step and read as jitter.)
 

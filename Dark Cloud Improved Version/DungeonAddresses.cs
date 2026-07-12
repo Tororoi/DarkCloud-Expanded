@@ -294,30 +294,59 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class MirageDecoy
     {
-        // Per-enemy redirect, CAVE-FREE + cold-applied. Native code in a PINE-written cave crashes PCSX2
-        // when a fresh path is first executed, and patching HOT code crashes it too — so we do BOTH the
-        // safe things: a 5-word IN-PLACE rewrite (no jump to a fresh page — runs in _GET_POSITION's own
-        // already-compiled block) applied ONLY at the cold window (in-game entry, before _GET_POSITION
-        // has ever run). a1 = TABLE + $s2*0x20 (a plain DATA table). 0x1E1E7C (jal) stays; the a0-setup
-        // moves into the jal's delay slot.
-        //   0x1E1E70 sll at,s2,5 | 0x1E1E74 lui a1,0x01F3 | 0x1E1E78 addu a1,a1,at | 0x1E1E7C jal | 0x1E1E80 addiu a0,sp,0x40
-        internal const long PatchAddr   = 0x201E1E70;
-        internal static readonly uint[] PatchOrig = { 0x27A40040, 0x3C0201EA, 0x24451D30, 0x0C04860C, 0x00000000 };
-        internal static readonly uint[] PatchNew  = { 0x00120940, 0x3C0501F3, 0x00A12821, 0x0C04860C, 0x27A40040 };
-        internal static readonly int[] ApplyOrder = { 4, 0, 1, 2 };   // idx3 (jal) never written; torn-safe
+        // PER-ENEMY DECOY REDIRECT (pointer indirection). Enemy AI reads its target's position via _GET_POSITION
+        // (ELF 0x1E1DF0) and its attack range via _GET_DISTANCE (0x1E1D00); both read the PLAYER global 0x1EA1D30
+        // directly. We redirect BOTH to a per-slot POINTER table: PtrTable[slot] holds the ADDRESS to read the
+        // 16-byte position from. An un-fooled slot's pointer IS the live player global, so the enemy reads the
+        // engine-live player — bit-identical vanilla, zero staleness, mod NOT in the loop. A fooled slot's pointer
+        // is DecoyPos (a stationary decoy the mod writes once). So no-decoy play is untouched; only fooled enemies
+        // chase/attack the decoy, and a mod stall can't affect un-fooled reads (their pointer is static). Both are
+        // IN-PLACE + COLD-applied (PINE can't write hot EE code); the extra deref word rides each bne delay slot.
+        internal const long PtrTable       = 0x21F30000; // guest 0x01F30000; entry slot = a 4-byte position POINTER
+        internal const int  PtrStride      = 4;
+        internal const int  TableSlots     = 256;
+        internal const int  MaxSlots       = 20;          // slots the mod actively manages (FloorSlots is 16)
+        internal const long DecoyPos       = 0x21F30400;  // guest 0x01F30400; 16 bytes (x,z,y,w) — the decoy position
+        internal const uint DecoyPosGuest  = 0x01F30400;  // written into fooled slots' pointer entries
+        internal const uint PlayerPosGuest = 0x01EA1D30;  // the live player global — un-fooled slots point here
+        internal static long PtrAddr(int slot) => PtrTable + (long)slot * PtrStride;
 
-        internal const long CheckM2Addr  = 0x201E1E64;  internal const uint CheckM2  = 0x2402FFFE; // addiu v0,-2
-        internal const long CheckBneAddr = 0x201E1E68;  internal const uint CheckBne = 0x16020006; // bne s0,v0
-        internal const long CheckJalAddr = 0x201E1E7C;  internal const uint CheckJal = 0x0C04860C; // jal sceVu0CopyVector
+        // _GET_POSITION player branch → a1 = *(PtrTable + slot*4). The slot*4 shift lands in the bne delay slot
+        // (0x1E1E6C) so the deref (lw a1) fits; jal 0x1E1E7C stays, a0 dest → its delay slot, and the player path
+        // still falls through to the shared SetStack tail at 0x1E1E84 (jal returns there).
+        //   6C sll at,s2,2 | 70 lui a1,0x01F3 | 74 addu a1,a1,at | 78 lw a1,0(a1) | 7C jal | 80 addiu a0,sp,0x40
+        internal static readonly long[] PosAddrs = { 0x201E1E6C, 0x201E1E70, 0x201E1E74, 0x201E1E78, 0x201E1E7C, 0x201E1E80 };
+        internal static readonly uint[] PosOrig  = { 0x00000000, 0x27A40040, 0x3C0201EA, 0x24451D30, 0x0C04860C, 0x00000000 };
+        internal static readonly uint[] PosNew   = { 0x00120880, 0x3C0501F3, 0x00A12821, 0x8CA50000, 0x0C04860C, 0x27A40040 };
+        internal const long CheckM2Addr  = 0x201E1E64;  internal const uint CheckM2  = 0x2402FFFE; // addiu v0,-2 (context)
+        internal const long CheckBneAddr = 0x201E1E68;  internal const uint CheckBne = 0x16020006; // bne s0,v0 → 0x1E1E84
 
-        // The redirect is UNCONDITIONAL while applied, so the table must always hold the real player
-        // position for un-fooled slots (a fast maintenance loop keeps it current); fooled slots hold the
-        // decoy. Entry = 4 floats (x,z,y,w) at offset 0. Sized large so any in-range $s2 is valid.
-        internal const long TableAddr   = 0x21F30000;
-        internal const int  SlotStride  = 0x20;         // a1 = TableAddr + slot*0x20
-        internal const int  TableSlots  = 256;          // 8KB
-        internal const int  MaxSlots    = 20;           // slots the mod actively manages (FloorSlots is 16)
-        internal static long PosAddr(int slot) => TableAddr + (long)slot * SlotStride;
+        // _GET_DISTANCE param==1 branch → same pointer table. The slot lives in $v1 but the monster-position call
+        // clobbers it and no callee-saved reg is free ($s0=param_2, $s1=param_1, and $s1 is reused for SetStack +
+        // the explicit-branch stack ptr). So we SPILL param_1 to an enlarged frame (−0x50→−0x60, spill at sp+0x50
+        // above the copy dest), free $s1 to carry the slot across the call, reload param_1 at its two reuse sites,
+        // and the slot*4 shift rides the bne delay slot (0x1E1D54). Verify ALL before writing ANY (a partial frame
+        // resize = unbalanced stack = crash). 12 cold edits; jal 0x1E1D64 + b 0x1E1D6C stay.
+        internal static readonly long[] DistAddrs = {
+            0x201E1D00, 0x201E1D10, 0x201E1D1C, 0x201E1D24, 0x201E1D54, 0x201E1D58,
+            0x201E1D5C, 0x201E1D60, 0x201E1D68, 0x201E1D74, 0x201E1DC0, 0x201E1DE0 };
+        internal static readonly uint[] DistOrig = {
+            0x27BDFFB0, 0x70808E28, 0x8C830090, 0x00621018, 0x00000000, 0x27A40040,
+            0x3C0201EA, 0x24451D30, 0x00000000, 0x72202628, 0x72202628, 0x27BD0050 };
+        internal static readonly uint[] DistNew = {
+            0x27BDFFA0,  // addiu sp,sp,-0x60         prologue: enlarge frame for the param_1 spill slot
+            0xAFA40050,  // sw a0,0x50(sp)            spill param_1 (was por s1,a0) → frees $s1
+            0x8C910090,  // lw s1,0x90(a0)            slot into $s1 (was $v1)
+            0x02221018,  // mult v0,s1,v0             monster-unit offset now reads the slot from $s1
+            0x00110880,  // sll at,s1,2               bne delay slot: at = slot*4
+            0x3C0501F3,  // lui a1,0x01F3
+            0x00A12821,  // addu a1,a1,at             a1 = PtrTable + slot*4
+            0x8CA50000,  // lw a1,0(a1)               deref → a1 = position pointer (player global or decoy)
+            0x27A40040,  // addiu a0,sp,0x40          dest (jal delay slot; jal 0x1E1D64 + b 0x1E1D6C kept)
+            0x8FA40050,  // lw a0,0x50(sp)            reload param_1 (was por a0,s1) — explicit branch
+            0x8FA40050,  // lw a0,0x50(sp)            reload param_1 (was por a0,s1) — SetStack tail
+            0x27BD0060   // addiu sp,sp,0x60          epilogue: matching frame restore
+        };
     }
 
     /// <summary>
@@ -530,6 +559,8 @@ namespace Dark_Cloud_Improved_Version
         // to -1 stops the enemy re-posing our foreign clone tree (the likely delayed-crash cause) and holds
         // the snapshot stance.
         internal const int  MotionId      = 0xC68;
+        internal const int  MotionFlags   = 0xC64;   // Step__10CCharacter per-step motion flags; bit2 (0x4) = clean
+        internal const int  MotionRestart = 0x4;     //   restart (reset to frame 0, no blend), consumed once by the step
     }
 
     /// <summary>
