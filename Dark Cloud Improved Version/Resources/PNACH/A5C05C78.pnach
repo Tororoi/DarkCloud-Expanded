@@ -297,20 +297,23 @@ patch=1,EE,20240364,extended,3C024000 //more consistentfishing
 
 patch=1,EE,21F10020,extended,00000001 //pnach active flag
 
-//Ungaga Mirage: NOP the dungeon chara-loop "scene" gate at 0x1DAE8A4 (beq v0,zero = 0x10400037) so the
-//decoy clone draws (Draw__11CSeireiKing's 6-chara loop) while iGpffff9e18 stays 0 and enemies keep moving.
-//PINE can't write this (crashes PCSX2) — PCSX2 applies it. Gated on flag 0x01F10038 (mod sets =1 only while
-//a decoy is active in a dungeon, 0 otherwise) so it never NOPs the town overlay that shares this address.
-patch=1,EE,E1030001,extended,01F10038 //if Mirage scene-gate flag == 1 (apply next 3)
-patch=1,EE,21DAE8A4,extended,00000000 //  NOP the chara-loop scene gate (clone draws, enemies keep moving)
-patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2 (was the beqz delay-slot nop): a2 = charaIndex*4
-patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11: per-chara texgroup = i*4 + 0x11 -> chara[0]=0x11 (body),
-//                                       chara[3]=0x1d (weapon). Compresses the linear i+0x20 formula so the clone's
-//                                       body and its weapon (drawn as chara slot 3) each get their correct atlas in
-//                                       separate passes. Only slots 0 & 3 are registered, so 0x15/0x19/... never draw.
-patch=1,EE,21DB79C4,extended,00000000 //  NOP ShisaiShadow's chara-STEP gate (beqz v1 = 0x1060001D, gated by the same
-//                                       iGpffff9e18): lets the engine's 6-chara step loop run in combat so it poses the
-//                                       clone tree via SetMotionEX natively (head/hands animate) — no PINE polling.
+//Ungaga Mirage chara-loop gates (0x1DAE8A4 scene-draw + 0x1DB79C4 ShisaiShadow step, both beq/beqz on
+//iGpffff9e18) so the decoy clone draws + steps while enemies keep moving; plus the per-chara texgroup formula
+//(0x1DAE8D0/D4) for the weapon's separate texture pass. PINE can't write these (crashes PCSX2) — PCSX2 applies
+//them. THREE-STATE flag 0x01F10038: 1 = decoy up (NOP the gates), 2 = in a dungeon with no decoy (RESTORE the
+//vanilla words — PNACH conditionals don't auto-revert, so without this the NOPs persist after the first cast
+//and the chara loops run every frame, freezing enemy AI), 0 = town (touch nothing; the shared town overlay at
+//these addresses is left to its own overlay reload).
+patch=1,EE,E1040001,extended,01F10038 //if flag == 1 (decoy up): NOP the 4 gates (apply next 4)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone draws, enemies keep moving)
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula: a2 = charaIndex*4 ...)
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11  (... + 0x11 -> chara[0]=0x11 body, chara[3]=0x1d weapon)
+patch=1,EE,21DB79C4,extended,00000000 //  NOP step gate (clone steps → head/hands animate natively)
+patch=1,EE,E1040002,extended,01F10038 //if flag == 2 (dungeon, no decoy): RESTORE vanilla (apply next 4)
+patch=1,EE,21DAE8A4,extended,10400037 //  restore scene gate  (beq v0,zero)
+patch=1,EE,21DAE8D0,extended,00000000 //  restore delay-slot nop
+patch=1,EE,21DAE8D4,extended,26060020 //  restore texgroup formula  (addiu a2,s0,0x20)
+patch=1,EE,21DB79C4,extended,1060001D //  restore step gate  (beqz v1)
 
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value

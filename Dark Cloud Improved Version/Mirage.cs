@@ -83,8 +83,54 @@ namespace Dark_Cloud_Improved_Version
         /// same per-slot pointer table as the position redirect, so fooled enemies trigger attacks on the DECOY's
         /// range and un-fooled ones on the live player. Idempotent + strong-context verified; a no-op if already
         /// applied. Cold-safe (called only from the town-side arm path, before enemy AI runs).</summary>
+        /// <summary>Host a CLEAN _GET_DISTANCE in a cold-PINE cave and repoint the STB dispatch slot at it —
+        /// no in-place surgery. Byte-copies the vanilla function (self-contained: absolute jal, PC-relative
+        /// branches), then detours only the param==1 player branch: `addiu a0,sp,0x40` (dest) stays, but the
+        /// hardcoded `0x1EA1D30` load (+0x5C/+0x60) becomes `j helper / nop`. The helper (cave+0x100) sets
+        /// a1 = *(PtrTable + slot*4) — the per-slot target the mod maintains (fooled→decoy, else→player) —
+        /// and jumps back to the sceVu0CopyVector jal at +0x64. Explicit-coord queries (param!=1) are untouched.
+        /// Reuses the same pointer table _GET_POSITION reads, so distance = engine-fresh DistVector to the
+        /// per-enemy target, with none of the frame-spill fragility the in-place version had.</summary>
+        internal static void ArmDistCave()
+        {
+            const long distFn    = 0x201E1D00;   // vanilla _GET_DISTANCE
+            const int  fnSize    = 0xF0;
+            const long cave      = 0x21F34000;   // free gap in the proven-clean region (past RootBuf, before NodePool)
+            const uint caveGuest = 0x01F34000;
+            const long tblEntry  = 0x202918A0;   // dispatch: _GET_DISTANCE funcPtr slot
+
+            uint cur = (uint)Memory.ReadInt(tblEntry);
+            if (cur == caveGuest) { Console.WriteLine("[Mirage/cave] _GET_DISTANCE cave already armed"); return; }
+            if (cur != 0x001E1D00) { Console.WriteLine($"[Mirage/cave] dispatch slot = 0x{cur:X} (expected _GET_DISTANCE) — abort"); return; }
+
+            byte[] fn = Memory.ReadBytesBatch(distFn, fnSize);
+            if (fn == null) { Console.WriteLine("[Mirage/cave] fn read failed"); return; }
+            BitConverter.GetBytes(0x087CD040u).CopyTo(fn, 0x5C);   // j 0x01F34100 (helper) — was lui v0,0x1ea
+            BitConverter.GetBytes(0x00000000u).CopyTo(fn, 0x60);   // nop (j delay) — was addiu a1,v0,0x1d30
+
+            uint[] helper = {
+                0x8F889CE0,  // lw   t0, -0x6320(gp)   ; NowMonstorUnit
+                0x8D080090,  // lw   t0, 0x90(t0)      ; slot
+                0x00084080,  // sll  t0, t0, 2         ; slot*4
+                0x3C0501F3,  // lui  a1, 0x01F3
+                0x00A82821,  // addu a1, a1, t0        ; PtrTable + slot*4
+                0x8CA50000,  // lw   a1, 0(a1)         ; a1 = target pointer (player global or decoy)
+                0x087CD019,  // j    0x01F34064        ; back to the sceVu0CopyVector jal
+                0x00000000   // nop (j delay)
+            };
+            byte[] hb = new byte[helper.Length * 4];
+            for (int i = 0; i < helper.Length; i++) BitConverter.GetBytes(helper[i]).CopyTo(hb, i * 4);
+
+            Memory.WriteBytesBatch(cave, fn);
+            Memory.WriteBytesBatch(cave + 0x100, hb);
+            Memory.WriteUInt(tblEntry, caveGuest);
+            Console.WriteLine($"[Mirage/cave] _GET_DISTANCE → clean cave @0x{caveGuest:X} (per-slot pointer, no in-place surgery). readback 0x{(uint)Memory.ReadInt(tblEntry):X}");
+        }
+
+        private const bool EnableDistPatch = false;   // in-place _GET_DISTANCE retired — now hosted in the cave (ArmDistCave)
         private static void ArmDistPatch()
         {
+            if (!EnableDistPatch) { Console.WriteLine("[Mirage] _GET_DISTANCE patch DISABLED (isolation test — only _GET_POSITION active)"); return; }
             if ((uint)Memory.ReadInt(MirageDecoy.DistAddrs[0]) == MirageDecoy.DistNew[0]) return;   // frame resize already live
 
             // Verify EVERY original word before writing ANY — a partial frame resize (prologue without epilogue,
@@ -133,6 +179,10 @@ namespace Dark_Cloud_Improved_Version
 
                     if (_armed && inDun)
                     {
+                        if (!_clothDiagDone && Player.CurrentCharacterNum() == Player.UngagaId)
+                        { _clothDiagDone = true; DumpCloth(); }   // one-shot: UNGAGA's cloth layout (not Toan's)
+                        DumpEnemyAI();   // throttled: Lich/Diamond state to catch the AI mess-up
+
                         // Keep un-fooled slots on the live player (the patch reads the table for EVERY
                         // enemy, always) and fooled slots on the decoy — one batched write per fast tick.
                         bool ungagaMirage = Player.Weapon.GetCurrentWeaponId() == Items.mirage &&
@@ -173,12 +223,17 @@ namespace Dark_Cloud_Improved_Version
                         }
 
                         WriteTable();   // fills the per-slot table both _GET_POSITION and _GET_DISTANCE now read
+                        // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
+                        // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
+                        // town overlay at those addresses is never touched.
+                        Memory.WriteInt(SceneGateFlag, (_decoyActive && _cloneSlot >= 0) ? 1 : 2);
                         sleep = FastTickMs;
                     }
                     else
                     {
                         guardLatched = false;
                         if (_decoyActive || _cloneSlot >= 0) { _decoyActive = false; DespawnClone(); }
+                        Memory.WriteInt(SceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }
                 catch (Exception e) { Console.WriteLine("[Mirage] tick failed: " + e.Message); }
@@ -276,7 +331,14 @@ namespace Dark_Cloud_Improved_Version
         private const bool  WeaponEnabled   = true;      // graft the equipped weapon onto the clone's hand bone
         private const float GhostOpacity = 90f;          // of 128; lower = more see-through
         private const float GhostDim     = 1.0f;         // full lighting so any resident character texture shows
+        // Ambient ADD tint (+0xCE0 RGB) folded into the clone's lighting each draw; scene ambient ~128 = neutral,
+        // so positive brightens and B>R,G gives the blue tint. Tune to taste.
+        private const float GhostTintR = 20f;
+        private const float GhostTintG = 30f;
+        private const float GhostTintB = 65f;
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
+        private static bool     _clothDiagDone;   // one-shot cloth-layout dump guard
+        private static DateTime _enemyDiagNext;   // throttle for the enemy-AI dump
         private static uint _srcModelRoot;    // the model root the clone copies/renders (player or test enemy)
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
@@ -322,6 +384,9 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, MirageClone.MotionFlags) | (uint)MirageClone.MotionRestart)
                 .CopyTo(buf, MirageClone.MotionFlags);
             BitConverter.GetBytes(GhostSilhouette ? GhostOpacity : 128f).CopyTo(buf, MirageClone.NpcOpacity);  // +0xcec (Draw needs >0)
+            BitConverter.GetBytes(GhostSilhouette ? GhostTintR : 0f).CopyTo(buf, MirageClone.CharaTint);      // +0xce0 ambient ADD (brighter + blue)
+            BitConverter.GetBytes(GhostSilhouette ? GhostTintG : 0f).CopyTo(buf, MirageClone.CharaTint + 4);
+            BitConverter.GetBytes(GhostSilhouette ? GhostTintB : 0f).CopyTo(buf, MirageClone.CharaTint + 8);
             for (int o = MirageClone.LightFrom; o < MirageClone.LightTo; o += 4) BitConverter.GetBytes(0).CopyTo(buf, o);
             // Keep the copied tex-anime object (+0xdc) intact — it selects the face/skin textures; zeroing it
             // left the face dark and arms mis-textured. (Was zeroed for the old shared-texture NPC host.)
@@ -665,6 +730,83 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>One-shot: dump the player's cloth list (+0xC74 → array of up to 4 CCloth ptrs) and each cloth
+        /// object's header, to plan copying it onto the clone.</summary>
+        private static void DumpCloth()
+        {
+            uint list = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & 0x1FFFFFFF;
+            Console.WriteLine($"[Mirage/cloth] player +0xC74 listPtr=0x{list:X}");
+            if (list == 0 || list >= 0x02000000) { Console.WriteLine("[Mirage/cloth] no cloth list on this character"); return; }
+            for (int i = 0; i < 4; i++)
+            {
+                uint cloth = (uint)Memory.ReadInt(Memory.ToMmu(list) + i * 4) & 0x1FFFFFFF;
+                if (cloth == 0 || cloth >= 0x02000000) { Console.WriteLine($"[Mirage/cloth] [{i}] null"); continue; }
+                byte[] h = Memory.ReadBytesBatch(Memory.ToMmu(cloth), 0x40);
+                if (h == null) continue;
+                uint vt = (uint)BitConverter.ToInt32(h, 0x08) & 0x1FFFFFFF;
+                uint vu = (uint)BitConverter.ToInt32(h, 0x18) & 0x1FFFFFFF;
+                int  vusz = BitConverter.ToInt32(h, 0x1C);
+                uint b28 = (uint)BitConverter.ToInt32(h, 0x28) & 0x1FFFFFFF;
+                uint b2c = (uint)BitConverter.ToInt32(h, 0x2C) & 0x1FFFFFFF;
+                Console.WriteLine($"[Mirage/cloth] [{i}] obj=0x{cloth:X} vtbl=0x{vt:X} vu=0x{vu:X} vuSz={vusz}(={vusz * 16}B) +0x28=0x{b28:X} +0x2c=0x{b2c:X}");
+                Console.WriteLine($"[Mirage/cloth] [{i}] hdr: {BitConverter.ToString(h, 0, 0x40).Replace("-", " ")}");
+            }
+        }
+
+        /// <summary>Throttled (~1s): dump Lich (id 51) / Diamond (id 46) state + their redirect pointer, to catch
+        /// how the AI still misbehaves — slot, motion, position, fooled flag, and which target (PLAYER/DECOY) the
+        /// per-slot pointer resolves to.</summary>
+        private static void DumpEnemyAI()
+        {
+            if (DateTime.UtcNow < _enemyDiagNext) return;
+            _enemyDiagNext = DateTime.UtcNow.AddSeconds(1);
+            // Scene state: iGpffff9e18 (0x202A3608) != 0 freezes ALL enemies (motionDrive skips them); the PNACH
+            // mailbox (0x21F10038) + the two gate instructions show whether the NOPs are stuck applied.
+            uint scene = (uint)Memory.ReadInt(0x202A3608);
+            int  mbox  = Memory.ReadInt(SceneGateFlag);
+            uint sGate = (uint)Memory.ReadInt(0x21DAE8A4);
+            uint tGate = (uint)Memory.ReadInt(0x21DB79C4);
+            // Raw pointer-table[0..3] + the deref'd player position, to prove what enemies actually read.
+            uint p0 = Memory.ReadUInt(MirageDecoy.PtrAddr(0)), p1 = Memory.ReadUInt(MirageDecoy.PtrAddr(1));
+            float plx = Memory.ReadFloat(0x21EA1D30), plz = Memory.ReadFloat(0x21EA1D34), ply = Memory.ReadFloat(0x21EA1D38);
+            float dcx = Memory.ReadFloat(MirageDecoy.DecoyPos), dcy = Memory.ReadFloat(MirageDecoy.DecoyPos + 8);
+            Console.WriteLine($"[Mirage/ai] scene iGpffff9e18=0x{scene:X} mailbox={mbox} sceneGate=0x{sGate:X8} stepGate=0x{tGate:X8} ptr[0]=0x{p0:X} ptr[1]=0x{p1:X} player=({plx:0.#},{plz:0.#},{ply:0.#}) decoyScratch=({dcx:0.#},{dcy:0.#})");
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                long sb = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                int rs = Memory.ReadInt(sb + EnemySlotOffsets.RenderStatus);
+                if (rs < 0) continue;
+                int id = Memory.ReadUShort(sb + EnemySlotOffsets.EnemySpeciesId);
+                if (id != 46 && id != 51) continue;
+                bool fooled0 = s < MirageDecoy.MaxSlots && _fooled[s];
+                if (rs < 2 && !fooled0) continue;   // skip idle-far enemies; log only active or fooled ones
+                string name = id == 51 ? "Lich" : "Diamond";
+                long ch = EnemyAddresses.CharObjects.CharAddr(s);
+                int mot = Memory.ReadInt(ch + MirageClone.MotionId);
+                float ex = Memory.ReadFloat(ch + 0x10), ez = Memory.ReadFloat(ch + 0x14), ey = Memory.ReadFloat(ch + 0x18);
+                uint ip = (uint)Memory.ReadInt(CRunScript.Base + (long)s * CRunScript.Stride + CRunScript.CurIp) & 0x1FFFFFFF;
+                uint ptr = Memory.ReadUInt(MirageDecoy.PtrAddr(s)) & 0x1FFFFFFF;
+                string tgt = "?";
+                if (ptr != 0 && ptr < 0x02000000)
+                {
+                    float tx = Memory.ReadFloat(Memory.ToMmu(ptr)), ty = Memory.ReadFloat(Memory.ToMmu(ptr) + 8);   // x,y (skip height @+4)
+                    string which = ptr == MirageDecoy.PlayerPosGuest ? "PLAYER" : ptr == MirageDecoy.DecoyPosGuest ? "DECOY" : "??";
+                    tgt = $"{which}@0x{ptr:X}=({tx:0.#},{ty:0.#})";
+                }
+                float plx2 = Memory.ReadFloat(0x21EA1D30), ply2 = Memory.ReadFloat(0x21EA1D38);
+                double dist = Math.Sqrt((ex - plx2) * (ex - plx2) + (ey - ply2) * (ey - ply2));   // real enemy→player XY dist
+                Console.WriteLine($"[Mirage/ai] s{s} {name} rs={rs} mot={mot} ip=0x{ip:X} pos=({ex:0.#},{ez:0.#},{ey:0.#}) realDist={dist:0.#} fooled={fooled0} target={tgt}");
+            }
+        }
+
+        /// <summary>Re-assert the ghost's ambient-ADD tint (+0xCE0 RGB) on a chara slot — brighter + blue.</summary>
+        private static void WriteGhostTint(long charaSlot)
+        {
+            Memory.WriteFloat(charaSlot + MirageClone.CharaTint,     GhostSilhouette ? GhostTintR : 0f);
+            Memory.WriteFloat(charaSlot + MirageClone.CharaTint + 4, GhostSilhouette ? GhostTintG : 0f);
+            Memory.WriteFloat(charaSlot + MirageClone.CharaTint + 8, GhostSilhouette ? GhostTintB : 0f);
+        }
+
         private static void MaintainClone()
         {
             if (_cloneSlot < 0) return;
@@ -678,6 +820,7 @@ namespace Dark_Cloud_Improved_Version
 
             Memory.WriteInt  (slot + MirageClone.CharaActive, 1);
             Memory.WriteFloat(slot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
+            WriteGhostTint(slot);
             Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);
 
             // Engine-driven animation: the engine's own chara-step (unlocked via the PNACH step-gate NOP) poses
@@ -699,6 +842,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt (wslot + MirageClone.CharModel,   _weaponRootGuest);
                 Memory.WriteInt  (wslot + MirageClone.CharaActive, 1);
                 Memory.WriteFloat(wslot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
+                WriteGhostTint(wslot);
                 Memory.WriteInt  (wslot + MirageClone.CharaMotionA, 0);
                 Memory.WriteInt  (MirageClone.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 1);
                 Memory.WriteInt  (MirageClone.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 1);
@@ -712,11 +856,13 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DespawnClone()
         {
-            Memory.WriteInt(SceneGateFlag, 0);   // disarm the PNACH scene-gate NOP (always — keeps town safe)
+            // (SceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
             if (_cloneSlot < 0) return;
             long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
-            Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister
-            Memory.WriteInt (slot + MirageClone.CharaActive, 0);                     // inactive
+            Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)
+            Memory.WriteInt (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 1);   // step loop skips it (belt+braces)
+            Memory.WriteInt (slot + MirageClone.CharaActive,  0);                    // inactive
+            Memory.WriteInt (slot + MirageClone.CharaMotionA, 0);                    // don't step (leftover clone)
             Memory.WriteUInt(slot + MirageClone.CharModel, 0);                       // clear model
 
             if (_weaponRootGuest != 0)   // tear down the weapon chara slot too

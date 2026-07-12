@@ -52,3 +52,10 @@ merged across sessions — never overwritten):
   chunks self-reject, which is correct.
 - Guest addresses in the findings file match ELF/Ghidra; add `0x20000000` for
   PINE/mod access.
+
+## Executing code from a cave
+
+A cave found here can hold **DATA** freely. Running our own **native code** from one
+was long believed to crash PCSX2 — but it works if the cave is written cold and reached
+via a data-driven indirect call (repointing a dispatch-table entry), not an in-place
+`j cave`. See [`cave-code-execution.md`](cave-code-execution.md).
