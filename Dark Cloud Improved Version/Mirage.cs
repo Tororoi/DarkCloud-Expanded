@@ -241,6 +241,7 @@ namespace Dark_Cloud_Improved_Version
         private const bool  GhostSilhouette = true;      // translucent character clone
         private const bool  EngineDrivenAnim = true;     // let the engine's chara-step pose the clone tree natively (no polling)
         private const bool  IndependentMesh = true;      // copy the software-skinned body meshes → fully independent clone
+        private const bool  WeaponEnabled   = true;      // graft the equipped weapon onto the clone's hand bone
         private const bool  SyncMotionToPlayer = false;  // was syncing clone +0xc68 to the player each tick — clamps the clone's animation;
                                                          // OFF = clone free-runs its own motion (test: does decoupling change the flicker?)
         private const float GhostOpacity = 90f;          // of 128; lower = more see-through
@@ -249,6 +250,8 @@ namespace Dark_Cloud_Improved_Version
         private static uint _srcModelRoot;    // the model root the clone copies/renders (player or test enemy)
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
+        private static uint _weaponRootGuest; // copied weapon tree root (guest); 0 = no weapon grafted
+        private static uint _wpnObjPtr;       // the live weapon object (iGpffff9d00) — source of the grip transform
         private static int  _meshesCopied;    // # software-skinned meshes given independent copies this spawn
         private static readonly System.Collections.Generic.List<(long player, long clone)> _chanMap = new();  // motion-channel frame-sync map
 
@@ -264,8 +267,10 @@ namespace Dark_Cloud_Improved_Version
             if (!CloneEnabled) return;
 
             // Independent deep copy of the player's whole frame tree.
+            _weaponRootGuest = 0; _wpnObjPtr = 0;
             if (!BuildCloneTree()) { _cloneSlot = -1; return; }
             if (IndependentMesh) CopyMeshNodes();   // give the clone its OWN software-skinned body meshes
+            if (WeaponEnabled) GraftWeapon();       // graft the equipped weapon onto the clone's hand bone
 
             // Host = chara slot 0, drawn by the DUNGEON scene draw (Draw__11CSeireiKing) as a single
             // Draw__12CNPCharacter with its own texture group (0x20). Fill the player's draw fields, aim the
@@ -366,6 +371,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(slot + MirageClone.CharaRampB, 0);
             Memory.WriteInt(MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // register → dungeon draw draws it
             Console.WriteLine($"[Mirage] clone in chara slot {_cloneSlot} (texgroup 0x{MirageClone.CharaTexBase + _cloneSlot:X}) @({_dx:0.#},{_dz:0.#},{_dy:0.#}) root=0x{_cloneRootGuest:X}");
+
+            if (WeaponEnabled) RegisterWeaponChara();   // clone weapon in its own slot 3 / texgroup 0x1d pass
         }
 
         /// <summary>Deep-copy the source model's CFrame tree into the cave pool as a CONTIGUOUS 0x270-stride
@@ -375,6 +382,109 @@ namespace Dark_Cloud_Improved_Version
         /// sibling) are re-based by a single offset (clonePool − playerBase). Geometry (+0x260) stays SHARED.
         /// The result both renders (draw follows the re-based child/sibling) and poses (SetMotionEX indexes the
         /// contiguous array) correctly. Returns false if the tree isn't resolvable or overflows the pool.</summary>
+        /// <summary>Graft the equipped weapon onto the clone's hand. The weapon (WeaponObjGlobal → obj, +0xBC =
+        /// model root) is a small CFrame tree parented to the player's hand bone but drawn SEPARATELY (not part of
+        /// the player's +0xBC tree). We deep-copy that tree into WeaponCave (rebasing its internal links exactly
+        /// like BuildCloneTree) and splice the copy's root into the CLONE's hand-bone child list, so the clone's
+        /// own MGDraw walks into it and draws the weapon at the clone's hand — no separate draw call needed.
+        /// Mesh visuals (node+0x260) are left SHARED: if the weapon is VU1 (rigid) they're per-instance already;
+        /// if the weapon flickers it's software-skinned (MDT) and needs the CopyMeshNodes double-buffer copy.</summary>
+        private static void GraftWeapon()
+        {
+            uint wpnObj = (uint)Memory.ReadInt(MirageClone.WeaponObjGlobal) & 0x1FFFFFFF;
+            if (wpnObj == 0 || wpnObj >= 0x02000000) { Console.WriteLine("[Mirage/wpn] no weapon object"); return; }
+            uint wRoot = (uint)Memory.ReadInt(Memory.ToMmu(wpnObj) + 0xBC) & 0x1FFFFFFF;   // weapon model root
+            if (wRoot == 0 || wRoot >= 0x02000000) { Console.WriteLine("[Mirage/wpn] no weapon model"); return; }
+
+            // DFS child/sibling for the tree's contiguous 0x270-stride address span (same layout as the body).
+            uint min = wRoot, max = wRoot;
+            var seen = new System.Collections.Generic.HashSet<uint>();
+            var work = new System.Collections.Generic.Stack<uint>();
+            work.Push(wRoot);
+            while (work.Count > 0)
+            {
+                uint n = work.Pop();
+                if (n == 0 || n >= 0x02000000 || !seen.Add(n)) continue;
+                if (n < min) min = n; if (n > max) max = n;
+                if (seen.Count > 64) { Console.WriteLine("[Mirage/wpn] weapon tree > 64 nodes — bailing"); return; }
+                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.RootChild) & 0x1FFFFFFF;
+                     c != 0 && c < 0x02000000;
+                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & 0x1FFFFFFF)
+                    work.Push(c);
+            }
+            if ((max - min) % MirageClone.NodeStride != 0)
+            { Console.WriteLine($"[Mirage/wpn] span 0x{max - min:X} not 0x270-aligned — bailing"); return; }
+            int nodeCount = (int)((max - min) / MirageClone.NodeStride) + 1;
+            int blockSize = nodeCount * MirageClone.NodeStride;
+            if (blockSize > MirageClone.WeaponCaveSize)
+            { Console.WriteLine($"[Mirage/wpn] weapon tree 0x{blockSize:X} > cave 0x{MirageClone.WeaponCaveSize:X}"); return; }
+
+            byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
+            if (block == null) return;
+
+            uint rootOff = wRoot - min;
+            uint wCaveG  = (uint)MirageClone.WeaponCaveGuest;
+            for (int o = 0; o < blockSize; o += MirageClone.NodeStride)
+            {
+                bool isRoot = (uint)o == rootOff;
+                WpnRebase(block, o + MirageClone.Parent,      min, max, wCaveG, isRoot);   // root parent → set below
+                WpnRebase(block, o + MirageClone.RootChild,   min, max, wCaveG, false);
+                WpnRebase(block, o + MirageClone.RootSibling, min, max, wCaveG, isRoot);   // root sibling → set below
+                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheA);
+                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheB);
+            }
+            Memory.WriteBytesBatch(MirageClone.WeaponCave, block);
+
+            // Parent the copied root to the clone's hand bone (for positioning ONLY — MGDraw seeds a drawn
+            // root's world matrix from its parent's cached world, exactly like the player's weapon object). We do
+            // NOT insert it into the hand's child list: the weapon draws in its OWN chara slot / texgroup-0x1d
+            // pass (RegisterWeaponChara), so the body's 0x11 pass never draws it with the wrong texture.
+            uint wRootG = (uint)(wCaveG + rootOff);
+            uint handG  = (uint)(MirageClone.NodePoolGuest + MirageClone.WeaponHandBone * MirageClone.NodeStride);
+            Memory.WriteUInt(Memory.ToMmu(wRootG) + MirageClone.Parent,      handG);
+            Memory.WriteUInt(Memory.ToMmu(wRootG) + MirageClone.RootSibling, 0);   // standalone root
+            _weaponRootGuest = wRootG;
+            _wpnObjPtr = wpnObj;
+            Console.WriteLine($"[Mirage/wpn] weapon tree copied ({nodeCount} nodes) → root 0x{wRootG:X}, parent=clone hand {MirageClone.WeaponHandBone}");
+        }
+
+        /// <summary>Register the copied weapon tree as its OWN chara slot (WeaponCharaSlot). Cloned from the body
+        /// slot for a valid CCharacter (vtable/light/cloth-stub), then re-aimed: model → weapon tree (parent =
+        /// clone hand), transform ← the real weapon object (pos 0,0,0 + grip rot/scale), motion channels zeroed
+        /// (rigid). Drawn (registry) but NOT stepped (step-skip table + CharaMotionA=0). The patched group
+        /// formula gives this slot texgroup 0x1d, so the weapon samples its own atlas — correct texture.</summary>
+        private static void RegisterWeaponChara()
+        {
+            if (_weaponRootGuest == 0 || _wpnObjPtr == 0 || _cloneSlot < 0) return;
+            long src = MirageClone.CharaArray + (long)_cloneSlot        * MirageClone.CharaStride;   // body slot (valid)
+            long dst = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
+            byte[] cslot = Memory.ReadBytesBatch(src, MirageClone.CharaStride);
+            if (cslot == null) return;
+            byte[] wtf = Memory.ReadBytesBatch(Memory.ToMmu(_wpnObjPtr) + MirageClone.CharPos, 0x90);   // +0x10..+0xA0 TRS
+            if (wtf != null) wtf.CopyTo(cslot, MirageClone.CharPos);
+            BitConverter.GetBytes(_weaponRootGuest).CopyTo(cslot, MirageClone.CharModel);               // +0xbc = weapon tree
+            for (int s = 0; s < MirageClone.MotionSlots; s++)                                            // rigid: no motion
+                BitConverter.GetBytes(0).CopyTo(cslot, MirageClone.MotionSlotBase + s * 4);
+            Memory.WriteBytesBatch(dst, cslot);
+            Memory.WriteInt  (dst + MirageClone.CharaActive, 1);                                         // +0x146c draw gate
+            Memory.WriteFloat(dst + MirageClone.NpcOpacity, GhostSilhouette ? GhostOpacity : 128f);      // +0xcec > 0
+            Memory.WriteInt  (dst + MirageClone.CharaMotionA, 0);                                        // never step
+            Memory.WriteInt  (dst + MirageClone.CharaMotionB, 0);
+            Memory.WriteInt  (MirageClone.StepSkipTable  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // step loop skips it
+            Memory.WriteInt  (MirageClone.CharaRegistry  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // draw loop draws it
+            Console.WriteLine($"[Mirage/wpn] weapon chara slot {MirageClone.WeaponCharaSlot} (texgroup 0x1d) model=0x{_weaponRootGuest:X}");
+        }
+
+        /// <summary>Re-base a weapon-tree link into WeaponCave (mirror of Rebase but for the weapon cave); zero
+        /// external refs and, when forceZero, the root's parent/sibling (set explicitly by the graft splice).</summary>
+        private static void WpnRebase(byte[] block, int off, uint min, uint max, uint caveGuest, bool forceZero)
+        {
+            uint old = (uint)BitConverter.ToInt32(block, off) & 0x1FFFFFFF;
+            uint neu = 0;
+            if (!forceZero && old >= min && old <= max) neu = (uint)(caveGuest + (old - min));
+            BitConverter.GetBytes(neu).CopyTo(block, off);
+        }
+
         private static bool BuildCloneTree()
         {
             _srcModelRoot = CloneSourceModelRoot();
@@ -551,6 +661,18 @@ namespace Dark_Cloud_Improved_Version
             }
             // (Legacy per-tick TRS poll disabled: it fought the 60fps step and read as jitter.)
 
+            // Re-assert the weapon chara slot (drawn, never stepped) — the game may reset registry/opacity.
+            if (_weaponRootGuest != 0)
+            {
+                long wslot = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
+                Memory.WriteUInt (wslot + MirageClone.CharModel,   _weaponRootGuest);
+                Memory.WriteInt  (wslot + MirageClone.CharaActive, 1);
+                Memory.WriteFloat(wslot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
+                Memory.WriteInt  (wslot + MirageClone.CharaMotionA, 0);
+                Memory.WriteInt  (MirageClone.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 1);
+                Memory.WriteInt  (MirageClone.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 1);
+            }
+
             // NOTE: iGpffff9e18 (0x202A3608) is the "scene active" flag — setting it draws the chara loop BUT
             // freezes enemies (motionDrive steps enemies only when it's 0). So we DON'T set it here; the clone
             // is drawn instead via an in-place patch of Draw__11CSeireiKing's chara-loop gate (SceneDrawPatch),
@@ -565,6 +687,16 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister
             Memory.WriteInt (slot + MirageClone.CharaActive, 0);                     // inactive
             Memory.WriteUInt(slot + MirageClone.CharModel, 0);                       // clear model
+
+            if (_weaponRootGuest != 0)   // tear down the weapon chara slot too
+            {
+                long wslot = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
+                Memory.WriteInt (MirageClone.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 0);
+                Memory.WriteInt (MirageClone.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 0);
+                Memory.WriteInt (wslot + MirageClone.CharaActive, 0);
+                Memory.WriteUInt(wslot + MirageClone.CharModel, 0);
+                _weaponRootGuest = 0;
+            }
             _cloneSlot = -1;
         }
 

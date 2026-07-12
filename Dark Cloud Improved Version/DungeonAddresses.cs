@@ -494,6 +494,23 @@ namespace Dark_Cloud_Improved_Version
         internal const long BoneMtxCave   = 0x21F7D000;
         internal const int  BoneMtxPtr    = 0x00;         // channel MOTION_TYPE +0x00 = per-bone matrix buffer ptr
         internal const int  BoneMtxEntry  = 0x40;         // per-bone stride
+
+        // Equipped-weapon graft. The weapon is a separate object (iGpffff9d00 @ gp-0x6300 = MMU 0x202A34F0) whose
+        // model root (+0xBC) is PARENTED to the player's hand bone (index 39) but drawn separately (not in the
+        // player's +0xBC tree). To put it on the clone: deep-copy the weapon's small CFrame tree into WeaponCave,
+        // then splice the copy's root into the CLONE's bone-39 child list so the clone's MGDraw draws it at the
+        // clone's hand. Cave sits in the clean gap between BoneMtxCave (ends ~0x21F7E100) and MeshCave (0x21F80000).
+        internal const long WeaponObjGlobal = 0x202A34F0;
+        internal const long WeaponCave      = 0x21F7E200;
+        internal const long WeaponCaveGuest = 0x01F7E200;
+        internal const int  WeaponCaveSize  = 0x1D00;     // weapon trees are small (< ~12 nodes)
+        internal const int  WeaponHandBone  = 39;         // player/clone frame-tree bone the weapon parents to
+        // The weapon draws in its OWN chara slot (its own texgroup 0x1d pass, like the player's weapon), NOT
+        // grafted into the body tree (which would share the body's 0x11 pass → wrong texture). Slot 3 because the
+        // per-chara group formula is patched to (i*4 + 0x11): chara[0]=0x11 (body), chara[3]=0x1d (weapon). The
+        // slot is drawn (registry @0x1D3D284) but NOT stepped (step-skip table @0x1D3D344, entry !=0 → skip).
+        internal const int  WeaponCharaSlot = 3;
+        internal const long StepSkipTable   = 0x21D3D344;  // ShisaiShadow step loop: entry i (int) !=0 → skip step i
         internal const int  TexIndex      = 0x100;        // CFrame node: texture index (short); <0 → DrawVu1 skips texture binding (flat/untextured)
         internal const int  NpcOpacity    = 0xCEC;        // CCharacter: model opacity 0..128 (Step__12CNPCharacter ramps it; Draw folds it into ambient alpha)
         internal const int  Parent        = 0x110;        // CFrame parent ptr (world-matrix chain walks this)

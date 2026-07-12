@@ -52,7 +52,9 @@
       "Bash(/Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra/decompile.sh main *)",
       "Bash(cp /tmp/decomp_main.txt /tmp/decomp_abs3.txt)",
       "Bash(awk '/label 120/{p=1} p&&/--- label 1 /{exit} p' /tmp/e49a_dis.txt)",
-      "Bash(awk '/label 100/{p=1} p' /tmp/e49a_dis.txt)"
+      "Bash(awk '/label 100/{p=1} p' /tmp/e49a_dis.txt)",
+      "Bash(cp \"/Users/thomascantwell/DarkCloud-Enhanced/Dark Cloud Improved Version/Resources/PNACH/A5C05C78.pnach\" \"/Users/thomascantwell/Library/Application Support/PCSX2/cheats/A5C05C78.pnach\" && echo \"reverted & deployed\")",
+      "Bash(./tools/ghidra/decompile.sh dun *)"
     ]
   }
 }

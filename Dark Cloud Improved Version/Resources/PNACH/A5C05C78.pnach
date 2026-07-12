@@ -303,9 +303,11 @@ patch=1,EE,21F10020,extended,00000001 //pnach active flag
 //a decoy is active in a dungeon, 0 otherwise) so it never NOPs the town overlay that shares this address.
 patch=1,EE,E1030001,extended,01F10038 //if Mirage scene-gate flag == 1 (apply next 3)
 patch=1,EE,21DAE8A4,extended,00000000 //  NOP the chara-loop scene gate (clone draws, enemies keep moving)
-patch=1,EE,21DAE8D4,extended,26060011 //  chara[0] reloads group 0x11 (addiu a2,s0,0x20 -> 0x11): the NPC draw path
-//                                       samples ONE current group, so pick the body group (largest visible surface).
-//                                       0x1d gave right belt/gray body; 0x11 should give right body. player 0x11 untouched.
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2 (was the beqz delay-slot nop): a2 = charaIndex*4
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11: per-chara texgroup = i*4 + 0x11 -> chara[0]=0x11 (body),
+//                                       chara[3]=0x1d (weapon). Compresses the linear i+0x20 formula so the clone's
+//                                       body and its weapon (drawn as chara slot 3) each get their correct atlas in
+//                                       separate passes. Only slots 0 & 3 are registered, so 0x15/0x19/... never draw.
 patch=1,EE,21DB79C4,extended,00000000 //  NOP ShisaiShadow's chara-STEP gate (beqz v1 = 0x1060001D, gated by the same
 //                                       iGpffff9e18): lets the engine's 6-chara step loop run in combat so it poses the
 //                                       clone tree via SetMotionEX natively (head/hands animate) — no PINE polling.
