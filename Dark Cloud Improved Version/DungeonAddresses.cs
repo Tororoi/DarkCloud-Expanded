@@ -266,45 +266,6 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// Mirage "decoy aggro" system — GAME addresses and offsets only; the cave addresses it uses (PtrTable,
-    /// DecoyPos, and the two _GET_* function caves) live in <see cref="CodeCaves"/>.
-    ///
-    /// Enemy AI reads its target's position via _GET_POSITION (ELF 0x1E1DF0) and its attack range via
-    /// _GET_DISTANCE (0x1E1D00); both read the PLAYER global (0x1EA1D30) directly. We host a CLEAN COPY of
-    /// each in a cave and repoint its STB dispatch slot at the copy — a pure DATA hand-off, no in-place
-    /// surgery on the original (see CodeCaveFunctions for why a patched j/jal into a cave is not an option).
-    /// In the copy, the hardcoded player-address load is replaced with a jump to a helper that resolves the
-    /// CURRENT enemy's slot and sets a1 = *(PtrTable + slot*4) — a per-slot POINTER, not a copied position.
-    ///
-    /// That indirection is what makes aggro PER ENEMY, and it is why un-fooled play is bit-identical to
-    /// vanilla: an un-fooled slot's pointer IS the live player global, so the enemy reads the engine's own
-    /// live position with the mod entirely out of the loop (no staleness, and a mod stall cannot affect it).
-    /// A fooled slot's pointer is DecoyPos, a stationary point the mod writes. Hit an enemy and its slot is
-    /// pointed back at the player — it sees through the illusion and re-targets you.
-    ///
-    /// NOTE: an earlier design rewrote those instructions IN PLACE and toggled the patch per decoy, with a
-    /// stride-0x20 table of copied positions. That is all gone — the caves are armed ONCE at the cold window
-    /// and never toggled.
-    /// </summary>
-    internal static class MirageDecoy
-    {
-        // The decoy's PER-SLOT POINTER TABLE. Each entry is the ADDRESS the corresponding enemy should read
-        // its target's 16-byte position from — NOT a copied position. That indirection is the whole trick:
-        //   • un-fooled slot → StbExternCmd.PlayerPosGuest, the live player global itself. The enemy reads the
-        //     engine's own position, bit-identical to vanilla, with the mod entirely out of the loop (no
-        //     staleness, and a mod stall can't affect it).
-        //   • fooled slot    → CodeCaves.DecoyPos, the stationary point the mod writes once.
-        // Hit an enemy and its slot is pointed back at the player — it sees through the illusion.
-        //
-        // The vanilla side of this (which functions read the player, where they load it, the dispatch slots
-        // that reach them) is StbExternCmd — none of that is Mirage's. Here lives only the table's shape.
-        internal const int  PtrStride  = 4;
-        internal const int  TableSlots = 256;
-        internal const int  MaxSlots   = 20;   // slots the mod actively manages (FloorSlots is 16)
-        internal static long PtrAddr(int slot) => CodeCaves.PtrTable + (long)slot * PtrStride;
-    }
-
-    /// <summary>
     /// The DUNGEON's 6-character draw — the vanilla facility for rendering an extra character in a dungeon.
     /// Draw__11CSeireiKing (the dungeon scene draw) loops i in 0..5: if registry[i] != 0 it reloads texture
     /// group <see cref="CharaTexBase"/>+i, then calls Draw__12CNPCharacter on chara[i] = CharaArray + i*Stride.
@@ -329,34 +290,6 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CharaRampA    = 0x1484;      // opacity-ramp amount (int); 0 = no ramp
         internal const int  CharaRampB    = 0x1488;      //   ramp B (engine sets = -1 each step → falls back to A)
     }
-
-    /// <summary>
-    /// Mirage clone — the MOD's own knobs only. The clone is a deep per-instance copy of the player, drawn by
-    /// the vanilla <see cref="DungeonCharaDraw"/> facility; its cave addresses live in <see cref="CodeCaves"/>
-    /// and the engine struct layouts it copies live in CCharacter / CFrameVu1 / CVisualMDT / MotionType /
-    /// CCloth / CBound. What remains here is only what MIRAGE decides.
-    ///
-    /// (Two earlier draw hosts were tried and ABANDONED — do not resurrect them: the NPC-draw registry
-    /// (PartIdx/Occupied/Gate2 reservation fields) never triggered DrawNPCDraw at all, and the MotionParts
-    /// CMainChara slots were superseded by the chara loop above. Their constants are gone.)
-    /// </summary>
-    internal static class MirageClone
-    {
-        /// <summary>Copy ONLY the draw-relevant CCharacter fields (through the light block @0xD60). The chara
-        /// slot's own gate/reservation fields begin further in, so copying the player's FULL object clobbers
-        /// them and corrupts the instance (it teleported the player off-map). 0xD60 is the safe cut.</summary>
-        internal const int  CharCopySize     = 0xD60;
-
-        internal const int  ClothObjSlots    = 3;      // cave slots reserved (Ungaga has exactly 3 cloth pieces)
-        internal const int  MotionStructSize = 0xC0;   // bytes copied per motion channel (> the highest field used)
-
-        /// <summary>The clone's WEAPON draws in its own chara slot rather than being grafted into the body
-        /// tree (which would share the body's texture pass → wrong texture). Slot 3, because the per-chara
-        /// texgroup formula is patched to (i*4 + 0x11): chara[0] = 0x11 (body), chara[3] = 0x1D (weapon).
-        /// It is DRAWN but not STEPPED (DungeonCharaDraw.StepSkipTable).</summary>
-        internal const int  WeaponCharaSlot  = 3;
-    }
-
 
     /// <summary>
     /// The dungeon FIRE / HEAT-HAZE system — the only framebuffer distortion in the game, and the vehicle

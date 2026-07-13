@@ -483,6 +483,10 @@ namespace Dark_Cloud_Improved_Version
         /// <see cref="SuperSteveAbilities"/>. Every driver is pulsed each tick (enabled or not) so it
         /// self-restores the instant the sphere is swapped — no explicit per-swap teardown needed.
         ///
+        /// NOT dispatched here: MIRAGE (Mirage / Hercules' Wrath spheres). It owns a thread and a state machine
+        /// (guard charge → decoy → clone → shimmer), so it gates itself in <see cref="Mirage"/> rather than being
+        /// pulsed per-tick like the stateless abilities below. Nothing to add here when its sphere is attached.
+        ///
         /// NOT every weapon's ability transfers. Excluded by design:
         ///   • Macho Sword, Wise Owl Sword, Chronicle 2 — rely on weapon ownership
         ///   • Buster Sword, 7 Branch Sword - modify upgrading / status-breaks

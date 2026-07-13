@@ -93,8 +93,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint ModelInjectorCave = 0x01400000;
 
         // ── Mirage: decoy aggro redirect ─────────────────────────────────────────────────────────────
+        // NOTE: a cave's CAPACITY lives with the cave, deliberately. Divorcing "how big is it" from "how much
+        // do we put in it" is how you get a silent overrun — this file has already caught two (a fishing flag
+        // squatting on Mirage's mailbox slot, and HarderEnemyAI's stubs growing unbounded into PtrTable).
         internal const long PtrTable      = 0x21F30000;   // per-slot target POINTER table (entry = an address to read a position from)
         internal const uint PtrTableGuest = 0x01F30000;   // baked into the cave stubs as `lui a1, PtrTable>>16`
+        internal const int  PtrStride     = 4;            // one pointer per enemy slot
+        internal const int  TableSlots    = 256;          // 256 * 4 = 0x400 → the table ends exactly at DecoyPos
+        internal static long PtrAddr(int slot) => PtrTable + (long)slot * PtrStride;
+
         internal const long DecoyPos      = 0x21F30400;   // the stationary decoy position (x,z,y,w)
         internal const uint DecoyPosGuest = 0x01F30400;   // written into fooled slots' pointer entries
 
@@ -117,8 +124,12 @@ namespace Dark_Cloud_Improved_Version
 
         internal const long ClothListCave  = 0x21F54000;
         internal const uint ClothListGuest = 0x01F54000;
-        internal const long ClothObjCave   = 0x21F54100;  // 3 slots × 0x8550
+        internal const long ClothObjCave   = 0x21F54100;
         internal const uint ClothObjGuest  = 0x01F54100;
+        /// <summary>CCloth slots this cave holds. Sized for the WORST CASE across all six characters — Toan, at
+        /// 3 (Ungaga, the current caster, has only 2). Per-character footprints: docs/character-clone-footprints.md.
+        /// Capacity check: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F6D0F0, inside ClothBufCave @0x21F6E000.</summary>
+        internal const int  ClothObjSlots  = 3;
         internal const long ClothBufCave   = 0x21F6E000;
         internal const uint ClothBufGuest  = 0x01F6E000;
 
@@ -129,16 +140,35 @@ namespace Dark_Cloud_Improved_Version
         internal const uint ClothBoundGuest  = 0x01F75000;
         internal const long ClothBoundEnd    = 0x21F78000;
 
+        // ── The clone's PER-BONE buffers — sized by NODE COUNT, so they must fit the LARGEST character ──
+        // These four share one 0x8000 band (0x1F78000..0x1F80000, ending at MeshCave). Three of them scale
+        // with the character's bone count, so sizing them against ONE character silently overruns the next
+        // cave along. That is not hypothetical: they were sized for Ungaga (67 bones) and Xiao (79) overran
+        // BOTH — FrameInf spilled into BoneMtx, BoneMtx spilled into WeaponCave and overwrote the grafted
+        // weapon's root CFrame (its parent pointer read back as 1.0f, a matrix diagonal), so Xiao's clone
+        // simply held no weapon. Hence: an explicit size on every one, and CharacterClone REFUSES to spawn a
+        // character whose bone count exceeds MaxCloneNodes rather than scribbling over its neighbour.
         internal const long MotionCave      = 0x21F78000;
         internal const long MotionCaveGuest = 0x01F78000;
-        internal const long FrameInfCave      = 0x21F79000;
-        internal const long FrameInfCaveGuest = 0x01F79000;
-        internal const long MeshScratchCave = 0x21F7D000;
-        internal const long BoneMtxCave     = 0x21F7D000;
+        internal const int  MotionCaveSize  = 0x0600;    // CCharacter.MotionSlots(8) × MotionStructSize(0xC0)
 
-        internal const long WeaponCave      = 0x21F7E200;
-        internal const long WeaponCaveGuest = 0x01F7E200;
-        internal const int  WeaponCaveSize  = 0x1D00;
+        internal const long FrameInfCave      = 0x21F78600;
+        internal const long FrameInfCaveGuest = 0x01F78600;
+        internal const int  FrameInfCaveSize  = 0x4900;  // (nodes+1) × 0xD0 → holds 88 bones  ← the BINDING limit
+
+        internal const long BoneMtxCave     = 0x21F7CF00;
+        internal const int  BoneMtxCaveSize = 0x1700;    // (nodes+1) × 0x40 → holds 91 bones
+
+        internal const long WeaponCave      = 0x21F7E600;
+        internal const long WeaponCaveGuest = 0x01F7E600;
+        internal const int  WeaponCaveSize  = 0x1400;    // 0x270/node → 8 nodes (Ungaga's is 5, Xiao's 7)
+        //                                    ends 0x21F7FA00, 0x600 clear of MeshCave @0x21F80000
+
+        /// <summary>Max bones a clone may have. The FRAME_INF buffer is the binding constraint. Covers every
+        /// character: Ungaga 67, Toan 77, Xiao 79, Osmond 84 (see docs/character-clone-footprints.md).
+        /// NOTE this is a SEPARATE limit from the node pool (<see cref="MaxNodes"/> = 128) and from MeshCave,
+        /// which is what actually excludes Goro/Ruby/Osmond.</summary>
+        internal const int MaxCloneNodes = 88;
 
         internal const long MeshCave       = 0x21F80000;  // software-skinned meshes
         internal const long MeshCaveGuest  = 0x01F80000;

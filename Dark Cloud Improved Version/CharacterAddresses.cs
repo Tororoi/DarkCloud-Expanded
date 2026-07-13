@@ -177,10 +177,13 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The EQUIPPED WEAPON is a separate object from the character: its model root (+0xBC) is PARENTED
     /// to the hand bone but DRAWN separately (it is not inside the character's +0xBC tree), in its own texture
-    /// pass. So putting a weapon on a copied character means copying its small CFrame tree too.</summary>
+    /// pass. So putting a weapon on a copied character means copying its small CFrame tree too.
+    ///
+    /// To find the HAND BONE, read the weapon root's parent pointer (CFrameVu1.Parent) — do NOT hardcode a bone
+    /// index. Every character has a different skeleton (Ungaga 67 bones, Xiao 79, Osmond 84...), so an index is
+    /// only ever correct for one of them; the live weapon already tells you which bone it hangs off.</summary>
     internal static class EquippedWeapon
     {
         internal const long WeaponObjGlobal = 0x202A34F0;  // iGpffff9d00 (gp-0x6300)
-        internal const int  WeaponHandBone  = 39;          // frame-tree bone the weapon parents to
     }
 }

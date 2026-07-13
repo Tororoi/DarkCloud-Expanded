@@ -192,6 +192,21 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Returns true if the game is paused while inside a dungeon
         /// </summary>
+        /// <summary>
+        /// True while the game is paused in a way that should freeze in-dungeon gameplay — the "PAUSE" screen
+        /// (<see cref="CheckDunIsPaused"/>) OR the in-dungeon item menu.
+        ///
+        /// The two freeze DIFFERENT things natively, which is why callers usually want BOTH: the item menu
+        /// freezes characters but NOT mod timers, while the PAUSE screen freezes mod timers but NOT the
+        /// dungeon's chara loop. Anything the mod drives on a timer (or steps itself) will drift during one of
+        /// them unless it checks this rather than CheckDunIsPaused alone.
+        /// </summary>
+        public static bool CheckDunIsPausedOrMenu()
+        {
+            if (CheckDunIsPaused()) return true;
+            return Memory.ReadByte(Addresses.mode) == 3 && Memory.ReadByte(Addresses.dungeonMode) == 2;   // in-dungeon item menu
+        }
+
         public static bool CheckDunIsPaused()
         {
             int dunPauseTitle = 0x202A35C4;
