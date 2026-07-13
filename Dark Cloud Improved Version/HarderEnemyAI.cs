@@ -55,7 +55,9 @@ namespace Dark_Cloud_Improved_Version
         // stub mid-floor and crashed the VM to the BIOS browser), and the real gaps there are <0x140 bytes.
         private const long StubBase   = CodeCaves.AiStubBase;
         private const int  StubStride = CodeCaves.AiStubStride;   // up to 85 cells (roll + MUTEKI + motion run + 2 wait clusters)
-        private const int  MaxStubs   = CodeCaves.AiStubMaxSlots; // 127 — the wall before Mirage's PtrTable
+        private const int  MaxStubs   = CodeCaves.AiStubMaxSlots; // 32 — one stub per SPLICED SPECIES on a floor,
+                                                                  // not per enemy; a floor has a handful. Capped so
+                                                                  // this can't grow into the clone caves that follow.
 
         /// <summary>Every enemy model code with a LEGITIMATE get-up (起き上がり) motion, all at index 10.
         /// Generated from docs/enemy-motion-table.md and filtered: 39 of the 70 "get up" entries are

@@ -18,33 +18,37 @@ namespace Dark_Cloud_Improved_Version
     ///   • Guest(0x01xxxxxx) — what the GAME sees, i.e. what we bake into pointers/instructions.
     ///
     /// ── MAP (guest) ───────────────────────────────────────────────────────────────────────────────────
+    /// Everything below 0x01FB4300 lives in ONE proven-clean heap tail (CodeCaveScanner, 68 sessions).
+    /// It is now packed so that the clone's mesh cave fits the LARGEST character (Goro), which makes all six
+    /// clonable. The room came from three places: capping the AI stubs at 32 slots, trimming the node pool
+    /// 128→96 bones (Osmond's 84 is the real max), and packing the decoy tables out of a 0x10000 hole.
+    ///
     ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (0x3C is the next free)
-    ///   0x01F10100  HarderEnemyAI per-species STB stubs           → <see cref="AiStubBase"/>
-    ///               ...bounded at 0x01F30000 by Mirage's PtrTable → <see cref="AiStubMaxSlots"/>
-    ///   0x01400000  EnemyModelInjector param/code block (BSS)     → <see cref="ModelInjectorCave"/>
+    ///   0x01F10100  AI stubs      32 × 0x400                       → ends 0x01F18100
     ///
     ///   Mirage — decoy aggro redirect:
-    ///   0x01F30000  PtrTable      256 × 4B per-slot target pointers
-    ///   0x01F30400  DecoyPos      16B (x,z,y,w) — the stationary decoy fooled slots point at
-    ///   0x01F34000  DistCave      clean copy of _GET_DISTANCE (code)
-    ///   0x01F34200  PosCave       clean copy of _GET_POSITION (code)
+    ///   0x01F19000  PtrTable      256 × 4B per-slot target pointers
+    ///   0x01F19400  DecoyPos      16B (x,z,y,w) — what fooled enemies chase
+    ///   0x01F1A000  DistCave      clean copy of _GET_DISTANCE (code)
+    ///   0x01F1A400  PosCave       clean copy of _GET_POSITION (code)
     ///
-    ///   Mirage — clone (deep per-instance copy of the player; see docs/character-clone-footprints.md):
-    ///   0x01F33000  ClothStub     16 zero bytes — an empty cloth list
-    ///   0x01F33200  RootBuf       the clone's own root CFrame
-    ///   0x01F40000  NodePool      128 × 0x270 CFrames        → ends 0x01F53800
-    ///   0x01F54000  ClothListCave the 4-entry cloth-ptr array the clone's +0xC74 points at
-    ///   0x01F54100  ClothObjCave  3 × 0x8550 CCloth objects  → ends 0x01F6D0F0
-    ///   0x01F6E000  ClothBufCave  cloth draw buffers
-    ///   0x01F73000  ClothAnchorCave out-of-tree anchor CFrames → ends 0x01F75000
-    ///   0x01F75000  ClothBoundCave  copied CBound collision list → ends 0x01F78000
-    ///   0x01F78000  MotionCave    motion channel copies
-    ///   0x01F79000  FrameInfCave
-    ///   0x01F7D000  BoneMtxCave / MeshScratchCave
-    ///   0x01F7E200  WeaponCave    the equipped weapon's CFrame tree (0x1D00)
-    ///   0x01F80000  MeshCave      software-skinned meshes (0x34000) → ends 0x01FB4000
-    ///                             ^ top of the clean band (~0x01FB4300). Growing this needs a RELOCATION,
-    ///                               not an extension — Goro/Ruby/Osmond don't fit today (0x57B30 for Goro).
+    ///   CharacterClone (see docs/character-clone-footprints.md):
+    ///   0x01F19500  ClothStub     16 zero bytes — an empty cloth list
+    ///   0x01F19600  RootBuf       the clone's own root CFrame
+    ///   0x01F1B000  NodePool      96 × 0x270 CFrames               → ends 0x01F29A00
+    ///   0x01F2A000  ClothListCave the 4-entry cloth-ptr array (+0xC74 points here)
+    ///   0x01F2A100  ClothObjCave  3 × 0x8550 CCloth               → ends 0x01F430F0
+    ///   0x01F44000  ClothBufCave  cloth draw buffers
+    ///   0x01F49000  ClothAnchorCave out-of-tree anchor CFrames     → ends 0x01F4B000
+    ///   0x01F4B000  ClothBoundCave  copied CBound capsules         → ends 0x01F4E000
+    ///   0x01F4E000  MotionCave    8 motion channels
+    ///   0x01F4E600  FrameInfCave  per-bone skinning matrices (97 bones)
+    ///   0x01F53600  BoneMtxCave   per-bone animation matrices (99 bones)
+    ///   0x01F54F00  WeaponCave    the equipped weapon's CFrame tree
+    ///   0x01F56400  MeshCave      software-skinned meshes (0x58000) → ends 0x01FAE400
+    ///                             ^ 0x5F00 clear of the band top (0x01FB4300)
+    ///
+    ///   0x01400000  EnemyModelInjector param/code block — a SEPARATE region, deep in main BSS.
     /// </summary>
     internal static class CodeCaves
     {
@@ -79,99 +83,98 @@ namespace Dark_Cloud_Improved_Version
         internal const long MirageSceneGateFlag = Mailbox.MirageSceneGate;
 
         // ── HarderEnemyAI: per-species STB stubs ─────────────────────────────────────────────────────
-        // One self-contained stub per spliced species (nothing is shareable — every stub contains
-        // script-local CALL/branch targets). Starts just past the mailbox and grows upward, so it is
-        // HARD-BOUNDED by Mirage's PtrTable at 0x1F30000: 0x1FF00 / 0x400 = 127 slots. Overrunning that
-        // would silently scribble over the decoy aggro table and the clone's frame tree.
+        // One self-contained stub per SPLICED SPECIES on a floor (not per live enemy — nothing is shareable,
+        // every stub embeds script-local CALL/branch targets). A floor has a handful of species, so 32 is
+        // ample; the cap exists so this can never grow into the clone caves that follow it.
         internal const long AiStubBase     = 0x21F10100;
         internal const int  AiStubStride   = 0x400;
-        internal const int  AiStubMaxSlots = (int)((PtrTable - AiStubBase) / AiStubStride);   // 127
-
-        // ── EnemyModelInjector ───────────────────────────────────────────────────────────────────────
-        /// <summary>Param + code block, deep inside a 3.4 MB contiguous zero block in main BSS
-        /// (0x01340E20..0x016A0000). Guest address — the injected code loads it internally.</summary>
-        internal const uint ModelInjectorCave = 0x01400000;
+        internal const int  AiStubMaxSlots = 32;          // 32 × 0x400 = 0x8000 → ends 0x21F18100, clear of PtrTable
 
         // ── Mirage: decoy aggro redirect ─────────────────────────────────────────────────────────────
-        // NOTE: a cave's CAPACITY lives with the cave, deliberately. Divorcing "how big is it" from "how much
-        // do we put in it" is how you get a silent overrun — this file has already caught two (a fishing flag
-        // squatting on Mirage's mailbox slot, and HarderEnemyAI's stubs growing unbounded into PtrTable).
-        internal const long PtrTable      = 0x21F30000;   // per-slot target POINTER table (entry = an address to read a position from)
-        internal const uint PtrTableGuest = 0x01F30000;   // baked into the cave stubs as `lui a1, PtrTable>>16`
+        // A cave's CAPACITY lives with the cave, deliberately. Divorcing "how big is it" from "how much do we
+        // put in it" is how you get a silent overrun, and this band has already produced two: HarderEnemyAI's
+        // stubs growing unbounded toward PtrTable, and the clone's per-bone buffers (sized for Ungaga's 67
+        // bones) being overrun by Xiao's 79 — which scribbled over the grafted weapon's root CFrame.
+        internal const long PtrTable      = 0x21F19000;   // per-slot target POINTER table (entry = an address to read a position from)
+        internal const uint PtrTableGuest = 0x01F19000;   // baked into the cave stubs as `lui a1, PtrTable>>16`
         internal const int  PtrStride     = 4;            // one pointer per enemy slot
-        internal const int  TableSlots    = 256;          // 256 * 4 = 0x400 → the table ends exactly at DecoyPos
+        internal const int  TableSlots    = 256;          // 256 × 4 = 0x400
         internal static long PtrAddr(int slot) => PtrTable + (long)slot * PtrStride;
 
-        internal const long DecoyPos      = 0x21F30400;   // the stationary decoy position (x,z,y,w)
-        internal const uint DecoyPosGuest = 0x01F30400;   // written into fooled slots' pointer entries
+        internal const long DecoyPos      = 0x21F19400;   // the stationary decoy position (x,z,y,w)
+        internal const uint DecoyPosGuest = 0x01F19400;   // written into fooled slots' pointer entries
 
         // Clean cold-copied engine functions, reached via the STB external-command dispatch table (a pure
         // DATA path). NOT reachable by a patched j/jal — that crashes the recompiler.
-        internal const long DistCave      = 0x21F34000;   // _GET_DISTANCE copy
-        internal const uint DistCaveGuest = 0x01F34000;
-        internal const long PosCave       = 0x21F34200;   // _GET_POSITION copy
-        internal const uint PosCaveGuest  = 0x01F34200;
+        internal const long DistCave      = 0x21F1A000;   // _GET_DISTANCE copy (fn 0xF0 + helper @ +0x100)
+        internal const uint DistCaveGuest = 0x01F1A000;
+        internal const long PosCave       = 0x21F1A400;   // _GET_POSITION copy
+        internal const uint PosCaveGuest  = 0x01F1A400;
 
         // ── Mirage: clone ────────────────────────────────────────────────────────────────────────────
-        internal const long ClothStub      = 0x21F33000;  // 16 zero bytes = "no cloth"
-        internal const long ClothStubGuest = 0x01F33000;
-        internal const long RootBuf        = 0x21F33200;  // the clone's own root CFrame
-        internal const long RootBufGuest   = 0x01F33200;
+        internal const long ClothStub      = 0x21F19500;  // 16 zero bytes = "no cloth"
+        internal const long ClothStubGuest = 0x01F19500;
+        internal const long RootBuf        = 0x21F19600;  // the clone's own root CFrame
+        internal const long RootBufGuest   = 0x01F19600;
 
-        internal const long NodePool      = 0x21F40000;   // clone frame-tree pool
-        internal const long NodePoolGuest = 0x01F40000;
-        internal const int  MaxNodes      = 128;          // 128 × 0x270 = 0x13800 → ends 0x21F53800 (max char is Osmond @84)
+        internal const long NodePool      = 0x21F1B000;   // clone frame-tree pool
+        internal const long NodePoolGuest = 0x01F1B000;
+        internal const int  MaxNodes      = 96;           // 96 × 0x270 = 0xEA00 → ends 0x21F29A00. Osmond (84) is the
+                                                          // largest real character; 96 leaves headroom.
 
-        internal const long ClothListCave  = 0x21F54000;
-        internal const uint ClothListGuest = 0x01F54000;
-        internal const long ClothObjCave   = 0x21F54100;
-        internal const uint ClothObjGuest  = 0x01F54100;
+        internal const long ClothListCave  = 0x21F2A000;
+        internal const uint ClothListGuest = 0x01F2A000;
+        internal const long ClothObjCave   = 0x21F2A100;
+        internal const uint ClothObjGuest  = 0x01F2A100;
         /// <summary>CCloth slots this cave holds. Sized for the WORST CASE across all six characters — Toan, at
-        /// 3 (Ungaga, the current caster, has only 2). Per-character footprints: docs/character-clone-footprints.md.
-        /// Capacity check: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F6D0F0, inside ClothBufCave @0x21F6E000.</summary>
+        /// 3 (Ungaga has 2). Per-character footprints: docs/character-clone-footprints.md.
+        /// Capacity: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F430F0, inside ClothBufCave @0x21F44000.</summary>
         internal const int  ClothObjSlots  = 3;
-        internal const long ClothBufCave   = 0x21F6E000;
-        internal const uint ClothBufGuest  = 0x01F6E000;
 
-        internal const long ClothAnchorCave  = 0x21F73000;   // out-of-tree anchor CFrames (0x270 each)
-        internal const uint ClothAnchorGuest = 0x01F73000;
-        internal const long ClothAnchorEnd   = 0x21F75000;
-        internal const long ClothBoundCave   = 0x21F75000;   // copied CBound list (0x130 each)
-        internal const uint ClothBoundGuest  = 0x01F75000;
-        internal const long ClothBoundEnd    = 0x21F78000;
+        internal const long ClothBufCave   = 0x21F44000;   // 0x5000
+        internal const uint ClothBufGuest  = 0x01F44000;
+
+        internal const long ClothAnchorCave  = 0x21F49000;   // out-of-tree anchor CFrames (0x270 each)
+        internal const uint ClothAnchorGuest = 0x01F49000;
+        internal const long ClothAnchorEnd   = 0x21F4B000;
+        internal const long ClothBoundCave   = 0x21F4B000;   // copied CBound list (0x130 each)
+        internal const uint ClothBoundGuest  = 0x01F4B000;
+        internal const long ClothBoundEnd    = 0x21F4E000;
 
         // ── The clone's PER-BONE buffers — sized by NODE COUNT, so they must fit the LARGEST character ──
-        // These four share one 0x8000 band (0x1F78000..0x1F80000, ending at MeshCave). Three of them scale
-        // with the character's bone count, so sizing them against ONE character silently overruns the next
-        // cave along. That is not hypothetical: they were sized for Ungaga (67 bones) and Xiao (79) overran
-        // BOTH — FrameInf spilled into BoneMtx, BoneMtx spilled into WeaponCave and overwrote the grafted
-        // weapon's root CFrame (its parent pointer read back as 1.0f, a matrix diagonal), so Xiao's clone
-        // simply held no weapon. Hence: an explicit size on every one, and CharacterClone REFUSES to spawn a
-        // character whose bone count exceeds MaxCloneNodes rather than scribbling over its neighbour.
-        internal const long MotionCave      = 0x21F78000;
-        internal const long MotionCaveGuest = 0x01F78000;
+        // Three of these scale with bone count and sit immediately before their neighbours, so sizing them
+        // against ONE character silently overruns the next cave along (Xiao's 79 bones did exactly that to the
+        // weapon tree). Each carries an explicit size, and CharacterClone REFUSES to spawn past MaxCloneNodes.
+        internal const long MotionCave      = 0x21F4E000;
+        internal const long MotionCaveGuest = 0x01F4E000;
         internal const int  MotionCaveSize  = 0x0600;    // CCharacter.MotionSlots(8) × MotionStructSize(0xC0)
 
-        internal const long FrameInfCave      = 0x21F78600;
-        internal const long FrameInfCaveGuest = 0x01F78600;
-        internal const int  FrameInfCaveSize  = 0x4900;  // (nodes+1) × 0xD0 → holds 88 bones  ← the BINDING limit
+        internal const long FrameInfCave      = 0x21F4E600;
+        internal const long FrameInfCaveGuest = 0x01F4E600;
+        internal const int  FrameInfCaveSize  = 0x5000;  // (bones+1) × 0xD0 → holds 97 bones
 
-        internal const long BoneMtxCave     = 0x21F7CF00;
-        internal const int  BoneMtxCaveSize = 0x1700;    // (nodes+1) × 0x40 → holds 91 bones
+        internal const long BoneMtxCave     = 0x21F53600;
+        internal const int  BoneMtxCaveSize = 0x1900;    // (bones+1) × 0x40 → holds 99 bones
 
-        internal const long WeaponCave      = 0x21F7E600;
-        internal const long WeaponCaveGuest = 0x01F7E600;
-        internal const int  WeaponCaveSize  = 0x1400;    // 0x270/node → 8 nodes (Ungaga's is 5, Xiao's 7)
-        //                                    ends 0x21F7FA00, 0x600 clear of MeshCave @0x21F80000
+        internal const long WeaponCave      = 0x21F54F00;
+        internal const long WeaponCaveGuest = 0x01F54F00;
+        internal const int  WeaponCaveSize  = 0x1400;    // 0x270/node → 8 nodes (Ungaga's tree is 5, Xiao's 7)
 
-        /// <summary>Max bones a clone may have. The FRAME_INF buffer is the binding constraint. Covers every
-        /// character: Ungaga 67, Toan 77, Xiao 79, Osmond 84 (see docs/character-clone-footprints.md).
-        /// NOTE this is a SEPARATE limit from the node pool (<see cref="MaxNodes"/> = 128) and from MeshCave,
-        /// which is what actually excludes Goro/Ruby/Osmond.</summary>
-        internal const int MaxCloneNodes = 88;
+        /// <summary>Max bones a clone may have — covers every character (largest is Osmond at 84) and matches
+        /// the node pool. CharacterClone bounds-checks against this before writing a byte.</summary>
+        internal const int MaxCloneNodes = MaxNodes;
 
-        internal const long MeshCave       = 0x21F80000;  // software-skinned meshes
-        internal const long MeshCaveGuest  = 0x01F80000;
-        internal const int  MeshCaveSize   = 0x34000;     // fits Toan/Xiao/Ungaga; NOT Goro/Ruby/Osmond
+        // ── EnemyModelInjector (a DIFFERENT region: deep in main BSS, not the heap-tail band) ────────
+        /// <summary>Param + code block, buried in a 3.4 MB contiguous zero block in main BSS
+        /// (0x01340E20..0x016A0000). Guest address — the injected code loads it internally.</summary>
+        internal const uint ModelInjectorCave = 0x01400000;
+
+        /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
+        /// are clonable. (It was 0x34000 and excluded Goro/Ruby/Osmond; the room came from capping the AI stubs
+        /// at 32 slots, trimming the node pool 128→96, and packing the decoy tables.)</summary>
+        internal const long MeshCave       = 0x21F56400;
+        internal const long MeshCaveGuest  = 0x01F56400;
+        internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
     }
+
 }

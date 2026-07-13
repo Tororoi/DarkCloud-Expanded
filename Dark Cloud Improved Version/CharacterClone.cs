@@ -23,8 +23,11 @@ namespace Dark_Cloud_Improved_Version
     /// The clone is drawn by the vanilla DungeonCharaDraw facility (fill a slot, set active, register it) and
     /// STEPPED by the engine's own chara loop, so its animation and cloth physics run natively at 60fps.
     ///
-    /// LIMIT: the mesh cave fits Toan / Xiao / Ungaga. Goro (0x57B30), Ruby and Osmond do NOT fit today —
-    /// <see cref="Spawn"/> refuses them rather than overflowing the cave. See docs/character-clone-footprints.md.
+    /// CAPACITY: the caves now fit ALL SIX characters — the mesh cave is sized to the worst case (Goro, 0x57B30)
+    /// and the bone buffers to the largest skeleton (Osmond, 84). <see cref="Spawn"/> still REFUSES anything that
+    /// would not fit rather than overflowing into the next cave, because an overrun does not fail — it silently
+    /// corrupts a neighbour (that is how Xiao's 79 bones once wiped the grafted weapon's root CFrame).
+    /// See docs/character-clone-footprints.md and CodeCaveAddresses.cs.
     /// </summary>
     internal static class CharacterClone
     {

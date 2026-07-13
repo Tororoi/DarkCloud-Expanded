@@ -121,17 +121,13 @@ namespace Dark_Cloud_Improved_Version
         /// count as the game dirtying a region — chunks here are pinned clean and excluded from tracking.
         /// (This is also why findings entries overlapping these ranges stay CLEAN in the file: the region
         /// IS clean as far as the game is concerned; the mod is the only writer.)</summary>
-        // Authoritative layout: CodeCaveAddresses.cs (CodeCaves) — keep these in sync. Together these cover
-        // one contiguous claim, 0x1F10000..0x1FB4000.
         private static readonly (long Start, long Size)[] ModReserved =
         {
-            // PNACH mailbox @0x1F10000 + HarderEnemyAI's per-species STB stubs @0x1F10100. The stubs grow
-            // upward (0x400 each, up to CodeCaves.AiStubMaxSlots = 127), so they can legitimately reach right
-            // up to 0x1F30000 — the old 0x10000 reserve stopped at 0x1F20000 and would have started flagging
-            // our OWN stub writes as the game dirtying the region once a floor spliced past ~63 species.
-            (0x1F10000, 0x20000), // → 0x1F30000
-            (0x1F30000, 0x84000), // Mirage: decoy tables + _GET_* code caves + the whole clone cave band
-                                  // (node pool / cloth / motion / mesh) → 0x1FB4000
+            // One contiguous claim: PNACH mailbox + AI stubs + the decoy tables + the entire CharacterClone
+            // band (node pool / cloth / per-bone buffers / weapon / mesh). Authoritative layout lives in
+            // CodeCaveAddresses.cs — keep this in sync, or the sweeper starts reporting our OWN writes as the
+            // game dirtying the region and quietly rejects caves that are actually clean.
+            (0x1F10000, 0xA4300), // 0x1F10000 .. 0x1FB4300 (the whole proven-clean heap tail)
         };
 
         private static bool IsReserved(int chunk)

@@ -273,7 +273,14 @@ namespace Dark_Cloud_Improved_Version
             0x8F889CE0u,                                     // lw   t0, -0x6320(gp)   ; NowMonstorUnit
             0x8D080090u,                                     // lw   t0, 0x90(t0)      ; current enemy slot
             0x00084080u,                                     // sll  t0, t0, 2         ; slot*4
-            0x3C050000u | (CodeCaves.PtrTableGuest >> 16),   // lui  a1, PtrTable>>16
+            // Materialize PtrTable's FULL 32-bit address. `lui` alone only sets the high half — it silently
+            // truncates any base whose low 16 bits are non-zero. That is not theoretical: PtrTable used to be
+            // 0x01F30000 (low half zero, so lui sufficed); when the cave band was relaid it moved to
+            // 0x01F19000 and `lui 0x01F1` produced 0x01F10000 — the PNACH MAILBOX. Every enemy then read its
+            // target pointer out of flag bytes, so they all walked toward the origin, with no cast needed.
+            // `ori` is zero-extended (unlike addiu), so this is correct for any low half, including >= 0x8000.
+            0x3C050000u | (CodeCaves.PtrTableGuest >> 16),      // lui  a1, HI(PtrTable)
+            0x34A50000u | (CodeCaves.PtrTableGuest & 0xFFFFu),  // ori  a1, a1, LO(PtrTable)
             0x00A82821u,                                     // addu a1, a1, t0        ; &PtrTable[slot]
             0x8CA50000u,                                     // lw   a1, 0(a1)         ; a1 = per-slot target pointer
             CodeCaveFunctions.J(caveGuest + (uint)jalOff),   // j    cave+jalOff       ; back into the copy

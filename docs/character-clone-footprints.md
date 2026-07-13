@@ -34,20 +34,24 @@ Notes:
 
 ## Implications for cave sizing
 
-- **`MaxNodes = 128` is safe for all six** (max is Osmond at 84). No change needed. Do NOT drop
-  below ~100 — the cloth cave sits at `0x21F54000`, right after the 128-node pool
-  (`0x21F40000`, ends `0x21F53800`); shrinking the pool into it would collide.
-- **`MeshCave = 0x34000` (208 K) fits Toan, Xiao, and Ungaga**, and is 93 % full for Ungaga.
-  It is **too small for Ruby (221 K), Osmond (209 K), and especially Goro (351 K, +68 %)**.
+The clone's caves are sized to the **worst case across all six characters**, so every character is clonable:
 
-### What this means per goal
-- **Ungaga + Xiao (current scope: Ungaga's Mirage, and Super Steve/Xiao inheritance) both fit
-  today** — no cave surgery required.
-- **Universal support** (using the clone for effects on Goro/Ruby/Osmond) requires a **bigger,
-  relocated `MeshCave`** sized to ≥ `0x58000` (Goro). It can't grow in place — `MeshCave`
-  (`0x21F80000`) already runs to `0x21FB4000`, near the top of the clean band
-  (`0x1F30000`–`0x1FB4300`). A larger region (e.g. lower in the `0x1F10100` band above the
-  HarderEnemyAI stubs) would be needed. Deferred until such an effect is actually built.
+- **MeshCave = `0x58000`** — sized for **Goro** (`0x57B30`), the largest. This was `0x34000` and excluded
+  Goro/Ruby/Osmond; the room was found by capping HarderEnemyAI's stubs at 32 slots, trimming the node pool
+  from 128 to 96 bones, and packing the decoy tables out of a mostly-empty `0x10000` hole.
+- **NodePool = 96 bones** — covers **Osmond** (84), the largest skeleton.
+- **FrameInf / BoneMtx** — per-bone buffers, sized for 97 / 99 bones.
+- **ClothObjCave = 3 slots** — covers **Toan** (3 pieces), the most.
+
+Full map and capacities: `CodeCaveAddresses.cs`.
+
+### Why the capacities are stated next to the caves
+These buffers scale with bone count and sit immediately before their neighbours, so an overrun does **not**
+fail — it silently corrupts the next cave. That is not hypothetical: sized for Ungaga's 67 bones, Xiao's 79
+overran `FrameInfCave` into `BoneMtxCave` and `BoneMtxCave` into `WeaponCave`, overwriting the grafted
+weapon's root CFrame (its parent pointer read back as `1.0f` — a matrix diagonal), so Xiao's clone simply
+held no weapon. `CharacterClone` now bounds-checks against every cave's declared size and **refuses to spawn**
+rather than scribbling over a neighbour.
 
 ## Reproducing
 
