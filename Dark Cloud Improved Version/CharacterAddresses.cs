@@ -79,4 +79,108 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Timer value the curse effects use when (re)applying a status: 3600 frames = 60s.</summary>
         internal const ushort StatusDurationFrames = 3600;
     }
+
+    /// <summary>
+    /// <c>CCharacter</c> FIELD LAYOUT — vanilla engine struct. Applies to the active player at
+    /// <see cref="Base"/> AND to every dungeon chara slot (see DungeonCharaDraw), since those are the same
+    /// object type. Nothing here is feature-specific: it's what any code that renders, poses, tints or
+    /// fades a character needs. (CharacterMotion holds the motion-control view of the same object.)
+    /// </summary>
+    internal static class CCharacter
+    {
+        internal const long Base = CharacterMotion.Base;   // the ACTIVE player character (one source of truth)
+
+        internal const int  CharPos        = 0x10;    // x, z/height, y
+        internal const int  CharRotY       = 0x64;    // CObject EULER rotation Y (yaw). GetRotation__7CObject reads
+                                                      // +0x60/+0x64/+0x68 — these are ANGLES, not a direction vector
+                                                      // (an upright character's X/Z angles are ~0).
+        internal const int  CharModel      = 0xBC;    // → model root CFrame (== CharacterMotion.ModelRootOffset)
+        internal const int  ClothList      = 0xC74;   // → up to 4 CCloth ptrs (null list = no cloth)
+        internal const int  MotionSlotBase = 0xC20;   // channel[i] MOTION_TYPE ptr at +0xC20 + i*4
+        internal const int  MotionSlots    = 8;
+        internal const int  MotionFlags    = 0xC64;   // per-step motion flags
+        internal const int  MotionRestart  = 0x4;     //   bit2 = clean restart (frame 0, no blend); consumed once
+        internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN
+        internal const int  CharaTint      = 0xCE0;   // float3 ambient ADD (tint)
+        internal const int  NpcOpacity     = 0xCEC;   // model opacity 0..128; Draw folds it into ambient alpha (must be > 0 to draw)
+        internal const int  DimFactor      = 0xCF0;   // < 1.0 dims the model
+        internal const int  LightFrom      = 0xD00;   // point-light slots — zero them so the light loop skips
+        internal const int  LightTo        = 0xD60;
+    }
+
+    /// <summary>
+    /// <c>CFrameVu1</c> NODE — one bone/frame of a model tree. The tree is child/sibling linked; a node's WORLD
+    /// matrix is built by GetLWMatrix (0x1281B0) walking <see cref="Parent"/> up the chain, which is why a tree
+    /// can't be cloned by copying its root alone (the shared children still point at the original parent).
+    /// The game's own deep copy is CopyFrameVu1 (0x127610): per node a fresh 0x270 struct, geometry SHARED.
+    /// </summary>
+    internal static class CFrameVu1
+    {
+        internal const int  NodeStride   = 0x270;  // MUST match the real node size: MotionProc indexes bones as root + i*0x270
+        internal const int  RootChild    = 0x138;  // first child
+        internal const int  RootSibling  = 0x13C;  // next sibling
+        internal const int  Parent       = 0x110;  // parent (the world-matrix chain walks this)
+        internal const int  WorldCacheA  = 0x240;  // world-matrix-valid flags — zero to force a recompute
+        internal const int  WorldCacheB  = 0x244;
+        internal const int  GeomPtr      = 0x260;  // mesh/geometry object (SHARED between copies, never duplicated)
+    }
+
+    /// <summary>
+    /// <c>CVisualMDTVu1</c> — a SOFTWARE-skinned mesh. Only ~3 bones per character use one; the rest skin on VU1
+    /// at draw time (already per-instance). MotionProc2 skins IN PLACE into the MDT vertex array, so two
+    /// characters sharing one of these fight over the same verts — a real clone must own its own copy.
+    /// </summary>
+    internal static class CVisualMDT
+    {
+        internal const int  VisualSize   = 0x30;        // the visual struct itself
+        internal const int  VisVU        = 0x18;        // → VU data ptr; +0x1C = its size
+        internal const int  VisMDT       = 0x20;        // → MDT block
+        internal const uint MdtMagic     = 0x0054444D;  // "MDT\0" at MDT+0x00
+        internal const int  MdtSizeField = 0x08;        // MDT+0x08 = total block size
+    }
+
+    /// <summary>
+    /// <c>MOTION_TYPE</c> — one animation channel (CCharacter +0xC20 + i*4). Its embedded MOTION_STATE (+0x10)
+    /// is the frame counter Step advances, and it points at two PER-CHARACTER scratch buffers that MotionProc2
+    /// both reads AND writes — so a copied character that shares them fights the original over its own bones.
+    /// </summary>
+    internal static class MotionType
+    {
+        internal const int  BoneMtxPtr    = 0x00;  // → per-bone ANIMATION matrix buffer (MotionProc2 reads *(chan) + bone*0x40)
+        internal const int  BoneMtxEntry  = 0x40;  //   per-bone stride
+        internal const int  MotionSkinList = 0x08; // → MotionProc2 (software-skinning) list; +0x04 = the rigid list
+        internal const int  FrameInfPtr   = 0x60;  // → FRAME_INF, the per-bone SKINNING matrix buffer
+        internal const int  FrameInfEntry = 0xD0;  //   per-bone stride
+    }
+
+    /// <summary><c>CCloth</c> — a cloth piece hanging off CCharacter +0xC74. Fixed 0x8550 allocation with no
+    /// internal cross-refs; the only pointers are its draw packets and its skeleton anchors.</summary>
+    internal static class CCloth
+    {
+        internal const int  ClothObjSize   = 0x8550;  // fixed allocation (__nw 0x8550 in InitCloth)
+        internal const int  ClothMaxPieces = 4;       // length of the CCharacter +0xC74 list
+        internal const int  ClothActive    = 0x18;    // active draw-packet ptr (engine sets it each frame)
+        internal const int  ClothBuf0      = 0x24;    // DBuffID0 packet; +0x28 = DBuffID1 (double-buffered)
+        internal const int  ClothAttach    = 0x3C;    // anchor CFrame — drives the SIM when the cloth is stepped
+    }
+
+    /// <summary><c>CBound</c> — a body collision capsule the cloth sim collides against. Linked list off
+    /// CCloth +0x44. Each capsule is positioned from two body BONES (UpDateDirPos__6CBound → GetLWMatrix), so
+    /// re-anchoring those two pointers makes the cloth collide against a different skeleton.</summary>
+    internal static class CBound
+    {
+        internal const int  BoundSize   = 0x130;  // Sizeof__6CBound
+        internal const int  BoundNext   = 0x00;   // linked-list next
+        internal const int  BoundFrameA = 0xE4;   // capsule endpoint bone A (CFrame*)
+        internal const int  BoundFrameB = 0xE8;   // capsule endpoint bone B (CFrame*)
+    }
+
+    /// <summary>The EQUIPPED WEAPON is a separate object from the character: its model root (+0xBC) is PARENTED
+    /// to the hand bone but DRAWN separately (it is not inside the character's +0xBC tree), in its own texture
+    /// pass. So putting a weapon on a copied character means copying its small CFrame tree too.</summary>
+    internal static class EquippedWeapon
+    {
+        internal const long WeaponObjGlobal = 0x202A34F0;  // iGpffff9d00 (gp-0x6300)
+        internal const int  WeaponHandBone  = 39;          // frame-tree bone the weapon parents to
+    }
 }

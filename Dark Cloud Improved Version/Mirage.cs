@@ -44,10 +44,10 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_armed) return;
             FillWholeTablePlayer();                 // every slot → live-player pointer (valid before any enemy read)
-            bool pos  = ArmDecoyCave("_GET_POSITION", MirageDecoy.GetPositionFn, CodeCaves.PosCave,  CodeCaves.PosCaveGuest,
-                                     MirageDecoy.PosDispatch,  MirageDecoy.PosDetourOff,  MirageDecoy.PosJalOff);
-            bool dist = ArmDecoyCave("_GET_DISTANCE", MirageDecoy.GetDistanceFn, CodeCaves.DistCave, CodeCaves.DistCaveGuest,
-                                     MirageDecoy.DistDispatch, MirageDecoy.DistDetourOff, MirageDecoy.DistJalOff);
+            bool pos  = ArmDecoyCave("_GET_POSITION", StbExternCmd.GetPositionFn, CodeCaves.PosCave,  CodeCaves.PosCaveGuest,
+                                     StbExternCmd.GetPositionSlot,  StbExternCmd.PosPlayerLdOff,  StbExternCmd.PosCopyJalOff);
+            bool dist = ArmDecoyCave("_GET_DISTANCE", StbExternCmd.GetDistanceFn, CodeCaves.DistCave, CodeCaves.DistCaveGuest,
+                                     StbExternCmd.GetDistanceSlot, StbExternCmd.DistPlayerLdOff, StbExternCmd.DistCopyJalOff);
             _armed = pos && dist;                   // retry from the loop if either couldn't arm (e.g. not vanilla yet)
         }
 
@@ -297,8 +297,8 @@ namespace Dark_Cloud_Improved_Version
         private static bool ArmDecoyCave(string name, long vanillaFn, long cave, uint caveGuest, long dispatch, int detourOff, int jalOff)
             => CodeCaveFunctions.ArmDispatchCave(
                 name, vanillaFn, FnCopySize, cave, caveGuest, dispatch,
-                pristine: new[] { (0, MirageDecoy.VanillaPrologue),            // addiu sp,-0x50
-                                  (detourOff, MirageDecoy.VanillaPlayerLd) },  // lui v0,0x1ea (the player-addr load)
+                pristine: new[] { (0, StbExternCmd.VanillaPrologue),            // addiu sp,-0x50
+                                  (detourOff, StbExternCmd.VanillaPlayerLd) },  // lui v0,0x1ea (the player-addr load)
                 detours:  new[] { (detourOff, new[] { CodeCaveFunctions.J(caveGuest + HelperOff),   // was lui v0,0x1ea
                                                       CodeCaveFunctions.Nop }) },                   // was addiu a1,v0,0x1d30
                 helperOff: HelperOff, helper: DecoyHelper(caveGuest, jalOff));
@@ -341,7 +341,7 @@ namespace Dark_Cloud_Improved_Version
                             // the first hold-pose motion while guarding and only clear the latch when R1 is released
                             // (guard exited) — so re-entering guard plants a fresh decoy, but 9<->33 doesn't.
                             bool guarding = (Memory.ReadUShort(Addresses.buttonInputs) & (ushort)Button.R1) != 0;
-                            int  mid = Memory.ReadInt(MirageClone.PlayerChar + MirageClone.MotionId);
+                            int  mid = Memory.ReadInt(CCharacter.Base + CCharacter.MotionId);
                             bool inGuardPose = guarding && (mid == GuardLoopMotion || mid == GuardMoveMotion);
                             if (!guarding) { guardLatched = false; guardPoseSince = default; }   // released guard → re-arm
                             if (inGuardPose && !guardLatched)
@@ -416,7 +416,7 @@ namespace Dark_Cloud_Improved_Version
             => (Memory.ReadFloat(Addresses.dunPositionX),
                 Memory.ReadFloat(Addresses.dunPositionZ),
                 Memory.ReadFloat(Addresses.dunPositionY),
-                Memory.ReadFloat(MirageClone.PlayerChar + MirageClone.CharRotY));
+                Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY));
 
         private static void PlaceDecoy()
         {
@@ -522,7 +522,7 @@ namespace Dark_Cloud_Improved_Version
         {
             var buf = new byte[MirageDecoy.MaxSlots * MirageDecoy.PtrStride];
             for (int s = 0; s < MirageDecoy.MaxSlots; s++)
-                BitConverter.GetBytes(_fooled[s] ? CodeCaves.DecoyPosGuest : MirageDecoy.PlayerPosGuest)
+                BitConverter.GetBytes(_fooled[s] ? CodeCaves.DecoyPosGuest : StbExternCmd.PlayerPosGuest)
                     .CopyTo(buf, s * MirageDecoy.PtrStride);
             Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
         }
@@ -533,7 +533,7 @@ namespace Dark_Cloud_Improved_Version
         {
             var buf = new byte[MirageDecoy.TableSlots * MirageDecoy.PtrStride];
             for (int s = 0; s < MirageDecoy.TableSlots; s++)
-                BitConverter.GetBytes(MirageDecoy.PlayerPosGuest).CopyTo(buf, s * MirageDecoy.PtrStride);
+                BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(buf, s * MirageDecoy.PtrStride);
             Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
         }
 
@@ -595,7 +595,7 @@ namespace Dark_Cloud_Improved_Version
         /// whether the NPC slot can render ANY geometry at the decoy.</summary>
         private static uint CloneSourceModelRoot()
         {
-            return (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel);
+            return (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel);
         }
 
         private static void SpawnClone()
@@ -612,40 +612,40 @@ namespace Dark_Cloud_Improved_Version
             // Draw__12CNPCharacter with its own texture group (0x20). Fill the player's draw fields, aim the
             // model at the clone tree, freeze, set position/opacity, mark active, and register it for draw.
             _cloneSlot = 0;
-            long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
+            long slot = DungeonCharaDraw.CharaArray + (long)_cloneSlot * DungeonCharaDraw.CharaStride;
 
-            byte[] buf = Memory.ReadBytesBatch(MirageClone.PlayerChar, MirageClone.CharCopySize);
+            byte[] buf = Memory.ReadBytesBatch(CCharacter.Base, MirageClone.CharCopySize);
             if (buf == null) { _cloneSlot = -1; return; }
             // Cloth: snapshot the player's cloth pieces into clone-owned copies and hang them off the CLONE's own
             // +0xC74. The clone's Draw renders them (ghost tint — NO player flash bleed). In PHYSICS mode the
             // anchor/collision are re-based to the clone skeleton (in CopyCloth) and the clone is ClothStep'd by
             // the PNACH chara-loop patch (jal ShadowStep→ClothStep while the decoy flag == 1), so they simulate.
             uint clothListGuest = ClothEnabled ? CopyCloth() : (uint)CodeCaves.ClothStubGuest;
-            BitConverter.GetBytes(clothListGuest).CopyTo(buf, MirageClone.ClothList);
-            BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, MirageClone.DimFactor);
+            BitConverter.GetBytes(clothListGuest).CopyTo(buf, CCharacter.ClothList);
+            BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, CCharacter.DimFactor);
             // PIN the clone to the guard-loop motion instead of whatever the player was mid-doing at spawn. The
             // engine's chara-step (unlocked via the PNACH step-gate NOP) reads +0xC68 every frame → SetMotionEX,
             // so a stale/transition capture would stick. Force motion 9 and set the clean-restart flag (+0xC64
             // bit2) so the first step starts it at frame 0 with no blend. MaintainClone re-asserts +0xC68 = 9.
             // NOTE: leave +0xC60 (motion speed) at the copied player value — native speed. A near-zero override
             // made MotionProc loop-to-freeze covering a motion span by 0.001-steps.
-            BitConverter.GetBytes(GuardLoopMotion).CopyTo(buf, MirageClone.MotionId);
-            BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, MirageClone.MotionFlags) | (uint)MirageClone.MotionRestart)
-                .CopyTo(buf, MirageClone.MotionFlags);
+            BitConverter.GetBytes(GuardLoopMotion).CopyTo(buf, CCharacter.MotionId);
+            BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, CCharacter.MotionFlags) | (uint)CCharacter.MotionRestart)
+                .CopyTo(buf, CCharacter.MotionFlags);
             // Spawn TRANSPARENT: CloneAlpha() is ~0 the instant the decoy is planted. Writing full opacity here
             // draws the clone at full strength for the frames between SpawnClone and the first MaintainClone —
             // that's the visible "flash" before the haze ramps in.
-            BitConverter.GetBytes((GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha()).CopyTo(buf, MirageClone.NpcOpacity);  // +0xcec
-            BitConverter.GetBytes(GhostSilhouette ? GhostTintR : 0f).CopyTo(buf, MirageClone.CharaTint);      // +0xce0 ambient ADD (brighter + blue)
-            BitConverter.GetBytes(GhostSilhouette ? GhostTintG : 0f).CopyTo(buf, MirageClone.CharaTint + 4);
-            BitConverter.GetBytes(GhostSilhouette ? GhostTintB : 0f).CopyTo(buf, MirageClone.CharaTint + 8);
-            for (int o = MirageClone.LightFrom; o < MirageClone.LightTo; o += 4) BitConverter.GetBytes(0).CopyTo(buf, o);
+            BitConverter.GetBytes((GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha()).CopyTo(buf, CCharacter.NpcOpacity);  // +0xcec
+            BitConverter.GetBytes(GhostSilhouette ? GhostTintR : 0f).CopyTo(buf, CCharacter.CharaTint);      // +0xce0 ambient ADD (brighter + blue)
+            BitConverter.GetBytes(GhostSilhouette ? GhostTintG : 0f).CopyTo(buf, CCharacter.CharaTint + 4);
+            BitConverter.GetBytes(GhostSilhouette ? GhostTintB : 0f).CopyTo(buf, CCharacter.CharaTint + 8);
+            for (int o = CCharacter.LightFrom; o < CCharacter.LightTo; o += 4) BitConverter.GetBytes(0).CopyTo(buf, o);
             // Keep the copied tex-anime object (+0xdc) intact — it selects the face/skin textures; zeroing it
             // left the face dark and arms mis-textured. (Was zeroed for the old shared-texture NPC host.)
-            BitConverter.GetBytes(_dx).CopyTo(buf, MirageClone.CharPos);       // +0x10 X
-            BitConverter.GetBytes(_dz).CopyTo(buf, MirageClone.CharPos + 4);   // +0x14 Z/height
-            BitConverter.GetBytes(_dy).CopyTo(buf, MirageClone.CharPos + 8);   // +0x18 Y
-            BitConverter.GetBytes(_cloneRootGuest).CopyTo(buf, MirageClone.CharModel);
+            BitConverter.GetBytes(_dx).CopyTo(buf, CCharacter.CharPos);       // +0x10 X
+            BitConverter.GetBytes(_dz).CopyTo(buf, CCharacter.CharPos + 4);   // +0x14 Z/height
+            BitConverter.GetBytes(_dy).CopyTo(buf, CCharacter.CharPos + 8);   // +0x18 Y
+            BitConverter.GetBytes(_cloneRootGuest).CopyTo(buf, CCharacter.CharModel);
 
             // Give the clone INDEPENDENT motion channels so the engine-step advances its OWN frame counter
             // (not the player's shared one → the 2× fix). Copy each active channel struct into the cave and
@@ -654,14 +654,14 @@ namespace Dark_Cloud_Improved_Version
             // once; shared across channels). Otherwise the clone's MotionProc2 clobbers the player's matrices.
             bool ownSkin = IndependentMesh && _meshesCopied > 0;
             uint fiOld = 0, fiNew = 0, bmOld = 0, bmNew = 0;
-            int  fiSize = (_cloneNodeCount + 1) * MirageClone.FrameInfEntry;
-            int  bmSize = (_cloneNodeCount + 1) * MirageClone.BoneMtxEntry;
+            int  fiSize = (_cloneNodeCount + 1) * MotionType.FrameInfEntry;
+            int  bmSize = (_cloneNodeCount + 1) * MotionType.BoneMtxEntry;
             _chanMap.Clear();
             if (EngineDrivenAnim)
             {
-                for (int s = 0; s < MirageClone.MotionSlots; s++)
+                for (int s = 0; s < CCharacter.MotionSlots; s++)
                 {
-                    int po = MirageClone.MotionSlotBase + s * 4;
+                    int po = CCharacter.MotionSlotBase + s * 4;
                     uint sp = (uint)BitConverter.ToInt32(buf, po) & Memory.PhysAddrMask;
                     if (!Memory.IsValidGuest(sp)) continue;
                     byte[] mstr = Memory.ReadBytesBatch(Memory.ToMmu(sp), MirageClone.MotionStructSize);
@@ -670,7 +670,7 @@ namespace Dark_Cloud_Improved_Version
                     // Give the clone its own FRAME_INF (skinning-matrix buffer), copied once and reused.
                     if (ownSkin)
                     {
-                        uint fi = (uint)BitConverter.ToInt32(mstr, MirageClone.FrameInfPtr) & Memory.PhysAddrMask;
+                        uint fi = (uint)BitConverter.ToInt32(mstr, MotionType.FrameInfPtr) & Memory.PhysAddrMask;
                         if (Memory.IsValidGuest(fi))
                         {
                             if (fiNew == 0 || fi == fiOld)
@@ -680,12 +680,12 @@ namespace Dark_Cloud_Improved_Version
                                     byte[] fib = Memory.ReadBytesBatch(Memory.ToMmu(fi), fiSize);
                                     if (fib != null) { Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib); fiOld = fi; fiNew = (uint)CodeCaves.FrameInfCaveGuest; }
                                 }
-                                if (fiNew != 0) BitConverter.GetBytes(fiNew).CopyTo(mstr, MirageClone.FrameInfPtr);
+                                if (fiNew != 0) BitConverter.GetBytes(fiNew).CopyTo(mstr, MotionType.FrameInfPtr);
                             }
                         }
 
                         // Give the clone its own per-bone ANIMATION-matrix buffer (channel+0x00), copied once.
-                        uint bm = (uint)BitConverter.ToInt32(mstr, MirageClone.BoneMtxPtr) & Memory.PhysAddrMask;
+                        uint bm = (uint)BitConverter.ToInt32(mstr, MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
                         if (Memory.IsValidGuest(bm))
                         {
                             if (bmNew == 0 || bm == bmOld)
@@ -695,7 +695,7 @@ namespace Dark_Cloud_Improved_Version
                                     byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
                                     if (bmb != null) { Memory.WriteBytesBatch(CodeCaves.BoneMtxCave, bmb); bmOld = bm; bmNew = (uint)(CodeCaves.BoneMtxCave & Memory.PhysAddrMask | 0x01000000); }
                                 }
-                                if (bmNew != 0) BitConverter.GetBytes(bmNew).CopyTo(mstr, MirageClone.BoneMtxPtr);
+                                if (bmNew != 0) BitConverter.GetBytes(bmNew).CopyTo(mstr, MotionType.BoneMtxPtr);
                             }
                         }
                     }
@@ -704,7 +704,7 @@ namespace Dark_Cloud_Improved_Version
                     // body. Otherwise zero the list so it never touches the SHARED mesh (body mirrors the player).
                     // Only let the clone software-skin if it got its OWN mesh copies; else zero the skin list so
                     // it never touches the SHARED mesh (safe fallback = body mirrors, player uncorrupted).
-                    if (!IndependentMesh || _meshesCopied == 0) BitConverter.GetBytes(0).CopyTo(mstr, MirageClone.MotionSkinList);
+                    if (!IndependentMesh || _meshesCopied == 0) BitConverter.GetBytes(0).CopyTo(mstr, MotionType.MotionSkinList);
                     long cloneChan = CodeCaves.MotionCave + (long)s * MirageClone.MotionStructSize;
                     Memory.WriteBytesBatch(cloneChan, mstr);
                     BitConverter.GetBytes((uint)(CodeCaves.MotionCaveGuest + s * MirageClone.MotionStructSize)).CopyTo(buf, po);
@@ -714,16 +714,16 @@ namespace Dark_Cloud_Improved_Version
 
             Memory.WriteBytesBatch(CodeCaves.ClothStub, new byte[16]);
             Memory.WriteBytesBatch(slot, buf);   // fill the CCharacter fields (0..0xD60)
-            Memory.WriteInt(slot + MirageClone.CharaActive, 1);    // active (Draw__12CNPCharacter gate; beyond 0xD60)
+            Memory.WriteInt(slot + DungeonCharaDraw.CharaActive, 1);    // active (Draw__12CNPCharacter gate; beyond 0xD60)
             // Engine-driven animation: enable the chara motion step (Step__12CNPCharacter → Step__10CCharacter →
             // SetMotionEX) and zero the opacity ramp so it doesn't fight our GhostOpacity.
-            Memory.WriteInt(slot + MirageClone.CharaMotionA, EngineDrivenAnim ? 1 : 0);
-            Memory.WriteInt(slot + MirageClone.CharaMotionB, 0);
-            Memory.WriteInt(slot + MirageClone.CharaRampA, 0);     // opacity-ramp amount = 0 (no fade drift)
-            Memory.WriteInt(slot + MirageClone.CharaRampB, 0);
-            Memory.WriteInt(MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // register → dungeon draw draws it
-            Memory.WriteInt(MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // un-skip → dungeon step loop steps it (clear the 1 a prior DespawnClone left)
-            Console.WriteLine($"[Mirage] clone in chara slot {_cloneSlot} (texgroup 0x{MirageClone.CharaTexBase + _cloneSlot:X}) @({_dx:0.#},{_dz:0.#},{_dy:0.#}) root=0x{_cloneRootGuest:X}");
+            Memory.WriteInt(slot + DungeonCharaDraw.CharaMotionA, EngineDrivenAnim ? 1 : 0);
+            Memory.WriteInt(slot + DungeonCharaDraw.CharaMotionB, 0);
+            Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA, 0);     // opacity-ramp amount = 0 (no fade drift)
+            Memory.WriteInt(slot + DungeonCharaDraw.CharaRampB, 0);
+            Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 1);   // register → dungeon draw draws it
+            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, 0);   // un-skip → dungeon step loop steps it (clear the 1 a prior DespawnClone left)
+            Console.WriteLine($"[Mirage] clone in chara slot {_cloneSlot} (texgroup 0x{DungeonCharaDraw.CharaTexBase + _cloneSlot:X}) @({_dx:0.#},{_dz:0.#},{_dy:0.#}) root=0x{_cloneRootGuest:X}");
 
             if (WeaponEnabled) RegisterWeaponChara();   // clone weapon in its own slot 3 / texgroup 0x1d pass
         }
@@ -744,7 +744,7 @@ namespace Dark_Cloud_Improved_Version
         /// if the weapon flickers it's software-skinned (MDT) and needs the CopyMeshNodes double-buffer copy.</summary>
         private static void GraftWeapon()
         {
-            uint wpnObj = (uint)Memory.ReadInt(MirageClone.WeaponObjGlobal) & Memory.PhysAddrMask;
+            uint wpnObj = (uint)Memory.ReadInt(EquippedWeapon.WeaponObjGlobal) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(wpnObj)) { Console.WriteLine("[Mirage/wpn] no weapon object"); return; }
             uint wRoot = (uint)Memory.ReadInt(Memory.ToMmu(wpnObj) + 0xBC) & Memory.PhysAddrMask;   // weapon model root
             if (!Memory.IsValidGuest(wRoot)) { Console.WriteLine("[Mirage/wpn] no weapon model"); return; }
@@ -760,15 +760,15 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(n) || !seen.Add(n)) continue;
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > 64) { Console.WriteLine("[Mirage/wpn] weapon tree > 64 nodes — bailing"); return; }
-                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.RootChild) & Memory.PhysAddrMask;
+                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootChild) & Memory.PhysAddrMask;
                      Memory.IsValidGuest(c);
-                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & Memory.PhysAddrMask)
+                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + CFrameVu1.RootSibling) & Memory.PhysAddrMask)
                     work.Push(c);
             }
-            if ((max - min) % MirageClone.NodeStride != 0)
+            if ((max - min) % CFrameVu1.NodeStride != 0)
             { Console.WriteLine($"[Mirage/wpn] span 0x{max - min:X} not 0x270-aligned — bailing"); return; }
-            int nodeCount = (int)((max - min) / MirageClone.NodeStride) + 1;
-            int blockSize = nodeCount * MirageClone.NodeStride;
+            int nodeCount = (int)((max - min) / CFrameVu1.NodeStride) + 1;
+            int blockSize = nodeCount * CFrameVu1.NodeStride;
             if (blockSize > CodeCaves.WeaponCaveSize)
             { Console.WriteLine($"[Mirage/wpn] weapon tree 0x{blockSize:X} > cave 0x{CodeCaves.WeaponCaveSize:X}"); return; }
 
@@ -777,14 +777,14 @@ namespace Dark_Cloud_Improved_Version
 
             uint rootOff = wRoot - min;
             uint wCaveG  = (uint)CodeCaves.WeaponCaveGuest;
-            for (int o = 0; o < blockSize; o += MirageClone.NodeStride)
+            for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
-                WpnRebase(block, o + MirageClone.Parent,      min, max, wCaveG, isRoot);   // root parent → set below
-                WpnRebase(block, o + MirageClone.RootChild,   min, max, wCaveG, false);
-                WpnRebase(block, o + MirageClone.RootSibling, min, max, wCaveG, isRoot);   // root sibling → set below
-                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheA);
-                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheB);
+                WpnRebase(block, o + CFrameVu1.Parent,      min, max, wCaveG, isRoot);   // root parent → set below
+                WpnRebase(block, o + CFrameVu1.RootChild,   min, max, wCaveG, false);
+                WpnRebase(block, o + CFrameVu1.RootSibling, min, max, wCaveG, isRoot);   // root sibling → set below
+                BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
+                BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
             }
             Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);
 
@@ -793,12 +793,12 @@ namespace Dark_Cloud_Improved_Version
             // NOT insert it into the hand's child list: the weapon draws in its OWN chara slot / texgroup-0x1d
             // pass (RegisterWeaponChara), so the body's 0x11 pass never draws it with the wrong texture.
             uint wRootG = (uint)(wCaveG + rootOff);
-            uint handG  = (uint)(CodeCaves.NodePoolGuest + MirageClone.WeaponHandBone * MirageClone.NodeStride);
-            Memory.WriteUInt(Memory.ToMmu(wRootG) + MirageClone.Parent,      handG);
-            Memory.WriteUInt(Memory.ToMmu(wRootG) + MirageClone.RootSibling, 0);   // standalone root
+            uint handG  = (uint)(CodeCaves.NodePoolGuest + EquippedWeapon.WeaponHandBone * CFrameVu1.NodeStride);
+            Memory.WriteUInt(Memory.ToMmu(wRootG) + CFrameVu1.Parent,      handG);
+            Memory.WriteUInt(Memory.ToMmu(wRootG) + CFrameVu1.RootSibling, 0);   // standalone root
             _weaponRootGuest = wRootG;
             _wpnObjPtr = wpnObj;
-            Console.WriteLine($"[Mirage/wpn] weapon tree copied ({nodeCount} nodes) → root 0x{wRootG:X}, parent=clone hand {MirageClone.WeaponHandBone}");
+            Console.WriteLine($"[Mirage/wpn] weapon tree copied ({nodeCount} nodes) → root 0x{wRootG:X}, parent=clone hand {EquippedWeapon.WeaponHandBone}");
         }
 
         /// <summary>Register the copied weapon tree as its OWN chara slot (WeaponCharaSlot). Cloned from the body
@@ -809,22 +809,22 @@ namespace Dark_Cloud_Improved_Version
         private static void RegisterWeaponChara()
         {
             if (_weaponRootGuest == 0 || _wpnObjPtr == 0 || _cloneSlot < 0) return;
-            long src = MirageClone.CharaArray + (long)_cloneSlot        * MirageClone.CharaStride;   // body slot (valid)
-            long dst = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
-            byte[] cslot = Memory.ReadBytesBatch(src, MirageClone.CharaStride);
+            long src = DungeonCharaDraw.CharaArray + (long)_cloneSlot        * DungeonCharaDraw.CharaStride;   // body slot (valid)
+            long dst = DungeonCharaDraw.CharaArray + (long)MirageClone.WeaponCharaSlot * DungeonCharaDraw.CharaStride;
+            byte[] cslot = Memory.ReadBytesBatch(src, DungeonCharaDraw.CharaStride);
             if (cslot == null) return;
-            byte[] wtf = Memory.ReadBytesBatch(Memory.ToMmu(_wpnObjPtr) + MirageClone.CharPos, 0x90);   // +0x10..+0xA0 TRS
-            if (wtf != null) wtf.CopyTo(cslot, MirageClone.CharPos);
-            BitConverter.GetBytes(_weaponRootGuest).CopyTo(cslot, MirageClone.CharModel);               // +0xbc = weapon tree
-            for (int s = 0; s < MirageClone.MotionSlots; s++)                                            // rigid: no motion
-                BitConverter.GetBytes(0).CopyTo(cslot, MirageClone.MotionSlotBase + s * 4);
+            byte[] wtf = Memory.ReadBytesBatch(Memory.ToMmu(_wpnObjPtr) + CCharacter.CharPos, 0x90);   // +0x10..+0xA0 TRS
+            if (wtf != null) wtf.CopyTo(cslot, CCharacter.CharPos);
+            BitConverter.GetBytes(_weaponRootGuest).CopyTo(cslot, CCharacter.CharModel);               // +0xbc = weapon tree
+            for (int s = 0; s < CCharacter.MotionSlots; s++)                                            // rigid: no motion
+                BitConverter.GetBytes(0).CopyTo(cslot, CCharacter.MotionSlotBase + s * 4);
             Memory.WriteBytesBatch(dst, cslot);
-            Memory.WriteInt  (dst + MirageClone.CharaActive, 1);                                         // +0x146c draw gate
-            Memory.WriteFloat(dst + MirageClone.NpcOpacity, (GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha());   // +0xcec — spawn transparent (see above)
-            Memory.WriteInt  (dst + MirageClone.CharaMotionA, 0);                                        // never step
-            Memory.WriteInt  (dst + MirageClone.CharaMotionB, 0);
-            Memory.WriteInt  (MirageClone.StepSkipTable  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // step loop skips it
-            Memory.WriteInt  (MirageClone.CharaRegistry  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // draw loop draws it
+            Memory.WriteInt  (dst + DungeonCharaDraw.CharaActive, 1);                                         // +0x146c draw gate
+            Memory.WriteFloat(dst + CCharacter.NpcOpacity, (GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha());   // +0xcec — spawn transparent (see above)
+            Memory.WriteInt  (dst + DungeonCharaDraw.CharaMotionA, 0);                                        // never step
+            Memory.WriteInt  (dst + DungeonCharaDraw.CharaMotionB, 0);
+            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // step loop skips it
+            Memory.WriteInt  (DungeonCharaDraw.CharaRegistry  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // draw loop draws it
             Console.WriteLine($"[Mirage/wpn] weapon chara slot {MirageClone.WeaponCharaSlot} (texgroup 0x1d) model=0x{_weaponRootGuest:X}");
         }
 
@@ -857,15 +857,15 @@ namespace Dark_Cloud_Improved_Version
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > CodeCaves.MaxNodes)
                 { Console.WriteLine($"[Mirage] clone tree > {CodeCaves.MaxNodes} nodes — aborting"); return false; }
-                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.RootChild) & Memory.PhysAddrMask;
+                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootChild) & Memory.PhysAddrMask;
                      Memory.IsValidGuest(c);
-                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & Memory.PhysAddrMask)
+                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + CFrameVu1.RootSibling) & Memory.PhysAddrMask)
                     work.Push(c);
             }
 
-            int nodeCount = (int)((max - min) / MirageClone.NodeStride) + 1;
-            int blockSize = nodeCount * MirageClone.NodeStride;
-            if ((max - min) % MirageClone.NodeStride != 0)
+            int nodeCount = (int)((max - min) / CFrameVu1.NodeStride) + 1;
+            int blockSize = nodeCount * CFrameVu1.NodeStride;
+            if ((max - min) % CFrameVu1.NodeStride != 0)
             { Console.WriteLine($"[Mirage] tree span 0x{max - min:X} not 0x270-aligned — bailing"); return false; }
 
             byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
@@ -874,14 +874,14 @@ namespace Dark_Cloud_Improved_Version
             // Re-base every link pointer by (clonePool − playerBase); zero external refs and the root's
             // parent/sibling; invalidate world caches. Same-offset translation keeps array indexing valid.
             uint rootOff = rootPhys - min;
-            for (int o = 0; o < blockSize; o += MirageClone.NodeStride)
+            for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
-                Rebase(block, o + MirageClone.Parent,      min, max, isRoot);   // root's parent → 0
-                Rebase(block, o + MirageClone.RootChild,   min, max, false);
-                Rebase(block, o + MirageClone.RootSibling, min, max, isRoot);   // root's sibling → 0
-                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheA);
-                BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheB);
+                Rebase(block, o + CFrameVu1.Parent,      min, max, isRoot);   // root's parent → 0
+                Rebase(block, o + CFrameVu1.RootChild,   min, max, false);
+                Rebase(block, o + CFrameVu1.RootSibling, min, max, isRoot);   // root's sibling → 0
+                BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
+                BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
             }
             Memory.WriteBytesBatch(CodeCaves.NodePool, block);
 
@@ -916,20 +916,20 @@ namespace Dark_Cloud_Improved_Version
             int copied = 0;
             for (int i = 0; i < _cloneNodeCount; i++)
             {
-                long node = CodeCaves.NodePool + (long)i * MirageClone.NodeStride;
-                uint vis = (uint)Memory.ReadInt(node + MirageClone.GeomPtr) & Memory.PhysAddrMask;
+                long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
+                uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(vis)) continue;
-                uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisMDT) & Memory.PhysAddrMask;
+                uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
                 uint magic = (Memory.IsValidGuest(mdt)) ? (uint)Memory.ReadInt(Memory.ToMmu(mdt)) : 0xDEAD;
                 if (!Memory.IsValidGuest(mdt)) continue;
-                if (magic != MirageClone.MdtMagic) continue;   // not software-skinned
+                if (magic != CVisualMDT.MdtMagic) continue;   // not software-skinned
 
-                uint vu    = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisVU) & Memory.PhysAddrMask;
-                int  vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisVU + 4) * 16;   // field is in QWORDS
-                int  mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + MirageClone.MdtSizeField);
+                uint vu    = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
+                int  vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;   // field is in QWORDS
+                int  mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
                 if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
 
-                int visSz = MirageClone.VisualSize;
+                int visSz = CVisualMDT.VisualSize;
                 int need  = Align16(visSz) + Align16(vuSz) + Align16(mdtSz);
                 if (cave + need > caveEnd) { Console.WriteLine($"[Mirage/mesh] cave full at n{i}"); break; }
 
@@ -962,7 +962,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(cVU,  vuB);
                 Memory.WriteBytesBatch(cMDT, mdtB);
                 Memory.WriteBytesBatch(cVis, visB);
-                Memory.WriteUInt(node + MirageClone.GeomPtr, cVisG);   // node draws the clone's own mesh
+                Memory.WriteUInt(node + CFrameVu1.GeomPtr, cVisG);   // node draws the clone's own mesh
                 cave += need; caveGuest += need; copied++;
                 Console.WriteLine($"[Mirage/mesh] n{i}: vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} = 0x{need:X}");
             }
@@ -997,20 +997,20 @@ namespace Dark_Cloud_Improved_Version
         /// on any read failure so the clone simply gets no cloth rather than a bad pointer.</summary>
         private static uint CopyCloth()
         {
-            uint listGuest = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & Memory.PhysAddrMask;
+            uint listGuest = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.ClothList) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(listGuest)) return (uint)CodeCaves.ClothStubGuest;
 
             // Character-adaptive: walk the WHOLE +0xC74 list (up to ClothMaxPieces) rather than a hardcoded count,
             // so Xiao/Super Steve's cloth works too. Objects are PACKED DENSELY by success count (not source index)
             // so gaps in the list don't waste object slots, and both the object and buffer caves are capacity-guarded
             // (skip-and-log on overflow rather than corrupt). Full 0x8550 copy = physics-ready (Step touches +0x7550+).
-            uint[] cloneList = new uint[MirageClone.ClothMaxPieces];   // guest ptrs; 0 = empty (Draw skips)
+            uint[] cloneList = new uint[CCloth.ClothMaxPieces];   // guest ptrs; 0 = empty (Draw skips)
             int copied = 0, bufOff = 0, anchorOff = 0, boundOff = 0;
             int bufCap = (int)CodeCaves.ClothAnchorCave - (int)CodeCaves.ClothBufCave;   // room before anchor cave
-            uint modelRoot = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel) & Memory.PhysAddrMask;
+            uint modelRoot = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
             var boundDedupe = new System.Collections.Generic.Dictionary<uint, uint>();   // player bound-head → clone head
 
-            for (int i = 0; i < MirageClone.ClothMaxPieces; i++)
+            for (int i = 0; i < CCloth.ClothMaxPieces; i++)
             {
                 uint srcObj = (uint)Memory.ReadInt(Memory.ToMmu(listGuest) + i * 4) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(srcObj)) continue;   // empty list slot
@@ -1018,13 +1018,13 @@ namespace Dark_Cloud_Improved_Version
                 if (copied >= MirageClone.ClothObjSlots)
                 { Console.WriteLine($"[Mirage/cloth] piece {i}: object cave full ({MirageClone.ClothObjSlots} slots) — skip"); continue; }
 
-                byte[] obj = Memory.ReadBytesBatch(Memory.ToMmu(srcObj), MirageClone.ClothObjSize);
-                if (obj == null) { Console.WriteLine($"[Mirage/cloth] piece {i}: obj read (0x{MirageClone.ClothObjSize:X}) failed @0x{srcObj:X} — skip"); continue; }
+                byte[] obj = Memory.ReadBytesBatch(Memory.ToMmu(srcObj), CCloth.ClothObjSize);
+                if (obj == null) { Console.WriteLine($"[Mirage/cloth] piece {i}: obj read (0x{CCloth.ClothObjSize:X}) failed @0x{srcObj:X} — skip"); continue; }
 
                 int rows = BitConverter.ToInt32(obj, 0x2C), cols = BitConverter.ToInt32(obj, 0x30);
                 // The two draw buffers (+0x24/+0x28) point at external packets; their gap is the allocated size.
-                uint sBuf0 = (uint)BitConverter.ToInt32(obj, MirageClone.ClothBuf0)     & Memory.PhysAddrMask;
-                uint sBuf1 = (uint)BitConverter.ToInt32(obj, MirageClone.ClothBuf0 + 4) & Memory.PhysAddrMask;
+                uint sBuf0 = (uint)BitConverter.ToInt32(obj, CCloth.ClothBuf0)     & Memory.PhysAddrMask;
+                uint sBuf1 = (uint)BitConverter.ToInt32(obj, CCloth.ClothBuf0 + 4) & Memory.PhysAddrMask;
                 int bufSize = (int)(sBuf1 - sBuf0);
                 if (bufSize <= 0 || bufSize > 0x4000)
                 { Console.WriteLine($"[Mirage/cloth] piece {i}: odd buf span 0x{sBuf0:X}..0x{sBuf1:X} → fallback 0x2000"); bufSize = 0x2000; }
@@ -1032,14 +1032,14 @@ namespace Dark_Cloud_Improved_Version
                 if (bufOff + bufSize > bufCap) { Console.WriteLine($"[Mirage/cloth] piece {i}: buffer cave full — skip"); continue; }
 
                 uint cloneBufGuest = CodeCaves.ClothBufGuest + (uint)bufOff;   // single clone-owned buffer
-                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothActive);       // +0x18 active
-                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothBuf0);         // +0x24 DBuffID0
-                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothBuf0 + 4);     // +0x28 DBuffID1
+                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, CCloth.ClothActive);       // +0x18 active
+                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, CCloth.ClothBuf0);         // +0x24 DBuffID0
+                BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, CCloth.ClothBuf0 + 4);     // +0x28 DBuffID1
                 // Leave +0x3c (attach frame) pointing at the player's bone: it's never read while unstepped, and a
                 // valid frame is safer than a null if some path ever did step it.
 
-                long cloneObj      = CodeCaves.ClothObjCave  + (long)copied * MirageClone.ClothObjSize;   // DENSE
-                uint cloneObjGuest = CodeCaves.ClothObjGuest + (uint)(copied * MirageClone.ClothObjSize);
+                long cloneObj      = CodeCaves.ClothObjCave  + (long)copied * CCloth.ClothObjSize;   // DENSE
+                uint cloneObjGuest = CodeCaves.ClothObjGuest + (uint)(copied * CCloth.ClothObjSize);
                 Memory.WriteBytesBatch(cloneObj, obj);
                 cloneList[copied] = cloneObjGuest;
                 bufOff += bufSize;
@@ -1048,10 +1048,10 @@ namespace Dark_Cloud_Improved_Version
                 // PHYSICS: re-anchor +0x3c to a clone-space frame so the stepped sim tracks the CLONE skeleton.
                 if (ClothPhysics && _cloneNodeCount > 0)
                 {
-                    uint pAttach = (uint)BitConverter.ToInt32(obj, MirageClone.ClothAttach) & Memory.PhysAddrMask;
+                    uint pAttach = (uint)BitConverter.ToInt32(obj, CCloth.ClothAttach) & Memory.PhysAddrMask;
                     uint cAttach = ResolveCloneAttach(pAttach, modelRoot, ref anchorOff);
                     if (cAttach != 0)
-                    { Memory.WriteUInt(cloneObj + MirageClone.ClothAttach, cAttach);
+                    { Memory.WriteUInt(cloneObj + CCloth.ClothAttach, cAttach);
                       Console.WriteLine($"[Mirage/cloth] piece {i}: attach 0x{pAttach:X} → clone 0x{cAttach:X}"); }
                     else
                         Console.WriteLine($"[Mirage/cloth] piece {i}: attach resolve FAILED (0x{pAttach:X}) — cloth would follow player");
@@ -1066,10 +1066,10 @@ namespace Dark_Cloud_Improved_Version
 
             if (copied == 0) return (uint)CodeCaves.ClothStubGuest;
 
-            byte[] listBytes = new byte[MirageClone.ClothMaxPieces * 4];
+            byte[] listBytes = new byte[CCloth.ClothMaxPieces * 4];
             for (int i = 0; i < cloneList.Length; i++) BitConverter.GetBytes(cloneList[i]).CopyTo(listBytes, i * 4);
             Memory.WriteBytesBatch(CodeCaves.ClothListCave, listBytes);
-            Console.WriteLine($"[Mirage/cloth] {copied} piece(s) → clone; {copied}×0x{MirageClone.ClothObjSize:X} obj + 0x{bufOff:X} buf bytes");
+            Console.WriteLine($"[Mirage/cloth] {copied} piece(s) → clone; {copied}×0x{CCloth.ClothObjSize:X} obj + 0x{bufOff:X} buf bytes");
             return CodeCaves.ClothListGuest;
         }
 
@@ -1093,7 +1093,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 outChain.Add(n);
                 if (outChain.Count > 32) return 0;   // runaway guard
-                n = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.Parent) & Memory.PhysAddrMask;
+                n = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.Parent) & Memory.PhysAddrMask;
             }
             if (outChain.Count == 0) return CloneOf(playerAttach);   // attach itself is in-tree
             uint inTreeAncestor = n;
@@ -1115,13 +1115,13 @@ namespace Dark_Cloud_Improved_Version
             foreach (uint f in outChain)
             {
                 long copyMmu = CodeCaves.ClothAnchorCave + (long)(map[f] - CodeCaves.ClothAnchorGuest);
-                uint parent  = (uint)Memory.ReadInt(Memory.ToMmu(f) + MirageClone.Parent) & Memory.PhysAddrMask;
+                uint parent  = (uint)Memory.ReadInt(Memory.ToMmu(f) + CFrameVu1.Parent) & Memory.PhysAddrMask;
                 uint newParent = map.TryGetValue(parent, out uint mp) ? mp : CloneOf(parent);
-                Memory.WriteUInt(copyMmu + MirageClone.Parent,      newParent);
-                Memory.WriteInt (copyMmu + MirageClone.RootChild,   0);
-                Memory.WriteInt (copyMmu + MirageClone.RootSibling, 0);
-                Memory.WriteInt (copyMmu + MirageClone.WorldCacheA, 0);
-                Memory.WriteInt (copyMmu + MirageClone.WorldCacheB, 0);
+                Memory.WriteUInt(copyMmu + CFrameVu1.Parent,      newParent);
+                Memory.WriteInt (copyMmu + CFrameVu1.RootChild,   0);
+                Memory.WriteInt (copyMmu + CFrameVu1.RootSibling, 0);
+                Memory.WriteInt (copyMmu + CFrameVu1.WorldCacheA, 0);
+                Memory.WriteInt (copyMmu + CFrameVu1.WorldCacheB, 0);
             }
             return map[playerAttach];
         }
@@ -1138,19 +1138,19 @@ namespace Dark_Cloud_Improved_Version
 
             var list = new System.Collections.Generic.List<uint>();
             for (uint b = playerHead; Memory.IsValidGuest(b) && list.Count < 48;
-                 b = (uint)Memory.ReadInt(Memory.ToMmu(b) + MirageClone.BoundNext) & Memory.PhysAddrMask)
+                 b = (uint)Memory.ReadInt(Memory.ToMmu(b) + CBound.BoundNext) & Memory.PhysAddrMask)
                 list.Add(b);
 
             var map = new System.Collections.Generic.Dictionary<uint, uint>();
             foreach (uint pb in list)
             {
-                if (CodeCaves.ClothBoundCave + boundOff + MirageClone.BoundSize > CodeCaves.ClothBoundEnd)
+                if (CodeCaves.ClothBoundCave + boundOff + CBound.BoundSize > CodeCaves.ClothBoundEnd)
                 { Console.WriteLine("[Mirage/cloth] bound cave full"); break; }
-                byte[] bb = Memory.ReadBytesBatch(Memory.ToMmu(pb), MirageClone.BoundSize);
+                byte[] bb = Memory.ReadBytesBatch(Memory.ToMmu(pb), CBound.BoundSize);
                 if (bb == null) break;
                 Memory.WriteBytesBatch(CodeCaves.ClothBoundCave + boundOff, bb);
                 map[pb] = CodeCaves.ClothBoundGuest + (uint)boundOff;
-                boundOff += MirageClone.BoundSize;
+                boundOff += CBound.BoundSize;
             }
             if (map.Count == 0) return 0;
 
@@ -1159,8 +1159,8 @@ namespace Dark_Cloud_Improved_Version
                 if (!map.TryGetValue(list[i], out uint copy)) continue;
                 long copyMmu = CodeCaves.ClothBoundCave + (long)(copy - CodeCaves.ClothBoundGuest);
                 uint next = (i + 1 < list.Count && map.TryGetValue(list[i + 1], out uint nc)) ? nc : 0;
-                Memory.WriteUInt(copyMmu + MirageClone.BoundNext, next);
-                foreach (int fo in new[] { MirageClone.BoundFrameA, MirageClone.BoundFrameB })
+                Memory.WriteUInt(copyMmu + CBound.BoundNext, next);
+                foreach (int fo in new[] { CBound.BoundFrameA, CBound.BoundFrameB })
                 {
                     uint pf = (uint)Memory.ReadInt(Memory.ToMmu(list[i]) + fo) & Memory.PhysAddrMask;
                     if (pf == 0) continue;
@@ -1177,15 +1177,15 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Re-assert the ghost's ambient-ADD tint (+0xCE0 RGB) on a chara slot — brighter + blue.</summary>
         private static void WriteGhostTint(long charaSlot)
         {
-            Memory.WriteFloat(charaSlot + MirageClone.CharaTint,     GhostSilhouette ? GhostTintR : 0f);
-            Memory.WriteFloat(charaSlot + MirageClone.CharaTint + 4, GhostSilhouette ? GhostTintG : 0f);
-            Memory.WriteFloat(charaSlot + MirageClone.CharaTint + 8, GhostSilhouette ? GhostTintB : 0f);
+            Memory.WriteFloat(charaSlot + CCharacter.CharaTint,     GhostSilhouette ? GhostTintR : 0f);
+            Memory.WriteFloat(charaSlot + CCharacter.CharaTint + 4, GhostSilhouette ? GhostTintG : 0f);
+            Memory.WriteFloat(charaSlot + CCharacter.CharaTint + 8, GhostSilhouette ? GhostTintB : 0f);
         }
 
         private static void MaintainClone()
         {
             if (_cloneSlot < 0) return;
-            long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
+            long slot = DungeonCharaDraw.CharaArray + (long)_cloneSlot * DungeonCharaDraw.CharaStride;
             // Hold at the decoy, keep the model + active/opacity set, and keep it registered for draw
             // (the game may reset the registry / opacity-ramp between our ticks).
             // During a re-cast hand-off the clone instance is still the OUTGOING one: hold it at the old pose
@@ -1194,22 +1194,23 @@ namespace Dark_Cloud_Improved_Version
             float cz = _handoff ? _oldDz  : _dz;
             float cy = _handoff ? _oldDy  : _dy;
             float cyaw = _handoff ? _oldYaw : _decoyYaw;
-            Memory.WriteFloat(slot + MirageClone.CharPos,     cx);
-            Memory.WriteFloat(slot + MirageClone.CharPos + 4, cz);
-            Memory.WriteFloat(slot + MirageClone.CharPos + 8, cy);
-            Memory.WriteUInt (slot + MirageClone.CharModel,   _cloneRootGuest);
+            Memory.WriteFloat(slot + CCharacter.CharPos,     cx);
+            Memory.WriteFloat(slot + CCharacter.CharPos + 4, cz);
+            Memory.WriteFloat(slot + CCharacter.CharPos + 8, cy);
+            Memory.WriteUInt (slot + CCharacter.CharModel,   _cloneRootGuest);
             // PIN the heading. The engine steps the clone (so its yaw can drift) and a respawned clone copies
             // the player's CURRENT facing — either way it could diverge from the yaw the haze is pushed back
             // along (_decoyFwd*), which reads as the shimmer sitting off the clone.
-            Memory.WriteFloat(slot + MirageClone.CharRotY, cyaw);
+            Memory.WriteFloat(slot + CCharacter.CharRotY, cyaw);
 
             float op = (GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha();   // fade in/out envelope (haze is NOT gated by it)
-            Memory.WriteInt  (slot + MirageClone.CharaActive, 1);
-            Memory.WriteFloat(slot + MirageClone.NpcOpacity,  op);
+            Memory.WriteInt  (slot + DungeonCharaDraw.CharaActive, 1);
+            Memory.WriteFloat(slot + CCharacter.NpcOpacity,  op);
+            Memory.WriteFloat(slot + CCharacter.DimFactor,   GhostSilhouette ? GhostDim : 1.0f);   // re-assert like opacity/tint (spawn-only would drift)
             WriteGhostTint(slot);
-            Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
-            Memory.WriteInt  (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
-            uint dngMap = (uint)Memory.ReadInt(MirageClone.NowDngMapPtr) & Memory.PhysAddrMask;   // NowDngMap
+            Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
+            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
+            uint dngMap = (uint)Memory.ReadInt(DungeonTileGrid.NowDngMapPtr) & Memory.PhysAddrMask;   // NowDngMap
             SetupCloneHaze(dngMap);     // one-shot: claim a spare fire slot + mark the clone's tile (heat-haze)
             MaintainCloneHaze(dngMap);  // re-assert the tile marker each tick
 
@@ -1219,23 +1220,24 @@ namespace Dark_Cloud_Improved_Version
             // player is doing — the step reads +0xC68 each frame, so pinning it here keeps the motion stable.
             if (EngineDrivenAnim)
             {
-                Memory.WriteInt(slot + MirageClone.CharaMotionA, 1);
-                Memory.WriteInt(slot + MirageClone.CharaRampA,   0);
-                Memory.WriteInt(slot + MirageClone.MotionId,     GuardLoopMotion);
+                Memory.WriteInt(slot + DungeonCharaDraw.CharaMotionA, 1);
+                Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA,   0);
+                Memory.WriteInt(slot + CCharacter.MotionId,     GuardLoopMotion);
             }
             // (Legacy per-tick TRS poll disabled: it fought the 60fps step and read as jitter.)
 
             // Re-assert the weapon chara slot (drawn, never stepped) — the game may reset registry/opacity.
             if (_weaponRootGuest != 0)
             {
-                long wslot = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
-                Memory.WriteUInt (wslot + MirageClone.CharModel,   _weaponRootGuest);
-                Memory.WriteInt  (wslot + MirageClone.CharaActive, 1);
-                Memory.WriteFloat(wslot + MirageClone.NpcOpacity,  op);   // same envelope as the body — fade together
+                long wslot = DungeonCharaDraw.CharaArray + (long)MirageClone.WeaponCharaSlot * DungeonCharaDraw.CharaStride;
+                Memory.WriteUInt (wslot + CCharacter.CharModel,   _weaponRootGuest);
+                Memory.WriteInt  (wslot + DungeonCharaDraw.CharaActive, 1);
+                Memory.WriteFloat(wslot + CCharacter.NpcOpacity,  op);   // same envelope as the body — fade together
+                Memory.WriteFloat(wslot + CCharacter.DimFactor,   GhostSilhouette ? GhostDim : 1.0f);   // ...and the same ghost dim
                 WriteGhostTint(wslot);
-                Memory.WriteInt  (wslot + MirageClone.CharaMotionA, 0);
-                Memory.WriteInt  (MirageClone.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 1);
-                Memory.WriteInt  (MirageClone.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 1);
+                Memory.WriteInt  (wslot + DungeonCharaDraw.CharaMotionA, 0);
+                Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 1);
+                Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 1);
             }
 
             // NOTE: iGpffff9e18 (0x202A3608) is the "scene active" flag — setting it draws the chara loop BUT
@@ -1249,22 +1251,22 @@ namespace Dark_Cloud_Improved_Version
             // (CodeCaves.MirageSceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
             // keepHaze: the re-cast hand-off swaps the clone INSTANCE while the haze is mid-ramp at the new
             // decoy — tearing it down here would restore the torch + distortion gain for a tick and flicker.
-            if (!keepHaze) TeardownCloneHaze((uint)Memory.ReadInt(MirageClone.NowDngMapPtr) & Memory.PhysAddrMask);
+            if (!keepHaze) TeardownCloneHaze((uint)Memory.ReadInt(DungeonTileGrid.NowDngMapPtr) & Memory.PhysAddrMask);
             if (_cloneSlot < 0) return;
-            long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
-            Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)
-            Memory.WriteInt (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 1);   // step loop skips it (belt+braces)
-            Memory.WriteInt (slot + MirageClone.CharaActive,  0);                    // inactive
-            Memory.WriteInt (slot + MirageClone.CharaMotionA, 0);                    // don't step (leftover clone)
-            Memory.WriteUInt(slot + MirageClone.CharModel, 0);                       // clear model
+            long slot = DungeonCharaDraw.CharaArray + (long)_cloneSlot * DungeonCharaDraw.CharaStride;
+            Memory.WriteInt (DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)
+            Memory.WriteInt (DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, 1);   // step loop skips it (belt+braces)
+            Memory.WriteInt (slot + DungeonCharaDraw.CharaActive,  0);                    // inactive
+            Memory.WriteInt (slot + DungeonCharaDraw.CharaMotionA, 0);                    // don't step (leftover clone)
+            Memory.WriteUInt(slot + CCharacter.CharModel, 0);                       // clear model
 
             if (_weaponRootGuest != 0)   // tear down the weapon chara slot too
             {
-                long wslot = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
-                Memory.WriteInt (MirageClone.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 0);
-                Memory.WriteInt (MirageClone.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 0);
-                Memory.WriteInt (wslot + MirageClone.CharaActive, 0);
-                Memory.WriteUInt(wslot + MirageClone.CharModel, 0);
+                long wslot = DungeonCharaDraw.CharaArray + (long)MirageClone.WeaponCharaSlot * DungeonCharaDraw.CharaStride;
+                Memory.WriteInt (DungeonCharaDraw.CharaRegistry + (long)MirageClone.WeaponCharaSlot * 4, 0);
+                Memory.WriteInt (DungeonCharaDraw.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 0);
+                Memory.WriteInt (wslot + DungeonCharaDraw.CharaActive, 0);
+                Memory.WriteUInt(wslot + CCharacter.CharModel, 0);
                 _weaponRootGuest = 0;
             }
             _cloneSlot = -1;

@@ -346,7 +346,7 @@ namespace Dark_Cloud_Improved_Version
                 // ── Gameplay ──
                 bool fasterOn = (play & 0x01) != 0;
                 CBox_UserMode_FasterEnemies.IsChecked = fasterOn;
-                HarderEnemies.Enabled = fasterOn;
+                FasterEnemies.Enabled = fasterOn;
 
                 bool strongerOn = (play & 0x02) != 0;
                 CBox_UserMode_StrongerEnemies.IsChecked = strongerOn;
@@ -462,12 +462,12 @@ namespace Dark_Cloud_Improved_Version
             WriteOptionBit(OptGraphicsByte, 0x01, on);   // graphics bit0
         }
 
-        // Difficulty toggles. "Faster enemies" = HarderEnemies (movement + attack speed, with the hit-window dwell);
+        // Difficulty toggles. "Faster enemies" = FasterEnemies (movement + attack speed, with the hit-window dwell);
         // "Stronger enemies" = EnemyStatNormalizer normalizing every enemy to the next dungeon/band up.
         private void CBox_UserMode_FasterEnemies_Changed(object sender, RoutedEventArgs e)
         {
             bool on = CBox_UserMode_FasterEnemies.IsChecked == true;
-            HarderEnemies.Enabled = on;
+            FasterEnemies.Enabled = on;
             WriteOptionBit(OptGameplayByte, 0x01, on);   // gameplay bit0
         }
 

@@ -152,7 +152,7 @@ namespace Dark_Cloud_Improved_Version
                 // Gradient stat normalization: rescale non-native enemies' HP/defense (and optionally damage)
                 // toward the current dungeon's power level. Self-guards to run once per floor; no-op when off.
                 EnemyStatNormalizer.NormalizeStatsForFloor();
-                HarderEnemies.Tick();       // "Harder Enemies" difficulty: faster enemy movement + animation, with attack-window dwell (Options toggle)
+                FasterEnemies.Tick();       // "Faster enemies" (Options toggle): faster enemy movement + animation, with attack-window dwell
                 MiniBoss.MaintainProjectileScale();   // per-tick: keep miniboss projectile damage scaled (per-slot)
                 MiniBoss.MaintainAttackRange();        // per-tick: miniboss attack/engage range via shared-STB nearest-enemy trick
                 if (Player.InDungeonFloor())

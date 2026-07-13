@@ -4,8 +4,9 @@ using System.Collections.Generic;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// "Harder Enemies" difficulty (Options → Harder Enemies checkbox). Globally speeds up enemy MOVEMENT and
-    /// ANIMATION/action speed. Two independent, easily-tuned multipliers:
+    /// "Faster enemies" (Options toggle). Globally speeds up enemy MOVEMENT and ANIMATION/action speed — that
+    /// is ALL it does; AI difficulty (revive, get-up, aggression) lives in <see cref="HarderEnemyAI"/>.
+    /// Two independent, easily-tuned multipliers:
     ///   • <see cref="MoveSpeedMultiplier"/> — scales every enemy's _SET_MOVE (cmd 32) speed literals in its loaded
     ///     STB, once per species per floor (self-reverts on floor reload).
     ///   • <see cref="AnimSpeedMultiplier"/> — per-tick, multiplies each clip's natural PlayingMotionSpeed, EXCEPT
@@ -19,7 +20,7 @@ namespace Dark_Cloud_Improved_Version
     /// frame/effect pipeline works unchanged. Hit windows come from each species' _SET_DMG_COL (cmd 131)
     /// (bone, radius, startFrame, endFrame); the natural rate is captured from the engine during the swing's wind-up.
     /// </summary>
-    internal static class HarderEnemies
+    internal static class FasterEnemies
     {
         internal static bool  Enabled             = false;
         internal static float MoveSpeedMultiplier = 2.0f;   // enemy travel speed (×)

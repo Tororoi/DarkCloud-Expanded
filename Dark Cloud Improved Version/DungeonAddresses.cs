@@ -203,19 +203,6 @@ namespace Dark_Cloud_Improved_Version
         internal const long Base = 0x21D8FC80;
     }
 
-    /// <summary>
-    /// The item-Bomb explosion effect (the visual thrown Bomb items make — resident on EVERY floor) plus
-    /// the ground shockwave ring. RE'd from <c>SetBombEffect</c> @0x1D5940 / <c>SetBomb__15CItemBombEffect</c>
-    /// @0x1D60A0 / <c>CheckBomb</c> @0x1D6190: spawning is PURE DATA WRITES into a 3-slot pool, so the mod
-    /// can fabricate an explosion at any position (the native path's extra steps — SndSePlay(0x6C) and the
-    /// CCollisionData damage — are function calls, replaced mod-side). A slot is FREE when all five
-    /// <see cref="ActiveOffset"/> flags are 0 (CheckBomb's test). Each explosion = five staggered sub-puffs.
-    /// Native SetBomb writes, per sub-puff i (0..4): pos float4 @ +i*0x10 (all five = the blast point),
-    /// state 0 @ +0x50+i*4, timer i*−3 @ +0x64+i*4, 20.0f @ +0x78+i*4, 128.0f @ +0x8C+i*4, active 1
-    /// @ +0xA0+i*4; then scale @ +0xB4, state[0]=2, state[1]=1. The native caller also fires the shockwave
-    /// when scale &gt; 1: pos float4 @ +0, 1.0f @ +0xC, scale×30 @ +0x10/+0x14, 0 @ +0x18, scale×15 @ +0x1C,
-    /// 0 @ +0x20/+0x24, 1 @ +0x28.
-    /// </summary>
     /// <summary>Set to 1 each frame by CheckHealZone (0x1AF6E0) while the player stands inside a
     /// healing spring's zone (cleared at the top of every check — a live "in spring right now" flag).
     /// Native 0x1DC4514; the spring itself heals HP/thirst via HealingWater (0x1AF980).</summary>
@@ -235,7 +222,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class DungeonTileGrid
     {
-        internal const long NowDngMapPtr   = 0x202A34B8; // global: native ptr to the CDungeonMap instance
+        internal const long NowDngMapPtr   = DungeonAddresses.Map.NowDngMapPtr; // same global — declared once, in Map
         internal const int  TilePartsOffset = 0x9C50;    // + (tx + ty*20)*0x10 → int parts index, −1 = void
         internal const int  TileRotOffset   = 0x9C54;    //   +4 → int rotation variant (×−90°, see setCollisionData)
         internal const int  TileStride      = 0x10;
@@ -279,288 +266,95 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// Mirage "decoy aggro" system (CAVE-FREE — executing native code from a PINE-written heap cave
-    /// crashes PCSX2, so we do it entirely with an in-place patch + a DATA table). Enemy AI reads the
-    /// player's world position from ONE global (0x1EA1D30) via _GET_POSITION(-2) (ELF 0x1E1DF0). Its
-    /// player branch loads that pointer into a1 with `addiu a0,sp,0x40 / lui v0,0x1ea / addiu a1,v0,0x1d30
-    /// / jal sceVu0CopyVector`. We rewrite those 5 words IN PLACE (the jal is left untouched, and the
-    /// a0-setup moves into the jal's delay slot) so a1 instead points at TABLE + $s2*0x20 — where $s2 is
-    /// the current enemy's slot index. So aggro is redirected PER ENEMY: the mod fills each slot's table
-    /// entry with the real player position for normal enemies and the decoy position for fooled ones;
-    /// the slot the player hits is refilled with the real player and re-targets you. The patch is applied
-    /// only WHILE a decoy is active (reverted after) so idle play is untouched. Table entry = 4 floats
-    /// (x, z/height, y, w) at offset 0; stride 0x20; sized large so any in-range $s2 and the brief torn
-    /// state during apply/revert land on filled memory (no crash).
+    /// Mirage "decoy aggro" system — GAME addresses and offsets only; the cave addresses it uses (PtrTable,
+    /// DecoyPos, and the two _GET_* function caves) live in <see cref="CodeCaves"/>.
+    ///
+    /// Enemy AI reads its target's position via _GET_POSITION (ELF 0x1E1DF0) and its attack range via
+    /// _GET_DISTANCE (0x1E1D00); both read the PLAYER global (0x1EA1D30) directly. We host a CLEAN COPY of
+    /// each in a cave and repoint its STB dispatch slot at the copy — a pure DATA hand-off, no in-place
+    /// surgery on the original (see CodeCaveFunctions for why a patched j/jal into a cave is not an option).
+    /// In the copy, the hardcoded player-address load is replaced with a jump to a helper that resolves the
+    /// CURRENT enemy's slot and sets a1 = *(PtrTable + slot*4) — a per-slot POINTER, not a copied position.
+    ///
+    /// That indirection is what makes aggro PER ENEMY, and it is why un-fooled play is bit-identical to
+    /// vanilla: an un-fooled slot's pointer IS the live player global, so the enemy reads the engine's own
+    /// live position with the mod entirely out of the loop (no staleness, and a mod stall cannot affect it).
+    /// A fooled slot's pointer is DecoyPos, a stationary point the mod writes. Hit an enemy and its slot is
+    /// pointed back at the player — it sees through the illusion and re-targets you.
+    ///
+    /// NOTE: an earlier design rewrote those instructions IN PLACE and toggled the patch per decoy, with a
+    /// stride-0x20 table of copied positions. That is all gone — the caves are armed ONCE at the cold window
+    /// and never toggled.
     /// </summary>
-    /// <summary>Decoy aggro redirect. Cave addresses (PtrTable / DecoyPos / the _GET_* function caves) live in
-    /// <see cref="CodeCaves"/> — this class holds only GAME addresses and offsets.</summary>
     internal static class MirageDecoy
     {
-        // PER-ENEMY DECOY REDIRECT (pointer indirection). Enemy AI reads its target's position via _GET_POSITION
-        // (ELF 0x1E1DF0) and its attack range via _GET_DISTANCE (0x1E1D00); both read the PLAYER global 0x1EA1D30
-        // directly. We redirect BOTH to a per-slot POINTER table: PtrTable[slot] holds the ADDRESS to read the
-        // 16-byte position from. An un-fooled slot's pointer IS the live player global, so the enemy reads the
-        // engine-live player — bit-identical vanilla, zero staleness, mod NOT in the loop. A fooled slot's pointer
-        // is DecoyPos (a stationary decoy the mod writes once). So no-decoy play is untouched; only fooled enemies
-        // chase/attack the decoy, and a mod stall can't affect un-fooled reads (their pointer is static).
+        // The decoy's PER-SLOT POINTER TABLE. Each entry is the ADDRESS the corresponding enemy should read
+        // its target's 16-byte position from — NOT a copied position. That indirection is the whole trick:
+        //   • un-fooled slot → StbExternCmd.PlayerPosGuest, the live player global itself. The enemy reads the
+        //     engine's own position, bit-identical to vanilla, with the mod entirely out of the loop (no
+        //     staleness, and a mod stall can't affect it).
+        //   • fooled slot    → CodeCaves.DecoyPos, the stationary point the mod writes once.
+        // Hit an enemy and its slot is pointed back at the player — it sees through the illusion.
         //
-        // Both _GET_POSITION and _GET_DISTANCE now read this table from CLEAN cold-PINE CAVE copies reached via the
-        // STB external-command dispatch (Mirage.ArmFuncCave; see docs/cave-code-execution.md) — no in-place surgery.
-        // Each cave's helper computes a1 = *(PtrTable + slot*4) with the current enemy slot from NowMonstorUnit+0x90.
-        internal const int  PtrStride      = 4;
-        internal const int  TableSlots     = 256;
-        internal const int  MaxSlots       = 20;          // slots the mod actively manages (FloorSlots is 16)
-        internal const uint PlayerPosGuest = 0x01EA1D30;  // the live player global — un-fooled slots point here
+        // The vanilla side of this (which functions read the player, where they load it, the dispatch slots
+        // that reach them) is StbExternCmd — none of that is Mirage's. Here lives only the table's shape.
+        internal const int  PtrStride  = 4;
+        internal const int  TableSlots = 256;
+        internal const int  MaxSlots   = 20;   // slots the mod actively manages (FloorSlots is 16)
         internal static long PtrAddr(int slot) => CodeCaves.PtrTable + (long)slot * PtrStride;
-
-        // STB external-command dispatch slots (8-byte {funcPtr,id} entries) repointed at the cold caves.
-        internal const long PosDispatch  = 0x202918A8;   // _GET_POSITION funcPtr slot
-        internal const long DistDispatch = 0x202918A0;   // _GET_DISTANCE funcPtr slot
-
-        // The VANILLA engine functions we cold-copy into CodeCaves.PosCave / CodeCaves.DistCave.
-        internal const long GetPositionFn = 0x201E1DF0;  // _GET_POSITION
-        internal const long GetDistanceFn = 0x201E1D00;  // _GET_DISTANCE
-        internal const int  PosDetourOff  = 0x84;        // offset of the hardcoded player-addr load to detour
-        internal const int  PosJalOff     = 0x8C;
-        internal const int  DistDetourOff = 0x5C;
-        internal const int  DistJalOff    = 0x64;
-        internal const uint VanillaPrologue = 0x27BDFFB0; // addiu sp,-0x50 — sanity check before we copy
-        internal const uint VanillaPlayerLd = 0x3C0201EA; // lui v0,0x1ea  — the player-addr load we replace
     }
 
     /// <summary>
-    /// Mirage clone VISUAL — done the "trick the game" way (no injected code). The dungeon's NPC draw
-    /// system is a registry the game already renders every frame: DrawMapFreeStyle (0x1C23C0) auto-reserves
-    /// every LOADED NPC slot whose part index (+0xCFC0) matches a loaded map part, and DrawNPCDraw
-    /// (0x1C1F80, called from the overlay render @0x1DAE988) draws each reserved slot's CCharacter (@+0xBDF0)
-    /// via its vtable (SetPosition +0x14, SetRotation +0x30, Draw +0xAC — all verified compatible with the
-    /// player's CMainChara vtable). So we copy the live player CCharacter into a FREE NPC slot (it shares
-    /// Ungaga's model @+0xBC, and +0xBEAC = that same model root is the "loaded" gate) and set the slot's
-    /// gate fields — then the game draws the clone for us. All DATA writes. Base = the CDungeonMap instance
-    /// (NowDngMap); per-type stride 0x1330, 4 types.
+    /// The DUNGEON's 6-character draw — the vanilla facility for rendering an extra character in a dungeon.
+    /// Draw__11CSeireiKing (the dungeon scene draw) loops i in 0..5: if registry[i] != 0 it reloads texture
+    /// group <see cref="CharaTexBase"/>+i, then calls Draw__12CNPCharacter on chara[i] = CharaArray + i*Stride.
+    /// That draw renders iff active(+0x146C) != 0 AND model(+0xBC) != 0 AND opacity(+0xCEC) > 0.
+    ///
+    /// So: fill a slot's CCharacter fields (see <see cref="CCharacter"/>), set it active, and register it —
+    /// and the game draws your character every frame. All DATA writes, no injected code. A separate step loop
+    /// walks the same slots; <see cref="StepSkipTable"/> lets you have a slot DRAWN but not STEPPED.
+    /// (Slot gates below are CNPCharacter fields, i.e. past the embedded CCharacter.)
+    /// </summary>
+    internal static class DungeonCharaDraw
+    {
+        internal const long CharaArray    = 0x21EA8460;  // guest 0x01EA8460 (hardcoded in the dungeon draw)
+        internal const int  CharaStride   = 0x14A0;
+        internal const long CharaRegistry = 0x21D3D284;  // entry i (int) != 0 → slot i is drawn
+        internal const long StepSkipTable = 0x21D3D344;  // entry i (int) != 0 → slot i is NOT stepped
+        internal const int  CharaTexBase  = 0x20;        // slot i's texture group = 0x20 + i
+
+        internal const int  CharaActive   = 0x146C;      // int — Draw__12CNPCharacter requires != 0
+        internal const int  CharaMotionA  = 0x1474;      // Step__12CNPCharacter runs the motion step only if
+        internal const int  CharaMotionB  = 0x1478;      //   (+0x1474 || +0x1478) != 0 — zero both to freeze
+        internal const int  CharaRampA    = 0x1484;      // opacity-ramp amount (int); 0 = no ramp
+        internal const int  CharaRampB    = 0x1488;      //   ramp B (engine sets = -1 each step → falls back to A)
+    }
+
+    /// <summary>
+    /// Mirage clone — the MOD's own knobs only. The clone is a deep per-instance copy of the player, drawn by
+    /// the vanilla <see cref="DungeonCharaDraw"/> facility; its cave addresses live in <see cref="CodeCaves"/>
+    /// and the engine struct layouts it copies live in CCharacter / CFrameVu1 / CVisualMDT / MotionType /
+    /// CCloth / CBound. What remains here is only what MIRAGE decides.
+    ///
+    /// (Two earlier draw hosts were tried and ABANDONED — do not resurrect them: the NPC-draw registry
+    /// (PartIdx/Occupied/Gate2 reservation fields) never triggered DrawNPCDraw at all, and the MotionParts
+    /// CMainChara slots were superseded by the chara loop above. Their constants are gone.)
     /// </summary>
     internal static class MirageClone
     {
-        internal const long NowDngMapPtr = 0x202A34B8;   // → CDungeonMap instance (same as the tile grid)
-        internal const int  NpcStride    = 0x1330;
-        internal const int  NpcTypes     = 4;
-        internal const long PlayerChar   = 0x21EA1D20;   // active CCharacter (the source to copy)
-        // Copy ONLY the draw-relevant fields (through the light block @0xD60). The slot's CCharacter ends
-        // at +0xCFC0 (0x11D0 in) where the NPC gate/reservation fields begin — copying the player's full
-        // 0x12A0 clobbers them and corrupts the instance (teleported the player off-map). 0xD60 is safe.
-        internal const int  CharCopySize = 0xD60;
+        /// <summary>Copy ONLY the draw-relevant CCharacter fields (through the light block @0xD60). The chara
+        /// slot's own gate/reservation fields begin further in, so copying the player's FULL object clobbers
+        /// them and corrupts the instance (it teleported the player off-map). 0xD60 is the safe cut.</summary>
+        internal const int  CharCopySize     = 0xD60;
 
-        // NPC-slot field offsets — relative to (CDungeonMap instance + type*0x1330). RE'd from DrawNPCDraw
-        // (0x1c1f80): for each of 4 types it draws ONE CCharacter (@Char, root @ModelRoot) at CountField
-        // positions (PosList[i]) + PosField, reloading texture group (type+0x40) per draw. The gate that
-        // makes it draw is CountField>0 AND ModelRoot!=0 (NOT the old Occupied/PartIdx reservation fields,
-        // which belong to a different NPC path and never triggered DrawNPCDraw — why the clone never showed).
-        internal const int  Char        = 0xBDF0;   // the CCharacter DrawNPCDraw renders (vtable @+0xa0 = base+0xBE90)
-        internal const int  ModelRoot   = 0xBEAC;   // = Char + 0xBC; must be nonzero to reserve+draw
-        internal const int  PosField    = 0xCFA0;   // float3 ADDED to PosList[i] by DrawNPCDraw (world offset lever)
-        internal const int  RotBase     = 0xCFB4;   // float; added into the draw yaw
-        // The RESERVATION fields — the GAME rebuilds the draw list every frame: ClearNPC_Cash zeroes
-        // CountField, then DrawMap/DrawMapFreeStyle, while drawing each loaded map part, calls
-        // ReservNPC_Draw for any NPC type whose PartIdx == that part index. ReservNPC_Draw increments
-        // CountField and writes PosList[i] = the part origin — but ONLY if Occupied && Gate2 && ModelRoot
-        // are all nonzero. So to be drawn persistently we set PartIdx/Occupied/Gate2/ModelRoot and let the
-        // game own CountField (writing it ourselves loses the race with ClearNPC_Cash — the "flash" bug).
-        internal const int  PartIdx     = 0xCFC0;   // must equal a LOADED map-part index → reserved when that part draws
-        internal const int  Occupied    = 0xCFC4;   // reserve gate 1 (nonzero)
-        internal const int  Gate2       = 0xCFC8;   // reserve gate 2 (nonzero)
-        internal const int  StepCtrl    = 0xCFCC;   // -1 → StepNPC skips the motion step (we don't want it; reserve is separate)
-        internal const int  PosList     = 0xCFD0;   // per-instance world position (part origin), stride 0x10 — game-written
-        internal const int  RotList     = 0xD0D0;   // per-instance rotation index, stride 4
-        internal const int  CountField  = 0xD110;   // instances DrawNPCDraw draws — GAME-OWNED (read-only for us)
+        internal const int  ClothObjSlots    = 3;      // cave slots reserved (Ungaga has exactly 3 cloth pieces)
+        internal const int  MotionStructSize = 0xC0;   // bytes copied per motion channel (> the highest field used)
 
-        // CCharacter fields we tweak in the copied clone.
-        internal const int  CharPos     = 0x10;     // x,z,y (DrawNPCDraw overrides via SetPosition anyway)
-        internal const int  CharRotY    = 0x64;     // CObject EULER rotation Y (yaw). GetRotation__7CObject reads
-                                                    // +0x60/+0x64/+0x68 — these are ANGLES, not a direction vector
-                                                    // (an upright character's X/Z angles are ~0).
-        internal const int  CharModel   = 0xBC;     // shared player model root
-        internal const int  ClothList   = 0xC74;    // → 4 cloth ptrs; a zero stub skips cloth, a cave list adds it
-        internal const int  DimFactor   = 0xCF0;    // <1.0 dims the model (fade lever)
-        internal const int  LightFrom   = 0xD00;    // zero the point-light slots so the light loop skips
-        internal const int  LightTo     = 0xD60;
-        internal const int  TexAnimeOff = 0xDC;     // CTextureAnime — zero its active-ptr array so TexAnime
-        internal const int  TexAnimeLen = 0x60;     // (called by DrawNPCDraw) no-ops instead of animating
-                                                    // the SHARED textures the player also uses
-
-        // ── Chara host — the DUNGEON's individual-character draw (the RIGHT one) ──────────────────────
-        // Draw__11CSeireiKing (dun overlay, the dungeon scene draw) draws 6 charas: for i in 0..5, if
-        // registry DAT_01d3d284[i] != 0 → ReloadTexture(group 0x20+i); TextureAnime; Draw__12CNPCharacter
-        // (0x156540) on chara[i] = 0x1EA8460 + i*0x14A0. Draw__12CNPCharacter renders iff +0x146c!=0 (active)
-        // && +0xbc!=0 (model) && +0xcec>0 (opacity), applying ambient tint +0xce0/4/8 + alpha +0xcec. So a
-        // single clone: fill chara[0] (model=clone tree, pos +0x10, active +0x146c=1, opacity +0xcec), and
-        // register it (DAT_01d3d284[0]=nonzero). Single instance, own texture group 0x20, no crowd/enemy AI.
-        internal const long CharaArray    = 0x21EA8460;  // guest 0x01EA8460 (hardcoded in the dungeon draw)
-        internal const int  CharaStride   = 0x14A0;
-        internal const int  CharaSlots    = 6;
-        internal const long CharaRegistry = 0x21D3D284;  // guest 0x01D3D284; entry i (int) at +i*4, !=0 → drawn
-        internal const long CharaLoopGate = 0x202A3608;  // iGpffff9e18 (=_gp 0x2A97F0 -0x61E8, guest 0x2A3608): outer gate for the 6-chara draw loop; 0 in combat → set it
-        internal const int  CharaTexBase  = 0x20;        // chara i's texture group = 0x20 + i
-        internal const int  PlayerTexGroup = 0x1D;       // the dungeon reloads this group for the active player (Draw__11CSeireiKing) — source for the clone's textures
-        internal const int  CharaActive   = 0x146C;      // int — Draw__12CNPCharacter requires !=0
-        internal const int  CharaMotionA  = 0x1474;      // Step__12CNPCharacter runs the motion step only if
-        internal const int  CharaMotionB  = 0x1478;      //   (+0x1474 || +0x1478) != 0 — zero both to freeze
-        internal const int  CharaRampA    = 0x1484;      // Step__12CNPCharacter opacity-ramp amount (int); 0 = no ramp
-        internal const int  CharaRampB    = 0x1488;      //   ramp amount B (engine sets =-1 each step → falls back to A)
-        internal const int  CharaTint     = 0xCE0;       // float3 ambient ADD (tint); alpha/opacity = +0xCEC (NpcOpacity)
-
-        // Motion-speed override (CCharacter+0xC60): Step__10CCharacter REPLACES the current motion's per-frame
-        // advance with this when >0 (see [[player-motion-speed]]). The clone SHARES the player's motion structs
-        // (+0xC20[i], copied), so the animation frame counter is shared: setting the clone's step to a near-zero
-        // advance lets its SetMotionEX POSE the clone tree at the player's live frame without double-advancing it.
-        internal const int  MotionSpeed   = 0xC60;
-
-        // ── MotionParts host — the REAL character-draw pass ──────────────────────────────────────────
-        // MainDraw draws 4 CMainChara slots (MotionParts, stride 0x11B0) every frame, each via vtable+0xac
-        // (Draw__10CCharacter) with ITS OWN texture group (0x1b+slot) reloaded first. All 4 are empty
-        // (modelRoot=0) during play — the active player is a separate object (0x21EA1D20). Filling one slot
-        // gives a SINGLE clone instance, drawn like a real character (correct-texture pass), no crowd, no
-        // reservation racing, no enemy AI. Position is direct: CCharacter +0x10 (Draw reads it). Empty a
-        // slot by zeroing its model root (+0xBC) → Draw no-ops.
-        internal const long MotionPartsBase   = 0x21D4F030;  // guest 0x01D4F030
-        internal const int  MotionPartsStride = 0x11B0;
-        internal const int  MotionPartsSlots  = 4;
-        internal const int  MotionPartsTexBase = 0x1B;       // slot i's texture group = 0x1b + i
-
-
-        // FROZEN-CLOTH cave. Draw__10CCharacter (0x139310) auto-draws every non-null CCloth in the clone's +0xC74
-        // list; nothing in the dungeon chara-loop STEPS them (ClothStep is town/menu/edit only), so a copied cloth
-        // renders as a STATIC snapshot of the player's cloth at spawn. Each CCloth is a fixed 0x8550 object with no
-        // internal cross-refs — the only pointers to fix are its three draw-packet fields (+0x18 active, +0x24/+0x28
-        // double-buffer), which we point at a clone-owned buffer. The packet is WORLD-space (Draw__6CCloth draws at
-        // origin), so the frozen drape lands where the player stood at cast = the decoy plant spot. A frozen cloth's
-        // verts never change, so we SINGLE-buffer it (both +0x24/+0x28 → one buffer) — safe even mid-DMA (same bytes).
-        // Lives in the node-pool tail reclaimed by MaxNodes 320→128 (0x21F54000, before MotionCave @0x21F78000).
-        internal const int  ClothObjSize   = 0x8550;      // fixed CCloth allocation (__nw 0x8550 in InitCloth)
-        internal const int  ClothObjSlots  = 3;           // Ungaga has exactly 3 cloth pieces (dump: [3] null)
-        internal const int  ClothMaxPieces = 4;           // +0xC74 list length
-        internal const int  ClothActive    = 0x18;        // CCloth+0x18 = active draw packet ptr (set each frame)
-        internal const int  ClothBuf0      = 0x24;        // CCloth+0x24 = DBuffID0 packet; +0x28 = DBuffID1
-        internal const int  ClothAttach    = 0x3C;        // CCloth+0x3c = anchor CFrame (read when STEPPED — physics)
-
-        // PHYSICS anchor cave: the cloth's attach CFrame (+0x3c) drives the sim (Step→GetLWMatrix walks +0x110
-        // parents, recomputing world matrices on-demand). To make a STEPPED clone cloth follow the CLONE skeleton
-        // instead of the player's, resolve each attach frame to clone-space: in-tree frames map by the same offset
-        // the clone tree used (NodePool + (frame − modelRoot)); frames allocated PAST the contiguous tree are copied
-        // here and re-parented to the clone's copy of their first in-tree ancestor. Sits after the cloth draw
-        // buffers, before MotionCave (0x21F78000). Each CFrame is 0x270.
-
-        // PHYSICS collision: the cloth's CBound list (+0x44, linked via +0x00, each 0x130 bytes) is the body
-        // collision capsules. Each capsule is positioned from two body bones at CBound +0xe4/+0xe8 (via GetLWMatrix
-        // in UpDateDirPos__6CBound). For the clone we copy the list here and re-anchor each bound's +0xe4/+0xe8 to
-        // the clone skeleton (same resolver as +0x3c), so the cloth collides against the CLONE's legs/hips, not the
-        // player's. Shared across a character's cloth pieces (deduped by list head).
-        internal const int  BoundSize        = 0x130;        // Sizeof__6CBound
-        internal const int  BoundNext        = 0x00;         // linked-list next
-        internal const int  BoundFrameA      = 0xE4;         // capsule endpoint bone A (CFrame*)
-        internal const int  BoundFrameB      = 0xE8;         // capsule endpoint bone B (CFrame*)
-
-        // Separate ROOT frame for the clone. Posing the shared root (via DrawNPCDraw's SetPosition) drags
-        // the player (they share +0xBC). So we copy the player's root CFrame node into the cave and point
-        // the clone at THE COPY, whose child ptr (+0x138) still targets the shared animated bone subtree —
-        // the frame draw (DrawVu1__9CFrameVu1) is top-down (child world = accumulated matrix ∘ child local,
-        // matrix passed down via RenderInfo; no parent pointer), so the shared bones render at the copy's
-        // position while the player's own root stays put. Data only (MGDraw reads the node; the vtable it
-        // calls @+0x250 points at real game code).
-        internal const int  RootCopySize   = 0x800;       // full CFrameVu1 node (was 0x260 — truncated → didn't render)
-        internal const int  RootChild      = 0x138;       // first child
-        internal const int  RootSibling    = 0x13C;       // next sibling
-
-        // ── Full independent frame-tree DEEP COPY (the real clone) ─────────────────────────────────
-        // Root-only copies fail: a shared child's world matrix is built by GetLWMatrix (0x1281b0) walking
-        // its PARENT ptr @+0x110 up the chain, and the shared children's parents still point at the
-        // ORIGINAL player root → they render on the player, not the clone. The game's own CopyFrameVu1
-        // (0x127610) deep-copies the whole tree: per node new CFrameVu1(0x270), operator= memcpy's
-        // [0..0x260) + shares geometry @+0x260, zeroes links+cache, then SetParent relinks. We replicate
-        // with PINE: DFS via child/sibling, copy 0x270 bytes/node into a cave pool, fix up
-        // parent/child/sibling from an old→new map, share the mesh ptr @+0x260.
-        internal const int  NodeStride    = 0x270;        // MUST equal the real node size: MotionProc indexes
-        internal const int  NodeSize      = 0x270;        //   bones as root+index*0x270, so the copy is contiguous
-        internal const int  MaxNodes      = 128;          // pool cap (128*0x270 = 0x13800 → ends 0x21F53800). The clone
-                                                          // is Ungaga-only (Mirage) = 67 nodes, so 128 is ~2× headroom;
-                                                          // the reclaimed tail (0x21F54000+) now hosts the cloth cave.
-
-        // Independent motion-struct cave. The CCharacter holds up to 8 motion "channels" as pointers at
-        // +0xC20+i*4 (see GetMotionParam 0x1383b0); each points to a MOTION_TYPE whose embedded MOTION_STATE
-        // (+0x10) is the animation frame counter Step advances. The clone copies the player's CCharacter, so it
-        // SHARES these structs → both steps advance the same frame → 2× speed. Copy each active channel here and
-        // repoint so the clone advances its OWN frame. Internal ptrs (+0x04/+0x08/+0x60/+0x64 → shared keyframe
-        // data) stay as-is. Sits in the pool's clean tail (node pool ends 0x21F70C00, this < 0x21F7C000).
-        internal const int  MotionSlots     = 8;
-        internal const int  MotionSlotBase  = 0xC20;      // CCharacter+0xC20+i*4 = channel[i] MOTION_TYPE ptr
-        internal const int  MotionStructSize = 0xC0;      // > highest field used (+0x64); margin for safety
-        internal const int  MotionSkinList  = 0x08;       // MOTION_TYPE+0x08 = MotionProc2 (skinning) list; +0x04 = rigid
-
-        // Independent mesh cave. Only ~3 bones are CVisualMDTVu1 (software-skinned via MotionProc2); the rest
-        // skin on VU1 at draw time (already per-instance). For each MDT bone, copy the visual (0x30) + VU data
-        // (visual+0x1c bytes) + MDT block (MDT+0x08 bytes) here, rebase cross-refs, repoint node+0x260. Then the
-        // clone skins its OWN buffers → fully independent body. ~75KB; sits in the proven-clean cave tail.
-        internal const int  MeshCaveSize   = 0x34000;     // ~213KB (n66 VU alone is ~127KB); fits the clean tail 0x1F80000..0x1FB4300
-        internal const int  VisualSize     = 0x30;        // CVisualMDTVu1
-        internal const int  VisVU          = 0x18;        // visual+0x18 = VU data ptr, +0x1c = size
-        internal const int  VisMDT         = 0x20;        // visual+0x20 = MDT ptr
-        internal const uint MdtMagic       = 0x0054444D;  // "MDT\0" at MDT+0x00 (LE: 4D 44 54 00)
-        internal const int  MdtSizeField   = 0x08;        // MDT+0x08 = total MDT block size
-
-        // FRAME_INF = the per-bone skinning-matrix buffer (channel MOTION_TYPE +0x60), indexed bone*0xD0.
-        // MotionProc2 READS and WRITES it, so the clone must own its own or it fights the player's bone matrices
-        // (body "in two places at once"). One buffer per character, shared across channels → copy once, dedup.
-        // Sits in the clean gap between the motion cave (0x1F78600) and the mesh cave (0x1F80000).
-        internal const int  FrameInfPtr       = 0x60;     // channel MOTION_TYPE +0x60 = FRAME_INF ptr
-        internal const int  FrameInfEntry     = 0xD0;     // per-bone stride
-
-        internal const int  MotionStateOff    = 0x10;     // MOTION_TYPE embedded MOTION_STATE (frame counter + interp)
-        internal const int  MotionStateLen    = 0x40;     // bytes SetMotionEX reads/advances
-
-        // Lever #1 test (dead): clone-private copy of the packet's +0x20 scratch. Region reused below.
-        internal const int  MeshScratchSlot = 0x1000;       // per-mesh slot
-
-        // Per-bone ANIMATION-matrix buffer, referenced by the channel at +0x00 (MotionProc2 reads *(channel)+bone*0x40).
-        // The clone copies the channel (the pointer) but shared the buffer → clone & player fight over the bone
-        // matrices (the flicker + animation clamp). Copy it (once, dedup) and repoint channel+0x00. Reuses the dead
-        // lever-#1 region (0x21F7D000, 0x3000 free).
-        internal const int  BoneMtxPtr    = 0x00;         // channel MOTION_TYPE +0x00 = per-bone matrix buffer ptr
-        internal const int  BoneMtxEntry  = 0x40;         // per-bone stride
-
-        // Equipped-weapon graft. The weapon is a separate object (iGpffff9d00 @ gp-0x6300 = MMU 0x202A34F0) whose
-        // model root (+0xBC) is PARENTED to the player's hand bone (index 39) but drawn separately (not in the
-        // player's +0xBC tree). To put it on the clone: deep-copy the weapon's small CFrame tree into WeaponCave,
-        // then splice the copy's root into the CLONE's bone-39 child list so the clone's MGDraw draws it at the
-        // clone's hand. Cave sits in the clean gap between BoneMtxCave (ends ~0x21F7E100) and MeshCave (0x21F80000).
-        internal const long WeaponObjGlobal = 0x202A34F0;
-        internal const int  WeaponCaveSize  = 0x1D00;     // weapon trees are small (< ~12 nodes)
-        internal const int  WeaponHandBone  = 39;         // player/clone frame-tree bone the weapon parents to
-        // The weapon draws in its OWN chara slot (its own texgroup 0x1d pass, like the player's weapon), NOT
-        // grafted into the body tree (which would share the body's 0x11 pass → wrong texture). Slot 3 because the
-        // per-chara group formula is patched to (i*4 + 0x11): chara[0]=0x11 (body), chara[3]=0x1d (weapon). The
-        // slot is drawn (registry @0x1D3D284) but NOT stepped (step-skip table @0x1D3D344, entry !=0 → skip).
-        internal const int  WeaponCharaSlot = 3;
-        internal const long StepSkipTable   = 0x21D3D344;  // ShisaiShadow step loop: entry i (int) !=0 → skip step i
-        internal const int  TexIndex      = 0x100;        // CFrame node: texture index (short); <0 → DrawVu1 skips texture binding (flat/untextured)
-        internal const int  NpcOpacity    = 0xCEC;        // CCharacter: model opacity 0..128 (Step__12CNPCharacter ramps it; Draw folds it into ambient alpha)
-        internal const int  Parent        = 0x110;        // CFrame parent ptr (world-matrix chain walks this)
-        internal const int  WorldCacheA   = 0x240;        // world-matrix-valid flag (reset to force recompute)
-        internal const int  WorldCacheB   = 0x244;
-        internal const int  GeomPtr       = 0x260;        // mesh/geometry object (SHARED, not copied)
-
-        // Local (parent-relative) transform block: base matrix +0x1d0, scale +0x210, translation +0x220,
-        // rotation +0x230 — a contiguous 0x70 run [0x1d0..0x240). GetLWMatrix composes this up the parent
-        // chain into +0x140/+0x150. Copying this block from the live player node into the copied clone node
-        // (and zeroing the world cache) re-poses the clone's rigid parts (head/hands) to the player each tick.
-        internal const int  LocalTRS      = 0x1d0;
-        internal const int  LocalTRSLen   = 0x70;
-
-        // CCharacter current-motion id. Step__10CCharacter (0x138530) early-outs when this is < 0 → no
-        // SetMotionEX, so the model keeps its current bone pose = FROZEN. Setting the host slot's motion id
-        // to -1 stops the enemy re-posing our foreign clone tree (the likely delayed-crash cause) and holds
-        // the snapshot stance.
-        internal const int  MotionId      = 0xC68;
-        internal const int  MotionFlags   = 0xC64;   // Step__10CCharacter per-step motion flags; bit2 (0x4) = clean
-        internal const int  MotionRestart = 0x4;     //   restart (reset to frame 0, no blend), consumed once by the step
+        /// <summary>The clone's WEAPON draws in its own chara slot rather than being grafted into the body
+        /// tree (which would share the body's texture pass → wrong texture). Slot 3, because the per-chara
+        /// texgroup formula is patched to (i*4 + 0x11): chara[0] = 0x11 (body), chara[3] = 0x1D (weapon).
+        /// It is DRAWN but not STEPPED (DungeonCharaDraw.StepSkipTable).</summary>
+        internal const int  WeaponCharaSlot  = 3;
     }
 
 
@@ -604,6 +398,19 @@ namespace Dark_Cloud_Improved_Version
         /// the recompiler-crashing hot-code surgery we avoid everywhere.</summary>
         internal const long DistortionGain = 0x202A1DA8;
     }
+    /// <summary>
+    /// The item-Bomb explosion effect (the visual thrown Bomb items make — resident on EVERY floor) plus
+    /// the ground shockwave ring. RE'd from <c>SetBombEffect</c> @0x1D5940 / <c>SetBomb__15CItemBombEffect</c>
+    /// @0x1D60A0 / <c>CheckBomb</c> @0x1D6190: spawning is PURE DATA WRITES into a 3-slot pool, so the mod
+    /// can fabricate an explosion at any position (the native path's extra steps — SndSePlay(0x6C) and the
+    /// CCollisionData damage — are function calls, replaced mod-side). A slot is FREE when all five
+    /// <see cref="ActiveOffset"/> flags are 0 (CheckBomb's test). Each explosion = five staggered sub-puffs.
+    /// Native SetBomb writes, per sub-puff i (0..4): pos float4 @ +i*0x10 (all five = the blast point),
+    /// state 0 @ +0x50+i*4, timer i*−3 @ +0x64+i*4, 20.0f @ +0x78+i*4, 128.0f @ +0x8C+i*4, active 1
+    /// @ +0xA0+i*4; then scale @ +0xB4, state[0]=2, state[1]=1. The native caller also fires the shockwave
+    /// when scale &gt; 1: pos float4 @ +0, 1.0f @ +0xC, scale×30 @ +0x10/+0x14, 0 @ +0x18, scale×15 @ +0x1C,
+    /// 0 @ +0x20/+0x24, 1 @ +0x28.
+    /// </summary>
     internal static class BombEffect
     {
         internal const long PoolPtr      = 0x202A35E4; // NowBombEffect (gp-0x620C) → 3 slots × 0xC0

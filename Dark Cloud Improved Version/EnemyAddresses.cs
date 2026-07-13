@@ -147,6 +147,50 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
+    /// ENEMY TARGETING — the vanilla path by which every enemy learns where its target is, and the single
+    /// lever for redirecting it. All addresses here are VANILLA engine facts; nothing mod-specific.
+    ///
+    /// Enemy AI never stores the player's position: each frame it asks for it through two STB external
+    /// commands (op21, dispatched via the funcdata table @<see cref="StbExternCmd.DispatchTable"/>):
+    ///   • _GET_POSITION — where is my target?
+    ///   • _GET_DISTANCE — how far away is it?
+    /// Both load <see cref="PlayerPosGuest"/> — the live player global — with a HARDCODED address, then
+    /// sceVu0CopyVector it out. So the player's position enters enemy AI at exactly two instructions.
+    ///
+    /// Because the dispatch entries are function POINTERS the game dereferences, hosting a modified copy of
+    /// either function and repointing its slot redirects targeting for ALL enemies with a pure data write —
+    /// no in-place code surgery (see CodeCaveFunctions). Splice at the player-load offsets below; the copy's
+    /// own `jal sceVu0CopyVector` is left intact and is where a helper jumps back to.
+    ///
+    /// Mirage's decoy is the first consumer (it makes the load per-enemy indirect), but nothing here is
+    /// Mirage's — any feature that wants to lie to enemies about where the player is starts from these.
+    /// </summary>
+    internal static class StbExternCmd
+    {
+        internal const long DispatchTable = 0x202917C8;  // funcdata table: 8-byte {funcPtr, id} entries
+        internal const int  EntryStride   = 8;
+
+        internal const long GetPositionSlot = 0x202918A8;  // _GET_POSITION funcPtr slot
+        internal const long GetDistanceSlot = 0x202918A0;  // _GET_DISTANCE funcPtr slot
+        internal const long GetPositionFn   = 0x201E1DF0;  // _GET_POSITION (ELF 0x1E1DF0)
+        internal const long GetDistanceFn   = 0x201E1D00;  // _GET_DISTANCE (ELF 0x1E1D00)
+
+        /// <summary>The live player-position global both commands read (16 bytes: x, z/height, y, w).</summary>
+        internal const uint PlayerPosGuest  = 0x01EA1D30;
+
+        // Where, inside each function, the hardcoded player-address load sits — and the sceVu0CopyVector jal
+        // that consumes it. These are the splice points for anyone hosting a modified copy.
+        internal const int  PosPlayerLdOff  = 0x84;
+        internal const int  PosCopyJalOff   = 0x8C;
+        internal const int  DistPlayerLdOff = 0x5C;
+        internal const int  DistCopyJalOff  = 0x64;
+
+        // Sanity words — assert these before cloning, or you'll copy someone's stale in-place patch.
+        internal const uint VanillaPrologue = 0x27BDFFB0;  // addiu sp,-0x50
+        internal const uint VanillaPlayerLd = 0x3C0201EA;  // lui v0,0x1ea  (the player-addr load itself)
+    }
+
+    /// <summary>
     /// CRunScript — the per-enemy-slot STB-VM state, a sub-array inside CMainMonstorUnit at
     /// Base + 0x54DD0 (PCSX2 0x21E4D5A0), stride 0x48. One entry per FloorSlots/CCharacter slot index.
     /// (Listed in EnemyModelInjector._slotBlocks as the third per-slot block.)
@@ -293,7 +337,7 @@ namespace Dark_Cloud_Improved_Version
     /// loses the race (verified: even ×5 produced no visible change). The only per-slot speed modifier in _SET_MOVE is
     /// a boolean "halve" flag (int @ slot 0x1E3E4, store at−0x1C1C: if >0, speed ×0.5) — it can only SLOW, never speed
     /// up. And same-species slots share one STB native pointer, so there is no per-slot script to patch. ⇒ The only
-    /// race-free speed lever is the shared per-species _SET_MOVE STB literal (what HarderEnemies/"Faster enemies"
+    /// race-free speed lever is the shared per-species _SET_MOVE STB literal (what FasterEnemies/"Faster enemies"
     /// patches); a true per-enemy speed scale does not exist in this engine path. This field remains useful READ-ONLY
     /// (probe an enemy's live move speed) and for the one-shot "halve" flag if a slow-down is ever wanted.
     /// </summary>
