@@ -18,12 +18,12 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class Mirage
     {
-        private const double DecoySeconds = 10.0;
+        private const double DecoySeconds = 12.0;
         private const int    FastTickMs   = 25;    // table maintenance cadence while armed + in a dungeon
         private const int    IdleTickMs   = 150;
         private const int    GuardLoopMotion = 9;   // Ungaga's guard-hold loop (spawn here, not on guard-enter)
         private const int    GuardMoveMotion = 33;  // guard-while-moving; the hold pose oscillates 9<->33 under R1
-        private const int    GuardChargeMs   = 500; // hold the guard pose this long before the flash + decoy fire
+        private const int    GuardChargeMs   = 250; // hold the guard pose this long before the flash + decoy fire
 
         private static bool _armed;                 // both caves hosted + dispatch repointed this session (cold)
 
@@ -123,16 +123,96 @@ namespace Dark_Cloud_Improved_Version
         // and the raster is now positioned at the clone, not overlapping the torch). Only struct writes —
         // the collision-safe ones. Prefer a torch whose fireIdx no OTHER enabled tile shares (else every
         // sharer would draw a second raster at its own offset). Restored on despawn.
+        // Clone materialize / dematerialize. The clone fades IN over FadeSeconds, holds at full, then fades
+        // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE rather than a
+        // wall-clock start, so it inherits the pause semantics for free (while paused the deadline is pushed
+        // forward, so the envelope freezes with it) and a re-cast that re-plants the decoy restarts the fade
+        // in naturally. The heat-haze is deliberately NOT gated by this — it runs the clone's full lifetime.
+        // Sequencing is mirrored: on cast the HAZE leads and the clone resolves into it; on expiry the CLONE
+        // dissolves FIRST and the haze tails off after it, so the shimmer is the last thing to go.
+        //   0 .. 0.5s          haze 0→full, clone invisible
+        //   0.5 .. 1.0s        clone fades in, haze full
+        //   ... body ...       both full
+        //   T-1.0 .. T-0.5s    clone fades OUT, haze still full
+        //   T-0.5 .. T         clone gone, haze ramps full→0
+        private const double FadeSeconds = 0.5;
+
+        // RE-CAST HAND-OFF (overlapped). The new decoy is created IMMEDIATELY and normally — timer, enemy
+        // redirect, and its haze all start at the cast, unaffected. The OUTGOING clone simply dissolves in
+        // place over HandoffFade while the NEW haze ramps up at the new spot.
+        //
+        // Only ONE clone instance is needed, because the two never overlap VISUALLY: the outgoing clone is
+        // visible only during 0..HandoffFade, and the incoming clone is still fully transparent then (it does
+        // not begin to materialize until the haze ramp completes at HazeRampSeconds). So the single instance
+        // stays parked at the OLD pose while it fades out, and is respawned at the NEW pose exactly when its
+        // alpha reaches 0 — which is the same instant the incoming fade-in starts from 0. Seamless, and no
+        // second mesh/node/cloth copy (which would be a whole extra ~200 KB cave).
+        //
+        // The haze needs NO special case: it tracks _dx/_dy (now the new decoy) and its gain envelope is
+        // driven by the new deadline, so it "instantly disappears" from the old spot and ramps up at the new.
+        private const double HandoffFade = 0.25;   // outgoing clone's dissolve == the incoming haze's ramp-up
+        // AGGRO LAG: enemies keep attacking the OLD decoy spot until the NEW clone has fully materialized —
+        // i.e. past the clone swap, all the way through the incoming fade-in. Without this they'd re-target the
+        // instant we cast, which reads as psychic; with it they stay committed to the body they were fighting
+        // and only notice the switch once the new one is actually there.
+        private const double AggroHoldSeconds = HazeRampSeconds + FadeSeconds;
+        private static bool     _handoff;
+        private static DateTime _handoffStart;
+        private static DateTime _aggroHoldUntil;                // while now < this, DecoyPos stays on the OLD spot
+        private static float _oldDx, _oldDz, _oldDy, _oldYaw;   // the OUTGOING clone's pose, held while it fades
+
+        private static float CloneAlpha()
+        {
+            if (_handoff)   // outgoing clone dissolving in place; the incoming one is still invisible
+            {
+                double ht = (DateTime.UtcNow - _handoffStart).TotalSeconds;
+                return (float)Math.Clamp(1.0 - ht / HandoffFade, 0.0, 1.0);
+            }
+            double remaining = (_decoyDeadline - DateTime.UtcNow).TotalSeconds;
+            double elapsed   = DecoySeconds - remaining;
+            double a = 1.0;
+            double inT  = elapsed   - HazeRampSeconds;   // materialize only AFTER the haze has ramped in
+            double outT = remaining - HazeRampSeconds;   // dematerialize BEFORE the haze ramps out (haze outlives it)
+            if (inT  < FadeSeconds) a = inT / FadeSeconds;
+            if (outT < FadeSeconds) a = Math.Min(a, outT / FadeSeconds);
+            return (float)Math.Clamp(a, 0.0, 1.0);
+        }
+
+        // Haze amplitude ramp. blendTextuerTest's displacement is (size/10000) * fVar5 * wave * AMP, where
+        // fVar5 = (DAT_002a1da8 * rand) / 2^31 — a PURE multiplicative gain, so 0 = no distortion and it
+        // scales linearly to full. DAT_002a1da8 lives in RODATA at 0x2a1da8, i.e. plain DATA in RAM: we can
+        // ramp it per-tick from the mod with NO hot-code patching (rewriting the lui amplitude constant at
+        // 0x162FB4 every frame would be exactly the recompiler-crashing code surgery we avoid everywhere).
+        // Envelope: 0 → full over HazeRampSeconds on cast (before the clone appears), full through the body
+        // of the decoy, then back down with the clone's dissolve so nothing pops when the clone is torn down.
+        private const long   HazeGainAddr    = 0x202A1DA8;
+        private const double HazeRampSeconds = 0.25;
+        private static float _hazeGainOrig;   // vanilla gain (~1.3), captured once and restored on teardown
+        private static float HazeGain()
+        {
+            // No hand-off case: on a re-cast the deadline resets, so this naturally reads elapsed≈0 and ramps
+            // the haze up from zero AT THE NEW DECOY — i.e. it vanishes from the old spot the instant we cast.
+            double remaining = (_decoyDeadline - DateTime.UtcNow).TotalSeconds;
+            double elapsed   = DecoySeconds - remaining;
+            double g = 1.0;
+            if (elapsed   < HazeRampSeconds) g = elapsed / HazeRampSeconds;                       // ramp in  (haze leads the clone)
+            if (remaining < HazeRampSeconds) g = Math.Min(g, remaining / HazeRampSeconds);        // ramp out (haze outlives the clone)
+            return (float)Math.Clamp(g, 0.0, 1.0) * _hazeGainOrig;
+        }
+
         private const bool  CloneFireHaze = true;
-        private const float HazeBack      = 30f;   // world units to pull the shimmer BACK along the clone's facing (raster sits forward)
-        private static float _decoyFwdX, _decoyFwdY;  // clone's normalized forward vector (X/Y plane), captured at cast
-        private const float HazeBodyY     = -17f;  // world height above the clone's feet to center the shimmer (the raster is
+        private const float HazeBack      = 8f;   // world units to pull the shimmer BACK along the clone's facing (raster sits forward)
+        private const  int   CharaRotY = 0x64;         // CObject euler rotation Y (yaw) — GetRotation__7CObject reads +0x60/64/68
+        private static float _decoyYaw;               // clone's heading, latched at cast and PINNED onto the clone each tick
+        private static float _decoyFwdX, _decoyFwdY;  // clone's forward vector (X/Y plane), derived from _decoyYaw
+        private const float HazeBodyY     = -15f;  // world height above the clone's feet to center the shimmer (the raster is
                                                    // designed to rise above a fire, so it renders high; pull it down onto the body)
         private static int  _hazeFireIdx  = -1;    // reused torch's fire-struct index (-2 = checked/none, -1 = unchecked)
         private static int  _hazeTileIdx  = -1;    // reused torch's TILE index (for the dist-gate override)
         private static int  _hazeCol, _hazeRow;    // that torch tile's col/row (emitter anchor for re-assert)
         private static int  _hazeRot;              // that torch tile's rotation index (+0x9c54) — DrawRaster rotates the emitter by it
-        private static byte[] _hazeSaved;          // saved struct raster region (+0x4A0..+0x4C0)
+        private static int  _hazeEmitIdx;          // which emitter slot we own (appended after the torch's own, if any)
+        private static byte[] _hazeSaved;          // saved struct region (+0x4A0..+0x520: count, emitter pos array, flag bytes)
 
         private static void SetupCloneHaze(uint dngMap)
         {
@@ -140,8 +220,15 @@ namespace Dark_Cloud_Improved_Version
             if (dngMap == 0 || dngMap >= 0x02000000) return;
             // Anchor near the cast spot first (player is there at cast). Maintain re-anchors to the live
             // player as they move. If the dungeon has NO fire at all, UpdateAnchor returns false → skip.
+            // Capture the vanilla distortion gain ONCE (before we ever ramp it) so teardown always restores the
+            // real value rather than a hardcoded guess — and never latch a value we ourselves already ramped.
+            if (_hazeGainOrig <= 0f)
+            {
+                float g = Memory.ReadFloat(HazeGainAddr);
+                _hazeGainOrig = g > 0f && g < 100f ? g : 1.3f;   // sane-range guard; 1.3 is the shipped value
+            }
             if (!UpdateAnchor(dngMap, _dx, _dy)) { _hazeFireIdx = -2; return; }
-            Console.WriteLine($"[Mirage/haze] anchored to torch fireIdx {_hazeFireIdx} @tile ({_hazeCol},{_hazeRow}); dynamic re-anchor ON");
+            Console.WriteLine($"[Mirage/haze] anchored to torch fireIdx {_hazeFireIdx} @tile ({_hazeCol},{_hazeRow}); dynamic re-anchor ON, gain={_hazeGainOrig:0.##}");
         }
 
         // Point the raster emitter at the clone and force the anchor tile's dist so the ≤240 gate passes.
@@ -155,10 +242,16 @@ namespace Dark_Cloud_Improved_Version
             float tx = _dx - HazeBack * _decoyFwdX, ty = _dy - HazeBack * _decoyFwdY;   // pull back along the clone's facing
             double dxc = (tx - _hazeCol * 160) / 10.0, dzc = (ty - _hazeRow * 160) / 10.0;
             double th = (4 - _hazeRot) * (System.Math.PI / 2.0), c = System.Math.Cos(th), s = System.Math.Sin(th);
-            Memory.WriteBytesBatch(fs + 0x4A2, new byte[] { 1, 0 });          // raster emitter count = 1
-            Memory.WriteFloat(fs + 0x4B0, (float)(dxc * c - dzc * s));        // emitter[0] local X (inverse-rotated) → worldX = _dx
-            Memory.WriteFloat(fs + 0x4B4, (_dz + HazeBodyY) / 10f);           // emitter[0] local Y → worldY = _dz+HazeBodyY
-            Memory.WriteFloat(fs + 0x4B8, (float)(dxc * s + dzc * c));        // emitter[0] local Z (inverse-rotated) → worldZ = _dy
+            int i = _hazeEmitIdx;
+            Memory.WriteBytesBatch(fs + 0x4A2, new byte[] { (byte)(i + 1), 0 });        // emitter count = our slot + 1 (keeps the torch's own emitters 0..i-1)
+            Memory.WriteFloat(fs + 0x4B0 + i * 0x10, (float)(dxc * c - dzc * s));       // emitter[i] local X (inverse-rotated) → worldX
+            Memory.WriteFloat(fs + 0x4B4 + i * 0x10, (_dz + HazeBodyY) / 10f);          // emitter[i] local Y → worldY = _dz+HazeBodyY
+            Memory.WriteFloat(fs + 0x4B8 + i * 0x10, (float)(dxc * s + dzc * c));       // emitter[i] local Z (inverse-rotated) → worldZ
+            // DrawFire__11CDungeonMap walks the SAME emitter list and draws each as a flame+light via
+            // DrawFire__9CFireOmni(..., flags) where flags = the per-emitter byte at +0x510+i — a BITMASK
+            // (bit0 = light/glow, bit1 = flame). Zero it so OUR emitter renders the heat-haze ONLY: DrawRaster
+            // never reads this byte. Without it a flame/light draws under the shimmer in fire-emitter dungeons.
+            Memory.WriteBytesBatch(fs + 0x510 + i, new byte[] { 0 });
             // (dist gate is relaxed via PNACH during a decoy — no point forcing +0x08 here; DrawMap rewrites it each frame.)
         }
 
@@ -202,7 +295,13 @@ namespace Dark_Cloud_Improved_Version
                 RestoreAnchor(dngMap);                   // hand the raster back to the old torch before taking a new one
                 _hazeTileIdx = bestT; _hazeFireIdx = bestFi; _hazeCol = bestT % 20; _hazeRow = bestT / 20;
                 _hazeRot = BitConverter.ToInt32(tiles, bestT * 0x10 + 0x04);   // tile rotation → inverse-rotated in WriteHazeRaster
-                _hazeSaved = Memory.ReadBytesBatch(b + (long)bestFi * 0x1D0 + 0x4A0, 0x20);
+                // Save count(+0x4A2) + emitter pos array(+0x4B0..) + per-emitter flag bytes(+0x510..) so we can
+                // fully restore the torch. APPEND our emitter after the torch's own (if it has any) instead of
+                // overwriting slot 0, so real fire-emitter torches keep their flames. Cap at 5: emitter pos[i]
+                // lives at +0x4B0+i*0x10, so pos[6] would land on +0x510 — the flag array.
+                _hazeSaved = Memory.ReadBytesBatch(b + (long)bestFi * 0x1D0 + 0x4A0, 0x80);
+                int orig = _hazeSaved != null ? BitConverter.ToInt16(_hazeSaved, 0x02) : 0;   // +0x4A2 == saved[2]
+                _hazeEmitIdx = (orig >= 1 && orig <= 5) ? orig : 0;
             }
             WriteHazeRaster(dngMap);
             return true;
@@ -211,6 +310,7 @@ namespace Dark_Cloud_Improved_Version
         private static void MaintainCloneHaze(uint dngMap)
         {
             if (!CloneFireHaze || _hazeFireIdx < 0 || dngMap == 0 || dngMap >= 0x02000000) return;
+            Memory.WriteFloat(HazeGainAddr, HazeGain());           // ramp the distortion amplitude (pure data, no code patch)
             float px = Memory.ReadFloat(Addresses.dunPositionX);   // live player = camera proxy; anchor follows it
             float py = Memory.ReadFloat(Addresses.dunPositionY);
             UpdateAnchor(dngMap, px, py);
@@ -219,6 +319,7 @@ namespace Dark_Cloud_Improved_Version
         private static void TeardownCloneHaze(uint dngMap)
         {
             RestoreAnchor(dngMap);
+            if (_hazeGainOrig > 0f) Memory.WriteFloat(HazeGainAddr, _hazeGainOrig);   // hand the distortion gain back to vanilla
             _hazeFireIdx = -1; _hazeTileIdx = -1; _hazeSaved = null;
         }
 
@@ -292,11 +393,20 @@ namespace Dark_Cloud_Improved_Version
         {
             bool guardLatched = false;
             DateTime guardPoseSince = default;
+            DateTime lastTick = DateTime.UtcNow;
             while (true)
             {
                 int sleep = IdleTickMs;
                 try
                 {
+                    // REAL elapsed wall time since the previous iteration. A tick can take substantially
+                    // longer than FastTickMs (MaintainClone batch-reads the whole fire-tile grid and does a
+                    // pile of PINE writes), so freezing the decoy timer by pushing the deadline a hardcoded
+                    // FastTickMs under-compensates and the timer keeps draining while paused. Push by this.
+                    DateTime nowTick = DateTime.UtcNow;
+                    TimeSpan dt = nowTick - lastTick;
+                    lastTick = nowTick;
+
                     bool inDun = Player.InDungeonFloor();
                     if (!_armed && !inDun) ArmColdPatch();
 
@@ -331,7 +441,9 @@ namespace Dark_Cloud_Improved_Version
                                 else if (DateTime.UtcNow - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
                                 {
                                     Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1);
-                                    PlaceDecoy();
+                                    if (_handoff) { }                           // a hand-off is already running — ignore
+                                    else if (_decoyActive) BeginHandoff();      // clone up → new decoy now, dissolve the old one
+                                    else PlaceDecoy();                          // nothing up → plant immediately
                                     guardLatched = true;
                                 }
                             }
@@ -343,12 +455,14 @@ namespace Dark_Cloud_Improved_Version
                             // flag-3 gate below freezes its step + cloth. Covers BOTH pause types: the item menu
                             // (engine already freezes the clone there) and the PAUSE screen (where the chara loop
                             // otherwise keeps stepping the clone).
-                            _decoyDeadline = _decoyDeadline.AddMilliseconds(FastTickMs);
+                            _decoyDeadline += dt;   // hold the timer: push by the REAL tick delta, not a fixed FastTickMs
+                            if (_handoff) _handoffStart += dt;                      // freeze a hand-off mid-dissolve
+                            if (_aggroHoldUntil != default) _aggroHoldUntil += dt;   // ...and its aggro lag
                             MaintainClone();
                         }
                         else if (!ungagaMirage && _decoyActive)
                         {
-                            _decoyActive = false; Array.Clear(_fooled, 0, _fooled.Length);
+                            _decoyActive = false; _handoff = false; _aggroHoldUntil = default; Array.Clear(_fooled, 0, _fooled.Length);
                             DespawnClone();
                         }
 
@@ -364,7 +478,7 @@ namespace Dark_Cloud_Improved_Version
                     else
                     {
                         guardLatched = false;
-                        if (_decoyActive || _cloneSlot >= 0) { _decoyActive = false; DespawnClone(); }
+                        if (_decoyActive || _cloneSlot >= 0) { _decoyActive = false; _handoff = false; _aggroHoldUntil = default; DespawnClone(); }
                         Memory.WriteInt(SceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }
@@ -384,33 +498,93 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── decoy state (all DATA) ───────────────────────────────────────────────────────────
+        /// <summary>Read the player's current spot + facing as a decoy origin. The facing is the YAW at CObject
+        /// +0x64 (GetRotation__7CObject stores EULER ANGLES at +0x60/+0x64/+0x68 — NOT a direction vector; for an
+        /// upright character the X/Z angles are ~0, which is why reading +0x60/+0x68 as a vector gave (0,0)).</summary>
+        private static (float dx, float dz, float dy, float yaw) ReadDecoyOrigin()
+            => (Memory.ReadFloat(Addresses.dunPositionX),
+                Memory.ReadFloat(Addresses.dunPositionZ),
+                Memory.ReadFloat(Addresses.dunPositionY),
+                Memory.ReadFloat(MirageClone.PlayerChar + CharaRotY));
+
         private static void PlaceDecoy()
         {
-            _dx = Memory.ReadFloat(Addresses.dunPositionX);
-            _dz = Memory.ReadFloat(Addresses.dunPositionZ);
-            _dy = Memory.ReadFloat(Addresses.dunPositionY);
-            // Capture the player's facing (CCharacter +0x60/+0x68 = forward vector, X/Y plane) at cast so the
-            // heat-haze can be pushed BACK along it (the raster is built to rise over a fire ahead → too far forward).
-            float fwx = Memory.ReadFloat(MirageClone.PlayerChar + 0x60), fwy = Memory.ReadFloat(MirageClone.PlayerChar + 0x68);
-            double fmag = System.Math.Sqrt((double)fwx * fwx + (double)fwy * fwy);
-            _decoyFwdX = fmag > 0.0001 ? (float)(fwx / fmag) : 0f;
-            _decoyFwdY = fmag > 0.0001 ? (float)(fwy / fmag) : 0f;
+            var o = ReadDecoyOrigin();
+            PlaceDecoyAt(o.dx, o.dz, o.dy, o.yaw);
+        }
+
+        /// <summary>Create the decoy: this is the moment its TIMER, enemy REDIRECT and haze all begin. On a
+        /// re-cast this still runs immediately and normally (spawnClone:false) — the only difference is that we
+        /// hold off respawning the clone instance until the OUTGOING one has finished dissolving in place.</summary>
+        private static void PlaceDecoyAt(float dx, float dz, float dy, float yaw, bool spawnClone = true, bool refreshAggro = true)
+        {
+            _dx = dx; _dz = dz; _dy = dy;
+            _decoyYaw  = yaw;                                   // PINNED onto the clone each tick (see MaintainClone)
+            _decoyFwdX = (float)System.Math.Sin(yaw);           // haze is pushed BACK along this (the raster renders forward)
+            _decoyFwdY = (float)System.Math.Cos(yaw);
             WriteDecoyPos();   // the stationary decoy position fooled slots' pointers reference
+            // refreshAggro:false on a re-cast hand-off. Re-fooling everyone here would instantly re-deceive the
+            // enemies that had BROKEN the illusion (by hitting them) and — since aggro is held on the old spot —
+            // send them at the OUTGOING clone. Instead we preserve _brokenThisDecoy so they keep chasing the
+            // player through the hand-off, and fold them back in when the new clone finishes materializing.
+            if (refreshAggro) RefreshAggro();
+            _decoyActive = true;
+            _decoyDeadline = DateTime.UtcNow.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
+            if (spawnClone)
+            {
+                DespawnClone();   // clear any stale slot from a previous decoy
+                SpawnClone();
+                if (_cloneSlot >= 0) Memory.WriteInt(SceneGateFlag, 1);   // arm the PNACH scene-gate NOP (clone draws)
+            }
+            Console.WriteLine($"[Mirage] decoy planted at ({_dx:0.#},{_dy:0.#}); enemies redirected");
+        }
+
+        /// <summary>(Re-)deceive every live enemy: clear the "broke the illusion" set and fool them all, so they
+        /// path to the decoy. Called at a normal cast, and — on a re-cast — deferred until the new clone has
+        /// fully materialized, so enemies that had wised up don't get re-fooled onto the OUTGOING clone.</summary>
+        private static void RefreshAggro()
+        {
             Array.Clear(_fooled, 0, _fooled.Length);
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
             _prevHp = ReusableFunctions.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MirageDecoy.MaxSlots; s++)
                 if (IsLiveEnemy(s)) _fooled[s] = true;
-            _decoyActive = true;
-            _decoyDeadline = DateTime.UtcNow.AddSeconds(DecoySeconds);
-            DespawnClone();   // clear any stale slot from a previous decoy
+        }
+
+        /// <summary>Re-cast with a clone already up. The new decoy is created RIGHT NOW and normally (timer,
+        /// redirect, and its haze ramping up at the new spot). We just hold the existing clone instance at its
+        /// OLD pose and dissolve it over HandoffFade — during which the incoming clone is still fully
+        /// transparent, so one instance covers both. It is respawned at the new pose the moment it hits 0.</summary>
+        private static void BeginHandoff()
+        {
+            _oldDx = _dx; _oldDz = _dz; _oldDy = _dy; _oldYaw = _decoyYaw;   // hold the outgoing clone in place
+            _handoff = true;
+            _handoffStart = DateTime.UtcNow;
+            _aggroHoldUntil = _handoffStart.AddSeconds(AggroHoldSeconds);    // aggro lags on the old spot past the swap
+            var o = ReadDecoyOrigin();
+            PlaceDecoyAt(o.dx, o.dz, o.dy, o.yaw, spawnClone: false, refreshAggro: false);   // new decoy live now; aggro state preserved
+            Console.WriteLine($"[Mirage] re-cast: new decoy live; outgoing clone dissolving over {HandoffFade:0.###}s, aggro held on the old spot for {AggroHoldSeconds:0.###}s");
+        }
+
+        private static void CompleteHandoff()
+        {
+            _handoff = false;   // NOTE: aggro does NOT move here — it stays on the old spot until _aggroHoldUntil
+            DespawnClone(keepHaze: true);   // swap the instance WITHOUT tearing the haze down (it's mid-ramp at the new spot)
             SpawnClone();
-            if (_cloneSlot >= 0) Memory.WriteInt(SceneGateFlag, 1);   // arm the PNACH scene-gate NOP (clone draws)
-            Console.WriteLine($"[Mirage] decoy planted at ({_dx:0.#},{_dy:0.#}); enemies redirected");
+            if (_cloneSlot >= 0) Memory.WriteInt(SceneGateFlag, 1);
         }
 
         private static void UpdateDecoyState()
         {
+            if (_handoff && (DateTime.UtcNow - _handoffStart).TotalSeconds >= HandoffFade)
+                CompleteHandoff();   // outgoing clone hit alpha 0 → respawn it at the new decoy and fade it in
+            if (_aggroHoldUntil != default && DateTime.UtcNow >= _aggroHoldUntil)
+            {
+                _aggroHoldUntil = default;   // new clone is fully materialized → enemies finally notice the switch
+                RefreshAggro();              // incl. the ones that had broken the old illusion: they only fall for the NEW clone
+                WriteDecoyPos();
+                Console.WriteLine("[Mirage] hand-off: new clone fully faded in — enemies re-target it");
+            }
             if (DateTime.UtcNow > _decoyDeadline)
             {
                 _decoyActive = false; Array.Clear(_fooled, 0, _fooled.Length);
@@ -455,10 +629,15 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Write the stationary decoy position (x,z,y,w) that fooled slots' pointers reference.</summary>
         private static void WriteDecoyPos()
         {
+            // Enemies chase THIS position. Through a re-cast hand-off it stays on the OLD decoy spot until the
+            // new clone has fully materialized (AggroHoldSeconds) — deliberately outliving the clone swap, so
+            // enemies commit to the body they were fighting and only notice the switch once the new one is
+            // actually there, instead of psychically peeling off the instant we cast.
+            bool hold = DateTime.UtcNow < _aggroHoldUntil;
             var b = new byte[16];
-            BitConverter.GetBytes(_dx).CopyTo(b, 0);
-            BitConverter.GetBytes(_dz).CopyTo(b, 4);
-            BitConverter.GetBytes(_dy).CopyTo(b, 8);
+            BitConverter.GetBytes(hold ? _oldDx : _dx).CopyTo(b, 0);
+            BitConverter.GetBytes(hold ? _oldDz : _dz).CopyTo(b, 4);
+            BitConverter.GetBytes(hold ? _oldDy : _dy).CopyTo(b, 8);
             BitConverter.GetBytes(1.0f).CopyTo(b, 12);
             Memory.WriteBytesBatch(MirageDecoy.DecoyPos, b);
         }
@@ -550,7 +729,10 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(GuardLoopMotion).CopyTo(buf, MirageClone.MotionId);
             BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, MirageClone.MotionFlags) | (uint)MirageClone.MotionRestart)
                 .CopyTo(buf, MirageClone.MotionFlags);
-            BitConverter.GetBytes(GhostSilhouette ? GhostOpacity : 128f).CopyTo(buf, MirageClone.NpcOpacity);  // +0xcec (Draw needs >0)
+            // Spawn TRANSPARENT: CloneAlpha() is ~0 the instant the decoy is planted. Writing full opacity here
+            // draws the clone at full strength for the frames between SpawnClone and the first MaintainClone —
+            // that's the visible "flash" before the haze ramps in.
+            BitConverter.GetBytes((GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha()).CopyTo(buf, MirageClone.NpcOpacity);  // +0xcec
             BitConverter.GetBytes(GhostSilhouette ? GhostTintR : 0f).CopyTo(buf, MirageClone.CharaTint);      // +0xce0 ambient ADD (brighter + blue)
             BitConverter.GetBytes(GhostSilhouette ? GhostTintG : 0f).CopyTo(buf, MirageClone.CharaTint + 4);
             BitConverter.GetBytes(GhostSilhouette ? GhostTintB : 0f).CopyTo(buf, MirageClone.CharaTint + 8);
@@ -735,7 +917,7 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(0).CopyTo(cslot, MirageClone.MotionSlotBase + s * 4);
             Memory.WriteBytesBatch(dst, cslot);
             Memory.WriteInt  (dst + MirageClone.CharaActive, 1);                                         // +0x146c draw gate
-            Memory.WriteFloat(dst + MirageClone.NpcOpacity, GhostSilhouette ? GhostOpacity : 128f);      // +0xcec > 0
+            Memory.WriteFloat(dst + MirageClone.NpcOpacity, (GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha());   // +0xcec — spawn transparent (see above)
             Memory.WriteInt  (dst + MirageClone.CharaMotionA, 0);                                        // never step
             Memory.WriteInt  (dst + MirageClone.CharaMotionB, 0);
             Memory.WriteInt  (MirageClone.StepSkipTable  + (long)MirageClone.WeaponCharaSlot * 4, 1);    // step loop skips it
@@ -1221,13 +1403,24 @@ namespace Dark_Cloud_Improved_Version
             long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
             // Hold at the decoy, keep the model + active/opacity set, and keep it registered for draw
             // (the game may reset the registry / opacity-ramp between our ticks).
-            Memory.WriteFloat(slot + MirageClone.CharPos,     _dx);
-            Memory.WriteFloat(slot + MirageClone.CharPos + 4, _dz);
-            Memory.WriteFloat(slot + MirageClone.CharPos + 8, _dy);
+            // During a re-cast hand-off the clone instance is still the OUTGOING one: hold it at the old pose
+            // while it dissolves. _dx/_dy already point at the NEW decoy (which the haze is ramping up on).
+            float cx = _handoff ? _oldDx  : _dx;
+            float cz = _handoff ? _oldDz  : _dz;
+            float cy = _handoff ? _oldDy  : _dy;
+            float cyaw = _handoff ? _oldYaw : _decoyYaw;
+            Memory.WriteFloat(slot + MirageClone.CharPos,     cx);
+            Memory.WriteFloat(slot + MirageClone.CharPos + 4, cz);
+            Memory.WriteFloat(slot + MirageClone.CharPos + 8, cy);
             Memory.WriteUInt (slot + MirageClone.CharModel,   _cloneRootGuest);
+            // PIN the heading. The engine steps the clone (so its yaw can drift) and a respawned clone copies
+            // the player's CURRENT facing — either way it could diverge from the yaw the haze is pushed back
+            // along (_decoyFwd*), which reads as the shimmer sitting off the clone.
+            Memory.WriteFloat(slot + CharaRotY, cyaw);
 
+            float op = (GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha();   // fade in/out envelope (haze is NOT gated by it)
             Memory.WriteInt  (slot + MirageClone.CharaActive, 1);
-            Memory.WriteFloat(slot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
+            Memory.WriteFloat(slot + MirageClone.NpcOpacity,  op);
             WriteGhostTint(slot);
             Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
             Memory.WriteInt  (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
@@ -1253,7 +1446,7 @@ namespace Dark_Cloud_Improved_Version
                 long wslot = MirageClone.CharaArray + (long)MirageClone.WeaponCharaSlot * MirageClone.CharaStride;
                 Memory.WriteUInt (wslot + MirageClone.CharModel,   _weaponRootGuest);
                 Memory.WriteInt  (wslot + MirageClone.CharaActive, 1);
-                Memory.WriteFloat(wslot + MirageClone.NpcOpacity,  GhostSilhouette ? GhostOpacity : 128f);
+                Memory.WriteFloat(wslot + MirageClone.NpcOpacity,  op);   // same envelope as the body — fade together
                 WriteGhostTint(wslot);
                 Memory.WriteInt  (wslot + MirageClone.CharaMotionA, 0);
                 Memory.WriteInt  (MirageClone.StepSkipTable + (long)MirageClone.WeaponCharaSlot * 4, 1);
@@ -1266,10 +1459,12 @@ namespace Dark_Cloud_Improved_Version
             // which lets the loop run while the flag stays 0 so enemies keep moving.
         }
 
-        private static void DespawnClone()
+        private static void DespawnClone(bool keepHaze = false)
         {
             // (SceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
-            TeardownCloneHaze((uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF);   // restore the clone tile + free our fire slot
+            // keepHaze: the re-cast hand-off swaps the clone INSTANCE while the haze is mid-ramp at the new
+            // decoy — tearing it down here would restore the torch + distortion gain for a tick and flicker.
+            if (!keepHaze) TeardownCloneHaze((uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF);
             if (_cloneSlot < 0) return;
             long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
             Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)
