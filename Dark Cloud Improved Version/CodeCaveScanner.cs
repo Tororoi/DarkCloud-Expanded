@@ -126,6 +126,9 @@ namespace Dark_Cloud_Improved_Version
         private static readonly (long Start, long Size)[] ModReserved =
         {
             (0x1F10000, 0x10000), // PNACH mailbox @0x1F10020 + HarderEnemyAI STB cave @0x1F10100 (64KB reserve)
+            (0x1F30000, 0x84000), // Mirage: decoy tables + _GET_* code caves + the whole clone cave band
+                                  // (node pool / cloth / motion / mesh), 0x1F30000..0x1FB4000. Authoritative
+                                  // layout lives in CodeCaveAddresses.cs (CodeCaves) — keep these in sync.
         };
 
         private static bool IsReserved(int chunk)

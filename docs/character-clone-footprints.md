@@ -51,7 +51,11 @@ Notes:
 
 ## Reproducing
 
-The probe runs read-only whenever you're in a dungeon (`Mirage.ProbeCharacter`, called from the
-loop). Cycle party members, pausing ≥2 s on each so the model settles; it logs one
-`[Mirage/probe]` line per settled character and re-logs on any change. Character availability
-depends on story progress.
+The table above was captured by a temporary read-only probe (`Mirage.ProbeCharacter`), which has
+since been **removed** — it ran every dungeon tick purely to produce this data, and the data is now
+recorded here. To re-measure (e.g. after changing what the clone copies), re-add a probe that DFS's
+the model tree at `PlayerChar + CharModel`, sums the `CVisualMDTVu1` software-skinned meshes, and
+reads the `+0xC74` cloth list. Gate it on a **≥1 s stable `(id, root)`** read: character switching
+lags — `CurrentCharacterNum()` flips several frames before the `+0xBC` model actually swaps, so a
+naive read mislabels one character's footprint as another's. Cycle party members, pausing ≥2 s on
+each so the model settles. Character availability depends on story progress.

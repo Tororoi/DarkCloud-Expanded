@@ -44,67 +44,13 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_armed) return;
             FillWholeTablePlayer();                 // every slot → live-player pointer (valid before any enemy read)
-            bool pos  = ArmFuncCave(0x201E1DF0, 0x21F34200, 0x01F34200, MirageDecoy.PosDispatch, 0x84, 0x8C, "_GET_POSITION");
-            bool dist = ArmFuncCave(0x201E1D00, 0x21F34000, 0x01F34000, MirageDecoy.DistDispatch, 0x5C, 0x64, "_GET_DISTANCE");
-            if (HeatHaze) ArmHazeCave();            // only when the PNACH jal patch (0x1DAEBCC) is present (HeatHaze on)
+            bool pos  = ArmFuncCave(MirageDecoy.GetPositionFn, CodeCaves.PosCave,  CodeCaves.PosCaveGuest,
+                                    MirageDecoy.PosDispatch,  MirageDecoy.PosDetourOff,  MirageDecoy.PosJalOff,  "_GET_POSITION");
+            bool dist = ArmFuncCave(MirageDecoy.GetDistanceFn, CodeCaves.DistCave, CodeCaves.DistCaveGuest,
+                                    MirageDecoy.DistDispatch, MirageDecoy.DistDetourOff, MirageDecoy.DistJalOff, "_GET_DISTANCE");
             _armed = pos && dist;                   // retry from the loop if either couldn't arm (e.g. not vanilla yet)
         }
 
-        // Heat-haze on the clone: the dungeon's fire-source heat-haze pass (DrawRaster__11CDungeonMap, 0x1C4610)
-        // is called from Draw__11CSeireiKing @0x1DAEBCC — the same dungeon draw that renders the clone. The PNACH
-        // redirects that jal (in-dungeon, all flag states) to this COLD-written cave stub, which calls the ORIGINAL
-        // pass (normal fires) then, gated by HazeFlag, RasterStep + DrawRaster__9CFireOmni (0x162310) on a fake
-        // CFireOmni the mod positions at the decoy → a heat shimmer on the clone. Reached via jal (like ClothStep);
-        // the cold-written cave compiles fresh on first draw.
-        private const long HazeStub   = 0x21F34400;   // cave stub (guest 0x01F34400)
-        private const uint HazeStubGuest = 0x01F34400;
-        private const long HazeFireObj = 0x21F34500;  // fake CFireOmni (guest 0x01F34500): +0x04 phase, +0x20/24/28 pos
-        private const long HazeFlag   = 0x21F34540;    // mod-controlled: 1 = draw the clone haze, 0 = skip
-        private const long HazeTexResult = 0x21F34544; // stub stores the GetTexture("blender") result here (0 = not loaded)
-        internal static void ArmHazeCave()
-        {
-            // BISECT BUILD: skips the actual DrawRaster__9CFireOmni call (the suspected crash — blendTextuerTest's
-            // framebuffer distortion), keeps flag-check + GetTexture guard + RasterStep, and STORES the GetTexture
-            // result to HazeTexResult so we learn (a) whether the crash is in DrawRaster and (b) whether "blender"
-            // is even loaded. Compare-and-rewrite (not a version byte) so ANY edit auto-applies on a town re-arm.
-            uint[] code = {
-                // MINIMAL PASS-THROUGH: do NOTHING, just return. Isolates whether the crash is the jal→cave
-                // mechanism on the flag=1 (clone-draw) path vs. calling DrawRaster after the clone draw. Skips the
-                // fire pass (no fire haze) but that's fine for the test. jal set ra=0x1DAEBD4; jr ra returns there.
-                0x03E00008, // 00 jr ra
-                0x00000000, // 04 nop
-            };
-            byte[] cb = new byte[code.Length * 4];
-            for (int i = 0; i < code.Length; i++) BitConverter.GetBytes(code[i]).CopyTo(cb, i * 4);
-            byte[] cur = Memory.ReadBytesBatch(HazeStub, cb.Length);
-            if (cur != null && cur.AsSpan().SequenceEqual(cb)) return;   // already current → don't touch (cold-only anyway)
-            Memory.WriteBytesBatch(HazeStub, cb);
-            Memory.WriteBytesBatch(HazeFireObj, new byte[0x40]);   // zero the fake CFireOmni
-            Memory.WriteInt(HazeFlag, 0);
-            Memory.WriteInt(HazeTexResult, 0);
-            Console.WriteLine($"[Mirage/haze] cave stub armed @0x{HazeStubGuest:X} (MINIMAL: jr ra only — no fire pass, no haze; tests the jal→cave mechanism on the clone-draw path)");
-        }
-
-        private static bool _hazeStubLogged;
-        /// <summary>Position the fake CFireOmni at the decoy and enable the haze draw. Called while the clone is up.</summary>
-        private static void MaintainHaze()
-        {
-            if (!HeatHaze) return;
-            if (!_hazeStubLogged)   // BEFORE enabling: report which stub is actually live (disambiguates restart state)
-            {
-                _hazeStubLogged = true;
-                uint s5c = (uint)Memory.ReadInt(HazeStub + 0x5C);   // bisect stub: 0x00000000; full stub: 0x0C0588C4
-                Console.WriteLine($"[Mirage/haze] ACTIVE stub +0x5C=0x{s5c:X8} ({(s5c == 0 ? "BISECT (DrawRaster skipped)" : s5c == 0x0C0588C4 ? "FULL (old — re-arm from TOWN!)" : "?")})");
-            }
-            Memory.WriteFloat(HazeFireObj + 0x20, _dx);
-            Memory.WriteFloat(HazeFireObj + 0x24, _dz);   // DrawRaster raises this by +3
-            Memory.WriteFloat(HazeFireObj + 0x28, _dy);
-            if (EnableHazeDraw) Memory.WriteInt(HazeFlag, 1);   // DIAGNOSTIC OFF: if it STILL crashes with the haze
-                                                               // branch never taken, the crash isn't the haze draw
-                                                               // at all — it's the stub's presence + the clone draw.
-        }
-        private const bool EnableHazeDraw = false;
-        private static void HazeOff() { if (HeatHaze) Memory.WriteInt(HazeFlag, 0); }
 
         // ── Clone heat-haze by HIJACKING an existing torch's fire-raster (pure data; no cave, no crash) ──
         // The ONLY framebuffer distortion in the game is CFireOmni::DrawRaster (0x162310, via
@@ -185,7 +131,6 @@ namespace Dark_Cloud_Improved_Version
         // 0x162FB4 every frame would be exactly the recompiler-crashing code surgery we avoid everywhere).
         // Envelope: 0 → full over HazeRampSeconds on cast (before the clone appears), full through the body
         // of the decoy, then back down with the clone's dissolve so nothing pops when the clone is torn down.
-        private const long   HazeGainAddr    = 0x202A1DA8;
         private const double HazeRampSeconds = 0.25;
         private static float _hazeGainOrig;   // vanilla gain (~1.3), captured once and restored on teardown
         private static float HazeGain()
@@ -202,7 +147,6 @@ namespace Dark_Cloud_Improved_Version
 
         private const bool  CloneFireHaze = true;
         private const float HazeBack      = 8f;   // world units to pull the shimmer BACK along the clone's facing (raster sits forward)
-        private const  int   CharaRotY = 0x64;         // CObject euler rotation Y (yaw) — GetRotation__7CObject reads +0x60/64/68
         private static float _decoyYaw;               // clone's heading, latched at cast and PINNED onto the clone each tick
         private static float _decoyFwdX, _decoyFwdY;  // clone's forward vector (X/Y plane), derived from _decoyYaw
         private const float HazeBodyY     = -15f;  // world height above the clone's feet to center the shimmer (the raster is
@@ -211,6 +155,8 @@ namespace Dark_Cloud_Improved_Version
         private static int  _hazeTileIdx  = -1;    // reused torch's TILE index (for the dist-gate override)
         private static int  _hazeCol, _hazeRow;    // that torch tile's col/row (emitter anchor for re-assert)
         private static int  _hazeRot;              // that torch tile's rotation index (+0x9c54) — DrawRaster rotates the emitter by it
+        private const  int  HazeSaveOff = 0x4A0;   // saved window: count(+0x4A2), emitter pos array(+0x4B0..), flags(+0x510..)
+        private const  int  HazeSaveLen = 0x80;
         private static int  _hazeEmitIdx;          // which emitter slot we own (appended after the torch's own, if any)
         private static byte[] _hazeSaved;          // saved struct region (+0x4A0..+0x520: count, emitter pos array, flag bytes)
 
@@ -224,7 +170,7 @@ namespace Dark_Cloud_Improved_Version
             // real value rather than a hardcoded guess — and never latch a value we ourselves already ramped.
             if (_hazeGainOrig <= 0f)
             {
-                float g = Memory.ReadFloat(HazeGainAddr);
+                float g = Memory.ReadFloat(FireRaster.DistortionGain);
                 _hazeGainOrig = g > 0f && g < 100f ? g : 1.3f;   // sane-range guard; 1.3 is the shipped value
             }
             if (!UpdateAnchor(dngMap, _dx, _dy)) { _hazeFireIdx = -2; return; }
@@ -235,7 +181,7 @@ namespace Dark_Cloud_Improved_Version
         private static void WriteHazeRaster(uint dngMap)
         {
             long b  = Memory.ToMmu(dngMap);
-            long fs = b + (long)_hazeFireIdx * 0x1D0;
+            long fs = b + (long)_hazeFireIdx * FireRaster.Stride;
             // DrawRaster places the emitter at worldX=(localX+col*16)*10, worldZ=(localZ+row*16)*10 AFTER
             // rotating (localX,localZ) by θ=(4-rot)*90° (the tile's own orientation). Pre-apply the inverse
             // rotation so it lands exactly on the clone regardless of which torch (and its rot) we borrowed.
@@ -243,15 +189,15 @@ namespace Dark_Cloud_Improved_Version
             double dxc = (tx - _hazeCol * 160) / 10.0, dzc = (ty - _hazeRow * 160) / 10.0;
             double th = (4 - _hazeRot) * (System.Math.PI / 2.0), c = System.Math.Cos(th), s = System.Math.Sin(th);
             int i = _hazeEmitIdx;
-            Memory.WriteBytesBatch(fs + 0x4A2, new byte[] { (byte)(i + 1), 0 });        // emitter count = our slot + 1 (keeps the torch's own emitters 0..i-1)
-            Memory.WriteFloat(fs + 0x4B0 + i * 0x10, (float)(dxc * c - dzc * s));       // emitter[i] local X (inverse-rotated) → worldX
-            Memory.WriteFloat(fs + 0x4B4 + i * 0x10, (_dz + HazeBodyY) / 10f);          // emitter[i] local Y → worldY = _dz+HazeBodyY
-            Memory.WriteFloat(fs + 0x4B8 + i * 0x10, (float)(dxc * s + dzc * c));       // emitter[i] local Z (inverse-rotated) → worldZ
+            Memory.WriteBytesBatch(fs + FireRaster.EmitCount, new byte[] { (byte)(i + 1), 0 });        // emitter count = our slot + 1 (keeps the torch's own emitters 0..i-1)
+            Memory.WriteFloat(fs + FireRaster.EmitPos     + i * FireRaster.EmitPosStride, (float)(dxc * c - dzc * s));       // emitter[i] local X (inverse-rotated) → worldX
+            Memory.WriteFloat(fs + FireRaster.EmitPos + 4 + i * FireRaster.EmitPosStride, (_dz + HazeBodyY) / 10f);          // emitter[i] local Y → worldY = _dz+HazeBodyY
+            Memory.WriteFloat(fs + FireRaster.EmitPos + 8 + i * FireRaster.EmitPosStride, (float)(dxc * s + dzc * c));       // emitter[i] local Z (inverse-rotated) → worldZ
             // DrawFire__11CDungeonMap walks the SAME emitter list and draws each as a flame+light via
             // DrawFire__9CFireOmni(..., flags) where flags = the per-emitter byte at +0x510+i — a BITMASK
             // (bit0 = light/glow, bit1 = flame). Zero it so OUR emitter renders the heat-haze ONLY: DrawRaster
             // never reads this byte. Without it a flame/light draws under the shimmer in fire-emitter dungeons.
-            Memory.WriteBytesBatch(fs + 0x510 + i, new byte[] { 0 });
+            Memory.WriteBytesBatch(fs + FireRaster.EmitFlags + i, new byte[] { 0 });
             // (dist gate is relaxed via PNACH during a decoy — no point forcing +0x08 here; DrawMap rewrites it each frame.)
         }
 
@@ -259,7 +205,7 @@ namespace Dark_Cloud_Improved_Version
         private static void RestoreAnchor(uint dngMap)
         {
             if (_hazeFireIdx < 0 || dngMap == 0 || dngMap >= 0x02000000) return;
-            if (_hazeSaved != null) Memory.WriteBytesBatch(Memory.ToMmu(dngMap) + (long)_hazeFireIdx * 0x1D0 + 0x4A0, _hazeSaved);
+            if (_hazeSaved != null) Memory.WriteBytesBatch(Memory.ToMmu(dngMap) + (long)_hazeFireIdx * FireRaster.Stride + HazeSaveOff, _hazeSaved);
         }
 
         // Choose the enabled fire tile nearest (refX,refY) as the raster anchor; hand the raster off to a
@@ -276,14 +222,14 @@ namespace Dark_Cloud_Improved_Version
                 double kx = _hazeCol * 160.0 - refX, ky = _hazeRow * 160.0 - refY;
                 if (kx * kx + ky * ky <= 480.0 * 480.0) { WriteHazeRaster(dngMap); return true; }
             }
-            byte[] tiles = Memory.ReadBytesBatch(b + 0x9C50, 400 * 0x10);   // one batch read of the whole fire-tile grid
+            byte[] tiles = Memory.ReadBytesBatch(b + FireRaster.TileArray, FireRaster.TileCount * FireRaster.TileStride);   // one batch read of the whole fire-tile grid
             if (tiles == null) return _hazeFireIdx >= 0;
             int bestT = -1, bestFi = -1; double bestD2 = double.MaxValue;
             for (int t = 0; t < 400; t++)
             {
-                int off = t * 0x10;
-                if (BitConverter.ToInt32(tiles, off + 0x0C) != 1) continue;
-                int fi = BitConverter.ToInt32(tiles, off + 0x00);
+                int off = t * FireRaster.TileStride;
+                if (BitConverter.ToInt32(tiles, off + FireRaster.TileEnabled) != 1) continue;
+                int fi = BitConverter.ToInt32(tiles, off + FireRaster.TileFireIdx);
                 if (fi < 1 || fi > 200) continue;
                 double wx = (t % 20) * 160.0, wz = (t / 20) * 160.0;
                 double d2 = (wx - refX) * (wx - refX) + (wz - refY) * (wz - refY);
@@ -294,14 +240,14 @@ namespace Dark_Cloud_Improved_Version
             {
                 RestoreAnchor(dngMap);                   // hand the raster back to the old torch before taking a new one
                 _hazeTileIdx = bestT; _hazeFireIdx = bestFi; _hazeCol = bestT % 20; _hazeRow = bestT / 20;
-                _hazeRot = BitConverter.ToInt32(tiles, bestT * 0x10 + 0x04);   // tile rotation → inverse-rotated in WriteHazeRaster
+                _hazeRot = BitConverter.ToInt32(tiles, bestT * FireRaster.TileStride + FireRaster.TileRot);   // tile rotation → inverse-rotated in WriteHazeRaster
                 // Save count(+0x4A2) + emitter pos array(+0x4B0..) + per-emitter flag bytes(+0x510..) so we can
                 // fully restore the torch. APPEND our emitter after the torch's own (if it has any) instead of
                 // overwriting slot 0, so real fire-emitter torches keep their flames. Cap at 5: emitter pos[i]
                 // lives at +0x4B0+i*0x10, so pos[6] would land on +0x510 — the flag array.
-                _hazeSaved = Memory.ReadBytesBatch(b + (long)bestFi * 0x1D0 + 0x4A0, 0x80);
-                int orig = _hazeSaved != null ? BitConverter.ToInt16(_hazeSaved, 0x02) : 0;   // +0x4A2 == saved[2]
-                _hazeEmitIdx = (orig >= 1 && orig <= 5) ? orig : 0;
+                _hazeSaved = Memory.ReadBytesBatch(b + (long)bestFi * FireRaster.Stride + HazeSaveOff, HazeSaveLen);
+                int orig = _hazeSaved != null ? BitConverter.ToInt16(_hazeSaved, FireRaster.EmitCount - HazeSaveOff) : 0;
+                _hazeEmitIdx = (orig >= 1 && orig <= FireRaster.MaxEmitSlot) ? orig : 0;
             }
             WriteHazeRaster(dngMap);
             return true;
@@ -310,7 +256,7 @@ namespace Dark_Cloud_Improved_Version
         private static void MaintainCloneHaze(uint dngMap)
         {
             if (!CloneFireHaze || _hazeFireIdx < 0 || dngMap == 0 || dngMap >= 0x02000000) return;
-            Memory.WriteFloat(HazeGainAddr, HazeGain());           // ramp the distortion amplitude (pure data, no code patch)
+            Memory.WriteFloat(FireRaster.DistortionGain, HazeGain());           // ramp the distortion amplitude (pure data, no code patch)
             float px = Memory.ReadFloat(Addresses.dunPositionX);   // live player = camera proxy; anchor follows it
             float py = Memory.ReadFloat(Addresses.dunPositionY);
             UpdateAnchor(dngMap, px, py);
@@ -319,7 +265,7 @@ namespace Dark_Cloud_Improved_Version
         private static void TeardownCloneHaze(uint dngMap)
         {
             RestoreAnchor(dngMap);
-            if (_hazeGainOrig > 0f) Memory.WriteFloat(HazeGainAddr, _hazeGainOrig);   // hand the distortion gain back to vanilla
+            if (_hazeGainOrig > 0f) Memory.WriteFloat(FireRaster.DistortionGain, _hazeGainOrig);   // hand the distortion gain back to vanilla
             _hazeFireIdx = -1; _hazeTileIdx = -1; _hazeSaved = null;
         }
 
@@ -338,8 +284,8 @@ namespace Dark_Cloud_Improved_Version
             uint slot = (uint)Memory.ReadInt(dispatch);
             if (slot == caveGuest) return true;                                  // already armed
             if (slot != vanillaGuest) { Console.WriteLine($"[Mirage/cave] {name} dispatch = 0x{slot:X} (expected 0x{vanillaGuest:X}) — abort"); return false; }
-            if ((uint)Memory.ReadInt(vanillaFn) != 0x27BDFFB0 ||                  // vanilla prologue (addiu sp,-0x50)
-                (uint)Memory.ReadInt(vanillaFn + detourOff) != 0x3C0201EA)       // vanilla player-addr load (lui v0,0x1ea)
+            if ((uint)Memory.ReadInt(vanillaFn) != MirageDecoy.VanillaPrologue ||                  // vanilla prologue (addiu sp,-0x50)
+                (uint)Memory.ReadInt(vanillaFn + detourOff) != MirageDecoy.VanillaPlayerLd)       // vanilla player-addr load (lui v0,0x1ea)
             { Console.WriteLine($"[Mirage/cave] {name} not pristine vanilla (stale in-place patch? restart the game) — abort"); return false; }
 
             byte[] fn = Memory.ReadBytesBatch(vanillaFn, 0xF0);
@@ -351,7 +297,7 @@ namespace Dark_Cloud_Improved_Version
                 0x8F889CE0,                   // lw   t0, -0x6320(gp)   ; NowMonstorUnit
                 0x8D080090,                   // lw   t0, 0x90(t0)      ; current enemy slot
                 0x00084080,                   // sll  t0, t0, 2         ; slot*4
-                0x3C0501F3,                   // lui  a1, 0x01F3
+                0x3C050000u | (CodeCaves.PtrTableGuest >> 16),   // lui  a1, PtrTable>>16
                 0x00A82821,                   // addu a1, a1, t0        ; PtrTable + slot*4
                 0x8CA50000,                   // lw   a1, 0(a1)         ; a1 = per-slot target pointer
                 J(caveGuest + (uint)jalOff),  // j    cave+jalOff       ; back into the sceVu0CopyVector jal
@@ -367,27 +313,6 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        /// <summary>Patch the dungeon draw's chara-loop scene gate so the clone draws while enemies keep
-        /// moving. At MMU 0x21DAE8A4 the gate is `beq v0,zero,skip` (word 0x10400037, skipping the 6-chara
-        /// loop when iGpffff9e18==0); NOP it (0x00000000) → the loop always runs, iGpffff9e18 stays 0 so
-        /// motionDrive keeps stepping enemies. Verifies the exact word before writing. The dun overlay
-        /// reloads per floor, so call this at floor load (like EnemyModelInjector.Install). EXPERIMENTAL:
-        /// PINE code writes can crash PCSX2 (per EnemyModelInjector) — testing whether a single beq→nop is OK.</summary>
-        internal const long SceneGateAddr = 0x21DAE8A4;
-        internal const uint SceneGateWord = 0x10400037;   // beq v0,zero,0x1dae984
-        // The scene-gate NOP is done by the PNACH (PCSX2 applies code patches safely; PINE crashes). The
-        // PNACH conditional writes 0 to 0x1DAE8A4 only while this flag == 1, so it never touches the town
-        // overlay that shares the address. Mod sets it 1 while a decoy is up (in a dungeon), 0 otherwise.
-        internal const long SceneGateFlag = 0x21F10038;   // guest 0x01F10038 (mod PNACH mailbox; free slot)
-        internal static void ApplySceneDrawPatch()
-        {
-            uint cur = (uint)Memory.ReadInt(SceneGateAddr);
-            if (cur == 0x00000000) { Console.WriteLine("[Mirage] scene-draw gate already NOP'd"); return; }
-            if (cur != SceneGateWord) { Console.WriteLine($"[Mirage] scene-draw gate word 0x{cur:X8} != 0x{SceneGateWord:X8} — NOT patching"); return; }
-            Memory.WriteInt(SceneGateAddr, 0x00000000);
-            uint back = (uint)Memory.ReadInt(SceneGateAddr);
-            Console.WriteLine($"[Mirage] scene-draw gate patched 0x{SceneGateWord:X8}→0x{back:X8} (chara loop always runs)");
-        }
 
         private static void Loop()
         {
@@ -409,10 +334,6 @@ namespace Dark_Cloud_Improved_Version
 
                     bool inDun = Player.InDungeonFloor();
                     if (!_armed && !inDun) ArmColdPatch();
-
-                    if (inDun) ProbeCharacter();   // once per party member: node/mesh/cloth footprint for cave sizing
-                    if (FireProbe && inDun && DateTime.UtcNow >= _fireProbeNext)   // map the dungeon fire-tile data (idea 1)
-                    { _fireProbeNext = DateTime.UtcNow.AddSeconds(2); DumpFireData(); }
 
                     if (_armed && inDun)
                     {
@@ -472,14 +393,14 @@ namespace Dark_Cloud_Improved_Version
                         // town overlay at those addresses is never touched.
                         // 1 = decoy up & running (NOP scene+step gates); 3 = decoy up but PAUSED (NOP scene only →
                         // clone still drawn but frozen); 2 = dungeon, no decoy (restore vanilla).
-                        Memory.WriteInt(SceneGateFlag, (_decoyActive && _cloneSlot >= 0) ? (paused ? 3 : 1) : 2);
+                        Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && _cloneSlot >= 0) ? (paused ? 3 : 1) : 2);
                         sleep = FastTickMs;
                     }
                     else
                     {
                         guardLatched = false;
                         if (_decoyActive || _cloneSlot >= 0) { _decoyActive = false; _handoff = false; _aggroHoldUntil = default; DespawnClone(); }
-                        Memory.WriteInt(SceneGateFlag, 0);   // town: leave the gates to the overlay reload
+                        Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }
                 catch (Exception e) { Console.WriteLine("[Mirage] tick failed: " + e.Message); }
@@ -505,7 +426,7 @@ namespace Dark_Cloud_Improved_Version
             => (Memory.ReadFloat(Addresses.dunPositionX),
                 Memory.ReadFloat(Addresses.dunPositionZ),
                 Memory.ReadFloat(Addresses.dunPositionY),
-                Memory.ReadFloat(MirageClone.PlayerChar + CharaRotY));
+                Memory.ReadFloat(MirageClone.PlayerChar + MirageClone.CharRotY));
 
         private static void PlaceDecoy()
         {
@@ -534,7 +455,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 DespawnClone();   // clear any stale slot from a previous decoy
                 SpawnClone();
-                if (_cloneSlot >= 0) Memory.WriteInt(SceneGateFlag, 1);   // arm the PNACH scene-gate NOP (clone draws)
+                if (_cloneSlot >= 0) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);   // arm the PNACH scene-gate NOP (clone draws)
             }
             Console.WriteLine($"[Mirage] decoy planted at ({_dx:0.#},{_dy:0.#}); enemies redirected");
         }
@@ -571,7 +492,7 @@ namespace Dark_Cloud_Improved_Version
             _handoff = false;   // NOTE: aggro does NOT move here — it stays on the old spot until _aggroHoldUntil
             DespawnClone(keepHaze: true);   // swap the instance WITHOUT tearing the haze down (it's mid-ramp at the new spot)
             SpawnClone();
-            if (_cloneSlot >= 0) Memory.WriteInt(SceneGateFlag, 1);
+            if (_cloneSlot >= 0) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
         }
 
         private static void UpdateDecoyState()
@@ -611,9 +532,9 @@ namespace Dark_Cloud_Improved_Version
         {
             var buf = new byte[MirageDecoy.MaxSlots * MirageDecoy.PtrStride];
             for (int s = 0; s < MirageDecoy.MaxSlots; s++)
-                BitConverter.GetBytes(_fooled[s] ? MirageDecoy.DecoyPosGuest : MirageDecoy.PlayerPosGuest)
+                BitConverter.GetBytes(_fooled[s] ? CodeCaves.DecoyPosGuest : MirageDecoy.PlayerPosGuest)
                     .CopyTo(buf, s * MirageDecoy.PtrStride);
-            Memory.WriteBytesBatch(MirageDecoy.PtrTable, buf);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
         }
 
         /// <summary>Point every slot at the live player global (vanilla) — done at cold-arm before any enemy reads,
@@ -623,7 +544,7 @@ namespace Dark_Cloud_Improved_Version
             var buf = new byte[MirageDecoy.TableSlots * MirageDecoy.PtrStride];
             for (int s = 0; s < MirageDecoy.TableSlots; s++)
                 BitConverter.GetBytes(MirageDecoy.PlayerPosGuest).CopyTo(buf, s * MirageDecoy.PtrStride);
-            Memory.WriteBytesBatch(MirageDecoy.PtrTable, buf);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, buf);
         }
 
         /// <summary>Write the stationary decoy position (x,z,y,w) that fooled slots' pointers reference.</summary>
@@ -639,7 +560,7 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(hold ? _oldDz : _dz).CopyTo(b, 4);
             BitConverter.GetBytes(hold ? _oldDy : _dy).CopyTo(b, 8);
             BitConverter.GetBytes(1.0f).CopyTo(b, 12);
-            Memory.WriteBytesBatch(MirageDecoy.DecoyPos, b);
+            Memory.WriteBytesBatch(CodeCaves.DecoyPos, b);
         }
 
         private static bool IsLiveEnemy(int s)
@@ -658,7 +579,6 @@ namespace Dark_Cloud_Improved_Version
         private const bool  WeaponEnabled   = true;      // graft the equipped weapon onto the clone's hand bone
         private const bool  ClothEnabled    = true;      // copy the player's cloth onto the clone
         private const bool  ClothPhysics    = true;      // anchor cloth to the clone skeleton for real sim (needs step-injection)
-        private const bool  HeatHaze        = false;     // DISABLED: fire heat-haze via a cave-stub jal at 0x1DAEBCC
                                                          // crashes on the clone-draw frame — the scene-gate toggle
                                                          // re-compiles Draw__11CSeireiKing and the direct jal→cave
                                                          // chokes the recompiler (only dispatch-jalr into a cave is
@@ -672,14 +592,7 @@ namespace Dark_Cloud_Improved_Version
         private const float GhostTintR = 20f;
         private const float GhostTintG = 30f;
         private const float GhostTintB = 65f;
-        private const bool  FireProbe = false;  // DEBUG: dump the dungeon fire-tile data (idea 1: move a torch haze to the clone)
-        private const bool  ForceRaster = false; // (test done: forcing on a torch broke its flame, but NO crash → textures loaded)
-        private static DateTime _fireProbeNext;
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
-        private static int      _probeCid = -1;      // (cid,root) currently being observed for stability
-        private static uint     _probeRoot;
-        private static DateTime _probeSince;         // when the current (cid,root) pair was first seen
-        private static string   _probeLastSig = "";  // last logged footprint signature (dedupe)
         private static uint _srcModelRoot;    // the model root the clone copies/renders (player or test enemy)
         private static uint _cloneRootGuest;  // guest addr of the deep-copied clone root (node pool slot 0)
         private static int  _cloneNodeCount;  // nodes in the last deep copy
@@ -717,7 +630,7 @@ namespace Dark_Cloud_Improved_Version
             // +0xC74. The clone's Draw renders them (ghost tint — NO player flash bleed). In PHYSICS mode the
             // anchor/collision are re-based to the clone skeleton (in CopyCloth) and the clone is ClothStep'd by
             // the PNACH chara-loop patch (jal ShadowStep→ClothStep while the decoy flag == 1), so they simulate.
-            uint clothListGuest = ClothEnabled ? CopyCloth() : (uint)MirageClone.ClothStubGuest;
+            uint clothListGuest = ClothEnabled ? CopyCloth() : (uint)CodeCaves.ClothStubGuest;
             BitConverter.GetBytes(clothListGuest).CopyTo(buf, MirageClone.ClothList);
             BitConverter.GetBytes(GhostSilhouette ? GhostDim : 1.0f).CopyTo(buf, MirageClone.DimFactor);
             // PIN the clone to the guard-loop motion instead of whatever the player was mid-doing at spawn. The
@@ -775,7 +688,7 @@ namespace Dark_Cloud_Improved_Version
                                 if (fiNew == 0)
                                 {
                                     byte[] fib = Memory.ReadBytesBatch(Memory.ToMmu(fi), fiSize);
-                                    if (fib != null) { Memory.WriteBytesBatch(MirageClone.FrameInfCave, fib); fiOld = fi; fiNew = (uint)MirageClone.FrameInfCaveGuest; }
+                                    if (fib != null) { Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib); fiOld = fi; fiNew = (uint)CodeCaves.FrameInfCaveGuest; }
                                 }
                                 if (fiNew != 0) BitConverter.GetBytes(fiNew).CopyTo(mstr, MirageClone.FrameInfPtr);
                             }
@@ -790,7 +703,7 @@ namespace Dark_Cloud_Improved_Version
                                 if (bmNew == 0)
                                 {
                                     byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
-                                    if (bmb != null) { Memory.WriteBytesBatch(MirageClone.BoneMtxCave, bmb); bmOld = bm; bmNew = (uint)(MirageClone.BoneMtxCave & 0x1FFFFFFF | 0x01000000); }
+                                    if (bmb != null) { Memory.WriteBytesBatch(CodeCaves.BoneMtxCave, bmb); bmOld = bm; bmNew = (uint)(CodeCaves.BoneMtxCave & 0x1FFFFFFF | 0x01000000); }
                                 }
                                 if (bmNew != 0) BitConverter.GetBytes(bmNew).CopyTo(mstr, MirageClone.BoneMtxPtr);
                             }
@@ -802,14 +715,14 @@ namespace Dark_Cloud_Improved_Version
                     // Only let the clone software-skin if it got its OWN mesh copies; else zero the skin list so
                     // it never touches the SHARED mesh (safe fallback = body mirrors, player uncorrupted).
                     if (!IndependentMesh || _meshesCopied == 0) BitConverter.GetBytes(0).CopyTo(mstr, MirageClone.MotionSkinList);
-                    long cloneChan = MirageClone.MotionCave + (long)s * MirageClone.MotionStructSize;
+                    long cloneChan = CodeCaves.MotionCave + (long)s * MirageClone.MotionStructSize;
                     Memory.WriteBytesBatch(cloneChan, mstr);
-                    BitConverter.GetBytes((uint)(MirageClone.MotionCaveGuest + s * MirageClone.MotionStructSize)).CopyTo(buf, po);
+                    BitConverter.GetBytes((uint)(CodeCaves.MotionCaveGuest + s * MirageClone.MotionStructSize)).CopyTo(buf, po);
                     _chanMap.Add((Memory.ToMmu(sp), cloneChan));   // player channel → clone channel (for frame sync)
                 }
             }
 
-            Memory.WriteBytesBatch(MirageClone.ClothStub, new byte[16]);
+            Memory.WriteBytesBatch(CodeCaves.ClothStub, new byte[16]);
             Memory.WriteBytesBatch(slot, buf);   // fill the CCharacter fields (0..0xD60)
             Memory.WriteInt(slot + MirageClone.CharaActive, 1);    // active (Draw__12CNPCharacter gate; beyond 0xD60)
             // Engine-driven animation: enable the chara motion step (Step__12CNPCharacter → Step__10CCharacter →
@@ -866,14 +779,14 @@ namespace Dark_Cloud_Improved_Version
             { Console.WriteLine($"[Mirage/wpn] span 0x{max - min:X} not 0x270-aligned — bailing"); return; }
             int nodeCount = (int)((max - min) / MirageClone.NodeStride) + 1;
             int blockSize = nodeCount * MirageClone.NodeStride;
-            if (blockSize > MirageClone.WeaponCaveSize)
-            { Console.WriteLine($"[Mirage/wpn] weapon tree 0x{blockSize:X} > cave 0x{MirageClone.WeaponCaveSize:X}"); return; }
+            if (blockSize > CodeCaves.WeaponCaveSize)
+            { Console.WriteLine($"[Mirage/wpn] weapon tree 0x{blockSize:X} > cave 0x{CodeCaves.WeaponCaveSize:X}"); return; }
 
             byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
             if (block == null) return;
 
             uint rootOff = wRoot - min;
-            uint wCaveG  = (uint)MirageClone.WeaponCaveGuest;
+            uint wCaveG  = (uint)CodeCaves.WeaponCaveGuest;
             for (int o = 0; o < blockSize; o += MirageClone.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
@@ -883,14 +796,14 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheA);
                 BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheB);
             }
-            Memory.WriteBytesBatch(MirageClone.WeaponCave, block);
+            Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);
 
             // Parent the copied root to the clone's hand bone (for positioning ONLY — MGDraw seeds a drawn
             // root's world matrix from its parent's cached world, exactly like the player's weapon object). We do
             // NOT insert it into the hand's child list: the weapon draws in its OWN chara slot / texgroup-0x1d
             // pass (RegisterWeaponChara), so the body's 0x11 pass never draws it with the wrong texture.
             uint wRootG = (uint)(wCaveG + rootOff);
-            uint handG  = (uint)(MirageClone.NodePoolGuest + MirageClone.WeaponHandBone * MirageClone.NodeStride);
+            uint handG  = (uint)(CodeCaves.NodePoolGuest + MirageClone.WeaponHandBone * MirageClone.NodeStride);
             Memory.WriteUInt(Memory.ToMmu(wRootG) + MirageClone.Parent,      handG);
             Memory.WriteUInt(Memory.ToMmu(wRootG) + MirageClone.RootSibling, 0);   // standalone root
             _weaponRootGuest = wRootG;
@@ -952,8 +865,8 @@ namespace Dark_Cloud_Improved_Version
                 uint n = work.Pop();
                 if (n == 0 || n >= 0x02000000 || !seen.Add(n)) continue;
                 if (n < min) min = n; if (n > max) max = n;
-                if (seen.Count > MirageClone.MaxNodes)
-                { Console.WriteLine($"[Mirage] clone tree > {MirageClone.MaxNodes} nodes — aborting"); return false; }
+                if (seen.Count > CodeCaves.MaxNodes)
+                { Console.WriteLine($"[Mirage] clone tree > {CodeCaves.MaxNodes} nodes — aborting"); return false; }
                 for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + MirageClone.RootChild) & 0x1FFFFFFF;
                      c != 0 && c < 0x02000000;
                      c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & 0x1FFFFFFF)
@@ -980,10 +893,10 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheA);
                 BitConverter.GetBytes(0).CopyTo(block, o + MirageClone.WorldCacheB);
             }
-            Memory.WriteBytesBatch(MirageClone.NodePool, block);
+            Memory.WriteBytesBatch(CodeCaves.NodePool, block);
 
             _cloneNodeCount = nodeCount;
-            _cloneRootGuest = (uint)(MirageClone.NodePoolGuest + rootOff);   // clone root = pool + root offset
+            _cloneRootGuest = (uint)(CodeCaves.NodePoolGuest + rootOff);   // clone root = pool + root offset
             Console.WriteLine($"[Mirage] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}");
             return true;
         }
@@ -996,7 +909,7 @@ namespace Dark_Cloud_Improved_Version
             uint old = (uint)BitConverter.ToInt32(block, off) & 0x1FFFFFFF;
             uint neu = 0;
             if (!forceZero && old >= min && old <= max)
-                neu = (uint)(MirageClone.NodePoolGuest + (old - min));
+                neu = (uint)(CodeCaves.NodePoolGuest + (old - min));
             BitConverter.GetBytes(neu).CopyTo(block, off);
         }
 
@@ -1008,12 +921,12 @@ namespace Dark_Cloud_Improved_Version
         /// pointers are low 0x00xxxxxx addresses, distinct from vertex floats).</summary>
         private static void CopyMeshNodes()
         {
-            long cave = MirageClone.MeshCave, caveGuest = MirageClone.MeshCaveGuest;
-            long caveEnd = MirageClone.MeshCave + MirageClone.MeshCaveSize;
+            long cave = CodeCaves.MeshCave, caveGuest = CodeCaves.MeshCaveGuest;
+            long caveEnd = CodeCaves.MeshCave + CodeCaves.MeshCaveSize;
             int copied = 0;
             for (int i = 0; i < _cloneNodeCount; i++)
             {
-                long node = MirageClone.NodePool + (long)i * MirageClone.NodeStride;
+                long node = CodeCaves.NodePool + (long)i * MirageClone.NodeStride;
                 uint vis = (uint)Memory.ReadInt(node + MirageClone.GeomPtr) & 0x1FFFFFFF;
                 if (vis == 0 || vis >= 0x02000000) continue;
                 uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisMDT) & 0x1FFFFFFF;
@@ -1066,8 +979,8 @@ namespace Dark_Cloud_Improved_Version
             _meshesCopied = copied;
             // Instrument actual cave usage (character-dependent — needed to right-size MeshCaveSize for BOTH
             // Ungaga and Xiao/Super Steve once we have real numbers; the reservation stays generous until then).
-            long used = cave - MirageClone.MeshCave;
-            Console.WriteLine($"[Mirage/mesh] {copied} mesh(es), used 0x{used:X} of 0x{MirageClone.MeshCaveSize:X} MeshCave");
+            long used = cave - CodeCaves.MeshCave;
+            Console.WriteLine($"[Mirage/mesh] {copied} mesh(es), used 0x{used:X} of 0x{CodeCaves.MeshCaveSize:X} MeshCave");
         }
 
         private static int Align16(int n) => (n + 15) & ~15;
@@ -1085,124 +998,6 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Read-only footprint probe for the CURRENTLY-ACTIVE party member: DFS the model tree (child
-        /// +0x138 / sibling +0x13C) for node count + span, sum the software-skinned (CVisualMDTVu1) mesh bytes
-        /// the clone would have to copy (→ MeshCave sizing), and read the cloth list (piece count + grids →
-        /// cloth-cave sizing). Latches per character ID only on a STABLE read (a settled model has many bones),
-        /// so the transitional garbage that made the old one-shot DumpCloth unreliable can't lock in bad data.
-        /// Cycle party members in a dungeon to capture all six — needed to make Mirage usable for any character.</summary>
-        /// <summary>DEBUG: map the dungeon's fire-tile data for the "move a torch's heat-haze to the clone" idea.
-        /// DrawRaster__11CDungeonMap reads a 20×20 per-tile fire array at dngMap+0x9C50 (0x10/entry: +0=fireIndex
-        /// (-1=none), +4=rotation, +8=distance(float, <=240 to draw), +C=enabled(==1)); an enabled tile draws the
-        /// haze of the fire structure at dngMap+fireIndex*0x1D0. Logs live fire tiles + the decoy's tile so we can
-        /// copy a torch's record onto the clone's tile. Stand near a torch.</summary>
-        private static void DumpFireData()
-        {
-            uint dngMap = (uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF;   // NowDngMap ptr
-            if (dngMap == 0 || dngMap >= 0x02000000) { Console.WriteLine("[Mirage/fire] no dngMap"); return; }
-            long b = Memory.ToMmu(dngMap);
-            int found = 0;
-            for (int t = 0; t < 400 && found < 8; t++)
-            {
-                long e = b + 0x9C50 + (long)t * 0x10;
-                int idx = Memory.ReadInt(e + 0x00);
-                int en  = Memory.ReadInt(e + 0x0C);
-                if (en != 1 || idx == -1 || idx < 0 || idx > 200) continue;
-                float dist = Memory.ReadFloat(e + 0x08);
-                int rot = Memory.ReadInt(e + 0x04);
-                int sub = Memory.ReadUShort(b + (long)idx * 0x1D0 + 0x4A2);
-                Console.WriteLine($"[Mirage/fire] FIRE tile({t % 20},{t / 20}) fireIdx={idx} rot={rot} dist={dist:0.#} | struct@0x{dngMap + (uint)idx * 0x1D0:X} sub={sub} | rec:{BitConverter.ToString(Memory.ReadBytesBatch(e, 0x10) ?? new byte[0]).Replace("-", " ")}");
-                if (found == 0)   // dump the fire struct's emitter region to find the real sub-emitter count/data
-                {
-                    long fs = b + (long)idx * 0x1D0;
-                    byte[] d = Memory.ReadBytesBatch(fs + 0x480, 0x60);
-                    if (d != null) Console.WriteLine($"[Mirage/fire]   struct+0x480: {BitConverter.ToString(d).Replace("-", " ")}");
-                    if (ForceRaster)   // TEST: force one raster (heat-haze) emitter on THIS fire → does the torch shimmer, or crash?
-                    {
-                        Memory.WriteBytesBatch(fs + 0x4A2, new byte[] { 1, 0 });   // count = 1 (emitter[0].pos @+0x4B0 already 0 → draws at tile)
-                        Console.WriteLine($"[Mirage/fire]   FORCED raster count=1 on fireIdx={idx} @0x{dngMap + (uint)idx * 0x1D0:X} — watch that torch for heat-haze (or crash = 'alpha01' not loaded)");
-                    }
-                }
-                found++;
-            }
-            if (_decoyActive)
-            {
-                int dc = (int)((_dx + 80) / 160), dr = (int)((_dy + 80) / 160);
-                Console.WriteLine($"[Mirage/fire] decoy tile ({dc},{dr}) idx={dc + dr * 20} pos=({_dx:0.#},{_dy:0.#})");
-            }
-            if (found == 0) Console.WriteLine($"[Mirage/fire] no fire tiles (dngMap@0x{dngMap:X}) — stand near a torch/flame");
-        }
-
-        private static void ProbeCharacter()
-        {
-            int cid = Player.CurrentCharacterNum();
-            uint root = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel) & 0x1FFFFFFF;
-            if (cid < 0 || cid >= 6 || root == 0 || root >= 0x02000000) { _probeCid = -1; return; }
-            // Character switching is LAGGED: CurrentCharacterNum() flips to the new id several frames before the
-            // model at +0xBC actually swaps, so a first-valid read latches the PREVIOUS character's model under the
-            // new id (that's why Toan & Xiao read identically). Require the (id,root) pair to hold STABLE for ≥1s
-            // before reading, and log by CHANGED signature (no permanent latch) so a stale read self-corrects when
-            // you settle on the character again.
-            if (cid != _probeCid || root != _probeRoot) { _probeCid = cid; _probeRoot = root; _probeSince = DateTime.UtcNow; return; }
-            if ((DateTime.UtcNow - _probeSince).TotalMilliseconds < 1000) return;   // not settled yet
-
-            var seen = new System.Collections.Generic.HashSet<uint>();
-            var work = new System.Collections.Generic.Stack<uint>();
-            work.Push(root);
-            int meshes = 0; long meshBytes = 0; uint nodeMin = root, nodeMax = root;
-            bool overflow = false;
-            while (work.Count > 0)
-            {
-                uint nn = work.Pop();
-                if (nn == 0 || nn >= 0x02000000 || !seen.Add(nn)) continue;
-                if (seen.Count > 512) { overflow = true; break; }
-                if (nn < nodeMin) nodeMin = nn; if (nn > nodeMax) nodeMax = nn;
-                uint vis = (uint)Memory.ReadInt(Memory.ToMmu(nn) + MirageClone.GeomPtr) & 0x1FFFFFFF;
-                if (vis != 0 && vis < 0x02000000)
-                {
-                    uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisMDT) & 0x1FFFFFFF;
-                    if (mdt != 0 && mdt < 0x02000000 && (uint)Memory.ReadInt(Memory.ToMmu(mdt)) == MirageClone.MdtMagic)
-                    {
-                        int vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + MirageClone.VisVU + 4) * 16;
-                        int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + MirageClone.MdtSizeField);
-                        if (vuSz > 0 && vuSz <= 0x40000 && mdtSz > 0 && mdtSz <= 0x40000)
-                        { meshes++; meshBytes += Align16(MirageClone.VisualSize) + Align16(vuSz) + Align16(mdtSz); }
-                    }
-                }
-                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(nn) + MirageClone.RootChild) & 0x1FFFFFFF;
-                     c != 0 && c < 0x02000000;
-                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + MirageClone.RootSibling) & 0x1FFFFFFF)
-                    work.Push(c);
-            }
-            int nodes = seen.Count;
-            if (overflow || nodes < 20) return;   // transitional / not settled — retry next tick, don't latch
-            int span = (int)((nodeMax - nodeMin) / 0x270) + 1;
-
-            // cloth pieces + grids + buffer bytes (character-dependent; may still be loading — best-effort)
-            uint clist = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & 0x1FFFFFFF;
-            int cpieces = 0; long cbufBytes = 0; var grids = new System.Text.StringBuilder();
-            if (clist != 0 && clist < 0x02000000)
-                for (int i = 0; i < 4; i++)
-                {
-                    uint co = (uint)Memory.ReadInt(Memory.ToMmu(clist) + i * 4) & 0x1FFFFFFF;
-                    if (co == 0 || co >= 0x02000000) continue;
-                    int r = Memory.ReadInt(Memory.ToMmu(co) + 0x2C), cc = Memory.ReadInt(Memory.ToMmu(co) + 0x30);
-                    uint b0 = (uint)Memory.ReadInt(Memory.ToMmu(co) + 0x24) & 0x1FFFFFFF;
-                    uint b1 = (uint)Memory.ReadInt(Memory.ToMmu(co) + 0x28) & 0x1FFFFFFF;
-                    int bs = (int)(b1 - b0);
-                    cpieces++; cbufBytes += (bs > 0 && bs <= 0x4000) ? bs : 0;
-                    grids.Append($" {r}x{cc}");
-                }
-
-            // Dedupe on the full footprint signature so we log once per settled state and re-log if it later
-            // changes (e.g. cloth finishes loading) — but never spam the same reading.
-            string sig = $"{cid}:{root:X}:{nodes}:{meshBytes:X}:{cpieces}:{cbufBytes:X}";
-            if (sig == _probeLastSig) return;
-            _probeLastSig = sig;
-            string[] names = { "Toan", "Xiao", "Goro", "Ruby", "Ungaga", "Osmond" };
-            Console.WriteLine($"[Mirage/probe] {names[cid]} (id{cid}): nodes={nodes} span={span} root=0x{root:X} | {meshes} MDT mesh(es)=0x{meshBytes:X} (MeshCave 0x{MirageClone.MeshCaveSize:X}) | cloth {cpieces}pc={cpieces}×0x{MirageClone.ClothObjSize:X}obj +0x{cbufBytes:X}buf grids:{grids}");
-        }
-
         /// <summary>Snapshot the player's cloth pieces into clone-owned copies (frozen drape) and return the guest
         /// address of a cloth-ptr list to hang off the clone's +0xC74. Each CCloth is a self-contained 0x8550 object
         /// with no internal cross-refs; the only fix-ups are its draw-packet fields (+0x18 active, +0x24/+0x28
@@ -1213,7 +1008,7 @@ namespace Dark_Cloud_Improved_Version
         private static uint CopyCloth()
         {
             uint listGuest = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.ClothList) & 0x1FFFFFFF;
-            if (listGuest == 0 || listGuest >= 0x02000000) return (uint)MirageClone.ClothStubGuest;
+            if (listGuest == 0 || listGuest >= 0x02000000) return (uint)CodeCaves.ClothStubGuest;
 
             // Character-adaptive: walk the WHOLE +0xC74 list (up to ClothMaxPieces) rather than a hardcoded count,
             // so Xiao/Super Steve's cloth works too. Objects are PACKED DENSELY by success count (not source index)
@@ -1221,7 +1016,7 @@ namespace Dark_Cloud_Improved_Version
             // (skip-and-log on overflow rather than corrupt). Full 0x8550 copy = physics-ready (Step touches +0x7550+).
             uint[] cloneList = new uint[MirageClone.ClothMaxPieces];   // guest ptrs; 0 = empty (Draw skips)
             int copied = 0, bufOff = 0, anchorOff = 0, boundOff = 0;
-            int bufCap = (int)MirageClone.ClothAnchorCave - (int)MirageClone.ClothBufCave;   // room before anchor cave
+            int bufCap = (int)CodeCaves.ClothAnchorCave - (int)CodeCaves.ClothBufCave;   // room before anchor cave
             uint modelRoot = (uint)Memory.ReadInt(MirageClone.PlayerChar + MirageClone.CharModel) & 0x1FFFFFFF;
             var boundDedupe = new System.Collections.Generic.Dictionary<uint, uint>();   // player bound-head → clone head
 
@@ -1246,15 +1041,15 @@ namespace Dark_Cloud_Improved_Version
                 bufSize = (bufSize + 0x3F) & ~0x3F;                        // qword-align
                 if (bufOff + bufSize > bufCap) { Console.WriteLine($"[Mirage/cloth] piece {i}: buffer cave full — skip"); continue; }
 
-                uint cloneBufGuest = MirageClone.ClothBufGuest + (uint)bufOff;   // single clone-owned buffer
+                uint cloneBufGuest = CodeCaves.ClothBufGuest + (uint)bufOff;   // single clone-owned buffer
                 BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothActive);       // +0x18 active
                 BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothBuf0);         // +0x24 DBuffID0
                 BitConverter.GetBytes(cloneBufGuest).CopyTo(obj, MirageClone.ClothBuf0 + 4);     // +0x28 DBuffID1
                 // Leave +0x3c (attach frame) pointing at the player's bone: it's never read while unstepped, and a
                 // valid frame is safer than a null if some path ever did step it.
 
-                long cloneObj      = MirageClone.ClothObjCave  + (long)copied * MirageClone.ClothObjSize;   // DENSE
-                uint cloneObjGuest = MirageClone.ClothObjGuest + (uint)(copied * MirageClone.ClothObjSize);
+                long cloneObj      = CodeCaves.ClothObjCave  + (long)copied * MirageClone.ClothObjSize;   // DENSE
+                uint cloneObjGuest = CodeCaves.ClothObjGuest + (uint)(copied * MirageClone.ClothObjSize);
                 Memory.WriteBytesBatch(cloneObj, obj);
                 cloneList[copied] = cloneObjGuest;
                 bufOff += bufSize;
@@ -1279,13 +1074,13 @@ namespace Dark_Cloud_Improved_Version
                 copied++;
             }
 
-            if (copied == 0) return (uint)MirageClone.ClothStubGuest;
+            if (copied == 0) return (uint)CodeCaves.ClothStubGuest;
 
             byte[] listBytes = new byte[MirageClone.ClothMaxPieces * 4];
             for (int i = 0; i < cloneList.Length; i++) BitConverter.GetBytes(cloneList[i]).CopyTo(listBytes, i * 4);
-            Memory.WriteBytesBatch(MirageClone.ClothListCave, listBytes);
+            Memory.WriteBytesBatch(CodeCaves.ClothListCave, listBytes);
             Console.WriteLine($"[Mirage/cloth] {copied} piece(s) → clone; {copied}×0x{MirageClone.ClothObjSize:X} obj + 0x{bufOff:X} buf bytes");
-            return MirageClone.ClothListGuest;
+            return CodeCaves.ClothListGuest;
         }
 
         /// <summary>Resolve a player cloth attach CFrame to a CLONE-space frame whose world matrix follows the
@@ -1299,7 +1094,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (playerAttach == 0 || playerAttach >= 0x02000000 || modelRoot == 0) return 0;
             uint treeLo = modelRoot, treeHi = modelRoot + (uint)_cloneNodeCount * 0x270;
-            uint CloneOf(uint p) => (uint)MirageClone.NodePoolGuest + (p - modelRoot);   // in-tree same-offset map
+            uint CloneOf(uint p) => (uint)CodeCaves.NodePoolGuest + (p - modelRoot);   // in-tree same-offset map
 
             // Walk out-of-tree ancestors (nearest-first) up to the first in-tree frame.
             var outChain = new System.Collections.Generic.List<uint>();
@@ -1318,18 +1113,18 @@ namespace Dark_Cloud_Improved_Version
             var map = new System.Collections.Generic.Dictionary<uint, uint>();
             foreach (uint f in outChain)
             {
-                if (MirageClone.ClothAnchorCave + anchorOff + 0x270 > MirageClone.ClothAnchorEnd)
+                if (CodeCaves.ClothAnchorCave + anchorOff + 0x270 > CodeCaves.ClothAnchorEnd)
                 { Console.WriteLine("[Mirage/cloth] anchor cave full"); return 0; }
                 byte[] fb = Memory.ReadBytesBatch(Memory.ToMmu(f), 0x270);
                 if (fb == null) return 0;
-                Memory.WriteBytesBatch(MirageClone.ClothAnchorCave + anchorOff, fb);
-                map[f] = MirageClone.ClothAnchorGuest + (uint)anchorOff;
+                Memory.WriteBytesBatch(CodeCaves.ClothAnchorCave + anchorOff, fb);
+                map[f] = CodeCaves.ClothAnchorGuest + (uint)anchorOff;
                 anchorOff += 0x270;
             }
             // Fix each copy: parent → clone-space, zero child/sibling + world cache.
             foreach (uint f in outChain)
             {
-                long copyMmu = MirageClone.ClothAnchorCave + (long)(map[f] - MirageClone.ClothAnchorGuest);
+                long copyMmu = CodeCaves.ClothAnchorCave + (long)(map[f] - CodeCaves.ClothAnchorGuest);
                 uint parent  = (uint)Memory.ReadInt(Memory.ToMmu(f) + MirageClone.Parent) & 0x1FFFFFFF;
                 uint newParent = map.TryGetValue(parent, out uint mp) ? mp : CloneOf(parent);
                 Memory.WriteUInt(copyMmu + MirageClone.Parent,      newParent);
@@ -1359,12 +1154,12 @@ namespace Dark_Cloud_Improved_Version
             var map = new System.Collections.Generic.Dictionary<uint, uint>();
             foreach (uint pb in list)
             {
-                if (MirageClone.ClothBoundCave + boundOff + MirageClone.BoundSize > MirageClone.ClothBoundEnd)
+                if (CodeCaves.ClothBoundCave + boundOff + MirageClone.BoundSize > CodeCaves.ClothBoundEnd)
                 { Console.WriteLine("[Mirage/cloth] bound cave full"); break; }
                 byte[] bb = Memory.ReadBytesBatch(Memory.ToMmu(pb), MirageClone.BoundSize);
                 if (bb == null) break;
-                Memory.WriteBytesBatch(MirageClone.ClothBoundCave + boundOff, bb);
-                map[pb] = MirageClone.ClothBoundGuest + (uint)boundOff;
+                Memory.WriteBytesBatch(CodeCaves.ClothBoundCave + boundOff, bb);
+                map[pb] = CodeCaves.ClothBoundGuest + (uint)boundOff;
                 boundOff += MirageClone.BoundSize;
             }
             if (map.Count == 0) return 0;
@@ -1372,7 +1167,7 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < list.Count; i++)
             {
                 if (!map.TryGetValue(list[i], out uint copy)) continue;
-                long copyMmu = MirageClone.ClothBoundCave + (long)(copy - MirageClone.ClothBoundGuest);
+                long copyMmu = CodeCaves.ClothBoundCave + (long)(copy - CodeCaves.ClothBoundGuest);
                 uint next = (i + 1 < list.Count && map.TryGetValue(list[i + 1], out uint nc)) ? nc : 0;
                 Memory.WriteUInt(copyMmu + MirageClone.BoundNext, next);
                 foreach (int fo in new[] { MirageClone.BoundFrameA, MirageClone.BoundFrameB })
@@ -1416,7 +1211,7 @@ namespace Dark_Cloud_Improved_Version
             // PIN the heading. The engine steps the clone (so its yaw can drift) and a respawned clone copies
             // the player's CURRENT facing — either way it could diverge from the yaw the haze is pushed back
             // along (_decoyFwd*), which reads as the shimmer sitting off the clone.
-            Memory.WriteFloat(slot + CharaRotY, cyaw);
+            Memory.WriteFloat(slot + MirageClone.CharRotY, cyaw);
 
             float op = (GhostSilhouette ? GhostOpacity : 128f) * CloneAlpha();   // fade in/out envelope (haze is NOT gated by it)
             Memory.WriteInt  (slot + MirageClone.CharaActive, 1);
@@ -1424,7 +1219,7 @@ namespace Dark_Cloud_Improved_Version
             WriteGhostTint(slot);
             Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
             Memory.WriteInt  (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
-            uint dngMap = (uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF;   // NowDngMap
+            uint dngMap = (uint)Memory.ReadInt(MirageClone.NowDngMapPtr) & 0x1FFFFFFF;   // NowDngMap
             SetupCloneHaze(dngMap);     // one-shot: claim a spare fire slot + mark the clone's tile (heat-haze)
             MaintainCloneHaze(dngMap);  // re-assert the tile marker each tick
 
@@ -1461,10 +1256,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DespawnClone(bool keepHaze = false)
         {
-            // (SceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
+            // (CodeCaves.MirageSceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
             // keepHaze: the re-cast hand-off swaps the clone INSTANCE while the haze is mid-ramp at the new
             // decoy — tearing it down here would restore the torch + distortion gain for a tick and flicker.
-            if (!keepHaze) TeardownCloneHaze((uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF);
+            if (!keepHaze) TeardownCloneHaze((uint)Memory.ReadInt(MirageClone.NowDngMapPtr) & 0x1FFFFFFF);
             if (_cloneSlot < 0) return;
             long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
             Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)
@@ -1485,7 +1280,6 @@ namespace Dark_Cloud_Improved_Version
             _cloneSlot = -1;
         }
 
-        private const int TexMgrMax = 0xC4;   // 196 CTexture slots (Initialize__15CTextureManager inits 0xC4) — HARD cap
 
     }
 }

@@ -292,6 +292,8 @@ namespace Dark_Cloud_Improved_Version
     /// (x, z/height, y, w) at offset 0; stride 0x20; sized large so any in-range $s2 and the brief torn
     /// state during apply/revert land on filled memory (no crash).
     /// </summary>
+    /// <summary>Decoy aggro redirect. Cave addresses (PtrTable / DecoyPos / the _GET_* function caves) live in
+    /// <see cref="CodeCaves"/> — this class holds only GAME addresses and offsets.</summary>
     internal static class MirageDecoy
     {
         // PER-ENEMY DECOY REDIRECT (pointer indirection). Enemy AI reads its target's position via _GET_POSITION
@@ -305,18 +307,25 @@ namespace Dark_Cloud_Improved_Version
         // Both _GET_POSITION and _GET_DISTANCE now read this table from CLEAN cold-PINE CAVE copies reached via the
         // STB external-command dispatch (Mirage.ArmFuncCave; see docs/cave-code-execution.md) — no in-place surgery.
         // Each cave's helper computes a1 = *(PtrTable + slot*4) with the current enemy slot from NowMonstorUnit+0x90.
-        internal const long PtrTable       = 0x21F30000; // guest 0x01F30000; entry slot = a 4-byte position POINTER
         internal const int  PtrStride      = 4;
         internal const int  TableSlots     = 256;
         internal const int  MaxSlots       = 20;          // slots the mod actively manages (FloorSlots is 16)
-        internal const long DecoyPos       = 0x21F30400;  // guest 0x01F30400; 16 bytes (x,z,y,w) — the decoy position
-        internal const uint DecoyPosGuest  = 0x01F30400;  // written into fooled slots' pointer entries
         internal const uint PlayerPosGuest = 0x01EA1D30;  // the live player global — un-fooled slots point here
-        internal static long PtrAddr(int slot) => PtrTable + (long)slot * PtrStride;
+        internal static long PtrAddr(int slot) => CodeCaves.PtrTable + (long)slot * PtrStride;
 
         // STB external-command dispatch slots (8-byte {funcPtr,id} entries) repointed at the cold caves.
         internal const long PosDispatch  = 0x202918A8;   // _GET_POSITION funcPtr slot
         internal const long DistDispatch = 0x202918A0;   // _GET_DISTANCE funcPtr slot
+
+        // The VANILLA engine functions we cold-copy into CodeCaves.PosCave / CodeCaves.DistCave.
+        internal const long GetPositionFn = 0x201E1DF0;  // _GET_POSITION
+        internal const long GetDistanceFn = 0x201E1D00;  // _GET_DISTANCE
+        internal const int  PosDetourOff  = 0x84;        // offset of the hardcoded player-addr load to detour
+        internal const int  PosJalOff     = 0x8C;
+        internal const int  DistDetourOff = 0x5C;
+        internal const int  DistJalOff    = 0x64;
+        internal const uint VanillaPrologue = 0x27BDFFB0; // addiu sp,-0x50 — sanity check before we copy
+        internal const uint VanillaPlayerLd = 0x3C0201EA; // lui v0,0x1ea  — the player-addr load we replace
     }
 
     /// <summary>
@@ -366,6 +375,9 @@ namespace Dark_Cloud_Improved_Version
 
         // CCharacter fields we tweak in the copied clone.
         internal const int  CharPos     = 0x10;     // x,z,y (DrawNPCDraw overrides via SetPosition anyway)
+        internal const int  CharRotY    = 0x64;     // CObject EULER rotation Y (yaw). GetRotation__7CObject reads
+                                                    // +0x60/+0x64/+0x68 — these are ANGLES, not a direction vector
+                                                    // (an upright character's X/Z angles are ~0).
         internal const int  CharModel   = 0xBC;     // shared player model root
         internal const int  ClothList   = 0xC74;    // → 4 cloth ptrs; a zero stub skips cloth, a cave list adds it
         internal const int  DimFactor   = 0xCF0;    // <1.0 dims the model (fade lever)
@@ -414,8 +426,6 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionPartsSlots  = 4;
         internal const int  MotionPartsTexBase = 0x1B;       // slot i's texture group = 0x1b + i
 
-        internal const long ClothStub      = 0x21F33000;  // 16 zero bytes (clear of the 8KB aggro table @0x1F30000)
-        internal const long ClothStubGuest = 0x01F33000;
 
         // FROZEN-CLOTH cave. Draw__10CCharacter (0x139310) auto-draws every non-null CCloth in the clone's +0xC74
         // list; nothing in the dungeon chara-loop STEPS them (ClothStep is town/menu/edit only), so a copied cloth
@@ -425,12 +435,6 @@ namespace Dark_Cloud_Improved_Version
         // origin), so the frozen drape lands where the player stood at cast = the decoy plant spot. A frozen cloth's
         // verts never change, so we SINGLE-buffer it (both +0x24/+0x28 → one buffer) — safe even mid-DMA (same bytes).
         // Lives in the node-pool tail reclaimed by MaxNodes 320→128 (0x21F54000, before MotionCave @0x21F78000).
-        internal const long ClothListCave  = 0x21F54000;  // the 4-entry cloth-ptr array the clone's +0xC74 points at
-        internal const uint ClothListGuest = 0x01F54000;
-        internal const long ClothObjCave   = 0x21F54100;  // 3 object slots × 0x8550 (0x18FF0 → ends 0x21F6D0F0)
-        internal const uint ClothObjGuest  = 0x01F54100;
-        internal const long ClothBufCave   = 0x21F6E000;  // clone draw buffers, packed (before MotionCave @0x21F78000)
-        internal const uint ClothBufGuest  = 0x01F6E000;
         internal const int  ClothObjSize   = 0x8550;      // fixed CCloth allocation (__nw 0x8550 in InitCloth)
         internal const int  ClothObjSlots  = 3;           // Ungaga has exactly 3 cloth pieces (dump: [3] null)
         internal const int  ClothMaxPieces = 4;           // +0xC74 list length
@@ -444,18 +448,12 @@ namespace Dark_Cloud_Improved_Version
         // the clone tree used (NodePool + (frame − modelRoot)); frames allocated PAST the contiguous tree are copied
         // here and re-parented to the clone's copy of their first in-tree ancestor. Sits after the cloth draw
         // buffers, before MotionCave (0x21F78000). Each CFrame is 0x270.
-        internal const long ClothAnchorCave  = 0x21F73000;
-        internal const uint ClothAnchorGuest = 0x01F73000;
-        internal const long ClothAnchorEnd   = 0x21F75000;   // 0x2000 = ~12 CFrames (attach + bound out-of-tree frames)
 
         // PHYSICS collision: the cloth's CBound list (+0x44, linked via +0x00, each 0x130 bytes) is the body
         // collision capsules. Each capsule is positioned from two body bones at CBound +0xe4/+0xe8 (via GetLWMatrix
         // in UpDateDirPos__6CBound). For the clone we copy the list here and re-anchor each bound's +0xe4/+0xe8 to
         // the clone skeleton (same resolver as +0x3c), so the cloth collides against the CLONE's legs/hips, not the
         // player's. Shared across a character's cloth pieces (deduped by list head).
-        internal const long ClothBoundCave   = 0x21F75000;
-        internal const uint ClothBoundGuest  = 0x01F75000;
-        internal const long ClothBoundEnd    = 0x21F78000;   // 0x3000 = ~37 CBounds
         internal const int  BoundSize        = 0x130;        // Sizeof__6CBound
         internal const int  BoundNext        = 0x00;         // linked-list next
         internal const int  BoundFrameA      = 0xE4;         // capsule endpoint bone A (CFrame*)
@@ -468,8 +466,6 @@ namespace Dark_Cloud_Improved_Version
         // matrix passed down via RenderInfo; no parent pointer), so the shared bones render at the copy's
         // position while the player's own root stays put. Data only (MGDraw reads the node; the vtable it
         // calls @+0x250 points at real game code).
-        internal const long RootBuf        = 0x21F33200;  // guest 0x01F33200; the clone's own root CFrame
-        internal const long RootBufGuest   = 0x01F33200;
         internal const int  RootCopySize   = 0x800;       // full CFrameVu1 node (was 0x260 — truncated → didn't render)
         internal const int  RootChild      = 0x138;       // first child
         internal const int  RootSibling    = 0x13C;       // next sibling
@@ -482,8 +478,6 @@ namespace Dark_Cloud_Improved_Version
         // [0..0x260) + shares geometry @+0x260, zeroes links+cache, then SetParent relinks. We replicate
         // with PINE: DFS via child/sibling, copy 0x270 bytes/node into a cave pool, fix up
         // parent/child/sibling from an old→new map, share the mesh ptr @+0x260.
-        internal const long NodePool      = 0x21F40000;   // clone node pool (proven-clean cave, clear of RootBuf/tables)
-        internal const long NodePoolGuest = 0x01F40000;
         internal const int  NodeStride    = 0x270;        // MUST equal the real node size: MotionProc indexes
         internal const int  NodeSize      = 0x270;        //   bones as root+index*0x270, so the copy is contiguous
         internal const int  MaxNodes      = 128;          // pool cap (128*0x270 = 0x13800 → ends 0x21F53800). The clone
@@ -496,8 +490,6 @@ namespace Dark_Cloud_Improved_Version
         // SHARES these structs → both steps advance the same frame → 2× speed. Copy each active channel here and
         // repoint so the clone advances its OWN frame. Internal ptrs (+0x04/+0x08/+0x60/+0x64 → shared keyframe
         // data) stay as-is. Sits in the pool's clean tail (node pool ends 0x21F70C00, this < 0x21F7C000).
-        internal const long MotionCave      = 0x21F78000;
-        internal const long MotionCaveGuest = 0x01F78000;
         internal const int  MotionSlots     = 8;
         internal const int  MotionSlotBase  = 0xC20;      // CCharacter+0xC20+i*4 = channel[i] MOTION_TYPE ptr
         internal const int  MotionStructSize = 0xC0;      // > highest field used (+0x64); margin for safety
@@ -507,8 +499,6 @@ namespace Dark_Cloud_Improved_Version
         // skin on VU1 at draw time (already per-instance). For each MDT bone, copy the visual (0x30) + VU data
         // (visual+0x1c bytes) + MDT block (MDT+0x08 bytes) here, rebase cross-refs, repoint node+0x260. Then the
         // clone skins its OWN buffers → fully independent body. ~75KB; sits in the proven-clean cave tail.
-        internal const long MeshCave       = 0x21F80000;
-        internal const long MeshCaveGuest  = 0x01F80000;
         internal const int  MeshCaveSize   = 0x34000;     // ~213KB (n66 VU alone is ~127KB); fits the clean tail 0x1F80000..0x1FB4300
         internal const int  VisualSize     = 0x30;        // CVisualMDTVu1
         internal const int  VisVU          = 0x18;        // visual+0x18 = VU data ptr, +0x1c = size
@@ -520,8 +510,6 @@ namespace Dark_Cloud_Improved_Version
         // MotionProc2 READS and WRITES it, so the clone must own its own or it fights the player's bone matrices
         // (body "in two places at once"). One buffer per character, shared across channels → copy once, dedup.
         // Sits in the clean gap between the motion cave (0x1F78600) and the mesh cave (0x1F80000).
-        internal const long FrameInfCave      = 0x21F79000;
-        internal const long FrameInfCaveGuest = 0x01F79000;
         internal const int  FrameInfPtr       = 0x60;     // channel MOTION_TYPE +0x60 = FRAME_INF ptr
         internal const int  FrameInfEntry     = 0xD0;     // per-bone stride
 
@@ -529,14 +517,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionStateLen    = 0x40;     // bytes SetMotionEX reads/advances
 
         // Lever #1 test (dead): clone-private copy of the packet's +0x20 scratch. Region reused below.
-        internal const long MeshScratchCave = 0x21F7D000;   // uncached MMU form (guest 0x01F7D000)
         internal const int  MeshScratchSlot = 0x1000;       // per-mesh slot
 
         // Per-bone ANIMATION-matrix buffer, referenced by the channel at +0x00 (MotionProc2 reads *(channel)+bone*0x40).
         // The clone copies the channel (the pointer) but shared the buffer → clone & player fight over the bone
         // matrices (the flicker + animation clamp). Copy it (once, dedup) and repoint channel+0x00. Reuses the dead
         // lever-#1 region (0x21F7D000, 0x3000 free).
-        internal const long BoneMtxCave   = 0x21F7D000;
         internal const int  BoneMtxPtr    = 0x00;         // channel MOTION_TYPE +0x00 = per-bone matrix buffer ptr
         internal const int  BoneMtxEntry  = 0x40;         // per-bone stride
 
@@ -546,8 +532,6 @@ namespace Dark_Cloud_Improved_Version
         // then splice the copy's root into the CLONE's bone-39 child list so the clone's MGDraw draws it at the
         // clone's hand. Cave sits in the clean gap between BoneMtxCave (ends ~0x21F7E100) and MeshCave (0x21F80000).
         internal const long WeaponObjGlobal = 0x202A34F0;
-        internal const long WeaponCave      = 0x21F7E200;
-        internal const long WeaponCaveGuest = 0x01F7E200;
         internal const int  WeaponCaveSize  = 0x1D00;     // weapon trees are small (< ~12 nodes)
         internal const int  WeaponHandBone  = 39;         // player/clone frame-tree bone the weapon parents to
         // The weapon draws in its OWN chara slot (its own texgroup 0x1d pass, like the player's weapon), NOT
@@ -579,34 +563,47 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionRestart = 0x4;     //   restart (reset to frame 0, no blend), consumed once by the step
     }
 
+
     /// <summary>
-    /// Mirage clone HEAT-HAZE. DrawRaster__9CFireOmni (main segment, 0x162310) is the game's torch heat
-    /// shimmer: it projects the fire's world position (+0x20/24/28) to screen and re-blends the framebuffer
-    /// rectangle there, wobbled by an animated phase (+0x04). We give it a cave-allocated CFireOmni parked
-    /// at the clone, and hook the TAIL of DrawFire__11CDungeonMap (its jr ra @0x1C4600) to call DrawRaster
-    /// once more when a mod flag is set. Render order (dun overlay): map → player+clone → enemies → RASTER
-    /// → DrawFire — so the clone is already in the framebuffer when the haze pass runs. Main-segment, once.
-    /// Note: DrawRaster's projection scale is a hardcoded torch size, so the shimmer is a fixed-size patch.
+    /// The dungeon FIRE / HEAT-HAZE system — the only framebuffer distortion in the game, and the vehicle
+    /// for the Mirage clone's shimmer (Mirage hijacks a torch's raster emitter; see [[mirage-decoy-aggro]]).
+    ///
+    /// DrawRaster__11CDungeonMap (0x1C4610) walks a 20x20 per-tile fire array, but ONLY tiles within +/-4 of
+    /// the CAMERA and with dist &lt;= 240 (both camera-relative — DrawMap__11CDungeonMap @0x1C286C RECOMPUTES
+    /// that dist every frame, so forcing it from the mod is futile; the PNACH relaxes the 240 gate instead).
+    /// Each enabled tile draws the raster emitters of its fire STRUCT at dngMap + fireIdx*Stride, placing
+    /// emitter i at world ((localX + col*16)*10, localY*10, (localZ + row*16)*10) AFTER rotating (localX,localZ)
+    /// by theta = (4 - tileRot) * 90deg.
+    ///
+    /// DrawFire__11CDungeonMap walks the SAME emitter list and draws each as a flame+light, so an injected
+    /// emitter must zero its <see cref="EmitFlags"/> byte (bit0 = light, bit1 = flame) to be haze-only.
     /// </summary>
-    internal static class MirageHaze
+    internal static class FireRaster
     {
-        internal const long HookPatchAddr = 0x201C4600;   // MMU addr of DrawFire's `jr ra`
-        internal const uint  HookOrig     = 0x03E00008;    // jr ra
-        internal const uint  HookNew      = 0x087CC700;    // j 0x1F31C00
-        internal const long HookStubAddr  = 0x21F31C00;    // guest 0x01F31C00
-        internal static readonly uint[] HookStub =
-        {
-            0x27BDFFF0, 0xAFBF0000, 0x3C0201F3, 0x8C421BC0, 0x10400005, 0x00000000, 0x3C0401F3,
-            0x34841B80, 0x0C0588C4, 0x00000000, 0x8FBF0000, 0x27BD0010, 0x03E00008, 0x00000000,
-        };
+        // Per-tile fire array (relative to the CDungeonMap instance, i.e. NowDngMapPtr).
+        internal const int  TileArray   = 0x9C50;   // 20x20 entries, 0x10 each
+        internal const int  TileStride  = 0x10;
+        internal const int  TileCount   = 400;
+        internal const int  TileFireIdx = 0x00;     // int; -1 = no fire
+        internal const int  TileRot     = 0x04;     // int; emitter offsets are rotated by (4-rot)*90deg
+        internal const int  TileDist    = 0x08;     // float camera distance; <=240 to draw (game recomputes each frame)
+        internal const int  TileEnabled = 0x0C;     // int; ==1 to draw
 
-        internal const long Instance   = 0x21F31B80;   // guest 0x01F31B80; the CFireOmni (0x40 bytes)
-        internal const long Flag        = 0x21F31BC0;  // int: 1 = draw the haze
-        internal const int  PhaseOff   = 0x04;         // raster wobble phase (0..8)
-        internal const int  PosOff     = 0x20;         // x,y,z
-        internal const int  RadiusOff  = 0x0C;         // 15.0f from the ctor
+        // Fire struct: dngMap + fireIdx * Stride.
+        internal const int  Stride      = 0x1D0;
+        internal const int  EmitCount   = 0x4A2;    // short — RASTER emitter count (lh v1,0x4A2(v1) @0x1C48B8)
+        internal const int  EmitPos     = 0x4B0;    // emitter[i] local pos (x,y,z floats), stride 0x10
+        internal const int  EmitPosStride = 0x10;
+        internal const int  EmitFlags   = 0x510;    // emitter[i] flag BYTE (stride 1): bit0 = light/glow, bit1 = flame.
+                                                    // Zero it => heat-haze ONLY (DrawRaster never reads this byte).
+        internal const int  MaxEmitSlot = 5;        // EmitPos[6] would land on EmitFlags[0] — never append past 5
+
+        /// <summary>DAT_002a1da8 (RODATA): blendTextuerTest's multiplicative displacement gain. The distortion is
+        /// (size/10000) * gain * wave * AMP, so 0 = no distortion and it scales linearly to full (~1.3 vanilla).
+        /// Being plain DATA, the mod can RAMP it per tick — patching the AMP code constant every frame would be
+        /// the recompiler-crashing hot-code surgery we avoid everywhere.</summary>
+        internal const long DistortionGain = 0x202A1DA8;
     }
-
     internal static class BombEffect
     {
         internal const long PoolPtr      = 0x202A35E4; // NowBombEffect (gp-0x620C) → 3 slots × 0xC0
