@@ -18,9 +18,10 @@ namespace Dark_Cloud_Improved_Version
     ///   • Guest(0x01xxxxxx) — what the GAME sees, i.e. what we bake into pointers/instructions.
     ///
     /// ── MAP (guest) ───────────────────────────────────────────────────────────────────────────────────
-    ///   0x01F10020  PNACH "mod active" flag                       (PNACH-owned)
-    ///   0x01F10038  Mirage scene-gate flag (3-state mailbox)      → <see cref="MirageSceneGateFlag"/>
-    ///   0x01F10100  HarderEnemyAI STB cave (+0xA4200)             (other system — do not encroach)
+    ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (0x3C is the next free)
+    ///   0x01F10100  HarderEnemyAI per-species STB stubs           → <see cref="AiStubBase"/>
+    ///               ...bounded at 0x01F30000 by Mirage's PtrTable → <see cref="AiStubMaxSlots"/>
+    ///   0x01400000  EnemyModelInjector param/code block (BSS)     → <see cref="ModelInjectorCave"/>
     ///
     ///   Mirage — decoy aggro redirect:
     ///   0x01F30000  PtrTable      256 × 4B per-slot target pointers
@@ -48,11 +49,48 @@ namespace Dark_Cloud_Improved_Version
     internal static class CodeCaves
     {
         // ── PNACH mailboxes ──────────────────────────────────────────────────────────────────────────
-        /// <summary>3-state flag the Mirage PNACH block reads every frame: 1 = decoy up (NOP the chara-loop
-        /// gates so the clone draws + steps), 2 = in a dungeon with no decoy (RESTORE the vanilla words —
-        /// PNACH conditionals do NOT auto-revert), 3 = decoy up but PAUSED (drawn, frozen), 0 = town.
-        /// Also gates the fire-raster tuning patches (sprite size / dist gate / distortion amplitude).</summary>
-        internal const long MirageSceneGateFlag = 0x21F10038;
+        /// <summary>
+        /// The 4-byte flag slots at 0x01F10000 that the mod WRITES and the PNACH conditionals READ.
+        /// EVERY slot must be unique — two systems on one slot silently corrupt each other, and the symptom
+        /// shows up in the *other* system (this is not hypothetical: a reserved-but-unimplemented fishing flag
+        /// was sitting on Mirage's scene-gate slot; had it ever been wired up, writing 1 to boost the fishing
+        /// radius would have read as "decoy up" and NOP'd the chara-loop gates with no clone present).
+        ///
+        ///   +0x00 eventpoint   +0x04 sun/moon    +0x08 nearNPC     +0x0C xiaoFlag
+        ///   +0x10 nearNPC(2)   +0x14 insideMayor +0x18 element     +0x1C clock
+        ///   +0x20 pnachActive  +0x24 PINE probe (MemoryFunctions)  +0x28 option1   +0x2C option2
+        ///   +0x30 option3      +0x34 option4     +0x38 MIRAGE scene gate
+        ///   +0x3C.. FREE
+        /// </summary>
+        internal static class Mailbox
+        {
+            internal const long Base = 0x21F10000;
+
+            /// <summary>Mirage 3-state gate, read every frame by the PNACH: 1 = decoy up (NOP the chara-loop
+            /// gates so the clone draws + steps), 2 = in a dungeon with no decoy (RESTORE the vanilla words —
+            /// PNACH conditionals do NOT auto-revert), 3 = decoy up but PAUSED (drawn, frozen), 0 = town.
+            /// Also gates the fire-raster tuning patches (sprite size / dist gate / distortion amplitude).</summary>
+            internal const long MirageSceneGate = 0x21F10038;
+
+            internal const long NextFree = 0x21F1003C;
+        }
+
+        /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
+        internal const long MirageSceneGateFlag = Mailbox.MirageSceneGate;
+
+        // ── HarderEnemyAI: per-species STB stubs ─────────────────────────────────────────────────────
+        // One self-contained stub per spliced species (nothing is shareable — every stub contains
+        // script-local CALL/branch targets). Starts just past the mailbox and grows upward, so it is
+        // HARD-BOUNDED by Mirage's PtrTable at 0x1F30000: 0x1FF00 / 0x400 = 127 slots. Overrunning that
+        // would silently scribble over the decoy aggro table and the clone's frame tree.
+        internal const long AiStubBase     = 0x21F10100;
+        internal const int  AiStubStride   = 0x400;
+        internal const int  AiStubMaxSlots = (int)((PtrTable - AiStubBase) / AiStubStride);   // 127
+
+        // ── EnemyModelInjector ───────────────────────────────────────────────────────────────────────
+        /// <summary>Param + code block, deep inside a 3.4 MB contiguous zero block in main BSS
+        /// (0x01340E20..0x016A0000). Guest address — the injected code loads it internally.</summary>
+        internal const uint ModelInjectorCave = 0x01400000;
 
         // ── Mirage: decoy aggro redirect ─────────────────────────────────────────────────────────────
         internal const long PtrTable      = 0x21F30000;   // per-slot target POINTER table (entry = an address to read a position from)

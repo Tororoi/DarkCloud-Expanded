@@ -4364,7 +4364,7 @@ namespace Dark_Cloud_Improved_Version
             WhirlVisualScale = z / WhirlwindVisualRadius;
         }
 
-        static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < 0x2000000;
+        static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < Memory.EeRamSize;
 
         // Locate the fuusya effect root(s) via a direct pointer (no RAM scan): the main-character effect object
         // is a fixed global (MainCharaEffectBase) with EffectSlotCount pool slots; each slot's model object

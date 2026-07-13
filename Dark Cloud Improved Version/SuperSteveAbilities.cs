@@ -187,7 +187,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void DriveTsukikage(bool active)
         {
             long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
-            if (poolBase == 0 || poolBase >= 0x02000000) return;   // pool not allocated / bad pointer
+            if (!Memory.IsValidGuest(poolBase)) return;   // pool not allocated / bad pointer
             for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
             {
                 bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
@@ -224,7 +224,7 @@ namespace Dark_Cloud_Improved_Version
             // Grow the fired pellet + scale its damage up to HcMaxDamageMult with the held charge, once each.
             // A max-charge shot arms the shrapnel burst for its next hit.
             long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
-            if (poolBase != 0 && poolBase < 0x02000000)
+            if (Memory.IsValidGuest(poolBase))
             {
                 float pelletScale = active ? 1f + _ssHoldFrac * (HcPelletScale - 1f) : 1f;
                 bool bigPellet = pelletScale > 1.01f;
@@ -279,7 +279,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
-            bool poolOk = poolBase != 0 && poolBase < 0x02000000;
+            bool poolOk = Memory.IsValidGuest(poolBase);
 
             // Prune shrapnel that has hit/expired; while any is still airborne, don't react to HP drops (its
             // own collision damage would otherwise read as fresh hits → runaway cascade).
@@ -391,7 +391,7 @@ namespace Dark_Cloud_Improved_Version
 
             // Stamp fresh pellets once each: damage ×1.5^cycles (capped) + Ruby's ball-growth sprite scale.
             long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
-            if (poolBase == 0 || poolBase >= 0x02000000) return;   // pool not allocated / bad pointer
+            if (!Memory.IsValidGuest(poolBase)) return;   // pool not allocated / bad pointer
             float mult = (float)Math.Pow(MobiusStepMult, _mrCycles);
             for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
             {

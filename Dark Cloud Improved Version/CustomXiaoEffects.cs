@@ -36,8 +36,8 @@ namespace Dark_Cloud_Improved_Version
                     !Player.CheckDunIsPaused() &&
                     Player.CheckDunIsWalkingMode())
             {
-                long poolNative = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr) & 0x1FFFFFFF;
-                if (poolNative == 0 || poolNative >= 0x02000000) { Thread.Sleep(200); continue; }
+                long poolNative = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr) & Memory.PhysAddrMask;
+                if (!Memory.IsValidGuest(poolNative)) { Thread.Sleep(200); continue; }
                 long pool = Memory.ToMmu(poolNative);
 
                 float px = Memory.ReadFloat(Addresses.dunPositionX);
@@ -108,8 +108,8 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Weapon swapped / state left: free anything still held so pellets die naturally.
-            long endNative = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr) & 0x1FFFFFFF;
-            if (endNative != 0 && endNative < 0x02000000)
+            long endNative = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr) & Memory.PhysAddrMask;
+            if (Memory.IsValidGuest(endNative))
             {
                 long pool = Memory.ToMmu(endNative);
                 for (int slot = 0; slot < WeaponCollision.PlayerShotPool.SlotCount; slot++)
@@ -140,8 +140,8 @@ namespace Dark_Cloud_Improved_Version
         /// every ~100 ticks (cheap: one 6.25KB batched read).</summary>
         private static bool RefreshTileGrid()
         {
-            long native = (uint)Memory.ReadInt(DungeonTileGrid.NowDngMapPtr) & 0x1FFFFFFF;
-            if (native == 0 || native >= 0x02000000) { _gridInstance = 0; return false; }
+            long native = (uint)Memory.ReadInt(DungeonTileGrid.NowDngMapPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(native)) { _gridInstance = 0; return false; }
             long inst = Memory.ToMmu(native);
             if (inst == _gridInstance && ++_gridRefreshTick % 100 != 0)
             {
@@ -197,17 +197,17 @@ namespace Dark_Cloud_Improved_Version
             {
                 long entry = inst + DungeonTileGrid.PartsTableOffset + (long)idx * DungeonTileGrid.PartsStride;
                 _partRotBase[idx] = (short)Memory.ReadUShort(entry + DungeonTileGrid.PartRotBase);
-                long frame = (uint)Memory.ReadInt(entry + DungeonTileGrid.PartColFrame) & 0x1FFFFFFF;
+                long frame = (uint)Memory.ReadInt(entry + DungeonTileGrid.PartColFrame) & Memory.PhysAddrMask;
                 var list = new System.Collections.Generic.List<float>();
-                if (frame != 0 && frame < 0x02000000) CollectFrameSegments(Memory.ToMmu(frame), list, 0);
+                if (Memory.IsValidGuest(frame)) CollectFrameSegments(Memory.ToMmu(frame), list, 0);
                 _partSegs[idx] = list.ToArray();
                 parts++; segs += list.Count / 4;
             }
 
             // The shared door collision frame (engine translates it per active door slot, no rotation).
             var door = new System.Collections.Generic.List<float>();
-            long doorFrame = (uint)Memory.ReadInt(inst + DungeonTileGrid.DoorFrameOffset) & 0x1FFFFFFF;
-            if (doorFrame != 0 && doorFrame < 0x02000000) CollectFrameSegments(Memory.ToMmu(doorFrame), door, 0);
+            long doorFrame = (uint)Memory.ReadInt(inst + DungeonTileGrid.DoorFrameOffset) & Memory.PhysAddrMask;
+            if (Memory.IsValidGuest(doorFrame)) CollectFrameSegments(Memory.ToMmu(doorFrame), door, 0);
             _doorSegs = door.ToArray();
             Console.WriteLine($"[AngelLOS] floor geometry: {parts} part types, {segs} wall segments, door: {_doorSegs.Length / 4} segments");
         }
@@ -219,24 +219,24 @@ namespace Dark_Cloud_Improved_Version
             if (depth > 6) return;
             int flags = Memory.ReadInt(frameMmu + DungeonTileGrid.FrameFlags);
             if (flags == 4) return;
-            long colObj = (uint)Memory.ReadInt(frameMmu + DungeonTileGrid.FrameColObj) & 0x1FFFFFFF;
-            if (colObj != 0 && colObj < 0x02000000 && (flags & 1) != 0)
+            long colObj = (uint)Memory.ReadInt(frameMmu + DungeonTileGrid.FrameColObj) & Memory.PhysAddrMask;
+            if (Memory.IsValidGuest(colObj) && (flags & 1) != 0)
                 AppendMdtWallSegments(Memory.ToMmu(colObj), outSegs);
             if ((flags & 2) != 0) return;
-            long ch = (uint)Memory.ReadInt(frameMmu + DungeonTileGrid.FrameFirstChild) & 0x1FFFFFFF;
-            for (int guard = 0; ch != 0 && ch < 0x02000000 && guard < 64; guard++)
+            long ch = (uint)Memory.ReadInt(frameMmu + DungeonTileGrid.FrameFirstChild) & Memory.PhysAddrMask;
+            for (int guard = 0; Memory.IsValidGuest(ch) && guard < 64; guard++)
             {
                 long chMmu = Memory.ToMmu(ch);
                 if ((Memory.ReadInt(chMmu + DungeonTileGrid.FrameFlags) & 4) == 0)
                     CollectFrameSegments(chMmu, outSegs, depth + 1);
-                ch = (uint)Memory.ReadInt(chMmu + DungeonTileGrid.FrameNextSibling) & 0x1FFFFFFF;
+                ch = (uint)Memory.ReadInt(chMmu + DungeonTileGrid.FrameNextSibling) & Memory.PhysAddrMask;
             }
         }
 
         private static void AppendMdtWallSegments(long colObj, System.Collections.Generic.List<float> outSegs)
         {
-            long blob = (uint)Memory.ReadInt(colObj + DungeonTileGrid.ColObjBlobPtr) & 0x1FFFFFFF;
-            if (blob == 0 || blob >= 0x02000000) return;
+            long blob = (uint)Memory.ReadInt(colObj + DungeonTileGrid.ColObjBlobPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(blob)) return;
             blob = Memory.ToMmu(blob);
             int vertsOff = Memory.ReadInt(blob + DungeonTileGrid.BlobVertsOffset);
             int polysOff = Memory.ReadInt(blob + DungeonTileGrid.BlobPolysOffset);

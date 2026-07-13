@@ -40,19 +40,22 @@ namespace Dark_Cloud_Improved_Version
         private const int GetUpMotionIdx      = 10;   // universal: every legit get-up is motion 10
         private const int  SigBytes  = 96;
 
-        // ── cave layout ──
-        // Cave = 0x01F10100..0x01FB4300, the big heap-tail region CodeCaveScanner has verified clean across
-        // every session/sweep on record (sits just past the mod's own PNACH mailbox at 0x1F10020).
+        // ── cave layout (authoritative map: CodeCaveAddresses.cs) ──
+        // Per-species STB stubs starting just past the PNACH mailbox, in the heap-tail region CodeCaveScanner
+        // has verified clean across every session/sweep on record. Branch (op16/17/18) and CALL (op19) targets
+        // all resolve per-script (pc = executing script's stbBase+codeBase + operand), and every stub calls its
+        // own script's wait subroutine — so nothing is shareable across species; each species gets one
+        // self-contained stub per loaded copy.
+        //
+        // The region grows UPWARD into Mirage's caves, so it is hard-bounded at MaxStubs (see CodeCaves):
+        // overrunning would silently scribble over the decoy aggro table (0x1F30000) and the clone frame tree.
+        //
         // DO NOT use the BSS-slack gaps around 0x2A4000: 0x2A4000 itself is INSIDE tocbf (the CD
         // table-of-contents buffer — the game rewrites it during disc streaming, which corrupted the v4
         // stub mid-floor and crashed the VM to the BIOS browser), and the real gaps there are <0x140 bytes.
-        // Branch (op16/17/18) and CALL (op19) targets all resolve per-script (pc = executing script's
-        // stbBase+codeBase + operand), and every stub calls its own script's wait subroutine — so nothing
-        // is shareable across species; each species gets one self-contained stub per loaded copy.
-        private const long CaveBase      = 0x21F10100;
-        private const long StubBase      = CaveBase;   // per-species stubs (nothing shareable: every stub
-                                                       // contains script-local CALLs and branch targets)
-        private const int  StubStride    = 0x400;      // up to 85 cells (roll + MUTEKI + motion run + 2 wait clusters)
+        private const long StubBase   = CodeCaves.AiStubBase;
+        private const int  StubStride = CodeCaves.AiStubStride;   // up to 85 cells (roll + MUTEKI + motion run + 2 wait clusters)
+        private const int  MaxStubs   = CodeCaves.AiStubMaxSlots; // 127 — the wall before Mirage's PtrTable
 
         /// <summary>Every enemy model code with a LEGITIMATE get-up (起き上がり) motion, all at index 10.
         /// Generated from docs/enemy-motion-table.md and filtered: 39 of the 70 "get up" entries are
@@ -202,11 +205,10 @@ namespace Dark_Cloud_Improved_Version
             // One RAM sweep matching every needle.
             int caveSlot = 0, buffed = 0, spliced = 0;
             const int Block = 0x40000;
-            const long RamSize = 0x2000000;
             int maxNeedle = 0; foreach (var nd in needles) maxNeedle = Math.Max(maxNeedle, nd.Sig.Length);
-            for (long off = 0; off < RamSize; off += Block - (maxNeedle - 1))
+            for (long off = 0; off < Memory.EeRamSize; off += Block - (maxNeedle - 1))
             {
-                int size = (int)Math.Min(Block, RamSize - off);
+                int size = (int)Math.Min(Block, Memory.EeRamSize - off);
                 if (size <= maxNeedle) break;
                 byte[] buf;
                 try { buf = Memory.ReadBytesBatch(Memory.Pcsx2Base + off, size); }
@@ -366,6 +368,14 @@ namespace Dark_Cloud_Improved_Version
             }
 
             long progOrigin = stbBase + codeBaseEarly;   // op16/17/19 operands are relative to this
+            // The stub region grows upward into Mirage's caves — refuse to splice past the wall rather than
+            // silently overwrite the decoy aggro table / clone frame tree (see CodeCaveAddresses.cs).
+            if (caveSlot >= MaxStubs)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    $"[HarderAI] cave full: slot {caveSlot} >= {MaxStubs} (would run into Mirage's caves @0x{CodeCaves.PtrTable:X}) — skipping {code}");
+                return false;
+            }
             long stub = StubBase + (long)caveSlot * StubStride;
             uint hpBits = BitConverter.ToUInt32(BitConverter.GetBytes(ReviveHpFraction), 0);
 

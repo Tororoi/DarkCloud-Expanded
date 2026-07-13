@@ -339,6 +339,6 @@ namespace Dark_Cloud_Improved_Version
             return outw.ToArray();
         }
 
-        static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < 0x2000000;
+        static bool IsRamPtr(int p) => (uint)p >= 0x80000 && (uint)p < Memory.EeRamSize;
     }
 }

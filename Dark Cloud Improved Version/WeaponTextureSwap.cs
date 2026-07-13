@@ -138,13 +138,13 @@ namespace Dark_Cloud_Improved_Version
                     _nextQuickScan = DateTime.UtcNow.AddSeconds(2);
                     found = MergeHits(ScanEeRam(LocSig, LocSigOffset,
                                                Math.Max(Memory.Pcsx2Base, _regionMin - 0x200000),
-                                               Math.Min(Memory.Pcsx2Base + 0x2000000, _regionMax + 0x200000)));
+                                               Math.Min(Memory.Pcsx2Base + Memory.EeRamSize, _regionMax + 0x200000)));
                 }
                 if (!found && DateTime.UtcNow >= _nextFullScan)
                 {
                     _nextFullScan = DateTime.UtcNow.AddSeconds(10);
                     MergeHits(ScanEeRam(LocSig, LocSigOffset,
-                                        Memory.Pcsx2Base, Memory.Pcsx2Base + 0x2000000));
+                                        Memory.Pcsx2Base, Memory.Pcsx2Base + Memory.EeRamSize));
                 }
             }
             if (_pixBases.Count == 0) return;
@@ -203,7 +203,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!match) continue;
 
                 uint pixNative = BitConverter.ToUInt32(table, o + EntryPixOff);
-                if (pixNative == 0 || pixNative >= 0x02000000) continue;
+                if (!Memory.IsValidGuest(pixNative)) continue;
                 long pix = Memory.ToMmu(pixNative);
                 if (found.Contains(pix) || _pixBases.Contains(pix)) { if (!found.Contains(pix)) found.Add(pix); continue; }
 

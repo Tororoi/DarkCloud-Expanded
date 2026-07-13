@@ -393,15 +393,12 @@ namespace Dark_Cloud_Improved_Version
         public const int assignEditInit = 0x201F74B4; //when character is being selected, the game jumps to a function located in this address. We change this function to jal EditInit to reload map
 
         /// <summary>
-        /// Address of the lui instruction that sets the fish detection (bite) radius.
-        /// Owned by PNACH — do not write here via PINE. Set <see cref="fishRangeBoostFlag"/> instead.
+        /// Address of the lui instruction that sets the fish detection (bite) radius. The PNACH patches this
+        /// UNCONDITIONALLY ("more consistentfishing") — there is no flag and nothing to set from PINE.
+        /// (A `fishRangeBoostFlag` mailbox slot was once reserved for a conditional boost that was never
+        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot 0x21F10038.)
         /// </summary>
         public const int fishDetectionRadiusPatch = 0x20240364;
-        /// <summary>
-        /// Reserved flag byte read by the PNACH conditional: 1 = boosted radius, 0 = normal.
-        /// Write via PINE; PNACH patches <see cref="fishDetectionRadiusPatch"/> in response.
-        /// </summary>
-        public const int fishRangeBoostFlag = 0x21F10038;
 
     }
 

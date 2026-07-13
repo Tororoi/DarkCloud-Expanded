@@ -25,10 +25,8 @@ namespace Dark_Cloud_Improved_Version
     static class CodeCaveScanner
     {
         public static bool Enabled = true;
-
-        private const long RamSize = 0x2000000;          // 32MB EE RAM
         private const int ChunkSize = 256;               // tracking granularity
-        private const int ChunkCount = (int)(RamSize / ChunkSize);
+        private const int ChunkCount = (int)(Memory.EeRamSize / ChunkSize);
         private const int BlockSize = 8192;              // one PINE round-trip
         private const int ChunksPerBlock = BlockSize / ChunkSize;
         private const int MinNewRegion = 0x1000;         // only auto-report caves >= 4KB
@@ -103,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool Sweep()
         {
             int failedBlocks = 0;
-            for (long off = 0; off < RamSize; off += BlockSize)
+            for (long off = 0; off < Memory.EeRamSize; off += BlockSize)
             {
                 byte[] block = Memory.ReadBytesBatch(Memory.Pcsx2Base + off, BlockSize);
                 if (block == null)
@@ -123,12 +121,17 @@ namespace Dark_Cloud_Improved_Version
         /// count as the game dirtying a region — chunks here are pinned clean and excluded from tracking.
         /// (This is also why findings entries overlapping these ranges stay CLEAN in the file: the region
         /// IS clean as far as the game is concerned; the mod is the only writer.)</summary>
+        // Authoritative layout: CodeCaveAddresses.cs (CodeCaves) — keep these in sync. Together these cover
+        // one contiguous claim, 0x1F10000..0x1FB4000.
         private static readonly (long Start, long Size)[] ModReserved =
         {
-            (0x1F10000, 0x10000), // PNACH mailbox @0x1F10020 + HarderEnemyAI STB cave @0x1F10100 (64KB reserve)
+            // PNACH mailbox @0x1F10000 + HarderEnemyAI's per-species STB stubs @0x1F10100. The stubs grow
+            // upward (0x400 each, up to CodeCaves.AiStubMaxSlots = 127), so they can legitimately reach right
+            // up to 0x1F30000 — the old 0x10000 reserve stopped at 0x1F20000 and would have started flagging
+            // our OWN stub writes as the game dirtying the region once a floor spliced past ~63 species.
+            (0x1F10000, 0x20000), // → 0x1F30000
             (0x1F30000, 0x84000), // Mirage: decoy tables + _GET_* code caves + the whole clone cave band
-                                  // (node pool / cloth / motion / mesh), 0x1F30000..0x1FB4000. Authoritative
-                                  // layout lives in CodeCaveAddresses.cs (CodeCaves) — keep these in sync.
+                                  // (node pool / cloth / motion / mesh) → 0x1FB4000
         };
 
         private static bool IsReserved(int chunk)

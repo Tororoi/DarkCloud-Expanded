@@ -242,11 +242,22 @@ namespace Dark_Cloud_Improved_Version
         // The PS2 EE is MIPS: segment bits occupy the upper 3 bits of a 32-bit virtual address
         // (kseg0/kseg1/kuseg all alias the same physical RAM). Strip them with PhysAddrMask to get the
         // physical byte offset, then add Pcsx2Base to land in PCSX2's RAM window (where PINE reads/writes).
-        internal const long PhysAddrMask = 0x1FFFFFFF; // strips MIPS segment bits → 29-bit physical address
+        internal const uint PhysAddrMask = 0x1FFFFFFF; // strips MIPS segment bits → 29-bit physical address
         internal const long Pcsx2Base    = 0x20000000; // PCSX2 maps PS2 physical RAM at this offset
+        internal const uint EeRamSize    = 0x02000000; // 32 MB — the EE's entire main RAM (guest 0x0..0x01FFFFFF)
 
         // Convert a PS2-native pointer (read from PS2 RAM) to a PCSX2-addressable address.
         internal static long ToMmu(long nativePtr) => (nativePtr & PhysAddrMask) | Pcsx2Base;
+
+        /// <summary>Is <paramref name="guestPtr"/> a usable PS2 pointer — non-null and inside the EE's 32 MB of
+        /// RAM? Pointers chased out of live game memory (model trees, map/fire structs, cloth lists) are null or
+        /// stale garbage during loads and transitions, so guard before dereferencing: without this we'd compute
+        /// an address from nonsense and scribble into unrelated memory. Expects a GUEST address — mask an MMU
+        /// address with <see cref="PhysAddrMask"/> first (that's the usual `ReadInt(...) &amp; PhysAddrMask` idiom).</summary>
+        internal static bool IsValidGuest(uint guestPtr) => guestPtr != 0 && guestPtr < EeRamSize;
+
+        /// <inheritdoc cref="IsValidGuest(uint)"/>
+        internal static bool IsValidGuest(long guestPtr) => guestPtr > 0 && guestPtr < EeRamSize;
 
         private static uint PhysAddr(long address) => (uint)(address & PhysAddrMask);
 

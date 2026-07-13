@@ -931,7 +931,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Adjust every word in <data> that points into <srcSlot>'s FloorSlot/CCharacter/CRunScript region so it
         // points into <dstSlot>'s corresponding region (the entity is moving srcSlot -> dstSlot). Pointers are
-        // PS2-native (addr & 0x1FFFFFFF), 4-byte aligned. Returns the count relocated.
+        // PS2-native (addr & Memory.PhysAddrMask), 4-byte aligned. Returns the count relocated.
         private static int RelocatePointers(uint[][] data, int srcSlot, int dstSlot)
         {
             int relocated = 0;

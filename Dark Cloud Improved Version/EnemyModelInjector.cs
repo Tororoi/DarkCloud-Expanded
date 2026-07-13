@@ -53,7 +53,7 @@ namespace Dark_Cloud_Improved_Version
         /// breakpoint across your scenarios before trusting it.
         /// The embedded template is assembled for 0x01F70000 and relocated to this base at runtime.
         /// </summary>
-        internal const uint CaveBase = 0x01400000;   // deep in a 3.4 MB unused BSS block (verify w/ write bp)
+        internal const uint CaveBase = CodeCaves.ModelInjectorCave;   // deep in a 3.4 MB unused BSS block (verify w/ write bp)
         // Runtime hook address, in the OpA_MotionProcess EPILOGUE (the single per-frame `jr ra`
         // return path; the top of the function is first-frame init the common path skips). The dun
         // overlay loads WITH its 0x80 file header, so symbol 0x01DB73A0 is at +0x80 = 0x01DB7420

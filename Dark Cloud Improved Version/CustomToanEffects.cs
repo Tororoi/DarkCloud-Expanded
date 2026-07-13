@@ -96,8 +96,8 @@ namespace Dark_Cloud_Improved_Version
             float x = Memory.ReadFloat(ePos), ht = Memory.ReadFloat(ePos + 4), z = Memory.ReadFloat(ePos + 8);
 
             // The explosion visual: replicate SetBomb into a free pool slot (all five active flags clear).
-            long poolNative = (uint)Memory.ReadInt(BombEffect.PoolPtr) & 0x1FFFFFFF;
-            if (poolNative != 0 && poolNative < 0x02000000)
+            long poolNative = (uint)Memory.ReadInt(BombEffect.PoolPtr) & Memory.PhysAddrMask;
+            if (Memory.IsValidGuest(poolNative))
             {
                 long pool = Memory.ToMmu(poolNative);
                 for (int s = 0; s < BombEffect.SlotCount; s++)
@@ -126,8 +126,8 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 // The ground shockwave ring (the native path adds it when scale > 1).
-                long swNative = (uint)Memory.ReadInt(BombEffect.ShockWavePtr) & 0x1FFFFFFF;
-                if (BigBangScale > 1f && swNative != 0 && swNative < 0x02000000)
+                long swNative = (uint)Memory.ReadInt(BombEffect.ShockWavePtr) & Memory.PhysAddrMask;
+                if (BigBangScale > 1f && Memory.IsValidGuest(swNative))
                 {
                     long sw = Memory.ToMmu(swNative);
                     Memory.WriteFloat(sw, x); Memory.WriteFloat(sw + 4, ht);
@@ -775,11 +775,10 @@ namespace Dark_Cloud_Improved_Version
             if (needles.Count == 0) return;
 
             const int Block = 0x40000;
-            const long RamSize = 0x2000000;
             int overlap = ReviverSigBytes - 1;
-            for (long off = 0; off < RamSize; off += Block - overlap)
+            for (long off = 0; off < Memory.EeRamSize; off += Block - overlap)
             {
-                int size = (int)Math.Min(Block, RamSize - off);
+                int size = (int)Math.Min(Block, Memory.EeRamSize - off);
                 if (size <= overlap) break;
                 byte[] buf;
                 try { buf = Memory.ReadBytesBatch(Memory.Pcsx2Base + off, size); }
@@ -2006,7 +2005,7 @@ namespace Dark_Cloud_Improved_Version
             // Projectiles: downgrade every type-3 shot type in the shot-effect table (BST +0x44) to type-2.
             for (int i = 0; i < BehaviorScriptTable.Count; i++)
             {
-                long addr = 0x20000000 | (uint)BehaviorScriptTable.FieldAddress(i, BehaviorScriptTable.HitReactionType);
+                long addr = Memory.Pcsx2Base | (uint)BehaviorScriptTable.FieldAddress(i, BehaviorScriptTable.HitReactionType);
                 if (active && !_shBstDown[i])
                 {
                     if (Memory.ReadInt(addr) == 3)
