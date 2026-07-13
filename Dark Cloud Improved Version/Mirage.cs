@@ -46,7 +46,180 @@ namespace Dark_Cloud_Improved_Version
             FillWholeTablePlayer();                 // every slot → live-player pointer (valid before any enemy read)
             bool pos  = ArmFuncCave(0x201E1DF0, 0x21F34200, 0x01F34200, MirageDecoy.PosDispatch, 0x84, 0x8C, "_GET_POSITION");
             bool dist = ArmFuncCave(0x201E1D00, 0x21F34000, 0x01F34000, MirageDecoy.DistDispatch, 0x5C, 0x64, "_GET_DISTANCE");
+            if (HeatHaze) ArmHazeCave();            // only when the PNACH jal patch (0x1DAEBCC) is present (HeatHaze on)
             _armed = pos && dist;                   // retry from the loop if either couldn't arm (e.g. not vanilla yet)
+        }
+
+        // Heat-haze on the clone: the dungeon's fire-source heat-haze pass (DrawRaster__11CDungeonMap, 0x1C4610)
+        // is called from Draw__11CSeireiKing @0x1DAEBCC — the same dungeon draw that renders the clone. The PNACH
+        // redirects that jal (in-dungeon, all flag states) to this COLD-written cave stub, which calls the ORIGINAL
+        // pass (normal fires) then, gated by HazeFlag, RasterStep + DrawRaster__9CFireOmni (0x162310) on a fake
+        // CFireOmni the mod positions at the decoy → a heat shimmer on the clone. Reached via jal (like ClothStep);
+        // the cold-written cave compiles fresh on first draw.
+        private const long HazeStub   = 0x21F34400;   // cave stub (guest 0x01F34400)
+        private const uint HazeStubGuest = 0x01F34400;
+        private const long HazeFireObj = 0x21F34500;  // fake CFireOmni (guest 0x01F34500): +0x04 phase, +0x20/24/28 pos
+        private const long HazeFlag   = 0x21F34540;    // mod-controlled: 1 = draw the clone haze, 0 = skip
+        private const long HazeTexResult = 0x21F34544; // stub stores the GetTexture("blender") result here (0 = not loaded)
+        internal static void ArmHazeCave()
+        {
+            // BISECT BUILD: skips the actual DrawRaster__9CFireOmni call (the suspected crash — blendTextuerTest's
+            // framebuffer distortion), keeps flag-check + GetTexture guard + RasterStep, and STORES the GetTexture
+            // result to HazeTexResult so we learn (a) whether the crash is in DrawRaster and (b) whether "blender"
+            // is even loaded. Compare-and-rewrite (not a version byte) so ANY edit auto-applies on a town re-arm.
+            uint[] code = {
+                // MINIMAL PASS-THROUGH: do NOTHING, just return. Isolates whether the crash is the jal→cave
+                // mechanism on the flag=1 (clone-draw) path vs. calling DrawRaster after the clone draw. Skips the
+                // fire pass (no fire haze) but that's fine for the test. jal set ra=0x1DAEBD4; jr ra returns there.
+                0x03E00008, // 00 jr ra
+                0x00000000, // 04 nop
+            };
+            byte[] cb = new byte[code.Length * 4];
+            for (int i = 0; i < code.Length; i++) BitConverter.GetBytes(code[i]).CopyTo(cb, i * 4);
+            byte[] cur = Memory.ReadBytesBatch(HazeStub, cb.Length);
+            if (cur != null && cur.AsSpan().SequenceEqual(cb)) return;   // already current → don't touch (cold-only anyway)
+            Memory.WriteBytesBatch(HazeStub, cb);
+            Memory.WriteBytesBatch(HazeFireObj, new byte[0x40]);   // zero the fake CFireOmni
+            Memory.WriteInt(HazeFlag, 0);
+            Memory.WriteInt(HazeTexResult, 0);
+            Console.WriteLine($"[Mirage/haze] cave stub armed @0x{HazeStubGuest:X} (MINIMAL: jr ra only — no fire pass, no haze; tests the jal→cave mechanism on the clone-draw path)");
+        }
+
+        private static bool _hazeStubLogged;
+        /// <summary>Position the fake CFireOmni at the decoy and enable the haze draw. Called while the clone is up.</summary>
+        private static void MaintainHaze()
+        {
+            if (!HeatHaze) return;
+            if (!_hazeStubLogged)   // BEFORE enabling: report which stub is actually live (disambiguates restart state)
+            {
+                _hazeStubLogged = true;
+                uint s5c = (uint)Memory.ReadInt(HazeStub + 0x5C);   // bisect stub: 0x00000000; full stub: 0x0C0588C4
+                Console.WriteLine($"[Mirage/haze] ACTIVE stub +0x5C=0x{s5c:X8} ({(s5c == 0 ? "BISECT (DrawRaster skipped)" : s5c == 0x0C0588C4 ? "FULL (old — re-arm from TOWN!)" : "?")})");
+            }
+            Memory.WriteFloat(HazeFireObj + 0x20, _dx);
+            Memory.WriteFloat(HazeFireObj + 0x24, _dz);   // DrawRaster raises this by +3
+            Memory.WriteFloat(HazeFireObj + 0x28, _dy);
+            if (EnableHazeDraw) Memory.WriteInt(HazeFlag, 1);   // DIAGNOSTIC OFF: if it STILL crashes with the haze
+                                                               // branch never taken, the crash isn't the haze draw
+                                                               // at all — it's the stub's presence + the clone draw.
+        }
+        private const bool EnableHazeDraw = false;
+        private static void HazeOff() { if (HeatHaze) Memory.WriteInt(HazeFlag, 0); }
+
+        // ── Clone heat-haze by HIJACKING an existing torch's fire-raster (pure data; no cave, no crash) ──
+        // The ONLY framebuffer distortion in the game is CFireOmni::DrawRaster (0x162310, via
+        // blendTextuerTest + MGGetFBuffTex); it's driven by DrawRaster__11CDungeonMap (0x1C4610), which
+        // iterates the 20×20 fire-tile array at dngMap+0x9C50 (0x10/entry: +0=fireIdx, +4=rot,
+        // +8=dist(≤240 draws), +C=enabled) and, per enabled tile, draws the raster emitters of the fire
+        // struct at dngMap+fireIdx*0x1D0 (raster count @+0x4A2, emitter[0] local pos @+0x4B0/4B4/4B8) at
+        // world (localX*10 + col*160, localY*10, localZ*10 + row*160).
+        //
+        // The earlier "make a NEW fire tile" version broke floor collision (marking a floor tile as a
+        // fire made the engine treat it as fire-tile geometry) — the tile-array write, NOT the struct
+        // write, was the culprit (the ForceRaster probe wrote +0x4A2 on a real torch struct with NO
+        // collision effect). So instead we reuse an EXISTING enabled torch tile's struct: set its raster
+        // count=1 and point emitter[0] at the CLONE (using that tile's col/row as the anchor, so any tile
+        // works no matter how far). The torch keeps its flame (flame emitters live at +0x490, untouched,
+        // and the raster is now positioned at the clone, not overlapping the torch). Only struct writes —
+        // the collision-safe ones. Prefer a torch whose fireIdx no OTHER enabled tile shares (else every
+        // sharer would draw a second raster at its own offset). Restored on despawn.
+        private const bool  CloneFireHaze = true;
+        private const float HazeBack      = 30f;   // world units to pull the shimmer BACK along the clone's facing (raster sits forward)
+        private static float _decoyFwdX, _decoyFwdY;  // clone's normalized forward vector (X/Y plane), captured at cast
+        private const float HazeBodyY     = -17f;  // world height above the clone's feet to center the shimmer (the raster is
+                                                   // designed to rise above a fire, so it renders high; pull it down onto the body)
+        private static int  _hazeFireIdx  = -1;    // reused torch's fire-struct index (-2 = checked/none, -1 = unchecked)
+        private static int  _hazeTileIdx  = -1;    // reused torch's TILE index (for the dist-gate override)
+        private static int  _hazeCol, _hazeRow;    // that torch tile's col/row (emitter anchor for re-assert)
+        private static int  _hazeRot;              // that torch tile's rotation index (+0x9c54) — DrawRaster rotates the emitter by it
+        private static byte[] _hazeSaved;          // saved struct raster region (+0x4A0..+0x4C0)
+
+        private static void SetupCloneHaze(uint dngMap)
+        {
+            if (!CloneFireHaze || _hazeFireIdx != -1) return;        // -1 only = not yet checked this decoy
+            if (dngMap == 0 || dngMap >= 0x02000000) return;
+            // Anchor near the cast spot first (player is there at cast). Maintain re-anchors to the live
+            // player as they move. If the dungeon has NO fire at all, UpdateAnchor returns false → skip.
+            if (!UpdateAnchor(dngMap, _dx, _dy)) { _hazeFireIdx = -2; return; }
+            Console.WriteLine($"[Mirage/haze] anchored to torch fireIdx {_hazeFireIdx} @tile ({_hazeCol},{_hazeRow}); dynamic re-anchor ON");
+        }
+
+        // Point the raster emitter at the clone and force the anchor tile's dist so the ≤240 gate passes.
+        private static void WriteHazeRaster(uint dngMap)
+        {
+            long b  = Memory.ToMmu(dngMap);
+            long fs = b + (long)_hazeFireIdx * 0x1D0;
+            // DrawRaster places the emitter at worldX=(localX+col*16)*10, worldZ=(localZ+row*16)*10 AFTER
+            // rotating (localX,localZ) by θ=(4-rot)*90° (the tile's own orientation). Pre-apply the inverse
+            // rotation so it lands exactly on the clone regardless of which torch (and its rot) we borrowed.
+            float tx = _dx - HazeBack * _decoyFwdX, ty = _dy - HazeBack * _decoyFwdY;   // pull back along the clone's facing
+            double dxc = (tx - _hazeCol * 160) / 10.0, dzc = (ty - _hazeRow * 160) / 10.0;
+            double th = (4 - _hazeRot) * (System.Math.PI / 2.0), c = System.Math.Cos(th), s = System.Math.Sin(th);
+            Memory.WriteBytesBatch(fs + 0x4A2, new byte[] { 1, 0 });          // raster emitter count = 1
+            Memory.WriteFloat(fs + 0x4B0, (float)(dxc * c - dzc * s));        // emitter[0] local X (inverse-rotated) → worldX = _dx
+            Memory.WriteFloat(fs + 0x4B4, (_dz + HazeBodyY) / 10f);           // emitter[0] local Y → worldY = _dz+HazeBodyY
+            Memory.WriteFloat(fs + 0x4B8, (float)(dxc * s + dzc * c));        // emitter[0] local Z (inverse-rotated) → worldZ = _dy
+            // (dist gate is relaxed via PNACH during a decoy — no point forcing +0x08 here; DrawMap rewrites it each frame.)
+        }
+
+        // Restore the CURRENT anchor's struct to what it was before we hijacked it.
+        private static void RestoreAnchor(uint dngMap)
+        {
+            if (_hazeFireIdx < 0 || dngMap == 0 || dngMap >= 0x02000000) return;
+            if (_hazeSaved != null) Memory.WriteBytesBatch(Memory.ToMmu(dngMap) + (long)_hazeFireIdx * 0x1D0 + 0x4A0, _hazeSaved);
+        }
+
+        // Choose the enabled fire tile nearest (refX,refY) as the raster anchor; hand the raster off to a
+        // nearer tile when the reference (player/camera) moves out of the current anchor's draw window, so
+        // the shimmer keeps rendering wherever the camera roams. Returns false only if the dungeon has NO
+        // fire (→ no distortion textures resident → skip entirely, no crash). Writes the emitter each call.
+        private static bool UpdateAnchor(uint dngMap, float refX, float refY)
+        {
+            long b = Memory.ToMmu(dngMap);
+            // Keep the current anchor while it's still close enough to the reference to stay in the camera's
+            // ±4-tile window (≈480 u = 3 tiles) — avoids per-frame thrashing between equidistant torches.
+            if (_hazeFireIdx >= 0 && _hazeTileIdx >= 0)
+            {
+                double kx = _hazeCol * 160.0 - refX, ky = _hazeRow * 160.0 - refY;
+                if (kx * kx + ky * ky <= 480.0 * 480.0) { WriteHazeRaster(dngMap); return true; }
+            }
+            byte[] tiles = Memory.ReadBytesBatch(b + 0x9C50, 400 * 0x10);   // one batch read of the whole fire-tile grid
+            if (tiles == null) return _hazeFireIdx >= 0;
+            int bestT = -1, bestFi = -1; double bestD2 = double.MaxValue;
+            for (int t = 0; t < 400; t++)
+            {
+                int off = t * 0x10;
+                if (BitConverter.ToInt32(tiles, off + 0x0C) != 1) continue;
+                int fi = BitConverter.ToInt32(tiles, off + 0x00);
+                if (fi < 1 || fi > 200) continue;
+                double wx = (t % 20) * 160.0, wz = (t / 20) * 160.0;
+                double d2 = (wx - refX) * (wx - refX) + (wz - refY) * (wz - refY);
+                if (d2 < bestD2) { bestT = t; bestFi = fi; bestD2 = d2; }
+            }
+            if (bestT < 0) return _hazeFireIdx >= 0;     // no enabled fire found this scan (keep any current anchor)
+            if (bestT != _hazeTileIdx || bestFi != _hazeFireIdx)
+            {
+                RestoreAnchor(dngMap);                   // hand the raster back to the old torch before taking a new one
+                _hazeTileIdx = bestT; _hazeFireIdx = bestFi; _hazeCol = bestT % 20; _hazeRow = bestT / 20;
+                _hazeRot = BitConverter.ToInt32(tiles, bestT * 0x10 + 0x04);   // tile rotation → inverse-rotated in WriteHazeRaster
+                _hazeSaved = Memory.ReadBytesBatch(b + (long)bestFi * 0x1D0 + 0x4A0, 0x20);
+            }
+            WriteHazeRaster(dngMap);
+            return true;
+        }
+
+        private static void MaintainCloneHaze(uint dngMap)
+        {
+            if (!CloneFireHaze || _hazeFireIdx < 0 || dngMap == 0 || dngMap >= 0x02000000) return;
+            float px = Memory.ReadFloat(Addresses.dunPositionX);   // live player = camera proxy; anchor follows it
+            float py = Memory.ReadFloat(Addresses.dunPositionY);
+            UpdateAnchor(dngMap, px, py);
+        }
+
+        private static void TeardownCloneHaze(uint dngMap)
+        {
+            RestoreAnchor(dngMap);
+            _hazeFireIdx = -1; _hazeTileIdx = -1; _hazeSaved = null;
         }
 
         /// <summary>Host a CLEAN copy of a vanilla STB command function in a cold-PINE cave and repoint its
@@ -128,6 +301,8 @@ namespace Dark_Cloud_Improved_Version
                     if (!_armed && !inDun) ArmColdPatch();
 
                     if (inDun) ProbeCharacter();   // once per party member: node/mesh/cloth footprint for cave sizing
+                    if (FireProbe && inDun && DateTime.UtcNow >= _fireProbeNext)   // map the dungeon fire-tile data (idea 1)
+                    { _fireProbeNext = DateTime.UtcNow.AddSeconds(2); DumpFireData(); }
 
                     if (_armed && inDun)
                     {
@@ -214,6 +389,12 @@ namespace Dark_Cloud_Improved_Version
             _dx = Memory.ReadFloat(Addresses.dunPositionX);
             _dz = Memory.ReadFloat(Addresses.dunPositionZ);
             _dy = Memory.ReadFloat(Addresses.dunPositionY);
+            // Capture the player's facing (CCharacter +0x60/+0x68 = forward vector, X/Y plane) at cast so the
+            // heat-haze can be pushed BACK along it (the raster is built to rise over a fire ahead → too far forward).
+            float fwx = Memory.ReadFloat(MirageClone.PlayerChar + 0x60), fwy = Memory.ReadFloat(MirageClone.PlayerChar + 0x68);
+            double fmag = System.Math.Sqrt((double)fwx * fwx + (double)fwy * fwy);
+            _decoyFwdX = fmag > 0.0001 ? (float)(fwx / fmag) : 0f;
+            _decoyFwdY = fmag > 0.0001 ? (float)(fwy / fmag) : 0f;
             WriteDecoyPos();   // the stationary decoy position fooled slots' pointers reference
             Array.Clear(_fooled, 0, _fooled.Length);
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
@@ -292,12 +473,19 @@ namespace Dark_Cloud_Improved_Version
         // ── clone visual: a copy of the player CCharacter placed in a free NPC draw slot (the game draws
         //    it for us; see MirageClone). No injected code — pure data. ──────────────────────────────────
         private const bool  CloneEnabled = true;         // MotionParts host: single character-draw slot with its own texture group
-        private const bool  GhostSilhouette = true;      // translucent character clone
+        private const bool  GhostSilhouette = false;     // translucent character clone (false = normal appearance, rely on the heat-haze)
         private const bool  EngineDrivenAnim = true;     // let the engine's chara-step pose the clone tree natively (no polling)
         private const bool  IndependentMesh = true;      // copy the software-skinned body meshes → fully independent clone
         private const bool  WeaponEnabled   = true;      // graft the equipped weapon onto the clone's hand bone
         private const bool  ClothEnabled    = true;      // copy the player's cloth onto the clone
         private const bool  ClothPhysics    = true;      // anchor cloth to the clone skeleton for real sim (needs step-injection)
+        private const bool  HeatHaze        = false;     // DISABLED: fire heat-haze via a cave-stub jal at 0x1DAEBCC
+                                                         // crashes on the clone-draw frame — the scene-gate toggle
+                                                         // re-compiles Draw__11CSeireiKing and the direct jal→cave
+                                                         // chokes the recompiler (only dispatch-jalr into a cave is
+                                                         // safe, and DrawRaster has no fn-ptr table). Kept for a
+                                                         // possible future revisit (force-load textures + a dispatch
+                                                         // reach). While false: no cave write, PNACH jal reverted.
         private const float GhostOpacity = 90f;          // of 128; lower = more see-through
         private const float GhostDim     = 1.0f;         // full lighting so any resident character texture shows
         // Ambient ADD tint (+0xCE0 RGB) folded into the clone's lighting each draw; scene ambient ~128 = neutral,
@@ -305,6 +493,9 @@ namespace Dark_Cloud_Improved_Version
         private const float GhostTintR = 20f;
         private const float GhostTintG = 30f;
         private const float GhostTintB = 65f;
+        private const bool  FireProbe = false;  // DEBUG: dump the dungeon fire-tile data (idea 1: move a torch haze to the clone)
+        private const bool  ForceRaster = false; // (test done: forcing on a torch broke its flame, but NO crash → textures loaded)
+        private static DateTime _fireProbeNext;
         private static int _cloneSlot = -1;   // NPC type slot we borrowed, or -1
         private static int      _probeCid = -1;      // (cid,root) currently being observed for stability
         private static uint     _probeRoot;
@@ -718,6 +909,48 @@ namespace Dark_Cloud_Improved_Version
         /// cloth-cave sizing). Latches per character ID only on a STABLE read (a settled model has many bones),
         /// so the transitional garbage that made the old one-shot DumpCloth unreliable can't lock in bad data.
         /// Cycle party members in a dungeon to capture all six — needed to make Mirage usable for any character.</summary>
+        /// <summary>DEBUG: map the dungeon's fire-tile data for the "move a torch's heat-haze to the clone" idea.
+        /// DrawRaster__11CDungeonMap reads a 20×20 per-tile fire array at dngMap+0x9C50 (0x10/entry: +0=fireIndex
+        /// (-1=none), +4=rotation, +8=distance(float, <=240 to draw), +C=enabled(==1)); an enabled tile draws the
+        /// haze of the fire structure at dngMap+fireIndex*0x1D0. Logs live fire tiles + the decoy's tile so we can
+        /// copy a torch's record onto the clone's tile. Stand near a torch.</summary>
+        private static void DumpFireData()
+        {
+            uint dngMap = (uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF;   // NowDngMap ptr
+            if (dngMap == 0 || dngMap >= 0x02000000) { Console.WriteLine("[Mirage/fire] no dngMap"); return; }
+            long b = Memory.ToMmu(dngMap);
+            int found = 0;
+            for (int t = 0; t < 400 && found < 8; t++)
+            {
+                long e = b + 0x9C50 + (long)t * 0x10;
+                int idx = Memory.ReadInt(e + 0x00);
+                int en  = Memory.ReadInt(e + 0x0C);
+                if (en != 1 || idx == -1 || idx < 0 || idx > 200) continue;
+                float dist = Memory.ReadFloat(e + 0x08);
+                int rot = Memory.ReadInt(e + 0x04);
+                int sub = Memory.ReadUShort(b + (long)idx * 0x1D0 + 0x4A2);
+                Console.WriteLine($"[Mirage/fire] FIRE tile({t % 20},{t / 20}) fireIdx={idx} rot={rot} dist={dist:0.#} | struct@0x{dngMap + (uint)idx * 0x1D0:X} sub={sub} | rec:{BitConverter.ToString(Memory.ReadBytesBatch(e, 0x10) ?? new byte[0]).Replace("-", " ")}");
+                if (found == 0)   // dump the fire struct's emitter region to find the real sub-emitter count/data
+                {
+                    long fs = b + (long)idx * 0x1D0;
+                    byte[] d = Memory.ReadBytesBatch(fs + 0x480, 0x60);
+                    if (d != null) Console.WriteLine($"[Mirage/fire]   struct+0x480: {BitConverter.ToString(d).Replace("-", " ")}");
+                    if (ForceRaster)   // TEST: force one raster (heat-haze) emitter on THIS fire → does the torch shimmer, or crash?
+                    {
+                        Memory.WriteBytesBatch(fs + 0x4A2, new byte[] { 1, 0 });   // count = 1 (emitter[0].pos @+0x4B0 already 0 → draws at tile)
+                        Console.WriteLine($"[Mirage/fire]   FORCED raster count=1 on fireIdx={idx} @0x{dngMap + (uint)idx * 0x1D0:X} — watch that torch for heat-haze (or crash = 'alpha01' not loaded)");
+                    }
+                }
+                found++;
+            }
+            if (_decoyActive)
+            {
+                int dc = (int)((_dx + 80) / 160), dr = (int)((_dy + 80) / 160);
+                Console.WriteLine($"[Mirage/fire] decoy tile ({dc},{dr}) idx={dc + dr * 20} pos=({_dx:0.#},{_dy:0.#})");
+            }
+            if (found == 0) Console.WriteLine($"[Mirage/fire] no fire tiles (dngMap@0x{dngMap:X}) — stand near a torch/flame");
+        }
+
         private static void ProbeCharacter()
         {
             int cid = Player.CurrentCharacterNum();
@@ -998,6 +1231,9 @@ namespace Dark_Cloud_Improved_Version
             WriteGhostTint(slot);
             Memory.WriteInt  (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
             Memory.WriteInt  (MirageClone.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
+            uint dngMap = (uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF;   // NowDngMap
+            SetupCloneHaze(dngMap);     // one-shot: claim a spare fire slot + mark the clone's tile (heat-haze)
+            MaintainCloneHaze(dngMap);  // re-assert the tile marker each tick
 
             // Engine-driven animation: the engine's own chara-step (unlocked via the PNACH step-gate NOP) poses
             // the clone tree at 60fps — no polling. Re-assert the step flags (game may reset between our ticks)
@@ -1033,6 +1269,7 @@ namespace Dark_Cloud_Improved_Version
         private static void DespawnClone()
         {
             // (SceneGateFlag is driven by the Loop now: 2 in-dungeon → PNACH restores vanilla gates, 0 in town.)
+            TeardownCloneHaze((uint)Memory.ReadInt(0x202A34B8) & 0x1FFFFFFF);   // restore the clone tile + free our fire slot
             if (_cloneSlot < 0) return;
             long slot = MirageClone.CharaArray + (long)_cloneSlot * MirageClone.CharaStride;
             Memory.WriteInt (MirageClone.CharaRegistry + (long)_cloneSlot * 4, 0);   // unregister (draw)

@@ -326,6 +326,26 @@ patch=1,EE,21DB79C4,extended,1060001D //  RESTORE step gate (beqz v1) — loop g
 patch=1,EE,21DB7A18,extended,0C04E394 //  keep jal ClothStep (loop gated → unreached; matches flag 1 to avoid jal churn)
 patch=1,EE,21DB7A1C,extended,70002E28 //  keep por a1,zero,zero
 
+//Ungaga Mirage clone heat-haze: (A) 4x the fire-raster sprite size — DrawRaster__9CFireOmni loads its
+//dims via lui v0,0x4170 (15.0) @0x162360 and lui v0,0x4180 (16.0) @0x162368; bump to 0x4270 (60.0) /
+//0x4280 (64.0). (B) relax the raster DIST gate — DrawRaster__11CDungeonMap gates each fire tile on
+//dist<=240.0 (lui v1,0x4370 @0x1C4714, only ~1.5 tiles from camera → haze vanished in hallways); bump
+//to 0x4780 (65536.0) so any tile in the ±4 camera window draws. Both gated on the decoy flag (1/3 = decoy
+//up) so ordinary dungeon fires are untouched; flag 2 restores vanilla. Torch fires have raster count 0,
+//so relaxing the gate only affects our injected clone raster. Shared main-seg fns; PCSX2 reverts per frame.
+patch=1,EE,E1030001,extended,01F10038 //if decoy up: 4x raster + relax dist gate (apply next 3)
+patch=1,EE,20162360,extended,3C024234 //  size 15.0 -> 45.0
+patch=1,EE,20162368,extended,3C024240 //  size 16.0 -> 48.0
+patch=1,EE,201C4714,extended,3C034780 //  dist gate 240.0 -> 65536.0
+patch=1,EE,E1030003,extended,01F10038 //if decoy up + paused: 4x raster + relax dist gate (apply next 3)
+patch=1,EE,20162360,extended,3C024234 //  size 15.0 -> 45.0
+patch=1,EE,20162368,extended,3C024240 //  size 16.0 -> 48.0
+patch=1,EE,201C4714,extended,3C034780 //  dist gate 240.0 -> 65536.0
+patch=1,EE,E1030002,extended,01F10038 //if dungeon, no decoy: restore vanilla size + dist gate (apply next 3)
+patch=1,EE,20162360,extended,3C024170 //  size 60.0 -> 15.0
+patch=1,EE,20162368,extended,3C024180 //  size 64.0 -> 16.0
+patch=1,EE,201C4714,extended,3C034370 //  dist gate 65536.0 -> 240.0
+
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
 patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag
