@@ -623,11 +623,15 @@ namespace Dark_Cloud_Improved_Version
         public static void KitchenKnifeEffect()
         {
             bool boosted = false;
+            bool warnedNoBlade = false;
             ushort baseAtk = 0;
             DateTime deadline = DateTime.MinValue;
+            bool haveKk = ToanWeapons.TryGetValue(Items.kitchenknife, out WeaponData kk);
             float factor = KkTargetLength /
-                (ToanWeapons.TryGetValue(Items.kitchenknife, out WeaponData kk) && kk.Dcol1.HasValue
-                    ? Math.Abs(kk.Dcol1.Value) : 4.187f);
+                (haveKk && kk.Dcol1.HasValue ? Math.Abs(kk.Dcol1.Value) : 4.187f);
+            // The blade frame is named after the weapon's OWN model code: c01w08 → "w08". It is NOT a shared
+            // "blade" name — Heaven's Cloud's is "w14" (c01w14), which is why hardcoding that found nothing here.
+            string kkCode = haveKk ? kk.Code : "c01w08";
 
             DateTime lastTick = DateTime.UtcNow;
             while (Player.Weapon.GetCurrentWeaponId() == Items.kitchenknife && Player.InDungeonFloor())
@@ -642,7 +646,9 @@ namespace Dark_Cloud_Improved_Version
                     continue;
                 }
 
-                bool inSpring = Memory.ReadInt(HealingSpring.InZoneFlag) == 1 &&
+                // InZoneFlag is a 16-bit field (the engine writes it with `sh`) — reading it as an int pulls in
+                // the adjacent halfword, so the == 1 test fails whenever that neighbour is non-zero.
+                bool inSpring = Memory.ReadUShort(HealingSpring.InZoneFlag) == 1 &&
                                 Player.CurrentCharacterNum() == Player.ToanId;
                 long atkAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffAttackOffset;
 
@@ -665,13 +671,21 @@ namespace Dark_Cloud_Improved_Version
                         ushort cur = Memory.ReadUShort(atkAddr);
                         if (cur == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
                             Memory.WriteUShort(atkAddr, baseAtk);            // untouched by reloads → restore
-                        Weapons.ScaleAllWeaponMeshes(1f);
+                        Weapons.ScaleWeaponBlade(kkCode, 1f);
                         boosted = false;
                         Dayuppy.DisplayMessage("The spring's blessing fades\nfrom the Kitchen Knife...", 2, 30, 4000);
                     }
                     else
                     {
-                        Weapons.ScaleAllWeaponMeshes(factor);                // re-assert (floor reload re-poses)
+                        // Same mechanism Heaven's Cloud uses; the blade frame is derived from the weapon's own
+                        // model code (c01w08 -> "w08"), so the visible blade and its dcol hit point grow together.
+                        if (!Weapons.ScaleWeaponBlade(kkCode, factor) && !warnedNoBlade)
+                        {
+                            warnedNoBlade = true;
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                                $"[KitchenKnife] blade mesh for code '{kkCode}' not located — dumping the model's frame tree:");
+                            Weapons.DumpWeaponFrameTree();
+                        }
                         ushort cur = Memory.ReadUShort(atkAddr);
                         if (cur == baseAtk)                                  // battle record was refreshed → re-apply
                             Memory.WriteUShort(atkAddr, (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue));
@@ -685,7 +699,7 @@ namespace Dark_Cloud_Improved_Version
                 long atkAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffAttackOffset;
                 if (Memory.ReadUShort(atkAddr) == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
                     Memory.WriteUShort(atkAddr, baseAtk);
-                Weapons.ScaleAllWeaponMeshes(1f);
+                Weapons.ScaleWeaponBlade(kkCode, 1f);
             }
         }
 
@@ -1021,28 +1035,63 @@ namespace Dark_Cloud_Improved_Version
         {
             const float maxScale = 3.0f;       // blade grows up to 3x
             const double growSeconds = 4.0;    // wall-clock time to grow from 1x to maxScale
+            // Growth CURVE. factor = 1 + (maxScale-1) * t^growExponent, t = 0..1 over growSeconds. An exponent
+            // > 1 makes the curve convex: the blade creeps at the start of the hold and accelerates into the
+            // last second, so committing to a long charge feels like it pays off. Total duration is unchanged —
+            // only the shape is. (1.0 = the old linear ramp; raise it for a later, sharper surge.)
+            const float growExponent = 2.5f;
             var growTimer = new System.Diagnostics.Stopwatch();
             float factor = 1.0f;
             bool active = false;               // a non-base scale is applied and still needs resetting
+            bool charging = false;             // in a whirlwind windup (survives a pause; growTimer does not)
+            bool flashedMax = false;           // max-size flash already fired for THIS charge
+            bool warnedNoBlade = false;
 
             while (Player.Weapon.GetCurrentWeaponId() == Items.heavenscloud &&
                    Player.InDungeonFloor())
             {
                 if (Weapons.IsChargingWhirlwind())      // whirlwind charge specifically → grow the blade over time
                 {
-                    if (!growTimer.IsRunning) growTimer.Restart();   // whirlwind charge just began
+                    // The game's charge freezes while paused, so ours must too — otherwise the blade jumps a
+                    // chunk of its ramp the moment you unpause. Hold the stopwatch, keep `charging` set so the
+                    // resume below doesn't mistake this for a fresh charge and restart the ramp at zero.
+                    if (Player.CheckDunIsPausedOrMenu())
+                    {
+                        if (growTimer.IsRunning) growTimer.Stop();
+                        Thread.Sleep(30);
+                        continue;
+                    }
+
+                    if (!charging)                                   // whirlwind charge just began
+                    {
+                        charging = true; flashedMax = false;
+                        growTimer.Restart();
+                    }
+                    else if (!growTimer.IsRunning) growTimer.Start();   // resuming after a pause
+
                     float t = (float)Math.Min(1.0, growTimer.Elapsed.TotalSeconds / growSeconds);
-                    factor = 1.0f + t * (maxScale - 1.0f);
+                    factor = 1.0f + (float)Math.Pow(t, growExponent) * (maxScale - 1.0f);
                     active = true;
+
+                    // Hit full size → flash Toan once, the same engine ambient-pulse that marks Ruby's Mobius
+                    // charge peaking. It's the only feedback that the blade has stopped growing and holding
+                    // longer buys nothing.
+                    if (t >= 1.0f && !flashedMax)
+                    {
+                        flashedMax = true;
+                        Player.FlashChargeComplete();
+                    }
                 }
                 else if (Weapons.IsWhirlwindActive())   // whirlwind executing → hold the size reached during the charge
                 {
                     growTimer.Stop();
+                    charging = false;
                     active = true;
                 }
                 else if (active)                        // charge finished → snap the blade back to its original size
                 {
                     growTimer.Reset();
+                    charging = false;
                     factor = 1.0f;
                     Weapons.ResetHeavensCloudReach();
                     active = false;
@@ -1054,7 +1103,15 @@ namespace Dark_Cloud_Improved_Version
                 // on each cast, so the scale must be re-applied while it's live).
                 if (active)
                 {
-                    Weapons.ScaleHeavensCloudBlade(factor);
+                    // If the blade frame won't resolve, say so ONCE and dump the tree — the model's frame names
+                    // are not guessable (HC's mesh is a 'w14' child; the Kitchen Knife's is its root).
+                    if (!Weapons.ScaleHeavensCloudBlade(factor) && !warnedNoBlade)
+                    {
+                        warnedNoBlade = true;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            "[HeavensCloud] blade mesh not located — dumping the model's frame tree:");
+                        Weapons.DumpWeaponFrameTree();
+                    }
                     Weapons.ScaleHeavensCloudWhirl(factor);
                     Weapons.ScaleHeavensCloudHitbox(factor + 2.0f);
                 }
@@ -1066,6 +1123,12 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Macho Sword "Overtraining" (ABS rollover) ──────────────────────────────────────
+        /// <summary>Rollover ceiling: current ABS may grow to this multiple of the weapon's max. This is the
+        /// MOD's policy, not something the game does (vanilla is inert above max — see
+        /// <see cref="WeaponCollision.AbsRewards"/>), so it lives with the feature rather than in an addresses
+        /// file.</summary>
+        private const int RolloverFactor = 2;
+
         private static DateTime _machoNextTick = DateTime.MinValue;
 
         private static DateTime _machoNextOwnershipCheck = DateTime.MinValue;
@@ -1120,7 +1183,7 @@ namespace Dark_Cloud_Improved_Version
         /// Ability Name: Overtraining (Macho Sword) — replaces the old Shadow Boxing effect.
         /// PASSIVE: as long as a Macho Sword is OWNED (equipped, in Toan's bag, or in storage —
         /// it does not need to be in hand), every weapon's ABS keeps absorbing past its max, up
-        /// to <see cref="WeaponCollision.AbsRollover.RolloverFactor"/>× (98/100 + a 6-ABS kill →
+        /// to <see cref="RolloverFactor"/>× (98/100 + a 6-ABS kill →
         /// 104/100, cap 200/100), and the rolled-over surplus carries into the next level
         /// (level up at 116/100 → the new level starts at 16 ABS).
         ///
@@ -1187,10 +1250,10 @@ namespace Dark_Cloud_Improved_Version
             // Resolve the ACTIVE character's equipped inventory record — kill ABS lands there.
             int ch = Player.CurrentCharacterNum();
             if ((uint)ch > 5) { _machoShadowRecord = 0; return; }
-            int equipSlot = Memory.ReadByte(WeaponCollision.AbsRollover.UserStatusBase +
-                                            WeaponCollision.AbsRollover.EquipSlotArrayOffset + ch);
+            int equipSlot = Memory.ReadByte(UserStatus.Base +
+                                            UserStatus.EquipSlotArrayOffset + ch);
             if ((uint)equipSlot > 9) { _machoShadowRecord = 0; return; }
-            long rec = WeaponCollision.AbsRollover.RecordAddr(ch, equipSlot);
+            long rec = UserStatus.WeaponRecord(ch, equipSlot);
             int id = Memory.ReadUShort(rec);
             int max = MachoMaxExp(id, Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset));
             int cur = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset);
@@ -1206,15 +1269,15 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
 
-            bool drainMode = Memory.ReadInt(WeaponCollision.AbsRollover.UserStatusBase +
-                                            WeaponCollision.AbsRollover.TransformStateOffset) == 10;
+            bool drainMode = Memory.ReadInt(UserStatus.Base +
+                                            UserStatus.TransformStateOffset) == 10;
             bool eligible = max > 0 && !drainMode && !MachoIsAbslessWeapon(id);
 
             // 1) Kills first — so a fast engine grant that already landed isn't counted twice.
             int grants = MachoCollectKillGrants(ch, eligible);
             if (grants > 0)
             {
-                int cap = WeaponCollision.AbsRollover.RolloverFactor * max;
+                int cap = RolloverFactor * max;
                 _machoTrueAbs = Math.Min(_machoTrueAbs + grants, cap);
                 _machoLastGrantAt = DateTime.UtcNow;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -1242,7 +1305,7 @@ namespace Dark_Cloud_Improved_Version
         private static int MachoCollectKillGrants(int activeChar, bool eligible)
         {
             int total = 0;
-            bool backFloor = Memory.ReadInt(WeaponCollision.AbsRollover.BackFloorDoubleAddr) != 0;
+            bool backFloor = Memory.ReadInt(WeaponCollision.AbsRewards.BackFloorDoubleAddr) != 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
@@ -1257,9 +1320,9 @@ namespace Dark_Cloud_Improved_Version
                 int give = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Abs));
                 if (give <= 0) continue;
                 if (backFloor) give <<= 1;
-                if ((Memory.ReadInt(WeaponCollision.AbsRollover.SlotStatusFlagsAddr(s)) &
-                     WeaponCollision.AbsRollover.AbsBonusFlag) != 0)
-                    give = (int)(give * WeaponCollision.AbsRollover.AbsBonusMult);
+                if ((Memory.ReadInt(WeaponCollision.AbsRewards.SlotStatusFlagsAddr(s)) &
+                     WeaponCollision.AbsRewards.AbsBonusFlag) != 0)
+                    give = (int)(give * WeaponCollision.AbsRewards.AbsBonusMult);
                 total += give;
             }
             return total;
@@ -1282,7 +1345,7 @@ namespace Dark_Cloud_Improved_Version
                 int ch = Memory.ReadByte(WeaponCollision.MenuSelectedCharacter);
                 int slot = Memory.ReadByte(WeaponCollision.MenuSelectedWeaponSlot);
                 if ((uint)ch > 5 || (uint)slot > 9) return;
-                long rec = WeaponCollision.AbsRollover.RecordAddr(ch, slot);
+                long rec = UserStatus.WeaponRecord(ch, slot);
                 ushort id = Memory.ReadUShort(rec);
                 short level = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset);
                 int max = MachoMaxExp(id, level);
@@ -1291,7 +1354,7 @@ namespace Dark_Cloud_Improved_Version
                 if (abs <= max) return;               // no rollover on the leveling weapon — vanilla handles it
                 _machoFlowId = id;
                 _machoFlowPrevLevel = level;
-                _machoFlowCarry = Math.Min(abs, WeaponCollision.AbsRollover.RolloverFactor * max) - max;
+                _machoFlowCarry = Math.Min(abs, RolloverFactor * max) - max;
                 _machoFlowArmedAt = now;
                 _machoFlowRec = rec;                  // set last — arms the strike thread's loop
                 if (_machoStrikeThread == null || !_machoStrikeThread.IsAlive)
@@ -1376,7 +1439,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 for (int slot = 0; slot < 10; slot++)
                 {
-                    long rec = WeaponCollision.AbsRollover.RecordAddr(ch, slot);
+                    long rec = UserStatus.WeaponRecord(ch, slot);
                     ushort id = Memory.ReadUShort(rec);
                     bool validWeapon = id >= 257 && id <= 376;
                     short level = validWeapon ? Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset) : (short)0;
@@ -1409,7 +1472,7 @@ namespace Dark_Cloud_Improved_Version
                             rolled = prev.RolledAbs;
                         if (prevMax > 0)
                         {
-                            int expected = Math.Max(0, Math.Min(rolled, WeaponCollision.AbsRollover.RolloverFactor * prevMax) - prevMax);
+                            int expected = Math.Max(0, Math.Min(rolled, RolloverFactor * prevMax) - prevMax);
                             // Settle only the cases that are OURS to settle: a commit that
                             // zeroed a rollover below its carry (the normal case), or one that
                             // left the rolled value fully in place. A path that natively kept a
@@ -1452,12 +1515,12 @@ namespace Dark_Cloud_Improved_Version
                     int ch = int.Parse(p[0]); int slot = int.Parse(p[1]);
                     int id = int.Parse(p[2]); int surplus = int.Parse(p[4]);
                     if ((uint)ch > 5 || (uint)slot > 9 || surplus <= 0) continue;
-                    long rec = WeaponCollision.AbsRollover.RecordAddr(ch, slot);
+                    long rec = UserStatus.WeaponRecord(ch, slot);
                     if (Memory.ReadUShort(rec) != id) continue;
                     int max = MachoMaxExp(id, Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset));
                     if (max <= 0) continue;
                     int abs = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset);
-                    int merged = Math.Min(abs + surplus, WeaponCollision.AbsRollover.RolloverFactor * max);
+                    int merged = Math.Min(abs + surplus, RolloverFactor * max);
                     if (merged > abs)
                     {
                         Memory.WriteUShort(rec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)merged);

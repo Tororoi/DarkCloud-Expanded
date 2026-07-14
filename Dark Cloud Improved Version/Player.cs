@@ -299,6 +299,13 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CharacterFlash.Enable, 1);     // enable last
         }
 
+        /// <summary>Fire the game's STOCK charge-complete flash (see <see cref="CharacterFlash.ChargeR"/>) on the
+        /// active character. Use this rather than hand-picking an RGB whenever the flash means "a charge finished
+        /// building" — it is what Ruby's Mobius peak and Ungaga's guard charge use, so it matches the vanilla tint.</summary>
+        public static void FlashChargeComplete()
+            => FlashActiveCharacter(CharacterFlash.ChargeR, CharacterFlash.ChargeG, CharacterFlash.ChargeB,
+                                    CharacterFlash.ChargeSpeed, CharacterFlash.ChargeCount);
+
         internal class Inventory
         {
             /// <summary>

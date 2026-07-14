@@ -12,7 +12,8 @@ namespace Dark_Cloud_Improved_Version
     /// Enemy-side abilities reuse the <c>CustomToanEffects</c> drivers directly (they only touch enemy data);
     /// what lives here is the Xiao body adaptations. Each driver is named after its SOURCE weapon (the one
     /// whose sphere grants it): <c>DriveSmallSword</c> = Quick Draw, <c>DriveTsukikage</c> = Moonlit Focus,
-    /// <c>DriveHeavensCloud</c> = the charge → grow + shrapnel burst, <c>DriveAgasSword</c> = Defensive Legacy,
+    /// <c>DriveHeavensCloud</c> = the two-stage charge → wind-gem crowd-control blast, <c>DriveAgasSword</c> =
+    /// Defensive Legacy,
     /// <c>DriveBraveArk</c> = Hero's Courage.
     /// </summary>
     internal static class SuperSteveAbilities
@@ -140,47 +141,75 @@ namespace Dark_Cloud_Improved_Version
             if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
         }
 
-        // ── Moonlit Focus + Heaven's Cloud (charge → grow + shrapnel burst) ──
-        private const float HcPelletScale    = 8f;          // Heaven's Cloud: pellet at MAX charge (shot-pool +0x310)
-        private const float HcSlingshotScale = 2f;          // Heaven's Cloud: slingshot 'c04w' mesh at MAX charge
-        private const double ChargeGrowSeconds = 1;         // hold time to reach max charge (base→full)
-        private const float HcMaxDamageMult  = 1.5f;        // Heaven's Cloud: pellet damage at full charge (partial-charge payoff)
-        private static bool _ssFlashedThisCharge;           // edge latch: one flash per charge-to-max
+        // ── Moonlit Focus + Heaven's Cloud (two-stage charge → a wind-gem crowd-control blast) ──
+        // Faithful to the real Heaven's Cloud: the payoff is CONTROL, not raw damage. Xiao's hold has TWO stages,
+        // each announced by the game's own charge flash:
+        //   flash 1 (ChargeLevel1Frac) — the shot is "empowered": from here the pellet and the wind burst grow
+        //                                with the hold, and ANY shot released past this point bursts on impact.
+        //   flash 2 (full charge)      — maximum pellet, maximum burst, maximum blast radius.
+        // On impact the burst detonates as a wind shockwave: damage in a LARGE radius plus a heavy RADIAL launch
+        // that throws everything caught in it clear of the blast (Enemies.RadialKnockback).
+        private const float HcPelletScale    = 8f;          // pellet size at MAX charge (shot-pool +0x310)
+        private const float HcSlingshotScale = 1f;          // slingshot 'c04w' mesh at MAX charge
+        private const double ChargeGrowSeconds = 3;         // hold time from base to FULL charge
+        private const float HcMaxDamageMult  = 1.5f;        // pellet damage at full charge (partial-charge payoff)
+        private const float ChargeLevel1Frac = 0.125f;        // flash 1: scaling + the wind burst start here
+        private const float ChargeLevel2Frac = 0.98f;       // flash 2: max (just shy of 1.0 so it reliably latches)
+        private static bool _ssFlashedLevel1;               // edge latch: one flash per charge stage
+        private static bool _ssFlashedLevel2;
         private static float _ssSlingScale = 1f;            // current slingshot mesh scale
         private static bool  _ssHolding;                    // currently drawing/holding a shot
         private static DateTime _ssHoldStart;               // when the current hold began
         private static float _ssHoldFrac;                   // 0..1 charge fraction (frozen on release for the pellet)
 
-        // Heaven's Cloud impact = a shrapnel BURST: on a pellet hit, spawn 8 real CSHOT pellets radiating out
-        // from the hit enemy along the ground plane. They're actual pellets (collision ENABLED, +0x280=0) so
-        // they deal real weapon damage + hit reactions to whatever they fly into — the game's own hitbox does
-        // the "splash", no faked HP writes. They spawn just outside the hit enemy's body, then fly out + expire.
-        private const int   BurstCount          = 8;      // pellets per burst (8 compass directions)
-        private const float BurstSpeed          = 2.5f;   // outward units/frame (matches a normal pellet ~5.0/3.5)
-        // MUST spawn outside the origin enemy's hitbox (2.0 + its part_radius, checkCollision 0x1AB740), or the
-        // shrapnel collides with it on frame 1 and dies before moving. Big enemies have radius ~4-8; 16 also
-        // stops the occasional stray pellet re-clipping the hit enemy for a double-hit.
-        private const float BurstStartOffset    = 16f;    // spawn this far from the enemy center
-        private const int   BurstLifetime       = 0x40;   // frames the shrapnel lives → reach ≈ Speed × this
-        private const float BurstDamageFraction = 0.5f;   // each shrapnel's +0x2E0 attack = this × the weapon's attack stat
-        private const float BurstScale          = 1f;     // shrapnel sprite scale (+0x310) — normal pellet size (only the charged shot grows)
-        // The burst only fires from a MAX-charge shot. A max-charge pellet spawning arms this timestamp; the
-        // next Xiao hit within the window bursts and consumes it (covers the pellet's flight time).
-        private const float BurstMaxChargeThreshold = 0.95f;                       // charge fraction that counts as "max"
-        private static readonly TimeSpan BurstChargeWindow = TimeSpan.FromSeconds(2.5);
-        private static DateTime _ssMaxChargeFiredAt = DateTime.MinValue;
-        // Movement AND collision share one block in step__5CSHOT (pos+=vel only runs when +0x280==0), so pass-
-        // through pellets can't move. Real shrapnel = collision on (false). true = frozen visibility debug only.
-        internal static bool _hcBurstPassThrough = false;
-        private static readonly int[] _ssSplashPrevHp = new int[EnemyAddresses.FloorSlots.Count];
-        private static byte _ssSplashFloor = 0xFF;
+        // The wind BLAST. Everything scales 0..1 across the empowered band (flash 1 → flash 2), so a barely-charged
+        // shot pops a small gust and a full charge clears the room.
+        private const float WindFxScaleMin   = 2f;      // burst visual at flash 1
+        private const float WindFxScaleMax   = 5f;      // burst visual at full charge
+        private const float WindRadiusMin    = 60f;     // blast radius at flash 1 (world units)
+        private const float WindRadiusMax    = 160f;    // blast radius at full charge
+        private const float WindDamageFrac   = 0.75f;   // blast damage = this × the weapon's attack, × charge
+        // Knockback. Enemies.RadialKnockback derives each enemy's force from how far it must travel to clear the
+        // blast (distance ≈ force²/(2·decay)), so these only set the CHARACTER of the launch, not its distance —
+        // an enemy at the centre is thrown the full radius and one at the edge is nudged. Decay is the drain rate
+        // (vanilla runs 0.10 for a Pirate's Chariot to 0.30 for a Dasher); MaxForce is the anti-orbit clamp.
+        private const float WindKnockDecay   = 0.25f;   // a brisk, punchy shove rather than a long glide
+        private const float WindKnockMaxForce = 6f;     // clamp — a flat 40 threw enemies clean off the map
+        private const float WindKnockMargin  = 0f;      // land them ON the edge; no extra shove past it
+        private const float WindKnockScale   = 0.5f;    // the model's ideal slide runs LONG in practice — trim it
+        // The KNOCKBACK centre sits a little SHORT of the impact, back along the line from Xiao — the VISUAL stays
+        // on the impact itself. A pellet can strike a part of the enemy BEHIND its centre, which would put a
+        // centred blast behind the enemy and throw it at the player; pulling only the launch origin toward Xiao
+        // keeps enemies on the far side of it, so they are always pushed away, without shifting the effect.
+        private const float WindCenterPullback = 5f;
+        // Play-rate of the burst animation, as a MULTIPLIER of the motion's own baked rate (GemBurst reads the
+        // real KEY step and scales it — the engine's override is absolute, and a motion's native rate is NOT 1.0).
+        // The bigger the burst, the slower it plays: the animation was authored for a small thrown-gem puff, so at
+        // full scale the stock rate makes a room-sized gust look like it snaps rather than billows.
+        private const float WindFxSpeedAtMin = 1.0f;    // at flash-1 scale — the motion's own rate, untouched
+        private const float WindFxSpeedAtMax = 0.5f;    // at full charge — half speed
+        private const float WindColRadiusFrac  = 0.55f;  // damage sphere vs. the knockback radius — the wind pushes
+                                                          // further than it hurts, so the edge shoves without hitting
+        // The burst model's geometry RISES from its own origin, so anchoring the origin on the hit mark leaves the
+        // effect sitting above it — and scaling the model scales that rise too, which is why it looked worse the
+        // bigger the charge. The correction therefore has to scale WITH the burst, not be a fixed nudge: drop the
+        // origin by this much per 1x of scale, so the visible burst stays centred on the impact at every size.
+        private const float WindFxRisePerScale = 5f;
+
+        // The armed pellet, tracked from the frame it is fired to the frame it dies. Its LAST KNOWN POSITION is
+        // the impact point. We track the pellet rather than watching for enemy damage because a GUARDED hit deals
+        // no damage and does not advance the engine's hit ring — but the pellet still dies on the guard, so the
+        // burst and the shove happen regardless of whether the blow got through. (An enemy must be near the death
+        // point, or the pellet simply expired at the end of its flight and there is nothing to burst on.)
+        private static int      _ssArmedSlot = -1;      // shot-pool slot of the empowered pellet in flight
+        private static float    _ssArmedCharge;         // 0..1 across the empowered band, frozen at the shot
+        private static float    _ssArmedX, _ssArmedH, _ssArmedY;   // its last seen position
+        private static int      _ssArmedElement;        // the weapon's selected element, frozen at the shot
+        private const float WindImpactProximity = 40f;  // an enemy must be this close to the pellet's death point
+
         // Per-slot "already applied" latches — one per driver, so a pellet gets each effect exactly once.
         private static readonly bool[] _moonlitHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
         private static readonly bool[] _hcHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
-        // Slots we spawned as shrapnel, still in flight. While any are alive, hit-detection is suppressed so
-        // the shrapnel's own kills don't spawn more shrapnel (cascade). Plus a short settle cooldown after.
-        private static readonly List<int> _hcBurstSlots = new List<int>();
-        private static DateTime _hcBurstCooldownUntil;
 
         /// <summary>Moonlit Focus (Tsukikage / Heaven's Cloud): doubles each newly-fired pellet's +0x1C0
         /// velocity (2× shot speed), once per pellet. Per-slot latched; the latch clears when the slot frees.</summary>
@@ -202,11 +231,11 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>Heaven's Cloud (Heaven's Cloud sphere) — a CHARGE effect. Tracks the hold → 0..1 charge
-        /// fraction (frozen on release so the fired pellet reads it), grows the slingshot mesh and the fired
-        /// pellet (+0x310 scale) and scales its damage up to <see cref="HcMaxDamageMult"/>, flashes Xiao once
-        /// at full charge, and bursts shrapnel on hit. When inactive it resets (slingshot back to 1×, latches
-        /// cleared) while still keeping the burst HP snapshot fresh.</summary>
+        /// <summary>Heaven's Cloud (Heaven's Cloud sphere) — a two-stage CHARGE, ending in a crowd-control blast.
+        /// Tracks the hold as a 0..1 fraction (frozen on release so the fired pellet reads it) and flashes Xiao at
+        /// each stage. Past flash 1 the shot is "empowered": the slingshot, the pellet and its damage all grow with
+        /// the hold, and the shot arms a wind burst that detonates on impact (see <see cref="ImpactBurstDrive"/>).
+        /// When inactive everything resets (slingshot back to 1×, latches cleared).</summary>
         internal static void DriveHeavensCloud(bool active)
         {
             int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
@@ -221,23 +250,29 @@ namespace Dark_Cloud_Improved_Version
             }
             else _ssHolding = false;
 
-            // Grow the fired pellet + scale its damage up to HcMaxDamageMult with the held charge, once each.
-            // A max-charge shot arms the shrapnel burst for its next hit.
+            // How far into the EMPOWERED band (flash 1 → flash 2) the charge is: 0 below flash 1, 1 at full. This
+            // one number drives the pellet, the burst visual, the blast radius and the blast damage.
+            float empowered = EmpoweredFrac(_ssHoldFrac);
+
+            // Grow the fired pellet + scale its damage, once each. A shot fired while empowered arms the burst.
             long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
             if (Memory.IsValidGuest(poolBase))
             {
-                float pelletScale = active ? 1f + _ssHoldFrac * (HcPelletScale - 1f) : 1f;
+                float pelletScale = active ? 1f + empowered * (HcPelletScale - 1f) : 1f;
                 bool bigPellet = pelletScale > 1.01f;
                 for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
                 {
                     bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
                     if (bigPellet && live && !_hcHandled[i])
                     {
-                        float chargeFrac = (pelletScale - 1f) / (HcPelletScale - 1f);   // 0..1
                         Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, i), pelletScale);
                         long dmgA = WeaponCollision.PlayerShotPool.DamageAddr(poolBase, i);
-                        Memory.WriteInt(dmgA, (int)(Memory.ReadInt(dmgA) * (1f + chargeFrac * (HcMaxDamageMult - 1f))));
-                        if (chargeFrac >= BurstMaxChargeThreshold) _ssMaxChargeFiredAt = DateTime.UtcNow;
+                        Memory.WriteInt(dmgA, (int)(Memory.ReadInt(dmgA) * (1f + empowered * (HcMaxDamageMult - 1f))));
+                        _ssArmedSlot   = i;                  // ANY empowered shot bursts on impact, not just a max one
+                        _ssArmedCharge = empowered;
+                        // The burst LOOKS like wind but HURTS like the weapon: it inherits whatever element is
+                        // selected on Super Steve (0 = none). Frozen at the shot, like the charge.
+                        _ssArmedElement = Weapons.SelectedElementBits(Weapons.EquippedRecord());
                         _hcHandled[i] = true;
                     }
                     else if (!live) _hcHandled[i] = false;
@@ -246,104 +281,109 @@ namespace Dark_Cloud_Improved_Version
 
             // Slingshot 'c04w' mesh: grow with the hold, HOLD through the shoot (0xD), snap back after. Multiply-
             // scale preserves the frame's baked rotation; _ssHoldFrac stays frozen for 0xB/0xC/0xD.
-            _ssSlingScale = (active && (holding || shooting)) ? 1f + _ssHoldFrac * (HcSlingshotScale - 1f) : 1f;
+            _ssSlingScale = (active && (holding || shooting)) ? 1f + empowered * (HcSlingshotScale - 1f) : 1f;
             Weapons.ScaleWeaponFrameByName(WeaponCollision.XiaoSlingMeshNameWord, _ssSlingScale);
 
-            // Whole-character flash ONCE on reaching full charge (edge-latched; rearms on release) — burst armed.
-            if (active && holding && _ssHoldFrac >= BurstMaxChargeThreshold && !_ssFlashedThisCharge)
-            { Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1); _ssFlashedThisCharge = true; }
-            else if (!holding) _ssFlashedThisCharge = false;
+            // TWO flashes, each edge-latched and re-armed on release: flash 1 = "empowered from here", flash 2 =
+            // "maxed, holding longer buys nothing". Both use the game's own charge-complete pulse.
+            if (active && holding)
+            {
+                if (_ssHoldFrac >= ChargeLevel1Frac && !_ssFlashedLevel1)
+                { Player.FlashChargeComplete(); _ssFlashedLevel1 = true; }
+                if (_ssHoldFrac >= ChargeLevel2Frac && !_ssFlashedLevel2)
+                { Player.FlashChargeComplete(); _ssFlashedLevel2 = true; }
+            }
+            else if (!holding) { _ssFlashedLevel1 = false; _ssFlashedLevel2 = false; }
 
-            // Each pellet hit bursts into shrapnel radiating from the enemy (real collision damage).
-            HeavensCloudBurstDrive(active);
+            ImpactBurstDrive(active);
         }
 
-        /// <summary>Heaven's Cloud impact = a shrapnel BURST. When a Xiao pellet hits an enemy (its HP drops
-        /// with the damage source == Xiao), spawn <see cref="BurstCount"/> real CSHOT pellets radiating out
-        /// along the ground plane from the hit enemy. They collide natively (fixed 2.0 hitbox) and deal real
-        /// weapon damage to whatever they fly into — no faked HP writes. Hit-detection is suppressed while any
-        /// shrapnel is still airborne (and briefly after) so the shrapnel's own kills don't spawn more shrapnel.</summary>
-        private static void HeavensCloudBurstDrive(bool active)
+        /// <summary>Position within the EMPOWERED band: 0 below flash 1 (an ordinary shot — no growth, no burst),
+        /// ramping to 1 at full charge. Everything the charge scales reads this rather than the raw hold, so the
+        /// first flash is a real threshold rather than a cosmetic marker.</summary>
+        private static float EmpoweredFrac(float holdFrac)
         {
-            int n = EnemyAddresses.FloorSlots.Count;
-            int[] cur = new int[n];
-            for (int s = 0; s < n; s++) cur[s] = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
+            if (holdFrac < ChargeLevel1Frac) return 0f;
+            return Math.Min(1f, (holdFrac - ChargeLevel1Frac) / (ChargeLevel2Frac - ChargeLevel1Frac));
+        }
 
-            byte floor = Memory.ReadByte(Addresses.checkFloor);
-            if (floor != _ssSplashFloor)   // new floor: reseat the baseline, forget any in-flight shrapnel
+        /// <summary>Detonate the armed wind burst when the empowered pellet lands.
+        ///
+        /// The trigger is the PELLET's own death, not enemy damage. Earlier versions watched the engine's hit ring
+        /// (CheckDmg's hitCnt), but a GUARDED hit deals no damage and never advances that ring — so guarding made
+        /// the whole effect vanish. The pellet dies on a guard just the same, so tracking the pellet gives an
+        /// impact signal that survives guards, and its last position IS the point of impact. A pellet that simply
+        /// expired at the end of its flight has no enemy near it, and bursts on nothing.
+        ///
+        /// The burst's DAMAGE is the engine's: the effect carries its own collision sphere, widened to cover the
+        /// area, so CheckDmg resolves it and guards/elements/death/drops all behave. It must never be an HP write —
+        /// that skips the death path and leaves an unkillable walking corpse (see Enemies.RadialKnockback).
+        ///
+        /// The VISUAL sits on the impact; only the KNOCKBACK origin is pulled back toward Xiao, so enemies are
+        /// thrown away from her even when the pellet struck the far side of one.</summary>
+        private static void ImpactBurstDrive(bool active)
+        {
+            if (!active)
             {
-                _ssSplashFloor = floor;
-                for (int s = 0; s < n; s++) _ssSplashPrevHp[s] = cur[s];
-                _hcBurstSlots.Clear();
+                if (_ssArmedSlot >= 0) _ssArmedSlot = -1;
+                GemBurst.Restore(MasekiEffect.Wind);   // hand the shared collision radius back to the game
+                return;
+            }
+            if (_ssArmedSlot < 0) return;
+
+            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            if (!Memory.IsValidGuest(poolBase)) { _ssArmedSlot = -1; return; }
+
+            // Still in flight → keep its position fresh; the last one we see before it dies is the impact point.
+            if (Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
+            {
+                long pp = WeaponCollision.PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
+                _ssArmedX = Memory.ReadFloat(pp);
+                _ssArmedH = Memory.ReadFloat(pp + 4);
+                _ssArmedY = Memory.ReadFloat(pp + 8);
                 return;
             }
 
-            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
-            bool poolOk = Memory.IsValidGuest(poolBase);
+            _ssArmedSlot = -1;                                   // it landed — one blast per empowered shot
+            if (!EnemyNear(_ssArmedX, _ssArmedY, WindImpactProximity)) return;   // hit a wall / flew its full range
 
-            // Prune shrapnel that has hit/expired; while any is still airborne, don't react to HP drops (its
-            // own collision damage would otherwise read as fresh hits → runaway cascade).
-            if (poolOk)
-                _hcBurstSlots.RemoveAll(s => Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, s)) == 0);
-            // Only a MAX-charge shot's hit bursts (armed at fire, valid for the pellet's flight window).
-            bool maxChargeArmed = DateTime.UtcNow - _ssMaxChargeFiredAt < BurstChargeWindow;
-            bool clearToBurst = poolOk && maxChargeArmed && _hcBurstSlots.Count == 0 &&
-                                DateTime.UtcNow >= _hcBurstCooldownUntil;
+            float charge = _ssArmedCharge;                       // 0..1 across the empowered band
+            float scale  = WindFxScaleMin + charge * (WindFxScaleMax - WindFxScaleMin);
+            float radius = WindRadiusMin  + charge * (WindRadiusMax  - WindRadiusMin);
+            int   damage = (int)(Player.Weapon.GetCurrentWeaponAttack() * WindDamageFrac * (0.5f + 0.5f * charge));
 
-            if (active && clearToBurst && ReusableFunctions.GetDamageSourceCharacterID() == Player.XiaoId)
+            // VISUAL: on the impact. Its geometry rises from its own origin and that rise scales with the model,
+            // so the origin has to drop proportionally for the burst to stay centred on the impact at every size.
+            float fxSpeed = WindFxSpeedAtMin + charge * (WindFxSpeedAtMax - WindFxSpeedAtMin);
+            GemBurst.Show(MasekiEffect.Wind, _ssArmedX, _ssArmedH - scale * WindFxRisePerScale, _ssArmedY,
+                          scale, damage, radius * WindColRadiusFrac, fxSpeed, _ssArmedElement);
+
+            // KNOCKBACK: from a centre pulled back toward Xiao, so everything is thrown away from her.
+            float px = Memory.ReadFloat(Player.dunPositionX), py = Memory.ReadFloat(Player.dunPositionX + 8);
+            float ax = _ssArmedX - px, ay = _ssArmedY - py;      // player → impact
+            float alen = (float)Math.Sqrt(ax * ax + ay * ay);
+            float kx = _ssArmedX, ky = _ssArmedY;
+            if (alen > 0.001f)
             {
-                // Shrapnel +0x2E0 is an ATTACK value (defense is applied when it lands), so base it on the
-                // weapon's raw attack stat — NOT the direct hit's HP drop (that's already post-defense, so
-                // feeding it back in roughly reconstitutes full attack instead of a fraction).
-                int dmg = (int)(Player.Weapon.GetCurrentWeaponAttack() * BurstDamageFraction);
-                for (int h = 0; h < n && dmg > 0; h++)
-                {
-                    if (_ssSplashPrevHp[h] <= 0 || cur[h] >= _ssSplashPrevHp[h]) continue;   // detect a fresh Xiao hit
-                    SpawnHcBurst(poolBase, h, dmg);
-                    _ssMaxChargeFiredAt = DateTime.MinValue;   // consume — one burst per max-charge shot
-                    break;
-                }
+                kx -= ax / alen * WindCenterPullback;
+                ky -= ay / alen * WindCenterPullback;
             }
-
-            for (int s = 0; s < n; s++) _ssSplashPrevHp[s] = cur[s];
+            Enemies.RadialKnockback(kx, ky, radius, WindKnockDecay, WindKnockMaxForce, WindKnockMargin,
+                                    WindKnockScale);
         }
 
-        /// <summary>Spawn <see cref="BurstCount"/> real pellets fanning out from enemy <paramref name="h"/> in
-        /// the ground plane (pos layout: [0]=X @0x100, [1]=height @0x104, [2]=Y @0x108). Each is a genuine
-        /// CSHOT pellet — collision ENABLED (+0x280=0) with damage <paramref name="dmg"/> — spawned
-        /// <see cref="BurstStartOffset"/> out so it clears the hit enemy's body before flying on.</summary>
-        private static void SpawnHcBurst(long poolBase, int h, int dmg)
+        /// <summary>Is any live enemy within <paramref name="range"/> of (x, y)? Distinguishes a pellet that LANDED
+        /// on something from one that expired at the end of its flight or clipped a wall.</summary>
+        private static bool EnemyNear(float x, float y, float range)
         {
-            long ePos = EnemyAddresses.FloorSlots.SlotAddr(h, EnemySlotOffsets.LocationX);   // X, height, Y (contiguous)
-            float ex = Memory.ReadFloat(ePos), eh = Memory.ReadFloat(ePos + 4), ey = Memory.ReadFloat(ePos + 8);
-
-            for (int i = 0; i < BurstCount; i++)
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                int slot = -1;
-                for (int j = 0; j < WeaponCollision.PlayerShotPool.SlotCount; j++)
-                    if (Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, j)) == 0) { slot = j; break; }
-                if (slot < 0) break;   // pool full — fire as many as we can
-
-                double ang = i * (2.0 * Math.PI / BurstCount);
-                float dx = (float)Math.Cos(ang), dy = (float)Math.Sin(ang);   // ground-plane unit direction
-
-                long pos = WeaponCollision.PlayerShotPool.PosAddr(poolBase, slot);
-                Memory.WriteFloat(pos, ex + dx * BurstStartOffset);
-                Memory.WriteFloat(pos + 4, eh);                               // same height
-                Memory.WriteFloat(pos + 8, ey + dy * BurstStartOffset);
-                long vel = WeaponCollision.PlayerShotPool.VelAddr(poolBase, slot);
-                Memory.WriteFloat(vel, dx * BurstSpeed);
-                Memory.WriteFloat(vel + 4, 0f);                               // no vertical drift
-                Memory.WriteFloat(vel + 8, dy * BurstSpeed);
-                Memory.WriteInt(WeaponCollision.PlayerShotPool.NoCollideAddr(poolBase, slot), _hcBurstPassThrough ? 1 : 0);   // collision ON (0) unless debugging visibility
-                Memory.WriteInt(poolBase + WeaponCollision.PlayerShotPool.LifetimeOffset +
-                                slot * WeaponCollision.PlayerShotPool.ScalarStride, BurstLifetime);
-                Memory.WriteInt(WeaponCollision.PlayerShotPool.DamageAddr(poolBase, slot), dmg);
-                Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, slot), BurstScale);
-                Memory.WriteInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, slot), 1);
-                _hcBurstSlots.Add(slot);
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
+                long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);
+                float dx = Memory.ReadFloat(pos) - x, dy = Memory.ReadFloat(pos + 8) - y;
+                if (dx * dx + dy * dy <= range * range) return true;
             }
-            _hcBurstCooldownUntil = DateTime.UtcNow.AddMilliseconds(150);   // settle window after the last shrapnel clears
+            return false;
         }
 
         // ── Mobius Ring (Ruby's weapon: damage ramps the longer the attack is charged) ──
@@ -384,7 +424,7 @@ namespace Dark_Cloud_Improved_Version
                 if (cycles > _mrCycles)
                 {
                     _mrCycles = cycles;
-                    Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1);   // Ruby's Mobius flash per ramp step
+                    Player.FlashChargeComplete();   // Ruby's Mobius flash per ramp step
                 }
             }
             else _mrHolding = false;   // keep _mrCycles frozen for the pellet that fires

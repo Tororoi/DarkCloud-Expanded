@@ -45,6 +45,35 @@ namespace Dark_Cloud_Improved_Version
     /// active character. Trigger: write colour + speed + count, reset <see cref="Phase"/>, then set Enable.
     /// gp = 0x2A97F0. See <c>CustomXiaoEffects.TriggerCharacterFlash</c> / the Ruby Mobius flash.
     /// </summary>
+    /// <summary>
+    /// The player's STATUS BLOCK — the CDngStatusData object at <see cref="Base"/>: one per-character block
+    /// holding that character's weapon inventory, equipped slot, atla, transform state and the rest.
+    ///
+    /// Plain vanilla layout, and deliberately NOT owned by any one feature: the weapon-record lookup here is what
+    /// every "what is the player actually holding" question resolves through (weapon effects, the SynthSphere
+    /// lookup, texture swapping, the ABS grant). It previously lived inside an ABS-rollover class, which made
+    /// unrelated code read as if it cared about ABS.
+    /// </summary>
+    internal static class UserStatus
+    {
+        internal const long Base                 = 0x21CD954C; // CDngStatusData / "status base"
+        internal const int  CharStride           = 0xAA8;      // per-character block stride
+        internal const int  WeaponArrayOffset    = 0x450C;     // char block + this = weapon record 0 (id at +0)
+        internal const int  EquipSlotArrayOffset = 0x4340;     // + char = that character's equipped weapon slot (byte, 0-9)
+        internal const int  TransformStateOffset = 0x8B10;     // int; TransformedMonster = monster-transformed
+        internal const int  TransformedMonster   = 10;
+        internal const int  MaxWeaponSlots       = 10;         // bag slots 0-9
+
+        /// <summary>A character's inventory weapon record (WEAPON_HAVE) for one of its bag slots — the id is at
+        /// +0, and the element/attach/ABS fields hang off it (see <see cref="WeaponCollision"/>).</summary>
+        internal static long WeaponRecord(int character, int slot)
+            => Base + (long)character * CharStride + WeaponArrayOffset +
+               (long)slot * WeaponCollision.InventoryWeaponSlotStride;
+
+        /// <summary>Address of the byte holding which bag slot <paramref name="character"/> has equipped.</summary>
+        internal static long EquippedSlotAddr(int character) => Base + EquipSlotArrayOffset + character;
+    }
+
     internal static class CharacterFlash
     {
         internal const long Speed  = 0x202A36F4; // fGpffff9f04 — pulse speed (Ruby's charge flash uses 15.0)
@@ -54,6 +83,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long ColorR = 0x21F068D0; // fRam01f068d0 — flash colour RGB (float, 0-255)
         internal const long ColorG = 0x21F068D4; // fRam01f068d4
         internal const long ColorB = 0x21F068D8; // fRam01f068d8
+
+        // The game's STOCK charge flash — the cyan-blue pulse it fires when a charge attack finishes building
+        // (Ruby's Mobius peak, Ungaga's guard charge). Every mod flash that means "a charge completed" must use
+        // these so it reads as part of the game rather than as a mod effect; picking your own RGB looks wrong.
+        internal const float ChargeR     = 0f;
+        internal const float ChargeG     = 122f;
+        internal const float ChargeB     = 208f;
+        internal const float ChargeSpeed = 15f;
+        internal const int   ChargeCount = 1;
     }
 
     /// <summary>
@@ -90,10 +128,25 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const long Base = CharacterMotion.Base;   // the ACTIVE player character (one source of truth)
 
-        internal const int  CharPos        = 0x10;    // x, z/height, y
+        internal const int  CharPos        = 0x10;    // x, z/height, y (+0x1C = w, 1.0)
+        internal const int  CharRot        = 0x60;    // CObject EULER rotation x/y/z
         internal const int  CharRotY       = 0x64;    // CObject EULER rotation Y (yaw). GetRotation__7CObject reads
                                                       // +0x60/+0x64/+0x68 — these are ANGLES, not a direction vector
                                                       // (an upright character's X/Z angles are ~0).
+        internal const int  CharScale      = 0x90;    // CObject scale x/y/z. Draw__10CCharacter re-applies it EVERY
+                                                      // draw, so writing it is the clean whole-model size lever
+                                                      // (WeaponCollision.EffectObjectScale is this same field).
+        internal const int  MotionFrame    = 0x2F0;   // float — current frame of the playing motion
+        internal const int  MotionList     = 0x344;   // → the model's motion list (Mot_List; entry stride below)
+        // Mot_List entry, indexed by motion id. Step__10CCharacter (0x138530) reads the entry's STEP as the
+        // motion's native play rate, then — if the override at MotionSpeedOffset (+0xC60) is > 0 — TEMPORARILY
+        // overwrites the entry with it for that step and restores it afterwards. So the override is an ABSOLUTE
+        // rate, not a multiplier: to scale a motion's speed you must read its own step here and scale THAT. The
+        // rate is per-motion baked data and is NOT 1.0 in general.
+        internal const int  MotionEntryStride = 0x10;
+        internal const int  MotionEntryStart  = 0x00;  // int   — first frame
+        internal const int  MotionEntryEnd    = 0x04;  // int   — last frame
+        internal const int  MotionEntryStep   = 0x08;  // float — the KEY play rate (frames advanced per step)
         internal const int  CharModel      = 0xBC;    // → model root CFrame (== CharacterMotion.ModelRootOffset)
         internal const int  ClothList      = 0xC74;   // → up to 4 CCloth ptrs (null list = no cloth)
         internal const int  MotionSlotBase = 0xC20;   // channel[i] MOTION_TYPE ptr at +0xC20 + i*4

@@ -272,7 +272,7 @@ namespace Dark_Cloud_Improved_Version
         // @pool+0x11C0+s*0x11B0 (see EffectSlotStride/EffectSlotCount).
         internal const int  EffectTemplateOff   = 0x10;      // pool + this = template CCharacter
         internal const int  EffectSlotObjectsOff= 0x11C0;    // pool + this + s*EffectSlotStride = slot CCharacter
-        internal const int  EffectObjectScale   = 0x90;      // CObject scale x (y +0x94, z +0x98)
+        internal const int  EffectObjectScale   = CCharacter.CharScale;  // CObject scale x (y +0x94, z +0x98)
         // Shot collision: Step__12CSHOT_EFFECT (0x1AC180) builds each shot's damage sphere from the pool's
         // BT_SHOT_EFFECT per-phase radius array — radius = *(float*)(BT + 0x28 + phase*4), phases 0-3; the
         // same values gate the wall-collision check. BT native ptr = *(pool + 0) (set by Entry2).
@@ -383,7 +383,6 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Heaven's Cloud's visible-blade mesh frame name ("w14\0"). Scaling this frame's local 3x3
         /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
-        internal const uint HcMeshNameWord = 0x00343177;
 
         /// <summary>Xiao's slingshot weapon mesh frame name ("c04w"). Scaled by Super Steve's Heaven's Cloud
         /// charge (Weapons.ScaleWeaponFrameByName).</summary>
@@ -430,6 +429,18 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The in-battle WEAPON_HAVE copy of the equipped weapon (id at +0; same field
         /// layout as the inventory records — <c>Player.Weapon</c> wraps its common fields).</summary>
         internal const long BattleWeaponRecord          = 0x21EA7590;
+
+        // ── The weapon record's ELEMENT block (WEAPON_HAVE; record-relative) ──
+        // SetWeaponElementStatus (0x20F680) picks the STRONGEST of the five element levels and stores its index
+        // as the weapon's SELECTED element:
+        //     best = 0; for (i=1;i<5;i++) if (levels[best] < levels[i]) best = i;  record[0x16] = best;
+        // Every weapon has this, slingshots included. Note the index is 0 (Fire) when the weapon has NO element
+        // at all — the loop starts at 0 and only moves on a strict >, so ALWAYS check the LEVEL before trusting
+        // the index. A hit carries the element as BITS (1 << index): CheckDmg maps 0x01→Fire, 0x02→Ice,
+        // 0x04→Thunder, 0x08→Wind, 0x10→Holy, anything else → 5 = "no element".
+        internal const int  SelectedElementOffset = 0x16; // byte  — index 0..4 of the strongest element
+        internal const int  ElementLevelsOffset   = 0x17; // 5 bytes — Fire, Ice, Thunder, Wind, Holy
+        internal const int  ElementCount          = 5;
         // Effective (post-attachment, POST-CLAMP) stat block inside a WEAPON_HAVE, written by
         // WeaponAllValueSet (0x225B60): Attack+4 (cap MaxAttack), Endurance+6 (cap 99), Speed+8
         // (cap 99 = _DAT_00294178), Magic+10 (cap MaxMagic). Writing past the cap in the BATTLE copy
@@ -507,34 +518,29 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// The kill-ABS grant path, RE'd from the CMonstorUnit::Step death block (the
-        /// GetWeaponMaxExp call at ELF 0x1DF1CC). On an enemy slot's release frame
-        /// (slot field +0x00 == -1) the engine grants the slot's ABS reward to the ACTIVE
-        /// character's equipped INVENTORY record:
-        ///   rec = UserStatusBase + char*CharStride + WeaponArrayOffset + equipSlot*0xF8,
-        ///   equipSlot = byte at UserStatusBase + EquipSlotArrayOffset + char
-        /// gated on (slot.KillerCharId == active char) and the equipped weapon not being a
-        /// default weapon. Grant modifiers: ×2 when the back-floor flag (BackFloorDoubleAddr)
-        /// is set; ×AbsBonusMult (1.2f, DAT_002a1af8) when the slot's status-flag word has
-        /// AbsBonusFlag (0x2000) set. THE KEY BEHAVIOR: the whole grant is SKIPPED when
-        /// abs &gt;= GetWeaponMaxExp — a crossing kill clamps to exactly max and queues the
-        /// "ABS MAX" popup; above max the engine is fully inert. Max ABS is never stored: it is
-        /// COMPUTED per call as table base (+0x30, SIGNED CHAR) + level × step (+0x32, short),
-        /// clamped to 1..999 (the live Weapons.abs / Weapons.absadd table columns — which is
-        /// also why the table can't just be doubled: base values run up to 125, so 2× overflows
-        /// the signed char for ~54 weapons). Special cases in the same block: Serpent Sword
-        /// (id 268) grants nothing until game flag 0x30 is set, and while the player is
-        /// monster-transformed (UserStatusBase+TransformStateOffset == 10) kills DRAIN abs
-        /// instead of granting. Backs CustomToanEffects.MachoSwordEffect (ABS rollover).
+        /// The kill-ABS grant path (VANILLA), RE'd from the CMonstorUnit::Step death block (the GetWeaponMaxExp
+        /// call at ELF 0x1DF1CC). On an enemy slot's release frame (slot field +0x00 == -1) the engine grants the
+        /// slot's ABS reward to the ACTIVE character's equipped inventory record (see
+        /// <see cref="UserStatus.WeaponRecord"/>), gated on (slot.KillerCharId == active char) and the equipped
+        /// weapon not being a default weapon.
+        ///
+        /// Grant modifiers: ×2 when the back-floor flag (<see cref="BackFloorDoubleAddr"/>) is set;
+        /// ×<see cref="AbsBonusMult"/> when the slot's status-flag word has <see cref="AbsBonusFlag"/> set.
+        ///
+        /// THE KEY BEHAVIOR: the whole grant is SKIPPED when abs &gt;= GetWeaponMaxExp — a crossing kill clamps to
+        /// exactly max and queues the "ABS MAX" popup; above max the engine is fully inert. Max ABS is never
+        /// stored: it is COMPUTED per call as table base (+0x30, SIGNED CHAR) + level × step (+0x32, short),
+        /// clamped to 1..999 (the live Weapons.abs / Weapons.absadd table columns — which is also why the table
+        /// can't just be doubled: base values run up to 125, so 2× overflows the signed char for ~54 weapons).
+        /// Special cases in the same block: Serpent Sword (id 268) grants nothing until game flag 0x30 is set, and
+        /// while the player is monster-transformed (<see cref="UserStatus.TransformStateOffset"/> == 10) kills
+        /// DRAIN abs instead of granting.
+        ///
+        /// Backs CustomToanEffects.MachoSwordEffect ("Overtraining"), which owns the rollover POLICY — this class
+        /// holds only what the game itself does.
         /// </summary>
-        internal static class AbsRollover
+        internal static class AbsRewards
         {
-            internal const long UserStatusBase       = 0x21CD954C; // CDngStatusData / "status base"
-            internal const int  CharStride           = 0xAA8;      // per-character block stride
-            internal const int  WeaponArrayOffset    = 0x450C;     // char block + this = weapon record 0 (id at +0)
-            internal const int  EquipSlotArrayOffset = 0x4340;     // + char = equipped weapon slot byte (0-9)
-            internal const int  TransformStateOffset = 0x8B10;     // int; 10 = monster-transformed (kills DRAIN abs)
-
             internal const long BackFloorDoubleAddr  = EnemyAddresses.MainMonstorUnit.Base + 0x44; // int; nonzero = kill ABS ×2 (back floors)
             // Per-slot status-flag word (same 0x510-stride family as the collision arrays).
             internal const long SlotStatusFlagsBase  = EnemyAddresses.MainMonstorUnit.Base + 0x55754;
@@ -542,13 +548,7 @@ namespace Dark_Cloud_Improved_Version
             internal const int  AbsBonusFlag         = 0x2000;     // slot flag: ABS reward ×AbsBonusMult
             internal const float AbsBonusMult        = 1.2f;       // DAT_002a1af8
 
-            /// <summary>Rollover ceiling: current ABS may grow to this multiple of the weapon's max.</summary>
-            internal const int  RolloverFactor       = 2;
-
             internal static long SlotStatusFlagsAddr(int slot) => SlotStatusFlagsBase + (long)slot * SlotStatusFlagsStride;
-            /// <summary>Inventory weapon record address for a character's bag slot.</summary>
-            internal static long RecordAddr(int character, int slot)
-                => UserStatusBase + (long)character * CharStride + WeaponArrayOffset + (long)slot * InventoryWeaponSlotStride;
         }
 
         // Rollover display behavior (all RE'd, all native — nothing to patch):

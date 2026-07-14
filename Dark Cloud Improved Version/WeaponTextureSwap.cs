@@ -93,12 +93,12 @@ namespace Dark_Cloud_Improved_Version
                     Thread.Sleep(500);
                     if (!Memory.IsConnected) continue;
 
-                    int slot = Memory.ReadByte(WeaponCollision.AbsRollover.UserStatusBase +
-                                               WeaponCollision.AbsRollover.EquipSlotArrayOffset + Player.XiaoId);
+                    int slot = Memory.ReadByte(UserStatus.Base +
+                                               UserStatus.EquipSlotArrayOffset + Player.XiaoId);
                     bool steve = false; int sphere = 0;
                     if ((uint)slot <= 9)
                     {
-                        long rec = WeaponCollision.AbsRollover.RecordAddr(Player.XiaoId, slot);
+                        long rec = UserStatus.WeaponRecord(Player.XiaoId, slot);
                         steve = Memory.ReadUShort(rec) == Items.supersteve;
                         if (steve) sphere = SuperSteveAbilities.AttachedSphere(rec);
                     }

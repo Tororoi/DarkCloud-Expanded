@@ -508,10 +508,10 @@ namespace Dark_Cloud_Improved_Version
             {
                 int ch = Player.CurrentCharacterNum();
                 if (ch != Player.XiaoId) break;
-                int equipSlot = Memory.ReadByte(WeaponCollision.AbsRollover.UserStatusBase +
-                                                WeaponCollision.AbsRollover.EquipSlotArrayOffset + ch);
+                int equipSlot = Memory.ReadByte(UserStatus.Base +
+                                                UserStatus.EquipSlotArrayOffset + ch);
                 if ((uint)equipSlot > 9) break;
-                long rec = WeaponCollision.AbsRollover.RecordAddr(ch, equipSlot);
+                long rec = UserStatus.WeaponRecord(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) break;
 
                 int sphere = SuperSteveAbilities.AttachedSphere(rec);

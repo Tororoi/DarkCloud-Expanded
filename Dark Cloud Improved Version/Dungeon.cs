@@ -361,6 +361,19 @@ namespace Dark_Cloud_Improved_Version
                                         }
                                         break;
 
+                                    // Kitchen Knife is a TOAN sword — its effect gates on ToanId, so registering it under
+                                    // Xiao (where it used to live) made it unreachable: Xiao can never equip a Toan sword,
+                                    // so the thread never started, and the spring blessing could never fire.
+                                    case Items.kitchenknife:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!kitchenKnifeThread.IsAlive)
+                                        {
+                                            kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
+                                            kitchenKnifeThread.Start();
+                                        }
+                                        break;
+
                                     default:
                                         CustomToanEffects.BoneRapierEffect(false);
                                         break;
@@ -375,13 +388,6 @@ namespace Dark_Cloud_Improved_Version
 
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
-                                    case Items.kitchenknife:
-                                        if (!kitchenKnifeThread.IsAlive)
-                                        {
-                                            kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
-                                            kitchenKnifeThread.Start();
-                                        }
-                                        break;
 
                                     case Items.angelgear:
                                         if (!angelGearThread.IsAlive)

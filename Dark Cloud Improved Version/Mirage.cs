@@ -78,10 +78,10 @@ namespace Dark_Cloud_Improved_Version
 
             if (ch == Player.XiaoId)
             {
-                int equipSlot = Memory.ReadByte(WeaponCollision.AbsRollover.UserStatusBase +
-                                                WeaponCollision.AbsRollover.EquipSlotArrayOffset + ch);
+                int equipSlot = Memory.ReadByte(UserStatus.Base +
+                                                UserStatus.EquipSlotArrayOffset + ch);
                 if ((uint)equipSlot > 9) return false;
-                long rec = WeaponCollision.AbsRollover.RecordAddr(ch, equipSlot);
+                long rec = UserStatus.WeaponRecord(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) return false;
                 int sphere = SuperSteveAbilities.AttachedSphere(rec);
                 return sphere == Items.mirage || sphere == Items.herculeswrath;
@@ -352,7 +352,7 @@ namespace Dark_Cloud_Improved_Version
                                 if (guardPoseSince == default) guardPoseSince = DateTime.UtcNow;
                                 else if (DateTime.UtcNow - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
                                 {
-                                    Player.FlashActiveCharacter(0f, 122f, 208f, 15f, 1);
+                                    Player.FlashChargeComplete();
                                     if (_handoff) { }                           // a hand-off is already running — ignore
                                     else if (_decoyActive) BeginHandoff();      // clone up → new decoy now, dissolve the old one
                                     else PlaceDecoy();                          // nothing up → plant immediately

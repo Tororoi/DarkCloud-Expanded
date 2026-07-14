@@ -4001,13 +4001,99 @@ namespace Dark_Cloud_Improved_Version
         // HeavensCloudEffect grows factor during the charge windup and applies whirl+hitbox on the whirlwind
         // release, then ResetHeavensCloudReach snaps everything back. (docs/weapon-reach.md top section.)
         const float HcStockDcol1Z = 9.2053f;       // HC commenu dcol1 Z
-        static long _hcW14Addr;                    // cached "w14" mesh frame MMU addr (0 = not located)
         static float _hcHitboxDelta;               // persistent delta added to enemy body radii (0 = none)
         static readonly float[,] _hcHitboxOrig = new float[16, BodyCollision.MaxBodyParts];
 
-        /// <summary>Scale Heaven's Cloud's blade mesh (visible blade + dcol hit point) to <paramref name="factor"/>×.
+        const string HcModelCode = "c01w14";   // Heaven's Cloud; its mesh frame is the 'w14' child (see ResolveBladeFrame)
+
+        /// <summary>The equipped weapon record (WEAPON_HAVE) of the active character, or 0 if there isn't one.</summary>
+        internal static long EquippedRecord()
+        {
+            int ch = Player.CurrentCharacterNum();
+            if (ch < 0) return 0;
+            int slot = Memory.ReadByte(UserStatus.Base +
+                                       UserStatus.EquipSlotArrayOffset + ch);
+            return (uint)slot > 9 ? 0 : UserStatus.WeaponRecord(ch, slot);
+        }
+
+        /// <summary>The element a weapon's hits carry, as the BIT the engine uses on the collision data
+        /// (1=Fire, 2=Ice, 4=Thunder, 8=Wind, 0x10=Holy), or 0 for no element.
+        ///
+        /// The game keeps the SELECTED element index on the record (+0x16), maintained by SetWeaponElementStatus
+        /// as "whichever of the five element levels is highest". The catch: that index is 0 (Fire) for a weapon
+        /// with NO elements at all, because the scan starts at 0 and only moves on a strict &gt;. So the LEVEL has
+        /// to be checked — a zero level means no element, not Fire.</summary>
+        internal static int SelectedElementBits(long rec)
+        {
+            if (rec == 0) return 0;
+            int idx = Memory.ReadByte(rec + WeaponCollision.SelectedElementOffset);
+            if ((uint)idx >= WeaponCollision.ElementCount) return 0;
+            int level = Memory.ReadByte(rec + WeaponCollision.ElementLevelsOffset + idx);
+            return level > 0 ? 1 << idx : 0;
+        }
+
+        /// <summary>Scale Heaven's Cloud's blade (visible blade + dcol hit points) to <paramref name="factor"/>×.
+        /// Uses the same snapshot-and-MULTIPLY write as Super Steve's slingshot. The old route found the right
+        /// frame ('w14') but wrote it badly: only the DIAGONAL, SET to `factor` absolutely — which (a) assumed the
+        /// frame's base scale was exactly 1.0, (b) discarded the off-diagonal rotation terms, and (c) used a 0.01
+        /// dead-band, ten times coarser than this path's 0.001, so a smooth charge ramp came out visibly stepped.
         /// Returns false until the frame is located (model not loaded yet).</summary>
-        public static bool ScaleHeavensCloudBlade(float factor) => ScaleWeaponMesh(WeaponCollision.HcMeshNameWord, factor);
+        public static bool ScaleHeavensCloudBlade(float factor) => ScaleWeaponBlade(HcModelCode, factor);
+
+        /// <summary>
+        /// Resolve the frame that carries a weapon's MESH. Weapon models are NOT uniformly shaped, and the
+        /// naming is not uniform either — this was established by dumping both trees:
+        ///
+        ///   Heaven's Cloud ("c01w14")  root '14_1'  ->  child 'w14'  ->  4x 'dcol'      (mesh on the CHILD)
+        ///   Kitchen Knife  ("c01w08")  root 'c01w'  ->  'null' + 3x 'dcol'              (mesh on the ROOT; no 'w08')
+        ///   Xiao slingshot ("c04w..")  root 'c04w'                                      (mesh on the ROOT)
+        ///
+        /// <c>FindFrame</c> matches the first FOUR bytes of the name, so we probe two candidates derived from the
+        /// model code and take whichever the model actually has:
+        ///   1. the "wNN" suffix (code minus the 3-char character prefix, NUL-padded) — HC's child mesh frame;
+        ///   2. the 4-char prefix ("c01w" / "c04w") — the root, for models with no separate mesh child.
+        ///
+        /// The winner is cached per weapon id. It MUST NOT be re-probed per tick: a failed probe resets the
+        /// snapshot in <see cref="ScaleWeaponFrameByName"/>, which would then re-snapshot an ALREADY-SCALED
+        /// matrix and compound the scale every tick.
+        /// </summary>
+        static uint ResolveBladeFrame(string weaponCode)
+        {
+            if (string.IsNullOrEmpty(weaponCode) || weaponCode.Length < 4) return 0;
+
+            if (weaponCode.Length > 4)                                   // "c01w14" -> 'w','1','4',NUL
+            {
+                string s = weaponCode.Substring(3);
+                uint suffix = 0;
+                for (int i = 0; i < 4 && i < s.Length; i++) suffix |= (uint)s[i] << (i * 8);
+                if (suffix != 0 && LocateModelFrame(suffix, null) != 0) return suffix;
+            }
+
+            uint prefix = (uint)(weaponCode[0] | (weaponCode[1] << 8) | (weaponCode[2] << 16) | (weaponCode[3] << 24));
+            return LocateModelFrame(prefix, null) != 0 ? prefix : 0;
+        }
+
+        static int  _bladeWeaponId = -1;
+        static uint _bladeName;
+
+        /// <summary>Scale an equipped weapon's mesh to <paramref name="factor"/>× — the visible model AND its dcol
+        /// hit points grow together. Resolves the mesh frame with <see cref="ResolveBladeFrame"/> and scales it via
+        /// <see cref="ScaleWeaponFrameByName"/>, which snapshots the frame's local 3x3 and MULTIPLIES it, so the
+        /// model's own rotation and base scale survive and a gradual factor eases smoothly.
+        ///
+        /// Returns false until the frame is located (model not loaded). If it won't resolve,
+        /// <see cref="DumpWeaponFrameTree"/> shows what the model actually calls its frames.</summary>
+        public static bool ScaleWeaponBlade(string weaponCode, float factor)
+        {
+            int wid = Player.Weapon.GetCurrentWeaponId();
+            if (wid != _bladeWeaponId || _bladeName == 0)
+            {
+                _bladeName = ResolveBladeFrame(weaponCode);
+                _bladeWeaponId = wid;
+                if (_bladeName == 0) return false;      // model not loaded yet — probe again next tick
+            }
+            return ScaleWeaponFrameByName(_bladeName, factor);
+        }
 
         /// <summary>Scale the whirlwind visual to match a blade <paramref name="factor"/> and re-apply it to the fuusya roots.</summary>
         public static void ScaleHeavensCloudWhirl(float factor)
@@ -4022,7 +4108,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Snap Heaven's Cloud back to original: blade 1×, enemy hitboxes restored, whirl at base scale.</summary>
         public static void ResetHeavensCloudReach()
         {
-            ScaleWeaponMesh(WeaponCollision.HcMeshNameWord, 1.0f);
+            ScaleWeaponBlade(HcModelCode, 1.0f);
             RestoreEnemyHitbox();
             ScaleHeavensCloudWhirl(1.0f);
             _whirlWeaponId = -1;   // force ReachTick to recompute the whirl scale for whatever is equipped next
@@ -4045,20 +4131,6 @@ namespace Dark_Cloud_Improved_Version
         // Scale the equipped weapon's visible mesh frame (name@0 == nameWord) by factor: write factor to its
         // CFrameVu1 local-3x3 diagonal (+0xB8/+0xCC/+0xE0; bind is identity). The engine does not re-pose this
         // template node, so this holds. Returns false until the frame is located. Caches/re-validates by name.
-        static bool ScaleWeaponMesh(uint nameWord, float factor)
-        {
-            if (_hcW14Addr == 0 || (uint)Memory.ReadInt(_hcW14Addr) != nameWord)
-                _hcW14Addr = LocateModelFrame(nameWord, null);
-            if (_hcW14Addr == 0) return false;
-            long m00 = _hcW14Addr + WeaponCollision.Vu1LocalMatrixDiag0;
-            if (Math.Abs(Memory.ReadFloat(m00) - factor) > 0.01f)
-            {
-                Memory.WriteFloat(m00, factor);
-                Memory.WriteFloat(_hcW14Addr + WeaponCollision.Vu1LocalMatrixDiag1, factor);
-                Memory.WriteFloat(_hcW14Addr + WeaponCollision.Vu1LocalMatrixDiag2, factor);
-            }
-            return true;
-        }
 
         // Distance-gated enemy hitbox: for each active enemy, if its horizontal distance to the player is within
         // the range gate, ADD a reach bonus to its body radii so close swings connect; otherwise restore them to
@@ -4154,82 +4226,83 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Re-arm on floor entry so the freshly reloaded weapon model / fuusya pool is re-located.</summary>
         public static void OnReachFloorEntered()
         {
-            _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0; _hcW14Addr = 0;
+            _whirlRoots = System.Array.Empty<long>(); _whirlLocateBackoff = 0;
+            _sfFrameNameAddr = 0; _sfHasSnapshot = false; _sfWeaponId = -1;   // model moved: re-locate + re-snapshot
+            _bladeName = 0; _bladeWeaponId = -1;
         }
 
         static bool _weaponTreeDumped;
 
-        /// <summary>Scale EVERY mesh frame (name starts with 'w') in the equipped weapon model by
-        /// <paramref name="factor"/> — grows the whole weapon. Used for the slingshot (Super Steve +
-        /// Heaven's Cloud sphere), which has no single "blade" mesh like the sword's w14. Mesh frames are
-        /// template nodes the engine doesn't re-pose (unlike the root, which is re-posed to the hand each
-        /// frame), so the scale holds. Writes only when a diagonal differs from <paramref name="factor"/>.
-        /// Pass <paramref name="dumpOnce"/>=true to log the frame tree once (to discover the mesh names).</summary>
-        public static bool ScaleAllWeaponMeshes(float factor, bool dumpOnce = false)
+        /// <summary>
+        /// DIAGNOSTIC: log the equipped weapon model's whole CFrame tree — each frame's name and its current
+        /// scale (local 3x3 m00). This is how you discover a weapon's mesh-frame name, and it is worth having:
+        /// the trees are NOT uniformly shaped. Heaven's Cloud hangs its mesh on a 'w14' CHILD under a '14_1'
+        /// root; the Kitchen Knife has no 'w08' child at all and carries the mesh on its 'c01w' ROOT. A name
+        /// that works for one weapon silently finds nothing on another — dump, do not assume.
+        ///
+        /// (This replaces a ScaleAllWeaponMeshes that scaled every frame beginning with 'w'. It was dead code
+        /// and its premise was wrong twice over: its docstring claimed it served the slingshot, but the
+        /// slingshot's frame begins with 'c', so it could never have matched it.)
+        /// </summary>
+        public static bool DumpWeaponFrameTree()
         {
-            bool dump = dumpOnce && !_weaponTreeDumped;
+            if (_weaponTreeDumped) return true;
+            _weaponTreeDumped = true;
+
             int nw = Memory.ReadInt(WeaponCollision.NowWeaponPtr);
             if (!IsRamPtr(nw))
             {
-                if (dump) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] NowWeapon not resolvable (nw=0x{nw:X})"); _weaponTreeDumped = true; }
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] NowWeapon not resolvable (nw=0x{nw:X})");
                 return false;
             }
             int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponCollision.WeaponModelRootOffset);
             if (!IsRamPtr(modelRoot))
             {
-                if (dump) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] modelRoot not resolvable (nw=0x{nw:X} root=0x{modelRoot:X})"); _weaponTreeDumped = true; }
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] modelRoot not resolvable (nw=0x{nw:X} root=0x{modelRoot:X})");
                 return false;
             }
-            if (dump) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"=== equipped weapon model frame tree (nw=0x{nw:X} root=0x{modelRoot:X}) ===");
-            ScaleMeshFramesRec(Memory.ToMmu(modelRoot), factor, dump, 0);
-            if (dump) _weaponTreeDumped = true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"=== equipped weapon frame tree (nw=0x{nw:X} root=0x{modelRoot:X}) ===");
+            DumpFrameRec(Memory.ToMmu(modelRoot), 0);
             return true;
         }
 
-        static void ScaleMeshFramesRec(long node, float factor, bool dump, int depth)
+        static void DumpFrameRec(long node, int depth)
         {
             if (depth > 32) return;
             long name = node + WeaponCollision.CFrameName;
             uint nword = (uint)Memory.ReadInt(name);
-            bool isMesh = (nword & 0xFF) == 0x77;   // name's first char is 'w' (wNN mesh frame)
-            if (dump)
-            {
-                string s = "";
-                for (int b = 0; b < 4; b++) { char c = (char)((nword >> (b * 8)) & 0xFF); s += (c >= 32 && c < 127) ? c : '.'; }
-                Console.WriteLine($"{new string(' ', depth * 2)}[{depth}] '{s}' mesh={isMesh} m00={Memory.ReadFloat(name + WeaponCollision.Vu1LocalMatrixDiag0):F2}");
-            }
-            if (isMesh && Math.Abs(Memory.ReadFloat(name + WeaponCollision.Vu1LocalMatrixDiag0) - factor) > 0.01f)
-            {
-                Memory.WriteFloat(name + WeaponCollision.Vu1LocalMatrixDiag0, factor);
-                Memory.WriteFloat(name + WeaponCollision.Vu1LocalMatrixDiag1, factor);
-                Memory.WriteFloat(name + WeaponCollision.Vu1LocalMatrixDiag2, factor);
-            }
+            string s = "";
+            for (int b = 0; b < 4; b++) { char c = (char)((nword >> (b * 8)) & 0xFF); s += (c >= 32 && c < 127) ? c : '.'; }
+            Console.WriteLine($"{new string(' ', depth * 2)}[{depth}] '{s}' (0x{nword:X8}) m00={Memory.ReadFloat(name + WeaponCollision.Vu1LocalMatrixDiag0):F2}");
             for (int c = Memory.ReadInt(node + WeaponCollision.CFrameChild); IsRamPtr(c); )
             {
                 long cm = Memory.ToMmu(c);
-                ScaleMeshFramesRec(cm, factor, dump, depth + 1);
+                DumpFrameRec(cm, depth + 1);
                 c = Memory.ReadInt(cm + WeaponCollision.CFrameNext);
             }
         }
 
-        // Uniform-scale a named model frame by MULTIPLYING its local 3x3 by `factor` (unlike ScaleWeaponMesh
+        // Uniform-scale a named model frame by MULTIPLYING its local 3x3 by `factor` (snapshotting the
         // which SETS the diagonal — that only works on an identity/bind matrix; the slingshot's frames carry
         // rotation, so we scale by multiply to preserve orientation). Snapshots the frame's ORIGINAL matrix
         // the first time it's located and always writes original×factor, so it's stable across ticks and a
         // gradual factor eases smoothly; pass factor 1.0 to restore. Re-snapshots when the model reloads.
         static long _sfFrameNameAddr;
         static uint _sfNameWord;
+        static int  _sfWeaponId = -1;   // two Toan swords share the "c01w" key — re-locate + re-snapshot on a swap
         static readonly float[] _sfOrig = new float[9];
         static bool _sfHasSnapshot;
 
         public static bool ScaleWeaponFrameByName(uint nameWord, float factor)
         {
-            if (_sfFrameNameAddr == 0 || _sfNameWord != nameWord ||
+            int wid = Player.Weapon.GetCurrentWeaponId();
+            if (_sfFrameNameAddr == 0 || _sfNameWord != nameWord || _sfWeaponId != wid ||
                 (uint)Memory.ReadInt(_sfFrameNameAddr) != nameWord)
             {
                 _sfFrameNameAddr = LocateModelFrame(nameWord, null);
                 _sfNameWord = nameWord;
-                _sfHasSnapshot = false;
+                _sfWeaponId = wid;
+                _sfHasSnapshot = false;         // never carry a snapshot across models
                 if (_sfFrameNameAddr == 0) return false;
             }
             long m = _sfFrameNameAddr + WeaponCollision.Vu1LocalMatrixDiag0;   // 3x3 base: row stride 0x10, col stride 4
