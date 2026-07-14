@@ -51,6 +51,25 @@ namespace Dark_Cloud_Improved_Version
         private static string _lastDir = "";
         private static string _pendingDir;
         private static int _pendingTicks;
+        private static bool _deferPending;
+        private static int _deferTicks;
+
+        /// <summary>How many consecutive ticks the event-point count must hold steady before we believe the
+        /// array has finished being built (it is populated progressively as the town's parts load).</summary>
+        private const int EventCountStableTicks = 12;   // ~600 ms at the town loop's 50 ms
+        private static int _stableTicks;
+        private static int _lastEventCount = -1;
+        private static bool _fishingWasLive;
+
+        /// <summary>The loaded event.stb header reads as a plausible STB, rather than a zeroed buffer.</summary>
+        private static bool ScriptHeaderValid()
+        {
+            long stb = TownScript.Base();
+            if (stb == 0) return false;
+            int count = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl   = Memory.ReadInt(stb + TownScript.LabelTable);
+            return count > 0 && count < 4000 && tbl > 0;
+        }
 
         /// <summary>
         /// True once <c>edit_info</c> demonstrably holds THIS town's parsed cfg — i.e. at least one texture
@@ -125,6 +144,36 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
 
+            // Event points and the script land after the town data — and the event array is built up
+            // PROGRESSIVELY as parts load, so "non-empty" is not the same as "finished". Queens read
+            // `50 used of 51` on one visit and `8 of 34` on another: same town, caught mid-build.
+            //
+            // So wait for the count to STOP CHANGING, not merely to become non-zero.
+            if (_deferPending)
+            {
+                _deferTicks++;
+                int count = EventPoints.Base() != 0 ? Memory.ReadInt(EventPoints.Count) : 0;
+                bool script = ScriptHeaderValid();
+
+                if (count > 0 && count == _lastEventCount) _stableTicks++;
+                else _stableTicks = 0;
+                _lastEventCount = count;
+
+                bool settled = count > 0 && script && _stableTicks >= EventCountStableTicks;
+
+                if (settled || _deferTicks > PendingTimeoutTicks)
+                {
+                    if (!settled)
+                        Log($"##### event points / script never settled after {_deferTicks} ticks " +
+                            $"(count={count} script={script}) — dumping what there is, TREAT AS SUSPECT #####");
+                    _deferPending = false;
+                    _stableTicks = 0;
+                    _lastEventCount = -1;
+                    DumpEventPoints();
+                    DumpScript();
+                }
+            }
+
 
             // Did Select actually get us into the overhead camera? This is the whole experiment.
             int mode = Memory.ReadInt(EditLoop.GameMode);
@@ -138,6 +187,68 @@ namespace Dark_Cloud_Improved_Version
             }
 
             if (WatchPosition) SamplePosition();
+            WatchFishing();
+        }
+
+        /// <summary>
+        /// Catch the moment the game sets a fishing spot up, and print everything it set.
+        ///
+        /// This exists because the mechanism turned out not to be what I assumed. The event-point array holds
+        /// ONLY interior doors (a map name at +0x30, a position, a trigger box) — Norune's twelve points are
+        /// its eleven houses plus the dungeon, and there is no fishing entry. And the fishing globals read all
+        /// zero at town load, so `_LOAD_FISHING_DATA` is not run by the town's init script either. It fires
+        /// on demand, when the sign is used.
+        ///
+        /// Rather than guess again: stand at Norune's pond, use the sign, and this prints the exact rect,
+        /// water level, ground level, poly count and fish that the real command produces — plus where the
+        /// player was standing. That is the ground truth a custom spot has to reproduce.
+        /// </summary>
+        private static void WatchFishing()
+        {
+            float water = Memory.ReadFloat(FishingSpot.WaterLevel);
+            int polys = Memory.ReadInt(FishingSpot.CPolyNum);
+            bool live = polys > 0 || water != 0f;
+
+            if (live == _fishingWasLive) return;
+            _fishingWasLive = live;
+
+            if (!live) { Log("*** fishing state CLEARED ***"); return; }
+
+            ReadPos(out float x, out float y, out float z);
+            float ax = Memory.ReadFloat(FishingSpot.FishingRect + FishingSpot.BoxCornerA);
+            float az = Memory.ReadFloat(FishingSpot.FishingRect + FishingSpot.BoxCornerA + 8);
+            float bx = Memory.ReadFloat(FishingSpot.FishingRect + FishingSpot.BoxCornerB);
+            float bz = Memory.ReadFloat(FishingSpot.FishingRect + FishingSpot.BoxCornerB + 8);
+
+            Log("*** FISHING SPOT LOADED — this is the vanilla setup, capture it ***");
+            Log($"    player was at  x={x:0.##}  y={y:0.##}  z={z:0.##}");
+            Log($"    fishing_rect   ({ax:0.##}, {az:0.##}) -> ({bx:0.##}, {bz:0.##})");
+            Log($"    WaterLevel={water:0.###}  GroundLevel={Memory.ReadFloat(FishingSpot.GroundLevel):0.###}  " +
+                $"cpoly={polys}/{FishingSpot.CPolyMax}  FishNum={Memory.ReadInt(FishingSpot.FishNum)}  " +
+                $"drawUnderWater={Memory.ReadInt(FishingSpot.DrawUnderWater)}");
+            Log($"    Fish=0x{Memory.ReadUInt(FishingSpot.Fish):X8}  " +
+                $"cpoly=0x{Memory.ReadUInt(FishingSpot.CPoly):X8}  " +
+                $"fishingActive={Memory.ReadInt(FishingAddresses.Active)}");
+
+            // WHAT fired it? If an event point did, EdGetEvent will have left the match here. If both read
+            // as nothing, the trigger is not an event point and we look elsewhere — but either way this is a
+            // fact rather than another inference.
+            int param = Memory.ReadInt(EventPoints.MatchedParam);
+            uint pt = Memory.ReadUInt(EventPoints.MatchedPoint) & Memory.PhysAddrMask;
+            Log($"    matchedParam={param}  matchedPoint=0x{pt:X8}");
+            if (Memory.IsValidGuest(pt))
+            {
+                long e = Memory.ToMmu(pt);
+                Log($"    -> matched event: type={Memory.ReadInt(e + EventPoints.Type)} " +
+                    $"name='{ReadCStr(e + EventPoints.Name, 16)}' " +
+                    $"pos=({Memory.ReadFloat(e + EventPoints.Position):0.#}, " +
+                    $"{Memory.ReadFloat(e + EventPoints.Position + 4):0.#}, " +
+                    $"{Memory.ReadFloat(e + EventPoints.Position + 8):0.#})");
+            }
+            else
+            {
+                Log("    -> NO event point matched: the fishing trigger is NOT in the event-point array");
+            }
         }
 
         private static void SamplePosition()
@@ -183,10 +294,15 @@ namespace Dark_Cloud_Improved_Version
             DumpParts(info);
             DumpWaterSurfaces(info);
             DumpPlacedParts();
-            DumpEventPoints();
-            DumpScript();
             DumpFishingState();
             Log("===== END =====");
+
+            // The event points and the script are loaded LATER than the texture banks — the first run dumped
+            // a NULL event array and a zeroed script header for every town but the very first. So do not dump
+            // them here; wait until each is demonstrably populated. Same lesson as the town dump itself:
+            // verify, do not assume a load order.
+            _deferPending = true;
+            _deferTicks = 0;
         }
 
         /// <summary>Which texture banks this town loaded. The one that matters is <c>e01b24</c> — the
@@ -308,18 +424,32 @@ namespace Dark_Cloud_Improved_Version
                 if (type == 0) continue;   // free slot
                 used++;
 
-                // Dump the first 0x30 as ints AND floats — the position is in here somewhere, and a float
-                // that looks like a world coordinate is far more legible than a hex word.
+                // Dump the WHOLE 0x90, as ints AND floats. The first 0x30 is all zeros for Norune's points,
+                // so whatever identifies a fishing spot lives further in — and a value that reads as a
+                // plausible world coordinate is far more legible as a float than as a hex word.
                 var sb = new StringBuilder();
-                for (int w = 0; w < 12; w++)
+                for (int w = 0; w < EventPoints.Stride / 4; w++)
                 {
                     int iv = Memory.ReadInt(e + w * 4);
+                    if (iv == 0) continue;                        // skip the noise; there is a lot of it
                     float fv = Memory.ReadFloat(e + w * 4);
-                    bool looksFloat = Math.Abs(fv) > 0.01f && Math.Abs(fv) < 100000f && iv != 0;
-                    sb.Append(looksFloat ? $"{w * 4:X2}:{fv:0.#}f " : $"{w * 4:X2}:{iv} ");
+                    bool looksFloat = Math.Abs(fv) > 0.01f && Math.Abs(fv) < 100000f &&
+                                      Math.Abs(fv) != Math.Truncate(Math.Abs(fv));
+                    sb.Append(looksFloat ? $"{w * 4:X2}:{fv:0.##}f " : $"{w * 4:X2}:{iv} ");
+                    if ((w + 1) % 12 == 0) sb.Append("\n             ");
                 }
-                lines.AppendLine($"        [{i,2}] type={type} item={Memory.ReadInt(e + EventPoints.ItemId)}");
-                lines.AppendLine($"             {sb}");
+                string name = ReadCStr(e + EventPoints.Name, 16);
+                float px = Memory.ReadFloat(e + EventPoints.Position);
+                float py = Memory.ReadFloat(e + EventPoints.Position + 4);
+                float pz = Memory.ReadFloat(e + EventPoints.Position + 8);
+                float bx = Memory.ReadFloat(e + EventPoints.BoxSize);
+                float by = Memory.ReadFloat(e + EventPoints.BoxSize + 4);
+                float bz = Memory.ReadFloat(e + EventPoints.BoxSize + 8);
+
+                lines.AppendLine($"        [{i,2}] type={type} itemOrLabel={Memory.ReadInt(e + EventPoints.ItemOrLabel)} " +
+                                 $"name='{name}' pos=({px:0.#}, {py:0.#}, {pz:0.#}) box=({bx:0.#}, {by:0.#}, {bz:0.#}) " +
+                                 $"rotY={Memory.ReadFloat(e + EventPoints.RotY):0.##}");
+                lines.AppendLine($"             raw {sb.ToString().TrimEnd()}");
             }
             Log($"-- event points: {used} used of {n} (stride 0x{EventPoints.Stride:X}) --");
             if (lines.Length > 0) Log(lines.ToString().TrimEnd());

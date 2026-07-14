@@ -285,8 +285,47 @@ namespace Dark_Cloud_Improved_Version
         /// entry with 0 here, starting at index 1 (index 0 is reserved).</summary>
         internal const int Type = 0x10;
 
-        /// <summary>Item id, for the event types that hand something over.</summary>
-        internal const int ItemId = 0x1C;
+        /// <summary>
+        /// Overloaded by <see cref="Type"/>, and this is the crux of the whole fishing trigger:
+        ///
+        ///   type 2 — an ITEM id (the searchable barrels and pots).
+        ///   type 3 — a <b>SCRIPT LABEL id</b>. <c>EdMoveChara</c> does
+        ///            <c>if (matchedParam == 3 &amp;&amp; point[0x1C] &gt; 0) label = point[0x1C];</c>
+        ///            and then <c>ScriptLabelRequest = label</c>. Walking into the point runs that label.
+        ///
+        /// Norune's fishing sign is a type-3 point whose label is <b>256</b> — exactly the label that holds
+        /// <c>_LOAD_FISHING_DATA</c> / <c>_GOTO_FISHING</c> in <c>gedit\e01\event.stb</c>. That is the whole
+        /// mechanism, and it means a custom fishing spot needs only two data writes: a type-3 event point at
+        /// the water, and the fishing bytecode at whatever label it names.
+        /// </summary>
+        internal const int ItemOrLabel = 0x1C;
+
+        // Decoded from a live dump, then confirmed by catching a real fishing spot loading in Norune.
+        // NOTE: type-3 points are NOT in the door list — the dump at town load shows only type-1 interior
+        // doors. The fishing point's position (40, 0, 96) is PART-LOCAL: it is attached to the lake part.
+        internal const int Name     = 0x30;   // char[] — for doors, the target map ("i01h06", "dungeon")
+        internal const int Position = 0x50;   // float x, y, z  (part-local for part-derived points)
+        internal const int BoxSize  = 0x60;   // float x, y, z — the trigger volume
+        internal const int RotY     = 0x74;   // float radians (1.57 = 90 degrees)
+
+        /// <summary>Event types seen live.</summary>
+        internal const int TypeFree   = 0;   // slot is unused
+        internal const int TypeDoor   = 1;   // map jump; fires on walk-in
+        internal const int TypeItem   = 2;   // press the action button; +0x1C is an item id
+        internal const int TypeScript = 3;   // +0x1C is a SCRIPT LABEL — this is what a fishing sign is
+        internal const int TypeLadder4 = 4;  // EdInitHashigo (ladders)
+        internal const int TypeLadder5 = 5;
+
+        /// <summary>
+        /// ELF <c>0x21D19708</c> (the mod already calls this <c>FishingAddresses.OverworldState</c>) — the
+        /// script LABEL the town is being asked to run, or -1 for none. <c>EdMoveChara</c> writes it every
+        /// frame from the matched event point, so writing it directly is a race; create a type-3 event point
+        /// instead and let the engine do it.
+        /// </summary>
+        internal const long ScriptLabelRequest = 0x21D19708;
+
+        /// <summary>The label the engine falls back to (0x100). Norune's fishing script lives here.</summary>
+        internal const int DefaultFishingLabel = 256;
 
         /// <summary>The matched event's params, filled in by <c>EdGetEvent</c>. When this reads 2 and the
         /// action button is down, the event fires.</summary>
