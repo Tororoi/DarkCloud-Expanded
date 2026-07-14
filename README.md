@@ -126,7 +126,7 @@ The mod runs as a window alongside PCSX2 and opens in one of three **modes**. Re
 - **Options** — toggles that are **saved to your save file** and re-applied when you load it:
   - *Graphics* — enable graphical improvements; increased FOV
   - *Audio* — disable low-weapon-HP beeps; disable battle music; disable attack sounds; mute all music
-  - *Gameplay* — **Faster enemies** (enemy movement + attack speed) and **Stronger enemies** (scales enemies toward the next dungeon's power level)
+  - *Gameplay* — **Faster enemies** (enemy movement + attack speed); **Stronger enemies** (scales enemies toward the next dungeon's power level); **Randomize enemies** (re-rolls each floor's spawns on dungeon entry); **Harder enemy AI** (enemies with a get-up animation can revive after death)
 - **Quests** — a live tracker for active in-game quests (auto-refreshes when you open Manuals in-game).
 - **Credits** — contributor credits.
 
@@ -157,6 +157,49 @@ Power/testing tools kept out of normal play:
 - [ ] **Aga's Sword** — Equip: Confirm Toan gains +15 defense. Take hits that would change defense externally: verify boost is re-applied if given fluffy doughnut. Unequip: verify +15 is removed
 - [ ] **Brave Ark** — Equip in dungeon: get hit with Freeze, Poison, Curse, or Goo — confirm each is cleared within the polling interval. Stamina (not in resist mask) should still apply
 - [ ] **Frozen Tuna (Goro)** — Equip in dungeon: WHP loss heals Goro HP proportionally at 2x factor from banked hp pool. On hit, 5% chance stops all non-ice enemies and freezes Goro. Blizzard, Sam, and Ice Gemron are immune to the stop proc
+
+</details>
+
+<details>
+<summary>Custom Weapon Effects — second batch</summary>
+
+- [ ] **Small Sword (Quick Draw)** — First combo swing comes out with no wind-up; verify Tsukikage and Heaven's Cloud inherit it
+- [ ] **Tsukikage (Moonlit Focus)** — Lunge charge ready in ~0.25s, whirlwind in ~0.75s; verify Heaven's Cloud inherits it
+- [ ] **Heaven's Cloud (charge scale)** — Hold the whirlwind charge: blade grows up to 3× with a flash at max; whirlwind reach matches the grown blade
+- [ ] **Sun Sword (Solar Harvest)** — Kill many enemies with Sun Sword or Big Bang wielded; confirm occasional (1%) Sun attachment drops
+- [ ] **Big Bang (Detonate)** — Hits explode with fireball + shockwave; nearby enemies take real splash damage and knockback; chained kills also explode
+- [ ] **Buster Sword (True Buster)** — Attach an anti-category attachment: value counts as +4 in menu stats, damage, evolution, and absorb
+- [ ] **Cross Hinder (Sanctifier)** — ~2× damage and ~2× ABS vs undead; undead killed by it never revive
+- [ ] **Dark Cloud (Guard Crush)** — Hits land through a blocking enemy's guard (e.g. guarding skeletons)
+- [ ] **7th Heaven (Divine Guard)** — Guard blocks every attack including guard-breakers (knockback only, no damage); Guard Crush also active
+- [ ] **Kitchen Knife (Spring-Blessed Blade)** — Step into a healing spring: blade triples in length and attack doubles for ~60s; standing in the spring refreshes the timer
+- [ ] **Macho Sword (Overtraining)** — With a Macho Sword owned, weapon ABS fills past max (up to 2×) and the overflow carries into the next level after level-up
+- [ ] **Maneater (Blood Price)** — Curse applies per floor; holy water cures with no penalty; at critical durability drains 1 HP/s to restore durability, never killing
+- [ ] **7 Branch Sword (Sevenfold Rite)** — Status Break refused below +7; at +7 the sphere keeps 77% of stats; menu hint reflects the rule
+- [ ] **Atlamillia Sword (Insurance)** — With it owned, break a weapon in a dungeon: an Atla appears on a random floor of that dungeon containing the broken weapon's SynthSphere with level-scaled stats
+- [ ] **Angel Gear (Halo & Homing)** — Fire with no target: pellets form a spinning halo (max 5); approach an enemy: pellets peel off with trails and home in, curving around walls, skipping guarding enemies
+- [ ] **Super Steve (Sphere Inheritance)** — Attach spheres of several source weapons (e.g. Dark Cloud, Heaven's Cloud, Angel Gear, Mirage) and confirm the matching effect activates and the slingshot recolors to the source weapon's palette; detach and confirm it reverts
+- [ ] **Mirage (Decoy)** — Hold guard to charge, release: a shimmering clone appears and enemies chase it (~12s); hitting an enemy makes only that enemy re-target you; Hercules' Wrath grants the same effect
+- [ ] **Snail (Osmond)** — 5% Goo proc on hit
+
+</details>
+
+<details>
+<summary>Harder Enemy AI</summary>
+
+- [ ] **Toggle persistence** — Enable in Options, save, reload: toggle stays on and revival is active
+- [ ] **Non-native revival** — Kill common enemies with a get-up animation: ~30% revive at partial HP after their collapse, then resume normal AI
+- [ ] **Native undead revival** — Mummy / Master Jacket / Gacious / Horn Head revive noticeably more often (~45%)
+- [ ] **Cross Hinder interaction** — Undead killed by Cross Hinder never revive even with the toggle on
+
+</details>
+
+<details>
+<summary>Misc</summary>
+
+- [ ] **In-game weapon descriptions** — Open the weapon menu: descriptions match the modded effects (check a reworked one like 7th Heaven); 7 Branch Sword's Status Break hint shows the Sevenfold Rite rule
+- [ ] **Fishing records → Arise Mardan** — Set a new best record for a species: Arise Mardan's Max Magic increases after a few seconds; records list keeps one best entry per species
+- [ ] **Town overhead camera** — Press Select in any town (e.g. Yellow Drops): bird's-eye camera works; exiting snaps the player to the ground safely
 
 </details>
 

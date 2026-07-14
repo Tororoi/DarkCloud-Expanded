@@ -32,7 +32,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class HarderEnemyAI
     {
         internal static bool Enabled = false;
-        internal static bool DebugAlwaysRevive = true;   // TEMP diagnostic: roll threshold 100 → every kill revives
+        internal static bool DebugAlwaysRevive = false;  // TEMP diagnostic: roll threshold 100 → every kill revives
 
         private const int SplicedReviveChance = 30;   // % revive for species that never natively revived
         private const int NativeReviverChance = 45;   // % revive for the seven native revivers (10-18% natively)
