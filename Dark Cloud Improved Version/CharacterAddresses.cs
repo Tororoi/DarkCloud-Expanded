@@ -6,7 +6,7 @@ namespace Dark_Cloud_Improved_Version
     /// <c>MotionProc__FP6CFrameP12MOTION_STATEP8Mot_List</c> main 0x147D20). See docs/character-motion-table.md.
     ///
     /// The controlled character (Toan/Xiao/Goro/Ruby/Ungaga/Osmond — only one is active at a time) lives at a
-    /// FIXED global: <see cref="Base"/> = native 0x1EA1D20. It is the same object <c>WeaponCollision.
+    /// FIXED global: <see cref="Base"/> = native 0x1EA1D20. It is the same object <c>WeaponModel.
     /// EquippedModelPtr</c> (0x21EA1DDC) points into: EquippedModelPtr == Base + <see cref="ModelRootOffset"/>.
     /// </summary>
     internal static class CharacterMotion
@@ -15,7 +15,10 @@ namespace Dark_Cloud_Improved_Version
         internal const long Base       = 0x21EA1D20; // MMU (native | 0x20000000) — active-character CCharacter
 
         // ── Field offsets within the CCharacter object ──
-        internal const int ModelRootOffset   = 0xBC;  // → native ptr to the model root CFrame (== EquippedModelPtr)
+        internal const int ModelRootOffset   = 0xBC;  // → native ptr to the model root CFrame
+        /// <summary>Where the equipped model-root pointer lives (0x21EA1DDC). DERIVED, not a literal — it is
+        /// exactly <see cref="Base"/> + <see cref="ModelRootOffset"/>, and used to be a third hardcoded copy.</summary>
+        internal const long EquippedModelPtr = Base + ModelRootOffset;
         internal const int MotionSpeedOffset  = 0xC60; // float — motion play-rate override (see below)
         internal const int MotionFlagsOffset  = 0xC64; // uint  — motion flags: bit0x1=stop, 0x2=?, 0x4=restart
         internal const int MotionIdOffset     = 0xC68; // int   — current motion id (-1 = none); set by motionDrive
@@ -37,24 +40,20 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// The engine's whole-character ambient "flash" — an animated ambient tint applied to the ACTIVE unit
-    /// (RE'd from <c>setUnitAmbientAnime__Ffffff</c> dun 0x1DC1000 + <c>unitAmbientAnime__FPf</c> 0x1DC1050).
-    /// Setting <see cref="Enable"/> makes the per-frame updater drive the unit's ambient colour =
-    /// (colour × pulse) + 64 until the <see cref="Count"/> repeats run out. It is character-agnostic — the
-    /// game uses it for drink/face-change and Ruby's Mobius charge flash — so the same data writes flash any
-    /// active character. Trigger: write colour + speed + count, reset <see cref="Phase"/>, then set Enable.
-    /// gp = 0x2A97F0. See <c>CustomXiaoEffects.TriggerCharacterFlash</c> / the Ruby Mobius flash.
-    /// </summary>
-    /// <summary>
-    /// The player's STATUS BLOCK — the CDngStatusData object at <see cref="Base"/>: one per-character block
+    /// The player's STATUS BLOCK — the engine's <c>CDngStatusData</c> object at <see cref="Base"/>: one
+    /// per-character block
     /// holding that character's weapon inventory, equipped slot, atla, transform state and the rest.
     ///
     /// Plain vanilla layout, and deliberately NOT owned by any one feature: the weapon-record lookup here is what
     /// every "what is the player actually holding" question resolves through (weapon effects, the SynthSphere
     /// lookup, texture swapping, the ABS grant). It previously lived inside an ABS-rollover class, which made
     /// unrelated code read as if it cared about ABS.
+    ///
+    /// NAMED FOR THE ENGINE CLASS IT ACTUALLY IS. Do not call this "UserStatus": <c>CUserStatus</c> is a
+    /// SEPARATE, real ELF class (CheckLife/Init/Step__11CUserStatus), and the weapon/atla accessors that read
+    /// this block are <c>CDngStatusData</c>'s (GetItem/CheckDefaultWeapon/GetAtraData__14CDngStatusData).
     /// </summary>
-    internal static class UserStatus
+    internal static class DngStatusData
     {
         internal const long Base                 = 0x21CD954C; // CDngStatusData / "status base"
         internal const int  CharStride           = 0xAA8;      // per-character block stride
@@ -65,15 +64,44 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MaxWeaponSlots       = 10;         // bag slots 0-9
 
         /// <summary>A character's inventory weapon record (WEAPON_HAVE) for one of its bag slots — the id is at
-        /// +0, and the element/attach/ABS fields hang off it (see <see cref="WeaponCollision"/>).</summary>
+        /// +0, and the element/attach/ABS fields hang off it (see <see cref="WeaponHave"/>).</summary>
         internal static long WeaponRecord(int character, int slot)
             => Base + (long)character * CharStride + WeaponArrayOffset +
-               (long)slot * WeaponCollision.InventoryWeaponSlotStride;
+               (long)slot * WeaponHave.InventoryWeaponSlotStride;
 
         /// <summary>Address of the byte holding which bag slot <paramref name="character"/> has equipped.</summary>
         internal static long EquippedSlotAddr(int character) => Base + EquipSlotArrayOffset + character;
     }
 
+    /// <summary>
+    /// The PLAYER's hit-collision globals — character data, not weapon data.
+    ///
+    /// Researched vanilla facts with no caller yet; kept deliberately (an unused finding still costs a day to
+    /// rediscover). They lived in a class called "WeaponCollision", which was doubly wrong: that class held
+    /// nothing live from this domain, and the tolerance below is explicitly per-CHARACTER, not per-weapon.
+    /// </summary>
+    internal static class PlayerCollision
+    {
+        /// <summary>Per-character hit TOLERANCE — 6 floats indexed by character (0=Toan .. 5=Osmond), added to
+        /// hit tests. Confirmed in-game as [16,14,16,16,18,15]. It is the SAME across all of a character's
+        /// weapons, which is what proves it belongs to the CHARACTER and not to the weapon: it is a fixed
+        /// margin of error the hit test allows each character, NOT reach. Reach is per-weapon and lives in the
+        /// weapon model's dcol frames (see WeaponModel / docs/weapon-reach.md).</summary>
+        internal const int PerCharTolerance = 0x21DC1B40;
+
+        /// <summary>The player's collision object.</summary>
+        internal const int PlayerColObject  = 0x21DF9DF0;
+    }
+
+    /// <summary>
+    /// The engine's whole-character ambient "flash" — an animated ambient tint applied to the ACTIVE unit
+    /// (RE'd from <c>setUnitAmbientAnime__Ffffff</c> dun 0x1DC1000 + <c>unitAmbientAnime__FPf</c> 0x1DC1050).
+    /// Setting <see cref="Enable"/> makes the per-frame updater drive the unit's ambient colour =
+    /// (colour × pulse) + 64 until the <see cref="Count"/> repeats run out. It is character-agnostic — the
+    /// game uses it for drink/face-change and Ruby's Mobius charge flash — so the same data writes flash any
+    /// active character. Trigger: write colour + speed + count, reset <see cref="Phase"/>, then set Enable.
+    /// gp = 0x2A97F0. See <c>CustomXiaoEffects.TriggerCharacterFlash</c> / the Ruby Mobius flash.
+    /// </summary>
     internal static class CharacterFlash
     {
         internal const long Speed  = 0x202A36F4; // fGpffff9f04 — pulse speed (Ruby's charge flash uses 15.0)
@@ -135,7 +163,7 @@ namespace Dark_Cloud_Improved_Version
                                                       // (an upright character's X/Z angles are ~0).
         internal const int  CharScale      = 0x90;    // CObject scale x/y/z. Draw__10CCharacter re-applies it EVERY
                                                       // draw, so writing it is the clean whole-model size lever
-                                                      // (WeaponCollision.EffectObjectScale is this same field).
+                                                      // (ShotEffectPool.EffectObjectScale is this same field).
         internal const int  MotionFrame    = 0x2F0;   // float — current frame of the playing motion
         internal const int  MotionList     = 0x344;   // → the model's motion list (Mot_List; entry stride below)
         // Mot_List entry, indexed by motion id. Step__10CCharacter (0x138530) reads the entry's STEP as the
@@ -173,9 +201,48 @@ namespace Dark_Cloud_Improved_Version
         internal const int  RootChild    = 0x138;  // first child
         internal const int  RootSibling  = 0x13C;  // next sibling
         internal const int  Parent       = 0x110;  // parent (the world-matrix chain walks this)
+        internal const int  Name         = 0x118;  // NUL-terminated char[]; SearchFrame compares this, then
+                                                   // recurses child(+0x138) / next(+0x13C)
         internal const int  WorldCacheA  = 0x240;  // world-matrix-valid flags — zero to force a recompute
         internal const int  WorldCacheB  = 0x244;
         internal const int  GeomPtr      = 0x260;  // mesh/geometry object (SHARED between copies, never duplicated)
+
+        // ── Matrices. THE TRAP, learned the hard way (live dump 2026-06-28), is that a frame has TWO position
+        // representations and they are not interchangeable:
+        //   WorldMatrix (+0x150) — an output CACHE. Do NOT edit. GetLWMatrix recomputes it = parentWorld × local.
+        //   LocalMatrix (+0x1D0) — baked at load. Its translation row (+0x200/4/8) is the frame's REAL local
+        //                          offset from its parent.
+        //   TRS (+0x210 scale, +0x220 pos) — a SEPARATE path written by SetScale/SetPosition.
+        // For the dcol* weapon frames the position lives in the LOCAL MATRIX; the TRS position is (0,0,0) and
+        // unused. So to move such a frame: write +0x200/4/8, then force a world recompute by zeroing
+        // WorldCacheA (+0x240) — NOT DirtyTrs (+0x24C), which would rebuild the local matrix FROM the TRS and
+        // therefore zero the offset instead of extending it. (If a local-matrix edit reverts every frame, the
+        // engine is re-posing that frame from the upstream MDS — see MdsNode.)
+        internal const int  WorldMatrix   = 0x150;  // computed; do NOT edit
+        internal const int  LocalMatrix   = 0x1D0;  // baked at load
+        internal const int  LocalTransX   = 0x200;  // local-matrix translation row (y +0x204, z +0x208)
+        internal const int  LocalTransY   = 0x204;
+        internal const int  LocalTransZ   = 0x208;
+        internal const int  TrsScaleX     = 0x210;  // TRS scale x (y +0x214, z +0x218) — SetScale path
+        internal const int  TrsPosX       = 0x220;  // TRS translation x (y +0x224, z +0x228) — SetPosition path
+        internal const int  TrsPosY       = 0x224;
+        internal const int  TrsPosZ       = 0x228;
+        internal const int  DirtyTrs      = 0x24C;  // 1 = local TRS changed (rebuilds LocalMatrix from TRS)
+    }
+
+    /// <summary>
+    /// The RAW MDS model-node layout as it sits in data.dat / the .chr buffer — a DIFFERENT struct from the live
+    /// <see cref="CFrameVu1"/> object the engine builds from it. Worth keeping straight: when a local-matrix edit
+    /// on a CFrame reverts every frame, it is because the engine is re-posing that frame from here.
+    /// Layout: char name[16], then a 4x4 matrix at +0x28; the translation is matrix row 3 at +0x58/+0x5C/+0x60.
+    /// </summary>
+    internal static class MdsNode
+    {
+        internal const int NameLen = 16;
+        internal const int Matrix  = 0x28;
+        internal const int TransX  = 0x58;
+        internal const int TransY  = 0x5C;
+        internal const int TransZ  = 0x60;
     }
 
     /// <summary>

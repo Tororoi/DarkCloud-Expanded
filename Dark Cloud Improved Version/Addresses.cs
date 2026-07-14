@@ -2,6 +2,17 @@
 
 namespace Dark_Cloud_Improved_Version
 {
+    // TODO (deferred, agreed): DECOMPOSE THIS FILE. It is a 148-constant dumping ground with no class structure,
+    // read by 33 files, and it DUPLICATES facts the real *Addresses.cs files already own:
+    //   • chests / trap circles — the same CDungeonMap sub-tables as ChestAddresses, as absolute literals per map
+    //     instance (firstChest / backfloorFirstChest are one field on two maps: map + 0xB680)
+    //   • item tables — ItemPriceTable / ItemTbl* duplicate ItemAddresses (which says so in its own comments)
+    //   • player position / game mode / checkFloor / checkDungeon — duplicated verbatim in Player.cs
+    // It also holds MOD MECHANISM, not addresses: functionOverride / functionBGMPlay / functionBGMStop are
+    // assembled MIPS `jal` words the mod writes into the game, as MUTABLE public static byte[] in a constants
+    // file. Those belong with the feature that installs them (TownCharacter / audio).
+    // Plan: split into Input / GameMode / TownState / DungeonState / MenuState / Inventory; delete the
+    // duplicates; move the patch payloads out. Not started — do it as its own pass, it touches 33 files.
     class Addresses
     {
         /// <summary>
@@ -304,6 +315,13 @@ namespace Dark_Cloud_Improved_Version
 
         //Debug Menus
         public const int itemDebugMenu = 0x21D9EC08;
+        // TODO (needs live testing): 0x202A35EC has TWO contradictory names in this codebase —
+        //   Addresses.dungeonDebugMenu   (here; 11 call sites)
+        //   Player.dunCameraPerspective  (0 = Normal, 10 = FPS, 155 = Static; read as a ushort)
+        // and Dungeon.cs:1503/1508/1595 pokes it as a RAW LITERAL (writes 170, tests 171). At most one of these
+        // labels is right. Someone has to watch the value live across a camera change / the debug menu / a chest
+        // open and settle it, then collapse to ONE name and drop the literals. Until then, treat both names as
+        // suspect rather than trusting either.
         public const int dungeonDebugMenu = 0x202A35EC;
 
         //Inputs
@@ -396,7 +414,7 @@ namespace Dark_Cloud_Improved_Version
         /// Address of the lui instruction that sets the fish detection (bite) radius. The PNACH patches this
         /// UNCONDITIONALLY ("more consistentfishing") — there is no flag and nothing to set from PINE.
         /// (A `fishRangeBoostFlag` mailbox slot was once reserved for a conditional boost that was never
-        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot 0x21F10038.)
+        /// built; it was removed, and it had been squatting on Mirage's scene-gate slot CodeCaves.Mailbox.MirageSceneGate.)
         /// </summary>
         public const int fishDetectionRadiusPatch = 0x20240364;
 

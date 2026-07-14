@@ -8,6 +8,13 @@ namespace Dark_Cloud_Improved_Version
     public class CustomToanEffects
     {
 
+        /// <summary>7 Branch Sword's status-break transfer factor — MOD POLICY. The vanilla float (which the game
+        /// reads live) is <see cref="WeaponMenu.StatusBreakFactorDefault"/> = 0.6; 0.77 appears nowhere in the
+        /// game and is our designed buff (77% transfer, thematically "7"). A designed value belongs with the
+        /// feature, not in an addresses file.</summary>
+        private const float StatusBreakFactorSeven = 0.77f;
+
+
         private static Random random = new Random();
 
         // ── Aga's Sword "Defensive Legacy" ─────────────────────────────────────────────────
@@ -265,30 +272,30 @@ namespace Dark_Cloud_Improved_Version
             if (DateTime.UtcNow < _busterNextTick) return;
             _busterNextTick = DateTime.UtcNow.AddMilliseconds(400);
 
-            byte[] bag = Memory.ReadBytesBatch(WeaponCollision.InventoryWeaponSlot0Id,
-                10 * WeaponCollision.InventoryWeaponSlotStride);
-            if (bag == null || bag.Length < 10 * WeaponCollision.InventoryWeaponSlotStride) return;
+            byte[] bag = Memory.ReadBytesBatch(WeaponHave.InventoryWeaponSlot0Id,
+                10 * WeaponHave.InventoryWeaponSlotStride);
+            if (bag == null || bag.Length < 10 * WeaponHave.InventoryWeaponSlotStride) return;
 
             for (int slot = 0; slot < 10; slot++)
             {
-                int off = slot * WeaponCollision.InventoryWeaponSlotStride;
+                int off = slot * WeaponHave.InventoryWeaponSlotStride;
                 if (BitConverter.ToUInt16(bag, off) != Items.bustersword) continue;
 
-                for (int j = 0; j < WeaponCollision.WeaponAttachSlotCount; j++)
+                for (int j = 0; j < WeaponHave.WeaponAttachSlotCount; j++)
                 {
-                    int entryOff = off + WeaponCollision.WeaponAttachSlot0Offset +
-                                   j * WeaponCollision.WeaponAttachSlotStride;
+                    int entryOff = off + WeaponHave.WeaponAttachSlot0Offset +
+                                   j * WeaponHave.WeaponAttachSlotStride;
                     ushort attachId = BitConverter.ToUInt16(bag, entryOff);
                     if (attachId < Items.dragonslayer || attachId > Items.mageslayer) continue;
 
                     int cat = attachId - Items.dragonslayer;   // ids 111-120 are in anti-byte order
-                    int valOff = entryOff + WeaponCollision.AttachEntryAntiOffset + cat;
-                    if (bag[valOff] != WeaponCollision.AttachAntiBaseValue) continue;
+                    int valOff = entryOff + WeaponHave.AttachEntryAntiOffset + cat;
+                    if (bag[valOff] != WeaponHave.AttachAntiBaseValue) continue;
 
-                    Memory.WriteByte(WeaponCollision.InventoryWeaponSlot0Id + valOff,
-                        (byte)(WeaponCollision.AttachAntiBaseValue + 1));
+                    Memory.WriteByte(WeaponHave.InventoryWeaponSlot0Id + valOff,
+                        (byte)(WeaponHave.AttachAntiBaseValue + 1));
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"Buster Sword: attachment {attachId} boosted to +{WeaponCollision.AttachAntiBaseValue + 1} (bag slot {slot})");
+                        $"Buster Sword: attachment {attachId} boosted to +{WeaponHave.AttachAntiBaseValue + 1} (bag slot {slot})");
                 }
             }
         }
@@ -595,18 +602,6 @@ namespace Dark_Cloud_Improved_Version
             ("monstor\\e131a.stb", 0x4A08, 18),   // Mummy (Enhanced)
         };
 
-        /// <summary>
-        /// Ability Name: Sanctifier (Cross Hinder)
-        /// Against UNDEAD enemies (slot category 1):
-        ///   • ~2× damage — the BATTLE weapon record's anti-undead byte (+0x1C+1) is raised past the 99 menu
-        ///     cap to the value the damage formula (dmg += dmg × 0.015 × anti) needs for double damage:
-        ///     newAnti = (2×(1+0.015×native) − 1)/0.015, byte-capped at 255. Read live per hit, menu untouched.
-        ///   • 2× ABS — every undead slot's kill-ABS value (+0x0B0) is doubled ONCE when it appears on the
-        ///     floor (write-once, no per-hit racing); restored for live slots on unequip.
-        ///   • NO REVIVAL — the loaded death scripts of the five reviving undead species are patched once per
-        ///     floor: the revive roll's threshold literal is set to 0 so the revive branch never wins
-        ///     (one u32 per script, restored on unequip). No engine call, no per-death watching.
-        /// </summary>
         // ── Kitchen Knife: "Spring-Blessed Blade" ───────────────────────────────────────────
         private const float KkTargetLength   = 12f;    // blade length while blessed (stock dcol1 = 4.187)
         private const float KkAttackMult     = 2f;     // battle-copy attack multiplier while blessed
@@ -650,7 +645,7 @@ namespace Dark_Cloud_Improved_Version
                 // the adjacent halfword, so the == 1 test fails whenever that neighbour is non-zero.
                 bool inSpring = Memory.ReadUShort(HealingSpring.InZoneFlag) == 1 &&
                                 Player.CurrentCharacterNum() == Player.ToanId;
-                long atkAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffAttackOffset;
+                long atkAddr = WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset;
 
                 if (inSpring)
                 {
@@ -696,13 +691,25 @@ namespace Dark_Cloud_Improved_Version
             // Weapon swapped / left the dungeon mid-blessing: quietly put everything back.
             if (boosted)
             {
-                long atkAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffAttackOffset;
+                long atkAddr = WeaponHave.BattleWeaponRecord + WeaponHave.EffAttackOffset;
                 if (Memory.ReadUShort(atkAddr) == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
                     Memory.WriteUShort(atkAddr, baseAtk);
                 Weapons.ScaleWeaponBlade(kkCode, 1f);
             }
         }
 
+        /// <summary>
+        /// Ability Name: Sanctifier (Cross Hinder)
+        /// Against UNDEAD enemies (slot category 1):
+        ///   • ~2× damage — the BATTLE weapon record's anti-undead byte (+0x1C+1) is raised past the 99 menu
+        ///     cap to the value the damage formula (dmg += dmg × 0.015 × anti) needs for double damage:
+        ///     newAnti = (2×(1+0.015×native) − 1)/0.015, byte-capped at 255. Read live per hit, menu untouched.
+        ///   • 2× ABS — every undead slot's kill-ABS value (+0x0B0) is doubled ONCE when it appears on the
+        ///     floor (write-once, no per-hit racing); restored for live slots on unequip.
+        ///   • NO REVIVAL — the loaded death scripts of the five reviving undead species are patched once per
+        ///     floor: the revive roll's threshold literal is set to 0 so the revive branch never wins
+        ///     (one u32 per script, restored on unequip). No engine call, no per-death watching.
+        /// </summary>
         public static void CrossHinderEffect()
         {
             int n = EnemyAddresses.FloorSlots.Count;
@@ -711,7 +718,7 @@ namespace Dark_Cloud_Improved_Version
             var patched = new List<(long CellValueAddr, int OrigThr)>();
             byte floor = 0xFF;
             int nativeAnti = -1, targetAnti = -1;
-            long antiAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.AntiArrayOffset + (int)EnemyCategory.Undead;
+            long antiAddr = WeaponHave.BattleWeaponRecord + WeaponHave.AntiArrayOffset + (int)EnemyCategory.Undead;
 
             while (Player.Weapon.GetCurrentWeaponId() == Items.crosshinder && Player.InDungeonFloor())
             {
@@ -744,7 +751,7 @@ namespace Dark_Cloud_Improved_Version
                 // ~2× damage: keep the battle record's anti-undead byte asserted. The record is rebuilt
                 // (re-capped) whenever equipment changes, which this self-heals: any value other than our
                 // target is treated as the fresh native value and boosted from it.
-                if (Memory.ReadUShort(WeaponCollision.BattleWeaponRecord) == Items.crosshinder)
+                if (Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.crosshinder)
                 {
                     int cur = Memory.ReadByte(antiAddr);
                     if (cur != targetAnti)
@@ -766,7 +773,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(h, EnemySlotOffsets.RenderStatus)) > 0)
                         Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(h, EnemySlotOffsets.Abs), absOriginal[h]);
             }
-            if (nativeAnti >= 0 && Memory.ReadUShort(WeaponCollision.BattleWeaponRecord) == Items.crosshinder &&
+            if (nativeAnti >= 0 && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.crosshinder &&
                 Memory.ReadByte(antiAddr) == targetAnti)
                 Memory.WriteByte(antiAddr, (byte)nativeAnti);
         }
@@ -856,9 +863,9 @@ namespace Dark_Cloud_Improved_Version
         {
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                ushort dcEquipped = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
-                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                ushort dcEquipped = Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponHave.InventoryWeaponSlotStride);
                 if (dcEquipped != Items.darkcloud && dcEquipped != Items.seventhheaven)  // 7th Heaven inherits Guard Crush
                     break;
 
@@ -921,8 +928,8 @@ namespace Dark_Cloud_Improved_Version
             var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                if (Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id + toanSlot * WeaponCollision.InventoryWeaponSlotStride) != Items.evilcise)
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                if (Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id + toanSlot * WeaponHave.InventoryWeaponSlotStride) != Items.evilcise)
                     break;
                 EvilciseDrive(true, target, st);
                 Thread.Sleep(100);
@@ -1125,7 +1132,7 @@ namespace Dark_Cloud_Improved_Version
         // ── Macho Sword "Overtraining" (ABS rollover) ──────────────────────────────────────
         /// <summary>Rollover ceiling: current ABS may grow to this multiple of the weapon's max. This is the
         /// MOD's policy, not something the game does (vanilla is inert above max — see
-        /// <see cref="WeaponCollision.AbsRewards"/>), so it lives with the feature rather than in an addresses
+        /// <see cref="AbsRewards"/>), so it lives with the feature rather than in an addresses
         /// file.</summary>
         private const int RolloverFactor = 2;
 
@@ -1250,13 +1257,13 @@ namespace Dark_Cloud_Improved_Version
             // Resolve the ACTIVE character's equipped inventory record — kill ABS lands there.
             int ch = Player.CurrentCharacterNum();
             if ((uint)ch > 5) { _machoShadowRecord = 0; return; }
-            int equipSlot = Memory.ReadByte(UserStatus.Base +
-                                            UserStatus.EquipSlotArrayOffset + ch);
+            int equipSlot = Memory.ReadByte(DngStatusData.Base +
+                                            DngStatusData.EquipSlotArrayOffset + ch);
             if ((uint)equipSlot > 9) { _machoShadowRecord = 0; return; }
-            long rec = UserStatus.WeaponRecord(ch, equipSlot);
+            long rec = DngStatusData.WeaponRecord(ch, equipSlot);
             int id = Memory.ReadUShort(rec);
-            int max = MachoMaxExp(id, Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset));
-            int cur = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset);
+            int max = MachoMaxExp(id, Memory.ReadShort(rec + WeaponHave.InventoryWeaponLevelOffset));
+            int cur = Memory.ReadShort(rec + WeaponHave.InventoryWeaponAbsOffset);
 
             if (rec != _machoShadowRecord || id != _machoShadowId)
             {
@@ -1269,8 +1276,8 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
 
-            bool drainMode = Memory.ReadInt(UserStatus.Base +
-                                            UserStatus.TransformStateOffset) == 10;
+            bool drainMode = Memory.ReadInt(DngStatusData.Base +
+                                            DngStatusData.TransformStateOffset) == 10;
             bool eligible = max > 0 && !drainMode && !MachoIsAbslessWeapon(id);
 
             // 1) Kills first — so a fast engine grant that already landed isn't counted twice.
@@ -1297,7 +1304,7 @@ namespace Dark_Cloud_Improved_Version
             // 4) Materialize the rollover. Only ever needed above the vanilla max; a value ≥ max
             //    also makes the engine's pending grant for these kills skip itself natively.
             if (_machoTrueAbs > max && _machoTrueAbs > cur)
-                Memory.WriteUShort(rec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)_machoTrueAbs);
+                Memory.WriteUShort(rec + WeaponHave.InventoryWeaponAbsOffset, (ushort)_machoTrueAbs);
         }
 
         // One pass over the 16 enemy slots: HP > 0 → ≤ 0 crossings are deaths. Returns the summed
@@ -1305,7 +1312,7 @@ namespace Dark_Cloud_Improved_Version
         private static int MachoCollectKillGrants(int activeChar, bool eligible)
         {
             int total = 0;
-            bool backFloor = Memory.ReadInt(WeaponCollision.AbsRewards.BackFloorDoubleAddr) != 0;
+            bool backFloor = Memory.ReadInt(AbsRewards.BackFloorDoubleAddr) != 0;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
                 int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
@@ -1320,9 +1327,9 @@ namespace Dark_Cloud_Improved_Version
                 int give = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Abs));
                 if (give <= 0) continue;
                 if (backFloor) give <<= 1;
-                if ((Memory.ReadInt(WeaponCollision.AbsRewards.SlotStatusFlagsAddr(s)) &
-                     WeaponCollision.AbsRewards.AbsBonusFlag) != 0)
-                    give = (int)(give * WeaponCollision.AbsRewards.AbsBonusMult);
+                if ((Memory.ReadInt(AbsRewards.SlotStatusFlagsAddr(s)) &
+                     AbsRewards.AbsBonusFlag) != 0)
+                    give = (int)(give * AbsRewards.AbsBonusMult);
                 total += give;
             }
             return total;
@@ -1341,16 +1348,16 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_machoFlowRec == 0)
             {
-                if (Memory.ReadShort(WeaponCollision.LevelUpFlowKind) != WeaponCollision.FlowKindLevelUp) return;
-                int ch = Memory.ReadByte(WeaponCollision.MenuSelectedCharacter);
-                int slot = Memory.ReadByte(WeaponCollision.MenuSelectedWeaponSlot);
+                if (Memory.ReadShort(WeaponMenu.LevelUpFlowKind) != WeaponMenu.FlowKindLevelUp) return;
+                int ch = Memory.ReadByte(WeaponMenu.MenuSelectedCharacter);
+                int slot = Memory.ReadByte(WeaponMenu.MenuSelectedWeaponSlot);
                 if ((uint)ch > 5 || (uint)slot > 9) return;
-                long rec = UserStatus.WeaponRecord(ch, slot);
+                long rec = DngStatusData.WeaponRecord(ch, slot);
                 ushort id = Memory.ReadUShort(rec);
-                short level = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset);
+                short level = Memory.ReadShort(rec + WeaponHave.InventoryWeaponLevelOffset);
                 int max = MachoMaxExp(id, level);
                 if (max <= 0) return;                 // not a real weapon record
-                int abs = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset);
+                int abs = Memory.ReadShort(rec + WeaponHave.InventoryWeaponAbsOffset);
                 if (abs <= max) return;               // no rollover on the leveling weapon — vanilla handles it
                 _machoFlowId = id;
                 _machoFlowPrevLevel = level;
@@ -1368,8 +1375,8 @@ namespace Dark_Cloud_Improved_Version
             else
             {
                 ushort id = Memory.ReadUShort(_machoFlowRec);
-                short level = Memory.ReadShort(_machoFlowRec + WeaponCollision.InventoryWeaponLevelOffset);
-                short abs = Memory.ReadShort(_machoFlowRec + WeaponCollision.InventoryWeaponAbsOffset);
+                short level = Memory.ReadShort(_machoFlowRec + WeaponHave.InventoryWeaponLevelOffset);
+                short abs = Memory.ReadShort(_machoFlowRec + WeaponHave.InventoryWeaponAbsOffset);
                 if (id != _machoFlowId || now - _machoFlowArmedAt > TimeSpan.FromSeconds(15))
                 {
                     _machoFlowRec = 0;   // weapon changed under us, or the flow never committed
@@ -1377,7 +1384,7 @@ namespace Dark_Cloud_Improved_Version
                 else if (level > _machoFlowPrevLevel && abs < _machoFlowCarry)
                 {
                     // Backstop payout (the strike thread normally beats this by ~100ms).
-                    Memory.WriteUShort(_machoFlowRec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)_machoFlowCarry);
+                    Memory.WriteUShort(_machoFlowRec + WeaponHave.InventoryWeaponAbsOffset, (ushort)_machoFlowCarry);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"Macho Sword: fast carry (backstop) — weapon {id} starts its new level at {_machoFlowCarry} ABS");
                     _machoFlowRec = 0;
@@ -1403,12 +1410,12 @@ namespace Dark_Cloud_Improved_Version
                     long rec = _machoFlowRec;
                     if (rec == 0) return;                              // disarmed (paid out / timeout / changed)
                     if (Memory.ReadUShort(rec) != _machoFlowId) { Thread.Sleep(4); continue; } // let the tick disarm
-                    short level = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset);
+                    short level = Memory.ReadShort(rec + WeaponHave.InventoryWeaponLevelOffset);
                     if (level > _machoFlowPrevLevel)
                     {
-                        short abs = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset);
+                        short abs = Memory.ReadShort(rec + WeaponHave.InventoryWeaponAbsOffset);
                         if (abs < _machoFlowCarry)
-                            Memory.WriteUShort(rec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)_machoFlowCarry);
+                            Memory.WriteUShort(rec + WeaponHave.InventoryWeaponAbsOffset, (ushort)_machoFlowCarry);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             $"Macho Sword: strike carry — weapon {_machoFlowId} starts its new level at {_machoFlowCarry} ABS");
                         _machoFlowRec = 0;
@@ -1439,11 +1446,11 @@ namespace Dark_Cloud_Improved_Version
             {
                 for (int slot = 0; slot < 10; slot++)
                 {
-                    long rec = UserStatus.WeaponRecord(ch, slot);
+                    long rec = DngStatusData.WeaponRecord(ch, slot);
                     ushort id = Memory.ReadUShort(rec);
                     bool validWeapon = id >= 257 && id <= 376;
-                    short level = validWeapon ? Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset) : (short)0;
-                    short abs = validWeapon ? Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset) : (short)0;
+                    short level = validWeapon ? Memory.ReadShort(rec + WeaponHave.InventoryWeaponLevelOffset) : (short)0;
+                    short abs = validWeapon ? Memory.ReadShort(rec + WeaponHave.InventoryWeaponAbsOffset) : (short)0;
 
                     MachoSnap prev = _machoSnaps[ch, slot];
                     ref MachoCarry pend = ref _machoCarries[ch, slot];
@@ -1456,7 +1463,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             if (abs < pend.Carry)                      // a late engine reset undid the carry — re-apply
                             {
-                                Memory.WriteUShort(rec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)pend.Carry);
+                                Memory.WriteUShort(rec + WeaponHave.InventoryWeaponAbsOffset, (ushort)pend.Carry);
                                 abs = (short)pend.Carry;
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                                     $"Macho Sword: level-up carry re-applied — weapon {id} at {pend.Carry} ABS");
@@ -1480,7 +1487,7 @@ namespace Dark_Cloud_Improved_Version
                             bool resetSkipped = abs == rolled && rolled >= prevMax;
                             if (abs != expected && (resetSkipped || abs < expected))
                             {
-                                Memory.WriteUShort(rec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)expected);
+                                Memory.WriteUShort(rec + WeaponHave.InventoryWeaponAbsOffset, (ushort)expected);
                                 abs = (short)expected;
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                                     $"Macho Sword: weapon {id} leveled with {rolled}/{prevMax} ABS — new level starts at {expected}");
@@ -1515,15 +1522,15 @@ namespace Dark_Cloud_Improved_Version
                     int ch = int.Parse(p[0]); int slot = int.Parse(p[1]);
                     int id = int.Parse(p[2]); int surplus = int.Parse(p[4]);
                     if ((uint)ch > 5 || (uint)slot > 9 || surplus <= 0) continue;
-                    long rec = UserStatus.WeaponRecord(ch, slot);
+                    long rec = DngStatusData.WeaponRecord(ch, slot);
                     if (Memory.ReadUShort(rec) != id) continue;
-                    int max = MachoMaxExp(id, Memory.ReadShort(rec + WeaponCollision.InventoryWeaponLevelOffset));
+                    int max = MachoMaxExp(id, Memory.ReadShort(rec + WeaponHave.InventoryWeaponLevelOffset));
                     if (max <= 0) continue;
-                    int abs = Memory.ReadShort(rec + WeaponCollision.InventoryWeaponAbsOffset);
+                    int abs = Memory.ReadShort(rec + WeaponHave.InventoryWeaponAbsOffset);
                     int merged = Math.Min(abs + surplus, RolloverFactor * max);
                     if (merged > abs)
                     {
-                        Memory.WriteUShort(rec + WeaponCollision.InventoryWeaponAbsOffset, (ushort)merged);
+                        Memory.WriteUShort(rec + WeaponHave.InventoryWeaponAbsOffset, (ushort)merged);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                             $"Macho Sword: migrated {surplus} banked ABS back into weapon {id} ({merged}/{max})");
                     }
@@ -1694,8 +1701,8 @@ namespace Dark_Cloud_Improved_Version
             var target = new CurseAddrs(ToanState.Status, ToanState.StatusTimer, ToanState.Hp);
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                long weaponRecord = WeaponCollision.InventoryWeaponSlot0Id + toanSlot * WeaponCollision.InventoryWeaponSlotStride;
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                long weaponRecord = WeaponHave.InventoryWeaponSlot0Id + toanSlot * WeaponHave.InventoryWeaponSlotStride;
                 if (Memory.ReadUShort(weaponRecord) != Items.maneater)
                     break;
                 ManeaterDrive(true, target, weaponRecord, st);
@@ -1777,14 +1784,14 @@ namespace Dark_Cloud_Improved_Version
             if (DateTime.UtcNow - st.LastDrain >= TimeSpan.FromSeconds(1))
             {
                 st.LastDrain = DateTime.UtcNow;
-                float  whp    = Memory.ReadFloat(weaponRecord + WeaponCollision.InventoryWeaponWhpOffset);
-                short  maxWhp = Memory.ReadShort(weaponRecord + WeaponCollision.InventoryWeaponMaxWhpOffset);
+                float  whp    = Memory.ReadFloat(weaponRecord + WeaponHave.InventoryWeaponWhpOffset);
+                short  maxWhp = Memory.ReadShort(weaponRecord + WeaponHave.InventoryWeaponMaxWhpOffset);
                 ushort hp     = Memory.ReadUShort(a.Hp);
                 if (!nearDeath && hp > 1 && maxWhp > 0 &&
-                    whp > 0f && whp <= WeaponCollision.LowWhpWarningFraction * maxWhp)
+                    whp > 0f && whp <= WeaponMenu.LowWhpWarningFraction * maxWhp)
                 {
                     Memory.WriteUShort(a.Hp, (ushort)(hp - 1));
-                    Memory.WriteFloat(weaponRecord + WeaponCollision.InventoryWeaponWhpOffset, Math.Min(whp + 1f, maxWhp));
+                    Memory.WriteFloat(weaponRecord + WeaponHave.InventoryWeaponWhpOffset, Math.Min(whp + 1f, maxWhp));
                 }
             }
         }
@@ -1796,9 +1803,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static readonly byte[][] _sbSnapshots = new byte[10][]; // last-seen 7BS bag records
 
-        private static readonly bool[] _sbSphereSeen = new bool[WeaponCollision.AttachBoard.ScanCount];
+        private static readonly bool[] _sbSphereSeen = new bool[AttachBoard.ScanCount];
 
-        private static readonly DateTime[] _sbPendingSince = new DateTime[WeaponCollision.AttachBoard.ScanCount];
+        private static readonly DateTime[] _sbPendingSince = new DateTime[AttachBoard.ScanCount];
 
         private static bool _sbInitialized = false;
 
@@ -1842,17 +1849,17 @@ namespace Dark_Cloud_Improved_Version
 
             bool selected = false;
             int selLevel = -1;
-            if (Memory.ReadByte(WeaponCollision.MenuSelectedCharacter) == Player.ToanId)
+            if (Memory.ReadByte(WeaponMenu.MenuSelectedCharacter) == Player.ToanId)
             {
-                byte sel = Memory.ReadByte(WeaponCollision.MenuSelectedWeaponSlot);
+                byte sel = Memory.ReadByte(WeaponMenu.MenuSelectedWeaponSlot);
                 if (sel < 10)
                 {
-                    long rec = WeaponCollision.InventoryWeaponSlot0Id +
-                        sel * WeaponCollision.InventoryWeaponSlotStride;
+                    long rec = WeaponHave.InventoryWeaponSlot0Id +
+                        sel * WeaponHave.InventoryWeaponSlotStride;
                     if (Memory.ReadUShort(rec) == Items.sevenbranchsword)
                     {
                         selected = true;
-                        selLevel = Memory.ReadUShort(rec + WeaponCollision.InventoryWeaponLevelOffset);
+                        selLevel = Memory.ReadUShort(rec + WeaponHave.InventoryWeaponLevelOffset);
                     }
                 }
             }
@@ -1871,22 +1878,22 @@ namespace Dark_Cloud_Improved_Version
             // The sphere (written to the board at confirm) is cleared here as well. At +7 and
             // above the flow is untouched.
             if (menuOpen && selected && selLevel >= 0 && selLevel < 7 &&
-                Memory.ReadUShort(WeaponCollision.LevelUpFlowKind) == WeaponCollision.FlowKindStatusBreak &&
-                Memory.ReadUShort(WeaponCollision.LevelUpFlowState) == WeaponCollision.BreakStateAnimation)
+                Memory.ReadUShort(WeaponMenu.LevelUpFlowKind) == WeaponMenu.FlowKindStatusBreak &&
+                Memory.ReadUShort(WeaponMenu.LevelUpFlowState) == WeaponMenu.BreakStateAnimation)
             {
-                Memory.WriteUShort(WeaponCollision.LevelUpFlowState, WeaponCollision.BreakStateWindDown);
+                Memory.WriteUShort(WeaponMenu.LevelUpFlowState, WeaponMenu.BreakStateWindDown);
 
                 // Erase the just-created 7BS sphere from the attachment board
-                for (int i = 0; i < WeaponCollision.AttachBoard.ScanCount; i++)
+                for (int i = 0; i < AttachBoard.ScanCount; i++)
                 {
-                    long entry = WeaponCollision.AttachBoard.Base + (long)i * WeaponCollision.AttachBoard.Stride;
-                    if (Memory.ReadUShort(entry + WeaponCollision.AttachBoard.EntryItemId) ==
-                            WeaponCollision.AttachBoard.SynthSphereId &&
-                        Memory.ReadUShort(entry + WeaponCollision.AttachBoard.EntrySourceId) ==
+                    long entry = AttachBoard.Base + (long)i * AttachBoard.Stride;
+                    if (Memory.ReadUShort(entry + AttachBoard.EntryItemId) ==
+                            AttachBoard.SynthSphereId &&
+                        Memory.ReadUShort(entry + AttachBoard.EntrySourceId) ==
                             Items.sevenbranchsword &&
                         !_sbSphereSeen[i])
                     {
-                        Memory.WriteByteArray(entry, new byte[WeaponCollision.AttachBoard.Stride]);
+                        Memory.WriteByteArray(entry, new byte[AttachBoard.Stride]);
                         break;
                     }
                 }
@@ -1903,9 +1910,9 @@ namespace Dark_Cloud_Improved_Version
             if (boost != _sbFactorBoosted)
             {
                 _sbFactorBoosted = boost;
-                Memory.WriteFloat(WeaponCollision.StatusBreakFactorFloat,
-                    boost ? WeaponCollision.StatusBreakFactorSeven
-                          : WeaponCollision.StatusBreakFactorDefault);
+                Memory.WriteFloat(WeaponMenu.StatusBreakFactorFloat,
+                    boost ? StatusBreakFactorSeven
+                          : WeaponMenu.StatusBreakFactorDefault);
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     (boost ? "7 Branch Sword: status-break factor 0.6 -> 0.77"
                            : "7 Branch Sword: status-break factor restored to 0.6"));
@@ -1915,22 +1922,22 @@ namespace Dark_Cloud_Improved_Version
             if (DateTime.UtcNow < _sevenBranchNextTick) return;
             _sevenBranchNextTick = DateTime.UtcNow.AddMilliseconds(250);
 
-            byte[] bag = Memory.ReadBytesBatch(WeaponCollision.InventoryWeaponSlot0Id,
-                10 * WeaponCollision.InventoryWeaponSlotStride);
-            byte[] board = Memory.ReadBytesBatch(WeaponCollision.AttachBoard.Base,
-                WeaponCollision.AttachBoard.ScanCount * WeaponCollision.AttachBoard.Stride);
+            byte[] bag = Memory.ReadBytesBatch(WeaponHave.InventoryWeaponSlot0Id,
+                10 * WeaponHave.InventoryWeaponSlotStride);
+            byte[] board = Memory.ReadBytesBatch(AttachBoard.Base,
+                AttachBoard.ScanCount * AttachBoard.Stride);
             if (bag == null || board == null ||
-                bag.Length < 10 * WeaponCollision.InventoryWeaponSlotStride ||
-                board.Length < WeaponCollision.AttachBoard.ScanCount * WeaponCollision.AttachBoard.Stride)
+                bag.Length < 10 * WeaponHave.InventoryWeaponSlotStride ||
+                board.Length < AttachBoard.ScanCount * AttachBoard.Stride)
                 return;
 
-            for (int idx = 0; idx < WeaponCollision.AttachBoard.ScanCount; idx++)
+            for (int idx = 0; idx < AttachBoard.ScanCount; idx++)
             {
-                int off = idx * WeaponCollision.AttachBoard.Stride;
+                int off = idx * AttachBoard.Stride;
                 bool isSevenSphere =
-                    BitConverter.ToUInt16(board, off + WeaponCollision.AttachBoard.EntryItemId) ==
-                        WeaponCollision.AttachBoard.SynthSphereId &&
-                    BitConverter.ToUInt16(board, off + WeaponCollision.AttachBoard.EntrySourceId) ==
+                    BitConverter.ToUInt16(board, off + AttachBoard.EntryItemId) ==
+                        AttachBoard.SynthSphereId &&
+                    BitConverter.ToUInt16(board, off + AttachBoard.EntrySourceId) ==
                         Items.sevenbranchsword;
 
                 bool markSeen = isSevenSphere;
@@ -1967,10 +1974,10 @@ namespace Dark_Cloud_Improved_Version
 
             for (int s = 0; s < 10; s++)
             {
-                int off = s * WeaponCollision.InventoryWeaponSlotStride;
+                int off = s * WeaponHave.InventoryWeaponSlotStride;
                 if (BitConverter.ToUInt16(bag, off) == Items.sevenbranchsword)
                 {
-                    byte[] snap = new byte[WeaponCollision.InventoryWeaponSlotStride];
+                    byte[] snap = new byte[WeaponHave.InventoryWeaponSlotStride];
                     Array.Copy(bag, off, snap, 0, snap.Length);
                     _sbSnapshots[s] = snap;
                 }
@@ -1993,7 +2000,7 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < 10; s++)
             {
                 if (_sbSnapshots[s] != null &&
-                    BitConverter.ToUInt16(bag, s * WeaponCollision.InventoryWeaponSlotStride) !=
+                    BitConverter.ToUInt16(bag, s * WeaponHave.InventoryWeaponSlotStride) !=
                         Items.sevenbranchsword)
                 {
                     donor = s;
@@ -2003,7 +2010,7 @@ namespace Dark_Cloud_Improved_Version
             if (donor < 0) return SbPending;   // source sword still in the bag (animation running)
 
             byte[] snap = _sbSnapshots[donor];
-            int level = BitConverter.ToUInt16(snap, WeaponCollision.InventoryWeaponLevelOffset);
+            int level = BitConverter.ToUInt16(snap, WeaponHave.InventoryWeaponLevelOffset);
             if (level >= 7)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -2011,12 +2018,12 @@ namespace Dark_Cloud_Improved_Version
                 return SbKept;
             }
 
-            long sphereAddr = WeaponCollision.AttachBoard.Base + (long)idx * WeaponCollision.AttachBoard.Stride;
-            long slotAddr = WeaponCollision.InventoryWeaponSlot0Id +
-                            donor * WeaponCollision.InventoryWeaponSlotStride;
+            long sphereAddr = AttachBoard.Base + (long)idx * AttachBoard.Stride;
+            long slotAddr = WeaponHave.InventoryWeaponSlot0Id +
+                            donor * WeaponHave.InventoryWeaponSlotStride;
             Memory.WriteByteArray(slotAddr, snap);
-            Memory.WriteByteArray(sphereAddr, new byte[WeaponCollision.AttachBoard.Stride]);
-            Array.Copy(snap, 0, bag, donor * WeaponCollision.InventoryWeaponSlotStride, snap.Length);
+            Memory.WriteByteArray(sphereAddr, new byte[AttachBoard.Stride]);
+            Array.Copy(snap, 0, bag, donor * WeaponHave.InventoryWeaponSlotStride, snap.Length);
             Dayuppy.DisplayMessage("The 7 Branch Sword resists!\nIt only breaks at +7 or above.", 2, 34, 5000);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                 $"7 Branch Sword: status break at +{level} undone (needs +7)");
@@ -2052,9 +2059,9 @@ namespace Dark_Cloud_Improved_Version
         {
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                if (Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
-                        toanSlot * WeaponCollision.InventoryWeaponSlotStride) != Items.seventhheaven)
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                if (Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponHave.InventoryWeaponSlotStride) != Items.seventhheaven)
                     break;
 
                 SeventhHeavenSoftenAttacks(true);
@@ -2135,7 +2142,7 @@ namespace Dark_Cloud_Improved_Version
         /// Ability Name: Quick Draw (Small Sword, Tsukikage, Heaven's Cloud)
         /// While a Quick Draw sword is wielded, Toan's opening swing comes out almost instantly:
         /// once the first combo attack (action state 0x24) starts, the animation frame cursor
-        /// (<see cref="WeaponCollision.AnimFrameCursor"/>) is snapped forward past the wind-up
+        /// (<see cref="PlayerAction.AnimFrameCursor"/>) is snapped forward past the wind-up
         /// to just before the hit window. ToanKey_Play gates the forward step-in (frames
         /// 820–820.5), weapon trail (824–825), swing sound (825) and hit window (825–828) off
         /// that same cursor, so skipping 820.5 → 824 keeps all of them — only the wind-up
@@ -2147,25 +2154,25 @@ namespace Dark_Cloud_Improved_Version
         {
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                ushort equippedId = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
-                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                ushort equippedId = Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponHave.InventoryWeaponSlotStride);
                 if (equippedId != Items.smallsword && equippedId != Items.tsukikage &&
                     equippedId != Items.heavenscloud)
                     break;
 
                 if (Player.CurrentCharacterNum() == Player.ToanId &&
                     !Player.CheckDunIsPaused() &&
-                    Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionComboFirst)
+                    Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionComboFirst)
                 {
-                    float frame = Memory.ReadFloat(WeaponCollision.AnimFrameCursor);
+                    float frame = Memory.ReadFloat(PlayerAction.AnimFrameCursor);
                     // Wait until the engine's one-shot step-in write (820–820.5) has run, then
                     // fast-forward. The cursor advances 0.3/tick, so at least one poll always
                     // lands inside the window; a late catch just skips a little less.
-                    if (frame >= WeaponCollision.Combo1WindupSettled &&
-                        frame < WeaponCollision.Combo1QuickDrawTarget)
-                        Memory.WriteFloat(WeaponCollision.AnimFrameCursor,
-                            WeaponCollision.Combo1QuickDrawTarget);
+                    if (frame >= PlayerAction.Combo1WindupSettled &&
+                        frame < PlayerAction.Combo1TrailSpawn)
+                        Memory.WriteFloat(PlayerAction.AnimFrameCursor,
+                            PlayerAction.Combo1TrailSpawn);
                 }
 
                 // Tighter poll than the other effect loops: latency here directly delays the swing.
@@ -2194,9 +2201,9 @@ namespace Dark_Cloud_Improved_Version
             var st = new SunHarvestState(EnemyAddresses.FloorSlots.Count);
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                ushort equippedId = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
-                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                ushort equippedId = Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponHave.InventoryWeaponSlotStride);
                 if (equippedId != Items.sunsword && equippedId != Items.bigbang)
                     break;
 
@@ -2280,7 +2287,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Ability Name: Moonlit Focus (Tsukikage, Heaven's Cloud)
         /// Holding X charges the charge attack twice as fast as normal weapons. The engine adds
-        /// 1/60 to the charge meter (<see cref="WeaponCollision.ChargeMeter"/>) per wind-up frame
+        /// 1/60 to the charge meter (<see cref="PlayerAction.ChargeMeter"/>) per wind-up frame
         /// (= 1.0/second); this effect feeds in a second 1.0/second of wall time while the
         /// wind-up state is active, so lunge readies in ~0.25s and whirlwind in ~0.75s. The
         /// charge level is re-derived from the meter every wind-up frame by the engine, so the
@@ -2294,9 +2301,9 @@ namespace Dark_Cloud_Improved_Version
 
             while (Player.InDungeonFloor())
             {
-                byte toanSlot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
-                ushort equippedId = Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
-                        toanSlot * WeaponCollision.InventoryWeaponSlotStride);
+                byte toanSlot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
+                ushort equippedId = Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
+                        toanSlot * WeaponHave.InventoryWeaponSlotStride);
                 if (equippedId != Items.tsukikage && equippedId != Items.heavenscloud)
                     break;
 
@@ -2308,14 +2315,14 @@ namespace Dark_Cloud_Improved_Version
 
                 if (Player.CurrentCharacterNum() == Player.ToanId &&
                     !Player.CheckDunIsPaused() &&
-                    Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWindup)
+                    Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWindup)
                 {
-                    float meter = Memory.ReadFloat(WeaponCollision.ChargeMeter);
-                    if (meter > 0f && meter < WeaponCollision.ChargeMeterCap)
+                    float meter = Memory.ReadFloat(PlayerAction.ChargeMeter);
+                    if (meter > 0f && meter < PlayerAction.ChargeMeterCap)
                     {
-                        float boosted = Math.Min(WeaponCollision.ChargeMeterCap,
-                            meter + elapsed * WeaponCollision.ChargeMeterPerSecond);
-                        Memory.WriteFloat(WeaponCollision.ChargeMeter, boosted);
+                        float boosted = Math.Min(PlayerAction.ChargeMeterCap,
+                            meter + elapsed * PlayerAction.ChargeMeterPerSecond);
+                        Memory.WriteFloat(PlayerAction.ChargeMeter, boosted);
                     }
                 }
 

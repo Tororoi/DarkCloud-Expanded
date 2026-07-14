@@ -18,7 +18,7 @@ with no name (frames like `0-0`/`1-1`) are unused/placeholder slots kept for ind
 
 > NOTE: the source KEY block has one line **commented out** (`// KEY 540, 546, 0.4 //26投げ開始`,
 > throw-start). The loader skips it, so it is NOT a motion slot — the table below matches the RUNTIME
-> ids (verified against `ToanKey_Play`: first combo swing = motion id 0x24 = **36** 連続攻撃1, end frame
+> ids (verified against `ToanKey_Play`: first combo swing = motion id 0x24 = **36** 連続攻戸1, end frame
 > read from `DAT_01ea2064 + id*0x10 + 4`). Toan is the only playable character with a commented-out KEY.
 
 | Idx | Frames | Speed | Name (JP) | Meaning |
@@ -49,21 +49,22 @@ with no name (frames like `0-0`/`1-1`) are unused/placeholder slots kept for ind
 | 23 | 460–480 | 0.2 | やられ | downed |
 | 24 | 715–750 | 0.4 | 技２ 24やられ | skill２ 24downed |
 | 25 | 196–196 | 0 | 溜め攻撃loop3 | charge attackloop3 |
-| 26 | 546–546 | 0 | 投げ停止 | throw (stop) |
-| 27 | 546–566 | 0.4 | 投げる | throw |
-| 28 | 620–655 | 0.25 | 飲む | drink |
-| 29 | 690–710 | 0.65 | ダメージ受け走り | run (hit) |
-| 30 | 756–766 | 0.3 | 溜め移動 | charge move |
-| 31 | 660–680 | 0.5 | ダメだし | (dmg-out) |
-| 32 | 570–590 | 0.3 | 落下モーション | fall motion |
-| 33 | 778–788 | 0.3 | ガード移動 | guard move |
-| 34 | 792–802 | 0.3 | Gget In | Gget In |
-| 35 | 805–815 | 0.3 | Gget Loop | Gget Loop |
-| 36 | 820–830 | 0.3 | 連続攻撃1 | combo attack1 |
-| 37 | 830–838 | 0.3 | 連続攻撃2 | combo attack2 |
-| 38 | 838–847 | 0.3 | 連続攻撃1 | combo attack1 |
-| 39 | 847–857 | 0.3 | 連続攻撃2 | combo attack2 |
-| 40 | 856–884 | 0.3 | 連続攻撃3 | combo attack3 |
+| 26 | 540–546 | 0.4 | 投げ開始 | throw (start) |
+| 27 | 546–546 | 0 | 投げ停止 | throw (stop) |
+| 28 | 546–566 | 0.4 | 投げる | throw |
+| 29 | 620–655 | 0.25 | 飲む | drink |
+| 30 | 690–710 | 0.65 | ダメージ受け走り | run (hit) |
+| 31 | 756–766 | 0.3 | 溜め移動 | charge move |
+| 32 | 660–680 | 0.5 | ダメだし | (dmg-out) |
+| 33 | 570–590 | 0.3 | 落下モーション | fall motion |
+| 34 | 778–788 | 0.3 | ガード移動 | guard move |
+| 35 | 792–802 | 0.3 | Gget In | Gget In |
+| 36 | 805–815 | 0.3 | Gget Loop | Gget Loop |
+| 37 | 820–830 | 0.3 | 連続攻撃1 | combo attack1 |
+| 38 | 830–838 | 0.3 | 連続攻撃2 | combo attack2 |
+| 39 | 838–847 | 0.3 | 連続攻撃1 | combo attack1 |
+| 40 | 847–857 | 0.3 | 連続攻撃2 | combo attack2 |
+| 41 | 856–884 | 0.3 | 連続攻撃3 | combo attack3 |
 
 ### Xiao `c04b`
 
@@ -122,6 +123,23 @@ with no name (frames like `0-0`/`1-1`) are unused/placeholder slots kept for ind
 | 48 | 40–50 | 0.4 | 溜め | charge |
 | 49 | 20–20 | 0 | 溜め | charge |
 | 50 | 20–30 | 0.7 | 撃ち | shoot |
+
+### Xiao (CAT FORM — playable) `c04pcat`
+
+*Motions: gedit\e01\chara\c04pcat.chr @ data.dat 0x270B3000 — シャオ猫; the model the mod loads to play as cat Xiao in town (TownCharacter.cs)*
+
+> NOTE: **the playable cat has only these four motions — there is no run and no brace.** Every OTHER cat model
+> in the game (see the variant table below) carries a richer set, but their motion INDICES DO NOT MATCH this one:
+> `c04pcat` orders them idle/walk/walk/sit, while all the others order them idle/sit/walk/brace/run. A motion id is
+> only meaningful against the model that is actually loaded — id 1 is *walk* on the playable cat and *sit* on
+> every other cat. Motion data is bound to the model (`MOTION 0, "c04pcat.mot"`), so ids are not portable.
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 60–80 | 0.3 | 歩き | walk |
+| 2 | 60–80 | 0.3 | 歩き | walk |
+| 3 | 30–40 | 0.1 | 座り | sit |
 
 ### Ruby `c05a`
 
@@ -330,4 +348,101 @@ with no name (frames like `0-0`/`1-1`) are unused/placeholder slots kept for ind
 | 0 | 10–20 | 0.5 | 立ち | idle |
 | 1 | 60–80 | 0.5 | 走り | run |
 | 2 | 30–50 | 0.2 | 歩き | walk |
+
+### Cat-form variants (NOT playable — reference only)
+
+Every other `c04*cat` model in `data.dat`. They are listed because they show what cat animations
+EXIST — but a motion id only means anything against the model that is actually loaded, and these
+orderings differ from the playable `c04pcat`. To use one of these motions you would have to load
+that model, not just ask for the index.
+
+**`gedit\e01\chara\c04cat.chr`** @ 0x2705F000 — town NPC cat
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 30–40 | 0.1 | 座り | sit |
+| 2 | 60–80 | 0.3 | 歩き | walk |
+| 3 | 95–105 | 0.1 | 身構え | brace / ready |
+| 4 | 120–136 | 0.5 | 走り | run |
+
+**`gedit\s86\chara\c04cat.chr`** @ 0x51CAA800 — scene s86 — adds jump (踏み切り / 飛びＬ / 着地)
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 30–40 | 0.1 | 座り | sit |
+| 2 | 60–80 | 0.3 | 歩き | walk |
+| 3 | 95–105 | 0.1 | 身構え | brace / ready |
+| 4 | 120–136 | 0.5 | 走り | run |
+| 5 | 190–204 | 0.5 | 踏み切り | take off (jump) |
+| 6 | 205–214 | 0.1 | 飛びＬ | leap |
+| 7 | 215–227 | 0.36 | 着地 | land |
+
+**`gedit\s87\chara\c04cat.chr`** @ 0x51FE5800 — scene s87 — same set as s86
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 30–40 | 0.1 | 座り | sit |
+| 2 | 60–80 | 0.3 | 歩き | walk |
+| 3 | 95–105 | 0.1 | 身構え | brace / ready |
+| 4 | 120–136 | 0.5 | 走り | run |
+| 5 | 190–204 | 0.5 | 踏み切り | take off (jump) |
+| 6 | 205–214 | 0.1 | 飛びＬ | leap |
+| 7 | 215–227 | 0.36 | 着地 | land |
+
+**`gedit\e01\chara\e04c04cat.chr`** @ 0x27871000 — event e04 — adds float / head-tilt
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 30–40 | 0.1 | 座り | sit |
+| 2 | 60–80 | 0.3 | 歩き | walk |
+| 3 | 95–105 | 0.1 | 身構え | brace / ready |
+| 4 | 120–136 | 0.5 | 走り | run |
+| 5 | 160–190 | 0.16 | 浮かぶ | float |
+| 6 | 191–201 | 0.16 | そのまま首傾げ | head tilt |
+| 7 | 202–212 | 0.1 | 傾げﾙｰﾌﾟ | tilt (loop) |
+
+**`gedit\s99\chara\e17c04cat.chr`** @ 0x55966000 — event e17 — adds look-at-Toan / turn
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 30–40 | 0.1 | 座り | sit |
+| 2 | 60–80 | 0.3 | 歩き | walk |
+| 3 | 95–105 | 0.1 | 身構え | brace / ready |
+| 4 | 120–136 | 0.5 | 走り | run |
+| 5 | 150–165 | 0.1 | トアン見る | look at Toan |
+| 6 | 155–165 | 0.1 | 上見ﾙｰﾌﾟ | look up (loop) |
+| 7 | 166–180 | 0.3 | 振り向き | turn around |
+
+**`dun\d01\event\e613c04cat.chr`** @ 0x1789F800 — dungeon event e613 — its OWN ordering (idle/walk/run/gasp/turn)
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 25–45 | 0.3 | 歩き | walk |
+| 2 | 50–66 | 0.5 | 走り | run |
+| 3 | 70–80 | 0.3 | ハッ3 | gasp / startle3 |
+| 4 | 85–95 | 0.13 | ハッﾙｰﾌﾟ | gasp (loop) |
+| 5 | 100–110 | 0.3 | ハッ戻り（立ちへ） | gasp (return to idle)（idleへ） |
+| 6 | 115–135 | 0.3 | ふりかえ | turn around |
+| 7 | 140–150 | 0.13 | ふりかえﾙｰﾌﾟ | turn around (loop) |
+| 8 | 155–165 | 0.3 | ふりかえ戻り（歩きへ）8 | turn back (to walk)（walkへ）8 |
+
+**`dun\d01\event\e614c04cat.chr`** @ 0x1791D800 — dungeon event e614 — same as e613
+
+| Idx | Frames | Speed | Name (JP) | Meaning |
+|---|---|---|---|---|
+| 0 | 10–20 | 0.1 | 立ち | idle |
+| 1 | 25–45 | 0.3 | 歩き | walk |
+| 2 | 50–66 | 0.5 | 走り | run |
+| 3 | 70–80 | 0.3 | ハッ3 | gasp / startle3 |
+| 4 | 85–95 | 0.13 | ハッﾙｰﾌﾟ | gasp (loop) |
+| 5 | 100–110 | 0.3 | ハッ戻り（立ちへ） | gasp (return to idle)（idleへ） |
+| 6 | 115–135 | 0.3 | ふりかえ | turn around |
+| 7 | 140–150 | 0.13 | ふりかえﾙｰﾌﾟ | turn around (loop) |
+| 8 | 155–165 | 0.3 | ふりかえ戻り（歩きへ）8 | turn back (to walk)（walkへ）8 |
 

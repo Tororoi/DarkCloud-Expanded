@@ -8,6 +8,15 @@ namespace Dark_Cloud_Improved_Version
     public class CustomRubyEffects
     {
 
+        // ── Mobius Ring charge-ball growth — MOD POLICY, not a vanilla fact ──────────────────────────────
+        // The ball's size tracks the Mobius damage multiplier M = currentDamage/baseDamage:
+        //   scale = 1 + (M-1)*RubyBallGrowthPerMultiple, clamped to RubyBallMaxScale.
+        // Both are eyeball-calibration (tune live) — which is exactly why they do NOT belong in an addresses
+        // file. The vanilla facts they drive live in ShotEffectPool.
+        internal const float RubyBallMaxScale          = 5.0f;   // hard cap on ball/orb size (M can reach 1000s)
+        internal const float RubyBallGrowthPerMultiple = 1.0f;   // ball-scale gained per +1.0 of damage multiplier
+
+
         private static Random random = new Random();
 
         // ── Mobius Ring ────────────────────────────────────────────────────────────────────
@@ -100,8 +109,8 @@ namespace Dark_Cloud_Improved_Version
                     if (fullyCharged)
                     {
                         float m = (float)damage / baseDamage;
-                        ballScale = 1.0f + (m - 1.0f) * WeaponCollision.RubyBallGrowthPerMultiple;
-                        if (ballScale > WeaponCollision.RubyBallMaxScale) ballScale = WeaponCollision.RubyBallMaxScale;
+                        ballScale = 1.0f + (m - 1.0f) * RubyBallGrowthPerMultiple;
+                        if (ballScale > RubyBallMaxScale) ballScale = RubyBallMaxScale;
                         if (ballScale < 1.0f) ballScale = 1.0f;
                         Weapons.SetRubyBallScale(ballScale);
                     }

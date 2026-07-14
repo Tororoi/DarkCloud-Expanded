@@ -214,8 +214,8 @@ namespace Dark_Cloud_Improved_Version
             _writeProbeDone = true;
 
             // Try current PCSX2 PINE spec: Write8 = 0x04
-            SendBatch(BuildWritePacket(0x04, 0x21F10024, new byte[] { 0x01 }));
-            if (ReadByte(0x21F10024) == 0x01)
+            SendBatch(BuildWritePacket(0x04, CodeCaves.Mailbox.PineProbe, new byte[] { 0x01 }));
+            if (ReadByte(CodeCaves.Mailbox.PineProbe) == 0x01)
             {
                 _altWriteOpcodes = true;
                 Console.WriteLine("[PINE probe] Write8 opcode 0x04 works (current PCSX2 PINE spec).");
@@ -223,8 +223,8 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Fallback: legacy PCSX2 PINE spec: Write8 = 0x08
-            SendBatch(BuildWritePacket(0x08, 0x21F10024, new byte[] { 0x01 }));
-            if (ReadByte(0x21F10024) == 0x01)
+            SendBatch(BuildWritePacket(0x08, CodeCaves.Mailbox.PineProbe, new byte[] { 0x01 }));
+            if (ReadByte(CodeCaves.Mailbox.PineProbe) == 0x01)
             {
                 Console.WriteLine("[PINE probe] Write8 opcode 0x08 works (legacy PCSX2 PINE spec).");
                 goto Done;
@@ -234,7 +234,7 @@ namespace Dark_Cloud_Improved_Version
 
             Done:
             _writeFailCount = 0;
-            WriteByte(0x21F10024, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
+            WriteByte(CodeCaves.Mailbox.PineProbe, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
             _writeFailCount = 0;
         }
 

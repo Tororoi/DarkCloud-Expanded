@@ -43,7 +43,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Memory.process != null && Memory.IsConnected)
                 {
-                    Memory.WriteByte(0x21F10024, 0); //mod's flag for PNACH
+                    Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0); //mod's flag for PNACH
                 }
                 if (PID == 0)
                 {
@@ -95,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else
                     {
-                        if (Memory.ReadByte(0x21F10020) == 1) //check PNACH flag
+                        if (Memory.ReadByte(CodeCaves.Mailbox.PnachActive) == 1) //check PNACH flag
                         {
                             if (firstlaunch)
                             {
@@ -138,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
             // Check for another active mod instance before claiming the flag
             while (true)
             {
-                if (Memory.ReadByte(0x21F10024) == 1)
+                if (Memory.ReadByte(CodeCaves.Mailbox.PineProbe) == 1)
                 {
                     ModWindow.EnhancedModAlreadyOpen();
                 }
@@ -149,7 +149,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Claim the flag immediately to minimise the gap during which PNACH shows the "Launch Enhanced Mod" message
-            Memory.WriteByte(0x21F10024, 1);
+            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 1);
 
             TownCharacter.InitializeCharacterOffsetValues();
             while (true)
@@ -165,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
 
             while (true)
             {
-                Memory.WriteByte(0x21F10024, 1); //mod's flag for PNACH
+                Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 1); //mod's flag for PNACH
                 currentFrameCounter = Memory.ReadInt(0x202A2400);
                 int currentMode = Memory.ReadByte(Addresses.mode);
                 if (currentMode != previousMode && previousMode != -1)
@@ -295,7 +295,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if (currentFrameCounter > 0)
                 {
-                    if (Memory.ReadByte(0x21F10020) != 1) //check PNACH flag
+                    if (Memory.ReadByte(CodeCaves.Mailbox.PnachActive) != 1) //check PNACH flag
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "PNACH cheats were disabled!");
                         break;
@@ -312,7 +312,7 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(1);
             }
 
-            Memory.WriteByte(0x21F10024, 0); //disable mod's flag for pnach
+            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0); //disable mod's flag for pnach
         }
 
         public static void CheckModWindowOptions(int mode)

@@ -7,28 +7,64 @@ namespace Dark_Cloud_Improved_Version
     {
 
         // ── Angel Gear: pellet halo + homing ────────────────────────────────────────────────
-        private const float HaloRadius       = 8f;     // halo ring radius around the player
-        private const float HaloHeight      = 20f;    // ring height above the player's feet
+        private const int   HaloMaxPellets  = 5;      // ring capacity; a shot fired while it is FULL just flies normally
+        private const float HaloRadius      = 3.2f;   // ring radius — tight, so it reads as a halo and not a cloud
+        private const float HaloHeight      = 17f;    // ring height above the player's feet
         private const float HaloSpinStep    = 0.08f;  // radians per tick (~0.85 rev/s at 15ms)
-        private const float HomingRange     = 300f;   // any live enemy this close to the player releases the halo
+        private const float HomingRange     = 160f;   // a live enemy this close to the player starts the peel-off
         private const float HomingAimLift   = 5f;     // aim above the enemy's ground point
         private const float MinHomingSpeed  = 3f;     // floor for pellets captured while nearly stationary
         private const int   HaloTickMs      = 15;
         private const int   PelletLifeTopUp = 120;    // native spawn lifetime — rewritten so held pellets never expire
 
+        // Homing STEER RATE (radians per tick). The pellet no longer snaps its velocity onto the target: it
+        // rotates its CURRENT heading toward the target by at most this much each tick, so it arcs through the
+        // air instead of turning on a dime. ~0.10 rad at 15ms ≈ 380°/s — fast enough to always connect, slow
+        // enough that the curve is the thing you actually see. Raise it for a tighter, more homing-missile turn.
+        private const float HomingTurnRate  = 0.10f;
+        private const float HomingLockDist  = 25f;    // this close, aim straight in — no more arcing, just hit
+
+        // Each tracked pellet drags a glowing ribbon (TrailRibbon, which hijacks the idle sword-swing trail).
+        // The history is sampled every few ticks rather than every tick: at 15ms a 4-sample tail taken each tick
+        // would span ~60ms of travel and read as a dot, not a streak.
+        private const int   TrailSampleTicks = 3;     // ticks between history samples → tail spans ~180ms
+        private const float TrailHalfWidth   = 0.4f;  // ribbon half-width in world units — a fine streak, not a band
+
+        // Wall standoff. An enemy backed against a wall is a bad shot: a pellet flying straight at it drives into
+        // the wall behind. Instead the pellet aims at an APPROACH POINT out in the open and only commits to the
+        // enemy once it is close, which curls it around to a clear angle.
+        private const float WallProbe     = 40f;   // how far around the enemy to look for wall
+        private const float WallStandoff  = 45f;   // how far off the enemy the open-ground approach point sits
+
         /// <summary>
-        /// Angel Gear extra: pellets fired with no live enemy within <see cref="HomingRange"/> of the
-        /// player are captured into a spinning halo above her head (position rewritten every tick,
-        /// velocity zeroed, lifetime topped up, collision off). The moment any enemy comes within
-        /// range, every held pellet is released and HOMES: velocity re-aimed at its nearest live enemy
-        /// each tick at the pellet's own captured speed (collision back on). Pellets fired while
-        /// enemies are already near home immediately. Runs alongside the healing effect.
+        /// Angel Gear extra: pellets fired with no live enemy in range are captured into a slow-spinning HALO
+        /// above Xiao's head — position rewritten every tick, velocity zeroed, lifetime topped up, collision off.
+        /// The ring holds at most <see cref="HaloMaxPellets"/>; a shot fired while it is full simply flies as a
+        /// normal pellet rather than being swallowed.
+        ///
+        /// When an enemy comes within <see cref="HomingRange"/> the halo does NOT empty at once: exactly ONE
+        /// pellet peels off at a time, and the next only leaves once that one is gone (it hit something, expired,
+        /// or lost its target). A volley of six simultaneous streaks reads as noise; one arcing pellet at a time
+        /// reads as a halo hunting.
+        ///
+        /// A released pellet STEERS rather than snapping onto its target: each tick its heading rotates toward
+        /// the enemy by at most <see cref="HomingTurnRate"/>, so it curves visibly through the air, straightening
+        /// only inside <see cref="HomingLockDist"/> to guarantee the kill. Pellets fired while enemies are already
+        /// near skip the halo and hunt immediately. Runs alongside the healing effect.
         /// </summary>
         public static void AngelGearHaloEffect()
         {
-            var mode  = new int[WeaponCollision.PlayerShotPool.SlotCount];    // 0 = untracked, 1 = halo, 2 = homing
-            var speed = new float[WeaponCollision.PlayerShotPool.SlotCount];
+            // 0 = untracked          1 = in the ring        2 = peeled/tracked homing (may rejoin the ring)
+            // 3 = plain shot          4 = FREE homing shot (homes, but is not one of the ability's six)
+            var mode  = new int[PlayerShotPool.SlotCount];
+            var speed = new float[PlayerShotPool.SlotCount];
             float spin = 0f;
+            int peeled = -1;   // the ONE pellet currently out of the ring; -1 = the ring may release another
+
+            // Trail state: a short position history per pellet (newest first), and which ribbon lane it owns.
+            var hist     = new float[PlayerShotPool.SlotCount][];
+            var histFill = new int[PlayerShotPool.SlotCount];
+            int sampleTick = 0;
 
             while (Player.Weapon.GetCurrentWeaponId() == Items.angelgear &&
                     !Player.CheckDunIsInteracting() &&
@@ -36,87 +72,232 @@ namespace Dark_Cloud_Improved_Version
                     !Player.CheckDunIsPaused() &&
                     Player.CheckDunIsWalkingMode())
             {
-                long poolNative = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr) & Memory.PhysAddrMask;
+                long poolNative = (uint)Memory.ReadInt(PlayerShotPool.BasePtr) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(poolNative)) { Thread.Sleep(200); continue; }
                 long pool = Memory.ToMmu(poolNative);
 
+                // Only the ground plane is needed for the enemy scan; the height is read later, with the
+                // fresh anchor sample (see below).
                 float px = Memory.ReadFloat(Addresses.dunPositionX);
-                float ph = Memory.ReadFloat(Addresses.dunPositionZ);   // height
                 float py = Memory.ReadFloat(Addresses.dunPositionY);
+                float ph;
 
-                // Any live enemy within range of the PLAYER — with tile line of sight, so pellets are
-                // never released at a target behind a dungeon wall — releases (and pre-empts) the halo.
+                // A live enemy within range of the PLAYER releases the halo — but only one worth shooting at:
+                // tile line of sight (so nothing is released at a target behind a wall) AND not currently
+                // guarding (a guarding enemy would just block the pellet).
                 bool gridOk = RefreshTileGrid();
                 bool enemyNear = gridOk &&
-                    NearestLiveEnemy(px, py, out _, out _, out _, out float bestD, requireLos: true) &&
+                    NearestLiveEnemy(px, py, out _, out _, out _, out float bestD,
+                                     requireLos: true, skipGuarding: true) &&
                     bestD <= HomingRange;
 
-                // Even angular spacing for however many pellets are currently held.
-                int held = 0;
-                for (int i = 0; i < mode.Length; i++) if (mode[i] == 1) held++;
+                // The peeled pellet is done the moment its slot frees or it leaves homing — then the ring may
+                // release the next one. (This is about PEELING only: a pellet you fire straight at an enemy still
+                // homes normally, it just isn't "the one out of the halo".)
+                if (peeled >= 0 &&
+                    (mode[peeled] != 2 || Memory.ReadInt(PlayerShotPool.FlagAddr(pool, peeled)) == 0))
+                    peeled = -1;
+
+                // The ability owns at most HaloMaxPellets pellets AT ONCE — ringed AND chasing, counted together.
+                // Five circling plus one hunting is already six, so the next shot is not swallowed into the ring:
+                // it just flies as an ordinary homing pellet.
+                int held = 0, hunting = 0;
+                for (int i = 0; i < mode.Length; i++)
+                {
+                    if (mode[i] == 1) held++;
+                    else if (mode[i] == 2) hunting++;
+                }
+                int owned = held + hunting;
                 int haloN = 0;
                 spin += HaloSpinStep;
 
-                for (int slot = 0; slot < WeaponCollision.PlayerShotPool.SlotCount; slot++)
+                // Take (and keep) the sword-swing ribbon — re-asserted every tick because an equip or floor load
+                // resets it behind our back. Sample the trail history only every few ticks (see TrailSampleTicks).
+                // Arm FIRST, then ask. Xiao's slingshot has no dcol frames, so the ribbon's frame pointers are
+                // null until Arm supplies them — asking Ready() first would answer "no" forever and Arm would
+                // never run.
+                TrailRibbon.Arm();
+                bool trail = TrailRibbon.Ready();
+                bool sampleNow = (++sampleTick % TrailSampleTicks) == 0;
+                if (trail) TrailRibbon.Begin();
+                int lane = 0;
+
+                // Release exactly ONE from the ring, and only when none is already out. Lowest slot first, so the
+                // departures are orderly rather than random.
+                int peel = -1;
+                if (enemyNear && peeled < 0)
+                    for (int i = 0; i < mode.Length; i++)
+                        if (mode[i] == 1) { peel = i; break; }
+
+                // Re-read the player RIGHT HERE, not at the top of the tick.
+                //
+                // The halo is pinned to an absolute position every tick, so any delay between reading the
+                // player and writing the pellets shows up as the ring lagging behind. Everything above —
+                // RefreshTileGrid, the enemy scan, the wall probes — costs a variable few milliseconds,
+                // and the cost changes tick to tick with the enemy count. A *constant* lag would be
+                // invisible; a *varying* one is jitter, and it scales with speed, which is why it only
+                // showed while running. Sampling the anchor as late as possible collapses that variance.
+                px = Memory.ReadFloat(Addresses.dunPositionX);
+                ph = Memory.ReadFloat(Addresses.dunPositionZ);   // height
+                py = Memory.ReadFloat(Addresses.dunPositionY);
+
+                for (int slot = 0; slot < PlayerShotPool.SlotCount; slot++)
                 {
-                    if (Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(pool, slot)) == 0)
+                    if (Memory.ReadInt(PlayerShotPool.FlagAddr(pool, slot)) == 0)
                     { mode[slot] = 0; continue; }   // slot free (hit something or expired)
 
-                    long velAddr = WeaponCollision.PlayerShotPool.VelAddr(pool, slot);
-                    long posAddr = WeaponCollision.PlayerShotPool.PosAddr(pool, slot);
+                    long velAddr = PlayerShotPool.VelAddr(pool, slot);
+                    long posAddr = PlayerShotPool.PosAddr(pool, slot);
 
                     if (mode[slot] == 0)
                     {
-                        // Newly fired pellet: capture its natural speed, then hold or hunt.
+                        // Newly fired pellet: capture its natural speed, then hold, hunt, or let it fly.
                         float vx = Memory.ReadFloat(velAddr), vh = Memory.ReadFloat(velAddr + 4), vy = Memory.ReadFloat(velAddr + 8);
                         speed[slot] = (float)Math.Sqrt(vx * vx + vh * vh + vy * vy);
                         if (speed[slot] < MinHomingSpeed) speed[slot] = MinHomingSpeed;
-                        mode[slot] = enemyNear ? 2 : 1;
+
+                        if (owned >= HaloMaxPellets) mode[slot] = 4;                    // the six are spoken for
+                        else if (enemyNear) { mode[slot] = 2; hunting++; owned++; }      // an enemy is up: hunt it
+                        else { mode[slot] = 1; held++; owned++; }                        // join the ring
                     }
 
-                    if (mode[slot] == 1 && enemyNear)
-                        mode[slot] = 2;   // release the halo
+                    if (slot == peel) { mode[slot] = 2; held--; peeled = slot; }   // its turn to leave the ring
+
+                    // The position the halo pellet was just pinned to. Reused for the trail below rather
+                    // than reading it straight back out of the game — every round-trip we skip here is
+                    // latency between the anchor sample and the write, i.e. jitter.
+                    bool  pinned = false;
+                    float hx = 0f, hh = 0f, hy = 0f;
 
                     if (mode[slot] == 1)
                     {
                         double a = spin + (haloN++) * (2 * Math.PI / Math.Max(held, 1));
-                        Memory.WriteFloat(posAddr,     px + HaloRadius * (float)Math.Cos(a));
-                        Memory.WriteFloat(posAddr + 4, ph + HaloHeight);
-                        Memory.WriteFloat(posAddr + 8, py + HaloRadius * (float)Math.Sin(a));
-                        Memory.WriteFloat(velAddr, 0f); Memory.WriteFloat(velAddr + 4, 0f); Memory.WriteFloat(velAddr + 8, 0f);
-                        Memory.WriteInt(pool + WeaponCollision.PlayerShotPool.LifetimeOffset + slot * 4, PelletLifeTopUp);
-                        Memory.WriteInt(WeaponCollision.PlayerShotPool.NoCollideAddr(pool, slot), 1);
+                        hx = px + HaloRadius * (float)Math.Cos(a);
+                        hh = ph + HaloHeight;
+                        hy = py + HaloRadius * (float)Math.Sin(a);
+                        pinned = true;
+
+                        // Batch the vectors: one 12-byte write each instead of three round-trips each.
+                        Memory.WriteBytesBatch(posAddr, Vec3(hx, hh, hy));
+                        Memory.WriteBytesBatch(velAddr, Vec3(0f, 0f, 0f));   // pinned, so it must not drift
+                        Memory.WriteInt(pool + PlayerShotPool.LifetimeOffset + slot * 4, PelletLifeTopUp);
+                        Memory.WriteInt(PlayerShotPool.NoCollideAddr(pool, slot), 1);
                     }
-                    else if (mode[slot] == 2)
+                    else if (mode[slot] == 2 || mode[slot] == 4)
                     {
                         float sx = Memory.ReadFloat(posAddr), sh = Memory.ReadFloat(posAddr + 4), sy = Memory.ReadFloat(posAddr + 8);
-                        if (!NearestLiveEnemy(sx, sy, out float ex, out float eh, out float ey, out _, requireLos: true))
-                        { mode[slot] = 1; continue; }   // no VISIBLE target from here — back to the halo
 
-                        float dx = ex - sx, dh = (eh + HomingAimLift) - sh, dy = ey - sy;
+                        // Re-pick the target EVERY tick, ignoring anything that is guarding. So if the enemy this
+                        // pellet was chasing raises a guard mid-flight, the pellet switches to another target it
+                        // can actually hurt — and if there is none, it breaks off and rejoins the halo rather
+                        // than burying itself in a block.
+                        if (!NearestLiveEnemy(sx, sy, out float ex, out float eh, out float ey, out float edist,
+                                              requireLos: true, skipGuarding: true))
+                        {
+                            // A tracked chaser rejoins the ring (it was already one of the six, so the total is
+                            // unchanged); a FREE shot was never part of the ability's six and just flies on.
+                            mode[slot] = mode[slot] == 2 ? 1 : 3;
+                            if (peeled == slot) peeled = -1;
+                            continue;
+                        }
+
+                        // Wall standoff: while still out at range, steer at an approach point in the open rather
+                        // than at the enemy itself, so a wall-hugging target gets hit from a clear angle instead
+                        // of the pellet burying itself in the wall behind it. Close in, aim at the enemy.
+                        float aimX = ex, aimY = ey;
+                        if (edist > HomingLockDist) ClearApproach(ex, ey, out aimX, out aimY);
+
+                        float dx = aimX - sx, dh = (eh + HomingAimLift) - sh, dy = aimY - sy;
                         float len = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy);
-                        if (len < 0.01f) continue;      // on top of the target — let the collision land
-                        float k = speed[slot] / len;
-                        Memory.WriteFloat(velAddr,     dx * k);
-                        Memory.WriteFloat(velAddr + 4, dh * k);
-                        Memory.WriteFloat(velAddr + 8, dy * k);
-                        Memory.WriteInt(pool + WeaponCollision.PlayerShotPool.LifetimeOffset + slot * 4, PelletLifeTopUp);
-                        Memory.WriteInt(WeaponCollision.PlayerShotPool.NoCollideAddr(pool, slot), 0);
+                        if (len < 0.01f) continue;                 // on top of it — let the collision land
+                        dx /= len; dh /= len; dy /= len;           // desired heading (unit)
+
+                        // STEER, don't snap. Rotate the current heading toward the target by at most
+                        // HomingTurnRate this tick — that limit is the whole reason the pellet arcs. Inside
+                        // HomingLockDist stop arcing and aim straight, so a curving pellet can't orbit forever.
+                        // (Gate on the distance to the ENEMY, not to the approach point, or a pellet that has
+                        // reached the standoff spot would think it had arrived.)
+                        float cx2 = Memory.ReadFloat(velAddr), ch = Memory.ReadFloat(velAddr + 4), cy2 = Memory.ReadFloat(velAddr + 8);
+                        float clen = (float)Math.Sqrt(cx2 * cx2 + ch * ch + cy2 * cy2);
+                        if (clen > 0.01f && edist > HomingLockDist)
+                        {
+                            cx2 /= clen; ch /= clen; cy2 /= clen;
+                            float dot = Math.Clamp(cx2 * dx + ch * dh + cy2 * dy, -1f, 1f);
+                            float ang = (float)Math.Acos(dot);          // angle between heading and target
+                            if (ang > HomingTurnRate)
+                            {
+                                // Slerp the heading a fixed fraction of the way toward the target.
+                                float t = HomingTurnRate / ang;
+                                dx = cx2 + (dx - cx2) * t;
+                                dh = ch  + (dh - ch)  * t;
+                                dy = cy2 + (dy - cy2) * t;
+                                float nl = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy);
+                                if (nl > 0.0001f) { dx /= nl; dh /= nl; dy /= nl; }
+                            }
+                        }
+
+                        Memory.WriteFloat(velAddr,     dx * speed[slot]);
+                        Memory.WriteFloat(velAddr + 4, dh * speed[slot]);
+                        Memory.WriteFloat(velAddr + 8, dy * speed[slot]);
+                        Memory.WriteInt(pool + PlayerShotPool.LifetimeOffset + slot * 4, PelletLifeTopUp);
+                        Memory.WriteInt(PlayerShotPool.NoCollideAddr(pool, slot), 0);
                     }
+
+                    // ── trail ──────────────────────────────────────────────────────────────────────
+                    // Only the pellets Angel Gear actually drives (ringed or homing) get one; a plain shot is
+                    // just a shot. Lanes are handed out in slot order, up to the ribbon's capacity.
+                    if (!trail || (mode[slot] != 1 && mode[slot] != 2 && mode[slot] != 4))
+                    { hist[slot] = null; continue; }
+
+                    if (hist[slot] == null) { hist[slot] = new float[TrailRibbon.RibsPerLane * 3]; histFill[slot] = 0; }
+
+                    if (sampleNow || histFill[slot] == 0)
+                    {
+                        // A ringed pellet is wherever we just pinned it — no need to ask the game.
+                        float cxp, chp, cyp;
+                        if (pinned) { cxp = hx; chp = hh; cyp = hy; }
+                        else
+                        { cxp = Memory.ReadFloat(posAddr); chp = Memory.ReadFloat(posAddr + 4); cyp = Memory.ReadFloat(posAddr + 8); }
+                        // Shift the history back one and push the current position in at the front.
+                        for (int k = TrailRibbon.RibsPerLane - 1; k > 0; k--)
+                        {
+                            hist[slot][k * 3]     = hist[slot][(k - 1) * 3];
+                            hist[slot][k * 3 + 1] = hist[slot][(k - 1) * 3 + 1];
+                            hist[slot][k * 3 + 2] = hist[slot][(k - 1) * 3 + 2];
+                        }
+                        hist[slot][0] = cxp; hist[slot][1] = chp; hist[slot][2] = cyp;
+
+                        // A brand-new pellet has no past — seed every sample to its current spot so the first
+                        // frames draw a degenerate (invisible) ribbon instead of a streak from the world origin.
+                        if (histFill[slot] == 0)
+                            for (int k = 1; k < TrailRibbon.RibsPerLane; k++)
+                            { hist[slot][k * 3] = cxp; hist[slot][k * 3 + 1] = chp; hist[slot][k * 3 + 2] = cyp; }
+                        histFill[slot] = 1;
+                    }
+
+                    // Upright: the ribbon stands perpendicular to the ground rather than lying flat in the plane
+                    // of the orbit, so the halo reads as a ring of vertical streaks instead of a flat disc.
+                    if (lane < TrailRibbon.MaxLanes)
+                        TrailRibbon.SetLane(lane++, hist[slot], TrailHalfWidth, TrailRibbon.Plane.Upright);
                 }
+                if (trail) TrailRibbon.Commit();
                 Thread.Sleep(HaloTickMs);
             }
 
-            // Weapon swapped / state left: free anything still held so pellets die naturally.
-            long endNative = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr) & Memory.PhysAddrMask;
+            // Weapon swapped / state left: blank the trails and give the ribbon back to the engine, so a later
+            // Toan/Ungaga swing trail behaves normally.
+            TrailRibbon.Release();
+
+            // ...and free anything still held so pellets die naturally.
+            long endNative = (uint)Memory.ReadInt(PlayerShotPool.BasePtr) & Memory.PhysAddrMask;
             if (Memory.IsValidGuest(endNative))
             {
                 long pool = Memory.ToMmu(endNative);
-                for (int slot = 0; slot < WeaponCollision.PlayerShotPool.SlotCount; slot++)
+                for (int slot = 0; slot < PlayerShotPool.SlotCount; slot++)
                     if (mode[slot] == 1)
                     {
-                        Memory.WriteInt(WeaponCollision.PlayerShotPool.NoCollideAddr(pool, slot), 0);
-                        Memory.WriteInt(pool + WeaponCollision.PlayerShotPool.LifetimeOffset + slot * 4, 30);
+                        Memory.WriteInt(PlayerShotPool.NoCollideAddr(pool, slot), 0);
+                        Memory.WriteInt(pool + PlayerShotPool.LifetimeOffset + slot * 4, 30);
                     }
             }
         }
@@ -391,8 +572,53 @@ namespace Dark_Cloud_Improved_Version
             return d3 * d4 <= 0f;
         }
 
-        /// <summary>Nearest live enemy to (x, y) on the ground plane; false if none on the floor.</summary>
-        private static bool NearestLiveEnemy(float x, float y, out float ex, out float eh, out float ey, out float dist, bool requireLos = false)
+        /// <summary>True while enemy <paramref name="slot"/> is GUARDING — the same test CheckDmg makes before it
+        /// blocks a hit: an ACTIVE guard window whose [start, end] range contains the enemy's currently-playing
+        /// motion frame. A guarding enemy would simply eat the pellet, so homing treats it as no target at all.</summary>
+        private static bool EnemyGuarding(int slot)
+        {
+            long unit = EnemyAddresses.MainMonstorUnit.Base + (long)slot * ModelScaleOffsets.ModelStride;
+            float frame = Memory.ReadFloat(unit + ModelScaleOffsets.PlayingMotionFrameFromUnit);
+
+            long gw = EnemyAddresses.MainMonstorUnit.Base + (long)slot * EnemyAddresses.GuardWindows.Stride;
+            for (int w = 0; w < EnemyAddresses.GuardWindows.WindowCount; w++)
+            {
+                if (Memory.ReadUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w)) == 0) continue;
+                float s = Memory.ReadFloat(gw + EnemyAddresses.GuardWindows.StartOffset + w * 4);
+                float e = Memory.ReadFloat(gw + EnemyAddresses.GuardWindows.EndOffset   + w * 4);
+                if (frame >= s && frame <= e) return true;
+            }
+            return false;
+        }
+
+        /// <summary>An aim point that approaches (ex, ey) from OPEN GROUND. Probes eight directions around the
+        /// enemy for wall; if some are blocked, the approach point is pushed out along the sum of the clear ones,
+        /// so a pellet steering at it curls around to a side it can actually strike from. Returns the enemy's own
+        /// position unchanged when it is in the open (or boxed in on all sides, where there is nothing better).</summary>
+        private static void ClearApproach(float ex, float ey, out float ax, out float ay)
+        {
+            ax = ex; ay = ey;
+            float ox = 0f, oy = 0f;
+            int blocked = 0, open = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                double a = i * Math.PI / 4.0;
+                float dx = (float)Math.Cos(a), dy = (float)Math.Sin(a);
+                if (TileLineOfSight(ex, ey, ex + dx * WallProbe, ey + dy * WallProbe)) { ox += dx; oy += dy; open++; }
+                else blocked++;
+            }
+            if (blocked == 0 || open == 0) return;              // in the clear, or nowhere to go
+            float l = (float)Math.Sqrt(ox * ox + oy * oy);
+            if (l < 0.001f) return;                             // walls opposite each other — they cancel out
+            ax = ex + ox / l * WallStandoff;
+            ay = ey + oy / l * WallStandoff;
+        }
+
+        /// <summary>Nearest live enemy to (x, y) on the ground plane; false if none qualifies. With
+        /// <paramref name="skipGuarding"/>, an enemy inside a guard window is ignored, so the caller switches to
+        /// another target (or gives up) rather than firing into a block.</summary>
+        private static bool NearestLiveEnemy(float x, float y, out float ex, out float eh, out float ey,
+                                             out float dist, bool requireLos = false, bool skipGuarding = false)
         {
             ex = eh = ey = 0f; dist = float.MaxValue;
             bool found = false;
@@ -406,6 +632,7 @@ namespace Dark_Cloud_Improved_Version
                 float dx = cx - x, dy = cy - y;
                 float d = (float)Math.Sqrt(dx * dx + dy * dy);
                 if (d >= dist) continue;
+                if (skipGuarding && EnemyGuarding(s)) continue;
                 if (requireLos && !TileLineOfSight(x, y, cx, cy)) continue;
                 dist = d; ex = cx; eh = ch; ey = cy; found = true;
             }
@@ -508,10 +735,10 @@ namespace Dark_Cloud_Improved_Version
             {
                 int ch = Player.CurrentCharacterNum();
                 if (ch != Player.XiaoId) break;
-                int equipSlot = Memory.ReadByte(UserStatus.Base +
-                                                UserStatus.EquipSlotArrayOffset + ch);
+                int equipSlot = Memory.ReadByte(DngStatusData.Base +
+                                                DngStatusData.EquipSlotArrayOffset + ch);
                 if ((uint)equipSlot > 9) break;
-                long rec = UserStatus.WeaponRecord(ch, equipSlot);
+                long rec = DngStatusData.WeaponRecord(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) break;
 
                 int sphere = SuperSteveAbilities.AttachedSphere(rec);
@@ -603,5 +830,17 @@ namespace Dark_Cloud_Improved_Version
             // moment Super Steve is no longer Xiao's equipped weapon)
         }
 
+        /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are
+        /// each three adjacent floats, so one 12-byte write replaces three round-trips — which matters
+        /// here because the halo is pinned to an absolute point every tick, and every round-trip between
+        /// sampling the player and writing the pellets is lag the ring shows as jitter.</summary>
+        private static byte[] Vec3(float a, float b, float c)
+        {
+            var v = new byte[12];
+            BitConverter.GetBytes(a).CopyTo(v, 0);
+            BitConverter.GetBytes(b).CopyTo(v, 4);
+            BitConverter.GetBytes(c).CopyTo(v, 8);
+            return v;
+        }
     }
 }

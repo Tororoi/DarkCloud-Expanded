@@ -238,13 +238,6 @@ namespace Dark_Cloud_Improved_Version
             if (WeaponEnabled) RegisterWeaponChara();   // clone weapon in its own slot 3 / texgroup 0x1d pass
         }
 
-        /// <summary>Deep-copy the source model's CFrame tree into the cave pool as a CONTIGUOUS 0x270-stride
-        /// array preserving the player's memory order. This is REQUIRED for engine posing: MotionProc
-        /// (0x147d20) addresses bones as <c>root + boneIndex*0x270</c> — raw array indexing, NOT pointer walks.
-        /// So the copy must keep the same stride (0x270) and order; only the link pointers (parent/child/
-        /// sibling) are re-based by a single offset (clonePool − playerBase). Geometry (+0x260) stays SHARED.
-        /// The result both renders (draw follows the re-based child/sibling) and poses (SetMotionEX indexes the
-        /// contiguous array) correctly. Returns false if the tree isn't resolvable or overflows the pool.</summary>
         /// <summary>Graft the equipped weapon onto the clone's hand. The weapon (WeaponObjGlobal → obj, +0xBC =
         /// model root) is a small CFrame tree parented to the player's hand bone but drawn SEPARATELY (not part of
         /// the player's +0xBC tree). We deep-copy that tree into WeaponCave (rebasing its internal links exactly
@@ -379,6 +372,13 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(neu).CopyTo(block, off);
         }
 
+        /// <summary>Deep-copy the source model's CFrame tree into the cave pool as a CONTIGUOUS 0x270-stride
+        /// array preserving the player's memory order. This is REQUIRED for engine posing: MotionProc
+        /// (0x147d20) addresses bones as <c>root + boneIndex*0x270</c> — raw array indexing, NOT pointer walks.
+        /// So the copy must keep the same stride (0x270) and order; only the link pointers (parent/child/
+        /// sibling) are re-based by a single offset (clonePool − playerBase). Geometry (+0x260) stays SHARED.
+        /// The result both renders (draw follows the re-based child/sibling) and poses (SetMotionEX indexes the
+        /// contiguous array) correctly. Returns false if the tree isn't resolvable or overflows the pool.</summary>
         private static bool BuildCloneTree()
         {
             _srcModelRoot = CloneSourceModelRoot();
@@ -559,7 +559,7 @@ namespace Dark_Cloud_Improved_Version
             // (skip-and-log on overflow rather than corrupt). Full 0x8550 copy = physics-ready (Step touches +0x7550+).
             uint[] cloneList = new uint[CCloth.ClothMaxPieces];   // guest ptrs; 0 = empty (Draw skips)
             int copied = 0, bufOff = 0, anchorOff = 0, boundOff = 0;
-            int bufCap = (int)CodeCaves.ClothAnchorCave - (int)CodeCaves.ClothBufCave;   // room before anchor cave
+            int bufCap = CodeCaves.ClothBufSize;   // the cave declares its own capacity
             uint modelRoot = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
             var boundDedupe = new System.Collections.Generic.Dictionary<uint, uint>();   // player bound-head → clone head
 

@@ -23,12 +23,12 @@ namespace Dark_Cloud_Improved_Version
         /// one found is the only one — its source id (attach-entry +0x02) selects the inherited effect.</summary>
         internal static int AttachedSphere(long rec)
         {
-            for (int slot = 0; slot < WeaponCollision.WeaponAttachSlotCount; slot++)
+            for (int slot = 0; slot < WeaponHave.WeaponAttachSlotCount; slot++)
             {
-                long entry = rec + WeaponCollision.WeaponAttachSlot0Offset +
-                             slot * WeaponCollision.WeaponAttachSlotStride;
-                if (Memory.ReadUShort(entry) == WeaponCollision.AttachBoard.SynthSphereId)
-                    return Memory.ReadUShort(entry + WeaponCollision.AttachBoard.EntrySourceId);
+                long entry = rec + WeaponHave.WeaponAttachSlot0Offset +
+                             slot * WeaponHave.WeaponAttachSlotStride;
+                if (Memory.ReadUShort(entry) == AttachBoard.SynthSphereId)
+                    return Memory.ReadUShort(entry + AttachBoard.EntrySourceId);
             }
             return 0;
         }
@@ -62,23 +62,23 @@ namespace Dark_Cloud_Improved_Version
         {
             // Only touch the battle-speed when the BATTLE weapon really is Super Steve (it can lag the equipped
             // record during swaps). Writing past the 99 cap (BATTLE copy only) removes the between-shots wait.
-            bool boosted = active && Memory.ReadUShort(WeaponCollision.BattleWeaponRecord) == Items.supersteve;
-            long battleSpeedAddr = WeaponCollision.BattleWeaponRecord + WeaponCollision.EffSpeedOffset;
+            bool boosted = active && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.supersteve;
+            long battleSpeedAddr = WeaponHave.BattleWeaponRecord + WeaponHave.EffSpeedOffset;
             if (boosted && Memory.ReadUShort(battleSpeedAddr) != BattleSpeed)
                 Memory.WriteUShort(battleSpeedAddr, BattleSpeed);
 
             // Instant shot on X RELEASE: while drawing (0xB) or holding (0xC), the moment the fire input is
             // released (engine sets XiaoShotReleaseFlag), jump to the shoot state (0xD) and drop the cursor into
             // the fire window (251). Holding still aims; a tap fires almost instantly. Edge-triggered.
-            int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
-            bool inDrawOrHold = shotState == WeaponCollision.XiaoShotDraw ||
-                                shotState == WeaponCollision.XiaoShotHold;
-            bool released = inDrawOrHold && Memory.ReadInt(WeaponCollision.XiaoShotReleaseFlag) != 0;
+            int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
+            bool inDrawOrHold = shotState == PlayerAction.XiaoShotDraw ||
+                                shotState == PlayerAction.XiaoShotHold;
+            bool released = inDrawOrHold && Memory.ReadInt(PlayerAction.XiaoShotReleaseFlag) != 0;
             if (boosted && released && !_xqReleaseArmed)
             {
-                Memory.WriteInt(WeaponCollision.XiaoShotReleaseFlag, 1);
-                Memory.WriteInt(WeaponCollision.ChargeActionState, WeaponCollision.XiaoShotShoot);
-                Memory.WriteFloat(WeaponCollision.AnimFrameCursor, ShotFireFrame);
+                Memory.WriteInt(PlayerAction.XiaoShotReleaseFlag, 1);
+                Memory.WriteInt(PlayerAction.ChargeActionState, PlayerAction.XiaoShotShoot);
+                Memory.WriteFloat(PlayerAction.AnimFrameCursor, ShotFireFrame);
             }
             _xqReleaseArmed = released;
         }
@@ -208,21 +208,21 @@ namespace Dark_Cloud_Improved_Version
         private const float WindImpactProximity = 40f;  // an enemy must be this close to the pellet's death point
 
         // Per-slot "already applied" latches — one per driver, so a pellet gets each effect exactly once.
-        private static readonly bool[] _moonlitHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
-        private static readonly bool[] _hcHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
+        private static readonly bool[] _moonlitHandled = new bool[PlayerShotPool.SlotCount];
+        private static readonly bool[] _hcHandled = new bool[PlayerShotPool.SlotCount];
 
         /// <summary>Moonlit Focus (Tsukikage / Heaven's Cloud): doubles each newly-fired pellet's +0x1C0
         /// velocity (2× shot speed), once per pellet. Per-slot latched; the latch clears when the slot frees.</summary>
         internal static void DriveTsukikage(bool active)
         {
-            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(poolBase)) return;   // pool not allocated / bad pointer
-            for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
+            for (int i = 0; i < PlayerShotPool.SlotCount; i++)
             {
-                bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
+                bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, i)) != 0;
                 if (active && live && !_moonlitHandled[i])
                 {
-                    long vel = WeaponCollision.PlayerShotPool.VelAddr(poolBase, i);
+                    long vel = PlayerShotPool.VelAddr(poolBase, i);
                     for (int c = 0; c < 3; c++)
                         Memory.WriteFloat(vel + c * 4, Memory.ReadFloat(vel + c * 4) * 2f);
                     _moonlitHandled[i] = true;
@@ -238,9 +238,9 @@ namespace Dark_Cloud_Improved_Version
         /// When inactive everything resets (slingshot back to 1×, latches cleared).</summary>
         internal static void DriveHeavensCloud(bool active)
         {
-            int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
-            bool holding  = shotState == WeaponCollision.XiaoShotDraw || shotState == WeaponCollision.XiaoShotHold;
-            bool shooting = shotState == WeaponCollision.XiaoShotShoot;
+            int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
+            bool holding  = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
+            bool shooting = shotState == PlayerAction.XiaoShotShoot;
 
             // Hold time → 0..1 charge fraction; frozen on release (draw 0xB / nocked-hold 0xC), base on a tap.
             if (holding)
@@ -255,18 +255,18 @@ namespace Dark_Cloud_Improved_Version
             float empowered = EmpoweredFrac(_ssHoldFrac);
 
             // Grow the fired pellet + scale its damage, once each. A shot fired while empowered arms the burst.
-            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (Memory.IsValidGuest(poolBase))
             {
                 float pelletScale = active ? 1f + empowered * (HcPelletScale - 1f) : 1f;
                 bool bigPellet = pelletScale > 1.01f;
-                for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
+                for (int i = 0; i < PlayerShotPool.SlotCount; i++)
                 {
-                    bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
+                    bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, i)) != 0;
                     if (bigPellet && live && !_hcHandled[i])
                     {
-                        Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, i), pelletScale);
-                        long dmgA = WeaponCollision.PlayerShotPool.DamageAddr(poolBase, i);
+                        Memory.WriteFloat(PlayerShotPool.ScaleAddr(poolBase, i), pelletScale);
+                        long dmgA = PlayerShotPool.DamageAddr(poolBase, i);
                         Memory.WriteInt(dmgA, (int)(Memory.ReadInt(dmgA) * (1f + empowered * (HcMaxDamageMult - 1f))));
                         _ssArmedSlot   = i;                  // ANY empowered shot bursts on impact, not just a max one
                         _ssArmedCharge = empowered;
@@ -282,7 +282,7 @@ namespace Dark_Cloud_Improved_Version
             // Slingshot 'c04w' mesh: grow with the hold, HOLD through the shoot (0xD), snap back after. Multiply-
             // scale preserves the frame's baked rotation; _ssHoldFrac stays frozen for 0xB/0xC/0xD.
             _ssSlingScale = (active && (holding || shooting)) ? 1f + empowered * (HcSlingshotScale - 1f) : 1f;
-            Weapons.ScaleWeaponFrameByName(WeaponCollision.XiaoSlingMeshNameWord, _ssSlingScale);
+            Weapons.ScaleWeaponFrameByName(WeaponModel.XiaoSlingMeshNameWord, _ssSlingScale);
 
             // TWO flashes, each edge-latched and re-armed on release: flash 1 = "empowered from here", flash 2 =
             // "maxed, holding longer buys nothing". Both use the game's own charge-complete pulse.
@@ -331,13 +331,13 @@ namespace Dark_Cloud_Improved_Version
             }
             if (_ssArmedSlot < 0) return;
 
-            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(poolBase)) { _ssArmedSlot = -1; return; }
 
             // Still in flight → keep its position fresh; the last one we see before it dies is the impact point.
-            if (Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
+            if (Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, _ssArmedSlot)) != 0)
             {
-                long pp = WeaponCollision.PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
+                long pp = PlayerShotPool.PosAddr(poolBase, _ssArmedSlot);
                 _ssArmedX = Memory.ReadFloat(pp);
                 _ssArmedH = Memory.ReadFloat(pp + 4);
                 _ssArmedY = Memory.ReadFloat(pp + 8);
@@ -399,7 +399,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool     _mrHolding;
         private static DateTime _mrHoldStart;
         private static int      _mrCycles;   // completed ramp cycles (frozen on release for the pellet that fires)
-        private static readonly bool[] _mrHandled = new bool[WeaponCollision.PlayerShotPool.SlotCount];
+        private static readonly bool[] _mrHandled = new bool[PlayerShotPool.SlotCount];
 
         /// <summary>Mobius Ring: while <paramref name="active"/>, holding the shot ramps a compounding damage
         /// multiplier (one ×<see cref="MobiusStepMult"/> step + a Ruby-style flash per
@@ -415,8 +415,8 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
 
-            int shotState = Memory.ReadInt(WeaponCollision.ChargeActionState);
-            bool holding = shotState == WeaponCollision.XiaoShotDraw || shotState == WeaponCollision.XiaoShotHold;
+            int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
+            bool holding = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
             if (holding)
             {
                 if (!_mrHolding) { _mrHoldStart = DateTime.UtcNow; _mrHolding = true; _mrCycles = 0; }
@@ -430,21 +430,21 @@ namespace Dark_Cloud_Improved_Version
             else _mrHolding = false;   // keep _mrCycles frozen for the pellet that fires
 
             // Stamp fresh pellets once each: damage ×1.5^cycles (capped) + Ruby's ball-growth sprite scale.
-            long poolBase = (uint)Memory.ReadInt(WeaponCollision.PlayerShotPool.BasePtr);
+            long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(poolBase)) return;   // pool not allocated / bad pointer
             float mult = (float)Math.Pow(MobiusStepMult, _mrCycles);
-            for (int i = 0; i < WeaponCollision.PlayerShotPool.SlotCount; i++)
+            for (int i = 0; i < PlayerShotPool.SlotCount; i++)
             {
-                bool live = Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, i)) != 0;
+                bool live = Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, i)) != 0;
                 if (live && !_mrHandled[i])
                 {
                     if (_mrCycles > 0)
                     {
-                        long dmgA = WeaponCollision.PlayerShotPool.DamageAddr(poolBase, i);
+                        long dmgA = PlayerShotPool.DamageAddr(poolBase, i);
                         Memory.WriteInt(dmgA, (int)Math.Min(MobiusDamageCap, Memory.ReadInt(dmgA) * (double)mult));
-                        float scale = 1f + (mult - 1f) * WeaponCollision.RubyBallGrowthPerMultiple;
+                        float scale = 1f + (mult - 1f) * CustomRubyEffects.RubyBallGrowthPerMultiple;
                         if (scale > MobiusPelletMaxScale) scale = MobiusPelletMaxScale;
-                        Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, i), scale);
+                        Memory.WriteFloat(PlayerShotPool.ScaleAddr(poolBase, i), scale);
                     }
                     _mrHandled[i] = true;
                 }

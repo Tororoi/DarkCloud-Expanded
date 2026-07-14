@@ -68,15 +68,36 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static class Mailbox
         {
+            // EVERY slot is declared here, deliberately. The 13 that were "documented" in the header comment but
+            // never given a constant were being written as RAW LITERALS across five feature files — which is
+            // exactly how a fishing flag once ended up squatting on Mirage's scene gate. A map that only exists
+            // as prose does not prevent collisions; a constant does. Claim the next slot by taking NextFree and
+            // moving it, and never write a bare 0x21F100xx anywhere else.
             internal const long Base = 0x21F10000;
+
+            internal const long EventPoint   = Base + 0x00; // TownCharacter
+            internal const long SunMoon      = Base + 0x04; // TownCharacter
+            internal const long NearNpc      = Base + 0x08; // TownCharacter
+            internal const long XiaoFlag     = Base + 0x0C; // TownCharacter
+            internal const long NearNpc2     = Base + 0x10; // TownCharacter
+            internal const long InsideMayor  = Base + 0x14; // TownCharacter
+            internal const long Element      = Base + 0x18; // Dayuppy
+            internal const long Clock        = Base + 0x1C; // TownCharacter
+            internal const long PnachActive  = Base + 0x20; // MainMenuThread
+            internal const long PineProbe    = Base + 0x24; // MemoryFunctions / MainMenuThread / ModWindow
+            internal const long Option1      = Base + 0x28; // ModWindow
+            internal const long Option2      = Base + 0x2C; // ModWindow
+            internal const long Option3      = Base + 0x30; // ModWindow
+            internal const long Option4      = Base + 0x34; // ModWindow
 
             /// <summary>Mirage 3-state gate, read every frame by the PNACH: 1 = decoy up (NOP the chara-loop
             /// gates so the clone draws + steps), 2 = in a dungeon with no decoy (RESTORE the vanilla words —
             /// PNACH conditionals do NOT auto-revert), 3 = decoy up but PAUSED (drawn, frozen), 0 = town.
             /// Also gates the fire-raster tuning patches (sprite size / dist gate / distortion amplitude).</summary>
-            internal const long MirageSceneGate = 0x21F10038;
+            internal const long MirageSceneGate = Base + 0x38;
 
-            internal const long NextFree = 0x21F1003C;
+            /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
+            internal const long NextFree = Base + 0x3C;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -128,10 +149,14 @@ namespace Dark_Cloud_Improved_Version
         internal const uint ClothObjGuest  = 0x01F2A100;
         /// <summary>CCloth slots this cave holds. Sized for the WORST CASE across all six characters — Toan, at
         /// 3 (Ungaga has 2). Per-character footprints: docs/character-clone-footprints.md.
-        /// Capacity: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F430F0, inside ClothBufCave @0x21F44000.</summary>
+        /// Capacity: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F430F0, safely BELOW ClothBufCave @0x21F44000.</summary>
         internal const int  ClothObjSlots  = 3;
 
-        internal const long ClothBufCave   = 0x21F44000;   // 0x5000
+        /// <summary>Cloth draw buffers. The size is declared HERE, next to the address — CharacterClone used to
+        /// back-compute it as (ClothAnchorCave − ClothBufCave), i.e. "how big is it" lived somewhere else, which
+        /// is the exact split this file exists to prevent.</summary>
+        internal const long ClothBufCave   = 0x21F44000;
+        internal const int  ClothBufSize   = 0x5000;       // → ends 0x21F49000 = ClothAnchorCave
         internal const uint ClothBufGuest  = 0x01F44000;
 
         internal const long ClothAnchorCave  = 0x21F49000;   // out-of-tree anchor CFrames (0x270 each)
@@ -164,10 +189,12 @@ namespace Dark_Cloud_Improved_Version
         /// the node pool. CharacterClone bounds-checks against this before writing a byte.</summary>
         internal const int MaxCloneNodes = MaxNodes;
 
-        // ── EnemyModelInjector (a DIFFERENT region: deep in main BSS, not the heap-tail band) ────────
-        /// <summary>Param + code block, buried in a 3.4 MB contiguous zero block in main BSS
-        /// (0x01340E20..0x016A0000). Guest address — the injected code loads it internally.</summary>
-        internal const uint ModelInjectorCave = 0x01400000;
+        // ── EnemyModelInjector: NO CAVE. ────────────────────────────────────────────────────────────
+        // It used to claim 0x01400000 in main BSS, "verified" only by eyeballing a zero block — it PREDATES the
+        // code-cave scanner and was never swept by it. Rather than launder that into CodeCaveScanner.ModReserved
+        // (which would have made the sweeper treat the region as ours and stop telling us the truth about it),
+        // the cave is REMOVED. The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
+        // scanner-verified cave from this file before it is ever switched on.
 
         /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
         /// are clonable. (It was 0x34000 and excluded Goro/Ruby/Osmond; the room came from capping the AI stubs

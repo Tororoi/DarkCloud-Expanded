@@ -44,16 +44,28 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// Native PS2 base of the cave region (PARAM block is the first 0x20 bytes; code at +0x20).
-        /// MUST be RAM the game never writes. History of bad picks (and why a write breakpoint is the
-        /// only real test): 0x01F70000 was inside the active dungeon heap (garbage -> crash); 0x0027D090
-        /// looked like static padding in two dumps but the use-item/back-floor menu writes there.
-        /// 0x01400000 is buried deep inside a 3.4 MB contiguous zero block in main BSS (0x01340E20..
-        /// 0x01698CC0), zero across three states including the back-floor menu, no nonzero within
-        /// 8 KB before / 16 KB after — i.e. reserved/unused. Still: verify with a 512-byte write
-        /// breakpoint across your scenarios before trusting it.
+        ///
+        /// CURRENTLY 0 — NO CAVE IS ALLOCATED, and <see cref="Install"/> refuses to run while it is, so a
+        /// forgotten <see cref="Enabled"/> = true cannot write to a null base. The old claim (0x01400000)
+        /// PREDATED the code-cave scanner and was never swept by it, so it was removed from CodeCaves rather
+        /// than rubber-stamped into CodeCaveScanner's reserved list — which would only have made the sweeper
+        /// stop telling us the truth about that region. To revive this feature, allocate a SCANNER-VERIFIED
+        /// cave in CodeCaveAddresses.cs and point this at it.
+        ///
+        /// WHY A SCANNER AND NOT AN EYEBALL — the history of bad picks, all of which LOOKED free:
+        ///   • 0x01F70000 — inside the active dungeon heap. Garbage, then a crash.
+        ///   • 0x0027D090 — looked like static padding across two dumps; the use-item / back-floor menu
+        ///     writes there.
+        ///   • 0x01400000 — buried in a 3.4 MB contiguous zero block in main BSS (0x01340E20..0x01698CC0),
+        ///     zero across three states including the back-floor menu, nothing nonzero within 8 KB before or
+        ///     16 KB after. Still never proven over a real session, which is exactly the point: "I found a big
+        ///     block of zeroes" is not evidence that the game never writes there.
+        /// A region is only free if it stays clean across a long sweep (see CodeCaveScanner) or a write
+        /// breakpoint held across every scenario.
+        ///
         /// The embedded template is assembled for 0x01F70000 and relocated to this base at runtime.
         /// </summary>
-        internal const uint CaveBase = CodeCaves.ModelInjectorCave;   // deep in a 3.4 MB unused BSS block (verify w/ write bp)
+        internal const uint CaveBase = 0;
         // Runtime hook address, in the OpA_MotionProcess EPILOGUE (the single per-frame `jr ra`
         // return path; the top of the function is first-frame init the common path skips). The dun
         // overlay loads WITH its 0x80 file header, so symbol 0x01DB73A0 is at +0x80 = 0x01DB7420
@@ -103,6 +115,12 @@ namespace Dark_Cloud_Improved_Version
             // Write the cave with read-back verification + retry FIRST and only arm the hook if the
             // cave fully landed — otherwise the hook would jump into a half-written / zeroed region
             // (a nop-sled through BSS) and crash.
+            if (CaveBase == 0)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                    "[ModelInjector] no cave allocated — see CodeCaveAddresses.cs. Install aborted.");
+                return;
+            }
             bool caveOk = WriteVerified(CaveBase + 0x20, BuildCave(), "cave");
             Memory.WriteInt(CaveBase + P_TRIGGER, 0);
             Memory.WriteInt(CaveBase + P_MODE, 0);

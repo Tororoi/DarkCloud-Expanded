@@ -321,32 +321,30 @@ namespace Dark_Cloud_Improved_Version
             50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, //360
             50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50};            //376
 
-        public static byte[] PriceList = Memory.ReadByteArray(Addresses.ItemPriceTable, 1504);
+        // The price table is exactly ItemAddresses.ItemPriceTable.ByteSize (1184 = 296 items × 4). It used to be read as a flat
+        // 1504, a 320-byte OVER-READ past the end of the table.
+        //
+        // Careful if you touch this: the old index scans bounded themselves by `PriceList.Length / 4`, which
+        // happens to land on the correct last item (376) ONLY because of that over-read. Shrinking the read
+        // without also fixing the bound would have silently truncated the item range at 296. The bound now comes
+        // from the table's own FirstItemId/Count, so the two can't disagree.
+        public static byte[] PriceList = Memory.ReadByteArray(ItemAddresses.ItemPriceTable.Base, ItemAddresses.ItemPriceTable.ByteSize);
 
+        /// <summary>Byte offset of <paramref name="item"/>'s BUY price within <see cref="PriceList"/>.</summary>
         public static ushort GetPurchasePriceIndex(ushort item)
-        {
-            ushort itemIndex, buyIndex;
+            => (ushort)(EntryIndex(item) * ItemAddresses.ItemPriceTable.Stride + ItemAddresses.ItemPriceTable.BuyOffset);
 
-            for (itemIndex = 81, buyIndex = 0; itemIndex <= PriceList.Length / 4; itemIndex++, buyIndex += 4)
-            {
-                if (itemIndex == item)
-                    break;
-            }
-
-            return buyIndex;
-        }
-
+        /// <summary>Byte offset of <paramref name="item"/>'s SELL price within <see cref="PriceList"/>.</summary>
         public static ushort GetSellPriceIndex(ushort item)
+            => (ushort)(EntryIndex(item) * ItemAddresses.ItemPriceTable.Stride + ItemAddresses.ItemPriceTable.SellOffset);
+
+        /// <summary>Table entry for an item id (the linear scans these replaced computed exactly this). An id
+        /// outside the table used to walk the scan off the end and read whatever followed it; it now clamps to
+        /// entry 0, so a bad id gives a wrong price instead of reading past the table.</summary>
+        private static int EntryIndex(ushort item)
         {
-            ushort itemIndex, sellIndex;
-
-            for (itemIndex = 81, sellIndex = 2; itemIndex <= PriceList.Length / 4; itemIndex++, sellIndex += 4)
-            {
-                if (itemIndex == item)
-                    break;
-            }
-
-            return sellIndex;
+            int i = ItemAddresses.ItemPriceTable.IndexForId(item);
+            return i < 0 ? 0 : i;
         }
 
         internal class item81

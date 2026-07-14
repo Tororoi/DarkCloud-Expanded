@@ -184,7 +184,7 @@ namespace Dark_Cloud_Improved_Version
             int character = Player.CurrentCharacterNum();
             if (character < 0 || character > 5) { _snapChar = -1; return; }
             long bagBase = AtlaSystem.StatusBase + character * 0xAA8 + 0x450C;
-            byte[] bag = Memory.ReadBytesBatch(bagBase, 10 * WeaponCollision.InventoryWeaponSlotStride);
+            byte[] bag = Memory.ReadBytesBatch(bagBase, 10 * WeaponHave.InventoryWeaponSlotStride);
             if (bag == null) return;
 
             // Only trust wipe transitions where BOTH snapshots were taken in WALKING mode
@@ -201,7 +201,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 for (int s = 0; s < 10; s++)
                 {
-                    int off = s * WeaponCollision.InventoryWeaponSlotStride;
+                    int off = s * WeaponHave.InventoryWeaponSlotStride;
                     ushort prevId = BitConverter.ToUInt16(_snapBag, off);
                     ushort curId = BitConverter.ToUInt16(bag, off);
                     // A weapon record wiped in place (id -> 0xFFFF) mid-combat = it broke.
@@ -335,8 +335,8 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int s = 0; s < 10; s++)
             {
-                if (Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id +
-                        s * WeaponCollision.InventoryWeaponSlotStride) == Items.atlamilliasword)
+                if (Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id +
+                        s * WeaponHave.InventoryWeaponSlotStride) == Items.atlamilliasword)
                     return true;
             }
             for (int s = 0; s < 30; s++)   // storage records (see CheckChronicle2)
@@ -352,25 +352,25 @@ namespace Dark_Cloud_Improved_Version
             int dungeon = Memory.ReadByte(Addresses.checkDungeon);
             if (dungeon < 0 || dungeon >= AtlaSystem.DungeonCount) return;
 
-            int level = BitConverter.ToUInt16(snap, off + WeaponCollision.InventoryWeaponLevelOffset);
+            int level = BitConverter.ToUInt16(snap, off + WeaponHave.InventoryWeaponLevelOffset);
             int pct = Math.Min(50, (level + 1) * 10);
             string name = weaponId < Items.ItemNameTbl.Length ? Items.ItemNameTbl[weaponId] : $"weapon {weaponId}";
 
             // Build the sphere board entry from the weapon's own stats (attachments are lost)
-            byte[] sphere = new byte[WeaponCollision.AttachBoard.Stride];
-            BitConverter.GetBytes((ushort)WeaponCollision.AttachBoard.SynthSphereId).CopyTo(sphere, 0);
-            BitConverter.GetBytes(weaponId).CopyTo(sphere, WeaponCollision.AttachBoard.EntrySourceId);
-            BitConverter.GetBytes(BitConverter.ToUInt16(snap, off + 0xEE)).CopyTo(sphere, WeaponCollision.AttachBoard.EntryFlags);
-            sphere[WeaponCollision.AttachBoard.EntrySourceLevel] = (byte)Math.Min(level, 255);
+            byte[] sphere = new byte[AttachBoard.Stride];
+            BitConverter.GetBytes((ushort)AttachBoard.SynthSphereId).CopyTo(sphere, 0);
+            BitConverter.GetBytes(weaponId).CopyTo(sphere, AttachBoard.EntrySourceId);
+            BitConverter.GetBytes(BitConverter.ToUInt16(snap, off + 0xEE)).CopyTo(sphere, AttachBoard.EntryFlags);
+            sphere[AttachBoard.EntrySourceLevel] = (byte)Math.Min(level, 255);
             for (int i = 0; i < 4; i++)
             {
                 short stat = (short)(BitConverter.ToInt16(snap, off + 4 + i * 2) * pct / 100);
-                BitConverter.GetBytes(stat).CopyTo(sphere, WeaponCollision.AttachBoard.EntryStats + i * 2);
+                BitConverter.GetBytes(stat).CopyTo(sphere, AttachBoard.EntryStats + i * 2);
             }
             for (int i = 0; i < 5; i++)
-                sphere[WeaponCollision.AttachBoard.EntryElements + i] = (byte)((sbyte)snap[off + 0x17 + i] * pct / 100);
+                sphere[AttachBoard.EntryElements + i] = (byte)((sbyte)snap[off + 0x17 + i] * pct / 100);
             for (int i = 0; i < 10; i++)
-                sphere[WeaponCollision.AttachBoard.EntryAntis + i] = (byte)((sbyte)snap[off + WeaponCollision.WeaponAntiOffset + i] * pct / 100);
+                sphere[AttachBoard.EntryAntis + i] = (byte)((sbyte)snap[off + WeaponHave.WeaponAntiOffset + i] * pct / 100);
 
             // Claim a free parts-list entry (from the top, away from the native list)
             int entry = -1;
@@ -489,9 +489,9 @@ namespace Dark_Cloud_Improved_Version
                 // Collected: hand over the sphere (the slot stays -3, so floor-select keeps
                 // showing it as an obtained atla — same as any georama atla)
                 bool delivered = false;
-                for (int b = 0; b < WeaponCollision.AttachBoard.ScanCount && !delivered; b++)
+                for (int b = 0; b < AttachBoard.ScanCount && !delivered; b++)
                 {
-                    long entry = WeaponCollision.AttachBoard.Base + (long)b * WeaponCollision.AttachBoard.Stride;
+                    long entry = AttachBoard.Base + (long)b * AttachBoard.Stride;
                     if (Memory.ReadUShort(entry) <= 0x50)
                     {
                         Memory.WriteByteArray(entry, p.Sphere);

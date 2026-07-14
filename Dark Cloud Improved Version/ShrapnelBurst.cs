@@ -51,22 +51,22 @@ namespace Dark_Cloud_Improved_Version
                 double ang = i * (2.0 * System.Math.PI / count);
                 float dx = (float)System.Math.Cos(ang), dy = (float)System.Math.Sin(ang);   // ground-plane unit dir
 
-                long pos = WeaponCollision.PlayerShotPool.PosAddr(poolBase, slot);
+                long pos = PlayerShotPool.PosAddr(poolBase, slot);
                 Memory.WriteFloat(pos,     x + dx * startOffset);
                 Memory.WriteFloat(pos + 4, height);                    // same height as the origin
                 Memory.WriteFloat(pos + 8, y + dy * startOffset);
 
-                long vel = WeaponCollision.PlayerShotPool.VelAddr(poolBase, slot);
+                long vel = PlayerShotPool.VelAddr(poolBase, slot);
                 Memory.WriteFloat(vel,     dx * speed);
                 Memory.WriteFloat(vel + 4, 0f);                        // no vertical drift
                 Memory.WriteFloat(vel + 8, dy * speed);
 
-                Memory.WriteInt(WeaponCollision.PlayerShotPool.NoCollideAddr(poolBase, slot), passThrough ? 1 : 0);
-                Memory.WriteInt(poolBase + WeaponCollision.PlayerShotPool.LifetimeOffset +
-                                slot * WeaponCollision.PlayerShotPool.ScalarStride, lifetime);
-                Memory.WriteInt(WeaponCollision.PlayerShotPool.DamageAddr(poolBase, slot), damage);
-                Memory.WriteFloat(WeaponCollision.PlayerShotPool.ScaleAddr(poolBase, slot), scale);
-                Memory.WriteInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, slot), 1);   // live LAST
+                Memory.WriteInt(PlayerShotPool.NoCollideAddr(poolBase, slot), passThrough ? 1 : 0);
+                Memory.WriteInt(poolBase + PlayerShotPool.LifetimeOffset +
+                                slot * PlayerShotPool.ScalarStride, lifetime);
+                Memory.WriteInt(PlayerShotPool.DamageAddr(poolBase, slot), damage);
+                Memory.WriteFloat(PlayerShotPool.ScaleAddr(poolBase, slot), scale);
+                Memory.WriteInt(PlayerShotPool.FlagAddr(poolBase, slot), 1);   // live LAST
                 taken.Add(slot);
             }
             return taken;
@@ -76,14 +76,14 @@ namespace Dark_Cloud_Improved_Version
         /// fragment's own hit apart from a fresh primary hit; it also prunes the list in place.</summary>
         internal static bool Airborne(long poolBase, List<int> slots)
         {
-            slots.RemoveAll(s => Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, s)) == 0);
+            slots.RemoveAll(s => Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, s)) == 0);
             return slots.Count > 0;
         }
 
         private static int FreeSlot(long poolBase)
         {
-            for (int j = 0; j < WeaponCollision.PlayerShotPool.SlotCount; j++)
-                if (Memory.ReadInt(WeaponCollision.PlayerShotPool.FlagAddr(poolBase, j)) == 0) return j;
+            for (int j = 0; j < PlayerShotPool.SlotCount; j++)
+                if (Memory.ReadInt(PlayerShotPool.FlagAddr(poolBase, j)) == 0) return j;
             return -1;
         }
     }

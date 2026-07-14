@@ -78,10 +78,10 @@ namespace Dark_Cloud_Improved_Version
 
             if (ch == Player.XiaoId)
             {
-                int equipSlot = Memory.ReadByte(UserStatus.Base +
-                                                UserStatus.EquipSlotArrayOffset + ch);
+                int equipSlot = Memory.ReadByte(DngStatusData.Base +
+                                                DngStatusData.EquipSlotArrayOffset + ch);
                 if ((uint)equipSlot > 9) return false;
-                long rec = UserStatus.WeaponRecord(ch, equipSlot);
+                long rec = DngStatusData.WeaponRecord(ch, equipSlot);
                 if (Memory.ReadUShort(rec) != Items.supersteve) return false;
                 int sphere = SuperSteveAbilities.AttachedSphere(rec);
                 return sphere == Items.mirage || sphere == Items.herculeswrath;
@@ -399,10 +399,6 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        /// <summary>True while the game is paused in a way that should freeze the decoy — either the "PAUSE"
-        /// screen (CheckDunIsPaused) or the in-dungeon item menu (mode 3 / dungeonMode 2, same test the other
-        /// effects use for menuOpen). The two pause types freeze different things natively (the menu freezes the
-        /// clone but not our timer; the PAUSE screen freezes our timer but not the clone), so we unify them.</summary>
         // ── decoy state (all DATA) ───────────────────────────────────────────────────────────
         /// <summary>Read the player's current spot + facing as a decoy origin. The facing is the YAW at CObject
         /// +0x64 (GetRotation__7CObject stores EULER ANGLES at +0x60/+0x64/+0x68 — NOT a direction vector; for an

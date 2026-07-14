@@ -190,9 +190,6 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Returns true if the game is paused while inside a dungeon
-        /// </summary>
-        /// <summary>
         /// True while the game is paused in a way that should freeze in-dungeon gameplay — the "PAUSE" screen
         /// (<see cref="CheckDunIsPaused"/>) OR the in-dungeon item menu.
         ///
@@ -207,6 +204,9 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadByte(Addresses.mode) == 3 && Memory.ReadByte(Addresses.dungeonMode) == 2;   // in-dungeon item menu
         }
 
+        /// <summary>
+        /// Returns true if the game is paused while inside a dungeon
+        /// </summary>
         public static bool CheckDunIsPaused()
         {
             int dunPauseTitle = 0x202A35C4;

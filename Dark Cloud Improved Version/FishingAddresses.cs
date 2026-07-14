@@ -298,4 +298,50 @@ namespace Dark_Cloud_Improved_Version
         internal const int EntryFishId = 0x0;   // int; -1 = empty
         internal const int EntrySize   = 0x4;   // float; <= 0 = empty. Display cm = floor(size * 10)
     }
+
+    /// <summary>
+    /// A fishing SPOT — where you may cast, how high the water is, and what collision the hook and
+    /// the fish live against. All of it is set by the single STB command <c>_LOAD_FISHING_DATA</c>
+    /// (cmd 999, handler 0x1969A0) and then left in these globals, which means the mod can move or
+    /// resize a spot with plain writes. See docs/custom-fishing-spot.md.
+    ///
+    /// The three ingredients are INDEPENDENT: the rectangle and the water height are these globals;
+    /// the collision comes from <c>CEditGround::PickUpPoly</c>, which is not water-aware and happily
+    /// gathers static terrain; and the visible liquid is whatever the map already draws. So a spot
+    /// does not require a Georama water part — only a rectangle over something with ground under it.
+    /// </summary>
+    internal static class FishingSpot
+    {
+        /// <summary>ELF <c>fishing_rect</c> — the castable rectangle, a 32-byte CBoxVu0.
+        /// The handler hardcodes the box's Y extents to +/-1000, so it is effectively 2D in XZ.</summary>
+        internal const long FishingRect = 0x21D549D0;
+
+        /// <summary>ELF <c>fish_rect</c> — the box the fish are kept inside (copied from the above by
+        /// <c>FishingInitFish</c>). Fish are seeded at its centre, <c>WaterLevel - 12</c> deep.</summary>
+        internal const long FishRect = 0x21D549F0;
+
+        // CBoxVu0: two corners, each (x, y, z, w).
+        internal const int BoxCornerA = 0x00;   // x @ +0x00, y @ +0x04 (= +1000), z @ +0x08
+        internal const int BoxCornerB = 0x10;   // x @ +0x10, y @ +0x14 (= -1000), z @ +0x18
+        internal const int BoxSize    = 0x20;
+
+        internal const long WaterLevel     = 0x202A2B28; // float — the surface
+        internal const long GroundLevel    = 0x202A2B2C; // float — the bed
+        internal const long UkiGroundLevel = 0x202A2B30; // float — where the bobber rests
+        internal const long HookGroundLevel = 0x202A2B34;
+        internal const long LineGroundLevel = 0x202A2B38;
+
+        internal const long CPoly     = 0x202A2B68; // CCPoly* — the collision PickUpPoly gathered
+        internal const long CPolyNum  = 0x202A2B6C; // int. PickUpPoly HANGS the game above 0x400.
+        internal const int  CPolyMax  = 0x400;
+
+        internal const long Fish       = 0x202A2B58; // CFish* — array base, stride 0x2410
+        internal const long FishNum    = 0x202A2B64; // int — live fish (4 or 5; six are allocated)
+        internal const long AngleFish  = 0x202A2B5C;
+        internal const long BattleFish = 0x202A2B60;
+
+        /// <summary>int. 0 disables the underwater view. Area 3 (Queens Harbor) ships with it off —
+        /// worth copying for any spot whose "water" is not water (e.g. Yellow Drops' liquid).</summary>
+        internal const long DrawUnderWater = 0x202A1FA0;
+    }
 }

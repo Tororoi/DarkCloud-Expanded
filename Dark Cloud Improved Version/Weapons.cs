@@ -8,6 +8,15 @@ namespace Dark_Cloud_Improved_Version
 {
     public class Weapons
     {
+
+        // ── Ruby ball scaling: WHICH lever to use. MOD implementation choices / crash triage, not game facts.
+        // 1. Mot_List chain-1 SCALE keyframe patch — redundant with Core.
+        // 2. CObject scale on the template + slots — THE visual lever.
+        // 3. BT body radii — ⚠ CRASHES the game. Keep off. (Kept as a flag so the dead end stays documented.)
+        private const bool RubyBallScaleSprites   = false;
+        private const bool RubyBallScaleCore      = true;
+        private const bool RubyBallScaleCollision = false;
+
         //Default Weapons ID
         public const int daggerid = Items.dagger;
         public const int woodenid = Items.woodenslingshot;
@@ -3949,7 +3958,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ════════════════════════════════════════════════════════════════════════════════════════
         //  Heaven's Cloud reach + per-weapon whirlwind visual scale (runtime, data-side; no EE-code patch).
-        //  Three features — see docs/weapon-reach.md / WeaponAddresses.WeaponCollision:
+        //  Three features — see docs/weapon-reach.md / WeaponAddresses.WeaponModel:
         //   1. Scale Heaven's Cloud's blade mesh "w14" — grows the visible blade AND its dcol hit collision.
         //   2. Scale the whirlwind effect model (c01_fuusya) for EVERY Toan weapon, sized to its reach.
         //   3. Distance-gated enemy-hitbox inflation so the scaled HC's close/far hits stay consistent.
@@ -3976,7 +3985,7 @@ namespace Dark_Cloud_Improved_Version
         static float _rubyOrigKey0;            // original (1×) first scale-key value — reload canary
         static long  _rubyBtAddr;              // MMU addr of the BT_SHOT_EFFECT the radii were captured from
         static float _rubyBtFactor = 1.0f;     // factor currently applied to the BT collision radii
-        static readonly float[] _rubyBtOrig = new float[WeaponCollision.BtShotRadiiCount]; // original per-phase radii
+        static readonly float[] _rubyBtOrig = new float[ShotEffectPool.BtShotRadiiCount]; // original per-phase radii
 
         // The exact chain-1 track-type set MotionProc (0x147D20) dispatches on. Anything else in a walked
         // record means we're not looking at a real Mot_List — stop before touching memory.
@@ -4011,9 +4020,9 @@ namespace Dark_Cloud_Improved_Version
         {
             int ch = Player.CurrentCharacterNum();
             if (ch < 0) return 0;
-            int slot = Memory.ReadByte(UserStatus.Base +
-                                       UserStatus.EquipSlotArrayOffset + ch);
-            return (uint)slot > 9 ? 0 : UserStatus.WeaponRecord(ch, slot);
+            int slot = Memory.ReadByte(DngStatusData.Base +
+                                       DngStatusData.EquipSlotArrayOffset + ch);
+            return (uint)slot > 9 ? 0 : DngStatusData.WeaponRecord(ch, slot);
         }
 
         /// <summary>The element a weapon's hits carry, as the BIT the engine uses on the collision data
@@ -4026,9 +4035,9 @@ namespace Dark_Cloud_Improved_Version
         internal static int SelectedElementBits(long rec)
         {
             if (rec == 0) return 0;
-            int idx = Memory.ReadByte(rec + WeaponCollision.SelectedElementOffset);
-            if ((uint)idx >= WeaponCollision.ElementCount) return 0;
-            int level = Memory.ReadByte(rec + WeaponCollision.ElementLevelsOffset + idx);
+            int idx = Memory.ReadByte(rec + WeaponHave.SelectedElementOffset);
+            if ((uint)idx >= WeaponHave.ElementCount) return 0;
+            int level = Memory.ReadByte(rec + WeaponHave.ElementLevelsOffset + idx);
             return level > 0 ? 1 << idx : 0;
         }
 
@@ -4118,15 +4127,15 @@ namespace Dark_Cloud_Improved_Version
         /// level 2 — i.e. the meter has passed the whirlwind threshold and it's unlocked). The lunge-level
         /// windup (level 0/1) is excluded, so the blade only grows once the whirlwind charge specifically begins.</summary>
         public static bool IsChargingWhirlwind()
-            => Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWindup
-            && Memory.ReadInt(WeaponCollision.ChargeLevel) == WeaponCollision.ChargeLevelWhirl;
+            => Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWindup
+            && Memory.ReadInt(PlayerAction.ChargeLevel) == PlayerAction.ChargeLevelWhirl;
 
         /// <summary>True while the whirlwind attack is actually executing (action 0x18 with the charge-active
         /// flag still set). The flag clears on the final whirlwind frame, so this goes false immediately when the
         /// attack finishes — even though the action state lingers at 0x18 for a frame.</summary>
         public static bool IsWhirlwindActive()
-            => Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWhirlwind
-            && Memory.ReadInt(WeaponCollision.ChargeActiveFlag) == 1;
+            => Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWhirlwind
+            && Memory.ReadInt(PlayerAction.ChargeActiveFlag) == 1;
 
         // Scale the equipped weapon's visible mesh frame (name@0 == nameWord) by factor: write factor to its
         // CFrameVu1 local-3x3 diagonal (+0xB8/+0xCC/+0xE0; bind is identity). The engine does not re-pose this
@@ -4143,7 +4152,7 @@ namespace Dark_Cloud_Improved_Version
         {
             // The whirlwind charge sweeps a wide arc, so it gets the full `reach` bonus and a slightly wider
             // range gate; every other attack (combo, lunge) gets reach − 5.0 with the plain gate.
-            bool whirl = Memory.ReadInt(WeaponCollision.ChargeActionState) == WeaponCollision.ActionWhirlwind;
+            bool whirl = Memory.ReadInt(PlayerAction.ChargeActionState) == PlayerAction.ActionWhirlwind;
             float bonus  = whirl ? reach : reach;       // added to each enemy's stock body radius
             float gateSq = whirl ? reach * reach + 5.0f : reach * reach + 2.8f; // squared distance to player for the bonus to apply
             for (int s = 0; s < 16; s++)
@@ -4197,9 +4206,9 @@ namespace Dark_Cloud_Improved_Version
         // NAME address (base+0x118, so the +0xB8/0xE8/0xF0 offset conventions hold), or 0 if not resolvable.
         static long LocateModelFrame(uint nameWord, byte? fifthByte)
         {
-            int nw = Memory.ReadInt(WeaponCollision.NowWeaponPtr);
+            int nw = Memory.ReadInt(WeaponModel.NowWeaponPtr);
             if (!IsRamPtr(nw)) return 0;
-            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponCollision.WeaponModelRootOffset);
+            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponModel.WeaponModelRootOffset);
             if (!IsRamPtr(modelRoot)) return 0;
             return FindFrame(Memory.ToMmu(modelRoot), nameWord, fifthByte, 0);
         }
@@ -4209,16 +4218,16 @@ namespace Dark_Cloud_Improved_Version
         static long FindFrame(long node, uint nameWord, byte? fifthByte, int depth)
         {
             if (depth > 32) return 0;
-            long name = node + WeaponCollision.CFrameName;
+            long name = node + CFrameVu1.Name;
             if ((uint)Memory.ReadInt(name) == nameWord &&
                 (!fifthByte.HasValue || (byte)Memory.ReadByte(name + 4) == fifthByte.Value))
                 return name;
-            for (int c = Memory.ReadInt(node + WeaponCollision.CFrameChild); IsRamPtr(c); )
+            for (int c = Memory.ReadInt(node + CFrameVu1.RootChild); IsRamPtr(c); )
             {
                 long cm = Memory.ToMmu(c);
                 long hit = FindFrame(cm, nameWord, fifthByte, depth + 1);
                 if (hit != 0) return hit;
-                c = Memory.ReadInt(cm + WeaponCollision.CFrameNext);
+                c = Memory.ReadInt(cm + CFrameVu1.RootSibling);
             }
             return 0;
         }
@@ -4249,13 +4258,13 @@ namespace Dark_Cloud_Improved_Version
             if (_weaponTreeDumped) return true;
             _weaponTreeDumped = true;
 
-            int nw = Memory.ReadInt(WeaponCollision.NowWeaponPtr);
+            int nw = Memory.ReadInt(WeaponModel.NowWeaponPtr);
             if (!IsRamPtr(nw))
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] NowWeapon not resolvable (nw=0x{nw:X})");
                 return false;
             }
-            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponCollision.WeaponModelRootOffset);
+            int modelRoot = Memory.ReadInt(Memory.ToMmu(nw) + WeaponModel.WeaponModelRootOffset);
             if (!IsRamPtr(modelRoot))
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[weapon model] modelRoot not resolvable (nw=0x{nw:X} root=0x{modelRoot:X})");
@@ -4269,16 +4278,16 @@ namespace Dark_Cloud_Improved_Version
         static void DumpFrameRec(long node, int depth)
         {
             if (depth > 32) return;
-            long name = node + WeaponCollision.CFrameName;
+            long name = node + CFrameVu1.Name;
             uint nword = (uint)Memory.ReadInt(name);
             string s = "";
             for (int b = 0; b < 4; b++) { char c = (char)((nword >> (b * 8)) & 0xFF); s += (c >= 32 && c < 127) ? c : '.'; }
-            Console.WriteLine($"{new string(' ', depth * 2)}[{depth}] '{s}' (0x{nword:X8}) m00={Memory.ReadFloat(name + WeaponCollision.Vu1LocalMatrixDiag0):F2}");
-            for (int c = Memory.ReadInt(node + WeaponCollision.CFrameChild); IsRamPtr(c); )
+            Console.WriteLine($"{new string(' ', depth * 2)}[{depth}] '{s}' (0x{nword:X8}) m00={Memory.ReadFloat(name + WeaponModel.Vu1LocalMatrixDiag0):F2}");
+            for (int c = Memory.ReadInt(node + CFrameVu1.RootChild); IsRamPtr(c); )
             {
                 long cm = Memory.ToMmu(c);
                 DumpFrameRec(cm, depth + 1);
-                c = Memory.ReadInt(cm + WeaponCollision.CFrameNext);
+                c = Memory.ReadInt(cm + CFrameVu1.RootSibling);
             }
         }
 
@@ -4305,7 +4314,7 @@ namespace Dark_Cloud_Improved_Version
                 _sfHasSnapshot = false;         // never carry a snapshot across models
                 if (_sfFrameNameAddr == 0) return false;
             }
-            long m = _sfFrameNameAddr + WeaponCollision.Vu1LocalMatrixDiag0;   // 3x3 base: row stride 0x10, col stride 4
+            long m = _sfFrameNameAddr + WeaponModel.Vu1LocalMatrixDiag0;   // 3x3 base: row stride 0x10, col stride 4
             if (!_sfHasSnapshot)
             {
                 for (int r = 0; r < 3; r++)
@@ -4375,14 +4384,14 @@ namespace Dark_Cloud_Improved_Version
             if (_whirlRoots.Length > 0)
             {
                 // Drop the cache if the first root's name vanished (model freed/relocated); else re-apply.
-                if (Memory.ReadUInt(_whirlRoots[0] + WeaponCollision.CFrameName) != WeaponCollision.KiruNameWord)
+                if (Memory.ReadUInt(_whirlRoots[0] + CFrameVu1.Name) != ShotEffectPool.KiruNameWord)
                     { _whirlRoots = System.Array.Empty<long>(); return; }
                 // Keep EVERY pool instance scaled (don't narrow to one): a cast right after a swap can activate a
                 // different instance than the previously-live one, so narrowing would leave that first cast at the
                 // wrong scale. Re-applying to all idle copies is harmless (they're at world 0,0,0 until used).
                 float target0 = _whirlBind3x3[0] * WhirlVisualScale;
                 foreach (long root in _whirlRoots)
-                    if (Math.Abs(Memory.ReadFloat(root + WeaponCollision.CFrameLocal3x3[0]) - target0) > 0.01f) WriteWhirlScaled(root);
+                    if (Math.Abs(Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[0]) - target0) > 0.01f) WriteWhirlScaled(root);
             }
             else if (_whirlLocateBackoff <= 0) LocateWhirlRoots();
             else _whirlLocateBackoff--;
@@ -4393,18 +4402,18 @@ namespace Dark_Cloud_Improved_Version
         static void WriteWhirlScaled(long root)
         {
             for (int i = 0; i < 9; i++)
-                Memory.WriteFloat(root + WeaponCollision.CFrameLocal3x3[i], _whirlBind3x3[i] * WhirlVisualScale);
-            Memory.WriteInt(root + WeaponCollision.CFrameDirtyWorld, 0);
+                Memory.WriteFloat(root + ShotEffectPool.CFrameLocal3x3[i], _whirlBind3x3[i] * WhirlVisualScale);
+            Memory.WriteInt(root + CFrameVu1.WorldCacheA, 0);
         }
 
         // True if `root` is a fuusya "kiru" instance (next frame +0x270 is "fkiri"). Caches its bind 3x3 once.
         static bool ValidateWhirlRoot(long root)
         {
-            if (Memory.ReadUInt(root + WeaponCollision.CFrameName) != WeaponCollision.KiruNameWord) return false;
-            if (Memory.ReadUInt(root + WeaponCollision.FuusyaFrameStride + WeaponCollision.CFrameName) != WeaponCollision.FkiriNameWord) return false;
+            if (Memory.ReadUInt(root + CFrameVu1.Name) != ShotEffectPool.KiruNameWord) return false;
+            if (Memory.ReadUInt(root + ShotEffectPool.FuusyaFrameStride + CFrameVu1.Name) != ShotEffectPool.FkiriNameWord) return false;
             if (!_whirlBindRead)
             {
-                for (int k = 0; k < 9; k++) _whirlBind3x3[k] = Memory.ReadFloat(root + WeaponCollision.CFrameLocal3x3[k]);
+                for (int k = 0; k < 9; k++) _whirlBind3x3[k] = Memory.ReadFloat(root + ShotEffectPool.CFrameLocal3x3[k]);
                 if (Math.Abs(_whirlBind3x3[0]) < 0.05f || Math.Abs(_whirlBind3x3[0]) > 4.0f) return false; // already scaled / bad read
                 _whirlBindRead = true;
             }
@@ -4417,9 +4426,9 @@ namespace Dark_Cloud_Improved_Version
         // ToanId. Returns -1 when no valid slot.
         static int GetEquippedWeaponId()
         {
-            int slot = Memory.ReadByte(WeaponCollision.InventoryEquipSlotAddr);
+            int slot = Memory.ReadByte(WeaponHave.InventoryEquipSlotAddr);
             if ((uint)slot > 9) return -1;
-            return Memory.ReadUShort(WeaponCollision.InventoryWeaponSlot0Id + slot * WeaponCollision.InventoryWeaponSlotStride);
+            return Memory.ReadUShort(WeaponHave.InventoryWeaponSlot0Id + slot * WeaponHave.InventoryWeaponSlotStride);
         }
 
         // Fallback for weapons not in ToanWeapons (or with no static dcol1): read the EQUIPPED weapon's dcol1 Z
@@ -4427,11 +4436,11 @@ namespace Dark_Cloud_Improved_Version
         // the whirl from it. The dcol1 frame's local translation is (0,0,Z) at name+0xE8/+0xEC/+0xF0; Z = reach.
         static void LocateWeaponDcol1()
         {
-            long name = LocateModelFrame(WeaponCollision.DcolNameWord, WeaponCollision.Dcol1Digit);
+            long name = LocateModelFrame(WeaponModel.DcolNameWord, WeaponModel.Dcol1Digit);
             if (name == 0) { _whirlDcolBackoff = 8; return; }        // model / dcol1 not ready yet
-            float x = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalX);
-            float y = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalX + 4);
-            float z = Memory.ReadFloat(name + WeaponCollision.DcolNameToLocalZ);
+            float x = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalX);
+            float y = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalX + 4);
+            float z = Memory.ReadFloat(name + WeaponModel.DcolNameToLocalZ);
             if (Math.Abs(x) > 0.5f || Math.Abs(y) > 0.5f || z < 0.1f || z > 40f) { _whirlDcolBackoff = 8; return; } // sane (0,0,Z)
             _weaponDcol1Z = z;
             WhirlVisualScale = z / WhirlwindVisualRadius;
@@ -4446,9 +4455,9 @@ namespace Dark_Cloud_Improved_Version
         static void LocateWhirlRoots()
         {
             var roots = new System.Collections.Generic.List<long>();
-            for (int s = 0; s < WeaponCollision.EffectSlotCount; s++)
+            for (int s = 0; s < ShotEffectPool.EffectSlotCount; s++)
             {
-                int p = Memory.ReadInt(WeaponCollision.MainCharaEffectBase + (long)s * WeaponCollision.EffectSlotStride + WeaponCollision.EffectSlotModelOff);
+                int p = Memory.ReadInt(ShotEffectPool.MainCharaEffectBase + (long)s * ShotEffectPool.EffectSlotStride + ShotEffectPool.EffectSlotModelOff);
                 if (!IsRamPtr(p)) continue;
                 long root = Memory.ToMmu(p);
                 if (ValidateWhirlRoot(root)) roots.Add(root);
@@ -4485,38 +4494,38 @@ namespace Dark_Cloud_Improved_Version
             // double-scale the sprite layers), so this lever is normally OFF; kept for experiments.
             // CHAIN-1 ONLY: chain-2 (MotionProc2) records are vertex-skinning data with a different layout
             // (+0x10 = blend weights) — patching them corrupts vertex animation (the Read Abort crashes).
-            if (WeaponCollision.RubyBallScaleSprites)
+            if (RubyBallScaleSprites)
             {
                 var tracks = new System.Collections.Generic.List<(long Keys, int Count)>();
                 long head = 0;
                 for (int bank = 0; bank < 8; bank++)
                 {
                     // Trust a bank only if its motion-id range fields look sane (GetMotionParam's own check).
-                    long chr = WeaponCollision.MainCharaEffectBase + WeaponCollision.EffectTemplateOff;
+                    long chr = ShotEffectPool.MainCharaEffectBase + ShotEffectPool.EffectTemplateOff;
                     int first = Memory.ReadInt(chr + 0x3E0 + bank * 4);
                     int end   = Memory.ReadInt(chr + 0x400 + bank * 4);
                     int mpN   = Memory.ReadInt(chr + 0xC20 + bank * 4);
                     if (!IsRamPtr(mpN) || first < 0 || end <= first || end > 100) continue;
                     long mp = Memory.ToMmu(mpN);
 
-                    int headN = Memory.ReadInt(mp + WeaponCollision.MotionParamChain1);
+                    int headN = Memory.ReadInt(mp + ShotEffectPool.MotionParamChain1);
                     if (!IsRamPtr(headN)) continue;
                     long rec = Memory.ToMmu(headN);
                     if (head == 0) head = rec;                                 // identity for the rebase check
                     for (int i = 0; i < 64 && rec != 0; i++)
                     {
-                        int frame = Memory.ReadInt(rec + WeaponCollision.MotRecFrameIdx);
-                        int type  = Memory.ReadInt(rec + WeaponCollision.MotRecType);
-                        int cnt   = Memory.ReadInt(rec + WeaponCollision.MotRecKeyCount);
-                        int keysN = Memory.ReadInt(rec + WeaponCollision.MotRecKeysPtr);
-                        int nextN = Memory.ReadInt(rec + WeaponCollision.MotRecNext);
+                        int frame = Memory.ReadInt(rec + ShotEffectPool.MotRecFrameIdx);
+                        int type  = Memory.ReadInt(rec + ShotEffectPool.MotRecType);
+                        int cnt   = Memory.ReadInt(rec + ShotEffectPool.MotRecKeyCount);
+                        int keysN = Memory.ReadInt(rec + ShotEffectPool.MotRecKeysPtr);
+                        int nextN = Memory.ReadInt(rec + ShotEffectPool.MotRecNext);
                         if ((uint)frame >= 32 || cnt <= 0 || cnt > 300 || !IsRamPtr(keysN) || !IsKnownTrackType(type)) break;
-                        if (type == WeaponCollision.MotTypeScale)
+                        if (type == ShotEffectPool.MotTypeScale)
                         {
                             // Keys must read as keyframes: small non-decreasing integer times at +0 of each 0x20.
                             long keys = Memory.ToMmu(keysN);
                             int t0 = Memory.ReadInt(keys);
-                            int t1 = cnt > 1 ? Memory.ReadInt(keys + WeaponCollision.MotKeyStride) : t0;
+                            int t1 = cnt > 1 ? Memory.ReadInt(keys + ShotEffectPool.MotKeyStride) : t0;
                             if (t0 >= 0 && t0 <= 1000 && t1 >= t0 && t1 <= 1000)
                                 tracks.Add((keys, cnt));
                         }
@@ -4527,7 +4536,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     // Rebase on reload: a new chain address, or the canary key reading at its 1× value again
                     // (same address, freshly rebuilt data), means the keyframes are back at original scale.
-                    float v0 = Memory.ReadFloat(tracks[0].Keys + WeaponCollision.MotKeyValueOff);
+                    float v0 = Memory.ReadFloat(tracks[0].Keys + ShotEffectPool.MotKeyValueOff);
                     if (head != _rubyChainHead) { _rubyChainHead = head; _rubyBallApplied = 1f; _rubyOrigKey0 = v0; }
                     else if (Math.Abs(v0 - _rubyOrigKey0 * _rubyBallApplied) > Math.Abs(_rubyOrigKey0) * 0.05f + 0.001f)
                         { _rubyBallApplied = 1f; _rubyOrigKey0 = v0; }
@@ -4538,12 +4547,12 @@ namespace Dark_Cloud_Improved_Version
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"RubyBall: applying sprite keyframe scale {factor:F2} ({tracks.Count} tracks)");
                         foreach (var (keys, cnt) in tracks)
                         {
-                            byte[] blk = Memory.ReadBytesBatch(keys, cnt * WeaponCollision.MotKeyStride);
+                            byte[] blk = Memory.ReadBytesBatch(keys, cnt * ShotEffectPool.MotKeyStride);
                             if (blk == null) continue;
                             for (int k = 0; k < cnt; k++)
                                 for (int c = 0; c < 3; c++)                    // value vec xyz at key+0x10
                                 {
-                                    int off = k * WeaponCollision.MotKeyStride + WeaponCollision.MotKeyValueOff + c * 4;
+                                    int off = k * ShotEffectPool.MotKeyStride + ShotEffectPool.MotKeyValueOff + c * 4;
                                     BitConverter.GetBytes(BitConverter.ToSingle(blk, off) * ratio).CopyTo(blk, off);
                                 }
                             Memory.WriteByteArray(keys, blk);
@@ -4555,18 +4564,18 @@ namespace Dark_Cloud_Improved_Version
 
             // 2. Core geometry: object scale on the template + every slot. The engine (Draw__10CCharacter)
             // re-applies it to the root frame each draw, so one write per factor change suffices.
-            long tmpl = WeaponCollision.MainCharaEffectBase + WeaponCollision.EffectTemplateOff;
-            if (WeaponCollision.RubyBallScaleCore &&
-                Math.Abs(Memory.ReadFloat(tmpl + WeaponCollision.EffectObjectScale) - factor) > 0.005f)
+            long tmpl = ShotEffectPool.MainCharaEffectBase + ShotEffectPool.EffectTemplateOff;
+            if (RubyBallScaleCore &&
+                Math.Abs(Memory.ReadFloat(tmpl + ShotEffectPool.EffectObjectScale) - factor) > 0.005f)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"RubyBall: applying core object scale {factor:F2}");
-                for (int o = -1; o < WeaponCollision.EffectSlotCount; o++)
+                for (int o = -1; o < ShotEffectPool.EffectSlotCount; o++)
                 {
                     long obj = o < 0 ? tmpl
-                        : WeaponCollision.MainCharaEffectBase + WeaponCollision.EffectSlotObjectsOff + (long)o * WeaponCollision.EffectSlotStride;
-                    Memory.WriteFloat(obj + WeaponCollision.EffectObjectScale,     factor);
-                    Memory.WriteFloat(obj + WeaponCollision.EffectObjectScale + 4, factor);
-                    Memory.WriteFloat(obj + WeaponCollision.EffectObjectScale + 8, factor);
+                        : ShotEffectPool.MainCharaEffectBase + ShotEffectPool.EffectSlotObjectsOff + (long)o * ShotEffectPool.EffectSlotStride;
+                    Memory.WriteFloat(obj + ShotEffectPool.EffectObjectScale,     factor);
+                    Memory.WriteFloat(obj + ShotEffectPool.EffectObjectScale + 4, factor);
+                    Memory.WriteFloat(obj + ShotEffectPool.EffectObjectScale + 8, factor);
                 }
             }
 
@@ -4575,24 +4584,24 @@ namespace Dark_Cloud_Improved_Version
             // runtime-built registry entry whose static content differs). Kept for reference, toggle OFF.
             // The shipping collision path is MaintainRubyOrbHitbox (enemy-body inflation — mathematically
             // equivalent: hit ⇔ dist < orbR + bodyR) driven from CustomRubyEffects.MobiusRingEffect.
-            int btN = Memory.ReadInt(WeaponCollision.MainCharaEffectBase + WeaponCollision.BtShotPtrOff);
-            if (WeaponCollision.RubyBallScaleCollision && IsRamPtr(btN))
+            int btN = Memory.ReadInt(ShotEffectPool.MainCharaEffectBase + ShotEffectPool.BtShotPtrOff);
+            if (RubyBallScaleCollision && IsRamPtr(btN))
             {
                 long bt = Memory.ToMmu(btN);
                 if (bt != _rubyBtAddr)                                         // new BT (element/char change) → capture originals
                 {
                     _rubyBtAddr = bt; _rubyBtFactor = 1f;
-                    for (int i = 0; i < WeaponCollision.BtShotRadiiCount; i++)
-                        _rubyBtOrig[i] = Memory.ReadFloat(bt + WeaponCollision.BtShotRadiiOff + i * 4);
+                    for (int i = 0; i < ShotEffectPool.BtShotRadiiCount; i++)
+                        _rubyBtOrig[i] = Memory.ReadFloat(bt + ShotEffectPool.BtShotRadiiOff + i * 4);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                         $"RubyBall: BT 0x{bt:X} radii captured [{_rubyBtOrig[0]:F2}, {_rubyBtOrig[1]:F2}, {_rubyBtOrig[2]:F2}, {_rubyBtOrig[3]:F2}]");
                 }
                 if (Math.Abs(factor - _rubyBtFactor) > 0.005f)
                 {
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"RubyBall: applying collision scale {factor:F2} (phases 1..3)");
-                    for (int i = 1; i < WeaponCollision.BtShotRadiiCount; i++) // skip phase 0 (held ball)
+                    for (int i = 1; i < ShotEffectPool.BtShotRadiiCount; i++) // skip phase 0 (held ball)
                         if (_rubyBtOrig[i] > 0f && _rubyBtOrig[i] < 100f)      // sane radii only; 0 = phase without a hit
-                            Memory.WriteFloat(bt + WeaponCollision.BtShotRadiiOff + i * 4, _rubyBtOrig[i] * factor);
+                            Memory.WriteFloat(bt + ShotEffectPool.BtShotRadiiOff + i * 4, _rubyBtOrig[i] * factor);
                     _rubyBtFactor = factor;
                 }
             }
@@ -4609,7 +4618,7 @@ namespace Dark_Cloud_Improved_Version
         /// connect as if their damage sphere had grown. Call while the orbs are in flight; restore when they die.</summary>
         public static void MaintainRubyOrbHitbox(float factor)
         {
-            float bonus = (factor - 1f) * WeaponCollision.RubyOrbBaseRadius;
+            float bonus = (factor - 1f) * ShotEffectPool.RubyOrbBaseRadius;
             if (bonus <= 0.01f || !Player.CheckDunIsWalkingMode()) return;
             _rubyOrbHitboxActive = true;
             for (int s = 0; s < 16; s++)

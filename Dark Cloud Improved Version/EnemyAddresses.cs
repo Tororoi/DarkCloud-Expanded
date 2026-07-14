@@ -113,6 +113,10 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class StbVm
     {
+        // RAM window (PS2-native) that loaded .stb scripts land in — the bound for companion-locate / pattern scans.
+        internal const long ScanLo = 0x01000000;
+        internal const long ScanHi = 0x01A00000;
+
         // ── Header ───────────────────────────────────────────────────────────
         internal const int Magic          = 0x00425453; // "STB\0" — first word; validate before patching
         internal const int CodeSectionOff = 0x08;       // header field: byte offset of the code section
@@ -235,8 +239,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int OffsetInUnit = 0x5A4D0; // base offset within CMainMonstorUnit
         internal const int SlotStride   = 0x350;   // per-slot
         internal const int EntryStride  = 4;       // per body-part damage int (int32)
-        internal const int EntryCount   = 32;      // body-part slots per enemy (covers any observed enemy)
-        internal const int ReadLength   = EntryCount * EntryStride; // 0x80 — safe read window for the full array
+        // 16, NOT 32. The per-slot attack block is a set of PARALLEL 16-entry arrays spaced 0x40 apart:
+        //   0x5A450 frame ptr | 0x5A490 radius | 0x5A4D0 DAMAGE (this) | 0x5A510 hit REACTION | 0x5A5D0 start...
+        // A 32-entry window here is 0x80 wide and therefore runs straight into the reaction array
+        // (EnemyAttackParams.ReactionOffset, MaxCols=16) — which EnemyStatScaler then value-matches and
+        // REWRITES. Reaction types are 2/3/4, and weak enemies really do have melee damage of 2/3/4, so the
+        // damage scaler was silently corrupting hit reactions (7th Heaven's guard-break lever). Do not widen it.
+        internal const int EntryCount   = EnemyAddresses.EnemyAttackParams.MaxCols;   // 16 — one per attack column
+        internal const int ReadLength   = EntryCount * EntryStride; // 0x40 — exactly this array, no neighbours
 
         /// <summary>EE base address of <paramref name="slot"/>'s per-body-part melee-damage array.</summary>
         internal static long ArrayAddr(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + OffsetInUnit;
@@ -810,6 +820,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int ModelBase   = 0x21E18530;
         internal const int ModelStride = 0x3510;
 
+        // The model/render block sits INSIDE the MainMonstorUnit object, so the same field has two addressings:
+        // ModelBase + slot*ModelStride + off, or MainMonstorUnit.Base + slot*ModelStride + (ModelFromUnit + off).
+        // Both appear in the wild — derive the second from the first so there is ONE definition per field. (These
+        // were previously duplicated as separate literals, which is two sources of truth for one offset.)
+        internal const int ModelFromUnit = ModelBase - (int)EnemyAddresses.MainMonstorUnit.Base;   // 0x1FD60
+
         // +0x000/+0x004/+0x008: render scale multipliers (width/height/depth).
         // All 1.0 at spawn for regular enemies. MiniBoss.cs writes custom values here to
         // visually resize boss enemies. The game engine reads these for rendering.
@@ -873,10 +889,12 @@ namespace Dark_Cloud_Improved_Version
         // below are ModelBase-relative (ModelBase = that motion-block base + 0x90), i.e. subtract 0x90 from the
         // RE offsets, so they work with the usual ModelBase + slot*ModelStride + field addressing.
         internal const int PlayingMotionSpeed = 0xBD0; // float — playback speed for the current clip (−1.0 = use the motion's KEY speed). RE +0xc60.
-        internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (mirrored to FloorSlot 0x20938, read by _STATUS_GET_MOTION_ID). RE +0xc68.
+        internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (read by _STATUS_GET_MOTION_ID). RE +0xc68.
+        internal const int PlayingMotionIdFromUnit    = ModelFromUnit + PlayingMotionId;    // 0x20938 — same field, unit-relative
         // PLAYING motion FRAME (float). Same field _SET_MOTION_FRM (ELF 0x1e1cb0) writes and _GET_MOTION_FRM reads.
         // NOTE: the motion-table KEY "speed" is NOT the frame-advance rate, so to retime a clip drive THIS directly.
-        internal const int PlayingMotionFrame = 0x260; // RE +0x2F0 / absolute MonstorUnit+slot*0x3510+0x1FFC0.
+        internal const int PlayingMotionFrame = 0x260; // float — RE +0x2F0.
+        internal const int PlayingMotionFrameFromUnit = ModelFromUnit + PlayingMotionFrame; // 0x1FFC0 — same field, unit-relative
     }
 
     /// <summary>
@@ -1123,26 +1141,20 @@ namespace Dark_Cloud_Improved_Version
     }
 
     /// <summary>
-    /// EE RAM addresses + unit-relative offsets used by the runtime enemy injector / boss-fight orchestration
-    /// (EnemyModelInjector). PCSX2 addresses unless noted (= PS2-native + 0x20000000).
+    /// Enemy PLACEMENT — the vanilla globals CMonstorUnit::ArrangementPos reads when populating a floor.
+    ///
+    /// (Was "InjectorAddresses", named for the EnemyModelInjector — which does not use any of it. Its actual
+    /// readers are the boss-script patcher and the spawn roster, so the feature name was pure misdirection.)
     /// </summary>
-    internal static class InjectorAddresses
+    internal static class EnemyPlacement
     {
-        // Per-floor enemy-count target globals read by CMonstorUnit::ArrangementPos — the placement loop runs this
-        // many times (capped by walkable spawn tiles). Native 0x01D564xx; these three are the ones used as the count arg.
+        // Per-floor enemy-count target globals read by ArrangementPos — the placement loop runs this many times
+        // (capped by walkable spawn tiles). Native 0x01D564xx; these three are the ones used as the count arg.
         internal static readonly long[] PopulationTargets = [0x21D56494, 0x21D5649C, 0x21D564A0];
-
-        // STB load-address scan window (PS2-native) for the remaining RAM scans (companion locate / pattern scans).
-        internal const long StbScanLo = 0x01000000;
-        internal const long StbScanHi = 0x01A00000;
 
         // Engine spawn-candidate table, indexed by ArrangementPos at MainMonstorUnit + SpawnCandidateTableOff
         // (stride SpawnCandidateStride; flag @+0, eid @+4).
         internal const long SpawnCandidateTableOff = 0x1DEA8;
         internal const int  SpawnCandidateStride   = 0x9C;
-
-        // MainMonstorUnit-relative motion fields: unit + slot*ModelScaleOffsets.ModelStride + offset.
-        internal const long PlayingMotionFrameOff = 0x1FFC0; // float — same field as ModelScaleOffsets.PlayingMotionFrame (absolute)
-        internal const int  PlayingMotionIdOff    = 0x20938; // int   — mirror of ModelScaleOffsets.PlayingMotionId
     }
 }

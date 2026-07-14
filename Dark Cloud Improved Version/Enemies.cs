@@ -590,7 +590,7 @@ namespace Dark_Cloud_Improved_Version
             const float displacedThreshold = 300.0f;
 
             // Collect active chest positions — guaranteed walkable floor locations.
-            int rawCount = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            int rawCount = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr());
             int chestCount = Math.Min(rawCount, 16); // guard against corrupted count
             var activeChests = new List<(float x, float y)>();
             for (int c = 0; c < chestCount; c++)

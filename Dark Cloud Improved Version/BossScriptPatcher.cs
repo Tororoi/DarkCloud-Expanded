@@ -44,7 +44,7 @@ namespace Dark_Cloud_Improved_Version
 
         // STB load-address window for the remaining RAM scans (Ice Queen companion locate + command-pattern
         // scans). Boss STB location no longer scans — it reads CRunScript+0x3C (see LocateStbByCodeOff).
-        private const long ScanLo = InjectorAddresses.StbScanLo, ScanHi = InjectorAddresses.StbScanHi;
+        private const long ScanLo = StbVm.ScanLo, ScanHi = StbVm.ScanHi;
         private const int  ChunkWords = 8192;           // 32 KB per batched round-trip
         private const uint StbMagic = (uint)StbVm.Magic;  // "STB\0"
         private const int  InitCmdLen = 60;             // _INITIALIZE call = 5 vmcode_t records (all 4 bosses)
@@ -136,7 +136,7 @@ namespace Dark_Cloud_Improved_Version
         // ── EE memory layout ──────────────────────────────────────────────────────────────────────────
         private const long MainMonstorUnit  = EnemyAddresses.MainMonstorUnit.Base;          // = -0x6320($gp)
         private const long MotionBlock      = ModelScaleOffsets.ModelStride;                // 0x3510 render-object stride
-        private const long MotionFrameField = InjectorAddresses.PlayingMotionFrameOff; // PLAYING motion frame (float) @ unit + slot*0x3510 + 0x1FFC0
+        private const long MotionFrameField = ModelScaleOffsets.PlayingMotionFrameFromUnit; // PLAYING motion frame (float) @ unit + slot*0x3510 + 0x1FFC0
 
 
         internal static void Tick()
@@ -354,7 +354,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool TryGetChestTarget(out float cx, out float cy)
         {
             cx = cy = 0f;
-            int cnt = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            int cnt = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr());
             if (cnt < 1 || cnt > 16) return false;
             for (int c = 0; c < cnt; c++)
             {
@@ -1046,7 +1046,7 @@ namespace Dark_Cloud_Improved_Version
             float f1 = BitConverter.Int32BitsToSingle(v1), f2 = BitConverter.Int32BitsToSingle(v2), f3 = BitConverter.Int32BitsToSingle(v3);
             Console.WriteLine($"[IQdiag] _SET_POSITION args: a1(op{o1})={v1}/{f1:F1}  a2(op{o2})={v2}/{f2:F1}  a3(op{o3})={v3}/{f3:F1}");
             Console.WriteLine($"[IQdiag] IQ loc: X(0x100)={lx:F1}  Z/height(0x104)={lz:F1}  Y(0x108)={ly:F1}");
-            int cc = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            int cc = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr());
             Console.WriteLine($"[IQdiag] chest count={cc}");
             for (int c = 0; c < Math.Min(Math.Max(cc, 0), 16); c++)
             {
@@ -1206,10 +1206,10 @@ namespace Dark_Cloud_Improved_Version
             _spawnTblDumped = true;
             long mmu = MainMonstorUnit;
             int count = Memory.ReadInt(mmu + 0x48);   // INT count (engine cvt.s.w's it to float for the rand math)
-            Console.WriteLine($"[SPAWNTBL] count={count} (table @ MMU+0x{InjectorAddresses.SpawnCandidateTableOff:X}, stride 0x{InjectorAddresses.SpawnCandidateStride:X}; flag@+0, eid@+4):");
+            Console.WriteLine($"[SPAWNTBL] count={count} (table @ MMU+0x{EnemyPlacement.SpawnCandidateTableOff:X}, stride 0x{EnemyPlacement.SpawnCandidateStride:X}; flag@+0, eid@+4):");
             for (int i = 0; i < 9; i++)
             {
-                long e = mmu + InjectorAddresses.SpawnCandidateTableOff + (long)i * InjectorAddresses.SpawnCandidateStride;
+                long e = mmu + EnemyPlacement.SpawnCandidateTableOff + (long)i * EnemyPlacement.SpawnCandidateStride;
                 Console.WriteLine($"[SPAWNTBL]  [{i}] flag@+0={Memory.ReadInt(e)} eid@+4={Memory.ReadInt(e + 4)}");
             }
         }
@@ -1273,7 +1273,7 @@ namespace Dark_Cloud_Improved_Version
                         {
                             int hp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp));
                             int mhp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.MaxHp));
-                            int pm = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + InjectorAddresses.PlayingMotionIdOff);
+                            int pm = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + ModelScaleOffsets.PlayingMotionIdFromUnit);
                             // Native collision/targeting fields (compare genuine baria vs the Queen to learn what our
                             // spawn strips): EntityScale(+0x44 collision radius), lock-on reticle(+0x110/+0x114), COL_OFF(+0xA8).
                             float esc = F(EnemyAddresses.FloorSlots.SlotAddr(s, 0x44));
@@ -1285,7 +1285,7 @@ namespace Dark_Cloud_Improved_Version
                         _obsEid[s] = eid; _obsSdp[s] = sdp;
                     }
                     // track EVERY live slot's playing motion (companions react to her global signals)
-                    int pmNow = live ? Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + InjectorAddresses.PlayingMotionIdOff) : -1;
+                    int pmNow = live ? Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + ModelScaleOffsets.PlayingMotionIdFromUnit) : -1;
                     if (pmNow != _obsMot[s])
                     {
                         if (live) Console.WriteLine($"{ts} [IQobs] slot {s}{(s == iq ? "(IceQueen)" : eid == EnemySpecies.IceArrow.Id ? "(IceArrow)" : "")} playMot {_obsMot[s]} -> {pmNow}");
@@ -1330,7 +1330,7 @@ namespace Dark_Cloud_Improved_Version
                         float cx = F(pos), cz = F(pos + 4), cy = F(pos + 8);
                         float fx = F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX));
                         float fy = F(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationY));
-                        int mot = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + InjectorAddresses.PlayingMotionIdOff);
+                        int mot = Memory.ReadInt(MainMonstorUnit + (long)s * MotionBlock + ModelScaleOffsets.PlayingMotionIdFromUnit);
                         Console.WriteLine($"{ts} [IQpos] {tag} slot{s} char=({cx:F0},{cz:F0},{cy:F0}) floor=({fx:F0},{fy:F0}) mot={mot} player=({pX:F0},{pY:F0})");
                     }
                     LogChar("IceQueen", iq);
