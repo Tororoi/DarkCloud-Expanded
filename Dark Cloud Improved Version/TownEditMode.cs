@@ -39,7 +39,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Keep exit-from-overhead placement sane (see the class remarks). Leave this on unless you
         /// are deliberately testing the unpatched behaviour.</summary>
-        internal static bool SafeExit = true;
+        internal static bool SafeExit = false;
 
         private static bool _loggedPatch;
 
@@ -47,6 +47,20 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!OverheadCameraEverywhere) return;
+
+            // NOT WHILE FISHING. The flag's third reader is EdMoveChara — the very function that holds the
+            // `chara_fishing` state machine — so leaving it raised during a session hands fishing the debug
+            // controls: the camera stops being pinned high and starts moving freely, and Circle picks up its
+            // debug JUMP binding, which then fights the quit button (the player pops upward on exit).
+            //
+            // Fishing is a mode, not a place, so this is a clean hold-off: drop the flag for the duration and
+            // let the normal re-assert below bring it back the moment the session ends.
+            if (Memory.ReadInt(EditLoop.GameMode) == EditLoop.GameModeFishing)
+            {
+                if (Memory.ReadInt(EditLoop.EdDebugMoveFlag) != 0)
+                    Memory.WriteInt(EditLoop.EdDebugMoveFlag, 0);
+                return;
+            }
 
             if (Memory.ReadInt(EditLoop.EdDebugMoveFlag) <= 0)
                 Memory.WriteInt(EditLoop.EdDebugMoveFlag, 1);   // 1, never 2 — 2 is noclip

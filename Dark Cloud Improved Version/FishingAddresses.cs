@@ -5,7 +5,14 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class FishingAddresses
     {
-        internal const int Active            = 0x21D19714; // 0 = not fishing, 1 = session active
+        /// <summary>
+        /// 0 = not fishing, 1 = session active. Accurate, but NOT a flag anything sets deliberately:
+        /// <c>MoveChara</c> (0x17F54C) recomputes it every frame as <c>DAT_01d19714 = (GameMode == 0x10)</c>.
+        /// It is a MIRROR of <see cref="EditLoop.GameModeFishing"/>, so it can only ever become 1 once the
+        /// game is already in fishing mode. Do not watch it to find out whether a fishing spot was set up —
+        /// it says nothing about that, and it read 0 through several correct spot loads.
+        /// </summary>
+        internal const int Active            = 0x21D19714;
         /// <summary>
         /// Index of the fishing trigger NPC/object that activated the current fishing session,
         /// within the area's object table. Set when townMode transitions to 16 (fishing).

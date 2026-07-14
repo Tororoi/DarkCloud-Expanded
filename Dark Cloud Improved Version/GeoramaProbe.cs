@@ -259,7 +259,11 @@ namespace Dark_Cloud_Improved_Version
             if (!float.IsNaN(_lx) && Math.Abs(x - _lx) <= MoveEpsilon && Math.Abs(z - _lz) <= MoveEpsilon)
                 return;
             _lx = x; _lz = z;
-            Log($"pos  x={x:0.##}  y={y:0.##} (height)  z={z:0.##}");
+
+            // Yaw too: Norune's fishing script SNAPS the player to a fixed spot and faces them at the water
+            // (_SET_NPC_POS / _SET_NPC_ROT) before entering fishing mode. To do the same in a new town we need
+            // the stance — stand at the water's edge looking at it, and these are the numbers to bake in.
+            Log($"pos  x={x:0.##}  y={y:0.##} (height)  z={z:0.##}   yaw={ReadYaw():0.###} rad");
         }
 
         /// <summary>MapNo is the same id TownCharacter calls `currentArea` (it reads 0x202A2518).</summary>
@@ -442,13 +446,12 @@ namespace Dark_Cloud_Improved_Version
                 float px = Memory.ReadFloat(e + EventPoints.Position);
                 float py = Memory.ReadFloat(e + EventPoints.Position + 4);
                 float pz = Memory.ReadFloat(e + EventPoints.Position + 8);
-                float bx = Memory.ReadFloat(e + EventPoints.BoxSize);
-                float by = Memory.ReadFloat(e + EventPoints.BoxSize + 4);
-                float bz = Memory.ReadFloat(e + EventPoints.BoxSize + 8);
+                float radius = Memory.ReadFloat(e + EventPoints.Radius);
+                int part = Memory.ReadInt(e + EventPoints.PartIndex);
 
                 lines.AppendLine($"        [{i,2}] type={type} itemOrLabel={Memory.ReadInt(e + EventPoints.ItemOrLabel)} " +
-                                 $"name='{name}' pos=({px:0.#}, {py:0.#}, {pz:0.#}) box=({bx:0.#}, {by:0.#}, {bz:0.#}) " +
-                                 $"rotY={Memory.ReadFloat(e + EventPoints.RotY):0.##}");
+                                 $"name='{name}' pos=({px:0.#}, {py:0.#}, {pz:0.#}) radius={radius:0.#} " +
+                                 $"partIndex={part}{(part >= 0 ? " (pos is PART-LOCAL)" : " (pos is world)")}");
                 lines.AppendLine($"             raw {sb.ToString().TrimEnd()}");
             }
             Log($"-- event points: {used} used of {n} (stride 0x{EventPoints.Stride:X}) --");
@@ -576,6 +579,14 @@ namespace Dark_Cloud_Improved_Version
         /// [1407.34, 170, 43.52] with the middle value tracking the EDITAREA base heights — i.e. the
         /// naming does not survive contact with the data. The CFrame is unambiguous, so use it.
         /// </summary>
+        /// <summary>The player's yaw, from the CObject rotation at +0x60 (see EditLoop.CharaRotation).</summary>
+        internal static float ReadYaw()
+        {
+            uint p = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return 0f;
+            return Memory.ReadFloat(Memory.ToMmu(p) + EditLoop.CharaRotation + 4);
+        }
+
         private static bool ReadPos(out float x, out float y, out float z)
         {
             x = y = z = 0f;

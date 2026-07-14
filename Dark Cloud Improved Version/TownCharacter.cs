@@ -1027,7 +1027,8 @@ namespace Dark_Cloud_Improved_Version
                     CheckCreditsScene(); //when player finishes credits, properly save the game and redirect to demon shaft
                 }
 
-                TownEditMode.Tick();  //overhead camera + safe exit, every town
+                TownEditMode.Tick();       //overhead camera + safe exit, every town
+                CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
                 GeoramaProbe.Tick();  //no-op unless GeoramaProbe.Enabled; dumps each town once on entry
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket

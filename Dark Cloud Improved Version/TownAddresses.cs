@@ -206,14 +206,58 @@ namespace Dark_Cloud_Improved_Version
         /// even though Georama part data exists for six maps (see <see cref="GeoramaTables"/>).</summary>
         internal const long MapNo = 0x202A2518;
 
-        /// <summary>ELF <c>GameMode</c>. 1 = walking, 4 = the Georama overhead camera, 0xB = fishing.</summary>
+        /// <summary>ELF <c>GameMode</c> — the town's top-level state machine.</summary>
         internal const long GameMode = 0x202A1F50;
 
         internal const int GameModeWalking  = 1;
         internal const int GameModeOverhead = 4;
 
+        /// <summary>Event mode. <c>EventMode__Fv</c> (0x17E970) runs ONLY in this mode, and it is the sole
+        /// consumer of <see cref="EventReturnCode"/> — so an event script that never reaches 0xE can set any
+        /// return code it likes and nothing will ever act on it.</summary>
+        internal const int GameModeEvent = 0xE;
+
+        /// <summary>
+        /// FISHING is <c>GameMode 0x10</c> — NOT 0xB, which is what the mod used to say here.
+        ///
+        /// 0xB is the event RETURN CODE that asks for fishing; <c>EventMode</c> turns it into the mode with
+        /// <c>case 0xb: GameMode = 0x10;</c>. Independently confirmed by <c>MoveChara</c>, which computes
+        /// <c>DAT_01d19714 = (GameMode == 0x10)</c> — and 0x1D19714 is the flag the mod has long called
+        /// <c>FishingAddresses.Active</c>. So "Active" is precisely "GameMode is 0x10".
+        /// </summary>
+        internal const int GameModeFishing = 0x10;
+
+        /// <summary>
+        /// ELF <c>DAT_01d3d618</c> — an event script's RETURN CODE, not a mode. <c>EdInitEventParamSimple</c>
+        /// zeroes it when an event starts; the script sets it (<c>_GOTO_FISHING</c> = 0xB, <c>_MAP_JUMP</c>,
+        /// <c>_GOTO_INTERIOR</c>, <c>_GOTO_OUTSIDE</c> all write it); <c>EdEventMode</c> sees
+        /// <c>if (0 &lt; code) EdEventFinish()</c> and RETURNS it; and <c>EventMode</c> switches on it:
+        /// <c>4</c> = interior, <c>5</c> = dungeon, <c>9</c> = menu, <c>0xB</c> = fishing, default = walking.
+        ///
+        /// The catch, and the thing that cost a day: that whole chain hangs off <c>EventMode</c>, which only
+        /// runs in <see cref="GameModeEvent"/>. Setting this code from a script that is NOT running as a
+        /// real event leaves the value sitting there, read by nobody.
+        /// </summary>
+        internal const long EventReturnCode = 0x21D3D618;
+
+        internal const int ReturnCodeFishing = 0xB;
+
         internal const long ECursorFrame      = 0x202A1F60; // CFrame* — the edit cursor
         internal const long EditCamera        = 0x21D34840; // CCameraFollow, 752 bytes
+
+        /// <summary>
+        /// The MAIN follow camera (ELF <c>MainCamera</c>) — the one walking and fishing use, and the one
+        /// <c>EventMode</c> drives with <c>FollowOn</c> / <c>SetFollow</c> / <c>SetAngleSoon</c>. Not to be
+        /// confused with <see cref="EditCamera"/>, nor with the event camera at 0x21D35140.
+        /// </summary>
+        internal const long MainCamera = 0x21D34540;
+
+        /// <summary>CCameraFollow's yaw. <c>SetAngle</c> (0x124B20) writes only <see cref="CameraAngle"/>
+        /// (so the camera swings around to it); <c>SetAngleSoon</c> (0x124B30) writes BOTH, which snaps it
+        /// there instantly. Behind-the-player is simply angle = the player's yaw — that is precisely what
+        /// EventMode does when it returns you to walking: <c>SetAngleSoon(charaYaw + offset)</c>.</summary>
+        internal const int CameraAngle    = 0x2D8;
+        internal const int CameraAngleNow = 0x2DC;
         internal const long ChangeTimeEvent   = 0x202A28A0;
         internal const long EditArea          = 0x202A28DC;
 
@@ -234,6 +278,17 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Offset of the (x, y, z) position within a CCharacter/CFrame.</summary>
         internal const int CharaPosition = 0x10;
+
+        /// <summary>
+        /// Offset of the (x, y, z) rotation, so <c>+0x64</c> is the YAW. From
+        /// <c>GetRotation__7CObject</c> / <c>SetRotation__7CObject</c> (0x156EF0 / 0x156DE0), which read and
+        /// write <c>this + 0x60/0x64/0x68</c>. Same object as <see cref="CharaPosition"/>.
+        ///
+        /// NOT 0x230. That is <c>CFrame</c>'s euler cache, and <c>GetRotation__6CFrame</c> only trusts it when
+        /// the flag at <c>+0x244</c> is clear — for the player it is not, so 0x230 reads a constant zero. It
+        /// read exactly 0.000 through a whole session of the player visibly turning.
+        /// </summary>
+        internal const int CharaRotation = 0x60;
     }
 
     /// <summary>
@@ -281,9 +336,44 @@ namespace Dark_Cloud_Improved_Version
 
         internal const int Stride = 0x90;
 
+        /// <summary><b>Must be non-zero or the point is ignored.</b> <c>CheckEventPoint</c> opens with
+        /// <c>if (*point == 0) return 0;</c>. Every live point reads 1 here. Forgetting it makes an
+        /// otherwise-correct event point silently do nothing.</summary>
+        internal const int Enabled = 0x00;
+
+        /// <summary>If &gt; 0, <c>CheckEventPoint</c> gates the point on <c>EdGetMapFlag</c> — i.e. "already
+        /// done". Zero it for a point that should always fire.</summary>
+        internal const int MapFlag = 0x08;
+
         /// <summary>Event type. <b>0 means the slot is FREE</b> — <c>GetNewEventPoint</c> scans for the first
         /// entry with 0 here, starting at index 1 (index 0 is reserved).</summary>
         internal const int Type = 0x10;
+
+        /// <summary>
+        /// <b>Georama PART INDEX — and the field that silently swallows a hand-made event point.</b>
+        ///
+        /// <c>EdGetEvent</c>:
+        /// <code>
+        /// if (point[0x0C] >= 0) {
+        ///     parts = GetPartsObject(EditGround, ...);
+        ///     if (parts == 0) goto skip;          // part not placed -> the point is SKIPPED
+        ///     GetPosRot(parts, pos, rot);         // Position becomes PART-RELATIVE
+        /// }
+        /// </code>
+        ///
+        /// So a point with a part index is anchored to that part (which is why Norune's fishing trigger
+        /// reads <c>(40, 0, 96)</c> — part-local, attached to the lake). <b>Set this to -1</b> for a
+        /// free-standing point whose <see cref="Position"/> is plain world space.
+        /// </summary>
+        internal const int PartIndex = 0x0C;
+
+        /// <summary>Optional <c>CMapObject*</c>. If <see cref="PartIndex"/> is negative and this is set, the
+        /// position is taken from this object instead. 0 for a free-standing point.</summary>
+        internal const int ObjectPtr = 0x14;
+
+        /// <summary>Optional CFrame*. If set, <c>CheckEventPoint</c> gates the point on that frame's draw
+        /// flag (<c>frame[0xB0] &amp; 1</c>) — so a hidden object's event does not fire. 0 = no gate.</summary>
+        internal const int FramePtr = 0x18;
 
         /// <summary>
         /// Overloaded by <see cref="Type"/>, and this is the crux of the whole fishing trigger:
@@ -304,9 +394,13 @@ namespace Dark_Cloud_Improved_Version
         // NOTE: type-3 points are NOT in the door list — the dump at town load shows only type-1 interior
         // doors. The fishing point's position (40, 0, 96) is PART-LOCAL: it is attached to the lake part.
         internal const int Name     = 0x30;   // char[] — for doors, the target map ("i01h06", "dungeon")
-        internal const int Position = 0x50;   // float x, y, z  (part-local for part-derived points)
-        internal const int BoxSize  = 0x60;   // float x, y, z — the trigger volume
-        internal const int RotY     = 0x74;   // float radians (1.57 = 90 degrees)
+        internal const int Position = 0x50;   // float x, y, z  (world if PartIndex < 0, else part-local)
+
+        /// <summary>A scalar <b>RADIUS</b>, not a box: <c>EdGetEvent</c> does
+        /// <c>if (DistVector(pos, player) &lt; *(float*)(point + 0x60))</c>.</summary>
+        internal const int Radius = 0x60;
+
+        internal const int Rotation = 0x70;   // float x, y, z
 
         /// <summary>Event types seen live.</summary>
         internal const int TypeFree   = 0;   // slot is unused
@@ -326,6 +420,18 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The label the engine falls back to (0x100). Norune's fishing script lives here.</summary>
         internal const int DefaultFishingLabel = 256;
+
+        /// <summary>
+        /// Labels the ENGINE requests by number while fishing. <c>EdMoveChara</c>'s <c>chara_fishing</c>
+        /// state machine writes them straight into <see cref="ScriptLabelRequest"/> on a button press:
+        /// Circle (pad 0x20) asks for 133, Square (pad 0x80) asks for 134. Cross (0x40) casts and needs no
+        /// script.
+        ///
+        /// These ids are NOT negotiable — a town that lacks them has no way to quit fishing or change bait,
+        /// because the request names a label that does not exist and the event simply never starts.
+        /// </summary>
+        internal const int FishingExitLabel = 133;   // "quit fishing?"
+        internal const int FishingBaitLabel = 134;   // the bait menu
 
         /// <summary>The matched event's params, filled in by <c>EdGetEvent</c>. When this reads 2 and the
         /// action button is down, the event fires.</summary>
@@ -360,6 +466,52 @@ namespace Dark_Cloud_Improved_Version
     /// label[i] = { u32 id, u32 codeOffset }   // the code itself starts at codeOffset + 8
     /// </code>
     /// </summary>
+    /// <summary>
+    /// The background (disc) file reader. <c>_LOAD_ITEM_FILE</c> issues <c>LoadFileBG</c> reads and returns
+    /// immediately; <c>_LOAD_ITEM</c> then builds an item frame from the buffer — and if the read has not
+    /// landed, it builds one out of nothing and the game dies calling through a garbage pointer
+    /// ("Jump to unaligned address").
+    ///
+    /// The trap is that <c>GetReadBGFile</c> tests <c>entry[0]</c>, which <c>LoadFileBG</c> sets at QUEUE
+    /// time — so it reports a slot as available while the read is still in flight. <c>ReadBG</c> shows the
+    /// real state machine:
+    ///
+    /// <code>
+    ///   entry[0] = 1                       // queued        (LoadFileBG)
+    ///   entry[1] = sceCdRead handle        // read issued   (ReadBG)
+    ///   entry[2] = 1                       // COMPLETE      (ReadBG, after sceCdSync with no error)
+    /// </code>
+    ///
+    /// <c>entry[2]</c> is the only honest completion flag, and it is what the mod polls to release a script
+    /// waiting on a load — instead of guessing at a frame count, which is a race that crashes when lost.
+    /// </summary>
+    internal static class BgRead
+    {
+        internal const long Table  = 0x21CBB0C0;   // bg_read_info
+        internal const int  Stride = 0x9C;         // 0x27 ints
+        internal const int  Slots  = 32;
+
+        internal const int InUse    = 0x00;        // set when QUEUED — NOT a completion signal
+        internal const int Complete = 0x08;        // entry[2] — set when the read has actually landed
+    }
+
+    /// <summary>
+    /// The event script's VM object (ELF <c>CRunScript</c>) — <c>EdEventInit</c> calls
+    /// <c>reload__10CRunScript(0x1d4a430, ...)</c>. <c>exe()</c> reads the running frame's LOCAL VARIABLE
+    /// array from <c>this + 0x28</c>, so that is how the mod reaches a script's locals: each is an
+    /// 8-byte RS_STACKDATA of {type, value}, and type 1 = int.
+    /// </summary>
+    internal static class RunScript
+    {
+        internal const long Object   = 0x21D4A430;
+        internal const int  VarsBase = 0x28;
+
+        internal const int VarStride = 8;
+        internal const int VarType   = 0;
+        internal const int VarValue  = 4;
+        internal const int TypeInt   = 1;
+    }
+
     internal static class TownScript
     {
         /// <summary>ELF <c>EdEventData</c> — native ptr to the loaded event.stb image.</summary>
@@ -369,7 +521,19 @@ namespace Dark_Cloud_Improved_Version
         internal const int LabelTable  = 0x0C;
         internal const int LabelCount  = 0x10;
         internal const int LabelStride = 0x08;   // { u32 id, u32 codeOffset }
-        internal const int LabelCodeSkip = 0x08; // code begins at codeOffset + 8
+
+        /// <summary>
+        /// Where a label's EXECUTABLE code starts, relative to its <c>codeOffset</c>.
+        ///
+        /// A label does not begin with an instruction. It begins with an 8-byte gap and then a FOUR-SLOT
+        /// HEADER (4 x 12 bytes): one slot whose first word varies per label — 27, 10, 4, 1, 3 — almost
+        /// certainly a local-variable count, followed by three zeroed slots. Every real label in the game
+        /// has this shape, and the first genuine instruction sits after it.
+        ///
+        /// Writing over that header is silent death: the VM reads your first PUSH as the frame setup and
+        /// everything after it as rubbish. The event point fires, the label is requested, and nothing runs.
+        /// </summary>
+        internal const int LabelCodeSkip = 0x08 + 4 * 12;   // 8-byte gap + 4-slot header = 56
 
         internal static long Base()
         {
