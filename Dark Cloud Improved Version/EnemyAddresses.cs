@@ -47,6 +47,53 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>EE address of the live position triple (X,Z,Y) for <paramref name="slot"/>.</summary>
             internal static long PosAddr(int slot) => CharAddr(slot) + PosOffset;
         }
+
+        /// <summary>
+        /// Enemy GUARD windows — the "guard motion frames" that make a defending enemy block the player's hit.
+        /// RE'd 2026-07-07. Each guarding enemy (69/167 species) registers up to 3 windows once in its STB
+        /// _INITIALIZE via <c>_SET_GUARD_FRAME(startFrame, endFrame)</c> (cmd 244, handler 0x1E60B0), stored in
+        /// CMainMonstorUnit at <c>Base + slot*Stride</c>: a flag short at +0x60550 (per window, stride 2), a start
+        /// frame float at +0x60558 and an end frame float at +0x60564 (per window, stride 4). The enemy is
+        /// "guarding" whenever its current motion frame (CCharacter +0x1FFC0) falls inside an active window; at
+        /// that moment CMonstorUnit::CheckDmg (0x1D9F10) blocks the player's hit — plays the guard clink (SE 0xA2),
+        /// nudges the enemy back, and SKIPS the damage. Zeroing the flag makes CheckDmg's guard check find no
+        /// active window, so the hit lands (the enemy still animates its guard). Written once at spawn (not per
+        /// frame), so a data-side zero holds with no race. Used by CustomToanEffects.DarkCloudEffect (guard-break).
+        /// </summary>
+        internal static class GuardWindows
+        {
+            internal const int  Stride       = 0x20;      // per enemy slot (matches CheckDmg slot*0x20)
+            internal const int  FlagOffset   = 0x60550;   // short[3] — window active flags (stride 2)
+            internal const int  StartOffset  = 0x60558;   // float[3] — window start frame (stride 4)
+            internal const int  EndOffset    = 0x60564;   // float[3] — window end frame (stride 4)
+            internal const int  WindowCount  = 3;
+
+            /// <summary>EE address of <paramref name="window"/>'s guard-active flag short for <paramref name="slot"/>.</summary>
+            internal static long FlagAddr(int slot, int window)
+                => MainMonstorUnit.Base + (long)slot * Stride + FlagOffset + window * 2;
+        }
+
+        /// <summary>
+        /// Enemy MELEE attack parameters — the per-damage-collision values an enemy sets once in its STB
+        /// _INITIALIZE via <c>_SET_DMG_PARA(damage, statusFlags, reactionType[, launch])</c>. Stored in
+        /// CMainMonstorUnit at <c>Base + slot*0x350 + col*4</c>: damage int @+0x5A4D0, status-flag int @+0x5A590,
+        /// and the HIT REACTION TYPE int @+0x5A510 (2=knockback/guardable, 3=knockdown/guard-break/unguardable,
+        /// 4=light). CMonstorUnit::CheckDmg (0x1D9F10) rebuilds the enemy's attack CCollisionData entry from these
+        /// each frame (reaction → entry +0x4C), which BtCheckDamageProc reads to decide guardability. So writing
+        /// ReactionAddr from 3→2 makes that melee attack guardable (the player's guard then blocks it). See
+        /// [[guard-break-and-knockback]] and CustomToanEffects.SeventhHeavenEffect. Up to 16 cols per enemy.
+        /// </summary>
+        internal static class EnemyAttackParams
+        {
+            internal const int SlotStride     = 0x350;
+            internal const int ColStride      = 4;
+            internal const int MaxCols        = 16;
+            internal const int ReactionOffset = 0x5A510; // int — melee hit reaction type (2/3/4)
+
+            /// <summary>EE address of the melee reaction-type int for <paramref name="slot"/>'s dmg-col <paramref name="col"/>.</summary>
+            internal static long ReactionAddr(int slot, int col)
+                => MainMonstorUnit.Base + (long)slot * SlotStride + col * ColStride + ReactionOffset;
+        }
     }
 
     /// <summary>
@@ -66,6 +113,10 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class StbVm
     {
+        // RAM window (PS2-native) that loaded .stb scripts land in — the bound for companion-locate / pattern scans.
+        internal const long ScanLo = 0x01000000;
+        internal const long ScanHi = 0x01A00000;
+
         // ── Header ───────────────────────────────────────────────────────────
         internal const int Magic          = 0x00425453; // "STB\0" — first word; validate before patching
         internal const int CodeSectionOff = 0x08;       // header field: byte offset of the code section
@@ -97,6 +148,50 @@ namespace Dark_Cloud_Improved_Version
         internal const int FnSetShot      = 133; // _SET_SHOT   with explicit damage (argc==6)
         internal const int FnSetShotReg   = 135; // _SET_SHOT   registry entry (not observed in any monster STB)
         internal const int FnSetShot2     = 229; // _SET_SHOT2 / second-shot with explicit damage (argc==6)
+    }
+
+    /// <summary>
+    /// ENEMY TARGETING — the vanilla path by which every enemy learns where its target is, and the single
+    /// lever for redirecting it. All addresses here are VANILLA engine facts; nothing mod-specific.
+    ///
+    /// Enemy AI never stores the player's position: each frame it asks for it through two STB external
+    /// commands (op21, dispatched via the funcdata table @<see cref="StbExternCmd.DispatchTable"/>):
+    ///   • _GET_POSITION — where is my target?
+    ///   • _GET_DISTANCE — how far away is it?
+    /// Both load <see cref="PlayerPosGuest"/> — the live player global — with a HARDCODED address, then
+    /// sceVu0CopyVector it out. So the player's position enters enemy AI at exactly two instructions.
+    ///
+    /// Because the dispatch entries are function POINTERS the game dereferences, hosting a modified copy of
+    /// either function and repointing its slot redirects targeting for ALL enemies with a pure data write —
+    /// no in-place code surgery (see CodeCaveFunctions). Splice at the player-load offsets below; the copy's
+    /// own `jal sceVu0CopyVector` is left intact and is where a helper jumps back to.
+    ///
+    /// Mirage's decoy is the first consumer (it makes the load per-enemy indirect), but nothing here is
+    /// Mirage's — any feature that wants to lie to enemies about where the player is starts from these.
+    /// </summary>
+    internal static class StbExternCmd
+    {
+        internal const long DispatchTable = 0x202917C8;  // funcdata table: 8-byte {funcPtr, id} entries
+        internal const int  EntryStride   = 8;
+
+        internal const long GetPositionSlot = 0x202918A8;  // _GET_POSITION funcPtr slot
+        internal const long GetDistanceSlot = 0x202918A0;  // _GET_DISTANCE funcPtr slot
+        internal const long GetPositionFn   = 0x201E1DF0;  // _GET_POSITION (ELF 0x1E1DF0)
+        internal const long GetDistanceFn   = 0x201E1D00;  // _GET_DISTANCE (ELF 0x1E1D00)
+
+        /// <summary>The live player-position global both commands read (16 bytes: x, z/height, y, w).</summary>
+        internal const uint PlayerPosGuest  = 0x01EA1D30;
+
+        // Where, inside each function, the hardcoded player-address load sits — and the sceVu0CopyVector jal
+        // that consumes it. These are the splice points for anyone hosting a modified copy.
+        internal const int  PosPlayerLdOff  = 0x84;
+        internal const int  PosCopyJalOff   = 0x8C;
+        internal const int  DistPlayerLdOff = 0x5C;
+        internal const int  DistCopyJalOff  = 0x64;
+
+        // Sanity words — assert these before cloning, or you'll copy someone's stale in-place patch.
+        internal const uint VanillaPrologue = 0x27BDFFB0;  // addiu sp,-0x50
+        internal const uint VanillaPlayerLd = 0x3C0201EA;  // lui v0,0x1ea  (the player-addr load itself)
     }
 
     /// <summary>
@@ -144,8 +239,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int OffsetInUnit = 0x5A4D0; // base offset within CMainMonstorUnit
         internal const int SlotStride   = 0x350;   // per-slot
         internal const int EntryStride  = 4;       // per body-part damage int (int32)
-        internal const int EntryCount   = 32;      // body-part slots per enemy (covers any observed enemy)
-        internal const int ReadLength   = EntryCount * EntryStride; // 0x80 — safe read window for the full array
+        // 16, NOT 32. The per-slot attack block is a set of PARALLEL 16-entry arrays spaced 0x40 apart:
+        //   0x5A450 frame ptr | 0x5A490 radius | 0x5A4D0 DAMAGE (this) | 0x5A510 hit REACTION | 0x5A5D0 start...
+        // A 32-entry window here is 0x80 wide and therefore runs straight into the reaction array
+        // (EnemyAttackParams.ReactionOffset, MaxCols=16) — which EnemyStatScaler then value-matches and
+        // REWRITES. Reaction types are 2/3/4, and weak enemies really do have melee damage of 2/3/4, so the
+        // damage scaler was silently corrupting hit reactions (7th Heaven's guard-break lever). Do not widen it.
+        internal const int EntryCount   = EnemyAddresses.EnemyAttackParams.MaxCols;   // 16 — one per attack column
+        internal const int ReadLength   = EntryCount * EntryStride; // 0x40 — exactly this array, no neighbours
 
         /// <summary>EE base address of <paramref name="slot"/>'s per-body-part melee-damage array.</summary>
         internal static long ArrayAddr(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride + OffsetInUnit;
@@ -246,7 +347,7 @@ namespace Dark_Cloud_Improved_Version
     /// loses the race (verified: even ×5 produced no visible change). The only per-slot speed modifier in _SET_MOVE is
     /// a boolean "halve" flag (int @ slot 0x1E3E4, store at−0x1C1C: if >0, speed ×0.5) — it can only SLOW, never speed
     /// up. And same-species slots share one STB native pointer, so there is no per-slot script to patch. ⇒ The only
-    /// race-free speed lever is the shared per-species _SET_MOVE STB literal (what HarderEnemies/"Faster enemies"
+    /// race-free speed lever is the shared per-species _SET_MOVE STB literal (what FasterEnemies/"Faster enemies"
     /// patches); a true per-enemy speed scale does not exist in this engine path. This field remains useful READ-ONLY
     /// (probe an enemy's live move speed) and for the one-shot "halve" flag if a slow-down is ever wanted.
     /// </summary>
@@ -310,7 +411,8 @@ namespace Dark_Cloud_Improved_Version
     internal static class EnemySlotOffsets
     {
         // ── Status / Timers ──────────────────────────────────────────────────
-        internal const int RenderStatus      = 0x000; // int   — 0=inactive, 1=spawned (not yet aggro'd), 2=active; transitions 1→2 when enemy enters play
+        internal const int RenderStatus      = 0x000; // int   — 0=inactive, 1=spawned (not yet aggro'd), 2=active; transitions 1→2 when enemy enters play; -1 = release/death-processing frame (the CMonstorUnit::Step death block — kill-ABS grant + drop spawn — runs on it)
+        internal const int KillerCharId      = 0x004; // int   — character id of the last damager; the death block grants kill ABS only when this equals the active character
         internal const int FreezeTimer       = 0x008; // int   — freeze status countdown; 0 at rest
         internal const int PoisonPeriod      = 0x00C; // int   — poison tick interval; 0 at rest
         internal const int StaminaTimer      = 0x010; // int   — stamina/status countdown; starts at a large value (e.g. 0x004F0000 ≈ 5.2M) and decrements each frame; 0 when expired
@@ -718,6 +820,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int ModelBase   = 0x21E18530;
         internal const int ModelStride = 0x3510;
 
+        // The model/render block sits INSIDE the MainMonstorUnit object, so the same field has two addressings:
+        // ModelBase + slot*ModelStride + off, or MainMonstorUnit.Base + slot*ModelStride + (ModelFromUnit + off).
+        // Both appear in the wild — derive the second from the first so there is ONE definition per field. (These
+        // were previously duplicated as separate literals, which is two sources of truth for one offset.)
+        internal const int ModelFromUnit = ModelBase - (int)EnemyAddresses.MainMonstorUnit.Base;   // 0x1FD60
+
         // +0x000/+0x004/+0x008: render scale multipliers (width/height/depth).
         // All 1.0 at spawn for regular enemies. MiniBoss.cs writes custom values here to
         // visually resize boss enemies. The game engine reads these for rendering.
@@ -781,10 +889,12 @@ namespace Dark_Cloud_Improved_Version
         // below are ModelBase-relative (ModelBase = that motion-block base + 0x90), i.e. subtract 0x90 from the
         // RE offsets, so they work with the usual ModelBase + slot*ModelStride + field addressing.
         internal const int PlayingMotionSpeed = 0xBD0; // float — playback speed for the current clip (−1.0 = use the motion's KEY speed). RE +0xc60.
-        internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (mirrored to FloorSlot 0x20938, read by _STATUS_GET_MOTION_ID). RE +0xc68.
+        internal const int PlayingMotionId    = 0xBD8; // int   — currently-PLAYING motion id (read by _STATUS_GET_MOTION_ID). RE +0xc68.
+        internal const int PlayingMotionIdFromUnit    = ModelFromUnit + PlayingMotionId;    // 0x20938 — same field, unit-relative
         // PLAYING motion FRAME (float). Same field _SET_MOTION_FRM (ELF 0x1e1cb0) writes and _GET_MOTION_FRM reads.
         // NOTE: the motion-table KEY "speed" is NOT the frame-advance rate, so to retime a clip drive THIS directly.
-        internal const int PlayingMotionFrame = 0x260; // RE +0x2F0 / absolute MonstorUnit+slot*0x3510+0x1FFC0.
+        internal const int PlayingMotionFrame = 0x260; // float — RE +0x2F0.
+        internal const int PlayingMotionFrameFromUnit = ModelFromUnit + PlayingMotionFrame; // 0x1FFC0 — same field, unit-relative
     }
 
     /// <summary>
@@ -980,8 +1090,19 @@ namespace Dark_Cloud_Improved_Version
         // overrides it. The shot's BST entry is selected by the species record's +0x68/+0x6A shot-effect indices
         // through PointerArray (0x27FA70), in CMonstorUnit::SetupBaseModel.
         internal const int ShotBaseDamage     = 0x3C; // int   — base damage of a shot behavior (was mislabeled AttackDistance)
-        internal const int BehaviorFlags      = 0x40; // int   — packed flags controlling hit response / VFX
-        internal const int PhaseCount         = 0x44; // int   — number of animation phases in this behavior
+        // +0x40 CONFIRMED 2026-07-07 (guard/knockback RE): the projectile's ATTACK STATUS FLAGS. When a shot hits,
+        // Step__CSHOT_EFFECT (0x1AC180) copies this word into the CCollisionData entry +0x50, and BtCheckDamageProc
+        // (dun 0x1DBAFD0) rolls each set status bit (~65% for amulet-gated ailments, 20% for Steal). Only the bits
+        // in AttackStatusFlag below are ailments; low bits (0x1..0x80) are non-status shot flags (element/VFX).
+        // MELEE attacks carry the SAME flag word via _SET_DMG_PARA's 2nd argument (param array +0x5A590 →
+        // CMonstorUnit::CheckDmg passes it as Set__CCollisionData param_9 → entry +0x50) — e.g. the Days-of-week
+        // imps Steal, Mummy/Curse Dancer Curse, King Mimics HalfHP, Ice Arrow guaranteed-Freeze.
+        internal const int AttackStatusFlags  = 0x40; // int   — projectile status-effect bit flags (see AttackStatusFlag)
+        // +0x44 CONFIRMED 2026-07-07 (guard/knockback RE): the HIT REACTION TYPE (2/3/4), NOT a phase count.
+        // Step__CSHOT_EFFECT passes it as the CCollisionData entry +0x4C reaction type (and special-cases ==3 to set
+        // the launch vector). BtCheckDamageProc keys guard-break + knockdown off it — see AttackReaction below and
+        // docs/enemy-attack-damage-table.md. For melee the same reaction type is the _SET_DMG_PARA 3rd STB arg.
+        internal const int HitReactionType    = 0x44; // int   — hit reaction type: 2=knockback,3=knockdown(guard-break),4=light
         // +0x48: always 1
         internal const int ScriptMode         = 0x4C; // int   — packed mode flags for the behavior FSM
         internal const int PackedFlags2       = 0x50; // int   — secondary packed flags
@@ -989,29 +1110,51 @@ namespace Dark_Cloud_Improved_Version
         internal const int ProjectileSpeed    = 0x58; // float — non-zero only for projectile behaviors
         internal const int ProjectileLifetime = 0x5C; // int   — frames the projectile lives; 0 if no projectile
         // +0x60–+0x6C: four ints, all -1
+
+        /// <summary>Hit reaction type values (CCollisionData entry +0x4C; BST +0x44 for shots,
+        /// _SET_DMG_PARA arg2 for melee). Governs guardability AND knockdown together, resolved in
+        /// BtCheckDamageProc. See docs/enemy-attack-damage-table.md.</summary>
+        internal static class AttackReaction
+        {
+            internal const int Knockback = 2; // guardable; unguarded = medium stagger (~80f)
+            internal const int Knockdown = 3; // UNGUARDABLE (breaks guard) + hard knockdown/launch (~160f); reads a 4th launch arg
+            internal const int Light     = 4; // guardable; unguarded = minimal flinch (~8f), no knockover
+        }
+
+        /// <summary>Attack status-effect bits, shared by melee (_SET_DMG_PARA 2nd arg) and shots (BST +0x40 =
+        /// AttackStatusFlags); both land in CCollisionData entry +0x50 and are resolved by BtCheckDamageProc.
+        /// Amulet-gated ailments roll at ~65% and are blocked by the matching Anti-* amulet. Low bits
+        /// (0x1..0x80) are non-status shot/element flags and are not included here. Full per-attack map in
+        /// docs/enemy-attack-damage-table.md.</summary>
+        internal static class AttackStatusFlag
+        {
+            internal const int Freeze           = 0x100;    // ~65% roll; blocked by Anti-Freeze Amulet (item 0x84)
+            internal const int Poison           = 0x200;    // ~65% roll; blocked by Antidote Amulet (item 0x87)
+            internal const int Curse            = 0x400;    // ~65% roll; blocked by Anti-Curse Amulet (item 0x85)
+            internal const int Goo              = 0x800;    // ~65% roll; blocked by Anti-Goo Amulet (item 0x86)
+            internal const int Stamina          = 0x1000;   // ~65% roll; drains stamina (no amulet)
+            internal const int Steal            = 0x40000;  // 20% roll; steals 1/5 of the player's gold, dropped as loot (Days-of-week imps)
+            internal const int HalfHpDamage     = 0x80000;  // damage = HALF the player's CURRENT HP, replacing the dmg formula (King Mimic bite)
+            internal const int FreezeGuaranteed = 0x100000; // freeze applied unconditionally — no roll, no amulet check (Ice Arrow)
+            internal const int AilmentMask      = Freeze | Poison | Curse | Goo | Stamina | Steal | HalfHpDamage | FreezeGuaranteed;
+        }
     }
 
     /// <summary>
-    /// EE RAM addresses + unit-relative offsets used by the runtime enemy injector / boss-fight orchestration
-    /// (EnemyModelInjector). PCSX2 addresses unless noted (= PS2-native + 0x20000000).
+    /// Enemy PLACEMENT — the vanilla globals CMonstorUnit::ArrangementPos reads when populating a floor.
+    ///
+    /// (Was "InjectorAddresses", named for the EnemyModelInjector — which does not use any of it. Its actual
+    /// readers are the boss-script patcher and the spawn roster, so the feature name was pure misdirection.)
     /// </summary>
-    internal static class InjectorAddresses
+    internal static class EnemyPlacement
     {
-        // Per-floor enemy-count target globals read by CMonstorUnit::ArrangementPos — the placement loop runs this
-        // many times (capped by walkable spawn tiles). Native 0x01D564xx; these three are the ones used as the count arg.
+        // Per-floor enemy-count target globals read by ArrangementPos — the placement loop runs this many times
+        // (capped by walkable spawn tiles). Native 0x01D564xx; these three are the ones used as the count arg.
         internal static readonly long[] PopulationTargets = [0x21D56494, 0x21D5649C, 0x21D564A0];
-
-        // STB load-address scan window (PS2-native) for the remaining RAM scans (companion locate / pattern scans).
-        internal const long StbScanLo = 0x01000000;
-        internal const long StbScanHi = 0x01A00000;
 
         // Engine spawn-candidate table, indexed by ArrangementPos at MainMonstorUnit + SpawnCandidateTableOff
         // (stride SpawnCandidateStride; flag @+0, eid @+4).
         internal const long SpawnCandidateTableOff = 0x1DEA8;
         internal const int  SpawnCandidateStride   = 0x9C;
-
-        // MainMonstorUnit-relative motion fields: unit + slot*ModelScaleOffsets.ModelStride + offset.
-        internal const long PlayingMotionFrameOff = 0x1FFC0; // float — same field as ModelScaleOffsets.PlayingMotionFrame (absolute)
-        internal const int  PlayingMotionIdOff    = 0x20938; // int   — mirror of ModelScaleOffsets.PlayingMotionId
     }
 }

@@ -214,8 +214,8 @@ namespace Dark_Cloud_Improved_Version
             _writeProbeDone = true;
 
             // Try current PCSX2 PINE spec: Write8 = 0x04
-            SendBatch(BuildWritePacket(0x04, 0x21F10024, new byte[] { 0x01 }));
-            if (ReadByte(0x21F10024) == 0x01)
+            SendBatch(BuildWritePacket(0x04, CodeCaves.Mailbox.PineProbe, new byte[] { 0x01 }));
+            if (ReadByte(CodeCaves.Mailbox.PineProbe) == 0x01)
             {
                 _altWriteOpcodes = true;
                 Console.WriteLine("[PINE probe] Write8 opcode 0x04 works (current PCSX2 PINE spec).");
@@ -223,8 +223,8 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Fallback: legacy PCSX2 PINE spec: Write8 = 0x08
-            SendBatch(BuildWritePacket(0x08, 0x21F10024, new byte[] { 0x01 }));
-            if (ReadByte(0x21F10024) == 0x01)
+            SendBatch(BuildWritePacket(0x08, CodeCaves.Mailbox.PineProbe, new byte[] { 0x01 }));
+            if (ReadByte(CodeCaves.Mailbox.PineProbe) == 0x01)
             {
                 Console.WriteLine("[PINE probe] Write8 opcode 0x08 works (legacy PCSX2 PINE spec).");
                 goto Done;
@@ -234,7 +234,7 @@ namespace Dark_Cloud_Improved_Version
 
             Done:
             _writeFailCount = 0;
-            WriteByte(0x21F10024, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
+            WriteByte(CodeCaves.Mailbox.PineProbe, 0x00); // Clear probe value so instance-check in MainMenuThread sees 0
             _writeFailCount = 0;
         }
 
@@ -242,11 +242,22 @@ namespace Dark_Cloud_Improved_Version
         // The PS2 EE is MIPS: segment bits occupy the upper 3 bits of a 32-bit virtual address
         // (kseg0/kseg1/kuseg all alias the same physical RAM). Strip them with PhysAddrMask to get the
         // physical byte offset, then add Pcsx2Base to land in PCSX2's RAM window (where PINE reads/writes).
-        internal const long PhysAddrMask = 0x1FFFFFFF; // strips MIPS segment bits → 29-bit physical address
+        internal const uint PhysAddrMask = 0x1FFFFFFF; // strips MIPS segment bits → 29-bit physical address
         internal const long Pcsx2Base    = 0x20000000; // PCSX2 maps PS2 physical RAM at this offset
+        internal const uint EeRamSize    = 0x02000000; // 32 MB — the EE's entire main RAM (guest 0x0..0x01FFFFFF)
 
         // Convert a PS2-native pointer (read from PS2 RAM) to a PCSX2-addressable address.
         internal static long ToMmu(long nativePtr) => (nativePtr & PhysAddrMask) | Pcsx2Base;
+
+        /// <summary>Is <paramref name="guestPtr"/> a usable PS2 pointer — non-null and inside the EE's 32 MB of
+        /// RAM? Pointers chased out of live game memory (model trees, map/fire structs, cloth lists) are null or
+        /// stale garbage during loads and transitions, so guard before dereferencing: without this we'd compute
+        /// an address from nonsense and scribble into unrelated memory. Expects a GUEST address — mask an MMU
+        /// address with <see cref="PhysAddrMask"/> first (that's the usual `ReadInt(...) &amp; PhysAddrMask` idiom).</summary>
+        internal static bool IsValidGuest(uint guestPtr) => guestPtr != 0 && guestPtr < EeRamSize;
+
+        /// <inheritdoc cref="IsValidGuest(uint)"/>
+        internal static bool IsValidGuest(long guestPtr) => guestPtr > 0 && guestPtr < EeRamSize;
 
         private static uint PhysAddr(long address) => (uint)(address & PhysAddrMask);
 
@@ -281,6 +292,32 @@ namespace Dark_Cloud_Improved_Version
             var result = new byte[numBytes];
             for (long i = 0; i < numBytes; i++)
                 result[i] = ReadByte(address + i);
+            return result;
+        }
+
+        /// <summary>
+        /// Bulk byte read via packed Read32 batches (one PINE round-trip per 2048 words instead
+        /// of one per BYTE — use this instead of <see cref="ReadByteArray"/> for anything larger
+        /// than a few bytes). <paramref name="address"/> may be unaligned; alignment is handled
+        /// internally.
+        /// </summary>
+        internal static byte[] ReadBytesBatch(long address, int numBytes)
+        {
+            const int ChunkWords = 2048;   // 8KB of data per round-trip
+            long alignedStart = address & ~3L;
+            int alignedLen = (int)(((address + numBytes + 3) & ~3L) - alignedStart);
+            int totalWords = alignedLen / 4;
+            var buf = new byte[alignedLen];
+            for (int done = 0; done < totalWords; done += ChunkWords)
+            {
+                int words = Math.Min(ChunkWords, totalWords - done);
+                uint[] chunk = ReadUIntBatch(alignedStart + (long)done * 4, words);
+                if (chunk == null || chunk.Length != words) return null;
+                for (int i = 0; i < words; i++)
+                    BitConverter.GetBytes(chunk[i]).CopyTo(buf, (done + i) * 4);
+            }
+            var result = new byte[numBytes];
+            Array.Copy(buf, (int)(address - alignedStart), result, 0, numBytes);
             return result;
         }
 
@@ -460,6 +497,30 @@ namespace Dark_Cloud_Improved_Version
         internal static void WriteByteArray(long address, byte[] byteArray)
         {
             Write(address, byteArray);
+        }
+
+        // Writes <data.Length> consecutive bytes starting at <startAddr>, packing many Write8 commands into
+        // each PINE packet (chunked) — the byte-wise sibling of WriteUIntBatch, for bulk blobs (e.g. texture
+        // pixels) where per-byte round-trips would take seconds and alignment rules out 32-bit packing.
+        internal static void WriteBytesBatch(long startAddr, byte[] data)
+        {
+            const int chunk = 500;                 // 500*6+4 = 3004 bytes/packet — well under the PINE buffer
+            byte op = OpWrite8;
+            for (int start = 0; start < data.Length; start += chunk)
+            {
+                int n = Math.Min(chunk, data.Length - start);
+                int pktLen = 4 + n * 6;            // header + n*(opcode(1)+addr(4)+value(1))
+                var pkt = new byte[pktLen];
+                BitConverter.GetBytes(pktLen).CopyTo(pkt, 0);
+                for (int i = 0; i < n; i++)
+                {
+                    int off = 4 + i * 6;
+                    pkt[off] = op;
+                    BitConverter.GetBytes(PhysAddr(startAddr + start + i)).CopyTo(pkt, off + 1);
+                    pkt[off + 5] = data[start + i];
+                }
+                SendBatch(pkt);
+            }
         }
 
         internal static bool WriteUShort(long address, ushort value)

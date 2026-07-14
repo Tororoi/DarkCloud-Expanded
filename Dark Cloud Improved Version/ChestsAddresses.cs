@@ -38,48 +38,68 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class ChestAddresses
     {
-        /// <summary>CDungeonMap* — base of all tables below. Stable at 0x21DC4BE0; robustly read from this ptr.</summary>
-        internal const int CDungeonMapPtr  = 0x21DF9CC8;     // *(this) = CDungeonMap* (native 0x01DC4BE0)
-        internal const int CDungeonMapBase = 0x21DC4BE0;     // this* (assumed-stable allocation)
-
         /// <summary>
-        /// BOX-OBJECT table — live chest instances, one per rendered chest. 24 slots × 0x40.
-        /// (Same memory the older dump analysis found; SlotBase = slot-0 EntityId.)
+        /// The LIVE CDungeonMap the tables below hang off. There are TWO instances — MainDungeonMap and
+        /// UraDungeonMap (the back floors), exactly 0x10B10 apart (= sizeof(CDungeonMap)) — and the engine
+        /// iterates whichever <c>NowDngMap</c> points at.
+        ///
+        /// These tables used to be hardcoded absolutes into the MAIN map. That is a BUG on a back floor: the
+        /// engine is walking the Ura map while our writes (mimic box + state slots, chest avoidance) land in the
+        /// main map's object, where nothing reads them. Every address below is therefore an OFFSET, resolved
+        /// against the live map at call time. Falls back to the main map if the pointer isn't up yet.
         /// </summary>
-        internal static class ChestSlots
+        internal static long MapBase()
         {
-            internal const int SlotBase = 0x21DD0260; // slot 0 EntityId  (= this*+0xB680)
-            internal const int Stride   = 0x40;       // bytes between slots
-            internal const int Capacity = 24;         // 0x18 — table size SetTreasureBox/SetMimicEvent scan for a free slot
-
-            // Number-of-chests count. NOTE: the engine's box LOOP bound (DrawItemBox/CheckTreasureBox) is
-            // BoxLoopCount below (this*+0xBC60). CountAddr here (this*+0xB650, a header just before the array)
-            // is what existing mod code reads and has matched the live chest count — keep both; verify their
-            // relationship live if it ever matters.
-            internal const int CountAddr     = 0x21DD0230; // header count (existing callers)
-            internal const int BoxLoopCount  = 0x21DD0840; // this*+0xBC60 — incremented by SetTreasureBox; the real loop bound
-
-            // Draw-enable / state flags trailing the array (read by DrawItemBox head gate).
-            internal const int DrawFlag0 = 0x21DD0844; // this*+0xBC64
-            internal const int DrawFlag1 = 0x21DD0848; // this*+0xBC68
-            internal const int DrawFlag2 = 0x21DD0850; // this*+0xBC70
-            internal const int DrawFlag3 = 0x21DD0854; // this*+0xBC74
-
-            /// <summary>RAM address of <paramref name="fieldOffset"/> within box slot <paramref name="slot"/>.</summary>
-            internal static int SlotAddr(int slot, int fieldOffset) => SlotBase + slot * Stride + fieldOffset;
+            long m = DungeonAddresses.Map.Deref((uint)Memory.ReadInt(DungeonAddresses.Map.NowDngMapPtr));
+            return Memory.IsValidGuest(m) ? m : DungeonAddresses.Map.MainDungeonMap;
         }
 
         /// <summary>
-        /// STATE/META table — per-box metadata (type, item contents, position, box link). 48 slots × 0x50.
-        /// Free slot marker = Type == -1. base = this*+0x8D58 (slot-0 Type field).
+        /// BOX-OBJECT table — live chest instances, one per rendered chest. 24 slots × 0x40, at map+0xB680.
+        /// </summary>
+        internal static class ChestSlots
+        {
+            internal const int TableOffset = 0xB680;  // map + this = slot 0 EntityId
+            internal const int Stride      = 0x40;    // bytes between slots
+            internal const int Capacity    = 24;      // 0x18 — table size SetTreasureBox/SetMimicEvent scan for a free slot
+
+            // Number-of-chests count. NOTE: the engine's box LOOP bound (DrawItemBox/CheckTreasureBox) is
+            // BoxLoopCountOffset (map+0xBC60). CountOffset (map+0xB650, a header just before the array) is what
+            // existing mod code reads and has matched the live chest count — keep both; verify the relationship
+            // live if it ever matters.
+            internal const int CountOffset        = 0xB650; // header count (existing callers)
+            internal const int BoxLoopCountOffset = 0xBC60; // incremented by SetTreasureBox; the real loop bound
+
+            // Draw-enable / state flags trailing the array (read by DrawItemBox head gate).
+            internal const int DrawFlag0Offset = 0xBC64;
+            internal const int DrawFlag1Offset = 0xBC68;
+            internal const int DrawFlag2Offset = 0xBC70;
+            internal const int DrawFlag3Offset = 0xBC74;
+
+            internal static long CountAddr()    => MapBase() + CountOffset;
+            internal static long BoxLoopCount() => MapBase() + BoxLoopCountOffset;
+            internal static long DrawFlag(int i) =>
+                MapBase() + (i == 0 ? DrawFlag0Offset : i == 1 ? DrawFlag1Offset
+                                    : i == 2 ? DrawFlag2Offset : DrawFlag3Offset);
+
+            /// <summary>RAM address of <paramref name="fieldOffset"/> within box slot <paramref name="slot"/>,
+            /// on the LIVE dungeon map.</summary>
+            internal static long SlotAddr(int slot, int fieldOffset)
+                => MapBase() + TableOffset + (long)slot * Stride + fieldOffset;
+        }
+
+        /// <summary>
+        /// STATE/META table — per-box metadata (type, item contents, position, box link). 48 slots × 0x50, at
+        /// map+0x8D58. Free slot marker = Type == -1.
         /// </summary>
         internal static class ChestStateTable
         {
-            internal const int TypeBase = 0x21DCD938; // slot 0 Type field (= this*+0x8D58)
-            internal const int Stride   = 0x50;
-            internal const int Capacity = 48;         // 0x30
+            internal const int TableOffset = 0x8D58;  // map + this = slot 0 Type field
+            internal const int Stride      = 0x50;
+            internal const int Capacity    = 48;      // 0x30
 
-            internal static int SlotAddr(int slot, int fieldOffset) => TypeBase + slot * Stride + fieldOffset;
+            internal static long SlotAddr(int slot, int fieldOffset)
+                => MapBase() + TableOffset + (long)slot * Stride + fieldOffset;
         }
     }
 

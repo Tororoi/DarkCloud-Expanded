@@ -297,6 +297,67 @@ patch=1,EE,20240364,extended,3C024000 //more consistentfishing
 
 patch=1,EE,21F10020,extended,00000001 //pnach active flag
 
+//Ungaga Mirage chara-loop gates (0x1DAE8A4 scene-draw + 0x1DB79C4 ShisaiShadow step, both beq/beqz on
+//iGpffff9e18) so the decoy clone draws + steps while enemies keep moving; plus the per-chara texgroup formula
+//(0x1DAE8D0/D4) for the weapon's separate texture pass. PINE can't write these (crashes PCSX2) — PCSX2 applies
+//them. THREE-STATE flag 0x01F10038: 1 = decoy up (NOP the gates), 2 = in a dungeon with no decoy (RESTORE the
+//vanilla words — PNACH conditionals don't auto-revert, so without this the NOPs persist after the first cast
+//and the chara loops run every frame, freezing enemy AI), 0 = town (touch nothing; the shared town overlay at
+//these addresses is left to its own overlay reload).
+patch=1,EE,E1060001,extended,01F10038 //if flag == 1 (decoy up): NOP the gates (apply next 6)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone draws, enemies keep moving)
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula: a2 = charaIndex*4 ...)
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11  (... + 0x11 -> chara[0]=0x11 body, chara[3]=0x1d weapon)
+patch=1,EE,21DB79C4,extended,00000000 //  NOP step gate (clone steps → head/hands animate natively)
+patch=1,EE,21DB7A18,extended,0C04E394 //  chara-loop: jal ClothStep (0x138E50) i/o ShadowStep → clone cloth PHYSICS, drawn via clone (ghost tint, no player flash)
+patch=1,EE,21DB7A1C,extended,70002E28 //  its delay slot: por a1,zero,zero (ClothStep param_2=0 = simulate, matches the player's own call)
+patch=1,EE,E1060002,extended,01F10038 //if flag == 2 (dungeon, no decoy): RESTORE vanilla (apply next 6)
+patch=1,EE,21DAE8A4,extended,10400037 //  restore scene gate  (beq v0,zero)
+patch=1,EE,21DAE8D0,extended,00000000 //  restore delay-slot nop
+patch=1,EE,21DAE8D4,extended,26060020 //  restore texgroup formula  (addiu a2,s0,0x20)
+patch=1,EE,21DB79C4,extended,1060001D //  restore step gate  (beqz v1) — loop gated when no decoy
+patch=1,EE,21DB7A18,extended,0C05583C //  restore jal ShadowStep (0x1560F0) — clone's ground shadow (never reached when loop gated)
+patch=1,EE,21DB7A1C,extended,00000000 //  restore its delay-slot nop
+patch=1,EE,E1060003,extended,01F10038 //if flag == 3 (decoy up + PAUSED): draw the clone but FREEZE it = flag 1 minus the step-gate NOP (apply next 6)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone STILL drawn while paused)
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula — weapon pass)
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11
+patch=1,EE,21DB79C4,extended,1060001D //  RESTORE step gate (beqz v1) — loop gated → clone body+cloth frozen (the ONLY diff vs flag 1)
+patch=1,EE,21DB7A18,extended,0C04E394 //  keep jal ClothStep (loop gated → unreached; matches flag 1 to avoid jal churn)
+patch=1,EE,21DB7A1C,extended,70002E28 //  keep por a1,zero,zero
+
+//Ungaga Mirage clone heat-haze: (A) 4x the fire-raster sprite size — DrawRaster__9CFireOmni loads its
+//dims via lui v0,0x4170 (15.0) @0x162360 and lui v0,0x4180 (16.0) @0x162368; bump to 0x4270 (60.0) /
+//0x4280 (64.0). (B) relax the raster DIST gate — DrawRaster__11CDungeonMap gates each fire tile on
+//dist<=240.0 (lui v1,0x4370 @0x1C4714, only ~1.5 tiles from camera → haze vanished in hallways); bump
+//to 0x4780 (65536.0) so any tile in the ±4 camera window draws. Both gated on the decoy flag (1/3 = decoy
+//up) so ordinary dungeon fires are untouched; flag 2 restores vanilla. Torch fires have raster count 0,
+//so relaxing the gate only affects our injected clone raster. Shared main-seg fns; PCSX2 reverts per frame.
+//(C) stronger distortion — DrawRaster__9CFireOmni's per-scanline framebuffer displacement is amplitude
+//= (size/10000)*wave*gain * 16.0; that *16.0 scalar is lui v0,0x4180 @0x162FB4, bumped to 0x4200 (32.0 =
+//2x). (D) NARROWER aspect — H size @0x162360 dropped to 30.0 (0x41F0) while V size @0x162368 stays 48.0
+//(0x4240) → taller-than-wide shimmer. (E) SLOWER wave — RasterStep__9CFireOmni advances the wave phase by
+//rand*2.0 (lui v1,0x4000 @0x1622A4); halve to 0x3F80 (1.0) so the shimmer ripples at half speed. All gated
+//on the decoy flag; flag 2 restores vanilla.
+patch=1,EE,E1050001,extended,01F10038 //if decoy up: narrow size + relax dist gate + 2x distort + slow (apply next 5)
+patch=1,EE,20162360,extended,3C024234 //  H size 15.0 -> 45.0 (3x)
+patch=1,EE,20162368,extended,3C0242C0 //  V size 16.0 -> 96.0 (6x, tall)
+patch=1,EE,201C4714,extended,3C034780 //  dist gate 240.0 -> 65536.0
+patch=1,EE,20162FB4,extended,3C024240 //  distortion amplitude 16.0 -> 48.0 (3x)
+patch=1,EE,201622A4,extended,3C033F80 //  wave speed 2.0 -> 1.0 (half vanilla; 2x the previous 0.5)
+patch=1,EE,E1050003,extended,01F10038 //if decoy up + paused: same (apply next 5)
+patch=1,EE,20162360,extended,3C024234 //  H size 15.0 -> 45.0 (3x)
+patch=1,EE,20162368,extended,3C0242C0 //  V size 16.0 -> 96.0 (6x, tall)
+patch=1,EE,201C4714,extended,3C034780 //  dist gate 240.0 -> 65536.0
+patch=1,EE,20162FB4,extended,3C024240 //  distortion amplitude 16.0 -> 48.0 (3x)
+patch=1,EE,201622A4,extended,3C033F80 //  wave speed 2.0 -> 1.0 (half vanilla; 2x the previous 0.5)
+patch=1,EE,E1050002,extended,01F10038 //if dungeon, no decoy: restore vanilla (apply next 5)
+patch=1,EE,20162360,extended,3C024170 //  H size -> 15.0
+patch=1,EE,20162368,extended,3C024180 //  V size -> 16.0
+patch=1,EE,201C4714,extended,3C034370 //  dist gate -> 240.0
+patch=1,EE,20162FB4,extended,3C024180 //  distortion amplitude -> 16.0
+patch=1,EE,201622A4,extended,3C034000 //  wave speed -> 2.0
+
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
 patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag

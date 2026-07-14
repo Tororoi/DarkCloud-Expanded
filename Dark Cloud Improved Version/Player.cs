@@ -190,6 +190,21 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// True while the game is paused in a way that should freeze in-dungeon gameplay — the "PAUSE" screen
+        /// (<see cref="CheckDunIsPaused"/>) OR the in-dungeon item menu.
+        ///
+        /// The two freeze DIFFERENT things natively, which is why callers usually want BOTH: the item menu
+        /// freezes characters but NOT mod timers, while the PAUSE screen freezes mod timers but NOT the
+        /// dungeon's chara loop. Anything the mod drives on a timer (or steps itself) will drift during one of
+        /// them unless it checks this rather than CheckDunIsPaused alone.
+        /// </summary>
+        public static bool CheckDunIsPausedOrMenu()
+        {
+            if (CheckDunIsPaused()) return true;
+            return Memory.ReadByte(Addresses.mode) == 3 && Memory.ReadByte(Addresses.dungeonMode) == 2;   // in-dungeon item menu
+        }
+
+        /// <summary>
         /// Returns true if the game is paused while inside a dungeon
         /// </summary>
         public static bool CheckDunIsPaused()
@@ -264,6 +279,32 @@ namespace Dark_Cloud_Improved_Version
                 Memory.ReadByte(Addresses.weaponsMode) <= 11) return true;
             return false;
         }
+
+        /// <summary>
+        /// Fires the engine's whole-character ambient "flash" on the ACTIVE unit by writing the same globals
+        /// <c>setUnitAmbientAnime</c> (dun 0x1DC1000) sets. The per-frame <c>unitAmbientAnime</c> then drives
+        /// the unit's ambient colour = (colour × pulse) + 64 for <paramref name="count"/> repeats before it
+        /// self-disables — the same effect the game uses for drink / face-change / Ruby's Mobius charge flash,
+        /// so it works for whoever is active. <paramref name="r"/>/<paramref name="g"/>/<paramref name="b"/>
+        /// are 0-255; enable is written last so the updater never runs mid-setup.
+        /// </summary>
+        public static void FlashActiveCharacter(float r, float g, float b, float speed, int count)
+        {
+            Memory.WriteFloat(CharacterFlash.ColorR, r);
+            Memory.WriteFloat(CharacterFlash.ColorG, g);
+            Memory.WriteFloat(CharacterFlash.ColorB, b);
+            Memory.WriteFloat(CharacterFlash.Speed, speed);
+            Memory.WriteInt(CharacterFlash.Count, count);
+            Memory.WriteFloat(CharacterFlash.Phase, 0f);   // (re)start the pulse
+            Memory.WriteInt(CharacterFlash.Enable, 1);     // enable last
+        }
+
+        /// <summary>Fire the game's STOCK charge-complete flash (see <see cref="CharacterFlash.ChargeR"/>) on the
+        /// active character. Use this rather than hand-picking an RGB whenever the flash means "a charge finished
+        /// building" — it is what Ruby's Mobius peak and Ungaga's guard charge use, so it matches the vanilla tint.</summary>
+        public static void FlashChargeComplete()
+            => FlashActiveCharacter(CharacterFlash.ChargeR, CharacterFlash.ChargeG, CharacterFlash.ChargeB,
+                                    CharacterFlash.ChargeSpeed, CharacterFlash.ChargeCount);
 
         internal class Inventory
         {
@@ -678,6 +719,17 @@ namespace Dark_Cloud_Improved_Version
             //Returns the current equipped weapon Attack
             {
                 return Memory.ReadUShort(attack);
+            }
+
+            /// <summary>
+            /// Overwrites the in-battle weapon record's Attack. This is the copy the swing code
+            /// latches damage from; the engine rebuilds it from the inventory record on equip
+            /// changes and menu closes, so boosts written here must be re-applied by their effect
+            /// loop and never touch inventory stats (menus/build-up keep seeing the base value).
+            /// </summary>
+            public static void SetCurrentWeaponAttack(ushort newAttack)
+            {
+                Memory.WriteUShort(attack, newAttack);
             }
 
             public static byte GetCurrentWeaponEndurance()

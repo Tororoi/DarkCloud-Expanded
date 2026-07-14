@@ -17,6 +17,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Sandbox tab** — Sandbox mode adds a tab with testing tools kept out of normal play: a spawn-roster editor (override the current dungeon's spawns by TableIndex, with a trailing `!` to mark a species spawn-once) and the Fish Data Farmer.
 - **Difficulty options** — Added Gameplay toggles: **Faster enemies** (enemy movement + animation/action speed, with an attack-hit-window dwell so fast swings still connect) and **Stronger enemies** (scales enemies toward the next dungeon's power level). Saved to the save file and re-applied on load.
 - **Randomize enemies option** — New Gameplay toggle that re-rolls every non-boss/event floor's spawns on dungeon entry (see Enemy System → Randomized enemies). Saved to the save file and re-applied on load.
+- **Harder enemy AI option** — New Gameplay toggle: any enemy with a real get-up animation can revive after death (~30% chance, at a fraction of max HP), and the natively-reviving undead (Mummy, Master Jacket, Gacious, Horn Head, …) revive far more often than vanilla. Saved to the save file and re-applied on load.
 - **Bit-packed option storage** — Persisted option toggles are now bit-packed into three category-grouped save bytes (Graphics / Audio / Gameplay) instead of one byte each, freeing proven-unused save bytes for future options. Each toggle read-modify-writes a single bit, preserving the others in its byte.
 
 ---
@@ -25,6 +26,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 - **Max Thirst memory addresses** — Corrected the memory addresses used to read and write Max Thirst value.
 - **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
+- **Log file names** — Mod log filenames now use a correct `yyyy-MM-dd` date format (was `yyyy-dd-M`, which sorted wrong and collided across months).
 
 ---
 
@@ -37,6 +39,11 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Mardan Sword rework** — Detects all Mardan swords from bag and storage (not only equipped). FP multipliers: Eins 1.2×, Twei 1.5×, Arise 2×. Mardan Twei and Arise Mardan trigger a second independent Garayan fish roll. Arise Mardan applies the full size transform: native smoothing, a linear scale to 2× the species max, then a second smoothing pass over the scaled range (hard cap at exactly 2× max).
 - **Smooth native fish size distribution** — Every non-Arise fishing session smooths the size the game rolls, filling the sparse region just below the species max so the distribution ramps into the cap instead of spiking at it. Does not change the max. Arise Mardan sessions include this smoothing internally.
 - **Rerolled slots use the native size formula** — Mardan Twei/Arise slot rerolls now roll size via the game's native slot-init formula (12-draw Irwin-Hall RNG, asymmetric slope, clamped to `[0.5×BaseSize, MaxSize]`) instead of a flat uniform draw, then receive the smoothing/Arise effect like any other slot.
+- **Fishing records feed Arise Mardan's magic** — Each fish species' best recorded catch grants Arise Mardan bonus Max Magic on a curve: +1 at the species' vanilla max size, rising to a per-species cap at the 2× Arise size cap (43 for normal species, 117 for the two Garayans). Maxing every record takes Arise Mardan from its base 120 Max Magic to the 999 cap. The native records list is also deduped to one best entry per species, so the records screen shows per-species maxes and a new catch always has a free slot.
+
+### Towns
+
+- **Overhead camera everywhere** — The Georama bird's-eye camera (Select button) now works in every town map, not just the first five, along with the leftover developer fast-run speed while it's active. Exiting the camera safely snaps the player back to the ground.
 
 ### Enemy System
 
@@ -167,29 +174,51 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 ### Custom Weapon Effects
 
+- **In-game weapon descriptions** — The weapon description text in the in-game menus is rewritten live to describe each weapon's modded effect (including dynamic hints such as the 7 Branch Sword's Status Break rule), so the menu always matches what the weapon actually does.
+
 #### This Fork
 
 **Toan**
 - **Mardan Eins** — Draws rare fish to the player's location at an interval weighted by their bait affinity. FP x1.2 for all non-Garayan fish.
 - **Mardan Twei** — Reroll non-Garayan fish for an additional chance (same as native game's initial chance) to turn them into Mardan or Baron Garayan. Mardan Eins ability occurs at an increased rate. FP x1.5 for all non-Garayan fish.
-- **Arise Mardan** — Smooths the native size distribution, then scales fish up to 2x their original size (larger initial sizes receiving a scale factor closer to 2x), then smooths again over the scaled range; final size is hard-capped at exactly 2x the species max. Mardan Eins ability occurs at an increased rate. FP x2 for all non-Garayan fish.
-- **Evilcise** — Applies curse immediately on equip (including from pause menu). Breaking the curse with holy water applies poison and sets HP to 1. Curse is reapplied on floor change; stripped on unequip or leaving the dungeon.
-- **Heaven's Cloud** — 50% chance to apply Gooey on hit.
-- **Aga's Sword** — Grants Toan +15 defense while equipped; boost is re-applied if external changes alter defense. Removed on unequip.
-- **Brave Ark** — Resist Freeze, Poison, Curse, and Goo status effects.
-- **Wise Owl Sword** — While a Wise Owl Sword is owned, a message displays when you are near an enemy carrying one of the three keys in Wise Owl Forest.
+- **Arise Mardan** — Smooths the native size distribution, then scales fish up to 2x their original size (larger initial sizes receiving a scale factor closer to 2x), then smooths again over the scaled range; final size is hard-capped at exactly 2x the species max. Mardan Eins ability occurs at an increased rate. FP x2 for all non-Garayan fish. Fishing records grant it bonus Max Magic (see Fishing).
+- **Evilcise ("Jealous Soul")** — Applies curse immediately on equip (including from pause menu). Breaking the curse with holy water applies poison and sets HP to 1. Curse is reapplied on floor change; stripped on unequip or leaving the dungeon.
+- **Maneater ("Blood Price")** — Cursed each floor like Evilcise, but curing it with holy water carries no penalty (it just stays off until the next floor). While the sword's durability is critically low it drains 1 HP per second to restore durability (never fatal).
+- **Aga's Sword ("Defensive Legacy")** — Grants Toan +15 defense while equipped; boost is re-applied if external changes alter defense. Removed on unequip.
+- **Brave Ark ("Hero's Courage")** — Resist Freeze, Poison, Curse, and Goo status effects.
+- **Wise Owl Sword ("Wise Owl Always Knows")** — While a Wise Owl Sword is owned, a message displays when you are near an enemy carrying one of the three keys in Wise Owl Forest.
+- **Small Sword ("Quick Draw")** — The opening combo swing comes out almost instantly, skipping the wind-up. Inherited by Tsukikage and Heaven's Cloud through the buildup line.
+- **Tsukikage ("Moonlit Focus")** — Charge attacks build twice as fast (lunge ready in ~0.25 s, whirlwind in ~0.75 s). Inherits Small Sword effect. Inherited by Heaven's Cloud.
+- **Heaven's Cloud** — Holding the whirlwind charge grows the blade — up to 3× at a full hold, with a flash at max — for a bigger, longer-reaching whirlwind. Also inherits Small Sword and Tsukikage effects.
+- **Sun Sword ("Solar Harvest")** — While wielding Sun Sword (or its evolution Big Bang), every enemy killed has a 1% chance to drop a Sun attachment.
+- **Big Bang ("Detonate")** — Every enemy Toan hits triggers an explosion.
+- **Buster Sword ("True Buster")** — Anti-category attachments (Dinoslayer … Mage Slayer) are worth +4 instead of +3 when attached to a Buster Sword.
+- **Cross Hinder ("Sanctifier")** — Roughly double damage and double ABS reward against undead, and undead it kills can no longer revive.
+- **Dark Cloud ("Guard Crush")** — Toan's hits cut straight through enemy guards; every blow connects even while an enemy is blocking. Inherited by 7th Heaven.
+- **7th Heaven ("Divine Guard")** — Perfect guard: blocks every enemy attack and projectile, including heavy hits that normally break guard (those just knock Toan back instead). Also inherits Dark Cloud effect.
+- **Kitchen Knife ("Spring-Blessed Blade")** — Stepping into a healing spring blesses the knife for ~60 seconds: the blade visibly grows to triple length and its attack doubles. Standing in the spring refreshes the timer.
+- **Macho Sword ("Overtraining")** — While a Macho Sword is owned (bag or storage), every weapon's ABS keeps filling past its max — up to 2× — and the overflow carries into the next level, so a weapon starts its new level with a head start. (Replaces the old Shadow Boxing effect.)
+- **7 Branch Sword ("Sevenfold Rite")** — Refuses to Status Break below +7; at +7 or higher the resulting SynthSphere keeps 77% of the weapon's stats instead of the normal 60%. The Status Break menu hint explains the rule.
+- **Atlamillia Sword ("Atlamillia Insurance")** — While owned (bag or storage), a weapon breaking in a dungeon is no longer a total loss: an Atla appears on a random floor of that dungeon containing a SynthSphere of the broken weapon, keeping 10% of its stats per weapon level (up to 50% at +4 or higher). Attachments are lost. Collecting the Atla delivers the sphere like any georama Atla.
+
+**Xiao**
+- **Angel Gear ("Halo & Homing")** — Pellets fired with no enemy in range gather into a slow-spinning halo of up to 5 above Xiao's head. When an enemy approaches, pellets peel off one at a time with glowing trails and home in on it, arcing around walls and skipping enemies that are guarding. (The party-wide HP regen from Dark Cloud Enhanced remains.)
+- **Super Steve ("Sphere Inheritance")** — Super Steve inherits the custom effect of whichever weapon's SynthSphere is attached to it (one sphere at a time = one inherited effect), and recolors itself in the source weapon's palette. Ownership/upgrade passives (Macho Sword, Wise Owl Sword, Chronicle 2, Buster Sword, 7 Branch Sword) deliberately don't transfer.
 
 **Goro**
-- **Frozen Tuna** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
+- **Frozen Tuna ("Cold Storage")** — Each point of WHP lost banks 2 HP into a healing pool. When Goro takes damage, the pool drains at 1 HP per 0.5 seconds. Healing pauses if HP reaches max; banked HP is preserved until the next hit. The pool resets on weapon repair or switch. On hit, 5% chance stops all non-ice enemies and freezes Goro for 3 seconds. Blizzard, Sam, and Ice Gemron are immune to the stop proc.
 
 **Ungaga**
-- **Cactus** — Custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
+- **Cactus ("Absorb")** — Custom thirst effect which drains moisture from enemies. Dry enemies are unaffected.
+- **Mirage ("Decoy")** — Holding guard charges a mirage; on release a shimmering clone of Ungaga with a heat-haze effect is planted at that spot, and enemies chase the decoy instead of him for ~12 seconds (a new charge refreshes it). The illusion breaks per enemy — hit one and it re-targets you. Hercules' Wrath inherits the effect.
+
+**Osmond**
+- **Snail** — 5% chance on hit to apply Gooey to the struck enemy.
 
 #### Dark Cloud Enhanced
 
 **Toan**
 - **Bone Rapier** — Allows bypassing bone doors while equipped.
-- **Seventh Heaven** — On acquiring a non-gem attachment, a copy is placed in the next available bag slot. Gems duplicate with 50% probability.
 - **Chronicle Sword** — Attacks hit all nearby targets for a percentage of damage.
 
 **Xiao**
@@ -309,6 +338,19 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 **Osmond**
 - **All weapons** — +15 Attack, +15 Max Attack
+
+---
+
+## Developer Tooling
+
+Not player-facing; listed so contributors know what exists.
+
+- **Ghidra EE decompiler toolchain** (`tools/ghidra/`) — one-command decompilation of the game's PS2 EE code (`decompile.sh main|dun "<function>"`), symbol export/apply scripts, and an xref finder. The game ELF ships a full demangled C++ symbol table (`symbols.txt`).
+- **Code cave scanner** (`CodeCaveScanner.cs` + `tools/find_code_caves.py`) — background sweeps of EE RAM across sessions to find provably-unused regions for the mod's injected bytecode; findings accumulate in `CodeCaveFindings.txt`. Proven caves and mod cave layout live in `CodeCaveAddresses.cs`.
+- **Georama probe** (`GeoramaProbe.cs`) — read-only dumper of town Georama parts, water surfaces, event points, and fishing-sign parameters, supporting the custom-fishing-spot research (`docs/custom-fishing-spot.md`).
+- **Asset tools** (`tools/`) — `.mes` menu-text decoder, TIM2/`.mds` surgery scripts, and generators for the motion/tile/model reference tables in `docs/`.
+- **Docs library** (`docs/`) — new reverse-engineering references: game damage formulas, per-attack enemy damage/guard tables, enemy & character motion tables, chest loot tables, dungeon tile grid, code caves, cave code execution, orphaned enemy models, and more. Existing root-level docs moved into `docs/`.
+- **Reusable effect primitives** — general building blocks for future weapon effects: elemental gem bursts at any point/scale (`GemBurst.cs`), rings of real damaging pellets (`ShrapnelBurst.cs`), screen-space heat shimmer (`HeatHaze.cs`), glowing motion trails (`TrailRibbon.cs`), radial knockback shockwaves, and a full player-clone renderer (`CharacterClone.cs`).
 
 ---
 

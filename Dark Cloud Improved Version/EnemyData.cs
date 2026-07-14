@@ -143,9 +143,9 @@ namespace Dark_Cloud_Improved_Version
         internal float  ReachRange;
         internal float  SecondaryRange;
         internal int    DurationFrames;
-        internal int    AttackDistance;
-        internal int    BehaviorFlags;
-        internal int    PhaseCount;
+        internal int    ShotBaseDamage;
+        internal int    AttackStatusFlags;
+        internal int    HitReactionType;
         internal int    ScriptMode;
         internal int    PackedFlags2;
         internal float  ProjectileSpeed;
@@ -163,36 +163,36 @@ namespace Dark_Cloud_Improved_Version
     internal static class EnemyBehaviorScripts
     {
         // Index 0 — "gas_h": thin horizontal gas cloud.
-        // Tiny hitbox (0.1×0.4×0.1), BehaviorFlags=0x0200. Short dist=26.
+        // Tiny hitbox (0.1×0.4×0.1), AttackStatusFlags=0x0200. Short dist=26.
         // Likely a slow-drifting horizontal poison or slow-gas puff from a plant or bug enemy.
         internal static readonly BehaviorScript GasH = new BehaviorScript {
             Index=0, ScriptName="gas_h",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=0.4f, HitboxDepth=0.1f,
             TriggerRange=2.3f, ReachRange=7.0f, SecondaryRange=4.3f,
-            DurationFrames=220, AttackDistance=26, BehaviorFlags=0x0200,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=220, ShotBaseDamage=26, AttackStatusFlags=0x0200,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 1 — "gas_d": downward-drifting gas cloud.
-        // Slightly wider hitbox (0.3×0.9×0.1), BehaviorFlags=0x0200. Paired with gas_h.
+        // Slightly wider hitbox (0.3×0.9×0.1), AttackStatusFlags=0x0200. Paired with gas_h.
         // Likely falls downward from ceilings or lobbed in an arc vs. gas_h's lateral drift.
         internal static readonly BehaviorScript GasD = new BehaviorScript {
             Index=1, ScriptName="gas_d",
             BehaviorMode=0, HitboxWidth=0.3f, HitboxHeight=0.9f, HitboxDepth=0.1f,
             TriggerRange=2.3f, ReachRange=7.0f, SecondaryRange=4.3f,
-            DurationFrames=190, AttackDistance=26, BehaviorFlags=0x0200,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=190, ShotBaseDamage=26, AttackStatusFlags=0x0200,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 2 — "nebaneba": regular sticky/slimy field.
         // "nebaneba" (ねばねば) = sticky/slimy; wider hitbox (0.8×1.4×0.1) than the boss variant.
-        // BehaviorFlags=0x0800, very short AttackDistance=5. Regular enemy slow field.
+        // AttackStatusFlags=0x0800, very short ShotBaseDamage=5. Regular enemy slow field.
         internal static readonly BehaviorScript NebanebaField = new BehaviorScript {
             Index=2, ScriptName="nebaneba",
             BehaviorMode=0, HitboxWidth=0.8f, HitboxHeight=1.4f, HitboxDepth=0.1f,
             TriggerRange=2.6f, ReachRange=5.0f, SecondaryRange=4.3f,
-            DurationFrames=180, AttackDistance=5, BehaviorFlags=0x0800,
-            PhaseCount=2, ScriptMode=65536, PackedFlags2=131074,
+            DurationFrames=180, ShotBaseDamage=5, AttackStatusFlags=0x0800,
+            HitReactionType=2, ScriptMode=65536, PackedFlags2=131074,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 3 — "pump_bom": pump bomb projectile.
@@ -201,19 +201,19 @@ namespace Dark_Cloud_Improved_Version
             Index=3, ScriptName="pump_bom",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=1.4f, HitboxDepth=0f,
             TriggerRange=1.3f, ReachRange=2.0f, SecondaryRange=1.3f,
-            DurationFrames=150, AttackDistance=60, BehaviorFlags=0,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=150, ShotBaseDamage=60, AttackStatusFlags=0,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0.4f, ProjectileLifetime=8 };
 
         // Index 4 — "ringo_ex": apple / fruit throw (extended).
-        // "ringo" (りんご) = apple in Japanese. (0.2×1.5) hitbox, plt=6 frames, BehaviorFlags=0x0200.
+        // "ringo" (りんご) = apple in Japanese. (0.2×1.5) hitbox, plt=6 frames, AttackStatusFlags=0x0200.
         // Likely FliFli's (plant EID=8) fruit-toss special attack.
         internal static readonly BehaviorScript AppleThrow = new BehaviorScript {
             Index=4, ScriptName="ringo_ex",
             BehaviorMode=0, HitboxWidth=0.2f, HitboxHeight=1.5f, HitboxDepth=0f,
             TriggerRange=1.6f, ReachRange=3.0f, SecondaryRange=4.3f,
-            DurationFrames=160, AttackDistance=30, BehaviorFlags=0x0200,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=160, ShotBaseDamage=30, AttackStatusFlags=0x0200,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=6 };
 
         // Index 5 — "f_boll_3" (short/slow variant): slow fireball 3.
@@ -224,19 +224,19 @@ namespace Dark_Cloud_Improved_Version
             Index=5, ScriptName="f_boll_3",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=1.5f, HitboxDepth=0f,
             TriggerRange=1.7f, ReachRange=3.8f, SecondaryRange=15.0f,
-            DurationFrames=120, AttackDistance=17, BehaviorFlags=1,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=17, AttackStatusFlags=1,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0.5f, ProjectileLifetime=16 };
 
         // Index 6 — "awabres": bubble burst attack.
-        // "awa" (泡) = bubble; "bres" likely = burst/breath. (0.1×0.8×0.1), BehaviorFlags=0x0200.
+        // "awa" (泡) = bubble; "bres" likely = burst/breath. (0.1×0.8×0.1), AttackStatusFlags=0x0200.
         // Larger TriggerRange=4.0 suggests it fires when slightly farther away.
         internal static readonly BehaviorScript BubbleBurst = new BehaviorScript {
             Index=6, ScriptName="awabres",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=0.8f, HitboxDepth=0.1f,
             TriggerRange=4.0f, ReachRange=6.0f, SecondaryRange=6.0f,
-            DurationFrames=160, AttackDistance=45, BehaviorFlags=0x0200,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=160, ShotBaseDamage=45, AttackStatusFlags=0x0200,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 7 — "g_wave1": ground wave 1 (narrow).
@@ -246,8 +246,8 @@ namespace Dark_Cloud_Improved_Version
             Index=7, ScriptName="g_wave1",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=1.4f, HitboxDepth=0f,
             TriggerRange=4.3f, ReachRange=9.0f, SecondaryRange=6.3f,
-            DurationFrames=90, AttackDistance=34, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=90, ShotBaseDamage=34, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.2f, ProjectileLifetime=0 };
 
         // Index 8 — "g_wave2": ground wave 2 (wide AoE).
@@ -257,30 +257,30 @@ namespace Dark_Cloud_Improved_Version
             Index=8, ScriptName="g_wave2",
             BehaviorMode=0, HitboxWidth=2.1f, HitboxHeight=3.4f, HitboxDepth=1.0f,
             TriggerRange=6.3f, ReachRange=9.0f, SecondaryRange=8.3f,
-            DurationFrames=100, AttackDistance=66, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=100, ShotBaseDamage=66, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=5.0f, ProjectileLifetime=0 };
 
         // Index 9 — "magic_noroi": curse magic.
-        // "noroi" (呪い) = curse. (1.1×1.8), BehaviorFlags=0x0400; medium range.
+        // "noroi" (呪い) = curse. (1.1×1.8), AttackStatusFlags=0x0400; medium range.
         // Likely a debuff projectile — slow/weaken effect on contact.
         internal static readonly BehaviorScript CurseMagic = new BehaviorScript {
             Index=9, ScriptName="magic_noroi",
             BehaviorMode=0, HitboxWidth=1.1f, HitboxHeight=1.8f, HitboxDepth=0f,
             TriggerRange=1.9f, ReachRange=2.3f, SecondaryRange=5.3f,
-            DurationFrames=160, AttackDistance=16, BehaviorFlags=0x0400,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=160, ShotBaseDamage=16, AttackStatusFlags=0x0400,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 10 — "magic_bin": bind magic.
-        // "bin" may relate to binding/freezing. (0.8×1.5), BehaviorFlags=0x1000, AttackDistance=0.
+        // "bin" may relate to binding/freezing. (0.8×1.5), AttackStatusFlags=0x1000, ShotBaseDamage=0.
         // Zero attack distance suggests an on-contact root effect rather than a projectile.
         internal static readonly BehaviorScript BindMagic = new BehaviorScript {
             Index=10, ScriptName="magic_bin",
             BehaviorMode=0, HitboxWidth=0.8f, HitboxHeight=1.5f, HitboxDepth=0f,
             TriggerRange=2.9f, ReachRange=2.9f, SecondaryRange=5.3f,
-            DurationFrames=180, AttackDistance=0, BehaviorFlags=0x1000,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=180, ShotBaseDamage=0, AttackStatusFlags=0x1000,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 11 — "magic_isi": stone/rock magic.
@@ -290,30 +290,30 @@ namespace Dark_Cloud_Improved_Version
             Index=11, ScriptName="magic_isi",
             BehaviorMode=0, HitboxWidth=1.1f, HitboxHeight=1.9f, HitboxDepth=0f,
             TriggerRange=1.8f, ReachRange=2.0f, SecondaryRange=5.3f,
-            DurationFrames=160, AttackDistance=5, BehaviorFlags=0x0100,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=160, ShotBaseDamage=5, AttackStatusFlags=0x0100,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=5.0f, ProjectileLifetime=0 };
 
         // Index 12 — "magic_s": small generic magic.
-        // Moderate hitbox (1.8×2.8), 3 phases, plt=10 frames. BehaviorFlags=0.
+        // Moderate hitbox (1.8×2.8), 3 phases, plt=10 frames. AttackStatusFlags=0.
         // General-purpose small magic spell — may be used for fire, ice, or holy projectiles.
         internal static readonly BehaviorScript MagicSmall = new BehaviorScript {
             Index=12, ScriptName="magic_s",
             BehaviorMode=0, HitboxWidth=1.8f, HitboxHeight=2.8f, HitboxDepth=0f,
             TriggerRange=4.5f, ReachRange=5.2f, SecondaryRange=5.3f,
-            DurationFrames=140, AttackDistance=50, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=140, ShotBaseDamage=50, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=10 };
 
         // Index 13 — "f_boll_2": fireball variant 2.
         // Tall thin hitbox (0.1×2.5), pspd=1.5, plt=20; SecondaryRange=20.0 (very wide follow-through).
-        // BehaviorFlags=0x0001. Intermediate fireball — between the slow variant 3-short and the fast one.
+        // AttackStatusFlags=0x0001. Intermediate fireball — between the slow variant 3-short and the fast one.
         internal static readonly BehaviorScript Fireball2 = new BehaviorScript {
             Index=13, ScriptName="f_boll_2",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=2.5f, HitboxDepth=0f,
             TriggerRange=0.5f, ReachRange=4.0f, SecondaryRange=20.0f,
-            DurationFrames=180, AttackDistance=35, BehaviorFlags=1,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=180, ShotBaseDamage=35, AttackStatusFlags=1,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.5f, ProjectileLifetime=20 };
 
         // Index 14 — "seedshot": seed-shot projectile.
@@ -323,151 +323,151 @@ namespace Dark_Cloud_Improved_Version
             Index=14, ScriptName="seedshot",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=5.5f, HitboxDepth=0.3f,
             TriggerRange=0.3f, ReachRange=3.5f, SecondaryRange=0.3f,
-            DurationFrames=180, AttackDistance=37, BehaviorFlags=0,
-            PhaseCount=4, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=180, ShotBaseDamage=37, AttackStatusFlags=0,
+            HitReactionType=4, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 15 — "g_canon": ground cannon.
-        // Wide hitbox (3.5×5.0), slow pspd=0.8, 3 phases. BehaviorFlags=0.
+        // Wide hitbox (3.5×5.0), slow pspd=0.8, 3 phases. AttackStatusFlags=0.
         // Large slow-moving cannon ball rolling along the floor — high-damage close AoE.
         internal static readonly BehaviorScript GroundCannon = new BehaviorScript {
             Index=15, ScriptName="g_canon",
             BehaviorMode=0, HitboxWidth=3.5f, HitboxHeight=5.0f, HitboxDepth=0f,
             TriggerRange=1.9f, ReachRange=5.2f, SecondaryRange=6.3f,
-            DurationFrames=120, AttackDistance=42, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=42, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0.8f, ProjectileLifetime=0 };
 
         // Index 16 — "zibaku_f2": self-destruct fire variant 2.
         // "zibaku" (自爆) = self-destruct. Zero hitbox — triggers by proximity (TriggerRange=14.0).
-        // pspd=1.0, plt=40 frames; BehaviorFlags=0x0001. Fire-type AoE detonation.
+        // pspd=1.0, plt=40 frames; AttackStatusFlags=0x0001. Fire-type AoE detonation.
         internal static readonly BehaviorScript SelfDestructFire2 = new BehaviorScript {
             Index=16, ScriptName="zibaku_f2",
             BehaviorMode=0, HitboxWidth=0f, HitboxHeight=0f, HitboxDepth=0f,
             TriggerRange=14.0f, ReachRange=14.5f, SecondaryRange=10.3f,
-            DurationFrames=110, AttackDistance=59, BehaviorFlags=1,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=110, ShotBaseDamage=59, AttackStatusFlags=1,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.0f, ProjectileLifetime=40 };
 
         // Index 17 — "zibaku_r2": self-destruct roll variant 2.
-        // Same proximity trigger (14.0), slightly wider SecondaryRange=14.3. BehaviorFlags=0x0002.
+        // Same proximity trigger (14.0), slightly wider SecondaryRange=14.3. AttackStatusFlags=0x0002.
         // Roll-type detonation — distinct hit response from the fire variant.
         internal static readonly BehaviorScript SelfDestructRoll2 = new BehaviorScript {
             Index=17, ScriptName="zibaku_r2",
             BehaviorMode=0, HitboxWidth=0f, HitboxHeight=0f, HitboxDepth=0f,
             TriggerRange=14.0f, ReachRange=14.5f, SecondaryRange=14.3f,
-            DurationFrames=110, AttackDistance=60, BehaviorFlags=2,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=110, ShotBaseDamage=60, AttackStatusFlags=2,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.0f, ProjectileLifetime=40 };
 
         // Index 18 — "zibaku_t2": self-destruct tail variant 2.
-        // Same trigger radius, shorter duration (20 frames) but higher dist=100. BehaviorFlags=0x0004.
+        // Same trigger radius, shorter duration (20 frames) but higher dist=100. AttackStatusFlags=0x0004.
         // Tail-sweep detonation — different angle coverage. plt=50 (longest of the three).
         internal static readonly BehaviorScript SelfDestructTail2 = new BehaviorScript {
             Index=18, ScriptName="zibaku_t2",
             BehaviorMode=0, HitboxWidth=0f, HitboxHeight=0f, HitboxDepth=0f,
             TriggerRange=14.0f, ReachRange=14.5f, SecondaryRange=10.3f,
-            DurationFrames=20, AttackDistance=100, BehaviorFlags=4,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=20, ShotBaseDamage=100, AttackStatusFlags=4,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.0f, ProjectileLifetime=50 };
 
         // Index 19 — "fuki_ex": exhale/breath extended.
-        // "fuki" (吹き) = blow/exhale. Large AoE (4.0×4.5), BehaviorFlags=0x0200, TriggerRange=7.6.
+        // "fuki" (吹き) = blow/exhale. Large AoE (4.0×4.5), AttackStatusFlags=0x0200, TriggerRange=7.6.
         // Likely a boss breath attack covering a wide cone. Same dimensions as DarkGenieForm2Attack.
         internal static readonly BehaviorScript ExhaleExtended = new BehaviorScript {
             Index=19, ScriptName="fuki_ex",
             BehaviorMode=0, HitboxWidth=4.0f, HitboxHeight=4.5f, HitboxDepth=0f,
             TriggerRange=7.6f, ReachRange=5.5f, SecondaryRange=5.5f,
-            DurationFrames=180, AttackDistance=31, BehaviorFlags=0x0200,
-            PhaseCount=2, ScriptMode=65536, PackedFlags2=131074,
+            DurationFrames=180, ShotBaseDamage=31, AttackStatusFlags=0x0200,
+            HitReactionType=2, ScriptMode=65536, PackedFlags2=131074,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 20 — "i_boll": ice ball.
-        // Narrow (0.1×1.7), BehaviorFlags=0x0002, SecondaryRange=9.0. IceQueen or ice-type enemy special.
+        // Narrow (0.1×1.7), AttackStatusFlags=0x0002, SecondaryRange=9.0. IceQueen or ice-type enemy special.
         internal static readonly BehaviorScript IceBall = new BehaviorScript {
             Index=20, ScriptName="i_boll",
             BehaviorMode=0, HitboxWidth=0.1f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=1.9f, ReachRange=6.0f, SecondaryRange=9.0f,
-            DurationFrames=120, AttackDistance=58, BehaviorFlags=2,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=58, AttackStatusFlags=2,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 21 — "mikazuki_ex": crescent-moon extended.
-        // "mikazuki" (三日月) = crescent moon. (0.8×1.7), BehaviorFlags=0x0004, ReachRange=6.0.
+        // "mikazuki" (三日月) = crescent moon. (0.8×1.7), AttackStatusFlags=0x0004, ReachRange=6.0.
         // Likely a scythe or blade arc — smaller than the full engetu sweep (index 30).
         internal static readonly BehaviorScript CrescentExtended = new BehaviorScript {
             Index=21, ScriptName="mikazuki_ex",
             BehaviorMode=0, HitboxWidth=0.8f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=1.6f, ReachRange=6.0f, SecondaryRange=6.0f,
-            DurationFrames=120, AttackDistance=70, BehaviorFlags=4,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=70, AttackStatusFlags=4,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 22 — "b_boll": dark/bomb ball.
-        // Wider hitbox (1.2×1.8), BehaviorFlags=0x0100, ReachRange=8.0. Likely a dark-energy orb
+        // Wider hitbox (1.2×1.8), AttackStatusFlags=0x0100, ReachRange=8.0. Likely a dark-energy orb
         // or a larger explosive ball distinct from the fire/ice/thunder variants.
         internal static readonly BehaviorScript DarkBall = new BehaviorScript {
             Index=22, ScriptName="b_boll",
             BehaviorMode=0, HitboxWidth=1.2f, HitboxHeight=1.8f, HitboxDepth=0f,
             TriggerRange=1.6f, ReachRange=8.0f, SecondaryRange=8.0f,
-            DurationFrames=120, AttackDistance=70, BehaviorFlags=0x0100,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=70, AttackStatusFlags=0x0100,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 23 — "t_boll": thunder ball.
-        // (1.4×1.7), BehaviorFlags=0x0004. Likely the thunder-type elemental orb.
+        // (1.4×1.7), AttackStatusFlags=0x0004. Likely the thunder-type elemental orb.
         internal static readonly BehaviorScript ThunderBall = new BehaviorScript {
             Index=23, ScriptName="t_boll",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=7.0f, SecondaryRange=8.0f,
-            DurationFrames=120, AttackDistance=58, BehaviorFlags=4,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=58, AttackStatusFlags=4,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 24 — "e114a_ex": MasterUtan extended attack.
-        // "e114" prefix matches MasterUtan (EID=114). Same hitbox as e115a_ex; BehaviorFlags=0x0008.
+        // "e114" prefix matches MasterUtan (EID=114). Same hitbox as e115a_ex; AttackStatusFlags=0x0008.
         // Likely MasterUtan's special vine or slam attack, one flag-bit below KingsCurseCoffin.
         internal static readonly BehaviorScript MasterUtanAttack = new BehaviorScript {
             Index=24, ScriptName="e114a_ex",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=7.0f, SecondaryRange=8.0f,
-            DurationFrames=120, AttackDistance=58, BehaviorFlags=8,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-65535,
+            DurationFrames=120, ShotBaseDamage=58, AttackStatusFlags=8,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-65535,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // ---- pointer-array entries [25]–[33] — directly referenced by BehaviorScriptTable.PointerArray ----
 
         // Index 25 — "e115a_ex": KingsCurseCoffin extended melee attack.
-        // "e115" prefix matches KingsCurseCoffin (EID=115). BehaviorFlags=0x0010.
+        // "e115" prefix matches KingsCurseCoffin (EID=115). AttackStatusFlags=0x0010.
         // Likely the claw/arm-grab special that deals high damage at medium range.
         internal static readonly BehaviorScript KingsCurseCoffinAttack = new BehaviorScript {
             Index=25, ScriptName="e115a_ex",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=7.0f, SecondaryRange=8.0f,
-            DurationFrames=120, AttackDistance=58, BehaviorFlags=16,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-65535,
+            DurationFrames=120, ShotBaseDamage=58, AttackStatusFlags=16,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-65535,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 26 — "last_gw2": last-dungeon ranged projectile.
         // "gw2" likely = Genie World 2; final boss ranged special.
-        // ProjectileSpeed=1.5, ProjectileLifetime=20; AttackDistance=130 (longest ranged reach).
+        // ProjectileSpeed=1.5, ProjectileLifetime=20; ShotBaseDamage=130 (longest ranged reach).
         internal static readonly BehaviorScript LastDungeonProjectile = new BehaviorScript {
             Index=26, ScriptName="last_gw2",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=7.0f, SecondaryRange=8.0f,
-            DurationFrames=120, AttackDistance=130, BehaviorFlags=1,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=130, AttackStatusFlags=1,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.5f, ProjectileLifetime=20 };
 
         // Index 27 — "f_boll_3" (boss variant): fireball 3 with wider flags.
-        // BehaviorFlags=0x0401 (1 | 0x0400) adds extra hit effect vs. index-5 variant.
-        // Same projectile params as last_gw2 but shorter AttackDistance=58. Used by a fire-type boss.
+        // AttackStatusFlags=0x0401 (1 | 0x0400) adds extra hit effect vs. index-5 variant.
+        // Same projectile params as last_gw2 but shorter ShotBaseDamage=58. Used by a fire-type boss.
         internal static readonly BehaviorScript Fireball3 = new BehaviorScript {
             Index=27, ScriptName="f_boll_3",
             BehaviorMode=0, HitboxWidth=1.4f, HitboxHeight=1.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=7.0f, SecondaryRange=8.0f,
-            DurationFrames=120, AttackDistance=58, BehaviorFlags=1025,
-            PhaseCount=3, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=58, AttackStatusFlags=1025,
+            HitReactionType=3, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=1.5f, ProjectileLifetime=20 };
 
         // Index 28 — "e118a_Ex": DarkGenie Form2 extended AoE.
@@ -477,41 +477,41 @@ namespace Dark_Cloud_Improved_Version
             Index=28, ScriptName="e118a_Ex",
             BehaviorMode=0, HitboxWidth=4.0f, HitboxHeight=4.5f, HitboxDepth=0f,
             TriggerRange=7.6f, ReachRange=5.5f, SecondaryRange=5.5f,
-            DurationFrames=180, AttackDistance=51, BehaviorFlags=0,
-            PhaseCount=2, ScriptMode=65536, PackedFlags2=131074,
+            DurationFrames=180, ShotBaseDamage=51, AttackStatusFlags=0,
+            HitReactionType=2, ScriptMode=65536, PackedFlags2=131074,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 29 — "nebaneba_b": boss sticky/sludge AoE.
-        // Tiny hitbox (0.4×0.4×0.1), BehaviorFlags=0x0800. Boss variant of nebaneba (index 2).
-        // Very short AttackDistance=15 — close-range grab or sludge pool.
+        // Tiny hitbox (0.4×0.4×0.1), AttackStatusFlags=0x0800. Boss variant of nebaneba (index 2).
+        // Very short ShotBaseDamage=15 — close-range grab or sludge pool.
         internal static readonly BehaviorScript NebanebaSludge = new BehaviorScript {
             Index=29, ScriptName="nebaneba_b",
             BehaviorMode=0, HitboxWidth=0.4f, HitboxHeight=0.4f, HitboxDepth=0.1f,
             TriggerRange=2.6f, ReachRange=5.0f, SecondaryRange=4.3f,
-            DurationFrames=180, AttackDistance=15, BehaviorFlags=2048,
-            PhaseCount=2, ScriptMode=65536, PackedFlags2=131074,
+            DurationFrames=180, ShotBaseDamage=15, AttackStatusFlags=2048,
+            HitReactionType=2, ScriptMode=65536, PackedFlags2=131074,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 30 — "engetu": crescent-moon sweep attack.
-        // "engetu" (円月) = crescent moon. Very long ReachRange=13.0, AttackDistance=150.
+        // "engetu" (円月) = crescent moon. Very long ReachRange=13.0, ShotBaseDamage=150.
         // Large arc (3.4×3.7). Likely MinotaurJoe's scythe swing or a sword-boss long slash.
         internal static readonly BehaviorScript CrescentSweep = new BehaviorScript {
             Index=30, ScriptName="engetu",
             BehaviorMode=0, HitboxWidth=3.4f, HitboxHeight=3.7f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=13.0f, SecondaryRange=4.3f,
-            DurationFrames=120, AttackDistance=150, BehaviorFlags=0,
-            PhaseCount=2, ScriptMode=65535, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=150, AttackStatusFlags=0,
+            HitReactionType=2, ScriptMode=65535, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 31 — "dash": charging dash attack.
-        // Longest DurationFrames=240 and AttackDistance=170; three phases; medium hitbox (2.6×2.4).
+        // Longest DurationFrames=240 and ShotBaseDamage=170; three phases; medium hitbox (2.6×2.4).
         // Likely a boss charging straight at Toan.
         internal static readonly BehaviorScript Dash = new BehaviorScript {
             Index=31, ScriptName="dash",
             BehaviorMode=0, HitboxWidth=2.6f, HitboxHeight=2.4f, HitboxDepth=0f,
             TriggerRange=2.6f, ReachRange=5.0f, SecondaryRange=4.3f,
-            DurationFrames=240, AttackDistance=170, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=65536, PackedFlags2=131074,
+            DurationFrames=240, ShotBaseDamage=170, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=65536, PackedFlags2=131074,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 32 — "kamai": long-range stance/repositioning (movement mode).
@@ -521,8 +521,8 @@ namespace Dark_Cloud_Improved_Version
             Index=32, ScriptName="kamai",
             BehaviorMode=2, HitboxWidth=0f, HitboxHeight=0f, HitboxDepth=0f,
             TriggerRange=30.0f, ReachRange=0f, SecondaryRange=0f,
-            DurationFrames=120, AttackDistance=130, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=-65536, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=130, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=-65536, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
 
         // Index 33 — "terepo": short-range teleport repositioning (movement mode).
@@ -532,8 +532,8 @@ namespace Dark_Cloud_Improved_Version
             Index=33, ScriptName="terepo",
             BehaviorMode=2, HitboxWidth=0f, HitboxHeight=0f, HitboxDepth=0f,
             TriggerRange=10.0f, ReachRange=0f, SecondaryRange=0f,
-            DurationFrames=120, AttackDistance=90, BehaviorFlags=0,
-            PhaseCount=3, ScriptMode=-65536, PackedFlags2=-1,
+            DurationFrames=120, ShotBaseDamage=90, AttackStatusFlags=0,
+            HitReactionType=3, ScriptMode=-65536, PackedFlags2=-1,
             ProjectileSpeed=0f, ProjectileLifetime=0 };
     }
 
@@ -1384,7 +1384,12 @@ namespace Dark_Cloud_Improved_Version
         // 消滅/爆発 (despawn/explode). For these the boss-death system doesn't apply (scripted despawn).
         // Dark Genie fight companions: code=c17_ = DG attack-effect family. The prefix maps to several .chr:
         // c17_beem.chr (発射/ループ/消滅 = launch/loop/despawn), c17_kaze.chr (wind), c17_hikari.chr (light),
-        // c17_syougeki.chr (shock). e.g. c17_beem @ data.dat 0x1b1e9000. Which TableIndex→which is unconfirmed.
+        // c17_syougeki.chr (shock). e.g. c17_beem @ data.dat 0x1b1e9000.
+        // TableIndex→entity resolved by matching footprint + Abs against the CONFIRMED c23 Final-Form beams
+        // (TableIndex 109 c23_beem: fp 21938/Abs 17; 110 c23_beem_s: fp 7423/Abs 20 — both 175 dmg). The two c17
+        // beams line up almost exactly: idx 89 (fp 21882/Abs 17) = c17_beem, idx 90 (fp 7475/Abs 20) = c17_beem_s,
+        // both dealing 175 (funcId 132, verified in c17_beem.stb / c17_beem_s.stb). idx 88 & 93 are the wind/light/
+        // shock effects (c17_kaze/hikari/syougeki .stb have NO damage script) — non-attackers, so no MeleeDamage.
         internal static readonly EnemyDefaults DGComp88 = new EnemyDefaults {
             Id=0, TableIndex=88, Name="(DG companion c17_)", ModelCode="c17_", ModelFootprint=16563,
             Abs=20, MinGoldDrop=0, DropChance=0, StealItemId=65535, RareDropItemId=65535,
@@ -1392,7 +1397,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             ItemDamageRes=50, ItemStatusRes=0,
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=5.0f, EntityScaleCopy=5.0f,
-            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };   // non-attacker effect (kaze/hikari/syougeki)
 
         internal static readonly EnemyDefaults DGComp89 = new EnemyDefaults {
             Id=0, TableIndex=89, Name="(DG companion c17_)", ModelCode="c17_", ModelFootprint=21882,
@@ -1401,7 +1406,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             ItemDamageRes=50, ItemStatusRes=0,
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=5.0f, EntityScaleCopy=5.0f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };  // c17_beem (funcId 132 = 175)
 
         internal static readonly EnemyDefaults DGComp90 = new EnemyDefaults {
             Id=0, TableIndex=90, Name="(DG companion c17_)", ModelCode="c17_", ModelFootprint=7475,
@@ -1410,7 +1415,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Mage, FireRes=100, IceRes=100, ThunderRes=100, WindRes=100, HolyRes=100,
             ItemDamageRes=50, ItemStatusRes=0,
             BodyWidth=7.0f, BodyHeight=17.0f, BodyDepth=60.0f, EntityScale=5.0f, EntityScaleCopy=5.0f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{} };
+            MeleeDamage=new int[]{175}, ProjectileDamage=new int[]{} };  // c17_beem_s (funcId 132 = 175)
 
         internal static readonly EnemyDefaults WineKeg = new EnemyDefaults {
             Id=121, TableIndex=91, Name="Wine Keg", ModelCode="e85a", ModelFootprint=3172,
@@ -1617,7 +1622,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=0, IceRes=150, ThunderRes=30, WindRes=30, HolyRes=30,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{100} };
+            MeleeDamage=new int[]{100}, ProjectileDamage=new int[]{100} };
 
         internal static readonly EnemyDefaults Nikapous = new EnemyDefaults {
             Id=308, TableIndex=112, Name="Nikapous", ModelCode="e108", ModelFootprint=69755,
@@ -1710,7 +1715,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=150, IceRes=0, ThunderRes=30, WindRes=30, HolyRes=30,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{120} };
+            MeleeDamage=new int[]{120}, ProjectileDamage=new int[]{120} };
 
         internal static readonly EnemyDefaults HornHead = new EnemyDefaults {
             Id=319, TableIndex=122, Name="Horn Head", ModelCode="e119", ModelFootprint=52419,
@@ -1816,7 +1821,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=30, IceRes=30, ThunderRes=0, WindRes=150, HolyRes=30,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{130} };
+            MeleeDamage=new int[]{130}, ProjectileDamage=new int[]{130} };
 
         internal static readonly EnemyDefaults BishopQ = new EnemyDefaults {
             Id=316, TableIndex=133, Name="Bishop Q", ModelCode="e116", ModelFootprint=67591,
@@ -1915,7 +1920,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=100, IceRes=100, ThunderRes=140, WindRes=0, HolyRes=100,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{140} };
+            MeleeDamage=new int[]{140}, ProjectileDamage=new int[]{140} };
 
         internal static readonly EnemyDefaults SilverGear = new EnemyDefaults {
             Id=318, TableIndex=144, Name="Silver Gear", ModelCode="e118", ModelFootprint=64198,
@@ -2015,7 +2020,7 @@ namespace Dark_Cloud_Improved_Version
             Category=EnemyCategory.Dragon, FireRes=50, IceRes=50, ThunderRes=50, WindRes=50, HolyRes=0,
             ItemDamageRes=70, ItemStatusRes=60,
             BodyWidth=7.0f, BodyHeight=23.0f, BodyDepth=60.0f, EntityScale=6.5f, EntityScaleCopy=6.5f,
-            MeleeDamage=new int[]{}, ProjectileDamage=new int[]{150} };
+            MeleeDamage=new int[]{150}, ProjectileDamage=new int[]{150} };
 
         internal static readonly EnemyDefaults GaciousEnhanced = new EnemyDefaults {
             Id=317, TableIndex=155, Name="Gacious (Enhanced)", ModelCode="e117", ModelFootprint=45760,

@@ -192,6 +192,20 @@ namespace Dark_Cloud_Improved_Version
 
             while (true)
             {
+                // Buster Sword "True Buster" absorb watcher — runs in every mode (self-gated to
+                // ~2.5 Hz) because ABS level-ups can happen from any menu, sword equipped or not.
+                CustomToanEffects.BusterSwordEffect();
+                // 7 Branch Sword "Sevenfold Rite" — status-break patch keyed on the weapon-menu
+                // selection; runs in every mode because the menu exists everywhere (self-gated ~10 Hz).
+                CustomToanEffects.SevenBranchSwordEffect();
+                // Macho Sword "Overtraining" — ownership passive: ABS rollover past max on every
+                // weapon + level-up carry; runs in every mode (level-ups happen from any menu,
+                // self-gated ~10 Hz, kill tracking only while in a dungeon floor).
+                CustomToanEffects.MachoSwordEffect();
+                // Atlamillia Sword "Insurance" — break watcher + dynamic atla + collected-slot
+                // erasure; runs in every mode (self-gated ~2 Hz) so floor-select stays clean too.
+                AtlamilliaInsurance.Tick();
+
                 //Check if player is in town
                 if (Memory.ReadByte(Addresses.mode) == 2)
                 {
@@ -393,20 +407,20 @@ namespace Dark_Cloud_Improved_Version
                         currentArea = Memory.ReadByte(0x202A2518);
                         if (currentArea == 11 || currentArea == 13 || currentArea == 33 || currentArea == 35 || currentArea == 37 || currentArea == 14)
                         {
-                            Memory.WriteByte(0x21F10000, 1); //disable eventpoints/triggers, pnach does the rest
+                            Memory.WriteByte(CodeCaves.Mailbox.EventPoint, 1); //disable eventpoints/triggers, pnach does the rest
                         }
                         else
                         {
-                            Memory.WriteByte(0x21F10000, 0);
+                            Memory.WriteByte(CodeCaves.Mailbox.EventPoint, 0);
                         }
 
 
                         if (Memory.ReadByte(0x21CDD80D) != 255)
                         {
-                            Memory.WriteByte(0x21F10004, 1); //enable yaya
+                            Memory.WriteByte(CodeCaves.Mailbox.SunMoon, 1); //enable yaya
                         }
 
-                        if (Memory.ReadByte(0x21F10014) == 1)
+                        if (Memory.ReadByte(CodeCaves.Mailbox.InsideMayor) == 1)
                         {
                             Memory.WriteByte(0x20415508, 0); //disable mayor door event
                             Memory.WriteByte(0x20415538, 0); //disable mayor door event mark
@@ -425,7 +439,7 @@ namespace Dark_Cloud_Improved_Version
                                     Dialogues.SetDialogue(i, true, false);
                                     if (talkableNPC != false) //check if NPC is not llama
                                     {
-                                        Memory.WriteByte(0x21F10008, 1); //nearNPC flag for PNACH to use
+                                        Memory.WriteByte(CodeCaves.Mailbox.NearNpc, 1); //nearNPC flag for PNACH to use
                                     }
                                     talkableNPC = true;
                                     nearNPC = true;
@@ -437,7 +451,7 @@ namespace Dark_Cloud_Improved_Version
                         if (checkNearNPC == 0)
                         {
                             nearNPC = false;
-                            Memory.WriteByte(0x21F10008, 0); //nearNPC flag for PNACH to use
+                            Memory.WriteByte(CodeCaves.Mailbox.NearNpc, 0); //nearNPC flag for PNACH to use
                             onDialogueFlag = 0;
                         }
 
@@ -497,11 +511,11 @@ namespace Dark_Cloud_Improved_Version
                                     break;
                             }
 
-                            Memory.WriteByte(0x21F1000C, 1); //xiaoFlag for PNACH
+                            Memory.WriteByte(CodeCaves.Mailbox.XiaoFlag, 1); //xiaoFlag for PNACH
                         }
                         else
                         {
-                            Memory.WriteByte(0x21F1000C, 0); //xiaoFlag for PNACH
+                            Memory.WriteByte(CodeCaves.Mailbox.XiaoFlag, 0); //xiaoFlag for PNACH
                         }
 
                         if (shopkeeper == true) //check for shopkeeper and change dialogue ID, this part is a bit poorly written and could be cleaner
@@ -579,7 +593,7 @@ namespace Dark_Cloud_Improved_Version
 
                             if (sidequestOptionFlag == true)
                             {
-                                if (Memory.ReadByte(0x21F10014) == 1)
+                                if (Memory.ReadByte(CodeCaves.Mailbox.InsideMayor) == 1)
                                 {
                                     Memory.WriteInt(0x21D3D438, sidequestDialogueID);
                                 }
@@ -612,8 +626,8 @@ namespace Dark_Cloud_Improved_Version
                     else //after the massive if check for ally usage, some custom dialogue is set for Toan
                     {
                         isUsingAlly = false;
-                        Memory.WriteByte(0x21F10000, 0); //re-enable eventpoints if they were disable
-                        Memory.WriteByte(0x21F1000C, 0); //xiaoFlag for PNACH
+                        Memory.WriteByte(CodeCaves.Mailbox.EventPoint, 0); //re-enable eventpoints if they were disable
+                        Memory.WriteByte(CodeCaves.Mailbox.XiaoFlag, 0); //xiaoFlag for PNACH
 
                         //if (Memory.ReadByte(0x21D1CC0C) == 12)
 
@@ -630,7 +644,7 @@ namespace Dark_Cloud_Improved_Version
                             }
                             if (sidequestOptionFlag == true)
                             {
-                                if (Memory.ReadByte(0x21F10014) == 1)
+                                if (Memory.ReadByte(CodeCaves.Mailbox.InsideMayor) == 1)
                                 {
                                     Memory.WriteInt(0x21D3D438, sidequestDialogueID);
                                 }
@@ -698,7 +712,7 @@ namespace Dark_Cloud_Improved_Version
                                     {
 
                                         Dialogues.SetDialogue(i, false, false);
-                                        Memory.WriteByte(0x21F10010, 1); //nearNPC flag for PNACH to use
+                                        Memory.WriteByte(CodeCaves.Mailbox.NearNpc2, 1); //nearNPC flag for PNACH to use
                                         nearNPC = true;
                                         if (onDialogueFlag == 1) onDialogueFlag = 2;
                                     }
@@ -718,7 +732,7 @@ namespace Dark_Cloud_Improved_Version
                             if (checkNearNPC == 0)
                             {
                                 nearNPC = false;
-                                Memory.WriteByte(0x21F10010, 0); //nearNPC flag for PNACH to use
+                                Memory.WriteByte(CodeCaves.Mailbox.NearNpc2, 0); //nearNPC flag for PNACH to use
                                 onDialogueFlag = 0;
                             }
 
@@ -848,7 +862,7 @@ namespace Dark_Cloud_Improved_Version
                         changingLocation = true;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "changing location");
                         chrFilePath = "chara/c01d.chr";
-                        Memory.WriteByte(0x21F10000, 0); //re-enable eventpoints in case they were disabled'
+                        Memory.WriteByte(CodeCaves.Mailbox.EventPoint, 0); //re-enable eventpoints in case they were disabled'
 
                         //when player is about to enter another area, a cutscene might play. We switch back to Toan to prevent any character models from breaking
 
@@ -889,7 +903,7 @@ namespace Dark_Cloud_Improved_Version
                                 timerCheck++;
                             }
                         }
-                        Memory.WriteByte(0x21F1001C, 0);
+                        Memory.WriteByte(CodeCaves.Mailbox.Clock, 0);
                     }
 
                     if (Memory.ReadByte(0x202A1E90) == 255) //not 100% sure about this value, but it should be static while the player is not in the process of switching areas
@@ -904,6 +918,10 @@ namespace Dark_Cloud_Improved_Version
                     if (buttonRead != _prevButtonRead && !FishDataFarmer.IsPressingButton)
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[Input] Player buttons: {FormatButtons(buttonRead)}");
                     _prevButtonRead = buttonRead;
+
+                    // One-time (per process) catch-up: dedupe the fishing records list and apply the
+                    // Arise Mardan max-magic bonus as soon as a save is loaded. No-op afterwards.
+                    Fishing.EnsureAriseBonusInitialized();
 
                     int checkFishing = Memory.ReadByte(FishingAddresses.Active);
                     if (fishingActive == false && checkFishing == 1)
@@ -1009,6 +1027,9 @@ namespace Dark_Cloud_Improved_Version
                     CheckCreditsScene(); //when player finishes credits, properly save the game and redirect to demon shaft
                 }
 
+                TownEditMode.Tick();  //overhead camera + safe exit, every town
+                GeoramaProbe.Tick();  //no-op unless GeoramaProbe.Enabled; dumps each town once on entry
+
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket
             }
 
@@ -1037,7 +1058,7 @@ namespace Dark_Cloud_Improved_Version
                     {
 
                         Dialogues.SetDialogue(i, false, true);
-                        Memory.WriteByte(0x21F10010, 1); //nearNPC flag for PNACH to use
+                        Memory.WriteByte(CodeCaves.Mailbox.NearNpc2, 1); //nearNPC flag for PNACH to use
                         nearNPCSD = true;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "sidequestdialogue set");
                         sidequestonDialogueFlag = 1;
@@ -1058,7 +1079,7 @@ namespace Dark_Cloud_Improved_Version
                     if (itsfinishedonDialogueFlag == 0)
                     {
                         Dialogues.SetDialogue(i, false, false, true);
-                        Memory.WriteByte(0x21F10010, 1); //nearNPC flag for PNACH to use
+                        Memory.WriteByte(CodeCaves.Mailbox.NearNpc2, 1); //nearNPC flag for PNACH to use
                         nearNPCSD = true;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "its finished dialogue set");
                         itsfinishedonDialogueFlag = 1;
@@ -1376,7 +1397,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 float currentClock = Memory.ReadFloat(0x21CD4310);
 
-                Memory.WriteByte(0x21F1001C, 1);
+                Memory.WriteByte(CodeCaves.Mailbox.Clock, 1);
                 Thread.Sleep(10);
 
                 Memory.WriteByte(0x203A3920, 0); //enable clock

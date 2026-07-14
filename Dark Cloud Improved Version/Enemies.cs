@@ -590,7 +590,7 @@ namespace Dark_Cloud_Improved_Version
             const float displacedThreshold = 300.0f;
 
             // Collect active chest positions — guaranteed walkable floor locations.
-            int rawCount = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr);
+            int rawCount = Memory.ReadInt(ChestAddresses.ChestSlots.CountAddr());
             int chestCount = Math.Min(rawCount, 16); // guard against corrupted count
             var activeChests = new List<(float x, float y)>();
             for (int c = 0; c < chestCount; c++)
@@ -881,6 +881,68 @@ namespace Dark_Cloud_Improved_Version
         internal class Digger
         {
             public const int maxJumpDistance = 0x213F3D70;
+        }
+
+        /// <summary>
+        /// An area-of-effect KNOCKBACK centred on a world point: launch every live enemy within
+        /// <paramref name="radius"/> radially OUTWARD, away from the centre. Returns how many it caught.
+        ///
+        /// This deals NO DAMAGE, deliberately. Writing an enemy's HP from outside the engine does not kill it —
+        /// CheckDmg owns the death path (death motion, drops, de-targeting, removing it from the AI), so an enemy
+        /// zeroed by a direct HP write keeps walking and attacking while everything that tests HP treats it as
+        /// dead: an untargetable, unkillable corpse. Damage must always be dealt by something the engine itself
+        /// resolves (a real pellet — <see cref="ShrapnelBurst"/> — or an effect's own collision sphere).
+        ///
+        /// The knockback is the engine's own, not a teleport. Step__CMonstorUnit feeds
+        /// <see cref="EnemySlotOffsets.KnockbackForce"/> into the enemy's velocity every frame and drains it by
+        /// <paramref name="decay"/>, launching it along the vector at <see cref="EnemySlotOffsets.HitFacingX"/> —
+        /// which vanilla only ever sets to a snapshot of the enemy's own facing. Overwriting that vector with a
+        /// RADIAL one is what turns a hit's knockback into a shockwave: enemies are thrown away from the centre
+        /// rather than along whatever way they happened to be looking.
+        ///
+        /// The launch is SELF-SCALING rather than a flat impulse, because "throw them clear of the blast" is a
+        /// statement about DISTANCE, not force. A launch travels roughly <c>force²/(2·decay)</c> before it stops;
+        /// inverting that gives the force needed to move each enemy exactly far enough to clear the radius, so one
+        /// at the centre is thrown the full radius, one at the edge is nudged, and NOBODY is fired across the room.
+        /// (A flat force gets this violently wrong: 40 with decay 0.08 is a ~10,000-unit slide against a 160-unit
+        /// radius.) <paramref name="maxForce"/> clamps the inversion; <paramref name="forceScale"/> calibrates it,
+        /// since the real slide runs longer than the ideal one. Vanilla decay runs 0.10 (Pirate's Chariot, slides
+        /// far) to 0.30 (Dasher).
+        /// </summary>
+        internal static int RadialKnockback(float cx, float cy, float radius,
+                                            float decay, float maxForce, float clearMargin = 0f,
+                                            float forceScale = 1f)
+        {
+            int caught = 0;
+            for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
+            {
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) <= 0) continue;
+
+                long pos = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LocationX);   // X, height, Y
+                float ex = Memory.ReadFloat(pos), ey = Memory.ReadFloat(pos + 8);
+                float dx = ex - cx, dy = ey - cy;
+                float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (dist > radius) continue;
+
+                // An enemy standing exactly on the centre has no direction to be thrown in — give it one rather
+                // than dividing by zero.
+                if (dist < 0.001f) { dx = 1f; dy = 0f; }
+                else { dx /= dist; dy /= dist; }
+
+                float need  = radius - dist + clearMargin;
+                float force = (float)Math.Sqrt(2.0 * decay * Math.Max(0f, need)) * forceScale;
+                if (force > maxForce) force = maxForce;
+
+                long slot = EnemyAddresses.FloorSlots.SlotAddr(s, 0);
+                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingX, dx);
+                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingY, 0f);   // horizontal launch
+                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingZ, dy);
+                Memory.WriteFloat(slot + EnemySlotOffsets.HitFacingW, 0f);   // W=0 => a direction, not a point
+                Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackForce, force);
+                Memory.WriteFloat(slot + EnemySlotOffsets.KnockbackDecay, decay);
+                caught++;
+            }
+            return caught;
         }
     }
 }

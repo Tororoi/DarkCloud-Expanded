@@ -66,7 +66,7 @@ namespace Dark_Cloud_Improved_Version
             if (!Directory.Exists(logFolder))
                 Directory.CreateDirectory(logFolder);
             var fileStream = new FileStream(
-                Path.Combine(logFolder, "EnhancedModLogFile-" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt"),
+                Path.Combine(logFolder, "EnhancedModLogFile-" + DateTime.Now.ToString("yyyy-MM-dd--HH-mm-ss") + ".txt"),
                 FileMode.Create);
             var writer = new StreamWriter(fileStream, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
             Console.SetOut(writer);

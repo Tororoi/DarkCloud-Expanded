@@ -170,7 +170,7 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="currentDungeon">Dungeon index (0–6).</param>
         /// <param name="currentFloor">Current floor number, used to select the correct loot half and address area.</param>
         /// <param name="chronicle2">True if the player possesses Chronicle 2; modifies item/weapon odds and Powerup Powder eligibility.</param>
-        public static void ChestRandomizer(int currentDungeon, int currentFloor, bool chronicle2)
+        public static void BasicChestRandomizer(int currentDungeon, int currentFloor, bool chronicle2)
         {
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Custom chests activated");
             itemQuestSpawn = false;
@@ -621,7 +621,7 @@ namespace Dark_Cloud_Improved_Version
         /// With Chronicle 2: luckyTableChance is set to 0, guaranteeing the weapon table for both boxes.
         ///
         /// Handles regular floors and backfloors separately, writing results to the appropriate
-        /// memory address areas populated by <see cref="ChestRandomizer"/>.
+        /// memory address areas populated by <see cref="BasicChestRandomizer"/>.
         /// </summary>
         /// <param name="chronicle2">True if the player possesses Chronicle 2; forces weapon table rolls for both boxes.</param>
         public static void ClownRandomizer(bool chronicle2)
@@ -762,9 +762,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Rolls a chance to guarantee a side-quest item appears in a backfloor chest this floor.
         /// If the random roll exceeds <paramref name="currentItemChance"/> and the player does not
-        /// already own the item, sets <c>itemQuestSpawn = true</c> so <see cref="ChestRandomizer"/>
+        /// already own the item, sets <c>itemQuestSpawn = true</c> so <see cref="BasicChestRandomizer"/>
         /// will place the item in the first available backfloor chest slot.
-        /// Called from inside <see cref="ChestRandomizer"/> once per dungeon that has an active fetch quest.
+        /// Called from inside <see cref="BasicChestRandomizer"/> once per dungeon that has an active fetch quest.
         /// </summary>
         /// <param name="itemQuestID">Item ID of the side-quest reward to potentially spawn.</param>
         /// <param name="currentItemChance">Roll threshold (0–100); item spawns only when the random roll exceeds this value. Defaults to 66 (~33% chance).</param>

@@ -20,22 +20,19 @@ namespace Dark_Cloud_Improved_Version
         public static Thread changesThread = new Thread(new ThreadStart(ApplyNewChanges));
         public static Thread dungeonthread = new Thread(new ThreadStart(Dungeon.InsideDungeonThread));
         public static Thread weaponspecialeffectThread = new Thread(new ThreadStart(Weapons.RerollWeaponSpecialAttributes));
+        public static Thread codeCaveScannerThread = new Thread(new ThreadStart(CodeCaveScanner.Run));
 
         internal static void ApplyNewChanges()
         {
             Weapons.WeaponsBalanceChanges();
             Shop.UpdateShopPrices();
             Enemies.EnableEnemyDrops();   // let the "can't drop" species (flyers, Gol/Sil) drop on death (static species-table patch)
-
-            // ── TEMP TEST: does EntityScale (record +0x60) control physical/movement collision? ──
-            // Skeleton Soldier (TableIndex 1, e03a) normal EntityScale = 6.0; set 10x = 60.0. The record copies to both
-            // slot 0x044 (MoveCheck — walls/player) and 0x048 (MoveChecMonster — other enemies) at spawn, so watch how
-            // skeletons interact with walls, the player, and each other (MoveCheck uses distance < 6.0 + EntityScale).
-            // Expect them to keep a much larger berth (or, if too large, teleport/movement-lock). Remove after the test.
-            Memory.WriteFloat(EnemySpeciesTable.RecordAddress(EnemySpecies.SkeletonSoldier.TableIndex.Value)
-                + EnemySpeciesTable.EntityScale, 0.0f);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog()
-                + "[EntityScaleTest] Skeleton Soldier (TI 1) EntityScale set to 60.0 (10x) in the static species table.");
+            WeaponDescriptions.StartDescriptionPatcher();   // keep weapon menu descriptions = WeaponData.ModDescription
+            CustomToanEffects.ApplyAbsCodePatches();   // ABS rollover display patches (EE code; menu/HUD code is still cold here)
+            Mirage.ArmColdPatch();   // Ungaga's Mirage: host clean _GET_POSITION + _GET_DISTANCE in cold-PINE caves (per-slot target)
+            WeaponTextureSwap.StartSwapThread();   // Super Steve wears the attached sphere weapon's palette (dungeon + menus)
+            HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
+            Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
         }
 
         public static void CheckEmulatorAndGame()
@@ -46,7 +43,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Memory.process != null && Memory.IsConnected)
                 {
-                    Memory.WriteByte(0x21F10024, 0); //mod's flag for PNACH
+                    Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0); //mod's flag for PNACH
                 }
                 if (PID == 0)
                 {
@@ -98,7 +95,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else
                     {
-                        if (Memory.ReadByte(0x21F10020) == 1) //check PNACH flag
+                        if (Memory.ReadByte(CodeCaves.Mailbox.PnachActive) == 1) //check PNACH flag
                         {
                             if (firstlaunch)
                             {
@@ -141,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
             // Check for another active mod instance before claiming the flag
             while (true)
             {
-                if (Memory.ReadByte(0x21F10024) == 1)
+                if (Memory.ReadByte(CodeCaves.Mailbox.PineProbe) == 1)
                 {
                     ModWindow.EnhancedModAlreadyOpen();
                 }
@@ -152,7 +149,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Claim the flag immediately to minimise the gap during which PNACH shows the "Launch Enhanced Mod" message
-            Memory.WriteByte(0x21F10024, 1);
+            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 1);
 
             TownCharacter.InitializeCharacterOffsetValues();
             while (true)
@@ -168,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
 
             while (true)
             {
-                Memory.WriteByte(0x21F10024, 1); //mod's flag for PNACH
+                Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 1); //mod's flag for PNACH
                 currentFrameCounter = Memory.ReadInt(0x202A2400);
                 int currentMode = Memory.ReadByte(Addresses.mode);
                 if (currentMode != previousMode && previousMode != -1)
@@ -221,6 +218,12 @@ namespace Dark_Cloud_Improved_Version
                                         if (!townThread.IsAlive) townThread.Start();
                                         if (!dungeonthread.IsAlive) dungeonthread.Start();
                                         if (!weaponspecialeffectThread.IsAlive) weaponspecialeffectThread.Start();
+                                        if (!codeCaveScannerThread.IsAlive) codeCaveScannerThread.Start(); //passive code-cave sweep, findings -> CodeCaveFindings.txt
+
+                                        // TEST hook: uncomment to hand a character a weapon on save load
+                                        // (Weapons.GiveWeaponIfMissing writes an empty slot at base stats).
+                                        // Weapons.GiveWeaponIfMissing(Player.RubyId, Items.mobiusring)
+
                                         CheckModWindowOptions(currentMode);
                                         ingameFlag = true;
                                     }
@@ -292,7 +295,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if (currentFrameCounter > 0)
                 {
-                    if (Memory.ReadByte(0x21F10020) != 1) //check PNACH flag
+                    if (Memory.ReadByte(CodeCaves.Mailbox.PnachActive) != 1) //check PNACH flag
                     {
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "PNACH cheats were disabled!");
                         break;
@@ -309,7 +312,7 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(1);
             }
 
-            Memory.WriteByte(0x21F10024, 0); //disable mod's flag for pnach
+            Memory.WriteByte(CodeCaves.Mailbox.PineProbe, 0); //disable mod's flag for pnach
         }
 
         public static void CheckModWindowOptions(int mode)

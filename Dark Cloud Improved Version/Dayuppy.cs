@@ -730,7 +730,7 @@ namespace Dark_Cloud_Improved_Version
                                                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Element written");
                                                     }
                                                     */
-                                                    Memory.WriteByte(0x21F10018, 1);
+                                                    Memory.WriteByte(CodeCaves.Mailbox.Element, 1);
 
                                                 }
 
@@ -1362,7 +1362,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     Memory.WriteByteArray(textureAddress1, modifiedTexture1);
                     Memory.WriteByteArray(textureAddress2, modifiedTexture2);
-                    ///Memory.WriteByteArray(textureAddress3, modifiedTexture3);
+                    //Memory.WriteByteArray(textureAddress3, modifiedTexture3);
                 }
 
                 //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Input: " + Memory.ReadUShort(Addresses.buttonInputs));

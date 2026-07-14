@@ -77,7 +77,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void SetPopulationTarget(int pop)
         {
-            foreach (long target in InjectorAddresses.PopulationTargets) Memory.WriteInt(target, pop);
+            foreach (long target in EnemyPlacement.PopulationTargets) Memory.WriteInt(target, pop);
             Console.WriteLine($"[EnemyInjector] population target (0x21D56494/9C/A0) <- {pop} "
                 + "(capped by walkable tiles; re-set after floor-select if it gets overwritten).");
         }
@@ -295,8 +295,8 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(ChestAddresses.ChestStateTable.SlotAddr(stateIdx, ChestStateOffsets.Height),  hOff);
 
                 // Extend the box loop count so CheckTreasureBox covers the new slot (DrawItemBox already scans all 24).
-                int cnt = Memory.ReadInt(ChestAddresses.ChestSlots.BoxLoopCount);
-                if (boxIdx + 1 > cnt) Memory.WriteInt(ChestAddresses.ChestSlots.BoxLoopCount, boxIdx + 1);
+                int cnt = Memory.ReadInt(ChestAddresses.ChestSlots.BoxLoopCount());
+                if (boxIdx + 1 > cnt) Memory.WriteInt(ChestAddresses.ChestSlots.BoxLoopCount(), boxIdx + 1);
 
                 _mimicChestDone.Add(s);
                 made++;
