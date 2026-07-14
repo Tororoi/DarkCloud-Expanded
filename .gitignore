@@ -341,3 +341,6 @@ healthchecksdb
 
 # Ignore SCUS_971.11 binary
 SCUS_971.11
+
+# Claude Code local settings
+.claude/
