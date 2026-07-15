@@ -156,12 +156,11 @@ namespace Dark_Cloud_Improved_Version
             // edges: x ~-347..320, z ~-289..307), not just the +/-120 central pond. WATCH cpoly on the
             // FISHING SPOT LOADED line: this is a large rect and the poly gather has a hard 1024 cap
             // (overflow crashes). Brownboo's water is sparse so it should stay well under, but confirm.
-            // Cast rect = the traced shoreline's bounding box (X -258..295, Z -296..245). Tight to the pond:
-            // the whole-map rect made PickUpPoly gather 944 native polys, leaving no room under the 1024 cap
-            // for our exact rock triangles. Corners of the box that fall on land are rejected by the native
-            // terrain (bobber rests above water+5), so a box over the pond is fine.
+            // Cast rect (X1,Z1,X2,Z2 = W,N,E,S edges): W=-300, N=-260, E=240, S=300. Kept tight-ish to the
+            // pond so PickUpPoly stays under the 1024 native-poly cap; corners over land are rejected by the
+            // native terrain (bobber rests above water+5). Mirrored in tools/brownboo_viewer.py (RECT_*).
             new Spot(14, "Brownboo lake", 0,
-                     -258f, -296f, 295f, 245f, water: 0f, ground: -15f,
+                     -300f, -260f, 240f, 300f, water: 0f, ground: -15f,
                      tx: 74f, ty: 10f, tz: -20f, radius: InteractRadius,
                      sx: 74f, sy: 10f, sz: -20f, facing: -1.639f,
                      diagNoVillagerClear: true,   // the crash fix: don't clear villagers in Brownboo
@@ -1292,7 +1291,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Turn OFF to leave the native cpoly untouched (no fish walls). See InjectCollision.</summary>
-        internal static bool InjectFakeCollision = true;
+        internal static bool InjectFakeCollision = false;   // OFF: leave native cpoly untouched to read the vanilla count
 
         private static bool _fishingWasLive;
 
