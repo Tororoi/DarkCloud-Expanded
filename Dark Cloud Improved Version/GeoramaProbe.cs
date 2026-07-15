@@ -230,6 +230,18 @@ namespace Dark_Cloud_Improved_Version
                 $"cpoly=0x{Memory.ReadUInt(FishingSpot.CPoly):X8}  " +
                 $"fishingActive={Memory.ReadInt(FishingAddresses.Active)}");
 
+            // The fishing-TIME pool budget — the number that actually matters for the model load, which the
+            // town-entry dump cannot see. This runs after _CLEAR_VILLAGER_BUFF and _LOAD_FISHING_DATA, so
+            // `used` here is fishing.pak + fish, and `capacity` is what BaseBuffer had free once the event was
+            // running. If this capacity is far below the town-entry 15145 KB, the fishing event is eating
+            // BaseBuffer and that — not the town's static data — is why the 1.77 MB model overflows.
+            long poolUsed = (long)Memory.ReadInt(FishingPool.Used) * FishingPool.BlockSize;
+            long poolCap  = (long)Memory.ReadInt(FishingPool.Capacity) * FishingPool.BlockSize;
+            Log($"    POOL @fishing-time: capacity={poolCap / 1024f:0.#} KB  used={poolUsed / 1024f:0.#} KB  " +
+                $"free={(poolCap - poolUsed) / 1024f:0.#} KB  (model needs {FishingPool.TuriModelBytes / 1024f:0.#} KB)");
+
+            DumpCPoly();
+
             // WHAT fired it? If an event point did, EdGetEvent will have left the match here. If both read
             // as nothing, the trigger is not an event point and we look elsewhere — but either way this is a
             // fact rather than another inference.
@@ -253,6 +265,17 @@ namespace Dark_Cloud_Improved_Version
 
         private static void SamplePosition()
         {
+            // In the overhead (bird's-eye) camera the PLAYER stands still while the CAMERA pans over the map.
+            // A CCamera's look-at point is at +0x270, and that is the ground point you are flying over — the
+            // thing we want for mapping. But it is not obvious WHICH camera object is active in this mode, so
+            // log the look-at of both candidates until we see which one tracks your input; then I lock onto
+            // it. In walking/fishing mode, just read the player.
+            if (Memory.ReadInt(EditLoop.GameMode) == EditLoop.GameModeOverhead)
+            {
+                SampleOverhead();
+                return;
+            }
+
             if (!ReadPos(out float x, out float y, out float z)) return;
             Accumulate(x, y, z);
 
@@ -263,7 +286,101 @@ namespace Dark_Cloud_Improved_Version
             // Yaw too: Norune's fishing script SNAPS the player to a fixed spot and faces them at the water
             // (_SET_NPC_POS / _SET_NPC_ROT) before entering fishing mode. To do the same in a new town we need
             // the stance — stand at the water's edge looking at it, and these are the numbers to bake in.
-            Log($"pos  x={x:0.##}  y={y:0.##} (height)  z={z:0.##}   yaw={ReadYaw():0.###} rad");
+            Log($"pos   x={x:0.##}  y={y:0.##} (height)  z={z:0.##}   yaw={ReadYaw():0.###} rad");
+        }
+
+        /// <summary>
+        /// Dump the fishing collision geometry, to settle whether a spot has a real basin for the fish/hook.
+        ///
+        /// A CCPoly is 0x50 bytes: three triangle verts at +0x00/+0x10/+0x20 (x,y,z floats) and a normal at
+        /// +0x30. The hook sinks until it hits one of these (HookGroundLevel), so a proper pond has a FLOOR
+        /// (near-horizontal polys clustered at the bed) plus WALLS (near-vertical polys at the edges). A town
+        /// never meant for fishing may have neither, letting the hook and fish fall straight through.
+        ///
+        /// Compare this line between a real spot (Muska Lacka oasis, Matataki pond) and ours.
+        /// </summary>
+        private static void DumpCPoly()
+        {
+            int count = Memory.ReadInt(FishingSpot.CPolyNum);
+            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            if (count <= 0 || count > 1024 || !Memory.IsValidGuest(p))
+            {
+                Log($"    CPOLY: count={count} (none to analyse)");
+                return;
+            }
+
+            long baseAddr = Memory.ToMmu(p);
+            float minY = float.MaxValue, maxY = float.MinValue;
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            int floorish = 0, wallish = 0;
+
+            // The question for the native-collision shortcut: are there WALLS near the fishing spot, and at
+            // what Y do they reach DOWN to? If crater walls near the spot descend to ~the water, we can raise
+            // the fish into that band and let the town's own collision contain them.
+            float spotX = SpotProbeX, spotZ = SpotProbeZ;
+            float nearWallMinY = float.MaxValue, nearWallMaxY = float.MinValue;
+            int nearWalls = 0;
+
+            for (int i = 0; i < count; i++)
+            {
+                long poly = baseAddr + (long)i * 0x50;
+                float pminY = float.MaxValue, pmaxY = float.MinValue, pcx = 0, pcz = 0;
+                for (int v = 0; v < 3; v++)
+                {
+                    float vx = Memory.ReadFloat(poly + v * 0x10);
+                    float vy = Memory.ReadFloat(poly + v * 0x10 + 4);
+                    float vz = Memory.ReadFloat(poly + v * 0x10 + 8);
+                    if (vy < minY) minY = vy; if (vy > maxY) maxY = vy;
+                    if (vx < minX) minX = vx; if (vx > maxX) maxX = vx;
+                    if (vz < minZ) minZ = vz; if (vz > maxZ) maxZ = vz;
+                    if (vy < pminY) pminY = vy; if (vy > pmaxY) pmaxY = vy;
+                    pcx += vx; pcz += vz;
+                }
+                float ny = Memory.ReadFloat(poly + 0x30 + 4);   // normal Y
+                bool wall = Math.Abs(ny) < 0.3f;
+                if (Math.Abs(ny) > 0.7f) floorish++;
+                else if (wall) wallish++;
+
+                // is this a wall within ~180 units (XZ) of the fishing spot?
+                float dx = pcx / 3f - spotX, dz = pcz / 3f - spotZ;
+                if (wall && dx * dx + dz * dz < 180f * 180f)
+                {
+                    nearWalls++;
+                    if (pminY < nearWallMinY) nearWallMinY = pminY;
+                    if (pmaxY > nearWallMaxY) nearWallMaxY = pmaxY;
+                }
+            }
+
+            Log($"    CPOLY: count={count}  Y {minY:0.#}..{maxY:0.#}  X {minX:0.#}..{maxX:0.#}  Z {minZ:0.#}..{maxZ:0.#}");
+            Log($"    CPOLY: {floorish} floor-ish, {wallish} wall-ish");
+            if (nearWalls > 0)
+                Log($"    CPOLY: {nearWalls} WALLS within 180u of spot ({spotX:0},{spotZ:0}) — they span Y " +
+                    $"{nearWallMinY:0.#}..{nearWallMaxY:0.#}  (if these reach near the water, native walls can contain fish)");
+            else
+                Log($"    CPOLY: NO walls within 180u of spot ({spotX:0},{spotZ:0}) — native collision won't contain fish here");
+        }
+
+        /// <summary>The fishing spot's approximate centre, for the near-spot collision probe (Brownboo).</summary>
+        internal static float SpotProbeX = 74f, SpotProbeZ = -20f;
+
+        private const int CameraRef = 0x270;   // CCamera look-at point (GetRef__7CCamera reads +0x270)
+
+        private static void SampleOverhead() =>
+            LogCameraRef("CURSOR", EditLoop.EditCamera, ref _lEditX, ref _lEditZ);
+
+        private static float _lEditX = float.NaN, _lEditZ;
+
+        /// <summary>Log a camera's look-at point when it moves; returns whether it did.</summary>
+        private static bool LogCameraRef(string tag, long camera, ref float lx, ref float lz)
+        {
+            float x = Memory.ReadFloat(camera + CameraRef);
+            float y = Memory.ReadFloat(camera + CameraRef + 4);
+            float z = Memory.ReadFloat(camera + CameraRef + 8);
+            if (!float.IsNaN(lx) && Math.Abs(x - lx) <= MoveEpsilon && Math.Abs(z - lz) <= MoveEpsilon)
+                return false;
+            lx = x; lz = z;
+            Log($"{tag}  x={x:0.##}  y={y:0.##} (height)  z={z:0.##}");
+            return true;
         }
 
         /// <summary>MapNo is the same id TownCharacter calls `currentArea` (it reads 0x202A2518).</summary>
@@ -299,6 +416,7 @@ namespace Dark_Cloud_Improved_Version
             DumpWaterSurfaces(info);
             DumpPlacedParts();
             DumpFishingState();
+            DumpFishingPool();
             Log("===== END =====");
 
             // The event points and the script are loaded LATER than the texture banks — the first run dumped
@@ -486,6 +604,27 @@ namespace Dark_Cloud_Improved_Version
                 if ((i + 1) % 6 == 0) sb.AppendLine().Append("        ");
             }
             Log("        " + sb.ToString().TrimEnd());
+        }
+
+        /// <summary>
+        /// The villager/fishing memory pool. This is where a fishing session must fit the 1.73 MB turi model
+        /// plus fishing.pak — and it is sized to whatever the parent buffer has free, so a heavier town gets a
+        /// smaller pool. Comparing this between a town that fishes (Yellow Drops) and one that crashes
+        /// (Brownboo) is the whole diagnosis: if Brownboo's capacity is below the model size, that is why.
+        /// </summary>
+        private static void DumpFishingPool()
+        {
+            long usedB = (long)Memory.ReadInt(FishingPool.Used) * FishingPool.BlockSize;
+            long capB  = (long)Memory.ReadInt(FishingPool.Capacity) * FishingPool.BlockSize;
+            long freeB = capB - usedB;
+            long need  = FishingPool.TuriModelBytes;
+
+            Log("-- fishing pool (0x1D1B360) --");
+            Log($"   capacity={capB / 1024f:0.#} KB  used={usedB / 1024f:0.#} KB  free={freeB / 1024f:0.#} KB");
+            Log($"   turi model needs {need / 1024f:0.#} KB -> {(capB >= need ? "FITS capacity" : "TOO BIG for capacity")}" +
+                $", {(freeB >= need ? "fits free space now" : "does NOT fit free space now")}");
+            Log("   (this is BEFORE fishing clears villagers; the session frees them first, so the real budget " +
+                "is nearer capacity than free)");
         }
 
         /// <summary>The live fishing globals, if a spot has been loaded this session.</summary>

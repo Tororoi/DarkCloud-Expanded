@@ -1270,6 +1270,45 @@ not check that you own the bait. The real menu route is `_GOTO_CHANGE_ESA` (comm
 generic use-item menu — but its handler bails unless the first stack entry is type 3 (**a string**), so
 it needs a string offset out of the town's own `.stb`.
 
+### The fishing rectangle can crash the game — size it to the terrain
+
+`_LOAD_FISHING_DATA` gathers the ground collision polys inside the rect into a fixed **1024-poly** stack
+buffer (81920 bytes ÷ 0x50). `PickUpPoly` writes them with **no bounds check**, and the count is only
+tested (`if (0x400 < n)`) *after* the gather — so a rect that collects more than 1024 polys has already
+overrun the stack and corrupted the return address. It **crashes on entry** (black screen, then the
+emulator dies), it does not hang.
+
+Density is entirely terrain-dependent. Yellow Drops' open liquid gives **27** polys in 200×200; Brownboo's
+pond is walled by dense town geometry and a 180×180 rect there blew past 1024 and crashed. There is no way
+to measure the count without a successful load, so for a new spot **start with a small rect (~70×70)**,
+read the `cpoly=N/1024` figure the probe logs on `FISHING SPOT LOADED`, and grow from there. Keep well
+under 1024 — that number is a hard cliff, not a soft limit.
+
+### The fishing model shares one pool with fishing.pak — reset it FIRST
+
+`_LOAD_MAIN_CHARA(path, cfg, 1)` (flag = 1) loads the model into allocator **`0x1d1b360`** — the *same*
+pool `_LOAD_FISHING_DATA` allocates `fishing.pak`, the fish and the bait from. So a session's turi model
+(1.8 MB) plus everything else must all fit that one pool.
+
+Norune loads the model and clears the event buffer *after* it. That only works because Norune's pool
+pointer already sits near the base. **Brownboo has more resident event data, so the pointer is high, and
+model-start + 1.8 MB runs off the end of the pool → crash** — and it is completely rect-independent, which
+is why shrinking the rect never helped (proven: skipping the model reached fishing fine at `cpoly=4`).
+
+Fix: issue `_CLEAR_EVENT_BUFF` (39) *before* the model load, not after. That resets the pool pointer to
+its base so the model loads from the bottom and everything packs tight. Order:
+
+```
+_CLEAR_VILLAGER_BUFF        # free the NPCs
+_CLEAR_EVENT_BUFF          # reset the pool to base  <-- before, not after
+_LOAD_MAIN_CHARA(turi, 1)  # loads from the bottom of the freed pool
+_LOAD_FISHING_DATA         # fishing.pak stacks above it
+```
+
+Diagnosing this is worth a note: a per-spot "skip the model swap" flag isolated it in one test — with the
+swap gone the session reached `GameMode 0x10` and `FISHING SPOT LOADED`, so the crash had to be the model
+load and nothing else.
+
 ### Field notes on the event point (each one silently ate an attempt)
 
 | field | rule |

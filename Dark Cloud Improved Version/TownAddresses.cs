@@ -485,6 +485,43 @@ namespace Dark_Cloud_Improved_Version
     /// <c>entry[2]</c> is the only honest completion flag, and it is what the mod polls to release a script
     /// waiting on a load — instead of guessing at a frame count, which is a race that crashes when lost.
     /// </summary>
+    /// <summary>
+    /// The villager/fishing memory pool — a <c>CDataAlloc2</c> bump allocator (base, used, capacity), all
+    /// counts in 0x10-byte blocks. <c>Alloc</c> hangs (<c>while(true)</c>) if <c>used + size &gt; capacity</c>.
+    ///
+    /// This is the pool <c>_LOAD_MAIN_CHARA(turi, flag=1)</c> AND <c>_LOAD_FISHING_DATA</c> allocate from, so
+    /// the 1.73 MB fishing model has to fit here. <c>_CLEAR_VILLAGER_BUFF</c> recomputes
+    /// <c>capacity = BaseBuffer.capacity - BaseBuffer.used</c> — i.e. whatever the parent buffer has free —
+    /// so a town with more resident data gets a SMALLER fishing pool. Reading this tells us whether the model
+    /// fits, instead of finding out by crashing.
+    /// </summary>
+    /// <summary>
+    /// FishingInitFish places fish at <c>WaterLevel - 12</c>, where the 12.0 is built INLINE as
+    /// <c>lui r2, 0x4140</c> (0x41400000 = 12.0) at 0x001A94D4 — not a data constant. Patching that one
+    /// instruction's immediate changes the fish depth: e.g. 0x40C0 = 6.0, 0x4040 = 3.0. In-place, one
+    /// instruction, restored on town change — same class as the other cold-window code patches we ship.
+    /// </summary>
+    internal static class FishDepthPatch
+    {
+        internal const long Instr = 0x201A94D4;
+        internal const uint Original = 0x3C024140;   // lui r2, 0x4140  (= 12.0)
+        internal static uint For(float depth)        // lui r2, hi16(depth as float)
+        {
+            uint bits = System.BitConverter.ToUInt32(System.BitConverter.GetBytes(depth), 0);
+            return 0x3C020000u | (bits >> 16);
+        }
+    }
+
+    internal static class FishingPool
+    {
+        internal const long Base     = 0x21D1B360;   // guest pointer to the pool memory
+        internal const long Used     = 0x21D1B368;   // blocks in use (x0x10 = bytes)
+        internal const long Capacity = 0x21D1B36C;   // block capacity (x0x10 = bytes)
+        internal const int  BlockSize = 0x10;
+
+        internal const int TuriModelBytes = 1814240; // chara/c01d_turi.chr — must fit
+    }
+
     internal static class BgRead
     {
         internal const long Table  = 0x21CBB0C0;   // bg_read_info

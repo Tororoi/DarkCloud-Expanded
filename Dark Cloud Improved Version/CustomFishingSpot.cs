@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -58,16 +59,60 @@ namespace Dark_Cloud_Improved_Version
 
             internal bool HasStance => !float.IsNaN(Facing);
 
+            /// <summary>
+            /// The FISH rectangle — where fish spawn and wander. SEPARATE from the cast rect (X1..Z2):
+            /// <c>_LOAD_FISHING_DATA</c> sets the cast bounds, <c>_INIT_FISH</c> sets the fish bounds, and
+            /// they are different globals. So the cast rect can cover the whole lake while fish stay in a
+            /// smaller box inside the actual water (away from the shallow shore where they would clip through
+            /// the banks). Leave NaN to reuse the cast rect.
+            /// </summary>
+            internal readonly float FishX1, FishZ1, FishX2, FishZ2;
+            internal bool HasFishRect => !float.IsNaN(FishX1);
+
+            /// <summary>Fish depth below the water surface. Vanilla is 12 (FishingInitFish places fish at
+            /// WaterLevel-12); shallow ponds want less. Patched per-town into the inline constant. NaN = 12.</summary>
+            internal readonly float FishDepth;
+            internal bool HasFishDepth => !float.IsNaN(FishDepth);
+
+            /// <summary>
+            /// FABRICATED COLLISION. The town's native cpoly is all ABOVE the fish (it's the land), so fish
+            /// and hook fall through it. When set, the mod REPLACES cpoly with vertical walls built from these
+            /// outlines — the water Perimeter (a closed loop, fish kept in) and any Obstacles (rocks/pillars,
+            /// fish kept out). Each is a flat float array of x,z pairs. Walls span the fish's depth band, so
+            /// a fish swimming at WaterLevel-FishDepth physically cannot cross them.
+            /// </summary>
+            internal readonly float[] Perimeter;
+            internal readonly float[][] Obstacles;
+            internal bool HasCollision => Perimeter != null;
+
+            /// <summary>DIAGNOSTIC: skip the turi model swap. Proven the model load (not the rect, not pool
+            /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
+            internal readonly bool DiagSkipModel;
+
+            /// <summary>DIAGNOSTIC: do NOT clear/reload the town's villagers. <c>_CLEAR_VILLAGER_BUFF</c> only
+            /// rewinds the villager allocator, it does not delete the objects — so the model then loads over
+            /// memory the town still references. Harmless in Yellow Drops; a candidate cause in Brownboo.
+            /// With this set, the entry skips the clear and the exit skips the reload (nothing to restore).</summary>
+            internal readonly bool DiagNoVillagerClear;
+
             internal Spot(int mapNo, string name, int areaId,
                           float x1, float z1, float x2, float z2, float water, float ground,
                           float tx, float ty, float tz, float radius,
                           float sx = float.NaN, float sy = float.NaN, float sz = float.NaN,
-                          float facing = float.NaN)
+                          float facing = float.NaN, bool diagSkipModel = false,
+                          bool diagNoVillagerClear = false,
+                          float fx1 = float.NaN, float fz1 = float.NaN, float fx2 = float.NaN,
+                          float fz2 = float.NaN, float fishDepth = float.NaN,
+                          float[] perimeter = null, float[][] obstacles = null)
             {
                 MapNo = mapNo; Name = name; AreaId = areaId;
                 X1 = x1; Z1 = z1; X2 = x2; Z2 = z2; Water = water; Ground = ground;
                 TrigX = tx; TrigY = ty; TrigZ = tz; Radius = radius;
                 StandX = sx; StandY = sy; StandZ = sz; Facing = facing;
+                DiagSkipModel = diagSkipModel;
+                DiagNoVillagerClear = diagNoVillagerClear;
+                FishX1 = fx1; FishZ1 = fz1; FishX2 = fx2; FishZ2 = fz2; FishDepth = fishDepth;
+                Perimeter = perimeter; Obstacles = obstacles;
             }
         }
 
@@ -88,10 +133,57 @@ namespace Dark_Cloud_Improved_Version
                      -100f, -40f, 100f, 40f, water: 31f, ground: 10f,
                      tx: 0f, ty: 31f, tz: 0f, radius: 200f),
 
-            // Brownboo: static WATER s04w01/s04w02, surface at Y=0.
-            new Spot(14, "Brownboo water", 0,
-                     -80f, -80f, 80f, 80f, water: 0f, ground: -20f,
-                     tx: 0f, ty: 0f, tz: 0f, radius: 150f),
+            // Brownboo: the pond (static WATER s04w01). WATER_SURFACE centred on the origin, ±120, HEIGHT 0.
+            // Stance at the +X edge facing the water: (74, 10, -20), yaw -1.639 — forward (-1.00, -0.07).
+            //
+            // Brownboo's central pond is unfishable: it has a BOARDWALK over it, and _LOAD_FISHING_DATA's
+            // poly gather (PickUpPoly, fixed 1024-poly buffer, NO bounds check, box spans the full ±1000 Y)
+            // scoops up the entire boardwalk mesh for any rect touching its footprint — >1024 polys smashes
+            // the stack and crashes on entry (the player position reads (0,0,0) right after, i.e. corrupted).
+            // 180x180, 70x70 near the bank, AND 40x40 over the pond centre all crashed.
+            //
+            // Brownboo pond, at the FIRST spot tried — stance (74, 10, -20), yaw -1.639 -> forward
+            // (-1.00, -0.07), toward the pond centre. This crashed repeatedly before, but that was
+            // _CLEAR_VILLAGER_BUFF (it rewinds the villager allocator without deleting the objects, and the
+            // model loads over memory Brownboo still references), NOT the location or the boardwalk.
+            // diagNoVillagerClear skips the clear, so the spot should now work.
+            //
+            // WATER LEVEL = 0: confirmed by eye (bobber sits right on the surface at 0), and the near-water
+            // heights are ~1 and below — the ~7 readings were the raised banks, not the waterline. So the
+            // rejected casts are NOT the height check; they are casts landing outside the RECT.
+            //
+            // Brownboo is almost all water, so the rect covers the whole MAP (extent from the overhead
+            // edges: x ~-347..320, z ~-289..307), not just the +/-120 central pond. WATCH cpoly on the
+            // FISHING SPOT LOADED line: this is a large rect and the poly gather has a hard 1024 cap
+            // (overflow crashes). Brownboo's water is sparse so it should stay well under, but confirm.
+            // Cast rect = the traced shoreline's bounding box (X -258..295, Z -296..245). Tight to the pond:
+            // the whole-map rect made PickUpPoly gather 944 native polys, leaving no room under the 1024 cap
+            // for our exact rock triangles. Corners of the box that fall on land are rejected by the native
+            // terrain (bobber rests above water+5), so a box over the pond is fine.
+            new Spot(14, "Brownboo lake", 0,
+                     -258f, -296f, 295f, 245f, water: 0f, ground: -15f,
+                     tx: 74f, ty: 10f, tz: -20f, radius: InteractRadius,
+                     sx: 74f, sy: 10f, sz: -20f, facing: -1.639f,
+                     diagNoVillagerClear: true,   // the crash fix: don't clear villagers in Brownboo
+                     fishDepth: 6f,
+                     // Fabricated collision: the lake shore (fish kept in) + the two large rocks (fish kept
+                     // out), traced with the overhead cursor and decimated. Walls span the fish's depth band.
+                     perimeter: new[]
+                     {
+                         -243f,-72f, -147f,-250f, -115f,-271f, -91f,-281f, -37f,-294f, 55f,-296f, 71f,-292f,
+                         164f,-239f, 218f,-176f, 266f,-68f, 287f,10f, 295f,24f, 291f,95f, 285f,108f, 285f,131f,
+                         249f,169f, 205f,204f, 179f,214f, 98f,232f, 76f,232f, 10f,245f, -67f,230f, -192f,160f,
+                         -248f,59f, -258f,25f, -251f,-31f, -235f,-69f,
+                     },
+                     // Obstacle footprints extracted from Brownboo's own mesh (gedit/s04/scene.scn), decoded
+                     // offline: each is the underwater XZ hull of an "iwa" (rock) node, in world coords (pond
+                     // centre = 0,0), expanded 3u outward for fish clearance. Precise, not hand-traced.
+                     obstacles: new[]
+                     {
+                         new[] { -207f,-34f, -203f,-58f, -166f,-86f, -135f,-88f, -123f,-84f, -88f,-50f, -91f,-9f, -100f,6f, -151f,29f, -186f,10f },   // iwa01 (west)
+                         new[] { -49f,150f, -48f,145f, -38f,136f, -28f,134f, 50f,136f, 62f,147f, 64f,153f, 62f,168f, 49f,175f, -38f,168f },           // iwa02 (north)
+                         new[] { 182f,-48f, 186f,-66f, 203f,-81f, 212f,-84f, 231f,-76f, 245f,-51f, 247f,-33f, 229f,-18f, 219f,-15f, 197f,-25f },       // iwa03 (east)
+                     }),
 
             // Yellow Drops: the yellow liquid.
             //
@@ -114,19 +206,20 @@ namespace Dark_Cloud_Improved_Version
             // if the bobber floats above or sinks below the visible liquid, this is the number to move.
             new Spot(23, "Yellow Drops liquid", 0,
                      -609f, -444f, -409f, -244f, water: 1f, ground: -15f,
-                     tx: -575f, ty: 9f, tz: -286f, radius: 80f,
+                     tx: -575f, ty: 9f, tz: -286f, radius: InteractRadius,
                      sx: -582.9f, sy: 9.6f, sz: -276.8f, facing: 2.31f),
         };
 
         /// <summary>
-        /// Labels that must NOT be hijacked. The first attempt took "the last entry in the table", which in
-        /// Yellow Drops happened to be **128** — a low, system-level id. Overwriting it broke the town: the
-        /// player fell repeatedly and the doors' event markers disappeared. Queens (label 12) and Brownboo
-        /// (label 11) were unharmed, so the heuristic was not obviously wrong until it was.
+        /// How close you must stand for the "!" to show and X to work.
         ///
-        /// Low ids are engine/system handlers. Prefer the HIGHEST id: the 300+ block appears in every town
-        /// and looks like per-event scripts. Still a judgement call, but a far better one.
+        /// Read off the game rather than guessed. Across every town dumped, the two kinds of point you walk up
+        /// to and press X on are DOORS (type 1, radius 10) and ITEM pickups (type 2, radius 15) — 302 and 406
+        /// of them respectively, with no variation. 80 was fine while the point fired on contact; as a prompt
+        /// it lights up from halfway across the town.
         /// </summary>
+        private const float InteractRadius = 10f;
+
         /// <summary>
         /// Labels that must NOT be hijacked.
         ///
@@ -148,7 +241,6 @@ namespace Dark_Cloud_Improved_Version
         private static long _slotAddr;
         private static int _labelId;
         private static Spot _spot;
-        private static bool _armed;
         private static int _lastParam = int.MinValue;
         private static int _lastMode = int.MinValue;
         private static int _lastGameMode = int.MinValue;
@@ -162,6 +254,26 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Armed when a fishing session starts, so <see cref="SnapCameraBehindPlayer"/> fires once
         /// on entry — and NOT every time the bait menu bounces us through event mode and back.</summary>
         private static bool _snapCamera;
+
+        private static bool _fishDepthPatched;
+
+        /// <summary>Patch the inline fish-depth constant for this spot (WaterLevel - depth), if it sets one.
+        /// In-place, one instruction, at install time; undone on town change by <see cref="RestoreFishDepth"/>.</summary>
+        private static void PatchFishDepth(Spot spot)
+        {
+            if (!spot.HasFishDepth) return;
+            if (Memory.ReadUInt(FishDepthPatch.Instr) != FishDepthPatch.Original) return;  // already patched / moved
+            Memory.WriteInt(FishDepthPatch.Instr, unchecked((int)FishDepthPatch.For(spot.FishDepth)));
+            _fishDepthPatched = true;
+            Log($"   fish depth patched to WaterLevel-{spot.FishDepth} (was -12)");
+        }
+
+        private static void RestoreFishDepth()
+        {
+            if (!_fishDepthPatched) return;
+            Memory.WriteInt(FishDepthPatch.Instr, unchecked((int)FishDepthPatch.Original));
+            _fishDepthPatched = false;
+        }
 
         private static string GameModeName(int gm) => gm switch
         {
@@ -186,10 +298,11 @@ namespace Dark_Cloud_Improved_Version
                 _lastSeenMap = map;
                 _installedMap = -1;
                 _slot = -1;
-                _armed = false;
+                _fishingWasLive = false;
                 _settleTicks = 0;
                 _lastParam = int.MinValue;
                 _lastMode = int.MinValue;
+                RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
             }
 
             if (map == _installedMap) { WatchMatches(); return; }
@@ -237,15 +350,22 @@ namespace Dark_Cloud_Improved_Version
             // Our entry script is ~1.5 KB and no single spare label is that big (the 300-block runs 650-800 B
             // each). But their code regions TILE the buffer, so a run of adjacent ones can be treated as one
             // arena and written straight through.
-            Lab lab = Allocate(Need(BuildFishingBytecode(spot)), out int end);
+            Lab lab = Allocate(stb, Need(BuildFishingBytecode(spot)), out int end);
             if (lab == null)
             {
                 Log("   the spare labels cannot hold the fishing script — skipping");
                 return;
             }
 
-            int labelId = lab.Id, codeOff = lab.Off;
-            Log($"   script @0x{stb:X}  labels={labelCount}  label {labelId} " +
+            // Give the script an id of our own rather than inheriting the label's. Otherwise the town keeps a
+            // live entry pointing at our code, and any event of ITS OWN that happens to use that id would run
+            // the fishing script — drawing a "!" and offering to fish wherever it fired. Only OUR event point
+            // names this id, so nothing else can reach it.
+            int codeOff = lab.Off;
+            Memory.WriteInt(stb + lab.Entry, FishingLabelId);
+            int labelId = FishingLabelId;
+
+            Log($"   script @0x{stb:X}  labels={labelCount}  label {lab.Id} -> {labelId} " +
                 $"(code @+0x{codeOff:X}, arena {end - codeOff}B across {SpanCount(codeOff, end)} label(s))");
 
             WriteScript(stb, codeOff, end, BuildFishingBytecode(spot),
@@ -268,10 +388,14 @@ namespace Dark_Cloud_Improved_Version
             _slotAddr = EventPoints.Slot(EventPoints.Base(), slot);
             _labelId = labelId;
             _spot = spot;
-            _armed = true;
+
+            PatchFishDepth(spot);
 
             Log($"   event point [{slot}] type=3 label={labelId} " +
                 $"pos=({spot.TrigX},{spot.TrigY},{spot.TrigZ}) radius={spot.Radius} partIndex=-1 (world)");
+            if (spot.HasFishRect)
+                Log($"   fish rect ({spot.FishX1},{spot.FishZ1})-({spot.FishX2},{spot.FishZ2}) " +
+                    $"(cast rect is separate)");
 
             // Read it back. Three attempts have now "succeeded" and done nothing, so verify what the engine
             // will actually see rather than trusting that the writes landed as intended.
@@ -342,24 +466,62 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Bytes a script needs: header skip + code + string blob + alignment slack.</summary>
         private static int Need(StbWriter w) => TownScript.LabelCodeSkip + w.ToArray().Length + w.StringBytes + 8;
 
+        /// <summary>An id nothing will ever ask for, given to labels whose code we have overwritten.</summary>
+        private const int RetiredLabelId = 9000;
+
+        /// <summary>
+        /// The id our fishing script answers to. Deliberately outside the range any town uses (the highest
+        /// real label seen anywhere is 310), so the ONLY thing that can dispatch it is our own event point.
+        /// </summary>
+        private const int FishingLabelId = 400;
+
         /// <summary>
         /// Claim a run of adjacent unused labels totalling at least <paramref name="need"/> bytes, and return
-        /// the FIRST one — its id is what the script will answer to. Every label the run swallows is marked
-        /// used, so a later allocation cannot hand out the same bytes.
+        /// the FIRST one — its id is what the script will answer to.
+        ///
+        /// FEWEST LABELS FIRST. Every extra label a run swallows is a town event we destroy, so try to fit in
+        /// one label before considering two, and so on. Taking the first run that merely fits would grab a
+        /// 644+644 pair when a single 804 was sitting right there — and would then retire a label for nothing.
+        ///
+        /// Every label a run does swallow is marked used (so a later allocation cannot hand out the same
+        /// bytes) and RETIRED (so the engine cannot dispatch into the middle of the script we write over it).
         /// </summary>
-        private static Lab Allocate(int need, out int end)
+        private static Lab Allocate(long stb, int need, out int end)
         {
-            for (int i = 0; i < _arena.Count; i++)
+            for (int len = 1; len <= _arena.Count; len++)
+            for (int i = 0; i + len <= _arena.Count; i++)
             {
-                if (_arena[i].Used) continue;
                 int total = 0;
-                for (int j = i; j < _arena.Count; j++)
+                bool usable = true;
+                for (int j = i; j < i + len; j++)
                 {
-                    if (_arena[j].Used) break;
-                    if (j > i && _arena[j].Off != _arena[j - 1].Off + _arena[j - 1].Size) break;  // not adjacent
+                    if (_arena[j].Used ||
+                        (j > i && _arena[j].Off != _arena[j - 1].Off + _arena[j - 1].Size))   // not adjacent
+                    { usable = false; break; }
                     total += _arena[j].Size;
-                    if (total < need) continue;
+                }
+                if (!usable || total < need) continue;
+
+                {
+                    int j = i + len - 1;
                     for (int k = i; k <= j; k++) _arena[k].Used = true;
+
+                    // RETIRE THE SWALLOWED LABELS. A run's later labels keep their table entries, but we are
+                    // about to write straight THROUGH their code — so their codeOffset would then point into
+                    // the middle of our bytecode. If the town ever asks for one (an event that fires when you
+                    // reach some part of the map, say), the VM reads our data as a funcdata, takes a garbage
+                    // code offset from it, and jumps into nowhere. That is the crash-on-walking-away.
+                    //
+                    // Give them an id nothing will ever request. The engine then simply fails to find the
+                    // label and treats it as a no-op event, which loses whatever that event did — but a lost
+                    // town event beats a hard crash, and there is nowhere else to put a 1.5 KB script.
+                    for (int k = i + 1; k <= j; k++)
+                    {
+                        Memory.WriteInt(stb + _arena[k].Entry, RetiredLabelId + k);
+                        Log($"   label {_arena[k].Id} RETIRED (its code is inside our script now) — " +
+                            $"the town can no longer dispatch into it");
+                    }
+
                     end = _arena[i].Off + total;
                     return _arena[i];
                 }
@@ -415,7 +577,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void InstallEngineLabel(long stb, int targetId, StbWriter w, string what)
         {
-            Lab lab = Allocate(Need(w), out int end);
+            Lab lab = Allocate(stb, Need(w), out int end);
             if (lab == null)
             {
                 Log($"   NO room for label {targetId} — that fishing button will do nothing");
@@ -490,9 +652,6 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(_exitRotAddr + 12, GeoramaProbe.ReadYaw());   // the middle float is the yaw
         }
 
-        /// <summary>The bait equipped on arrival, before the player opens the menu. Mimi (197) is in Norune's
-        /// own bait list (166-170, 193, 197, 199) and is far easier to test with than a Throbbing Cherry.</summary>
-        private const int BaitItemId = 197;
 
         /// <summary>
         /// The script local that <c>_LOAD_SYNC</c> reports into, so the load loop waits exactly as long as the
@@ -565,6 +724,21 @@ namespace Dark_Cloud_Improved_Version
         /// first iteration: fade_end is 0 the moment EdFadeOut starts, so "loop while non-zero" waited zero
         /// frames and the model swap happened in plain view, before the screen had faded.
         /// </param>
+        /// <summary>
+        /// Reset the world coordinate to identity, so <c>_SET_NPC_POS</c> / <c>_SET_NPC_ROT</c> take plain
+        /// WORLD coordinates. (Norune passes the pond part's transform instead, because its numbers are
+        /// part-local; ours come out of the probe in world space.)
+        ///
+        /// Call it with NO ARGUMENTS. <c>_SET_WORLD_COORD</c>'s handler branches on the argument count, and
+        /// the zero-arg path is exactly this reset — <c>sceVu0UnitMatrix</c> on both matrices. Pushing six
+        /// zero floats does the same thing the long way round, for 6 extra instructions.
+        /// </summary>
+        private static void EmitWorldCoordReset(StbWriter w)
+        {
+            w.PushInt(StbCommands.SetWorldCoord);     // 7, with no args = "identity"
+            w.Ext(1);
+        }
+
         private static void EmitWaitLoop(StbWriter w, int pollCommand, bool exitOnNonZero)
         {
             w.UseLocals(GateVar + 1);
@@ -583,17 +757,18 @@ namespace Dark_Cloud_Improved_Version
             w.PlaceMark(done);
         }
 
-        /// <param name="fromVar0">Take the item id from local var0 (what the bait menu chose) instead of the
-        /// hard-coded <see cref="BaitItemId"/>.</param>
-        private static void EmitBaitLoad(StbWriter w, bool fromVar0 = false)
+        /// <summary>
+        /// Load the model for the bait in var0 and hang it on the hook. ONLY valid from label 134.
+        ///
+        /// This must not be emitted into the entry script. It calls <c>_CLEAR_EVENT_BUFF</c>, which rewinds
+        /// the bump allocator that <c>_LOAD_FISHING_DATA</c> allocates from — running it after the fishing
+        /// load drops the bait on top of fishing.pak and corrupts the arena. See BuildFishingBytecode.
+        /// </summary>
+        private static void EmitBaitLoad(StbWriter w)
         {
             w.UseLocals(GateVar + 1);
 
-            void PushItem()
-            {
-                if (fromVar0) w.PushVar(0);
-                else w.PushInt(BaitItemId);
-            }
+            void PushItem() => w.PushVar(0);        // var0 = whatever the menu chose
 
             w.PushInt(StbCommands.LoadItemFile);    // 49 — issues a BACKGROUND disc read and returns at once
             PushItem();
@@ -656,7 +831,7 @@ namespace Dark_Cloud_Improved_Version
             // The load now waits on the disc rather than on a frame count, so it is as short as it can safely
             // be — vanilla returns you to fishing the instant you pick a bait, and this is the closest we get
             // without the crash risk of guessing.
-            EmitBaitLoad(w, fromVar0: true);
+            EmitBaitLoad(w);
 
             // GO BACK TO FISHING. Every fishing sub-script runs as a normal event, and when an event RETs,
             // EventMode switches on its return code — whose `default:` branch is `GameMode = 1`, i.e. WALKING.
@@ -686,24 +861,36 @@ namespace Dark_Cloud_Improved_Version
         {
             var w = new StbWriter();
 
-            // YIELD FIRST — this is the whole ballgame, and it is not optional.
+            // ── PROMPT, DON'T POUNCE ────────────────────────────────────────────────────────────────────
             //
-            // EdEventInit does not merely *start* a script, it RUNS it:
+            // A type-3 event point fires its label the moment you are in range — EdMoveChara has no button
+            // check for it (only item and ladder points test PadDown). So the "!" prompt and the X press have
+            // to come from the SCRIPT, which is exactly what Norune's enormous label 256 is doing.
             //
-            //     if (EdRunEvent(...) < 1) { simple_event = 1; return 0; }   // finished -> NOT an event
-            //     else                     { return 1; }                     // yielded  -> GameMode = 0xE
+            // The mechanism is the same rule that cost us three test cycles at the start, used deliberately
+            // this time: a script that RETURNS WITHOUT YIELDING is a "simple event". EdEventInit runs it,
+            // sees it finish, and never enters event mode — so the player keeps walking around. That means
+            // this script can run EVERY FRAME while you stand near the spot, cheaply, drawing the prompt and
+            // watching the pad, and only commit — i.e. yield — once you actually press X.
             //
-            // and EditLoop only sets GameMode = 0xE (event mode) when that returns non-zero. A script with no
-            // YIELD runs to completion inside the init call and is written off as a "simple event" — the game
-            // never enters event mode, so EventMode() never runs, so NOTHING EVER READS the return code that
-            // _GOTO_FISHING sets. That is exactly what we saw for three test cycles: the spot loaded, the code
-            // went to 0xB, GameMode never left 1, and no fishing.
-            //
-            // Yielding once keeps the script alive across the init call, so the engine promotes it to a real
-            // event. The commands below then run inside EventMode, and when we RET, EdEventMode sees the
-            // return code and does `case 0xb: GameMode = 0x10` — fishing. Norune's script gets this for free:
-            // it yields constantly, waiting on the bait dialog.
-            w.Yield();
+            // It also makes the whole thing repeatable for free: no disarm/re-arm bookkeeping, no leaked
+            // fish. Walk away, come back, press X again.
+            w.UseLocals(2);                           // var0 = pad bits, var1 = the wait-loop gate
+
+            w.PushInt(StbCommands.DrawExclamationMark);   // 10 — per-frame; re-asserted on every pass
+            w.Ext(1);
+
+            w.PushInt(StbCommands.GetPadDown);        // 1
+            w.PushVarRef(0);                          // out: var0 = buttons pressed this frame
+            w.Ext(2);
+
+            w.PushVar(0);
+            w.PushInt(StbCommands.PadCross);
+            w.And();
+            int idle = w.MarkForward();
+            w.BrFalse(idle);                          // no X -> fall out WITHOUT yielding: a simple event
+
+            // Everything past here yields, so pressing X promotes this into a real event — and only then.
 
             // FADE TO BLACK BEFORE TOUCHING THE MODEL, and hide the player while we do it. Norune:
             //
@@ -716,28 +903,56 @@ namespace Dark_Cloud_Improved_Version
             w.Ext(2);
             EmitWaitLoop(w, StbCommands.CheckFade, exitOnNonZero: true);   // done once fade_end is set
 
-            w.PushInt(StbCommands.ClearVillagerBuff); // 38
+            // CLEAR THE TOWN'S NPCs for the session. This is HALF of a pair, and it only works with the other
+            // half — _LOAD_VILLAGER on exit (see BuildExitBytecode).
+            //
+            // It rewinds the villager buffer, so the townspeople vanish while you fish (which is what vanilla
+            // does — the town is empty during a session) and their memory is free for the 1.8 MB fishing
+            // model. On its own it CRASHES: an earlier build called this and never reloaded, so after the
+            // session the engine kept iterating villager slots whose memory had become part of a fishing rod,
+            // and walking to where one stood killed the game. Reloading them on exit is what makes it safe.
+            //
+            // Clearing here rather than not-clearing also fixes the OTHER symptom: with villagers still loaded
+            // through a session, an open town (Brownboo) shows them — and one renders garbled, because the
+            // texture manager reuses a block the model/bait overwrote. Gone for the session, gone the glitch.
+            if (!s.DiagNoVillagerClear)
+            {
+                w.PushInt(StbCommands.ClearVillagerBuff); // 38 — paired with _LOAD_VILLAGER on exit
+                w.Ext(1);
+            }
+
+            // RESET THE FISHING POOL TO ITS BASE *BEFORE* THE MODEL LOAD. This is the Brownboo fix.
+            //
+            // _LOAD_MAIN_CHARA(turi, flag=1) loads the 1.8 MB model into allocator 0x1d1b360 — the same pool
+            // _LOAD_FISHING_DATA uses. Norune loads the model FIRST and clears the event buffer AFTER, which
+            // works only because its pool pointer already sits low. Brownboo has more resident event data, so
+            // the pointer is high, and model-start + 1.8 MB runs off the end of the pool -> overflow -> crash
+            // (confirmed: skipping the model reaches fishing fine, cpoly=4). Resetting the pool to base first
+            // makes the model load from the bottom, so everything packs tight from the base and fits.
+            w.PushInt(StbCommands.ClearEventBuff);    // 39 — moved up from after the model swap
             w.Ext(1);
 
-            w.PushInt(StbCommands.NpcDraw);           // 140 — _NPC_DRAW(0, -1): hide the player
-            w.PushInt(0);
-            w.PushInt(-1);
-            w.Ext(3);
+            // We do NOT mirror Norune's _NPC_DRAW(0,-1) here (nor _NPC_DRAW(1,-1) on exit), and that is not a
+            // shortcut — for the player it is a NO-OP. _NPC_DRAW's per-character draw flags are an array
+            // indexed 0..15 for VILLAGERS; the player is id -1, which GetChara resolves to the main-character
+            // pointer directly, bypassing that array. The only other thing it writes is DAT_01d3d230, which
+            // has ZERO readers in the whole binary (verified by xref). So Norune's hide/show around the model
+            // swap is vestigial — it changes nothing the renderer looks at.
 
             // SWAP TOAN FOR THE FISHING TOAN.
             //     _LOAD_MAIN_CHARA("chara/c01d_turi.chr", "c01d_turi.cfg", 1)
             // The ordinary c01d has no `sao` (rod) frame for _GOTO_FISHING to hang the line from, and none of
             // the fishing motions — so the cast animation index lands on whatever else is at that slot in
             // c01d's motion table, which is why it played the atla-opening motion.
-            w.PushInt(StbCommands.LoadMainChara);     // 999
-            w.PushString(FishingModel);
-            w.PushString(FishingModelCfg);
-            w.PushInt(1);
-            w.Ext(4);
-
-            w.PushInt(StbCommands.ClearEventBuff);    // 39 — Norune does this right after the swap
-            w.Ext(1);
-            w.Yield();
+            if (!s.DiagSkipModel)
+            {
+                w.PushInt(StbCommands.LoadMainChara);     // 999 — into the pool we just reset to base
+                w.PushString(FishingModel);
+                w.PushString(FishingModelCfg);
+                w.PushInt(1);                             // flag 1 = load into the fishing pool 0x1d1b360
+                w.Ext(4);
+                w.Yield();
+            }
 
             w.PushInt(StbCommands.LoadFishingData);   // 998 — NOT 999; the dispatch table is {handler, id}
             w.PushInt(s.AreaId);
@@ -749,15 +964,19 @@ namespace Dark_Cloud_Improved_Version
             w.PushFloat(s.Ground);
             w.Ext(8);                                 // 1 command id + 7 arguments
 
-            // _INIT_FISH is NOT optional. FishingInitFish (0x1A9460) is what actually PLACES the fish:
-            // it puts each one at the centre of the rect at `WaterLevel - 12` and hands it the collision
-            // polys (SetCPoly). Without it the six CFish exist but sit unpositioned with no collision.
-            // Norune calls it (996 @ +0xEACC) between the load and _GOTO_FISHING, and so must we.
+            // _INIT_FISH places the fish, at the centre of the rect it is GIVEN, at WaterLevel-12 (see the
+            // fish-depth patch, which changes the 12). This rect is the FISH bounds (fish_rect), distinct
+            // from the cast bounds (_LOAD_FISHING_DATA's rect). Give it the smaller water rect when the spot
+            // has one, so fish stay in the water instead of wandering the whole cast area / through banks.
+            float fx1 = s.HasFishRect ? s.FishX1 : s.X1;
+            float fz1 = s.HasFishRect ? s.FishZ1 : s.Z1;
+            float fx2 = s.HasFishRect ? s.FishX2 : s.X2;
+            float fz2 = s.HasFishRect ? s.FishZ2 : s.Z2;
             w.PushInt(StbCommands.InitFish);          // 996
-            w.PushFloat(s.X1);
-            w.PushFloat(s.Z1);
-            w.PushFloat(s.X2);
-            w.PushFloat(s.Z2);
+            w.PushFloat(fx1);
+            w.PushFloat(fz1);
+            w.PushFloat(fx2);
+            w.PushFloat(fz2);
             w.Ext(5);                                 // 1 command id + 4 arguments
 
             // Snap the player into the fishing stance. Norune does exactly this — _SET_WORLD_COORD, then
@@ -771,9 +990,7 @@ namespace Dark_Cloud_Improved_Version
             // part-local; ours come straight out of the probe in world space.
             if (s.HasStance)
             {
-                w.PushInt(StbCommands.SetWorldCoord);
-                for (int i = 0; i < 6; i++) w.PushFloat(0f);
-                w.Ext(7);
+                EmitWorldCoordReset(w);
 
                 w.PushInt(StbCommands.SetNpcPos);
                 w.PushInt(-1);                        // -1 = the player
@@ -786,18 +1003,22 @@ namespace Dark_Cloud_Improved_Version
                 w.Ext(5);
             }
 
-            w.PushInt(StbCommands.NpcDraw);           // 140 — _NPC_DRAW(1, -1): the player is set up, show them
-            w.PushInt(1);
-            w.PushInt(-1);
-            w.Ext(3);
-
-            // BAIT — and it must come AFTER _LOAD_FISHING_DATA, not before.
+            // NO BAIT LOAD HERE — and that is deliberate. Norune loads bait ONLY from label 134.
             //
-            // The first attempt loaded the item first and the bait came out as a garbled texture: _LOAD_ITEM
-            // installs its texture into block 0x28, and _LOAD_FISHING_DATA then pulls in chara/fishing.pak
-            // over the top of it. Norune never has this problem because it only ever loads bait from label
-            // 134, i.e. once fishing is already up. Doing it in the same order fixes the garbling.
-            EmitBaitLoad(w);
+            // Loading it here corrupts the heap. _CLEAR_EVENT_BUFF (which the item load needs) is a bump
+            // allocator RESET:
+            //
+            //     EdEventBuffer = EdVillagerBuffer + n * 0x10;      // pointer back to base
+            //
+            // and the fields it rewinds (0x1d1b368/36c) belong to the allocator at 0x1d1b360 — the SAME one
+            // _LOAD_FISHING_DATA just allocated fishing.pak and the fish out of. So doing the item load after
+            // the fishing load rewinds the arena and drops the bait on top of the fishing data. The session
+            // still runs, because that memory is already in hand; but the arena is wrecked, and the next thing
+            // to allocate from it — area streaming, once you walk far enough — lands in the wreckage.
+            //
+            // That was the crash-after-fishing-when-you-walk-away. Vanilla starts a session with no bait
+            // (FishingInit sets esa_type = -1) and you pick one with Square, so this is also the faithful
+            // behaviour, not just the safe one.
 
             w.PushInt(StbCommands.GotoFishing);       // 997 — sets the event return code to 0xB
             w.Ext(1);                                 // command id only; matches Norune's `push 997; EXT argc=1`
@@ -809,6 +1030,9 @@ namespace Dark_Cloud_Improved_Version
             w.PushInt(60);
             w.Ext(2);
 
+            // The no-X path lands here too, having yielded nothing — so on an ordinary frame the whole script
+            // is: draw the "!", read the pad, return. Cheap enough to run every frame you stand there.
+            w.PlaceMark(idle);
             w.Ret();
             return w;
         }
@@ -840,12 +1064,15 @@ namespace Dark_Cloud_Improved_Version
 
             // Put the ORDINARY Toan back. If we do not, the player walks around town holding a fishing rod
             // with the fishing motion table — every normal animation would then be wrong in the same way the
-            // cast was.
-            w.PushInt(StbCommands.LoadMainChara);     // 999
-            w.PushString(NormalModel);
-            w.PushString(NormalModelCfg);
-            w.PushInt(0);
-            w.Ext(4);
+            // cast was. (Skipped when the entry skipped the swap — there is nothing to undo.)
+            if (!s.DiagSkipModel)
+            {
+                w.PushInt(StbCommands.LoadMainChara);     // 999
+                w.PushString(NormalModel);
+                w.PushString(NormalModelCfg);
+                w.PushInt(0);
+                w.Ext(4);
+            }
 
             // RE-PLACE THE PLAYER — but back where they ACTUALLY ARE, not at the entry stance.
             //
@@ -859,9 +1086,7 @@ namespace Dark_Cloud_Improved_Version
             // where you were standing, and the re-place is invisible.
             if (s.HasStance)
             {
-                w.PushInt(StbCommands.SetWorldCoord);
-                for (int i = 0; i < 6; i++) w.PushFloat(0f);
-                w.Ext(7);
+                EmitWorldCoordReset(w);
 
                 w.PushInt(StbCommands.SetNpcPos);
                 w.PushInt(-1);
@@ -876,14 +1101,28 @@ namespace Dark_Cloud_Improved_Version
                 w.Ext(5);
             }
 
-            w.PushInt(StbCommands.NpcDraw);           // 140 — Norune calls _NPC_DRAW(1, -1) here
-            w.PushInt(1);
-            w.PushInt(-1);
-            w.Ext(3);
-
             // AFTER the model swap, not before — Norune's order.
             w.PushInt(StbCommands.ExitFishing);       // 995
             w.Ext(1);
+
+            // RELOAD THE TOWN'S NPCs. This is the fix for the one garbled villager (e.g. Limbo).
+            //
+            // Fishing loads the 1.8 MB fishing Toan and the bait, and the texture manager reuses blocks — so
+            // one villager's texture block gets overwritten during a session. We restore the player model on
+            // the way out but never the villagers, so that block stays wrong until the area reloads (which is
+            // why walking into a building "fixes" it). _LOAD_VILLAGER rewinds the villager buffer and reloads
+            // every NPC and its textures from disc — exactly what Norune's exit does through its own script
+            // functions (which we never ported). It takes no arguments; it reads the current map's villager
+            // list from globals.
+            //
+            // After _EXIT_FISHING, so the fishing data is torn down first; behind the fade, so the reload is
+            // invisible; and followed by a load-wait, so the town is whole before the screen comes back.
+            if (!s.DiagNoVillagerClear)               // nothing was cleared, so nothing to reload
+            {
+                w.PushInt(StbCommands.LoadVillager);      // 57
+                w.Ext(1);
+                EmitWaitLoop(w, StbCommands.LoadSync, exitOnNonZero: false);
+            }
 
             w.PushInt(StbCommands.FadeIn);            // 500(60), as Norune's own exit block does
             w.PushInt(60);
@@ -1016,7 +1255,7 @@ namespace Dark_Cloud_Improved_Version
             }
 
             PatchExitPosition();
-            GuardRetrigger();
+            WatchFishingStart();
 
             // Did our slot survive? The array is built progressively during load, and something later in the
             // sequence could reclaim it.
@@ -1029,48 +1268,187 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Disarm our trigger the instant the spot is set up, and re-arm it once the player walks away.
+        /// Notice when a session actually begins, so the camera can be swung behind the player.
         ///
-        /// Our label RETURNS as soon as <c>_LOAD_FISHING_DATA</c> is done, so on the very next frame the
-        /// player is still inside the trigger radius, the point matches again, and the command runs AGAIN —
-        /// re-loading <c>chara/fishing.pak</c> and allocating a fresh set of CFish every single frame. That is
-        /// not a theory: consecutive dumps showed <c>Fish=0x00FD9790</c> and then <c>Fish=0x01552910</c>, a
-        /// different allocation each pass. The leak is what made the town crawl.
-        ///
-        /// Norune never has this problem because its label 256 is a state machine that does not return until
-        /// the session ends — it yields, and a label that has not returned is not re-entered. Rather than
-        /// relocate 28 KB of branches to imitate it, gate the trigger from out here: the engine only re-runs
-        /// the label if it matches the point, and it only matches the point while <c>+0x00</c> is non-zero.
-        ///
-        /// Re-arming uses a wider radius than firing (hysteresis) so that merely standing at the spot after a
-        /// session ends does not immediately re-trigger it.
+        /// This used to also DISARM the event point and re-arm it on walk-away, because the old script fired
+        /// on contact and returned immediately — so it re-ran every frame, re-loading fishing.pak and leaking
+        /// a fresh set of CFish each pass. None of that bookkeeping is needed now: the script draws the "!"
+        /// and waits for X, and only yields once you press it. The point can simply stay live, which is also
+        /// what makes re-entry work.
         /// </summary>
-        private static void GuardRetrigger()
+        private static void WatchFishingStart()
         {
-            if (_slot < 0) return;
-
             bool live = Memory.ReadInt(FishingSpot.CPolyNum) > 0
                         || Memory.ReadFloat(FishingSpot.WaterLevel) != 0f;
 
-            if (live && _armed)
+            if (live && !_fishingWasLive)
             {
-                Memory.WriteInt(_slotAddr + EventPoints.Enabled, 0);
-                _armed = false;
-                _snapCamera = true;     // a real session start — realign the camera when fishing begins
-                Log("spot is set up — trigger DISARMED (it re-arms when you walk away)");
+                _snapCamera = true;
+                // Keep the town's native terrain collision (hook/bobber vs sand/rocks/houses) and APPEND our
+                // fish-containment walls on top of it. See InjectCollision.
+                if (InjectFakeCollision && _spot.HasCollision) InjectCollision(_spot);
+            }
+            _fishingWasLive = live;
+        }
+
+        /// <summary>Turn OFF to leave the native cpoly untouched (no fish walls). See InjectCollision.</summary>
+        internal static bool InjectFakeCollision = true;
+
+        private static bool _fishingWasLive;
+
+        /// <summary>
+        /// APPEND fabricated fish-containment walls to the town's native collision, without disturbing it.
+        ///
+        /// The native cpoly (built by CEditGround::PickUpPoly at spot load) is the town's REAL terrain — the
+        /// sloped sand bottom, the shore banks, the rocks and the houses — world-placed with true surface
+        /// normals. FishLineStep raycasts the hook and bobber straight DOWN against it and only honours
+        /// floor-ish polys (|normal.Y| > 0.2), so that native mesh is exactly what stops the hook/bobber
+        /// passing through terrain and what makes a cast onto a rock/land rest above WaterLevel+5 (which
+        /// FishingCheckUkiHook then rejects). We must NOT overwrite it — an earlier version did, which is
+        /// why the hook/bobber clipped through everything and casts onto rocks succeeded.
+        ///
+        /// Our walls are purely for the FISH (a separate collision path): vertical quads (normal.Y = 0), so
+        /// they are invisible to the hook/bobber raycast and only fence the fish. We write them into the
+        /// slots ABOVE the native count and bump CPolyNum. PickUpPoly hangs the game above 0x400, so we cap.
+        ///
+        /// A CCPoly is 0x50 bytes: three verts (+0x00/+0x10/+0x20, x/y/z) and a normal (+0x30). We copy an
+        /// existing poly as a template so its flag/padding bytes stay valid, and rewrite only verts + normal.
+        /// </summary>
+        private static void InjectCollision(Spot s)
+        {
+            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return;
+            long buf = Memory.ToMmu(p);
+
+            int nativeCount = Memory.ReadInt(FishingSpot.CPolyNum);
+            if (nativeCount <= 0 || nativeCount > FishingSpot.CPolyMax) { Log($"   collision: native count {nativeCount} unusable — skipping"); return; }
+
+            byte[] template = Memory.ReadBytesBatch(buf, 0x50);   // a real poly, for its non-vertex fields
+            float depth = s.HasFishDepth ? s.FishDepth : 12f;
+            float yLow  = s.Water - depth - 4f;                   // a bit below the fish
+            float yHigh = s.Water + 3f;                           // a bit above the surface
+
+            var polys = new System.Collections.Generic.List<byte[]>();
+
+            // (1) Fish-containment walls along the shore perimeter. The native sand shore is a sloped FLOOR
+            //     (no vertical barrier), and fish swim at a fixed depth, so they need a real wall to fence
+            //     them in. Vertical (normal.Y = 0) → invisible to the hook/bobber, which is what we want.
+            AddWallLoop(polys, template, s.Perimeter, yLow, yHigh, inward: true);
+
+            // (2) The rocks' EXACT triangles, decoded from the town's visual mesh (they have no native
+            //     collision — they're decorative). Real surface normals: top faces (normal.Y > 0.2) stop
+            //     the hook/bobber and reject casts onto the rock; side faces fence the fish. This replaces
+            //     the crude convex-hull walls with the true geometry.
+            int meshTris = AddMeshTriangles(polys, template, s.MapNo);
+
+            int total = nativeCount + polys.Count;
+            if (total > FishingSpot.CPolyMax)
+            {
+                Log($"   collision: native {nativeCount} + {polys.Count} added = {total} > {FishingSpot.CPolyMax} cap — skipping");
                 return;
             }
 
-            if (live || _armed) return;
+            for (int i = 0; i < polys.Count; i++)
+                Memory.WriteBytesBatch(buf + (long)(nativeCount + i) * 0x50, polys[i]);
+            Memory.WriteInt(FishingSpot.CPolyNum, total);
+            Log($"   collision: {nativeCount} native + {polys.Count - meshTris} shore walls + {meshTris} exact rock tris → {total}");
+        }
 
-            if (!ReadPos(out float x, out float y, out float z)) return;
-            float dx = x - _spot.TrigX, dy = y - _spot.TrigY, dz = z - _spot.TrigZ;
-            float reArm = _spot.Radius * 1.5f;
-            if (dx * dx + dy * dy + dz * dz < reArm * reArm) return;   // still loitering on it
+        /// <summary>Emit two triangles per edge of a closed x,z loop — a vertical wall from yLow to yHigh with
+        /// a horizontal normal facing into (inward) or away from (obstacle) the loop's centre.</summary>
+        private static void AddWallLoop(System.Collections.Generic.List<byte[]> outp, byte[] template,
+                                        float[] loop, float yLow, float yHigh, bool inward)
+        {
+            int n = loop.Length / 2;
+            float cx = 0, cz = 0;
+            for (int i = 0; i < n; i++) { cx += loop[i * 2]; cz += loop[i * 2 + 1]; }
+            cx /= n; cz /= n;
 
-            Memory.WriteInt(_slotAddr + EventPoints.Enabled, 1);
-            _armed = true;
-            Log("trigger RE-ARMED");
+            for (int i = 0; i < n; i++)
+            {
+                float ax = loop[i * 2], az = loop[i * 2 + 1];
+                int j = (i + 1) % n;
+                float bx = loop[j * 2], bz = loop[j * 2 + 1];
+
+                // normal perpendicular to the edge, in XZ; flip so it points toward (inward) / away (obstacle)
+                float nx = -(bz - az), nz = bx - ax;
+                float len = (float)Math.Sqrt(nx * nx + nz * nz); if (len < 1e-3f) continue;
+                nx /= len; nz /= len;
+                float mx = (ax + bx) * 0.5f, mz = (az + bz) * 0.5f;
+                bool pointsToCentre = (nx * (cx - mx) + nz * (cz - mz)) > 0;
+                if (pointsToCentre != inward) { nx = -nx; nz = -nz; }
+
+                outp.Add(MakeTri(template, ax, yLow, az, bx, yLow, bz, bx, yHigh, bz, nx, nz));
+                outp.Add(MakeTri(template, ax, yLow, az, bx, yHigh, bz, ax, yHigh, az, nx, nz));
+            }
+        }
+
+        private static byte[] MakeTri(byte[] template,
+                                      float x0, float y0, float z0, float x1, float y1, float z1,
+                                      float x2, float y2, float z2, float nx, float nz)
+        {
+            byte[] q = (byte[])template.Clone();
+            PutVec(q, 0x00, x0, y0, z0);
+            PutVec(q, 0x10, x1, y1, z1);
+            PutVec(q, 0x20, x2, y2, z2);
+            PutVec(q, 0x30, nx, 0f, nz);   // horizontal normal
+            return q;
+        }
+
+        private static string MeshCollisionFile(int mapNo) =>
+            Path.Combine(AppContext.BaseDirectory, "Resources", "FishingCollision", $"brownboo_{mapNo}.bin");
+
+        /// <summary>Append the spot's EXACT mesh triangles (decoded offline from the town's visual mesh) to
+        /// the poly list, each with a real plane normal so the hook/bobber rest on up-facing faces and the
+        /// fish are stopped by side faces. Returns the number of triangles added (0 if no data file).</summary>
+        private static int AddMeshTriangles(System.Collections.Generic.List<byte[]> outp, byte[] template, int mapNo)
+        {
+            string path = MeshCollisionFile(mapNo);
+            if (!File.Exists(path)) return 0;
+
+            byte[] data;
+            try { data = File.ReadAllBytes(path); }
+            catch (Exception e) { Log($"   mesh collision: read failed ({e.Message})"); return 0; }
+
+            // Header: 'DCFC', uint version, uint mapNo, uint triCount; then triCount * 9 floats (3 verts).
+            if (data.Length < 16 || data[0] != (byte)'D' || data[1] != (byte)'C' || data[2] != (byte)'F' || data[3] != (byte)'C')
+            { Log("   mesh collision: bad magic"); return 0; }
+            int triCount = BitConverter.ToInt32(data, 12);
+            int need = 16 + triCount * 9 * 4;
+            if (triCount < 0 || data.Length < need) { Log($"   mesh collision: truncated ({data.Length} < {need})"); return 0; }
+
+            float F(int i) => BitConverter.ToSingle(data, i);
+            int p = 16, added = 0;
+            for (int t = 0; t < triCount; t++, p += 36)
+            {
+                float ax = F(p),      ay = F(p + 4),  az = F(p + 8);
+                float bx = F(p + 12), by = F(p + 16), bz = F(p + 20);
+                float cx = F(p + 24), cy = F(p + 28), cz = F(p + 32);
+
+                // plane normal = (b-a) x (c-a), normalized
+                float ux = bx - ax, uy = by - ay, uz = bz - az;
+                float vx = cx - ax, vy = cy - ay, vz = cz - az;
+                float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+                float len = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                if (len < 1e-6f) continue;
+                nx /= len; ny /= len; nz /= len;
+
+                byte[] q = (byte[])template.Clone();
+                PutVec(q, 0x00, ax, ay, az);
+                PutVec(q, 0x10, bx, by, bz);
+                PutVec(q, 0x20, cx, cy, cz);
+                PutVec(q, 0x30, nx, ny, nz);
+                outp.Add(q);
+                added++;
+            }
+            return added;
+        }
+
+        private static void PutVec(byte[] b, int off, float x, float y, float z)
+        {
+            Array.Copy(BitConverter.GetBytes(x), 0, b, off + 0, 4);
+            Array.Copy(BitConverter.GetBytes(y), 0, b, off + 4, 4);
+            Array.Copy(BitConverter.GetBytes(z), 0, b, off + 8, 4);
         }
 
         private static bool ReadPos(out float x, out float y, out float z)
@@ -1147,9 +1525,38 @@ namespace Dark_Cloud_Improved_Version
         internal const int FadeOut            = 501; // (frames) — 501 is FADE_OUT; 500 is FADE_IN
         internal const int ClearVillagerBuff  = 38;  // ()
 
+        /// <summary>() — rewinds the villager buffer and reloads every NPC (and its textures) for the current
+        /// map from disc. Reads its list from globals, no args. Used on fishing exit to un-garble whatever
+        /// villager texture block the session's model/bait loads overwrote.</summary>
+        internal const int LoadVillager = 57;
+
         /// <summary>(&amp;out) — out = non-zero while a fade is still in progress. Same shape as
         /// <see cref="LoadSync"/>: poll it in a YIELD loop instead of counting frames.</summary>
         internal const int CheckFade = 502;
+
+        /// <summary>() — raises the "!" prompt for this frame. It is a PER-FRAME flag (EdEventInit clears it,
+        /// the ladder code sets it the same way), so it has to be re-asserted every frame it should show.</summary>
+        internal const int DrawExclamationMark = 10;
+
+        /// <summary>(&amp;out) — out = the buttons pressed this frame (after exch_ok_cancel).</summary>
+        internal const int GetPadDown = 1;
+
+        /// <summary>
+        /// X (Cross) AS A SCRIPT SEES IT — 0x20, not 0x40.
+        ///
+        /// <c>EdMoveChara</c> tests the raw pad with <c>PadDown(0x40)</c> for confirm, so 0x40 is Cross in
+        /// engine code. But <c>_GET_PADDOWN</c> pipes the pad through <c>exch_ok_cancel</c> first, which
+        /// SWAPS bits 0x20 and 0x40:
+        ///
+        /// <code>
+        ///   v = pad &amp; ~0x60;
+        ///   if (pad &amp; 0x20) v |= 0x40;
+        ///   if (pad &amp; 0x40) v |= 0x20;
+        /// </code>
+        ///
+        /// So a script testing 0x40 is testing CIRCLE. That is why the fishing prompt answered to Circle.
+        /// </summary>
+        internal const int PadCross = 0x20;
 
         /// <summary>(&amp;outVar) — opens the game's native bait menu (menu_mode 9) over a static bait list,
         /// and writes the chosen item id back through the pointer. The handler REFUSES unless arg1's stack
@@ -1294,6 +1701,11 @@ namespace Dark_Cloud_Improved_Version
         }
 
         internal void PlaceMark(int mark) => _marks[mark] = _b.Count;
+
+        private const int OpAnd = 24;
+
+        /// <summary>Pop two, push (a &amp; b). Used to test a single button out of the pad bitmask.</summary>
+        internal void And() => Emit(OpAnd, 0, 0);
 
         internal void Jmp(int mark)     => EmitJump(OpJmp, mark);
         internal void BrTrue(int mark)  => EmitJump(OpBrTrue, mark);

@@ -179,6 +179,43 @@ entry[2] = 1                    // ACTUALLY COMPLETE (ReadBG, after sceCdSync, n
 `bg_read_info` is at `0x01CBB0C0` (MMU `0x21CBB0C0`), 32 slots of `0x9C` bytes. `entry[2]` is the only
 honest completion flag — but a script should just use `_LOAD_SYNC`, which checks it for you.
 
+## 7b. Reading the pad — X is `0x20` to a script, not `0x40`
+
+`_GET_PADDOWN(&out)` does **not** hand back the raw pad. It pipes it through `exch_ok_cancel`, which swaps
+bits `0x20` and `0x40`:
+
+```c
+v = pad & ~0x60;
+if (pad & 0x20) v |= 0x40;      // Circle -> reads as 0x40
+if (pad & 0x40) v |= 0x20;      // Cross  -> reads as 0x20
+```
+
+So engine code (`EdMoveChara`, item pickups, ladders) tests **`PadDown(0x40)` for Cross**, but a *script*
+testing `0x40` is testing **Circle**. Scripts want `0x20` for X. This is not a display-language thing —
+it is an unconditional swap in the command handler.
+
+## 7c. Prompting for X: the `simple_event` idiom
+
+A type-3 event point fires its label **the instant the player is in range** — `EdMoveChara` has no button
+check for it (only item and ladder points test the pad). So a "walk up, see a `!`, press X" interaction is
+built in the SCRIPT, not the point, and it hangs off the same rule as everything else here:
+
+> **A script that returns without yielding is a `simple_event`** — `EdEventInit` runs it, sees it finish,
+> and never enters event mode. The player keeps walking.
+
+Which means a script can run *every frame* while you stand near a point, cheaply, and only commit when it
+wants to:
+
+```
+_DRAW_EXCLAMATION_MARK()      // command 10 — a PER-FRAME flag (EdEventInit clears it), so re-assert it
+_GET_PADDOWN(&v)              // command 1
+if (!(v & 0x20)) RET          // no X -> return WITHOUT yielding: still just a simple event
+<the real thing>              // yields -> promoted to a real event, GameMode = 0xE
+```
+
+Interaction radii, read off every town's points: **doors (type 1) = 10**, **item pickups (type 2) = 15**.
+Those are the two things you walk up to and press X on, so they are the right scale for a prompt.
+
 ## 8. Runtime
 
 | what | where |
@@ -203,8 +240,27 @@ These are the things that cost us a test cycle each:
 - **Labels tile the code region.** A label's code runs until the *next* label's funcdata offset, so
   adjacent spare labels can be merged into one arena and written straight through. That is the only way a
   script bigger than one label fits.
+- **RETIRE every label an arena swallows.** The later labels in the run keep their table entries, and their
+  `codeOffset` now points into the *middle of your bytecode*. If the town ever dispatches one, the VM reads
+  your data as a `funcdata`, takes a garbage code offset out of it, and jumps into nowhere. Rewrite their
+  ids to something nothing requests. And give your own script a fresh id too (nothing real goes above 310),
+  so a town event cannot dispatch *into* it either.
 - **Label 256 is not spare.** It is the fishing script in Norune, but in an ordinary town it is the town's
   own script — overwriting it leaves the screen black on load.
+- **`_CLEAR_EVENT_BUFF` is a bump-allocator RESET, not a tidy-up.** It rewinds `EdEventBuffer` to its base,
+  and the fields it rewinds belong to the allocator at `0x1D1B360` — the same one `_LOAD_FISHING_DATA`
+  allocates `fishing.pak` and the fish from. The item-load recipe (`_CLEAR_EVENT_BUFF` →
+  `_ACTIVE_FILE_BUFFER` → `_LOAD_ITEM`) therefore **must not run after a fishing load**: it drops the new
+  item on top of the fishing data. The session keeps working, because that memory is already in hand — but
+  the arena is corrupt, and the next thing to allocate from it (area streaming, when the player walks far
+  enough) crashes. Norune loads bait only from label 134, and this is why.
+- **Fishing borrows town memory; put it back on exit.** Loading the 1.8 MB fishing model and the bait
+  disturbs two shared resources the town owns. `_CLEAR_VILLAGER_BUFF` (which Norune calls on entry to make
+  room) rewinds the NPC buffer — do NOT call it, or the model lands on live villager data and the game
+  crashes when you walk to where an NPC stands. And the texture manager reuses blocks, so a session
+  overwrites one villager's texture block (a single NPC renders garbled until the area reloads). The exit
+  script must **`_LOAD_VILLAGER` (57)** — a no-arg full reload of the map's NPCs and their textures — behind
+  the fade, followed by a `_LOAD_SYNC` wait. This is what Norune's un-ported exit helpers do.
 - **`EventMode`'s `default:` branch is `GameMode = 1`.** A script that returns without setting a return
   code silently drops the player back to walking. That is how quitting fishing is implemented; it is also
   why a bait script that just returns will end the session.

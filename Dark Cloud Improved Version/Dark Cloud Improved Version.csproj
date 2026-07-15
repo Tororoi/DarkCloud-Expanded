@@ -31,6 +31,9 @@
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
+    <None Include="Resources\FishingCollision\brownboo_14.bin">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Content Include="ModIcon.ico" />
