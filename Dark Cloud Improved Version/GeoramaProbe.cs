@@ -521,6 +521,46 @@ namespace Dark_Cloud_Improved_Version
             }
             Log($"-- placed parts: {used} used, {free} free (of {EditGround.PlacedCount}) --");
             if (sb.Length > 0) Log(sb.ToString().TrimEnd());
+
+            DumpMeshObjects(g);
+        }
+
+        /// <summary>Dump every occupied map object (both the 128-slot placed array and the 64-slot static-cfg
+        /// array) with its world position, Y rotation and resolved model name. Used to recover the georama
+        /// placement of scene-mesh blocks that sit at LOCAL origin in scene.scn (e.g. Brownboo's houses),
+        /// so their collision/visualisation can be placed in world space.</summary>
+        private static void DumpMeshObjects(long g)
+        {
+            long info = EditInfo.Base();
+            foreach (var (label, baseOff, count) in new[]
+                     {
+                         ("PLACED", EditGround.PlacedBase, EditGround.PlacedCount),
+                         ("STATIC", EditGround.ExtraBase, 64),
+                     })
+            {
+                var sb = new StringBuilder();
+                int n = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    long s = g + baseOff + (long)i * MapParts.Stride;
+                    if (Memory.ReadInt(s + MapParts.Occupied) < 0) continue;   // free
+                    if (Memory.ReadUInt(s + MapParts.ModelPtr) == 0) continue; // no mesh
+
+                    int id = Memory.ReadInt(s + MapParts.PartId);
+                    float x = Memory.ReadFloat(s + MapParts.Position);
+                    float y = Memory.ReadFloat(s + MapParts.Position + 4);
+                    float z = Memory.ReadFloat(s + MapParts.Position + 8);
+                    float rx = Memory.ReadFloat(s + 0x60), ry = Memory.ReadFloat(s + 0x64), rz = Memory.ReadFloat(s + 0x68);
+                    string model = (info != 0 && id >= 0 && id < EditInfo.MaxParts)
+                                 ? ReadCStr(info + EditInfo.PartBase + (long)id * EditInfo.PartStride + EditInfo.PartName, 32)
+                                 : "?";
+                    sb.AppendLine($"        [{i,3}] part {id,2} '{model,-14}' pos ({x,7:0.#}, {y,6:0.#}, {z,7:0.#}) " +
+                                  $"rot ({rx:0.##}, {ry:0.##}, {rz:0.##})");
+                    n++;
+                }
+                Log($"-- {label} mesh objects: {n} with a model --");
+                if (sb.Length > 0) Log(sb.ToString().TrimEnd());
+            }
         }
 
         /// <summary>

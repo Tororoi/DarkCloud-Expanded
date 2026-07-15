@@ -38,19 +38,47 @@ def load_scene(rel):
 def _isname(scn, b):
     s = scn[b:b+4]; return len(s) >= 2 and all(32 <= c < 127 for c in s[:2])
 
+def _points_at_mdt(scn, mds, mo):
+    if mo == 0: return True   # a node with no mesh is legal
+    for c in (mo, mds + mo):
+        if 0 <= c < len(scn) - 4 and scn[c:c+3] == b"MDT": return True
+    return False
+
+def _is_mesh_node(scn, mds, b):
+    """Does a 0x70 entry at b look like a MESH-bearing MDS node? meshOff (@+0x28) -> an MDT, and the
+    4x4 matrix (@+0x30) is a valid transform (homogeneous, sane translation, non-zero rotation)."""
+    if b + 0x70 > len(scn): return False
+    mo = struct.unpack_from("<i", scn, b + 0x28)[0]
+    if mo == 0: return False
+    fo = next((c for c in (mo, mds + mo) if 0 <= c < len(scn) - 4 and scn[c:c+3] == b"MDT"), None)
+    if fo is None: return False
+    mat = struct.unpack_from("<16f", scn, b + 0x30)
+    if abs(mat[15] - 1.0) > 1e-3: return False
+    if not all(abs(v) < 100000 for v in mat[12:15]): return False
+    if not (0.1 < sum(mat[i]*mat[i] for i in range(0, 3)) < 1e6): return False   # row0 has real scale
+    return True
+
 def parse_mds(scn, mds):
-    count = struct.unpack_from("<I", scn, mds+8)[0]
-    tbl = None
-    for x in range(mds+0x20, mds+0x140, 4):
-        if all(_isname(scn, x + k*0x70 + 8) for k in range(min(3, count))): tbl = x; break
-    if tbl is None: return []
-    out = []
-    for k in range(count):
-        b = tbl + k*0x70
-        name = scn[b+8:b+8+16].split(b"\x00")[0].decode("latin1", "replace")
-        mo, par = struct.unpack_from("<ii", scn, b+0x28)
-        mat = struct.unpack_from("<16f", scn, b+0x30)
-        out.append((name, mo, mat))
+    """Return [(name, meshOff, matrix)] for every mesh-bearing node in the block. Rather than locate the
+    (variable-offset) node table, scan the block for entries that look like real mesh nodes — robust to
+    unnamed/mesh-less nodes and odd preambles."""
+    # bound the scan to this block (up to the next MDS\0)
+    nxt = scn.find(b"MDS\x00", mds + 4)
+    end = nxt if nxt != -1 else min(mds + 0x8000, len(scn))
+    out, seen = [], set()
+    b = mds + 0x20
+    while b + 0x70 <= end:
+        if _is_mesh_node(scn, mds, b):
+            mo = struct.unpack_from("<i", scn, b + 0x28)[0]
+            if mo not in seen:
+                seen.add(mo)
+                name = scn[b+8:b+8+16].split(b"\x00")[0].decode("latin1", "replace")
+                if not all(32 <= c < 127 or c == 0 for c in scn[b+8:b+8+4]): name = ""  # unnamed node
+                mat = struct.unpack_from("<16f", scn, b + 0x30)
+                out.append((name, mo, mat))
+            b += 0x70
+        else:
+            b += 4
     return out
 
 def read_verts(scn, fo):
@@ -85,6 +113,10 @@ def read_tris(scn, fo):
     dl, vcount = hw[10], hw[3]
     if dl == 0 or fo + dl + 0x10 > len(scn): return []
     numsub = struct.unpack_from("<I", scn, fo + dl + 8)[0]
+    # A handful of decorative meshes (plants, obj56) use a display-list VARIANT with a different
+    # preamble; the standard read gets an absurd numsub (> vertex count). Reject rather than emit
+    # garbage triangles — these aren't needed for collision. TODO: crack the variant if wanted.
+    if numsub <= 0 or numsub > vcount: return []
     o = dl + 0x10
     tris = []
     for _ in range(numsub):
