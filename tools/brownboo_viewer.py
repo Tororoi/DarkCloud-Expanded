@@ -296,7 +296,7 @@ LAY = [
     ('plants','plants','D.visual.plants','[110,160,90]',1,'#ad6'),
     ('crater','crater (full)','D.visual.crater','[58,54,50]',1,'#ccc'),
     ('fishpoint','! marker + radius','D.fishpoint','[255,175,210]',0.95,'#fbd'),
-    ('crock','COLL rocks','D.col_rocks','[255,70,70]',0.85,'#f66'),
+    ('crock','COLL rocks','D.col_rocks','[150,25,25]',0.9,'#a33'),
     ('cstilt','COLL stilts','D.col_stilts','[255,150,40]',0.85,'#fa4'),
     ('cplant','COLL plants','D.col_plants','[80,230,120]',0.9,'#5e8'),
     ('cbuild','COLL buildings','D.col_build','[205,120,255]',0.7,'#c8f'),
@@ -321,6 +321,9 @@ checks = "".join(
 # draw() not as a layer — shown with a point count and excluded from the poly total.
 checks += (f'<label><input type=checkbox id=t_fishrect> <span style="color:#f4a">fishing box + coords</span> '
            f'<span style="color:#777">({len(D["fishbox"])} pts)</span></label><br>')
+# overlay (not a layer): recolour any VISIBLE poly the bobber can't land on (|normal.Y| <= 0.2, too steep)
+# that also sits above the water — the pass-through spots — bright pink, whatever layer it belongs to.
+checks += '<label><input type=checkbox id=t_steep> <span style="color:#ff2db4">steep &amp; above-water (highlight)</span></label><br>'
 checks += '<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">selected: <b id="tot" style="color:#fff">0</b> polys</div>'
 cnt_js = json.dumps(_cnt, separators=(',', ':'))
 pushes = "".join(f"if(on('t_{i}')&&{src}) L.push({{t:{src},c:{c},a:{a}}});\n" for i, lb, src, c, a, lc in LAY)
@@ -336,6 +339,7 @@ function updateTotal(){let s=0;for(const k in CNT){const e=document.getElementBy
 const cv=document.getElementById('c'),cx=cv.getContext('2d');
 let W,H;function resize(){W=cv.width=innerWidth||900;H=cv.height=innerHeight||700;}resize();addEventListener('resize',()=>{resize();draw();});
 let yaw=0.6,pitch=0.55,zoom=1.5;   // +pitch = camera ABOVE the model, looking down
+const WATER=0, STEEP_NY=0.2;   // bobber lands on |normal.Y|>0.2; <=0.2 is too steep to collide
 const on=id=>document.getElementById(id).checked;
 function layers(){const L=[];
 PUSHES
@@ -345,13 +349,23 @@ function rot(p){let x=p[0],y=p[1],z=p[2];let cy=Math.cos(yaw),sy=Math.sin(yaw);l
 function draw(){
  cx.fillStyle='#0d1117';cx.fillRect(0,0,W,H);
  const f=Math.min(W,H)*0.5*zoom/300, all=[];
+ const steep=on('t_steep');
  for(const L of layers()){ if(!L.t) continue; for(const tri of L.t){
    const r=[rot(tri[0]),rot(tri[1]),rot(tri[2])];
    const nz=(r[1][0]-r[0][0])*(r[2][1]-r[0][1])-(r[1][1]-r[0][1])*(r[2][0]-r[0][0]);
    const nx=(r[1][1]-r[0][1])*(r[2][2]-r[0][2])-(r[1][2]-r[0][2])*(r[2][1]-r[0][1]);
    const ny=(r[1][2]-r[0][2])*(r[2][0]-r[0][0])-(r[1][0]-r[0][0])*(r[2][2]-r[0][2]);
    const nlen=Math.hypot(nx,ny,nz)||1;
-   all.push({k:'t',r,c:L.c,a:L.a,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
+   let c=L.c,a=L.a;
+   if(steep){
+     // WORLD-space normal (not the rotated one) decides slope; centroid decides above-water
+     const wnx=(tri[1][1]-tri[0][1])*(tri[2][2]-tri[0][2])-(tri[1][2]-tri[0][2])*(tri[2][1]-tri[0][1]);
+     const wny=(tri[1][2]-tri[0][2])*(tri[2][0]-tri[0][0])-(tri[1][0]-tri[0][0])*(tri[2][2]-tri[0][2]);
+     const wnz=(tri[1][0]-tri[0][0])*(tri[2][1]-tri[0][1])-(tri[1][1]-tri[0][1])*(tri[2][0]-tri[0][0]);
+     const wl=Math.hypot(wnx,wny,wnz)||1, cy=(tri[0][1]+tri[1][1]+tri[2][1])/3;
+     if(Math.abs(wny)/wl<=STEEP_NY && cy>WATER){ c=[255,45,180]; a=1; }
+   }
+   all.push({k:'t',r,c,a,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
  }}
  if(on('t_fishrect')) for(const p of D.fishbox){const r=rot(p);all.push({k:'p',r,depth:r[2]});}
  all.sort((p,q)=>p.depth-q.depth);
