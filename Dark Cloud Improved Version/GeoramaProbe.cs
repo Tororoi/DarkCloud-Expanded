@@ -241,6 +241,7 @@ namespace Dark_Cloud_Improved_Version
                 $"free={(poolCap - poolUsed) / 1024f:0.#} KB  (model needs {FishingPool.TuriModelBytes / 1024f:0.#} KB)");
 
             DumpCPoly();
+            DumpCPolyFile();
 
             // WHAT fired it? If an event point did, EdGetEvent will have left the match here. If both read
             // as nothing, the trigger is not an event point and we look elsewhere — but either way this is a
@@ -358,6 +359,58 @@ namespace Dark_Cloud_Improved_Version
                     $"{nearWallMinY:0.#}..{nearWallMaxY:0.#}  (if these reach near the water, native walls can contain fish)");
             else
                 Log($"    CPOLY: NO walls within 180u of spot ({spotX:0},{spotZ:0}) — native collision won't contain fish here");
+        }
+
+        /// <summary>Where the per-poly cpoly dump is written. One line per triangle:
+        /// v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz. NOTE: this dumps the LIVE cpoly at spot load, which
+        /// may already be modified by the mod (e.g. the floors-only experiment). It writes to a SEPARATE
+        /// file so it never clobbers the preserved full-vanilla reference the viewer reads
+        /// (tools/vanilla_cpoly.csv). To recapture the full reference, disable the mod's cpoly edits and copy
+        /// this file over it.</summary>
+        internal static string CPolyDumpPath = "/Users/thomascantwell/DarkCloud-Enhanced/tools/vanilla_cpoly_live.csv";
+
+        /// <summary>
+        /// Dump EVERY native cpoly triangle (verts + normal) to a CSV, so the viewer can render the exact
+        /// collision the town already loads. The summary in <see cref="DumpCPoly"/> tells us how many polys
+        /// and their bounds; this tells us WHERE each one is — which is what lets us reclaim/repurpose the
+        /// vanilla polys instead of appending new ones for fishing.
+        /// </summary>
+        private static void DumpCPolyFile()
+        {
+            int count = Memory.ReadInt(FishingSpot.CPolyNum);
+            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            if (count <= 0 || count > 1024 || !Memory.IsValidGuest(p))
+            {
+                Log($"    CPOLY FILE: not written (count={count})");
+                return;
+            }
+
+            long baseAddr = Memory.ToMmu(p);
+            var sb = new StringBuilder();
+            sb.AppendLine("v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz");
+            for (int i = 0; i < count; i++)
+            {
+                long poly = baseAddr + (long)i * 0x50;
+                for (int v = 0; v < 3; v++)
+                {
+                    sb.Append(Memory.ReadFloat(poly + v * 0x10).ToString("0.###")).Append(',');
+                    sb.Append(Memory.ReadFloat(poly + v * 0x10 + 4).ToString("0.###")).Append(',');
+                    sb.Append(Memory.ReadFloat(poly + v * 0x10 + 8).ToString("0.###")).Append(',');
+                }
+                sb.Append(Memory.ReadFloat(poly + 0x30).ToString("0.###")).Append(',');
+                sb.Append(Memory.ReadFloat(poly + 0x30 + 4).ToString("0.###")).Append(',');
+                sb.Append(Memory.ReadFloat(poly + 0x30 + 8).ToString("0.###"));
+                sb.AppendLine();
+            }
+            try
+            {
+                System.IO.File.WriteAllText(CPolyDumpPath, sb.ToString());
+                Log($"    CPOLY FILE: wrote {count} polys -> {CPolyDumpPath}");
+            }
+            catch (Exception e)
+            {
+                Log($"    CPOLY FILE: write FAILED: {e.Message}");
+            }
         }
 
         /// <summary>The fishing spot's approximate centre, for the near-spot collision probe (Brownboo).</summary>

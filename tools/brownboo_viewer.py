@@ -29,7 +29,6 @@ def T(pred):
 
 craterids = [f's04g01{n:02d}' for n in range(2, 17)] + ['s040101']
 visual = {
-    'watereffect': T(lambda n: 'za01' in n),
     'watersurf':   T(lambda n: 'czapp' in n),
     'shore':       T(lambda n: n.startswith('s04g0117')),
     'boardwalk':   T(lambda n: n.startswith('s04g03')),
@@ -93,6 +92,15 @@ for name, pos, rot in placements:
     (houses if name.startswith('s04h') else ladders if name.startswith('s04r') else plants).extend(tris)
 visual['houses'] = houses; visual['ladders'] = ladders; visual['plants'] = plants
 
+# ---- split the water-edge foam (za01) into outer-shore vs interior (stilt/plant rings) ----
+# The foam splits cleanly BY NODE, no heuristic needed: s04w02__za01 IS the continuous outer-shore ring
+# (verified: all 128 of its tris lie in the ~16-wide shoreline band), while s04w01__za01 is the stilt/
+# plant foam (the sunburst rings around the boardwalk posts + the plant rings, 256 tris). Earlier
+# proximity rules kept nicking real ring tris that pass near an edge-stilt; the node split never does.
+visual['foam_outer'] = T(lambda n: n.startswith('s04w02') and 'za01' in n)   # the shore ring
+visual['foam_obj']   = T(lambda n: n.startswith('s04w01') and 'za01' in n)   # stilt/plant foam
+print("foam split:", len(visual['foam_outer']), "outer-shore ring +", len(visual['foam_obj']), "stilt/plant")
+
 # ---- collision (rocks) ----
 def hull(pts):
     pts = sorted(set((round(x, 1), round(z, 1)) for x, z in pts))
@@ -110,7 +118,7 @@ def hull(pts):
 def decim(h, n): return h if len(h) <= n else [h[int(i*len(h)/n)] for i in range(n)]
 
 # ---- UNSIMPLIFIED collision reference: exact mesh triangles, clipped to the collision height band ----
-CY_LO, CY_HI = -9, 74        # full collision height band (CY_HI tracks BOX_TOP below)
+CY_LO, CY_HI = -9, 54        # full collision height band (CY_HI tracks BOX_TOP below)
 WATER = 0                    # WaterLevel — perimeter/plants/houses collision caps here
 def clip_y(tri, lo, hi):
     """Clip one triangle to the slab lo <= y <= hi; return fan-triangulated pieces (possibly empty)."""
@@ -134,6 +142,23 @@ def clip_group(tris, lo=CY_LO, hi=CY_HI):
     out = []
     for t in tris: out += clip_y(t, lo, hi)
     return out
+def cap_at(tris, y):
+    """Fill the open cross-section where `tris` are sliced by the plane Y=y (a rock clipped at the box top):
+    collect every triangle-edge crossing at that height, order them around the centroid and fan-triangulate
+    into a flat horizontal cap — so a downward raycast (bobber/hook) lands on it instead of falling through
+    the opening. Returns [] if nothing crosses y (the rock is entirely below the box top)."""
+    pts = []
+    for t in tris:
+        for i in range(3):
+            a = t[i]; b = t[(i+1) % 3]
+            if (a[1]-y)*(b[1]-y) < 0:                      # edge straddles the plane
+                s = (y-a[1])/(b[1]-a[1])
+                pts.append((a[0]+s*(b[0]-a[0]), a[2]+s*(b[2]-a[2])))
+    if len(pts) < 3: return []
+    cx = sum(p[0] for p in pts)/len(pts); cz = sum(p[1] for p in pts)/len(pts)
+    pts.sort(key=lambda p: math.atan2(p[1]-cz, p[0]-cx))
+    return [[[a[0], y, a[1]], [cx, y, cz], [b[0], y, b[1]]]
+            for a, b in ((pts[i], pts[(i+1) % len(pts)]) for i in range(len(pts)))]
 def line_x(p1, p2, p3, p4):
     (x1, y1), (x2, y2), (x3, y3), (x4, y4) = p1, p2, p3, p4
     d = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4)
@@ -156,7 +181,14 @@ def inset_polygon(pts, dd):
         out.append(list(p) if p else list(edges[i][0]))
     return out
 
-col_rocks  = clip_group(T(lambda n: n.startswith('iwa')))                                            # -9..44
+# rocks: clip each rock to the box band (-9..CY_HI) AND cap the opening where it's sliced at the box top,
+# so a rock taller than the box (iwa01→93, iwa02→68) can't be cast through its open top. Per-rock so each
+# cap is its own cross-section.
+col_rocks = []
+for _nm, (_v, _ts) in GOT.items():
+    if not _nm.startswith('iwa'): continue
+    _rt = [[_v[a], _v[b], _v[c]] for a, b, c in _ts]
+    col_rocks += clip_group(_rt) + cap_at(_rt, CY_HI)
 col_stilts = clip_group(T(lambda n: n.startswith('s04g0401') or n in ('s04g402', 's04g403', 's04g404')))  # -9..44
 col_plants = clip_group(plants, hi=WATER)   # placed s04a01, capped at water
 col_build  = clip_group(houses, hi=WATER)   # placed s04h*,  capped at water
@@ -170,10 +202,10 @@ for i in range(len(Pin)):
     col_perim.append([[a[0], CY_LO, a[1]], [b[0], WATER, b[1]], [a[0], WATER, a[1]]])
 # Fishing rect as a 3D BOX filled with a 6-unit point grid: from fish depth (WaterLevel - fishDepth)
 # up to BOX_TOP (arbitrary for now — later = the height at which bobber/hook collisions matter).
-# edges (compass: E=+X, W=-X, N=-Z, S=+Z): W=-300, E=240, N=-260, S=300
-RECT_X1, RECT_Z1, RECT_X2, RECT_Z2 = -300, -260, 240, 300
+# edges (compass: E=+X, W=-X, N=-Z, S=+Z): W=-320, E=310, N=-260, S=300
+RECT_X1, RECT_Z1, RECT_X2, RECT_Z2 = -320, -260, 310, 300
 FISH_DEPTH = 0 - 6      # WaterLevel 0 - fishDepth 6
-BOX_TOP = 74            # TODO: set to the real bobber/hook collision height
+BOX_TOP = 54            # TODO: set to the real bobber/hook collision height
 def frange(a, b, step):
     out = []; v = a
     while v <= b + 1e-6: out.append(round(v, 3)); v += step
@@ -200,12 +232,59 @@ def uv_sphere(cx0, cy0, cz0, r, rings=10, segs=14):
     return tris
 fishpoint = uv_sphere(74, 10, -20, 10)   # trigger (74,10,-20), InteractRadius 10
 
+# ---- VANILLA native cpoly, dumped live from RAM by GeoramaProbe.DumpCPolyFile ----
+# This is the EXACT collision the town already loads (PickUpPoly) at fishing-spot load. Splitting by
+# the triangle's (NORMALIZED) normal.Y shows what KIND of collision exists where: floor-ish (|ny|>0.7)
+# is what the hook/bobber raycast honours; wall-ish (|ny|<0.3) is what would contain fish.
+#
+# The total cpoly count is capped (1024); every native poly we DON'T need is a slot the fishing
+# collision can reuse. We flag three reclaimable groups (mirror these thresholds in the mod's
+# native-cpoly compaction):
+#   above box-top : entirely above BOX_TOP  -> irrelevant to bobber/hook (they only matter near water)
+#   NE corner     : x>NE_X & z<NE_Z         -> the unreachable north-east pocket
+#   ladder-tops   : within LAD_R of a ladder & above LAD_Y -> the shafts/platforms climbing out of water
+# The mod drops ALL vertical walls wholesale (floors-only experiment), so the only remaining reclaim is
+# the FLOOR platforms sitting on top of the in-water ladders — floors the bobber/hook would otherwise
+# catch on. Near a ladder AND entirely above LAD_Y (pond floor near a ladder base is low-Y, so it stays).
+# Mirrors the mod's IsLadderTopFloor (LADDER positions / radius / height must match CustomFishingSpot.cs).
+LAD_POS = [(p[1][0], p[1][2]) for p in placements if p[0].startswith('s04r')]
+LAD_R, LAD_Y = 45, 25   # top platforms lean out up to ~42u from the base position
+def van_cut(cx, cy, cz, miny):
+    return miny >= LAD_Y and any(math.hypot(cx-lx, cz-lz) < LAD_R for lx, lz in LAD_POS)
+van_floor, van_wall, van_mid, van_dropped = [], [], [], []
+CPOLY_CSV = os.path.join(HERE, 'vanilla_cpoly.csv')
+if os.path.exists(CPOLY_CSV):
+    with open(CPOLY_CSV) as fh:
+        next(fh, None)   # header row
+        for ln in fh:
+            p = ln.strip().split(',')
+            if len(p) < 12: continue
+            try: f = [float(x) for x in p]
+            except ValueError: continue
+            tri = [[f[0], f[1], f[2]], [f[3], f[4], f[5]], [f[6], f[7], f[8]]]
+            cx = (f[0]+f[3]+f[6])/3; cy = (f[1]+f[4]+f[7])/3; cz = (f[2]+f[5]+f[8])/3
+            miny = min(f[1], f[4], f[7])
+            nl = math.hypot(f[9], f[10], f[11]) or 1; ny = abs(f[10]/nl)     # NORMALIZE the raw normal
+            if ny < 0.3:
+                van_wall.append(tri)                         # a wall — dropped wholesale by the mod
+            elif van_cut(cx, cy, cz, miny):
+                van_dropped.append(tri)                      # floor/slope on a ladder top — also reclaimed
+            else:
+                (van_floor if ny > 0.7 else van_mid).append(tri)
+    kept = len(van_floor)+len(van_mid)
+    print(f"vanilla cpoly: KEEP {kept} floor/slope ({len(van_floor)} floor + {len(van_mid)} slope);"
+          f" DROP {len(van_wall)} walls + {len(van_dropped)} ladder-top floors")
+else:
+    print("vanilla cpoly: (no vanilla_cpoly.csv — start fishing in Brownboo to dump it)")
+
 D = {'visual': visual, 'col_rocks': col_rocks, 'col_stilts': col_stilts, 'col_plants': col_plants,
      'col_build': col_build, 'col_perim': col_perim,
+     'van_floor': van_floor, 'van_wall': van_wall, 'van_mid': van_mid, 'van_dropped': van_dropped,
      'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint}
 js = json.dumps(D, separators=(',', ':'))   # embedded directly in the self-contained HTML
 LAY = [
-    ('watereffect','water-edge foam','D.visual.watereffect','[100,140,160]',0.5,'#adf'),
+    ('foamouter','foam: outer shore','D.visual.foam_outer','[120,175,205]',0.6,'#adf'),
+    ('foamobj','foam: interior (stilts/plants)','D.visual.foam_obj','[80,105,125]',0.5,'#7ab'),
     ('watersurf','water surface','D.visual.watersurf','[40,110,140]',0.30,'#8bd'),
     ('shore','shore ring','D.visual.shore','[95,82,60]',1,'#ccc'),
     ('board','boardwalk','D.visual.boardwalk','[70,85,110]',1,'#ccc'),
@@ -222,11 +301,28 @@ LAY = [
     ('cplant','COLL plants','D.col_plants','[80,230,120]',0.9,'#5e8'),
     ('cbuild','COLL buildings','D.col_build','[205,120,255]',0.7,'#c8f'),
     ('cperim','COLL perimeter (inset 20)','D.col_perim','[60,210,255]',0.5,'#3df'),
+    ('vfloor','VANILLA floor (KEPT)','D.van_floor','[90,200,255]',0.8,'#5cf'),
+    ('vwall','VANILLA wall (DROPPED)','D.van_wall','[255,90,160]',0.8,'#f6a'),
+    ('vmid','VANILLA slope (KEPT)','D.van_mid','[255,215,80]',0.8,'#fd5'),
+    ('vcut','VANILLA ladder-top floor (DROPPED)','D.van_dropped','[120,120,130]',0.7,'#999'),
 ]
-_off = ("crater", "fishpoint", "crock", "cstilt", "cplant", "cbuild", "cperim")   # off by default
-checks = "".join(f'<label><input type=checkbox id=t_{i} {"checked" if i not in _off else ""}> <span style="color:{lc}">{lb}</span></label><br>' for i, lb, src, c, a, lc in LAY)
-# fishrect is special: a hot-pink 3D point-grid box + coordinate labels, handled in draw() not as a layer
-checks += '<label><input type=checkbox id=t_fishrect> <span style="color:#f4a">fishing box + coords</span></label><br>'
+# vanilla layers ON by default (seeing the native collision is the point); mod-collision drafts + clutter OFF
+_on = ("vfloor", "vmid")   # only the vanilla floor + slope layers on by default; everything else off
+def layer_count(src):
+    obj = D
+    for p in src.split('.')[1:]: obj = obj[p]
+    return len(obj)
+_cnt = {f"t_{i}": layer_count(src) for i, lb, src, c, a, lc in LAY}   # poly (triangle) count per layer
+checks = "".join(
+    f'<label><input type=checkbox id=t_{i} {"checked" if i in _on else ""}> '
+    f'<span style="color:{lc}">{lb}</span> <span style="color:#777">({_cnt[f"t_{i}"]})</span></label><br>'
+    for i, lb, src, c, a, lc in LAY)
+# fishrect is special: a hot-pink 3D point-grid box + coordinate labels (POINTS, not polys), handled in
+# draw() not as a layer — shown with a point count and excluded from the poly total.
+checks += (f'<label><input type=checkbox id=t_fishrect> <span style="color:#f4a">fishing box + coords</span> '
+           f'<span style="color:#777">({len(D["fishbox"])} pts)</span></label><br>')
+checks += '<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">selected: <b id="tot" style="color:#fff">0</b> polys</div>'
+cnt_js = json.dumps(_cnt, separators=(',', ':'))
 pushes = "".join(f"if(on('t_{i}')&&{src}) L.push({{t:{src},c:{c},a:{a}}});\n" for i, lb, src, c, a, lc in LAY)
 html = '''<div style="margin:0;background:#0d1117;color:#ddd;font-family:monospace;overflow:hidden">
 <canvas id="c" style="display:block;cursor:grab;touch-action:none"></canvas>
@@ -235,9 +331,11 @@ html = '''<div style="margin:0;background:#0d1117;color:#ddd;font-family:monospa
 CHECKS<div id="err" style="color:#f66"></div></div></div>
 <script>try{
 const D=JSON_DATA;
+const CNT=CNT_DATA;
+function updateTotal(){let s=0;for(const k in CNT){const e=document.getElementById(k);if(e&&e.checked)s+=CNT[k];}const t=document.getElementById('tot');if(t)t.textContent=s;}
 const cv=document.getElementById('c'),cx=cv.getContext('2d');
 let W,H;function resize(){W=cv.width=innerWidth||900;H=cv.height=innerHeight||700;}resize();addEventListener('resize',()=>{resize();draw();});
-let yaw=0.6,pitch=-0.55,zoom=1.5;
+let yaw=0.6,pitch=0.55,zoom=1.5;   // +pitch = camera ABOVE the model, looking down
 const on=id=>document.getElementById(id).checked;
 function layers(){const L=[];
 PUSHES
@@ -296,7 +394,9 @@ cv.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;cv.sty
 addEventListener('pointerup',()=>{drag=false;cv.style.cursor='grab';});
 addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
 cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;draw();},{passive:false});
-for(const cb of document.querySelectorAll('input')) cb.addEventListener('change',draw);
+for(const cb of document.querySelectorAll('input')) cb.addEventListener('change',()=>{draw();updateTotal();});
+updateTotal();
 }catch(e){document.getElementById('err').textContent='ERR: '+e.message;}</script>'''
-open(os.path.join(OUT, HTML_NAME), 'w').write(html.replace('CHECKS', checks).replace('PUSHES', pushes).replace('JSON_DATA', js))
+open(os.path.join(OUT, HTML_NAME), 'w').write(
+    html.replace('CHECKS', checks).replace('PUSHES', pushes).replace('JSON_DATA', js).replace('CNT_DATA', cnt_js))
 print("visual:", {k: len(v) for k, v in visual.items()})

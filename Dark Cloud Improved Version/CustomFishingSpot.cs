@@ -156,11 +156,15 @@ namespace Dark_Cloud_Improved_Version
             // edges: x ~-347..320, z ~-289..307), not just the +/-120 central pond. WATCH cpoly on the
             // FISHING SPOT LOADED line: this is a large rect and the poly gather has a hard 1024 cap
             // (overflow crashes). Brownboo's water is sparse so it should stay well under, but confirm.
-            // Cast rect (X1,Z1,X2,Z2 = W,N,E,S edges): W=-300, N=-260, E=240, S=300. Kept tight-ish to the
-            // pond so PickUpPoly stays under the 1024 native-poly cap; corners over land are rejected by the
-            // native terrain (bobber rests above water+5). Mirrored in tools/brownboo_viewer.py (RECT_*).
+            // Cast rect (X1,Z1,X2,Z2 = W,N,E,S edges): W=-320, N=-260, E=310, S=300. Corners over land are
+            // rejected by the native terrain (bobber rests above water+5) — this still works with the
+            // floors-only experiment, since those rejections come from the floor polys we KEEP, not the
+            // walls we drop. STILL WATCH cpoly on the FISHING SPOT LOADED line: the poly GATHER (PickUpPoly)
+            // runs before our wall-removal and has a hard 1024 cap, so widening the rect can only be checked
+            // by watching the count — if it approaches 1024 we must decouple the fish rect (roam bounds) from
+            // this cast/gather rect. Mirrored in tools/brownboo_viewer.py (RECT_*).
             new Spot(14, "Brownboo lake", 0,
-                     -300f, -260f, 240f, 300f, water: 0f, ground: -15f,
+                     -320f, -260f, 310f, 300f, water: 0f, ground: -15f,
                      tx: 74f, ty: 10f, tz: -20f, radius: InteractRadius,
                      sx: 74f, sy: 10f, sz: -20f, facing: -1.639f,
                      diagNoVillagerClear: true,   // the crash fix: don't clear villagers in Brownboo
@@ -1283,11 +1287,142 @@ namespace Dark_Cloud_Improved_Version
             if (live && !_fishingWasLive)
             {
                 _snapCamera = true;
+                // EXPERIMENT: drop every vertical wall from the native cpoly, keeping only the floors/slopes
+                // the hook/bobber raycast honours. Tests whether player movement (its own collision system)
+                // still keeps you on the boardwalk and whether the bobber/hook behave with walls gone.
+                if (FloorsOnlyExperiment) ReplaceWithFloorsOnly();
                 // Keep the town's native terrain collision (hook/bobber vs sand/rocks/houses) and APPEND our
                 // fish-containment walls on top of it. See InjectCollision.
-                if (InjectFakeCollision && _spot.HasCollision) InjectCollision(_spot);
+                else if (InjectFakeCollision && _spot.HasCollision) InjectCollision(_spot);
             }
             _fishingWasLive = live;
+        }
+
+        /// <summary>
+        /// EXPERIMENT: rewrite the native cpoly to keep ONLY near-horizontal polys (floors + slopes), dropping
+        /// every vertical wall. The hypothesis being tested: (a) the hook/bobber only ever land on floor-ish
+        /// polys (FishLineStep honours |normal.Y| &gt; 0.2), so walls never mattered to them, and (b) the
+        /// player's OWN movement collision — a separate system from cpoly — is what keeps them on the boardwalk
+        /// during a session. If both hold, we can throw away ~460 wall polys and free the whole budget.
+        ///
+        /// Pure runtime memory op: forward-compact the buffer in place (write index never outruns read index)
+        /// and lower CPolyNum. Runs once, AFTER PickUpPoly has gathered — so no bearing on the 1024 gather cap.
+        /// Reloading the town restores the full native set.
+        /// </summary>
+        internal static bool FloorsOnlyExperiment = true;
+
+        /// <summary>The floor-ness cutoff: the engine's own raycast (FishLineStep, DAT_2a1a64) counts a poly as
+        /// ground when |normal.Y| &gt; 0.2 on the normalised normal. Keeping exactly that set preserves every
+        /// poly the hook/bobber can land on and discards only true walls.</summary>
+        private const float FloorNormalYMin = 0.2f;
+
+        private static void ReplaceWithFloorsOnly()
+        {
+            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) { Log("   floors-only: cpoly ptr invalid — skipping"); return; }
+            long buf = Memory.ToMmu(p);
+
+            int nativeCount = Memory.ReadInt(FishingSpot.CPolyNum);
+            if (nativeCount <= 0 || nativeCount > FishingSpot.CPolyMax)
+            { Log($"   floors-only: native count {nativeCount} unusable — skipping"); return; }
+
+            // Capture the FULL gather (floors + walls) at the current cast rect, BEFORE we compact — this is
+            // the ground-truth geometry the viewer splits into floor/slope/wall, so widening the rect can be
+            // verified. Runs here (not in the probe) because CustomFishingSpot.Tick fires before the probe,
+            // so by the time the probe dumps, the walls are already gone.
+            DumpFullGather(buf, nativeCount);
+
+            int keep = 0, walls = 0, ladtops = 0;
+            for (int i = 0; i < nativeCount; i++)
+            {
+                long poly = buf + (long)i * 0x50;
+                float nx = Memory.ReadFloat(poly + 0x30);
+                float ny = Memory.ReadFloat(poly + 0x30 + 4);
+                float nz = Memory.ReadFloat(poly + 0x30 + 8);
+                float nl = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                if (nl <= 0f || Math.Abs(ny) / nl <= FloorNormalYMin) { walls++; continue; }   // a wall — drop it
+
+                // Also drop floor polys sitting on TOP of the in-water ladders (platforms above the water,
+                // not pond floor) — the bobber/hook have no business catching on them. Gated on the poly's
+                // LOWEST vertex, so pond floor near a ladder base (low Y) is kept; only the high tops go.
+                if (IsLadderTopFloor(poly)) { ladtops++; continue; }
+
+                if (keep != i)
+                    Memory.WriteBytesBatch(buf + (long)keep * 0x50, Memory.ReadBytesBatch(poly, 0x50));
+                keep++;
+            }
+
+            Memory.WriteInt(FishingSpot.CPolyNum, keep);
+            Log($"   floors-only: kept {keep} floor/slope polys (dropped {walls} walls + {ladtops} " +
+                $"ladder-top floors) — cpoly {nativeCount} → {keep}");
+        }
+
+        /// <summary>Brownboo's in-water ladder (s04r*) XZ positions, from gedit/s04/mapinfo.cfg. Used to
+        /// reclaim the FLOOR platforms on top of each ladder. Radius/height must match the viewer's van_cut
+        /// (tools/brownboo_viewer.py: LAD_POS / LAD_R / LAD_Y).</summary>
+        private static readonly (float x, float z)[] BrownbooLadders =
+        {
+            (0f, 74f), (-57f, 48f), (32f, -67f), (82f, 109f), (62f, -127f), (-55f, -116f), (-91f, 76f),
+        };
+        private const float LadderRadius  = 45f;   // top platforms lean out up to ~42u from the base position
+        private const float LadderTopMinY = 25f;   // a floor poly at/above this height near a ladder is a top
+
+        /// <summary>True if a cpoly triangle is a floor platform on top of one of Brownboo's ladders: its
+        /// lowest vertex is above <see cref="LadderTopMinY"/> AND its centre lies within
+        /// <see cref="LadderRadius"/> of a ladder. Brownboo-only (the positions are its own).</summary>
+        private static bool IsLadderTopFloor(long poly)
+        {
+            if (_spot.MapNo != 14) return false;
+
+            float y0 = Memory.ReadFloat(poly + 4);
+            float y1 = Memory.ReadFloat(poly + 0x10 + 4);
+            float y2 = Memory.ReadFloat(poly + 0x20 + 4);
+            if (Math.Min(y0, Math.Min(y1, y2)) < LadderTopMinY) return false;
+
+            float cx = (Memory.ReadFloat(poly) + Memory.ReadFloat(poly + 0x10) + Memory.ReadFloat(poly + 0x20)) / 3f;
+            float cz = (Memory.ReadFloat(poly + 8) + Memory.ReadFloat(poly + 0x10 + 8) + Memory.ReadFloat(poly + 0x20 + 8)) / 3f;
+            foreach (var (lx, lz) in BrownbooLadders)
+            {
+                float dx = cx - lx, dz = cz - lz;
+                if (dx * dx + dz * dz < LadderRadius * LadderRadius) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
+        /// rect, for the viewer (tools/brownboo_viewer.py) to split into floor/slope/wall. Overwrites the
+        /// stale reference each capture, which is correct — the rect it reflects is whatever is live now.</summary>
+        private const string FullGatherCsv = "/Users/thomascantwell/DarkCloud-Enhanced/tools/vanilla_cpoly.csv";
+
+        /// <summary>Dump every cpoly triangle (3 verts + normal) to a CSV. One line per triangle:
+        /// v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz.</summary>
+        private static void DumpFullGather(long buf, int count)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz");
+            for (int i = 0; i < count; i++)
+            {
+                long poly = buf + (long)i * 0x50;
+                for (int v = 0; v < 3; v++)
+                {
+                    sb.Append(Memory.ReadFloat(poly + v * 0x10).ToString("0.###")).Append(',');
+                    sb.Append(Memory.ReadFloat(poly + v * 0x10 + 4).ToString("0.###")).Append(',');
+                    sb.Append(Memory.ReadFloat(poly + v * 0x10 + 8).ToString("0.###")).Append(',');
+                }
+                sb.Append(Memory.ReadFloat(poly + 0x30).ToString("0.###")).Append(',');
+                sb.Append(Memory.ReadFloat(poly + 0x30 + 4).ToString("0.###")).Append(',');
+                sb.Append(Memory.ReadFloat(poly + 0x30 + 8).ToString("0.###"));
+                sb.AppendLine();
+            }
+            try
+            {
+                System.IO.File.WriteAllText(FullGatherCsv, sb.ToString());
+                Log($"   full-gather: wrote {count} polys (floors+walls) -> {FullGatherCsv}");
+            }
+            catch (Exception e)
+            {
+                Log($"   full-gather: write FAILED: {e.Message}");
+            }
         }
 
         /// <summary>Turn OFF to leave the native cpoly untouched (no fish walls). See InjectCollision.</summary>
