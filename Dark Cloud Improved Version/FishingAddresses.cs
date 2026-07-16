@@ -339,8 +339,19 @@ namespace Dark_Cloud_Improved_Version
         internal const long LineGroundLevel = 0x202A2B38;
 
         internal const long CPoly     = 0x202A2B68; // CCPoly* — the collision PickUpPoly gathered
-        internal const long CPolyNum  = 0x202A2B6C; // int. PickUpPoly HANGS the game above 0x400.
-        internal const int  CPolyMax  = 0x400;
+        internal const long CPolyNum  = 0x202A2B6C; // int.
+
+        // TWO distinct ceilings (RE'd — see _LOAD_FISHING_DATA 0x1969a0 / FishingLoad 0x1a87e0):
+        //   • GATHER: _LOAD_FISHING_DATA gathers into a 0x14000-byte STACK buffer (1024 CCPoly) and, right
+        //     after, asserts `if (count > 0x400) hang`. So the NATIVE gather must stay <= 1024 or the game
+        //     hangs (and the stack has already overflowed). This bounds the cast-rect size.
+        internal const int  CPolyGatherMax = 0x400;   // 1024 — native gather assert
+        //   • BUFFER: FishingLoad allocates the persistent `cpoly` as CDataAlloc2 Alloc(0x1800) — the arg is
+        //     a count of 0x10-byte units, so 0x1800*0x10 = 0x18000 bytes / 0x50 per CCPoly = 1228 slots.
+        //     FishingSetCPoly memcpy's the gather into it; our APPENDS (rocks/pond-bottom) extend past the
+        //     native count. TOTAL cpoly must stay <= 1228 or the heap buffer overflows.
+        internal const int  CPolyBufferMax = 1228;    // 0x18000 / 0x50 — persistent buffer capacity
+        internal const int  CPolyMax  = CPolyGatherMax;   // back-compat alias (native-gather sanity checks)
 
         internal const long Fish       = 0x202A2B58; // CFish* — array base, stride 0x2410
         internal const long FishNum    = 0x202A2B64; // int — live fish (4 or 5; six are allocated)

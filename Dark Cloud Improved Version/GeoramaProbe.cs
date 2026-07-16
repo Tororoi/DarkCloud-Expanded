@@ -242,6 +242,7 @@ namespace Dark_Cloud_Improved_Version
 
             DumpCPoly();
             DumpCPolyFile();
+            DumpGroundGrid();
 
             // WHAT fired it? If an event point did, EdGetEvent will have left the match here. If both read
             // as nothing, the trigger is not an event point and we look elsewhere — but either way this is a
@@ -410,6 +411,78 @@ namespace Dark_Cloud_Improved_Version
             catch (Exception e)
             {
                 Log($"    CPOLY FILE: write FAILED: {e.Message}");
+            }
+        }
+
+        /// <summary>Where the base-ground grid dump is written, for the viewer to reconstruct the accurate
+        /// pond-bottom bowl. One line per cell: area,i,j,worldX,worldZ,height,code.</summary>
+        internal static string GroundGridPath = "/Users/thomascantwell/DarkCloud-Enhanced/tools/ground_grid.csv";
+
+        /// <summary>
+        /// Dump the town's base-ground GRID (all 4 CEditArea grids) — the accurate pond-bottom source. Unlike
+        /// cpoly (which skips underwater/non-walkable cells), this walks EVERY cell and records its world XZ,
+        /// its height (OriginY + altRaw*UnitAlt) and its code, so the viewer can rebuild the shallow-shore
+        /// bowl the collision gather leaves out. See EditArea (TownAddresses.cs) for the struct.
+        /// </summary>
+        private static void DumpGroundGrid()
+        {
+            long g = EditGround.Base();
+            if (g == 0) { Log("   GROUND GRID: CEditGround null — skipping"); return; }
+
+            // Diagnostic: log the raw area pointers. If all 0/invalid, this town has no runtime CEditArea
+            // grid (expected for fixed, non-georama-editable towns like Brownboo, map 14) — the pond bottom
+            // is built frames, not an editable grid, and must be reconstructed offline from the georama tiles.
+            {
+                uint rawG = Memory.ReadUInt(EditGround.EditGroundPtr);
+                var ap = new int[EditGround.AreaCount];
+                for (int a = 0; a < EditGround.AreaCount; a++)
+                    ap[a] = unchecked((int)Memory.ReadUInt(g + EditGround.AreaPtrBase + a * 4));
+                Log($"   GROUND GRID: CEditGround ptr=0x{rawG:X8}  areaPtrs=[{string.Join(", ", System.Array.ConvertAll(ap, v => $"0x{v:X8}"))}]");
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("area,i,j,worldX,worldZ,height,code");
+            int total = 0, areas = 0;
+            for (int a = 0; a < EditGround.AreaCount; a++)
+            {
+                long area = EditArea.Ptr(g, a);
+                if (area == 0) continue;
+
+                int w = Memory.ReadInt(area + EditArea.Width);
+                int h = Memory.ReadInt(area + EditArea.Height);
+                if (w <= 0 || w > 64 || h <= 0 || h > 16)   // sane bounds (row stride caps Height at 16)
+                { Log($"   GROUND GRID: area {a} bad dims {w}x{h} — skipping"); continue; }
+
+                float ox = Memory.ReadFloat(area + EditArea.OriginX);
+                float oy = Memory.ReadFloat(area + EditArea.OriginY);
+                float oz = Memory.ReadFloat(area + EditArea.OriginZ);
+                float unit = Memory.ReadFloat(area + EditArea.UnitSize);
+                float ualt = Memory.ReadFloat(area + EditArea.UnitAlt);
+                areas++;
+
+                for (int i = 0; i < w; i++)
+                for (int j = 0; j < h; j++)
+                {
+                    long off = (long)i * EditArea.RowStride + (long)j * EditArea.CellStride;
+                    int altRaw = Memory.ReadInt(area + EditArea.AltBase + off);
+                    int code   = Memory.ReadInt(area + EditArea.CodeBase + off);
+                    float wx = ox + i * unit;
+                    float wz = oz + j * unit;
+                    float hgt = oy + altRaw * ualt;
+                    sb.Append(a).Append(',').Append(i).Append(',').Append(j).Append(',')
+                      .Append(wx.ToString("0.##")).Append(',').Append(wz.ToString("0.##")).Append(',')
+                      .Append(hgt.ToString("0.###")).Append(',').Append(code).Append('\n');
+                    total++;
+                }
+            }
+            try
+            {
+                System.IO.File.WriteAllText(GroundGridPath, sb.ToString());
+                Log($"   GROUND GRID: dumped {total} cells across {areas} area(s) -> {GroundGridPath}");
+            }
+            catch (Exception e)
+            {
+                Log($"   GROUND GRID: write FAILED: {e.Message}");
             }
         }
 

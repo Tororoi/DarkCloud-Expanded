@@ -168,7 +168,10 @@ namespace Dark_Cloud_Improved_Version
                      tx: 74f, ty: 10f, tz: -20f, radius: InteractRadius,
                      sx: 74f, sy: 10f, sz: -20f, facing: -1.639f,
                      diagNoVillagerClear: true,   // the crash fix: don't clear villagers in Brownboo
-                     fishDepth: 6f,
+                     // fishDepth override REMOVED: patching fish to WaterLevel-6 left them shallower than
+                     // the hook reaches (hook depth was not changed to match) so nothing could bite. With no
+                     // override the fish stay at vanilla WaterLevel-12, which the hook reaches — fish bite again.
+                     // (If we want shallower fish later, the hook/bobber depth must be patched in tandem.)
                      // Fabricated collision: the lake shore (fish kept in) + the two large rocks (fish kept
                      // out), traced with the overhead cursor and decimated. Walls span the fish's depth band.
                      perimeter: new[]
@@ -306,9 +309,10 @@ namespace Dark_Cloud_Improved_Version
                 _lastParam = int.MinValue;
                 _lastMode = int.MinValue;
                 RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
+                PriscleenFish.Uninstall();
             }
 
-            if (map == _installedMap) { WatchMatches(); return; }
+            if (map == _installedMap) { WatchMatches(); PriscleenFish.Tick(); return; }
 
             if (!TryGetSpot(map, out Spot spot)) return;
 
@@ -393,6 +397,8 @@ namespace Dark_Cloud_Improved_Version
             _spot = spot;
 
             PatchFishDepth(spot);
+
+            if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
             Log($"   event point [{slot}] type=3 label={labelId} " +
                 $"pos=({spot.TrigX},{spot.TrigY},{spot.TrigZ}) radius={spot.Radius} partIndex=-1 (world)");
@@ -1294,6 +1300,15 @@ namespace Dark_Cloud_Improved_Version
                 // Keep the town's native terrain collision (hook/bobber vs sand/rocks/houses) and APPEND our
                 // fish-containment walls on top of it. See InjectCollision.
                 else if (InjectFakeCollision && _spot.HasCollision) InjectCollision(_spot);
+
+                // APPEND the simplified rock collision (decoded offline, tools/export_rock_collision.py) so
+                // the bobber can't cast onto/through the rocks and fish can't swim through them. Runs after
+                // the floors-only compaction, so it fills the slots freed by the dropped walls.
+                if (AppendRocks) AppendRockCollision(_spot.MapNo);
+
+                // TEST AID for the Priscleen port: stamp the loaded fish as species 8 (no-op unless the
+                // PriscleenFish.ForceAllSpecies8 switch is on).
+                PriscleenFish.ForceSpecies8OnFish();
             }
             _fishingWasLive = live;
         }
@@ -1389,6 +1404,34 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
+        /// <summary>Append the simplified rock collision from the DCFC .bin to cpoly. Runs after the
+        /// floors-only compaction, so it lands in the slots freed by the dropped walls.</summary>
+        internal static bool AppendRocks = true;
+
+        private static void AppendRockCollision(int mapNo)
+        {
+            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) { Log("   rocks: cpoly ptr invalid — skipping"); return; }
+            long buf = Memory.ToMmu(p);
+
+            int count = Memory.ReadInt(FishingSpot.CPolyNum);
+            if (count <= 0 || count > FishingSpot.CPolyMax) { Log($"   rocks: cpoly count {count} unusable"); return; }
+
+            byte[] template = Memory.ReadBytesBatch(buf, 0x50);   // a real poly, for its non-vertex fields
+            var polys = new System.Collections.Generic.List<byte[]>();
+            int added = AddMeshTriangles(polys, template, mapNo);
+            if (added == 0) { Log($"   rocks: no mesh file for map {mapNo} (or 0 tris)"); return; }
+
+            int total = count + polys.Count;
+            if (total > FishingSpot.CPolyBufferMax)
+            { Log($"   rocks: {count} + {polys.Count} = {total} > {FishingSpot.CPolyBufferMax} buffer — skipping"); return; }
+
+            for (int i = 0; i < polys.Count; i++)
+                Memory.WriteBytesBatch(buf + (long)(count + i) * 0x50, polys[i]);
+            Memory.WriteInt(FishingSpot.CPolyNum, total);
+            Log($"   rocks: appended {polys.Count} rock tris (cpoly {count} → {total})");
+        }
+
         /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
         /// rect, for the viewer (tools/brownboo_viewer.py) to split into floor/slope/wall. Overwrites the
         /// stale reference each capture, which is correct — the rect it reflects is whatever is live now.</summary>
@@ -1476,9 +1519,9 @@ namespace Dark_Cloud_Improved_Version
             int meshTris = AddMeshTriangles(polys, template, s.MapNo);
 
             int total = nativeCount + polys.Count;
-            if (total > FishingSpot.CPolyMax)
+            if (total > FishingSpot.CPolyBufferMax)
             {
-                Log($"   collision: native {nativeCount} + {polys.Count} added = {total} > {FishingSpot.CPolyMax} cap — skipping");
+                Log($"   collision: native {nativeCount} + {polys.Count} added = {total} > {FishingSpot.CPolyBufferMax} buffer — skipping");
                 return;
             }
 

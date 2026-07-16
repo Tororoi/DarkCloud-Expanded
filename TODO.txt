@@ -1,0 +1,96 @@
+DARK CLOUD MOD — WHAT TO TEST WHEN BACK AT THE PC
+==================================================
+Rebuild the mod first (dotnet build in "Dark Cloud Improved Version"), then fish in Brownboo.
+Both Brownboo tests below can be done in the SAME fishing session.
+
+
+[1] BROWNBOO — ROCK COLLISION + WIDER CAST RECT
+-----------------------------------------------
+Live setup: floors-only experiment ON (drops all native walls), rock collision appended, cast rect
+widened to W=-320 / E=310.
+
+ROCK COLLISION REBUILT AGAIN (PILLARS + TUNNELS, build_rock_pillars in tools/brownboo_viewer.py):
+  - iwa01 & iwa02 are DOLMENS (2 pillars + a lintel). We keep only the PILLARS: geometry above y=40 (the
+    lintel/top rock) is ignored, so each archway stays an OPEN TUNNEL — a walking player's held bobber
+    passes through without snagging. iwa03 = the small single rock.
+  - Pillar tops are capped at 40 and given a bobber-safe bounded-slope top (no too-steep above-water face:
+    min |normal.Y|/len = 0.253 > 0.2, validated in the viewer AND the exported .bin).
+  - The pillars' tunnel-facing INNER sides have NO above-water collision (so the bobber passes) and are
+    sealed only below the waterline. Outer sides slope down past the water to the pillar bases (Y reaches
+    -12.7), so the "extend into the water to >= -9" requirement is met.
+  - 807 tris. Budget: floors-only keeps 326 + 807 = 1133, under the 1228 buffer (native gather 769 < 1024).
+NEW WORKFLOW (rock collision now shaped in BLENDER, not the viewer):
+  - Export raw rocks:  python3 tools/export_rocks_obj.py  -> tools/rock_obj/iwa01.obj, iwa02.obj, iwa03.obj
+    (game world coords, Y up, WaterLevel y=0). Simplify each into a low-poly collision mesh in Blender.
+  - Constraints: keep tops closed/smooth (bobber rests on them); extend down to at least y=-9; keep the
+    dolmen tunnels OPEN (delete the lintel spans); envelope slightly OUTWARD; keep all 3 rocks combined
+    under ~800 tris (floors-only uses 326, buffer cap 1228).
+  - Re-export from Blender as OBJ with the SAME axis (Y up) so coords round-trip.
+  - Save each finished mesh as tools/rock_obj/<rock>_simple.obj (e.g. iwa03_simple.obj), then:
+        python3 tools/assemble_rock_collision.py   -> brownboo_14.bin
+    It uses your Blender mesh for any rock that has a *_simple.obj and a lathe PLACEHOLDER for the rest,
+    so the full collision is always complete & in budget. (import_rocks_obj.py = raw all-OBJ convert.)
+STATUS: ALL THREE hand-built in Blender & assembled — iwa01=76, iwa02=81, iwa03=37 (194 tris total, all
+winding-consistent). No more lathe placeholders. Re-run tools/assemble_rock_collision.py after any re-edit.
+IN-GAME CHECK: bobber rests cleanly on each rock top, fish don't clip, and the dolmen tunnels (iwa01 holes,
+iwa02 arch) are walkable without the held bobber snagging.
+
+Watch the LOG on the "FISHING SPOT LOADED" line:
+  - "floors-only: kept N ... (cpoly G -> N)"   G = the native GATHER count. MUST be under 1024 or the
+    game HANGS (that's the risk from widening the rect). If it hangs on entry with no log, the rect
+    over-gathered — tell Claude and we decouple the fish rect from the cast/gather rect.
+  - "rocks: appended 443 rock tris (cpoly N -> N+443)"   total ~780, well under the 1228 buffer cap.
+
+In-game behaviour to check:
+  - Cast ONTO a rock -> bobber rests on top (above water) and the cast is REJECTED (rocks block casts).
+  - Small rock (iwa03) -> bobber rests on its top, does NOT sink into the visual rock.
+  - Fish do NOT swim through the rocks.
+  - Collision sits just OUTSIDE the visual rock everywhere (nothing clips into the model).
+
+
+[2] BROWNBOO — POND-BOTTOM GROUND-GRID CAPTURE  (the "other brownboo thing")
+---------------------------------------------------------------------------
+On spot load the mod dumps the base-ground grid to tools/ground_grid.csv (the accurate pond bottom,
+including the underwater cells collision skips).
+
+  - Check the LOG: "GROUND GRID: dumped N cells across M area(s)".
+      If it says "bad dims" for an area -> tell Claude the numbers (grid layout differs from the assumed
+      bounds; the dump code needs adjusting).
+  - Then re-run:  python3 tools/brownboo_viewer.py
+      Toggle "ground grid: pond BOTTOM" and confirm it forms the bowl shape (not flat / not garbage).
+
+
+[3] PRISCLEEN (DC2 fish) — NOW WIRED, EXPERIMENTAL/UNTESTED  (do this AFTER [1] and [2] work)
+------------------------------------------------------------------------------------------
+The DC2 Priscleen model is extracted, converted to a DC1-format .chr, bundled as a mod Resource
+(Resources/Fish/f19a.chr), and the runtime injection is wired (PriscleenFish.cs). It injects into DC1's
+cut species 8 when a species-8 fish is caught in Brownboo.
+
+NOTE: the fish-depth override was REMOVED (fish are back at vanilla WaterLevel-12) — the earlier -6 depth
+left the fish shallower than the hook reached, so nothing could bite. Fish should bite normally now.
+
+Species 8 doesn't spawn normally, so to SEE Priscleen you must flip the test switch:
+  In PriscleenFish.cs set  ForceAllSpecies8 = true   (stamps every Brownboo fish as species 8), rebuild.
+  Then fish in Brownboo and CATCH ANY FISH -> it should reel up as the Priscleen model, flapping.
+
+FIXED (was showing "Bobo" = the f01a stand-in): the swap used to match the BG slot by a HARD-CODED size
+and only the first match. It now matches by FILENAME (f01a) across ALL 32 BG slots, gated on the caught
+species (BattleFish == 8) — robust to whichever BG/fish slot is used. There's a ~120-frame window after the
+read completes, so no race.
+
+Watch the LOG:
+  - "[PriscleenFish] name_419[8] redirected to stand-in f01a ... Priscleen model 131536B ready" (spot load)
+  - "[PriscleenFish] TEST: stamped N Brownboo fish as species 8"                          (on fishing start)
+  - "[PriscleenFish] injected Priscleen (131536B) into BG slot N buffer 0x........ (file 'chara/f01a.chr')"
+                                                                                          (when you reel one in)
+If the 3rd line never prints, tell Claude the log — the gate (species) or filename match needs adjusting.
+
+What to look for / report (these are the untested unknowns):
+  - Does the caught fish show the Priscleen MODEL at all (vs invisible / garbage / crash)?
+  - Does it FLAP (motion index 1 = the reeled-in animation)?  [KEYs kept in DC2 order 0=4-14/1=18-28/2=40-80]
+  - Texture correct?  (VERTEX_ANIME 1 vs DC2's skin1/skin2 — may need an ALLOC_DBUFF tweak)
+  - Any crash on catch?  (if so, note the exact moment)
+
+NOTE: this test aid makes ALL Brownboo fish Priscleen and doesn't set the name/stats yet. The real
+feature (species 8 in the spawn table + fish_info[8] + "Priscleen" name via .mes patch) comes after the
+model itself is confirmed working. Set ForceAllSpecies8 back to false for normal play.

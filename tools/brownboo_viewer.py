@@ -147,13 +147,15 @@ def cap_at(tris, y):
     collect every triangle-edge crossing at that height, order them around the centroid and fan-triangulate
     into a flat horizontal cap — so a downward raycast (bobber/hook) lands on it instead of falling through
     the opening. Returns [] if nothing crosses y (the rock is entirely below the box top)."""
-    pts = []
+    pts = []; seen = set()
     for t in tris:
         for i in range(3):
             a = t[i]; b = t[(i+1) % 3]
             if (a[1]-y)*(b[1]-y) < 0:                      # edge straddles the plane
                 s = (y-a[1])/(b[1]-a[1])
-                pts.append((a[0]+s*(b[0]-a[0]), a[2]+s*(b[2]-a[2])))
+                px, pz = a[0]+s*(b[0]-a[0]), a[2]+s*(b[2]-a[2])
+                k = (round(px, 2), round(pz, 2))           # shared edges yield the same crossing twice
+                if k not in seen: seen.add(k); pts.append((px, pz))
     if len(pts) < 3: return []
     cx = sum(p[0] for p in pts)/len(pts); cz = sum(p[1] for p in pts)/len(pts)
     pts.sort(key=lambda p: math.atan2(p[1]-cz, p[0]-cx))
@@ -181,14 +183,186 @@ def inset_polygon(pts, dd):
         out.append(list(p) if p else list(edges[i][0]))
     return out
 
-# rocks: clip each rock to the box band (-9..CY_HI) AND cap the opening where it's sliced at the box top,
-# so a rock taller than the box (iwa01→93, iwa02→68) can't be cast through its open top. Per-rock so each
-# cap is its own cross-section.
+def _tri_height_at(tri, x, z):
+    """Y of a triangle's plane at (x,z) via barycentric, or None if (x,z) is outside its XZ projection."""
+    (x1, y1, z1), (x2, y2, z2), (x3, y3, z3) = tri
+    d = (z2-z3)*(x1-x3) + (x3-x2)*(z1-z3)
+    if abs(d) < 1e-9: return None                     # degenerate in XZ (a vertical side)
+    a = ((z2-z3)*(x-x3) + (x3-x2)*(z-z3))/d
+    b = ((z3-z1)*(x-x3) + (x1-x3)*(z-z3))/d
+    c = 1 - a - b
+    if a < -1e-6 or b < -1e-6 or c < -1e-6: return None
+    return a*y1 + b*y2 + c*y3
+
+def _column_span(tris, x, z):
+    """min/max surface Y of the rock over the vertical column at (x,z), or (None,None) if none covers it."""
+    lo = hi = None
+    for t in tris:
+        y = _tri_height_at(t, x, z)
+        if y is not None:
+            if lo is None or y < lo: lo = y
+            if hi is None or y > hi: hi = y
+    return lo, hi
+
+def _flood_components(inside, nx, nz):
+    """8-connected components of the True cells in `inside` — one per pillar of a rock."""
+    seen = [[False]*nz for _ in range(nx)]; comps = []
+    for i in range(nx):
+        for j in range(nz):
+            if inside[i][j] and not seen[i][j]:
+                stack = [(i, j)]; seen[i][j] = True; comp = []
+                while stack:
+                    ci, cj = stack.pop(); comp.append((ci, cj))
+                    for di in (-1, 0, 1):
+                        for dj in (-1, 0, 1):
+                            ni, nj = ci+di, cj+dj
+                            if 0 <= ni < nx and 0 <= nj < nz and inside[ni][nj] and not seen[ni][nj]:
+                                seen[ni][nj] = True; stack.append((ni, nj))
+                comps.append(comp)
+    return comps
+
+def _lathe(pv, cx, cz, ytop, ybottom, nsides, nlevels, margin):
+    """Fit ONE smooth low-poly tapered tube (a lathe) to a pillar's vertex cloud `pv`, centred at (cx,cz),
+    from `ybottom` up to `ytop`. Per (height level, angle sector) we take the pillar's max radius, enforce
+    a downward taper (a level is at least as wide as the one above → an enveloping, monotone pillar), fill
+    empty sectors and smooth the rings so the surface is SMOOTH (no spikes) and CLOSED (no gaps). Returns
+    the tube walls + a flat top and bottom cap. `margin` pushes every radius out so the shell never sits
+    inside the visual rock."""
+    twopi = 2*math.pi
+    levels = [ybottom + (ytop-ybottom)*k/(nlevels-1) for k in range(nlevels)]
+    R = [[0.0]*nsides for _ in range(nlevels)]; seen = [[False]*nsides for _ in range(nlevels)]
+    for (x, y, z) in pv:
+        yy = ytop if y > ytop else y
+        r = math.hypot(x-cx, z-cz)
+        a = int((math.atan2(z-cz, x-cx) % twopi)/twopi*nsides) % nsides
+        k = min(range(nlevels), key=lambda kk: abs(levels[kk]-yy))
+        if r > R[k][a]: R[k][a] = r; seen[k][a] = True
+    for k in range(nlevels-2, -1, -1):                      # taper: a lower ring is >= the one above it
+        for a in range(nsides):
+            if R[k][a] < R[k+1][a]:
+                R[k][a] = R[k+1][a]
+                if seen[k+1][a]: seen[k][a] = True
+    for k in range(nlevels):                                # fill empty angle sectors (circular)
+        if not any(seen[k]):
+            for kk in list(range(k+1, nlevels)) + list(range(k-1, -1, -1)):
+                if any(seen[kk]): R[k] = R[kk][:]; break
+            continue
+        for a in range(nsides):
+            if not seen[k][a]:
+                for d in range(1, nsides):
+                    l, rt = (a-d) % nsides, (a+d) % nsides
+                    if seen[k][l] and seen[k][rt]: R[k][a] = (R[k][l]+R[k][rt])/2; break
+                    if seen[k][l]: R[k][a] = R[k][l]; break
+                    if seen[k][rt]: R[k][a] = R[k][rt]; break
+    for _ in range(2):                                      # smooth each ring circularly (kill spikes)
+        for k in range(nlevels):
+            R[k] = [(R[k][(a-1) % nsides] + 2*R[k][a] + R[k][(a+1) % nsides])/4 for a in range(nsides)]
+    for k in range(nlevels):
+        for a in range(nsides): R[k][a] += margin
+    def pt(k, a):
+        ang = twopi*a/nsides
+        return [cx + R[k][a]*math.cos(ang), levels[k], cz + R[k][a]*math.sin(ang)]
+    out = []
+    for k in range(nlevels-1):                             # tube walls
+        for a in range(nsides):
+            b = (a+1) % nsides
+            out.append([pt(k, a), pt(k, b), pt(k+1, b)]); out.append([pt(k, a), pt(k+1, b), pt(k+1, a)])
+    tc = [cx, levels[-1], cz]; bc = [cx, levels[0], cz]
+    for a in range(nsides):                                # flat top + bottom caps (closed → no gaps)
+        b = (a+1) % nsides
+        out.append([pt(nlevels-1, a), tc, pt(nlevels-1, b)])
+        out.append([pt(0, b), bc, pt(0, a)])
+    return out
+
+def build_rock_smooth(tris, cell, water, ycap, ybottom, nsides, nlevels, margin, lift):
+    """Collision for a rock as one smooth tapered LATHE per pillar. A rock may be a DOLMEN (2 pillars + a
+    lintel, e.g. iwa01/iwa02): we detect the pillar footprints (columns with rock below `ycap`), split them
+    into connected components (each = one pillar), and lathe each — so the lintel (above ycap) is dropped
+    and the archway between the pillars stays an open TUNNEL. Smooth by construction (no spiky height-field
+    sampling), closed (no gaps), low-poly, and extended down to `ybottom` below the water."""
+    ps = [p for t in tris for p in t]
+    minx = min(p[0] for p in ps); minz = min(p[2] for p in ps)
+    maxx = max(p[0] for p in ps); maxz = max(p[2] for p in ps)
+    xs = [minx + i*cell for i in range(int((maxx-minx)/cell)+2)]
+    zs = [minz + j*cell for j in range(int((maxz-minz)/cell)+2)]
+    nx, nz = len(xs), len(zs)
+    inside = [[False]*nz for _ in range(nx)]
+    for i in range(nx):
+        for j in range(nz):
+            lo, _ = _column_span(tris, xs[i], zs[j])
+            inside[i][j] = lo is not None and lo < ycap        # a pillar base is under this column
+    comps = _flood_components(inside, nx, nz)
+    cid = {}
+    for idx, comp in enumerate(comps):
+        for (i, j) in comp: cid[(i, j)] = idx
+    verts = list({tuple(p) for t in tris for p in t})
+    groups = [[] for _ in comps]
+    for v in verts:
+        if v[1] >= ycap: continue                              # skip lintel verts
+        i = max(0, min(nx-1, int((v[0]-minx)/cell))); j = max(0, min(nz-1, int((v[2]-minz)/cell)))
+        c = cid.get((i, j))
+        if c is not None: groups[c].append(v)
+    out = []
+    for g in groups:
+        if len(g) < 6: continue
+        cx = sum(p[0] for p in g)/len(g); cz = sum(p[2] for p in g)/len(g)
+        ytop = min(max(p[1] for p in g), ycap) + lift
+        out += _lathe(g, cx, cz, ytop, ybottom, nsides, nlevels, margin)
+    return out
+
+def _min_face_flatness(tris, water):
+    """min |normal.Y|/|normal| over ABOVE-water faces (for reporting how steep the pillar sides get)."""
+    m = 1.0
+    for (a, b, c) in tris:
+        if (a[1]+b[1]+c[1])/3.0 <= water + 1e-3: continue
+        ux, uy, uz = b[0]-a[0], b[1]-a[1], b[2]-a[2]
+        vx, vy, vz = c[0]-a[0], c[1]-a[1], c[2]-a[2]
+        nx_, ny_, nz_ = uy*vz-uz*vy, uz*vx-ux*vz, ux*vy-uy*vx
+        L = math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_)
+        if L > 1e-9: m = min(m, abs(ny_)/L)
+    return m
+
+# rock collision = one SMOOTH tapered lathe per pillar (build_rock_smooth): dolmen lintels dropped above
+# ycap so archways stay open TUNNELS, low-poly & closed (no gaps/spikes), extended down to YBOTTOM.
+ROCK_CELL, ROCK_MARGIN, ROCK_SIDES, ROCK_LEVELS, ROCK_LIFT = 8.0, 2.0, 12, 5, 2.0
+SMALL_CELL, SMALL_MARGIN, SMALL_SIDES, SMALL_LEVELS, SMALL_LIFT = 6.0, 1.5, 10, 4, 1.5
+YCAP, YBOTTOM = 40.0, -9.0        # ignore geometry above 40 (the lintel); extend collision down to -9
+def _load_obj_tris(path):
+    """Read triangles from a (hand-simplified, Blender) OBJ — the same meshes the mod loads. Faces may be
+    tris/quads/ngons (fan-triangulated); only vertex indices are used."""
+    vs = []; out = []
+    for line in open(path):
+        if line.startswith('v '):
+            p = line.split(); vs.append([float(p[1]), float(p[2]), float(p[3])])
+        elif line.startswith('f '):
+            idx = []
+            for tok in line.split()[1:]:
+                vi = tok.split('/')[0]
+                if vi: n = int(vi); idx.append(n-1 if n > 0 else len(vs)+n)
+            for k in range(1, len(idx)-1):
+                out.append([vs[idx[0]], vs[idx[k]], vs[idx[k+1]]])
+    return out
+
+# rock collision: prefer each rock's hand-simplified Blender mesh (tools/rock_obj/<rock>_simple.obj) —
+# exactly what the mod loads via assemble_rock_collision.py — and fall back to the smooth lathe for rocks
+# not yet done in Blender, so the viewer always matches the shipped .bin.
+_ROCK_OBJ = os.path.join(HERE, 'rock_obj')
 col_rocks = []
+_rock_src = []
 for _nm, (_v, _ts) in GOT.items():
     if not _nm.startswith('iwa'): continue
+    _base = _nm.split('__')[0]
+    _simple = os.path.join(_ROCK_OBJ, _base + '_simple.obj')
     _rt = [[_v[a], _v[b], _v[c]] for a, b, c in _ts]
-    col_rocks += clip_group(_rt) + cap_at(_rt, CY_HI)
+    if os.path.exists(_simple):
+        _r = _load_obj_tris(_simple); _src = 'blender'
+    elif _base == 'iwa03':
+        _r = build_rock_smooth(_rt, SMALL_CELL, WATER, YCAP, YBOTTOM, SMALL_SIDES, SMALL_LEVELS, SMALL_MARGIN, SMALL_LIFT); _src = 'lathe'
+    else:
+        _r = build_rock_smooth(_rt, ROCK_CELL, WATER, YCAP, YBOTTOM, ROCK_SIDES, ROCK_LEVELS, ROCK_MARGIN, ROCK_LIFT); _src = 'lathe'
+    col_rocks += _r; _rock_src.append(f'{_base}={len(_r)}({_src})')
+_flat = _min_face_flatness(col_rocks, WATER)
+print(f"[rock collision] {len(col_rocks)} tris  [{', '.join(_rock_src)}]  min|ny|/l(above water)={_flat:.3f}")
 col_stilts = clip_group(T(lambda n: n.startswith('s04g0401') or n in ('s04g402', 's04g403', 's04g404')))  # -9..44
 col_plants = clip_group(plants, hi=WATER)   # placed s04a01, capped at water
 col_build  = clip_group(houses, hi=WATER)   # placed s04h*,  capped at water
@@ -277,9 +451,33 @@ if os.path.exists(CPOLY_CSV):
 else:
     print("vanilla cpoly: (no vanilla_cpoly.csv — start fishing in Brownboo to dump it)")
 
+# ---- base-ground GRID, dumped live from RAM (GeoramaProbe.DumpGroundGrid) = the accurate pond bottom ----
+# CSV: area,i,j,worldX,worldZ,height,code. Reconstruct the surface by connecting each cell to its +i/+j
+# neighbours into quads. Split at the waterline so the underwater BOWL (the pond bottom the collision
+# gather skips) reads distinctly from the dry land.
+import csv as _csv
+grid_bottom, grid_land = [], []
+GRID_CSV = os.path.join(HERE, 'ground_grid.csv')
+if os.path.exists(GRID_CSV):
+    cells = {}
+    with open(GRID_CSV) as fh:
+        for r in _csv.DictReader(fh):
+            cells[(int(r['area']), int(r['i']), int(r['j']))] = \
+                (float(r['worldX']), float(r['worldZ']), float(r['height']), int(r['code']))
+    for (a, i, j), (wx, wz, h, code) in cells.items():
+        c10 = cells.get((a, i+1, j)); c01 = cells.get((a, i, j+1)); c11 = cells.get((a, i+1, j+1))
+        if not (c10 and c01 and c11): continue
+        p00 = [wx, h, wz]; p10 = [c10[0], c10[2], c10[1]]; p01 = [c01[0], c01[2], c01[1]]; p11 = [c11[0], c11[2], c11[1]]
+        dst = grid_bottom if max(h, c10[2], c01[2], c11[2]) <= WATER + 1 else grid_land
+        dst.append([p00, p10, p11]); dst.append([p00, p11, p01])
+    print(f"ground grid: {len(grid_bottom)} bottom tris + {len(grid_land)} land tris from {len(cells)} cells")
+else:
+    print("ground grid: (no ground_grid.csv — fish in Brownboo to dump it)")
+
 D = {'visual': visual, 'col_rocks': col_rocks, 'col_stilts': col_stilts, 'col_plants': col_plants,
      'col_build': col_build, 'col_perim': col_perim,
      'van_floor': van_floor, 'van_wall': van_wall, 'van_mid': van_mid, 'van_dropped': van_dropped,
+     'grid_bottom': grid_bottom, 'grid_land': grid_land,
      'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint}
 js = json.dumps(D, separators=(',', ':'))   # embedded directly in the self-contained HTML
 LAY = [
@@ -305,6 +503,8 @@ LAY = [
     ('vwall','VANILLA wall (DROPPED)','D.van_wall','[255,90,160]',0.8,'#f6a'),
     ('vmid','VANILLA slope (KEPT)','D.van_mid','[255,215,80]',0.8,'#fd5'),
     ('vcut','VANILLA ladder-top floor (DROPPED)','D.van_dropped','[120,120,130]',0.7,'#999'),
+    ('gridbot','ground grid: pond BOTTOM','D.grid_bottom','[40,180,190]',0.85,'#3cc'),
+    ('gridland','ground grid: land','D.grid_land','[90,110,90]',0.7,'#7a7'),
 ]
 # vanilla layers ON by default (seeing the native collision is the point); mod-collision drafts + clutter OFF
 _on = ("vfloor", "vmid")   # only the vanilla floor + slope layers on by default; everything else off

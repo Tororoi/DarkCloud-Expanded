@@ -115,6 +115,39 @@ namespace Dark_Cloud_Improved_Version
         internal const int  TemplateCount = 24;
         internal const long ExtraBase     = 0x15F40;   // CMapParts[64] — the cfg's static WATER/GROUND objects
         internal const int  ExtraCount    = 64;
+
+        /// <summary>The four base-ground grids. CEditGround holds 4 CEditArea pointers at +4+i*4
+        /// (PickUpPoly__11CEditGround loops these; GeoramaProbe.Status reads them too).</summary>
+        internal const long AreaPtrBase = 0x4;
+        internal const int  AreaCount   = 4;
+    }
+
+    /// <summary>
+    /// <c>CEditArea</c> — one of CEditGround's four base-ground GRIDS. Fully RE'd from the accessors
+    /// (GetAlt/GetCode/GetPos/GetWidth/… @0x16d880-0x170210). This is the town's walkable-ground grid,
+    /// the analog of the dungeon's CDungeonMap. Crucially it stores a HEIGHT per cell for EVERY cell —
+    /// including the underwater pond cells that PickUpPoly skips as non-walkable — so it is the accurate
+    /// source of the pond-bottom bowl (which exists in no static asset; see town-scene-mesh-extraction).
+    /// </summary>
+    internal static class EditArea
+    {
+        internal const int Width    = 0x08;   // int  — X-cell count
+        internal const int Height   = 0x0C;   // int  — Z-cell count
+        internal const int OriginX  = 0x10;   // float — world pos of cell (0,0)
+        internal const int OriginY  = 0x14;   // float — base altitude added to every cell height
+        internal const int OriginZ  = 0x18;   // float
+        internal const int UnitSize = 0x20;   // float — cell size in X and Z
+        internal const int UnitAlt  = 0x24;   // float — altitude scale: height = OriginY + altRaw*UnitAlt
+        internal const int AltBase  = 0x2C;   // cell (i,j) alt (int) at AltBase + i*RowStride + j*CellStride
+        internal const int CodeBase = 0x38;   // cell (i,j) code (int, -1=OOB) at CodeBase + i*RowStride + j*CellStride
+        internal const int RowStride  = 0x1C0; // per X-row (== 16 * CellStride, so Height <= 16)
+        internal const int CellStride = 0x1C;  // per Z-cell (28-byte cell record)
+
+        internal static long Ptr(long groundBase, int i)
+        {
+            uint p = Memory.ReadUInt(groundBase + EditGround.AreaPtrBase + i * 4) & Memory.PhysAddrMask;
+            return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
+        }
     }
 
     /// <summary>
