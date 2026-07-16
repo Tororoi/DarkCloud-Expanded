@@ -39,6 +39,13 @@ def dc1_info_cfg(dc2_cfg):
     mot   = re.search(r'MOTION\s+0,\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"', t)
     m_mot, m_bbp, m_wgt = mot.groups()
     keys  = re.findall(r'KEY\s+"[^"]*",\s*(\d+),\s*(\d+),\s*([\d.]+)', t)  # (start,end,weight)
+    # ANIMATION IS DISABLED (static mesh) for stability. DC2 names its morph frames VERTEX_ANIME
+    # "skin1","skin2" and blends the two as endpoints; DC1's vertex-anime morphs a SINGLE frame with
+    # baked-in targets (f01a = ALLOC_DBUFF "obj9"). Handing DC1 the two DC2 frames as double-buffered
+    # (ALLOC_DBUFF "skin1"+"skin2") makes its morph code misread the DC2 .mot/.wgt and CRASH PCSX2 ~2s after
+    # the caught-fish build. A single 'ALLOC_DBUFF "skin"' matches NO frame, so nothing morphs -> the mesh
+    # builds STATIC and stable (texture correct, no flap). Porting the flap needs the DC2 skin1/skin2 morph
+    # data converted to DC1's single-frame baked-target format — see the dc2-archive-and-priscleen memo.
     lines = [
         f'IMG 0,"{img}"', 'IMG_END', 'MATERIAL_ANIME 0', 'VERTEX_ANIME 1', '',
         'ALLOC_DBUFF "skin"', f'MODEL "{model}"', f'BODY_SIZE {bx},{by},{bz}', '',

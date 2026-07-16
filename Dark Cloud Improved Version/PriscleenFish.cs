@@ -59,6 +59,7 @@ namespace Dark_Cloud_Improved_Version
         private static uint _origPath;
         private static bool _redirected;
         private static readonly HashSet<int> _injected = new HashSet<int>();  // BG slots done THIS catch
+        private static bool _reelDiag;   // one-shot diagnostics per reel
 
         private static string ModelPath =>
             Path.Combine(AppContext.BaseDirectory, "Resources", "Fish", "f19a.chr");
@@ -110,29 +111,52 @@ namespace Dark_Cloud_Improved_Version
             // address and is cleared to 0 by the build, so this window is exactly the catch. When it closes,
             // re-arm for the next catch.
             uint bf = Memory.ReadUInt(BattleFishPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(bf) || Memory.ReadInt(Memory.ToMmu(bf) + CFishSpecies) != Species)
+            if (!Memory.IsValidGuest(bf))
             {
-                if (_injected.Count > 0) _injected.Clear();
+                _injected.Clear();
+                _reelDiag = false;
                 return;
             }
+            int species = Memory.ReadInt(Memory.ToMmu(bf) + CFishSpecies);
+            if (!_reelDiag)
+                Log($"DIAG: a fish is being reeled — BattleFish CFish species={species} (want {Species})");
+            if (species != Species) { _reelDiag = true; return; }
 
-            // Scan ALL BG slots (not just slot 0 — robust to whichever slot / fish is used). Inject into each
-            // finished slot whose filename is our f01a stand-in, once per catch.
+            // Scan ALL BG slots (robust to whichever slot / fish is used). For the f01a stand-in slot we do
+            // NOT wait for the read (that finishes only on the build frame — too late). Instead we FORCE the
+            // slot 'done' so ReadBG skips the disc read entirely, then write Priscleen into its buffer. We own
+            // that buffer for the whole ~120-frame window; re-writing only if an in-flight DMA clobbered it.
             for (int s = 0; s < BgSlots; s++)
             {
-                if (_injected.Contains(s)) continue;
                 long slot = BgReadInfo + (long)s * BgStride;
                 if (Memory.ReadInt(slot + BgActive) == 0) continue;
-                if (Memory.ReadInt(slot + BgDone1) == 0 || Memory.ReadInt(slot + BgDone2) == 0) continue; // still reading
-                string fn = Memory.ReadString(slot + BgName, 16);
-                if (fn == null || fn.IndexOf(StandInTag, StringComparison.Ordinal) < 0) continue;
+                int d1 = Memory.ReadInt(slot + BgDone1), d2 = Memory.ReadInt(slot + BgDone2);
+                string fn = (Memory.ReadString(slot + BgName, 20) ?? "").Split('\0')[0];
                 uint bp = Memory.ReadUInt(slot + BgBuffer) & Memory.PhysAddrMask;
+                if (!_reelDiag)
+                    Log($"DIAG: BG slot {s} active — done={d1}/{d2} file='{fn}' buf=0x{bp:X8}");
+                if (fn.IndexOf(StandInTag, StringComparison.Ordinal) < 0) continue;
                 if (!Memory.IsValidGuest(bp)) continue;
-                Memory.WriteBytesBatch(Memory.ToMmu(bp), _model);
-                Memory.WriteInt(slot + BgSize, _model.Length);
-                _injected.Add(s);
-                Log($"injected Priscleen ({_model.Length}B) into BG slot {s} buffer 0x{bp:X8} (file '{fn.TrimEnd('\0')}')");
+                long buf = Memory.ToMmu(bp);
+                Memory.WriteInt(slot + BgDone1, 1);       // pre-empt: mark done so ReadBG never reads/overwrites
+                Memory.WriteInt(slot + BgDone2, 1);
+                byte[] head = Memory.ReadBytesBatch(buf, 16);
+                if (!HeadMatches(head))                    // (re)write only if our bytes aren't already there
+                {
+                    Memory.WriteBytesBatch(buf, _model);
+                    Memory.WriteInt(slot + BgSize, _model.Length);
+                    if (_injected.Add(s))
+                        Log($"injected Priscleen ({_model.Length}B) into BG slot {s} buf 0x{bp:X8} (file '{fn}'), forced done");
+                }
             }
+            _reelDiag = true;   // the per-reel DIAG lines above print only on the first species-8 frame
+        }
+
+        private static bool HeadMatches(byte[] head)
+        {
+            if (head == null || head.Length < 16) return false;
+            for (int i = 0; i < 16; i++) if (head[i] != _model[i]) return false;
+            return true;
         }
 
         private static void Log(string s) =>
