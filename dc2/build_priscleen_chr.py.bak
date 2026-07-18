@@ -46,7 +46,7 @@ def dc1_info_cfg(dc2_cfg):
     # ~4s into the angle display. DBUFF_SKINS controls which morphable frames we build: ['skin1'] animates
     # just the body (matches f01a's single-part shape — the flap test); [] = static/stable; ['skin1',
     # 'skin2'] = full (crashed). See the dc2-archive-and-priscleen memo.
-    DBUFF_SKINS = ['skin1']
+    DBUFF_SKINS = ['skin1', 'skin2']
     lines = [
         f'IMG 0,"{img}"', 'IMG_END', 'MATERIAL_ANIME 0', 'VERTEX_ANIME 1', '',
         *[f'ALLOC_DBUFF "{s}"' for s in DBUFF_SKINS], f'MODEL "{model}"', f'BODY_SIZE {bx},{by},{bz}', '',
