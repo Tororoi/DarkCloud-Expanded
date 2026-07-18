@@ -52,6 +52,15 @@ def main():
         meshes.append({"name": mname, "verts": verts, "tris": tris,
                        "weights": [w.get(vi, []) for vi in range(len(verts))]})
 
+    # Priscleen ships its upper-lip verts weighted to the head bone (6) with the nose bone (26) unused.
+    # Re-home the WHOLE upper lip to bone 26 so it lifts as one piece for the "kissy-face" mouth (jaw code
+    # translates bone 26 up). rim = mouth edge, top = upper edge of the lip. Also applied to f19a.wgt at
+    # repack time. skin1 only.
+    UPPER_LIP = [16, 117, 63, 104, 44, 91,   # lower rim (mouth edge)
+                 115, 30, 84, 24, 28, 22]    # upper edge / front peak of the lip
+    for vi in UPPER_LIP:
+        meshes[0]["weights"][vi] = [[26, 1.0]]
+
     # Anatomy groups by subtree (see docstring / bone map). Tail excludes the pelvic-fin subtrees.
     tail = [i for i in subtree(parent, 27) if i not in subtree(parent, 42) + subtree(parent, 45)]
     groups = {
@@ -90,24 +99,26 @@ BODY = r'''
 #   just slots 0/1/6. Loop motions use whole-number freqs so the seam is clean.
 # ============================================================================================
 MP = {
-    "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=4,  pect=38, prow=9, pitch=0, arc=0, wob=0),
-    "1_battle元気 15f":    dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=4,  pect=70, prow=5, pitch=0, arc=0, wob=0),
-    "2_battle弱気 21f":    dict(len=20, loop=True,  body=16, bfreq=1.0, fin=8,  ffreq=1.0, jaw=3,  pect=48, prow=9, pitch=0, arc=0, wob=0),
-    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=50, bfreq=1.0, fin=30, ffreq=2.0, jaw=6,  pect=60, prow=9, pitch=0, arc=0, wob=0),
-    "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=26, bfreq=3.0, fin=32, ffreq=3.0, jaw=11, pect=55, prow=9, pitch=0, arc=0, wob=16),
-    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=15, pect=42, prow=9, pitch=0, arc=0, wob=9),
-    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=2,  pect=38, prow=9, pitch=0, arc=0, wob=0),
+    "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=30, jfreq=2, pect=38, prow=9,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=0),
+    "1_battle元気 15f":    dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=20, jfreq=1, pect=70, prow=5,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=0),
+    "2_battle弱気 21f":    dict(len=20, loop=True,  body=14, bfreq=2.0, fin=8,  ffreq=2.0, jaw=28, jfreq=1, pect=32, prow=9,  rowf=2, pivot=0, vtail=0,  pitch=0, arc=0, wob=0),
+    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=58, bfreq=2.0, fin=30, ffreq=2.0, jaw=50, jfreq=3, pect=20, prow=28, rowf=3, pivot=7, vtail=18, pitch=0, arc=0, wob=0),
+    "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=26, bfreq=3.0, fin=32, ffreq=3.0, jaw=16, jfreq=3, pect=55, prow=9,  rowf=6, pivot=7, vtail=0,  pitch=0, arc=0, wob=16),
+    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=20, jfreq=2, pect=42, prow=9,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=9),
+    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=6,  jfreq=1, pect=38, prow=9,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=0),
 }
-# pect = pectoral sweep-back (deg), prow = pectoral row amplitude (deg, 2x-rate fore/aft stroke)
+# pect=pectoral sweep-back, prow=pectoral row amp, rowf=pectoral row cycles, jaw=mouth-open, jfreq=mouth cycles,
+# pivot=nose-pivot yaw (0 = head fixed), vtail=vertical tail-flap amp (deg; the leap's up/down tail motion)
 # --- carangiform spine wave (tuned to f00s motion 0: pivots on a fixed nose, tail whips ~19u; no tilt) ---
 WAVE_K = 0.22           # phase travel down the body (rad per game-unit): drives the traveling S-node
 SPINE_BASE_FRAC = 0.16  # anterior-body floor of the tail wave (the nose pivot below adds the front swing)
 SPINE_POWER = 1.0       # tail-weighting exponent (higher = motion concentrated further back)
 BODY_PHASE = 2.25       # rad: start-of-loop phase — aligned so Priscleen swings the SAME way as f00s
-PIVOT_NOSE = 7          # deg: whole body yaws about the FIXED nose point — f00s "pivots on its nose"
+                        # (nose-pivot yaw is per-motion: MP[...]["pivot"] — f00s "pivots on its nose")
 DORSAL_FOLLOW = 0.25    # dorsal fin sways this fraction of the body amp (acts as a rudder)
 PECT_DROOP = 25         # pectoral fins angled downward (deg at the fin base, static rest pose)
                         # (pectoral sweep-back MP[...]["pect"] and row amplitude MP[...]["prow"] are per-motion)
+UPPER_JAW_FRAC = 0.4    # upper jaw (nose) lifts this fraction of the lower-jaw open — Priscleen's kissy-face gape
 
 # Game-space axes (Y up, Z fore/aft with the fish facing +Z, X left/right).
 UPv, RIGHT, FWD = Vector((0, 1, 0)), Vector((1, 0, 0)), Vector((0, 0, 1))
@@ -140,9 +151,10 @@ SP_Z0 = GZ[_SP[0]]; SP_SPAN = GZ[_SP[-1]] - GZ[_SP[0]]
 SP_MULT = {i: sum(1 for j in _SP if round(GZ[j], 1) == round(GZ[i], 1)) for i in _SP}
 NOSE_N = GR[GROUPS["NOSE"][0]].to_translation()   # rest world position of the nose (the pivot point)
 
-def game_world(deltas, pivot_deg=0.0):
+def game_world(deltas, pivot_deg=0.0, jaw_lift=0.0):
     """Rebuild game-world matrices with per-bone LOCAL rotation deltas (identity where absent).
-    pivot_deg yaws the WHOLE fish about the fixed nose point (game Y-up) — f00s 'pivots on its nose'."""
+    pivot_deg yaws the WHOLE fish about the fixed nose point (game Y-up) — f00s 'pivots on its nose'.
+    jaw_lift translates the nose bone (upper lip) up in game-Y for the kissy-face gape."""
     W = [None] * len(BONES)
     for i, b in enumerate(BONES):
         L = REST_L[i]
@@ -154,6 +166,9 @@ def game_world(deltas, pivot_deg=0.0):
     if abs(pivot_deg) > 1e-6:                        # rigid yaw about the nose: anchor there, body swings
         T = Matrix.Translation(NOSE_N) @ Matrix.Rotation(math.radians(pivot_deg), 4, 'Y') @ Matrix.Translation(-NOSE_N)
         W = [T @ w for w in W]
+    if abs(jaw_lift) > 1e-6:                         # upper lip (nose bone) translates up = kissy pucker
+        ni = GROUPS["NOSE"][0]
+        W[ni] = Matrix.Translation((0.0, jaw_lift, 0.0)) @ W[ni]
     return W
 
 def wq(i, axis, deg):
@@ -179,14 +194,17 @@ def deltas(mp, t):
         if mp["wob"]:                               # deterministic pseudo-noise for the struggle
             ang += (mp["wob"] / SP_MULT[i]) * math.sin(6.3 * TAU * prog + 0.9 * i)
         add(d, i, UPv, ang)
-    # (the anterior/nose swing is handled by the whole-body PIVOT_NOSE yaw in game_world, not here)
+        if mp["vtail"]:                             # vertical tail flap (leap): pitch the tail up/down about
+            Av = mp["vtail"] * (SPINE_BASE_FRAC + (1 - SPINE_BASE_FRAC) * u ** SPINE_POWER)   # X, tail-weighted,
+            add(d, i, RIGHT, Av / SP_MULT[i] * math.sin(ph + math.pi / 2))                    # 90deg off the yaw
+    # (the anterior/nose swing is handled by the per-motion nose-pivot yaw in game_world, not here)
     # ---- dorsal fin: gentle rudder sway following the body ----------------------------------
     for i in GROUPS["DORSAL"]:
         add(d, i, UPv, DORSAL_FOLLOW * mp["body"] / max(len(GROUPS["DORSAL"]), 1)
                         * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE))
     # ---- fins: pectorals row front-to-back (sweep oscillates); pelvics flap up/down -------
     fin = math.sin(TAU * mp["ffreq"] * prog)
-    row = math.sin(TAU * 2 * mp["bfreq"] * prog + BODY_PHASE)  # 2x body rate: one stroke per tail-swing direction
+    row = math.sin(TAU * mp["rowf"] * prog + BODY_PHASE)       # pectoral row: rowf strokes per motion (per-motion)
     for name, sign in (("PECT_R", +1), ("PECT_L", -1), ("PELV_R", +1), ("PELV_L", -1)):
         g = GROUPS[name]; n = max(len(g), 1)
         if name.startswith("PECT"):                    # whole-fin pose at the base: swept back + drooped
@@ -201,10 +219,9 @@ def deltas(mp, t):
                 w += 0.5 * math.sin(5.1 * TAU * prog + hash(name) % 7)
             for i in g:
                 add(d, i, FWD, amp * w)
-    # ---- jaw gasp: pitch open about the left/right axis (0 -> jaw) --------------------------
-    openf = 0.5 - 0.5 * math.cos(TAU * mp["ffreq"] * prog)
-    for i in GROUPS["JAW"]:
-        add(d, i, RIGHT, -mp["jaw"] * openf / max(len(GROUPS["JAW"]), 1))
+    # ---- jaw: lower jaw drops open here (jfreq cycles); upper lip lifts via jaw_lift in game_world ----
+    openf = 0.5 - 0.5 * math.cos(TAU * mp["jfreq"] * prog)
+    add(d, GROUPS["JAW"][0], RIGHT, mp["jaw"] * openf)                      # lower jaw drops (opens more)
     # ---- whole-body pitch: static hang (reeled/caught) + leap arc --------------------------
     pitch = mp["pitch"]
     if mp["arc"]:
@@ -250,8 +267,10 @@ def build():
         ao.animation_data.action = act
         for t in range(0, mp["len"] + 1):
             prog = t / mp["len"] if mp["len"] else 0.0
-            pivot_deg = PIVOT_NOSE * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE)   # swings about the fixed nose
-            GW = game_world(deltas(mp, t), pivot_deg)
+            pivot_deg = mp["pivot"] * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE)   # per-motion nose-pivot yaw
+            openf = 0.5 - 0.5 * math.cos(TAU * mp["jfreq"] * prog)
+            jaw_lift = UPPER_JAW_FRAC * 0.05 * mp["jaw"] * openf   # upper lip rises w/ the mouth (0.05 u/deg)
+            GW = game_world(deltas(mp, t), pivot_deg, jaw_lift)
             pose = [(UP @ (GW[i] @ GR[i].inverted()) @ UP.inverted()) @ restM[i] for i in range(len(BONES))]
             for i, b in enumerate(BONES):
                 p = b["parent"]
