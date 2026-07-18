@@ -90,14 +90,15 @@ BODY = r'''
 #   just slots 0/1/6. Loop motions use whole-number freqs so the seam is clean.
 # ============================================================================================
 MP = {
-    "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=4,  pect=38, pitch=0, arc=0, wob=0),
-    "1_battle元気 15f":    dict(len=14, loop=True,  body=42, bfreq=2.0, fin=28, ffreq=2.0, jaw=8,  pect=60, pitch=0, arc=0, wob=0),
-    "2_battle弱気 21f":    dict(len=20, loop=True,  body=16, bfreq=1.0, fin=8,  ffreq=1.0, jaw=3,  pect=48, pitch=0, arc=0, wob=0),
-    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=50, bfreq=1.0, fin=30, ffreq=2.0, jaw=6,  pect=60, pitch=0, arc=0, wob=0),
-    "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=26, bfreq=3.0, fin=32, ffreq=3.0, jaw=11, pect=55, pitch=0, arc=0, wob=16),
-    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=15, pect=42, pitch=0, arc=0, wob=9),
-    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=2,  pect=38, pitch=0, arc=0, wob=0),
+    "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=4,  pect=38, prow=9, pitch=0, arc=0, wob=0),
+    "1_battle元気 15f":    dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=4,  pect=70, prow=5, pitch=0, arc=0, wob=0),
+    "2_battle弱気 21f":    dict(len=20, loop=True,  body=16, bfreq=1.0, fin=8,  ffreq=1.0, jaw=3,  pect=48, prow=9, pitch=0, arc=0, wob=0),
+    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=50, bfreq=1.0, fin=30, ffreq=2.0, jaw=6,  pect=60, prow=9, pitch=0, arc=0, wob=0),
+    "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=26, bfreq=3.0, fin=32, ffreq=3.0, jaw=11, pect=55, prow=9, pitch=0, arc=0, wob=16),
+    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=15, pect=42, prow=9, pitch=0, arc=0, wob=9),
+    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=2,  pect=38, prow=9, pitch=0, arc=0, wob=0),
 }
+# pect = pectoral sweep-back (deg), prow = pectoral row amplitude (deg, 2x-rate fore/aft stroke)
 # --- carangiform spine wave (tuned to f00s motion 0: pivots on a fixed nose, tail whips ~19u; no tilt) ---
 WAVE_K = 0.22           # phase travel down the body (rad per game-unit): drives the traveling S-node
 SPINE_BASE_FRAC = 0.16  # anterior-body floor of the tail wave (the nose pivot below adds the front swing)
@@ -106,8 +107,7 @@ BODY_PHASE = 2.25       # rad: start-of-loop phase — aligned so Priscleen swin
 PIVOT_NOSE = 7          # deg: whole body yaws about the FIXED nose point — f00s "pivots on its nose"
 DORSAL_FOLLOW = 0.25    # dorsal fin sways this fraction of the body amp (acts as a rudder)
 PECT_DROOP = 25         # pectoral fins angled downward (deg at the fin base, static rest pose)
-                        # (pectoral SWEEP-back is per-motion: MP[...]["pect"])
-PECT_FLAP = 9           # subtle pectoral flap (deg), beats in sync with the tail (bfreq)
+                        # (pectoral sweep-back MP[...]["pect"] and row amplitude MP[...]["prow"] are per-motion)
 
 # Game-space axes (Y up, Z fore/aft with the fish facing +Z, X left/right).
 UPv, RIGHT, FWD = Vector((0, 1, 0)), Vector((1, 0, 0)), Vector((0, 0, 1))
@@ -193,7 +193,7 @@ def deltas(mp, t):
             base = g[0]
             add(d, base, UPv, sign * mp["pect"])        # per-motion sweep (calmer motions less back)
             add(d, base, FWD, -sign * PECT_DROOP)       # drooped down
-            add(d, base, UPv, sign * PECT_FLAP * row)   # ROW: fore/aft, once per tail-swing direction (2x rate)
+            add(d, base, UPv, sign * mp["prow"] * row)  # ROW: fore/aft, once per tail-swing direction (2x rate)
         else:                                          # pelvics: flap distributed along the fin
             amp = sign * mp["fin"] / n
             w = fin
