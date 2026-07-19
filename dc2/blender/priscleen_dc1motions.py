@@ -16,16 +16,17 @@ GROUPS = {'SPINE': [27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41],
 #   just slots 0/1/6. Loop motions use whole-number freqs so the seam is clean.
 # ============================================================================================
 MP = {
-    "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=30, jfreq=2, pect=38, prow=9,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=0),
-    "1_battle元気 15f":    dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=20, jfreq=1, pect=70, prow=5,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=0),
-    "2_battle弱気 21f":    dict(len=20, loop=True,  body=14, bfreq=2.0, fin=8,  ffreq=2.0, jaw=28, jfreq=1, pect=32, prow=9,  rowf=2, pivot=0, vtail=0,  pitch=0, arc=0, wob=0),
-    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=58, bfreq=2.0, fin=30, ffreq=2.0, jaw=50, jfreq=3, pect=20, prow=28, rowf=3, pivot=7, vtail=18, pitch=0, arc=0, wob=0),
-    "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=26, bfreq=3.0, fin=32, ffreq=3.0, jaw=16, jfreq=3, pect=55, prow=9,  rowf=6, pivot=7, vtail=0,  pitch=0, arc=0, wob=16),
-    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=20, jfreq=2, pect=42, prow=9,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=9),
-    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=6,  jfreq=1, pect=38, prow=9,  rowf=2, pivot=7, vtail=0,  pitch=0, arc=0, wob=0),
+    "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=30, jfreq=2, pect=38, prow=9,  rowf=2, pivot=7, vtail=0, warp=0.0, warpc=0.0,  pitch=0, arc=0, wob=0),
+    "1_battle元気 15f":    dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=20, jfreq=1, pect=70, prow=5,  rowf=2, pivot=7, vtail=0, warp=0.0, warpc=0.0,  pitch=0, arc=0, wob=0),
+    "2_battle弱気 21f":    dict(len=20, loop=True,  body=14, bfreq=2.0, fin=8,  ffreq=2.0, jaw=28, jfreq=1, pect=32, prow=9,  rowf=2, pivot=0, vtail=0, warp=0.0, warpc=0.0,  pitch=0, arc=0, wob=0),
+    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=58, bfreq=2.0, fin=30, ffreq=2.0, jaw=50, jfreq=3, pect=20, prow=28, rowf=3, pivot=0, vtail=7, warp=0.8, warpc=0.12, pitch=0, arc=0, wob=0),
+    "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=26, bfreq=3.0, fin=32, ffreq=3.0, jaw=16, jfreq=3, pect=55, prow=9,  rowf=6, pivot=7, vtail=0, warp=0.0, warpc=0.0,  pitch=0, arc=0, wob=16),
+    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=20, jfreq=2, pect=42, prow=9,  rowf=2, pivot=7, vtail=0, warp=0.0, warpc=0.0,  pitch=0, arc=0, wob=9),
+    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=6,  jfreq=1, pect=38, prow=9,  rowf=2, pivot=7, vtail=0, warp=0.0, warpc=0.0,  pitch=0, arc=0, wob=0),
 }
 # pect=pectoral sweep-back, prow=pectoral row amp, rowf=pectoral row cycles, jaw=mouth-open, jfreq=mouth cycles,
-# pivot=nose-pivot yaw (0 = head fixed), vtail=vertical tail-flap amp (deg; the leap's up/down tail motion)
+# pivot=nose-pivot yaw (0 = head fixed), vtail=vertical tail-lift amp (single upward flick, windowed to the snap),
+# warp=time-warp (0=uniform; >0 = slow-fast-slow so flaps burst mid-motion), warpc=warp center shift (later snap)
 # --- carangiform spine wave (tuned to f00s motion 0: pivots on a fixed nose, tail whips ~19u; no tilt) ---
 WAVE_K = 0.22           # phase travel down the body (rad per game-unit): drives the traveling S-node
 SPINE_BASE_FRAC = 0.16  # anterior-body floor of the tail wave (the nose pivot below adds the front swing)
@@ -98,10 +99,25 @@ def add(d, i, axis, deg):
     q = wq(i, axis, deg)
     d[i] = (d[i] @ q) if i in d else q
 
+def warp_prog(mp, rp):
+    """Time-warp raw progress rp (0..1) -> slow-fast-slow when mp['warp']>0, identity at 0. Keeps the
+    endpoints fixed and total cycle count intact; just redistributes speed so the leap bursts mid-motion.
+    warpc shifts the fast point later (peaks at warpc+0.5) so the snap lands where f00s's does (~0.65)."""
+    w = mp.get("warp", 0.0)
+    if not w:
+        return rp
+    s = mp.get("warpc", 0.0)
+    return rp - (w / TAU) * (math.sin(TAU * (rp - s)) + math.sin(TAU * s))
+
+def snap_window(rp):
+    """Narrow bump peaking at mid-motion (rp=0.5), 0 at both ends — the fast tail snap's timing."""
+    return max(0.0, math.cos(math.pi * (rp - 0.5))) ** 3
+
 def deltas(mp, t):
     """Local-frame rotation deltas for every animated bone at frame t (0..len)."""
     d = {}
-    prog = t / mp["len"] if mp["len"] else 0.0
+    rp = t / mp["len"] if mp["len"] else 0.0        # raw progress (window timing lives in real time)
+    prog = warp_prog(mp, rp)                         # warped progress drives the oscillations (burst)
     # ---- spine: carangiform traveling yaw wave — stiff front, tail whip (tuned to f00s motion 0) ----
     for i in GROUPS["SPINE"]:
         u = (GZ[i] - SP_Z0) / SP_SPAN if SP_SPAN else 0.0        # 0 at front of body, 1 at tail tip
@@ -111,9 +127,9 @@ def deltas(mp, t):
         if mp["wob"]:                               # deterministic pseudo-noise for the struggle
             ang += (mp["wob"] / SP_MULT[i]) * math.sin(6.3 * TAU * prog + 0.9 * i)
         add(d, i, UPv, ang)
-        if mp["vtail"]:                             # vertical tail flap (leap): pitch the tail up/down about
-            Av = mp["vtail"] * (SPINE_BASE_FRAC + (1 - SPINE_BASE_FRAC) * u ** SPINE_POWER)   # X, tail-weighted,
-            add(d, i, RIGHT, Av / SP_MULT[i] * math.sin(ph + math.pi / 2))                    # 90deg off the yaw
+        if mp["vtail"]:                             # vertical tail flick: ONE upward lift, windowed to the
+            Av = mp["vtail"] * (SPINE_BASE_FRAC + (1 - SPINE_BASE_FRAC) * u ** SPINE_POWER)   # fast snap only,
+            add(d, i, RIGHT, Av / SP_MULT[i] * snap_window(rp))                               # tail-weighted (+=up)
     # (the anterior/nose swing is handled by the per-motion nose-pivot yaw in game_world, not here)
     # ---- dorsal fin: gentle rudder sway following the body ----------------------------------
     for i in GROUPS["DORSAL"]:
@@ -183,7 +199,7 @@ def build():
         act.use_cyclic = mp["loop"]
         ao.animation_data.action = act
         for t in range(0, mp["len"] + 1):
-            prog = t / mp["len"] if mp["len"] else 0.0
+            prog = warp_prog(mp, t / mp["len"] if mp["len"] else 0.0)   # match deltas' warped time
             pivot_deg = mp["pivot"] * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE)   # per-motion nose-pivot yaw
             openf = 0.5 - 0.5 * math.cos(TAU * mp["jfreq"] * prog)
             jaw_lift = UPPER_JAW_FRAC * 0.05 * mp["jaw"] * openf   # upper lip rises w/ the mouth (0.05 u/deg)
