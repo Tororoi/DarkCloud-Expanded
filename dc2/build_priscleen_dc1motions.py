@@ -53,9 +53,11 @@ def main():
                        "weights": [w.get(vi, []) for vi in range(len(verts))]})
 
     # Priscleen ships its upper-lip verts weighted to the head bone (6) with the nose bone (26) unused.
-    # Re-home the WHOLE upper lip to bone 26 so it lifts as one piece for the "kissy-face" mouth (jaw code
-    # translates bone 26 up). rim = mouth edge, top = upper edge of the lip. Also applied to f19a.wgt at
-    # repack time. skin1 only.
+    # Re-home the whole upper lip to bone 26 as one rigid piece. The lip then opens the SAME way the lower
+    # jaw does — bone 26 is ROTATED about a hinge at the back of the mouth (see LIP_HINGE / jaw code), not
+    # translated. A rigid translation sheared the cluster against the static head; a hinge rotation pins the
+    # back (junction with the head, motion ~0) and swings the front up, like a real mouth. Full weights, so
+    # the lip stays coherent (no mid-lip crease). Also applied to f19a.wgt at repack time. skin1 only.
     UPPER_LIP = [16, 117, 63, 104, 44, 91,   # lower rim (mouth edge)
                  115, 30, 84, 24, 28, 22]    # upper edge / front peak of the lip
     for vi in UPPER_LIP:
@@ -119,7 +121,10 @@ BODY_PHASE = 2.25       # rad: start-of-loop phase — aligned so Priscleen swin
 DORSAL_FOLLOW = 0.25    # dorsal fin sways this fraction of the body amp (acts as a rudder)
 PECT_DROOP = 25         # pectoral fins angled downward (deg at the fin base, static rest pose)
                         # (pectoral sweep-back MP[...]["pect"] and row amplitude MP[...]["prow"] are per-motion)
-UPPER_JAW_FRAC = 0.4    # upper jaw (nose) lifts this fraction of the lower-jaw open — Priscleen's kissy-face gape
+JAW_SCALE = 0.65        # global gape multiplier (scales EVERY motion's mouth-open — dial the intensity here)
+UPPER_JAW_FRAC = 0.4    # upper lip opens this fraction of the lower jaw's angle — Priscleen's kissy-face gape
+LIP_HINGE = (0.0, 0.5, -3.0)  # world pivot the upper lip rotates about (back of the mouth, mirrors the lower
+                        # jaw hinge at (0,-0.75,-3.0)) — pins the head junction, swings the lip front up
 
 # Game-space axes (Y up, Z fore/aft with the fish facing +Z, X left/right).
 UPv, RIGHT, FWD = Vector((0, 1, 0)), Vector((1, 0, 0)), Vector((0, 0, 1))
@@ -152,10 +157,10 @@ SP_Z0 = GZ[_SP[0]]; SP_SPAN = GZ[_SP[-1]] - GZ[_SP[0]]
 SP_MULT = {i: sum(1 for j in _SP if round(GZ[j], 1) == round(GZ[i], 1)) for i in _SP}
 NOSE_N = GR[GROUPS["NOSE"][0]].to_translation()   # rest world position of the nose (the pivot point)
 
-def game_world(deltas, pivot_deg=0.0, jaw_lift=0.0):
+def game_world(deltas, pivot_deg=0.0, jaw_rot=0.0):
     """Rebuild game-world matrices with per-bone LOCAL rotation deltas (identity where absent).
     pivot_deg yaws the WHOLE fish about the fixed nose point (game Y-up) — f00s 'pivots on its nose'.
-    jaw_lift translates the nose bone (upper lip) up in game-Y for the kissy-face gape."""
+    jaw_rot rotates the nose bone (upper lip) UP about the back-of-mouth hinge for the kissy-face gape."""
     W = [None] * len(BONES)
     for i, b in enumerate(BONES):
         L = REST_L[i]
@@ -167,9 +172,11 @@ def game_world(deltas, pivot_deg=0.0, jaw_lift=0.0):
     if abs(pivot_deg) > 1e-6:                        # rigid yaw about the nose: anchor there, body swings
         T = Matrix.Translation(NOSE_N) @ Matrix.Rotation(math.radians(pivot_deg), 4, 'Y') @ Matrix.Translation(-NOSE_N)
         W = [T @ w for w in W]
-    if abs(jaw_lift) > 1e-6:                         # upper lip (nose bone) translates up = kissy pucker
-        ni = GROUPS["NOSE"][0]
-        W[ni] = Matrix.Translation((0.0, jaw_lift, 0.0)) @ W[ni]
+    if abs(jaw_rot) > 1e-6:                          # upper lip rotates UP about the hinge (like the lower
+        ni = GROUPS["NOSE"][0]                        # jaw): back pinned, front swings up — no rigid shear.
+        H = Vector(LIP_HINGE)                         # -jaw_rot about game-X lifts the front (fore = +Z).
+        R = Matrix.Translation(H) @ Matrix.Rotation(math.radians(-jaw_rot), 4, 'X') @ Matrix.Translation(-H)
+        W[ni] = R @ W[ni]
     return W
 
 def wq(i, axis, deg):
@@ -237,7 +244,7 @@ def deltas(mp, t):
                 add(d, i, FWD, amp * w)
     # ---- jaw: lower jaw drops open here (jfreq cycles); upper lip lifts via jaw_lift in game_world ----
     openf = 0.5 - 0.5 * math.cos(TAU * mp["jfreq"] * prog)
-    add(d, GROUPS["JAW"][0], RIGHT, mp["jaw"] * openf)                      # lower jaw drops (opens more)
+    add(d, GROUPS["JAW"][0], RIGHT, mp["jaw"] * JAW_SCALE * openf)          # lower jaw drops (opens more)
     # ---- whole-body pitch: static hang (reeled/caught) + leap arc --------------------------
     pitch = mp["pitch"]
     if mp["arc"]:
@@ -285,8 +292,8 @@ def build():
             prog = warp_prog(mp, t / mp["len"] if mp["len"] else 0.0)   # match deltas' warped time
             pivot_deg = mp["pivot"] * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE)   # per-motion nose-pivot yaw
             openf = 0.5 - 0.5 * math.cos(TAU * mp["jfreq"] * prog)
-            jaw_lift = UPPER_JAW_FRAC * 0.05 * mp["jaw"] * openf   # upper lip rises w/ the mouth (0.05 u/deg)
-            GW = game_world(deltas(mp, t), pivot_deg, jaw_lift)
+            jaw_rot = UPPER_JAW_FRAC * mp["jaw"] * JAW_SCALE * openf   # upper lip opening angle (deg); rot up @ hinge
+            GW = game_world(deltas(mp, t), pivot_deg, jaw_rot)
             pose = [(UP @ (GW[i] @ GR[i].inverted()) @ UP.inverted()) @ restM[i] for i in range(len(BONES))]
             for i, b in enumerate(BONES):
                 p = b["parent"]
