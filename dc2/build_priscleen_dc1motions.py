@@ -20,11 +20,12 @@ generated Blender file — tweak amplitudes/frequencies there and re-run in Blen
 
 Source: DC2 sg/fish/f19a.chr. Output: dc2/blender/priscleen_dc1motions.py
 """
-import os, sys, struct
+import os, sys, struct, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 from dc2_archive import read_file
-from build_blender_rig import parse_chr, skeleton
+from extract_scene_mesh import load_scene
+from build_blender_rig import parse_chr, skeleton, motions, matmul
 from build_priscleen_native import mesh_of, parse_wgt
 
 OUT = os.path.join(os.path.dirname(__file__), "blender", "priscleen_dc1motions.py")
@@ -36,6 +37,100 @@ def subtree(parent, root):
         i = stack.pop(); out.append(i)
         stack += [j for j, p in enumerate(parent) if p == i]
     return sorted(out)
+
+def _stations(idxs, z_of):
+    """Group a spine chain into coincident-Z stations (front->tip), like the Blender-side SP_MULT."""
+    st, cur, cz = [], [], None
+    for i in idxs:
+        z = round(z_of(i), 1)
+        if cz is None or z == cz:
+            cur.append(i)
+        else:
+            st.append(cur); cur = [i]
+        cz = z
+    st.append(cur)
+    return st
+
+def retarget_f00s_m5(pris_frames, pris_world, pris_tail):
+    """Extract f00s motion 5's spine EXACTLY: per station (coincident jnt/eff group), the incremental
+    world-frame rotation added at that station each frame. Mapped onto Priscleen's spine stations
+    TIP-ALIGNED (the user compares bones counted from the tail tip), so every Priscleen spine bone
+    twists in the same direction/amount as its f00s counterpart — only the segment lengths differ."""
+    fchr = dict(parse_chr(load_scene("chara/f00s.chr")))
+    ffr, fw = skeleton(fchr["f00s.mds"])
+    _, frot, ftrans = motions(fchr["f00s.mot"], fchr["info.cfg"].decode("shift_jis", "replace"))
+
+    def qm(q):                                     # conjugated DC quat -> col-major matrix (viewer-proven)
+        w, x, y, z = q[0], -q[1], -q[2], -q[3]
+        n = w * w + x * x + y * y + z * z or 1.0
+        s = 2.0 / n
+        return [1 - s * (y * y + z * z), s * (x * y + w * z), s * (x * z - w * y), 0,
+                s * (x * y - w * z), 1 - s * (x * x + z * z), s * (y * z + w * x), 0,
+                s * (x * z + w * y), s * (y * z - w * x), 1 - s * (x * x + y * y), 0, 0, 0, 0, 1]
+
+    def samp(kfs, t, n):
+        if t <= kfs[0][0]: return list(kfs[0][1])
+        if t >= kfs[-1][0]: return list(kfs[-1][1])
+        for lo, hi in zip(kfs, kfs[1:]):
+            if lo[0] <= t <= hi[0]:
+                f = (t - lo[0]) / (hi[0] - lo[0]) if hi[0] != lo[0] else 0.0
+                return [lo[1][j] + (hi[1][j] - lo[1][j]) * f for j in range(n)]
+
+    def fworld(t):
+        W = [None] * len(ffr)
+        for i, (nm, pa, loc) in enumerate(ffr):
+            L = list(loc)
+            if t is not None and i in frot:
+                m = qm(samp(frot[i], t, 4)); m[12], m[13], m[14] = L[12], L[13], L[14]; L = m
+            if t is not None and i in ftrans:
+                tt = samp(ftrans[i], t, 3); L[12], L[13], L[14] = tt
+            W[i] = L if pa < 0 else matmul(W[pa], L)
+        return W
+
+    def r3(m):   return [[m[0], m[4], m[8]], [m[1], m[5], m[9]], [m[2], m[6], m[10]]]
+    def mm3(a, b): return [[sum(a[r][k] * b[k][c] for k in range(3)) for c in range(3)] for r in range(3)]
+    def t3(m):   return [[m[c][r] for c in range(3)] for r in range(3)]
+    def axang(R):
+        tr = R[0][0] + R[1][1] + R[2][2]
+        ang = math.acos(max(-1.0, min(1.0, (tr - 1.0) / 2.0)))
+        if ang < 1e-6: return (0.0, 1.0, 0.0, 0.0)
+        s = 2.0 * math.sin(ang)
+        return ((R[2][1] - R[1][2]) / s, (R[0][2] - R[2][0]) / s, (R[1][0] - R[0][1]) / s, math.degrees(ang))
+
+    def rz(deg):
+        a = math.radians(deg); c, s = math.cos(a), math.sin(a)
+        return [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+
+    F_SPINE = list(range(16, 34))                  # chn2..eff7 (f00s spine chain)
+    ROOT = 4                                       # eff1 — reference just ahead of the spine
+    fst = _stations(F_SPINE, lambda i: fw[i][14])
+    fr_w = fworld(None)
+    pst = _stations(pris_tail, lambda i: pris_world[i][14])
+    n = min(len(fst), len(pst))
+    drop = len(fst) - n                            # extra f00s FRONT stations: FOLDED into the first mapped
+                                                   # station (compose, don't drop — f00s's front rotations
+                                                   # partially cancel; dropping half bent pris's mid wrongly)
+    # tapered TWIST redistribution: f00s applies its roll as one jump at a single station; on Priscleen
+    # ramp it instead — zero at the mid-body station, growing to the full f00s roll just before the tail.
+    CUM = [0.0, 0.2, 0.5, 0.8, 1.0, 1.0][:n]
+    rows = []
+    for t in range(143, 164):                      # f00s KEY slot 5 (釣れた), 21 frames
+        aw = fworld(t)
+        Ms = [mm3(r3(aw[st[-1]]), t3(r3(fr_w[st[-1]]))) for st in fst]   # world delta up to each station
+        root = mm3(r3(aw[ROOT]), t3(r3(fr_w[ROOT])))
+        th = [math.degrees(math.asin(max(-1.0, min(1.0, -Ms[k][0][1])))) for k in range(len(fst))]
+        row, prev, prev_th, j = [], root, 0.0, 0
+        for k in range(drop, len(fst)):
+            D = mm3(t3(prev), Ms[k])               # increment (first one spans the folded front stations)
+            droll = th[k] - prev_th                # f00s's roll increment at this station...
+            want = (CUM[j] - (CUM[j - 1] if j else 0.0)) * th[len(fst) - 1]   # ...retargeted to the taper
+            row.append(axang(mm3(rz(want - droll), D)))
+            prev, prev_th, j = Ms[k], th[k], j + 1
+        rows.append(row)
+
+    m5st = pst[-n:]
+    m5spine = [[tuple(round(v, 6) for v in r) for r in row] for row in rows]
+    return m5st, m5spine
 
 def main():
     chr = dict(parse_chr(read_file("sg/fish/f19a.chr")))
@@ -78,6 +173,8 @@ def main():
         "BODY":    [1],                        # whole-fish pitch pivot
     }
 
+    m5st, m5spine = retarget_f00s_m5(frames, world, tail)
+
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         f.write("# AUTO-GENERATED by dc2/build_priscleen_dc1motions.py — Priscleen's native rig, DC1-style motions.\n")
@@ -86,6 +183,8 @@ def main():
         f.write("BONES  = %r\n" % bones)
         f.write("MESHES = %r\n" % meshes)
         f.write("GROUPS = %r\n" % groups)
+        f.write("M5ST = %r\n" % m5st)          # pris spine stations (front->tip) driven by the f00s copy
+        f.write("M5SPINE = %r\n" % m5spine)    # per frame, per station: world-axis (x,y,z,deg) from f00s m5
         f.write(BODY)
     print(f"wrote {OUT}: {len(bones)} bones, {len(meshes)} meshes, "
           f"groups spine={len(tail)} pectR={len(groups['PECT_R'])} pelvR={len(groups['PELV_R'])} "
@@ -106,15 +205,19 @@ MP = {
     "2_battle弱気 21f":    dict(len=20, loop=True,  body=14, bfreq=2.0, fin=8,  ffreq=2.0, jaw=28, jfreq=1, pect=32, prow=9,  rowf=2, palt=0, pivot=0, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=0),
     "3_leap 飛びはね 21f": dict(len=20, loop=False, body=58, bfreq=2.0, fin=30, ffreq=2.0, jaw=50, jfreq=3, pect=20, prow=28, rowf=3, palt=0, pivot=0, vtail=7, warp=0.8, warpc=0.12, jawmin=0.0,  pitch=0, arc=0, wob=0),
     "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=32, bfreq=2.0, fin=10, ffreq=2.0, jaw=26, jfreq=1, pect=25, prow=50, rowf=3, palt=1, pivot=0, vtail=3, warp=0.0, warpc=0.0,  jawmin=0.5, rowdwell=0.7, bwarp=0.6, bwarpc=0.08, benv=0.58, pitch=0, arc=0, wob=0),
-    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=15, bfreq=1.0, fin=6,  ffreq=1.0, jaw=20, jfreq=2, pect=42, prow=9,  rowf=2, palt=0, pivot=7, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=9),
+    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=0,  bfreq=1.0, fin=6,  ffreq=1.0, jaw=30, jfreq=1, pect=55, prow=12, rowf=1, palt=0, pivot=0, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.85, copySpine=1, rowph=-2.7, pitch=0, arc=0, wob=0),
     "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=6,  jfreq=1, pect=38, prow=9,  rowf=2, palt=0, pivot=7, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=0),
 }
 # pect=pectoral sweep-back, prow=pectoral row amp, rowf=pectoral row cycles, palt=pectorals alternate L/R (1=out
 # of phase, the reeled-in paddle), rowdwell=uneven stroke speed: linger at the BACK extreme, snap through the
-# front (0=steady, <1), jaw=mouth-open, jfreq=mouth cycles, jawmin=mouth-open FLOOR (never fully closes
+# front (0=steady, <1), rowph=row phase shift (rad; m5: fins BACK at the tail-muscle contraction peak,
+# FORWARD as it relaxes), jaw=mouth-open, jfreq=mouth cycles, jawmin=mouth-open FLOOR (never fully closes
 # — the tired gasp), pivot=nose-pivot yaw (0=head fixed), vtail=vertical tail-lift (single flick @ snap),
 # warp=time-warp (0=uniform; >0 slow-fast-slow burst mid-motion), warpc=warp center shift (later snap),
-# bwarp/bwarpc=TAIL-ONLY wind-up/flick warp (fins untouched), benv=tail amplitude envelope (quiet ends, full flick)
+# bwarp/bwarpc=TAIL-ONLY wind-up/flick warp (fins untouched), benv=tail amplitude envelope (quiet ends, full flick),
+# copySpine=1: spine driven by the M5SPINE table — f00s motion 5's EXACT per-station rotations (extracted
+# from its .mot, tip-aligned) instead of any procedural wave; bend/twist/twistph=procedural fallbacks for
+# other motions (static side-curl / peduncle-muscle roll at the u~0.43 station / roll-swing phase align)
 # --- carangiform spine wave (tuned to f00s motion 0: pivots on a fixed nose, tail whips ~19u; no tilt) ---
 WAVE_K = 0.22           # phase travel down the body (rad per game-unit): drives the traveling S-node
 SPINE_BASE_FRAC = 0.16  # anterior-body floor of the tail wave (the nose pivot below adds the front swing)
@@ -158,6 +261,12 @@ GZ = [GR[i].to_translation().z for i in range(len(BONES))]   # rest fore/aft pos
 _SP = GROUPS["SPINE"]
 SP_Z0 = GZ[_SP[0]]; SP_SPAN = GZ[_SP[-1]] - GZ[_SP[0]]
 SP_MULT = {i: sum(1 for j in _SP if round(GZ[j], 1) == round(GZ[i], 1)) for i in _SP}
+# TWIST station: f00s m5's roll is EXACTLY 0 through the front/mid body, then jumps to full at one
+# joint (u~0.43, the peduncle muscles) and stays constant to the tip. Roll applied in-chain here twists
+# only the aft body; the dorsal/pelvic/pectoral attachment region ahead of it never rolls (no shear).
+_twz = SP_Z0 + 0.43 * SP_SPAN
+_tbest = min((GZ[i] for i in _SP), key=lambda z: abs(z - _twz))
+TW_ST = [i for i in _SP if round(GZ[i], 1) == round(_tbest, 1)]
 NOSE_N = GR[GROUPS["NOSE"][0]].to_translation()   # rest world position of the nose (the pivot point)
 
 def game_world(deltas, pivot_deg=0.0, jaw_rot=0.0):
@@ -219,17 +328,31 @@ def deltas(mp, t):
     benv = mp.get("benv", 0.0)
     env = 1.0 if not benv else \
         (1.0 - benv) + benv * max(0.0, math.cos(math.pi * (rp - (mp.get("bwarpc", 0.0) + 0.5)))) ** 2
-    for i in GROUPS["SPINE"]:
-        u = (GZ[i] - SP_Z0) / SP_SPAN if SP_SPAN else 0.0        # 0 at front of body, 1 at tail tip
-        A = env * mp["body"] * (SPINE_BASE_FRAC + (1 - SPINE_BASE_FRAC) * u ** SPINE_POWER)
-        ph = TAU * mp["bfreq"] * tprog + BODY_PHASE - WAVE_K * (SP_Z0 - GZ[i])
-        ang = A / SP_MULT[i] * math.sin(ph)         # split the station's bend among coincident joints
-        if mp["wob"]:                               # deterministic pseudo-noise for the struggle
-            ang += (mp["wob"] / SP_MULT[i]) * math.sin(6.3 * TAU * prog + 0.9 * i)
-        add(d, i, UPv, ang)
-        if mp["vtail"]:                             # vertical tail flick: ONE upward lift, windowed to the
-            Av = mp["vtail"] * (SPINE_BASE_FRAC + (1 - SPINE_BASE_FRAC) * u ** SPINE_POWER)   # fast snap only,
-            add(d, i, RIGHT, Av / SP_MULT[i] * snap_window(rp))                               # tail-weighted (+=up)
+    if mp.get("copySpine"):                          # spine copied STATION-FOR-STATION from f00s (m5): each
+        for k, bones_k in enumerate(M5ST):           # Priscleen station gets its tip-aligned f00s station's
+            ax, ay, az, ang = M5SPINE[t][k]          # exact incremental world rotation — same direction,
+            if abs(ang) > 1e-4:                      # same twist, same timing; only segment lengths differ.
+                for i in bones_k:
+                    add(d, i, Vector((ax, ay, az)), ang / len(bones_k))
+    else:
+        for i in GROUPS["SPINE"]:
+            u = (GZ[i] - SP_Z0) / SP_SPAN if SP_SPAN else 0.0    # 0 at front of body, 1 at tail tip
+            prof = SPINE_BASE_FRAC + (1 - SPINE_BASE_FRAC) * u ** SPINE_POWER
+            A = env * mp["body"] * prof
+            ph = TAU * mp["bfreq"] * tprog + BODY_PHASE - WAVE_K * (SP_Z0 - GZ[i])
+            ang = (A * math.sin(ph) + mp.get("bend", 0.0) * prof) / SP_MULT[i]
+            if mp["wob"]:                           # deterministic pseudo-noise for the struggle
+                ang += (mp["wob"] / SP_MULT[i]) * math.sin(6.3 * TAU * prog + 0.9 * i)
+            add(d, i, UPv, ang)
+            if mp["vtail"]:                         # vertical tail flick: ONE upward lift, windowed to the
+                Av = mp["vtail"] * prof                                       # fast snap only, tail-weighted
+                add(d, i, RIGHT, Av / SP_MULT[i] * snap_window(rp))
+        tw = mp.get("twist", 0.0)                    # TWIST: peduncle-muscle roll — ONE in-chain roll at the
+        if tw:                                       # u~0.43 station (zero ahead, constant aft), one-sided,
+            s = math.sin(TAU * mp["bfreq"] * tprog + BODY_PHASE + mp.get("twistph", 0.0))
+            ang = tw * 0.5 * (1.0 + s)               # peaking with the tail swing (twistph aligns)
+            for i in TW_ST:
+                add(d, i, FWD, ang / len(TW_ST))
     # (the anterior/nose swing is handled by the per-motion nose-pivot yaw in game_world, not here)
     # ---- dorsal fin: gentle rudder sway following the body ----------------------------------
     for i in GROUPS["DORSAL"]:
@@ -237,7 +360,8 @@ def deltas(mp, t):
                         * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE))
     # ---- fins: pectorals row front-to-back (sweep oscillates); pelvics flap up/down -------
     fin = math.sin(TAU * mp["ffreq"] * prog)
-    theta = TAU * mp["rowf"] * prog + BODY_PHASE                # pectoral row phase (rowf strokes / motion)
+    theta = TAU * mp["rowf"] * prog + BODY_PHASE + mp.get("rowph", 0.0)   # pectoral row phase (rowf strokes
+                                                    # per motion; rowph shifts where the stroke lands)
     rd = mp.get("rowdwell", 0.0)     # >0 = linger at the BACK extreme, snap through the front (per-stroke warp)
     row_hi = math.sin(theta + rd * math.cos(theta))            # dwells at +1 (= back for the +coeff fins)
     row_lo = math.sin(theta - rd * math.cos(theta))            # dwells at -1 (= back for the mirrored fins)
@@ -304,7 +428,8 @@ def build():
         act.use_cyclic = mp["loop"]
         ao.animation_data.action = act
         for t in range(0, mp["len"] + 1):
-            prog = warp_prog(mp, t / mp["len"] if mp["len"] else 0.0)   # match deltas' warped time
+            rp = t / mp["len"] if mp["len"] else 0.0
+            prog = warp_prog(mp, rp)                                    # match deltas' warped time
             pivot_deg = mp["pivot"] * math.sin(TAU * mp["bfreq"] * prog + BODY_PHASE)   # per-motion nose-pivot yaw
             openf = mp["jawmin"] + (1 - mp["jawmin"]) * (0.5 - 0.5 * math.cos(TAU * mp["jfreq"] * prog))
             jaw_rot = UPPER_JAW_FRAC * mp["jaw"] * JAW_SCALE * openf   # upper lip opening angle (deg); rot up @ hinge
