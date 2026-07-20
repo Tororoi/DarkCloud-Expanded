@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Repack Priscleen (f19a.chr) with the 7 authored DC1-style motions — the final export step.
 
-Input: dc2/blender/priscleen_bake.json — written by running dc2/blender/priscleen_dc1motions.py in
+Input: custom_fish/blender/priscleen_bake.json — written by running custom_fish/blender/priscleen_dc1motions.py in
 Blender (WYSIWYG: the exact game-space per-bone local quat+trans the preview keyframed, so the .mot
 is guaranteed to match what was approved on screen). Re-run the Blender script after any tuning
 change to refresh the bake, then re-run this.
@@ -23,6 +23,7 @@ the mod's Resources/Fish/f19a.chr (what PriscleenFish.cs injects at runtime).
 import json, math, os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dc2"))   # dc2_archive (DC2 source reader)
 from dc2_archive import read_file
 from build_blender_rig import skeleton
 from build_priscleen_chr import parse_pack, entry as pack_entry, align
@@ -251,7 +252,7 @@ def dc1_info_cfg():
 
 def main():
     if not os.path.exists(BAKE):
-        sys.exit(f"missing {BAKE} — run dc2/blender/priscleen_dc1motions.py in Blender first "
+        sys.exit(f"missing {BAKE} — run custom_fish/blender/priscleen_dc1motions.py in Blender first "
                  f"(it writes the bake automatically)")
     bake = json.load(open(BAKE))
     assert len(bake["motions"]) == len(KEYS), f"bake has {len(bake['motions'])} motions, need {len(KEYS)}"

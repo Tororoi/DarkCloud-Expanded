@@ -5,7 +5,7 @@ pixel/CLUT/dimension field from the embedded TIM2; it only reads the per-texture
 (the TIM2 offset). So converting IM3 -> IM2 is a header swap: keep the DC2 TIM2 verbatim, wrap it in an IM2
 header + one 0x30-byte entry (name = the mesh's texture name, TIM2 at 0x40).
 
-Rebuilds Resources/Fish/f19a.chr with the .img converted. Run: python3 dc2/fix_priscleen_texture.py
+Rebuilds Resources/Fish/f19a.chr with the .img converted. Run: python3 custom_fish/fix_priscleen_texture.py
 """
 import os, sys, struct
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))

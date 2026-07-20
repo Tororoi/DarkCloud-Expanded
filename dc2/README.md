@@ -63,27 +63,32 @@ a chain of sub-file entries, each:
 ```
 Sub-file ORDER is irrelevant (lookup is by name). DC1 fish `.chr` sub-files: info.cfg, fNNa.mds, .img,
 .wgt, .mot, .bbp. DC2 identical (info.cfg last instead of first). **So porting Priscleen needs NO
-container rebuild and NO binary conversion** — copy the DC2 `.chr` verbatim and only **rewrite its
-info.cfg** to DC1 grammar:
+container rebuild** — but five sub-files need conversion, each with a DC1-vs-DC2 incompatibility that
+was found the hard way (each one alone produced a distinct in-game failure). See below.
 
-| info.cfg | DC1 | DC2 |
-|---|---|---|
-| line ends | (none) | `;` |
-| VERTEX_ANIME | `1` | `"skin1","skin2"` |
-| KEY | `start,end,weight` | `"name",start,end,weight` |
-| extra | `ALLOC_DBUFF`,`SHADOW_MOTION` | `POLY_NUM`,`SCALE` |
+---
 
-Converter = regenerate info.cfg in DC1's exact form (mimic `chara/f01a.chr`'s), keeping DC2's values
-(model/tex/motion names, KEY frame ranges 4-14/18-28/40-80, BODY_SIZE 18,7,60), then patch that entry's
-size + nextStride and leave every other sub-file byte-for-byte. Injected at runtime into read_buffer at
-species-8 catch (see fishing-fish-slot-limit memory).
+# DC2 → DC1 fish port  ✅ SHIPPED (Priscleen, 2026-07-19)
 
-## Converter — BUILT (`dc2/build_priscleen_chr.py`)
+The tooling lives in [`custom_fish/`](../custom_fish/README.md) (it's not DC2-specific — only
+`dc2_archive.py` here is); the full source-agnostic pipeline is documented in
+[`docs/custom-fish-pipeline.md`](../docs/custom-fish-pipeline.md). This README keeps the one genuinely
+DC2-specific piece: what DC2 ships vs what DC1 needs.
 
-Copies every DC2 sub-file (mds/mot/bbp/wgt/img) verbatim, regenerates info.cfg in DC1 grammar,
-re-serializes into the shared pack format → `ROMs/dc2_extracted/priscleen/f19a.chr` (131536 B). Keeps
-the `f19a` name throughout (Priscleen = DC1 **species id 8**, but `f09a` is RESERVED for a future added
-fish — do NOT conflate). Verified: parses with DC1's GetPackFile, valid terminator, mesh decodes 280v/364t. Open items (in-game tests): (1) DC1 info.cfg parser accepts the
-regenerated cfg; (2) `VERTEX_ANIME 1` vs DC2's named `skin1/skin2` (may need matching ALLOC_DBUFF); (3)
-confirm flap = motion index 1 in f19a.mot (KEYs kept in DC2 order: 0=4-14, 1=18-28, 2=40-80). Next:
-bundle f09a.chr as a mod Resource + wire the read_buffer injection for species 8.
+## The five DC2→DC1 format conversions (all in `custom_fish/repack_priscleen_dc1motions.py`)
+
+| sub-file | DC2 ships | DC1 needs | symptom if skipped |
+|---|---|---|---|
+| `info.cfg` | `;`-grammar, named VERTEX_ANIME/KEY | DC1 grammar (table above) + one `ALLOC_DBUFF "<skin>"` per animated mesh frame | model doesn't load / mesh static |
+| `.img` | **IM3** wrapper around TIM2 | **IM2** wrapper (same TIM2 verbatim; header swap via `fix_priscleen_texture.im3_to_im2`) | garbled texture + delayed crash (EnterIMGFile walks junk offsets) |
+| `.bbp` | per-bone **WORLD** rest matrices | per-bone **LOCAL** rest matrices (regenerate from the .mds locals) | spiky vertex explosion (chain double-applies ancestors) |
+| `.mds` | skins parented to a bare null | skin frames parented to the **bone-chain root** (patch parent i32 @ frameRec+0x2C; locals are identity so pose unchanged) | stiff mesh + crash (see skinning contract) |
+| `.wgt` | nodes for bones 0..N | same, but the list must satisfy the **reset + chain contract** below | stiff mesh + crash |
+
+`.mot` needs no format conversion (same node/keyframe layout both games) but is REPLACED wholesale by
+the authored motions (below). The mesh (`.mds` MDT nodes) and the TIM2 pixels port byte-for-byte.
+
+The skinning contract (wgt reset node + matrix chain), `.mot`/KEY facts, the mds-reparent rationale,
+the authoring workflow, and the injection budget are all in
+[`docs/custom-fish-pipeline.md`](../docs/custom-fish-pipeline.md) — they are DC1 engine rules, not
+DC2 specifics.

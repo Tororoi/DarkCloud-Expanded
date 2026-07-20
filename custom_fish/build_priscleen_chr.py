@@ -13,6 +13,7 @@ added fish, not conflated with this). Output: ROMs/dc2_extracted/priscleen/f19a.
 """
 import sys, os, re, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dc2"))   # dc2_archive (DC2 source reader)
 from dc2_archive import read_file
 
 OUT = "/Users/thomascantwell/ROMs/dc2_extracted/priscleen/f19a.chr"
