@@ -21,14 +21,16 @@ MP = {
     "0_normal 通常 15f":   dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=30, jfreq=2, pect=38, prow=9,  rowf=2, palt=0, pivot=7, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=0),
     "1_battle元気 15f":    dict(len=14, loop=True,  body=40, bfreq=1.0, fin=12, ffreq=1.0, jaw=20, jfreq=1, pect=70, prow=5,  rowf=2, palt=0, pivot=7, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=0),
     "2_battle弱気 21f":    dict(len=20, loop=True,  body=14, bfreq=2.0, fin=8,  ffreq=2.0, jaw=28, jfreq=1, pect=32, prow=9,  rowf=2, palt=0, pivot=0, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=0),
-    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=58, bfreq=2.0, fin=30, ffreq=2.0, jaw=50, jfreq=3, pect=20, prow=28, rowf=3, palt=0, pivot=0, vtail=7, warp=0.8, warpc=0.12, jawmin=0.0,  pitch=0, arc=0, wob=0),
+    "3_leap 飛びはね 21f": dict(len=20, loop=False, body=58, bfreq=2.0, fin=30, ffreq=2.0, jaw=50, jfreq=3, pect=20, prow=28, rowf=3, palt=0, pivot=0, vtail=7, warp=0.8, warpc=0.12, jawmin=0.0,  prowv=10, pitch=0, arc=0, wob=0),
     "4_reeled 釣中 21f":   dict(len=20, loop=True,  body=32, bfreq=2.0, fin=10, ffreq=2.0, jaw=26, jfreq=1, pect=25, prow=50, rowf=3, palt=1, pivot=0, vtail=3, warp=0.0, warpc=0.0,  jawmin=0.5, rowdwell=0.7, bwarp=0.6, bwarpc=0.08, benv=0.58, pitch=0, arc=0, wob=0),
-    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=0,  bfreq=1.0, fin=6,  ffreq=1.0, jaw=30, jfreq=1, pect=55, prow=12, rowf=1, palt=0, pivot=0, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.85, copySpine=1, rowph=-2.7, pitch=0, arc=0, wob=0),
-    "6_idle アイドル 15f": dict(len=14, loop=True,  body=8,  bfreq=1.0, fin=5,  ffreq=1.0, jaw=6,  jfreq=1, pect=38, prow=9,  rowf=2, palt=0, pivot=7, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  pitch=0, arc=0, wob=0),
+    "5_caught 釣れた 21f": dict(len=20, loop=True,  body=0,  bfreq=1.0, fin=6,  ffreq=1.0, jaw=30, jfreq=1, pect=55, prow=12, rowf=1, palt=0, pivot=0, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.85, copySpine=1, rowph=-2.7, prowv=10, prowvph=-1.57, pitch=0, arc=0, wob=0),
+    "6_idle アイドル 15f": dict(len=14, loop=True,  body=19, bfreq=1.0, fin=5,  ffreq=1.0, jaw=24, jfreq=1, pect=22, prow=15, rowf=1, palt=1, pivot=2, vtail=0, warp=0.0, warpc=0.0,  jawmin=0.0,  rowdwell=0.45, prowv=16, pitch=0, arc=0, wob=0),
 }
 # pect=pectoral sweep-back, prow=pectoral row amp, rowf=pectoral row cycles, palt=pectorals alternate L/R (1=out
 # of phase, the reeled-in paddle), rowdwell=uneven stroke speed: linger at the BACK extreme, snap through the
-# front (0=steady, <1), rowph=row phase shift (rad; m5: fins BACK at the tail-muscle contraction peak,
+# front (0=steady, <1), prowv=vertical rowing amp (deg; ELLIPTICAL paddle: forward low, back raised —
+# true rowing, f00s idle; vertical is 90deg behind the fore/aft), rowph=row phase shift (rad; m5: fins BACK
+# at the tail-muscle contraction peak,
 # FORWARD as it relaxes), jaw=mouth-open, jfreq=mouth cycles, jawmin=mouth-open FLOOR (never fully closes
 # — the tired gasp), pivot=nose-pivot yaw (0=head fixed), vtail=vertical tail-lift (single flick @ snap),
 # warp=time-warp (0=uniform; >0 slow-fast-slow burst mid-motion), warpc=warp center shift (later snap),
@@ -192,6 +194,12 @@ def deltas(mp, t):
             add(d, base, UPv, sign * mp["pect"])        # per-motion sweep (calmer motions less back)
             add(d, base, FWD, -sign * PECT_DROOP)       # drooped down
             add(d, base, UPv, sign * altf * mp["prow"] * row)  # ROW: fore/aft (alternating L/R when palt)
+            vamp = mp.get("prowv", 0.0)                # prowv: VERTICAL rowing component — the tip traces an
+            if vamp:                                   # ELLIPSE instead of a flat swing (f00s). Default phase
+                lo = (name == "PECT_L" and mp["palt"])  # = 90deg behind the fore/aft (reach forward lowered,
+                wp = theta - rd * math.cos(theta) if lo else theta + rd * math.cos(theta)   # sweep back
+                wp += mp.get("prowvph", 0.0)           # raised); prowvph tilts the loop (m5: +pi/2 -> fin
+                add(d, base, FWD, sign * vamp * (-math.cos(wp) if lo else math.cos(wp)))    # low at the back)
         else:                                          # pelvics: flap distributed along the fin
             amp = sign * mp["fin"] / n
             w = fin
