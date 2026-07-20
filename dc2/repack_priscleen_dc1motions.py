@@ -194,9 +194,10 @@ def qdiff(a, b):
 
 
 def patch_wgt(wgt):
-    """Move the UPPER_LIP skin1 verts to a new (skin1, bone 26) block at weight 100, and DROP the
-    skin2 blocks entirely: skin2 is not ALLOC_DBUFF'd (static), and no working config ever bound
-    weights to a non-morphable frame — the transplant's .wgt referenced only its dbuff'd skin."""
+    """Move the UPPER_LIP skin1 verts to a new (skin1, bone 26) block at weight 100. skin2's blocks
+    pass through as-is — with skin2 reparented to root and ALLOC_DBUFF'd, its original bone-0 cnt=0
+    lead block is a valid MotionProc2 reset and the ascending run is a valid matrix chain. STATIC=1
+    drops skin2's blocks (never bind weights to a non-morphable frame)."""
     lip = set(UPPER_LIP)
     blocks, o, removed = [], 0, 0
     while o + 0x20 <= len(wgt):
@@ -207,6 +208,8 @@ def patch_wgt(wgt):
             kept = [e for e in entries if struct.unpack_from("<I", e)[0] not in lip]
             removed += len(entries) - len(kept)
             blocks.append([skinf, bone, h[2], h[3], kept, h[6], h[7]])
+        elif not os.environ.get("STATIC") and not os.environ.get("SKIN1ONLY"):
+            blocks.append([skinf, bone, h[2], h[3], entries, h[6], h[7]])
         if stride == 0: break
         o += stride
     # insert the lip block in ascending bone order within the skin1 run (after bone 25's block)
@@ -232,10 +235,12 @@ def dc1_info_cfg():
     """DC1-grammar info.cfg with the real 7 KEY ranges (values otherwise as build_priscleen_chr.py).
     STATIC=1 env: ALLOC_DBUFF matches no frame -> mesh stays rigid (bones still animate internally) —
     the crash-bisect switch separating bad motion DATA from a bad skin1 MORPH path."""
-    dbuff = "skin" if os.environ.get("STATIC") else "skin1"
+    dbuffs = (["skin"] if os.environ.get("STATIC") else            # fully rigid (crash bisect)
+              ["skin1"] if os.environ.get("SKIN1ONLY") else        # yesterday's proven body-only config
+              ["skin1", "skin2"])                                  # full: body + fin membranes
     lines = [
         'IMG 0,"f19a01.img"', 'IMG_END', 'MATERIAL_ANIME 0', 'VERTEX_ANIME 1', '',
-        f'ALLOC_DBUFF "{dbuff}"', 'MODEL "f19a.mds"', 'BODY_SIZE 18,7,60', '',
+        *[f'ALLOC_DBUFF "{d}"' for d in dbuffs], 'MODEL "f19a.mds"', 'BODY_SIZE 18,7,60', '',
         'MOTION 0, "f19a.mot", "f19a.bbp", "f19a.wgt"', 'SHADOW_MOTION "", "", ""', 'KEY_START 0',
     ]
     for s, e, w, name in KEYS:
