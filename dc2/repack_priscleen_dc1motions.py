@@ -264,7 +264,28 @@ def main():
     out = bytearray()
     for name, hdr, data in parse_pack(src):
         low = name.lower()
-        if low == "f19a.mot":
+        if low == "f19a.mds":
+            # REPARENT skin1/skin2: 48 (bare null) -> 0 (root). DC1's MotionProc2 skinning only runs
+            # after a "reset" wgt node whose bone == the skin frame's PARENT (initializes the vertex
+            # buffer + matrix chain, marks the mesh dirty); every DC1 fish parents its skin to the
+            # bone-chain root and leads the .wgt with that bone as a cnt=0 node. Priscleen's skin
+            # hangs off frame 48, which owns no bones -> reset never fires -> STIFF mesh + garbage
+            # matrix-chain reads (the crash). With parent=0, the wgt's existing first node (bone 0,
+            # cnt 0) becomes the reset and ascending bone order chains correctly. Locals are
+            # identity, so the rest pose is unchanged.
+            data = bytearray(data)
+            for fi in (49, 50):
+                struct.pack_into("<i", data, 0x10 + fi * 0x70 + 0x2c, 0)
+            data = bytes(data)
+            print("f19a.mds: reparented skin1/skin2 frames 49,50 -> root 0")
+        elif low == "f19a.bbp":
+            # DC2's .bbp stores per-bone WORLD rest matrices; DC1's skinning accumulates .bbp entries
+            # down the parent chain (MotionProc2 rest-pose chain), so entries must be LOCAL rest
+            # matrices (verified: f00s/f01a/f12a bbp == mds locals for every chain bone). Feeding
+            # world matrices explodes the verts. Regenerate as the 52 local rest matrices.
+            data = b"".join(struct.pack("<16f", *rest_local[i]) for i in range(len(rest_local)))
+            print(f"f19a.bbp: regenerated as LOCAL rest matrices ({len(data)}B, was world-space)")
+        elif low == "f19a.mot":
             data = mot
         elif low == "f19a.wgt":
             data = patch_wgt(data)
