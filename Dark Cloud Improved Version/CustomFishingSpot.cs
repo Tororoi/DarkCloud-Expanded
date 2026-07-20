@@ -167,7 +167,13 @@ namespace Dark_Cloud_Improved_Version
                      -320f, -260f, 310f, 300f, water: 0f, ground: -15f,
                      tx: 74f, ty: 10f, tz: -20f, radius: InteractRadius,
                      sx: 74f, sy: 10f, sz: -20f, facing: -1.639f,
-                     diagNoVillagerClear: true,   // the crash fix: don't clear villagers in Brownboo
+                     // BISECT (2026-07-20): back to the vanilla villager-clear pair (38/57) while
+                     // TownCharacter.DisableBrownbooDialogue is ON. If the session now loads without
+                     // crashing, the mod's per-frame Brownboo dialogue scan (which touches the villager
+                     // array every frame) was what referenced villager data after cmd 38 freed it. If it
+                     // still crashes, the referencer is engine-side and we fall back to diagNoVillagerClear
+                     // + EnforcePoolWatermark. Flip both together.
+                     diagNoVillagerClear: false,
                      // fishDepth override REMOVED: patching fish to WaterLevel-6 left them shallower than
                      // the hook reaches (hook depth was not changed to match) so nothing could bite. With no
                      // override the fish stay at vanilla WaterLevel-12, which the hook reaches — fish bite again.
@@ -305,6 +311,15 @@ namespace Dark_Cloud_Improved_Version
                 _installedMap = -1;
                 _slot = -1;
                 _fishingWasLive = false;
+                _fishLabelOff = 0;         // the pool + stb are rebuilt with the town — stale state is wrong
+                _exitLabelOff = 0;
+                _baitLabelOff = 0;
+                InFishingWindow = false;
+                _savedVillagerCount = -1;  // count belongs to the old town; don't restore it into the new one
+                _drawFlagsSaved = false;
+                _vbWatermark = -1;
+                _vbLastUsed = -1;
+                _vbStableTicks = 0;
                 _settleTicks = 0;
                 _lastParam = int.MinValue;
                 _lastMode = int.MinValue;
@@ -312,7 +327,8 @@ namespace Dark_Cloud_Improved_Version
                 PriscleenFish.Uninstall();
             }
 
-            if (map == _installedMap) { WatchMatches(); PriscleenFish.Tick(); return; }
+            if (map == _installedMap)
+            { WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick(); return; }
 
             if (!TryGetSpot(map, out Spot spot)) return;
 
@@ -351,6 +367,12 @@ namespace Dark_Cloud_Improved_Version
             int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
 
             Log($"installing '{spot.Name}' (MapNo {spot.MapNo})");
+
+            // (NOTE: villagers finish loading a few SECONDS after this point — never capture a pool
+            // watermark here; see EnforcePoolWatermark's stability guard.)
+            Log($"   pool at install: used {Memory.ReadInt(FishingPool.Used) * FishingPool.BlockSize / 1024} KB " +
+                $"of {Memory.ReadInt(FishingPool.Capacity) * FishingPool.BlockSize / 1024} KB");
+
             BuildArena(stb, labelCount, tbl);
             if (_arena.Count == 0) { Log("   no spare labels — skipping"); return; }
 
@@ -378,6 +400,7 @@ namespace Dark_Cloud_Improved_Version
             WriteScript(stb, codeOff, end, BuildFishingBytecode(spot),
                         $"_LOAD_MAIN_CHARA({FishingModel}) + _LOAD_FISHING_DATA(area={spot.AreaId}, " +
                         $"water={spot.Water}) + stance + bait + fishing");
+            _fishLabelOff = codeOff;    // arms EnforcePoolWatermark's running-label identification
 
             _exitPosOperand = _exitRotOperand = -1;
             _exitPosAddr = _exitRotAddr = 0;
@@ -596,6 +619,12 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(stb + lab.Entry, targetId);
             Log($"   label {lab.Id} re-numbered to {targetId} (the engine requests it by number)");
             WriteScript(stb, lab.Off, end, w, what);
+
+            // The pool-watermark enforcement and the fishing-window signal identify "one of OUR labels is
+            // running" by comparing CRunScript+0x3C (the RS_PROG_HEADER ptr reload() stores) against
+            // stbBase + these offsets.
+            if (targetId == EventPoints.FishingExitLabel) _exitLabelOff = lab.Off;
+            else if (targetId == EventPoints.FishingBaitLabel) _baitLabelOff = lab.Off;
 
             // Remember where the exit script's position/rotation operands landed, so they can be kept in step
             // with the player while they fish.
@@ -1290,6 +1319,26 @@ namespace Dark_Cloud_Improved_Version
             bool live = Memory.ReadInt(FishingSpot.CPolyNum) > 0
                         || Memory.ReadFloat(FishingSpot.WaterLevel) != 0f;
 
+            // THE LEAK (black screen after ~4 start/quit/restart cycles): the turi model (1771.7 KB) +
+            // fishing.pak (1568 KB) load from the villager allocator (EdVillagerBuffer 0x1D1B360), and only
+            // _CLEAR_VILLAGER_BUFF rewinds it. Brownboo skips that command (diagNoVillagerClear), so every
+            // session permanently stacks +3340 KB (used = N*3340+3553; FishingExit itself only frees what
+            // came after FishingInit). Session 4 exceeds the 14369 KB capacity -> load fails behind the
+            // fade -> permanent black screen.
+            //
+            // A mod-side rewind at SESSION END was tried and CRASHED the next session: town events (NPC
+            // dialogs) allocate from EdEventBuffer, which chains on top of this counter — rewinding while
+            // the town is live let dialog data and the next session's loads share memory. Vanilla only ever
+            // rewinds at session START (38 inside the enter script, behind the fade, no live events) — any
+            // real fix must do the same. See the memory note; the vanilla-faithful fix is in progress.
+            if (!live && _fishingWasLive && _spot.DiagNoVillagerClear)
+            {
+                int cur = Memory.ReadInt(FishingPool.Used);
+                Log($"   session ended: pool used {cur * FishingPool.BlockSize / 1024} KB " +
+                    $"(watermark {(_vbWatermark < 0 ? -1 : _vbWatermark * FishingPool.BlockSize / 1024)} KB " +
+                    $"— rewound at next spot approach)");
+            }
+
             if (live && !_fishingWasLive)
             {
                 _snapCamera = true;
@@ -1472,6 +1521,183 @@ namespace Dark_Cloud_Improved_Version
         internal static bool InjectFakeCollision = false;   // OFF: leave native cpoly untouched to read the vanilla count
 
         private static bool _fishingWasLive;
+
+        // ── POOL-WATERMARK ENFORCEMENT (the black-screen fix, vanilla-faithful) ────────────────────
+        //
+        // THE LEAK: the turi model (1771.7 KB) + fishing.pak (1568 KB) allocate from the villager bump
+        // allocator (EdVillagerBuffer 0x1D1B360) and only _CLEAR_VILLAGER_BUFF rewinds it. Brownboo's
+        // script must SKIP that command (diagNoVillagerClear): it is an open town whose villagers stay
+        // live through a session — 38 frees their memory and the model load lands on top of data the
+        // town still references (the original "can't start a session" crash). Yellow Drops keeps the
+        // vanilla 38/57 pair and provably doesn't leak (allocator-watch log 2026-07-20). Without any
+        // rewind, Brownboo stacked +3340 KB per session and blacked out on the 4th.
+        //
+        // THE FIX mirrors vanilla's discipline at vanilla's moment, minus the villager clear: rewind
+        // used to the VILLAGER WATERMARK (villagers loaded, nothing else) whenever OUR enter label is
+        // the running script and the game is still in walk mode — i.e. the player is standing at the
+        // prompt, before X promotes it to an event and the fade/loads begin. Identification is exact:
+        // CRunScript+0x3C holds the running label's header ptr (reload() @0x23DE10 stores it).
+        //
+        // Two hard-won constraints honoured here:
+        //   • the watermark must be captured AFTER the villagers finish loading (they land seconds
+        //     after Install — a too-early 0 KB baseline made a rewind free LIVE villagers, which
+        //     crashed exactly like the original 38 bug). Hence the stability guard.
+        //   • never rewind after the event starts (GameMode 14) — the loads bump `used` in stages and
+        //     a mid-load rewind would free memory the load is writing.
+        private static int _fishLabelOff;          // enter label's code offset in the stb (0 = none)
+        private static int _exitLabelOff;          // exit label's code offset
+        private static int _baitLabelOff;          // bait label's code offset
+
+        /// <summary>
+        /// TRUE while a fishing session (or its enter/exit script) owns the game — the window where the
+        /// custom-dialogue machinery (TownCharacter's NPC scan + the mailbox flags its PNACH patches key
+        /// on) must stand down. BISECT for the Brownboo crash-under-cmd-38: if the crash stops with the
+        /// dialogue system quiet, our own machinery was the thing referencing freed villager data.
+        ///
+        /// Deliberately NOT true during the walk-mode prompt (label runs every frame near the spot as a
+        /// simple event) — dialogue near the spot stays functional. Event mode (14) counts only when the
+        /// running script is one of OURS, so normal talk dialogues are unaffected.
+        /// </summary>
+        internal static bool InFishingWindow { get; private set; }
+
+        // The engine's event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < VillagerCount`
+        // and calls VIRTUAL functions on each villager object (DAT_01d3d228 + i*0x14A0, vtable @ +0xA0).
+        // A fishing session frees the villager buffer (cmd 38) and loads the 1.8 MB model over those
+        // objects, so their vtable pointers become garbage — and the stepper jumps through one to an
+        // unmapped page (the recLUT crash). Brownboo is populated so the count is large and it steps the
+        // freed villagers; Yellow Drops is nearly empty so the loop body never runs — which is why only
+        // Brownboo crashed. Vanilla's villager clear must pair with suspending this count; we do the same:
+        // zero the count for the whole fishing window (villagers are freed/suspended then anyway) and
+        // restore it on the way out. One write covers every event-mode villager iterator (EdEventNPCStep,
+        // EdEventMode, GetNPC/GetChara), not just the one we traced.
+        private const long VillagerCount = 0x21D3D3C8;   // ELF DAT_01d3d3c8 — live NPC count
+        private static int _savedVillagerCount = -1;
+
+        // The engine's villager DRAW (EdDrawCharacter 0x1725F0, called from MainDraw with a HARDCODED count
+        // of 10 — so the count knob above does NOT cover it). Each slot is gated by CheckDraw__12CNPCharacter
+        // (0x156670), which returns "draw" only when the villager object's draw flag @ +0x146C != 0. The
+        // objects live at a FIXED base (0x21D25B90, stride 0x14A0) that the model load does NOT overwrite —
+        // only the VISUAL sub-object they point to (+0xA0) is freed and overwritten, and dispatching its
+        // vtable (+0xAC) through the garbage pointer is the recLUT crash. Zero the fixed draw flags and
+        // CheckDraw returns 0 first, so the freed visual is never touched. Restore on exit.
+        private const long VillagerObjBase   = 0x21D25B90;
+        private const int  VillagerObjStride = 0x14A0;
+        private const int  VillagerDrawFlag  = 0x146C;
+        private const int  VillagerDrawSlots = 10;       // MainDraw's hardcoded EdDrawCharacter count
+        private static readonly int[] _savedDrawFlags = new int[VillagerDrawSlots];
+        private static bool _drawFlagsSaved;
+
+        private const long EdEventInfo = 0x21D3D1D0;   // ELF 0x1d3d1d0 — running-event id (set by EdEventInit)
+
+        private static void UpdateFishingWindow()
+        {
+            bool was = InFishingWindow;
+            InFishingWindow = ComputeFishingWindow(out string why);
+            if (InFishingWindow == was) return;
+            Log($"fishing-window {(InFishingWindow ? "OPEN" : "closed")} ({why})");
+
+            if (InFishingWindow)
+            {
+                // Suspend BOTH villager paths BEFORE the enter script frees + overwrites the visuals:
+                //  (1) STEP — EdEventNPCStep loops `i < count`, so zero the count.
+                _savedVillagerCount = Memory.ReadInt(VillagerCount);
+                if (_savedVillagerCount > 0) Memory.WriteInt(VillagerCount, 0);
+                //  (2) DRAW — EdDrawCharacter walks a fixed 10 slots gated by CheckDraw's +0x146C flag;
+                //      zero the 10 fixed-address flags so CheckDraw returns 0 and skips the freed visual.
+                for (int i = 0; i < VillagerDrawSlots; i++)
+                {
+                    long f = VillagerObjBase + (long)i * VillagerObjStride + VillagerDrawFlag;
+                    _savedDrawFlags[i] = Memory.ReadInt(f);
+                    Memory.WriteInt(f, 0);
+                }
+                _drawFlagsSaved = true;
+                Log($"   villagers suspended for session: count {_savedVillagerCount} -> 0, " +
+                    $"{VillagerDrawSlots} draw flags -> 0 (engine won't step OR draw freed villagers)");
+            }
+            else
+            {
+                // Restore AFTER the exit script's _LOAD_VILLAGER (57) has rebuilt the villagers.
+                if (_savedVillagerCount > 0) Memory.WriteInt(VillagerCount, _savedVillagerCount);
+                if (_drawFlagsSaved)
+                {
+                    for (int i = 0; i < VillagerDrawSlots; i++)
+                        Memory.WriteInt(VillagerObjBase + (long)i * VillagerObjStride + VillagerDrawFlag,
+                                        _savedDrawFlags[i]);
+                    _drawFlagsSaved = false;
+                    Log($"   villagers restored (count -> {_savedVillagerCount}, draw flags restored)");
+                }
+                _savedVillagerCount = -1;
+            }
+        }
+
+        private static bool ComputeFishingWindow(out string why)
+        {
+            // Only our own fishing towns, and only once a spot is installed here.
+            if (_installedMap < 0 || _spot.MapNo != _installedMap) { why = "no spot"; return false; }
+
+            // Loaded session / active fishing — unambiguous, always suspend.
+            if (Memory.ReadInt(FishingSpot.CPolyNum) > 0 ||
+                Memory.ReadFloat(FishingSpot.WaterLevel) != 0f) { why = "cpoly/water live"; return true; }
+            int gm = Memory.ReadInt(EditLoop.GameMode);
+            if (gm == EditLoop.GameModeFishing) { why = "fishing mode"; return true; }
+
+            // The ENTER/EXIT window is event mode — but so is every town dialogue/cutscene, and hiding the
+            // villagers for those is what made them vanish during normal play. The engine stamps the RUNNING
+            // event's id into EdEventInfo (set by EdEventInit before the enter script's fade + loads, so it's
+            // early enough), and it is EXACTLY our fishing label — verified live: dialogue events read 0x2 /
+            // 0x80, our fishing enter reads 0x190 = FishingLabelId (400). Exit/bait run the engine's own
+            // fishing labels 133/134. So the running-event id is the clean, position-independent discriminator.
+            if (gm == EditLoop.GameModeEvent)
+            {
+                int ev = Memory.ReadInt(EdEventInfo);
+                if (ev == FishingLabelId || ev == EventPoints.FishingExitLabel || ev == EventPoints.FishingBaitLabel)
+                { why = $"our fishing event ({ev})"; return true; }
+                // Latch through any mid-session event blip (e.g. a frame between fishing and the exit label
+                // where EdEventInfo hasn't updated yet) so a freed villager can't flicker back for one frame.
+                if (InFishingWindow) { why = "event mode (latched)"; return true; }
+            }
+            why = "walking/other";
+            return false;
+        }
+        private static int _vbWatermark = -1;      // villager-allocator used (blocks) with ONLY villagers
+        private static int _vbLastUsed = -1;       // stability tracking for the capture
+        private static int _vbStableTicks;
+        private const int VbStableNeeded = 40;     // ~2 s of unchanged `used` before trusting it
+
+        private static void EnforcePoolWatermark()
+        {
+            if (_fishLabelOff == 0 || !_spot.DiagNoVillagerClear) return;
+
+            int used = Memory.ReadInt(FishingPool.Used);
+            if (used == _vbLastUsed) _vbStableTicks++;
+            else { _vbLastUsed = used; _vbStableTicks = 0; }
+
+            if (Memory.ReadInt(EditLoop.GameMode) != 1) return;           // 1 = walking: the prompt phase
+            if (Memory.ReadInt(FishingSpot.CPolyNum) > 0 ||
+                Memory.ReadFloat(FishingSpot.WaterLevel) != 0f) return;   // a session is live
+
+            uint running = Memory.ReadUInt(TownAddressesRunScriptHeader) & Memory.PhysAddrMask;
+            uint expect = (Memory.ReadUInt(TownScript.EdEventData) + (uint)_fishLabelOff) & Memory.PhysAddrMask;
+            if (running != expect) return;                                // some other script is running
+
+            if (_vbWatermark < 0)
+            {
+                if (_vbStableTicks < VbStableNeeded) return;              // villagers may still be loading
+                _vbWatermark = used;
+                Log($"pool watermark captured: {used * FishingPool.BlockSize / 1024} KB (villagers resident)");
+                return;
+            }
+
+            if (used > _vbWatermark)
+            {
+                Memory.WriteInt(FishingPool.Used, _vbWatermark);
+                Log($"pool rewound at spot approach: used {used * FishingPool.BlockSize / 1024} KB -> " +
+                    $"{_vbWatermark * FishingPool.BlockSize / 1024} KB (freed previous session's model+pak+fish)");
+            }
+        }
+
+        /// <summary>CRunScript object +0x3C = RS_PROG_HEADER ptr of the running label (stored by reload()).</summary>
+        private const long TownAddressesRunScriptHeader = RunScript.Object + 0x3C;
 
         /// <summary>
         /// APPEND fabricated fish-containment walls to the town's native collision, without disturbing it.

@@ -35,6 +35,48 @@ namespace Dark_Cloud_Improved_Version
         /// The overhead camera lives in <see cref="TownEditMode"/>.</summary>
         internal static bool Enabled = true;
 
+        // ── ALLOCATOR-CHAIN WATCH ───────────────────────────────────────────────────────────────────
+        //
+        // The town bump allocators are CHAINED: BaseBuffer (ptr @0x2A2A48 -> the town's base CDataAlloc2)
+        // feeds EdVillagerBuffer @0x1D1B360 (= the "fishing pool": _CLEAR_VILLAGER_BUFF / EdInitEventParam
+        // set vb.ptr = base.ptr + base.used*0x10), which feeds EdEventBuffer @0x1D1B370 (_CLEAR_EVENT_BUFF:
+        // eb.ptr = vb.ptr + vb.used*0x10). Struct: {+0 ptr, +8 usedBlocks, +C capBlocks}, block = 0x10.
+        //
+        // This watch answers WHO moves WHAT and WHEN during normal town play — the question behind the
+        // Brownboo cmd-38 mystery (38 recomputes vb from base; if base.used moves after town load, a
+        // session-start 38 lands the pool somewhere new — evidence: town-entry cap 15145 KB vs
+        // fishing-time cap 14369 KB, so base.used demonstrably grows in Brownboo). Log-only, on-change.
+        internal static bool WatchAlloc = false;   // set true to log the town bump-allocator chain per change
+
+        private static readonly long[] _allocPrev = new long[9];
+        private static bool _allocHave;
+
+        private static void WatchAllocators()
+        {
+            if (!WatchAlloc) return;
+
+            uint basePtr = Memory.ReadUInt(0x202A2A48) & Memory.PhysAddrMask;
+            long b0 = 0, b1 = 0, b2 = 0;
+            if (Memory.IsValidGuest(basePtr))
+            {
+                long bs = Memory.ToMmu(basePtr);
+                b0 = Memory.ReadUInt(bs); b1 = Memory.ReadInt(bs + 8); b2 = Memory.ReadInt(bs + 0xC);
+            }
+            long v0 = Memory.ReadUInt(0x21D1B360), v1 = Memory.ReadInt(0x21D1B368), v2 = Memory.ReadInt(0x21D1B36C);
+            long e0 = Memory.ReadUInt(0x21D1B370), e1 = Memory.ReadInt(0x21D1B378), e2 = Memory.ReadInt(0x21D1B37C);
+
+            long[] cur = { b0, b1, b2, v0, v1, v2, e0, e1, e2 };
+            bool changed = !_allocHave;
+            for (int i = 0; i < 9 && !changed; i++) changed = cur[i] != _allocPrev[i];
+            if (!changed) return;
+
+            string F(long ptr, long used, long cap) =>
+                $"0x{ptr:X8} used {used * 16 / 1024,6} KB cap {cap * 16 / 1024,6} KB";
+            Log($"[Alloc] base(@0x{basePtr:X8}) {F(b0, b1, b2)} | vb {F(v0, v1, v2)} | eb {F(e0, e1, e2)}");
+            Array.Copy(cur, _allocPrev, 9);
+            _allocHave = true;
+        }
+
         /// <summary>Log the player's position as they move, and accumulate a bounding box.</summary>
         internal static bool WatchPosition = true;
 
@@ -103,6 +145,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!Enabled) return;
+
+            WatchAllocators();
 
             int map = Memory.ReadInt(EditLoop.MapNo);
 

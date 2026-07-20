@@ -35,6 +35,22 @@ namespace Dark_Cloud_Improved_Version
         static bool indungeon;
         static bool charaSwitchFunctionsRestored = false;
         static bool changingLocation;
+        // Kept as a diagnostic switch only. The real Brownboo fishing crash was engine-side — the event-mode
+        // NPC stepper calling vtables on villagers the session had freed — fixed by suspending the villager
+        // COUNT during the session (CustomFishingSpot.UpdateFishingWindow). Brownboo walking dialogue works
+        // normally again; the TownDialogueSuspended() gate below still keeps the mod's own villager scans
+        // quiet during the event/fishing window (correct regardless).
+        internal static bool DisableBrownbooDialogue = false;
+
+        /// <summary>
+        /// TRUE only during an actual fishing session — when the villager buffer has been freed (cmd 38) and
+        /// the mod's FIVE villager scanners (0x21D26FF8 + i*0x14A0) would read freed-then-overwritten memory.
+        /// Keyed to CustomFishingSpot's precise fishing-window (running-event id EdEventInfo == our fishing
+        /// labels), NOT to plain event mode — so ordinary town dialogue, sidequest scenes and the collection
+        /// reward (which also run in event mode, with villagers intact) keep working normally.
+        /// </summary>
+        static bool TownDialogueSuspended() => CustomFishingSpot.InFishingWindow;
+
         static bool menuExited = true;
         static bool jokerHouse = false;
         static bool dialogueWritten = false;
@@ -426,6 +442,10 @@ namespace Dark_Cloud_Improved_Version
                             Memory.WriteByte(0x20415538, 0); //disable mayor door event mark
                         }
 
+                        // Skip the villager-touching dialogue scan when the villager buffer may be freed
+                        // (event/fishing mode) or when Brownboo dialogue is disabled by the bisect switch.
+                        if (!TownDialogueSuspended() && !(currentArea == 14 && DisableBrownbooDialogue))
+                        {
                         int checkNearNPC = 0;
 
                         for (int i = 0; i < 6; i++)     //check if player is next to a character. If so, jumps to SetDialogue() and writes the dialogues
@@ -453,6 +473,7 @@ namespace Dark_Cloud_Improved_Version
                             nearNPC = false;
                             Memory.WriteByte(CodeCaves.Mailbox.NearNpc, 0); //nearNPC flag for PNACH to use
                             onDialogueFlag = 0;
+                        }
                         }
 
                         if (Memory.ReadByte(0x21D1CC0C) == townDialogueIDs[currentArea] && onDialogueFlag == 0) //check if current dialogue is our custom dialogue, set a flag
@@ -700,7 +721,7 @@ namespace Dark_Cloud_Improved_Version
                                 sidequestonDialogueFlag = 0;
                             }
                         }
-                        else if (currentArea == 14) //Brownboo is the only area where Toan has custom dialogue (outside of sidequests), so this special part is needed
+                        else if (currentArea == 14 && !DisableBrownbooDialogue && !TownDialogueSuspended()) //Brownboo is the only area where Toan has custom dialogue (outside of sidequests), so this special part is needed
                         {
                             int checkNearNPC = 0;
                             for (int i = 0; i < 6; i++)     //check if player is next to a character. If so, jumps to SetDialogue() and writes the dialogues
@@ -791,7 +812,7 @@ namespace Dark_Cloud_Improved_Version
                                 areaChanged = true;
                                 CheckAllyFishing();
                                 if (currentArea == 42) Dialogues.SetDefaultDialogue(42);
-                                else if (currentArea == 14) Dialogues.SetDefaultDialogue(14);
+                                else if (currentArea == 14 && !DisableBrownbooDialogue) Dialogues.SetDefaultDialogue(14);
 
                                 if (currentArea == 23)
                                 {
@@ -1049,6 +1070,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static void SetSideQuestDialogue()
         {
+            if (TownDialogueSuspended()) return;    // villager buffer may be freed during a fishing session
             int checkNearNPC = 0;
             for (int i = 0; i < 6; i++)     //check if player is next to a character. If so, jumps to SetDialogue() and writes the dialogues
             {
@@ -1071,6 +1093,7 @@ namespace Dark_Cloud_Improved_Version
 
         public static void SetItsFinishedDialogue()
         {
+            if (TownDialogueSuspended()) return;    // villager buffer may be freed during a fishing session
             int checkNearNPC = 0;
             for (int i = 0; i < 6; i++)     //check if player is next to a character. If so, jumps to SetDialogue() and writes the dialogues
             {
