@@ -1088,10 +1088,48 @@ namespace Dark_Cloud_Improved_Version
 
             // X confirms the highlighted line; otherwise loop for another frame.
             w.PushVar(vPad); w.PushInt(StbCommands.PadCross); w.And(); w.BrFalse(loop);
-            // Restore pos + tail (as menu-show/label 11 do), then close the bubble.
+            // Turn the selection cursor OFF: line -1 makes DrawMesWin draw no pointer and no highlight (it gates
+            // the cursor on line >= 0). Vanilla's select-loop does exactly this on exit — it's why the no-pole
+            // line that follows renders as a plain dialog bubble instead of a menu.
+            w.PushInt(StbCommands.SetMesCursor); w.PushInt(Win); w.PushInt(-1); w.Ext(3);
+            // Restore pos + tail as vanilla's menu-show/label 11 do. Do NOT _MES_CLOSE here: vanilla leaves the
+            // window open so the dispatch path reuses it — the mode change (fishing/quit) clears it, and the
+            // no-pole path's _MES_MAKE(21) replaces it in-place. Closing here left msg 21 built-but-not-shown.
             w.PushInt(StbCommands.SetMesPos);    w.PushInt(Win); w.PushInt(0); w.Ext(3);
             w.PushInt(StbCommands.SetMesShippo); w.PushInt(Win); w.PushInt(1); w.Ext(3);
-            w.PushInt(StbCommands.MesClose);     w.PushInt(Win); w.Ext(2);
+        }
+
+        /// <summary>Show event-mes <paramref name="msgId"/> in window 1 (no cursor), wait for X, then close.
+        /// This is Norune's no-pole line: window 1, pos 8 (anchors it talk-box style). Two things are essential
+        /// here. (1) The caller must NOT have closed the menu window first — the show-flag (ClsMes+0x94) is set
+        /// to 1 only at event start, and _MES_MAKE's rebuild path never re-raises it, so a preceding _MES_CLOSE
+        /// would leave this built-but-invisible. (2) We WAIT for X: window 1 is only drawn in event mode, so
+        /// without staying in the event the line renders for a single frame and vanishes as the event ends.</summary>
+        private static void EmitShowMessage(StbWriter w, int msgId, int padVar)
+        {
+            const int Win = 1;
+            // Tail OFF (flag 0) for the whole display: DrawMesWin_sub draws the shippo tail whenever
+            // ClsMes+0x58 != 0, and its anchor sits mid-screen — turning it on here is what put the stray
+            // triangle above the player. Vanilla also shows this line with the tail off.
+            w.PushInt(StbCommands.SetMesShippo);  w.PushInt(Win); w.PushInt(0); w.Ext(3);
+            w.PushInt(StbCommands.MesMake);       w.PushInt(Win); w.PushInt(msgId); w.Ext(3);
+            w.PushInt(StbCommands.SetMesPos);     w.PushInt(Win); w.PushInt(8); w.Ext(3);
+            w.PushInt(StbCommands.SetMesAutoset); w.PushInt(Win); w.PushInt(0); w.PushInt(0); w.PushInt(0); w.PushInt(0); w.Ext(6);
+            w.PushInt(StbCommands.SetMesPos);     w.PushInt(Win); w.PushInt(0); w.Ext(3);
+            int loop = w.Mark();
+            w.Yield();
+            w.PushInt(StbCommands.GetPadDown); w.PushVarRef(padVar); w.Ext(2);
+            w.PushVar(padVar); w.PushInt(StbCommands.PadCross); w.And(); w.BrFalse(loop);
+            EmitCloseMenu(w);
+        }
+
+        /// <summary>Hide window 1. The menu leaves the bubble SHOWN after a selection (so the no-pole path can
+        /// reuse it); every other dispatch path calls this before its transition so the bubble doesn't linger
+        /// and render its bare frame+tail during the fade. Safe across opens: the show-flag is re-raised at the
+        /// next event start.</summary>
+        private static void EmitCloseMenu(StbWriter w)
+        {
+            w.PushInt(StbCommands.MesClose); w.PushInt(1); w.Ext(2);
         }
 
         private static StbWriter BuildFishingBytecode(Spot s)
@@ -1146,18 +1184,31 @@ namespace Dark_Cloud_Improved_Version
             w.PushVar(2); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrTrue(doFish);
                 int notFp = w.MarkForward();
                 w.PushVar(2); w.PushInt(1); w.Cmp(StbWriter.CmpEq); w.BrFalse(notFp);
+                    EmitCloseMenu(w);
                     w.PushInt(StbCommands.GotoFpChange); w.Ext(1); w.Yield();
                     w.Ret();
                 w.PlaceMark(notFp);
                 int notLog = w.MarkForward();
                 w.PushVar(2); w.PushInt(2); w.Cmp(StbWriter.CmpEq); w.BrFalse(notLog);
+                    EmitCloseMenu(w);
                     w.PushInt(StbCommands.GotoFishRanking); w.Ext(1); w.Yield();
                     w.Ret();
                 w.PlaceMark(notLog);
+                EmitCloseMenu(w);
                 w.Ret();                              // Quit (3) or anything unexpected: back to walking
             w.PlaceMark(doFish);
 
-            // "Fish": fall through to the fade + model swap + fishing-data load.
+            // "Fish": require the fishing rod (item 185). EdCheckItem returns -1 when it isn't owned; Norune's
+            // label 11 shows the no-pole line (msg 21) and returns in that case, else starts fishing.
+            w.PushInt(StbCommands.SItemCheck); w.PushInt(StbCommands.FishingRodItem); w.PushVarRef(2); w.Ext(3);
+            int haveRod = w.MarkForward();
+            w.PushVar(2); w.PushInt(0); w.Cmp(StbWriter.CmpLt); w.BrFalse(haveRod);   // v2 >= 0 -> owned -> fish
+                EmitShowMessage(w, 21, /*padVar*/3);   // no-pole line, wait for X, then close (window still open here)
+                w.Ret();
+            w.PlaceMark(haveRod);
+            EmitCloseMenu(w);   // rod in hand: hide the menu bubble before the fade so it doesn't garble
+
+            // Rod in hand: fall through to the fade + model swap + fishing-data load.
 
             // FADE TO BLACK BEFORE TOUCHING THE MODEL, and hide the player while we do it. Norune:
             //
@@ -1338,10 +1389,12 @@ namespace Dark_Cloud_Improved_Version
             w.PushVar(8); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(doQuit);   // sel != 0 (Quit) -> leave
                 // Continue (0): keep the session running. _SET_RETURN_CODE(11) is exactly what Norune's 133
                 // does to fall back into fishing instead of exiting.
+                EmitCloseMenu(w);
                 w.PushInt(StbCommands.SetReturnCode); w.PushInt(11); w.Ext(2);
                 w.Yield();
                 w.Ret();
             w.PlaceMark(doQuit);
+            EmitCloseMenu(w);   // Quit: hide the menu bubble before the fade-out below
             // Quit: fall through to the fade-out + model restore + _EXIT_FISHING below.
 
             // FADE OUT OURSELVES before the model swap, don't rely on the fishing quit having done it. When
