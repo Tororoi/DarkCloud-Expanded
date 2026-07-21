@@ -95,14 +95,34 @@ naive `range(0, len, 12)` scan silently misses half the script.
 | 2 | **PUSHVARREF** | same, but pushes a *pointer* to the var (stack type 3) |
 | 3 | **PUSHCONST** | `a1` = type: 1 = int (`a2`), 2 = float (`a2` = IEEE bits), 3 = string (`a2` = offset from `codeBase`) |
 | 4 | **POP** | `sp -= 8`. **Not a jump** — we had this wrong. |
-| 15 | **RET** | |
+| 5 | **STORE** | pop *value* (top) then a *ref* (below, from `PUSHVARREF`); `*ref = value`; **push value back**. This is assignment `var = expr`; a bare statement needs a trailing `POP`. |
+| 6 / 7 / 8 / 9 / 10 | **ADD / SUB / MUL / DIV / MOD** | pop two, push result. Type-aware (int if both int, else float); MOD is int-only. |
+| 11 | **NEG** | pop, push `-a` |
+| 12 / 13 | **TOFLOAT / TOINT** | cast top (TOINT truncates via `fptosi`) |
+| 14 | **CMP** | pop two, push bool. **`a1` selects the comparator:** `0x28 ==`, `0x29 !=`, `0x2A <`, `0x2B <=`, `0x2C >`, `0x2D >=` (operands are `b` (top) `OP` `a`). |
+| 15 | **RET** | return from funcdata / end of a called function |
 | 16 | **JMP** | `pc = codeBase + a1` |
 | 17 | **BR_FALSE** | pops; branches to `codeBase + a1` if false |
 | 18 | **BR_TRUE** | pops; branches to `codeBase + a1` if true |
 | 19 | **CALL_FUNC** | `a2` = offset (from `codeBase`) of a **funcdata**, *not* of code |
+| 20 | **PRINT** | `sp -= a1*8`; debug print (harmless but pops `a1` items) |
 | 21 | **EXT** | `sp -= a1 * 8`, then dispatch. **`a1` counts the command id itself.** |
 | 23 | **YIELD** | suspend until next frame |
-| 24 / 25 | AND / OR | pop two, push result |
+| 24 / 25 | **AND / OR** | pop two ints, push bitwise result |
+| 26 | **NOT** | pop, push `a == 0` |
+| 27 | **HALT** | end the whole script (sets done-flag, `pc = 0`) |
+| 28 | **RESUME_GUARD** | if the resume flag is set, clear it and skip one instruction (used after YIELD) |
+| 29 / 30 | **SIN / COS** | pop, push `sinf` / `cosf` |
+
+*(Verified against the interpreter `exe__10CRunScript` @ `0x23E080` — the whole opcode switch. Op 22 (`0x16`) has no case and falls through as a NOP.)*
+
+**Building a menu select** needs only these: a cursor local moved by `STORE`/`ADD` (guarded by `CMP` against
+0 and `count-1`), the pad read via `_GET_PADDOWN(&v)` + `AND` with a button mask, `_SET_MES_CURSOR(win, cursor)`
+to draw it, and `YIELD`/`JMP` for the frame loop — no CALL_FUNC and no analog-stick math (the vanilla
+subroutine's bulk). Pad-down masks in the `_GET_PADDOWN` result (which applies `exch_ok_cancel`, swapping raw 0x20↔0x40):
+d-pad UP `0x1000` / DOWN `0x4000` (unswapped), **confirm (X) `0x20`, cancel (○) `0x40`** (raw X 0x40 arrives
+as 0x20 after the swap). Verified: `exch_ok_cancel` @ `0x18B840`, `FishRecordViewKey` uses 0x1000/0x4000 for
+up/down.
 
 ### The addressing mode is in `a2`
 

@@ -383,6 +383,10 @@ namespace Dark_Cloud_Improved_Version
             InFishingWindow = false;
             _savedVillagerCount = -1;  // count belongs to the old town; don't restore it into the new one
             _drawFlagsSaved = false;
+            _savedTalkBuf = 0;         // talk buffer belongs to the old town; don't restore it into the new one
+            _catchMesWritten = false;  // re-write the template after a reload (guest scratch may be cleared)
+            _savedEventBuf = 0;
+            _menuMesWritten = false;
             _vbWatermark = -1;
             _vbLastUsed = -1;
             _vbStableTicks = 0;
@@ -992,6 +996,104 @@ namespace Dark_Cloud_Improved_Version
         /// six floats and does EXT argc=8. We push negative floats as literals rather than using the negate
         /// op the original happens to use.
         /// </summary>
+        /// <summary>Emit <c>var[idx] = &lt;value pushed by <paramref name="push"/>&gt;</c> as a statement
+        /// (STORE re-pushes the stored value, so this drops it with POP).</summary>
+        private static void SetVar(StbWriter w, int idx, System.Action push)
+        {
+            w.PushVarRef(idx); push(); w.Store(); w.Pop();
+        }
+
+        /// <summary>
+        /// Draw event-mes <paramref name="msgId"/> (window 1 — our injected menu text) as an
+        /// <paramref name="count"/>-line cursor menu and block until the player presses X, leaving the chosen
+        /// 0-based line in local <paramref name="vSel"/>. The caller then branches on <paramref name="vSel"/>.
+        ///
+        /// This reproduces Norune's shared fishing-select cursor with the documented VM primitives: the LEFT
+        /// ANALOG STICK (LY, ±0.5 threshold, with a "held" edge flag so one push moves one line) AND the d-pad,
+        /// X to confirm. No CALL_FUNC and none of the vanilla subroutine's analog-acceleration bulk.
+        /// Scratch locals <paramref name="vPad"/>/<paramref name="vLy"/>/<paramref name="vHeld"/>/
+        /// <paramref name="vScratch"/> are clobbered.
+        /// </summary>
+        private static void EmitSelectMenu(StbWriter w, int msgId, int count,
+                                           int vSel, int vPad, int vLy, int vHeld, int vScratch)
+        {
+            const int Win = 1;
+            // Locals is a COUNT (indices 0..count-1), so reserve highest-index + 1 — see WriteScript.
+            int maxIdx = System.Math.Max(System.Math.Max(vSel, vPad), System.Math.Max(System.Math.Max(vLy, vHeld), vScratch));
+            w.UseLocals(maxIdx + 1);
+
+            // Matches Norune's menu-show + its caller (label 11): tail off, draw the message, position it, and
+            // AUTO-PLACE the bubble (this is what was missing — without _SET_MES_AUTOSET the bubble sat top-left).
+            w.PushInt(StbCommands.SetMesShippo);    w.PushInt(Win); w.PushInt(0); w.Ext(3);
+            w.PushInt(StbCommands.SetMesDrawSpeed); w.PushInt(Win); w.PushFloat(0.0f); w.Ext(3); // 0 = instant (per-char delay); vanilla's select-loop value
+            w.PushInt(StbCommands.MesMake);       w.PushInt(Win); w.PushInt(msgId); w.Ext(3);
+            w.PushInt(StbCommands.SetMesPos);     w.PushInt(Win); w.PushInt(9); w.Ext(3);
+            w.PushInt(StbCommands.SetMesAutoset); w.PushInt(Win); w.PushInt(0); w.PushInt(0); w.PushInt(0); w.PushInt(0); w.Ext(6);
+            SetVar(w, vSel,  () => w.PushInt(0));
+            SetVar(w, vHeld, () => w.PushInt(0));
+
+            int loop        = w.Mark();
+            int afterAnalog = w.MarkForward();
+
+            w.PushInt(StbCommands.SetMesCursor); w.PushInt(Win); w.PushVar(vSel); w.Ext(3);
+            w.Yield();
+            w.PushInt(StbCommands.GetApad);   w.PushVarRef(vScratch); w.PushVarRef(vLy); w.Ext(3); // vLy = LY
+            w.PushInt(StbCommands.GetPadDown); w.PushVarRef(vPad); w.Ext(2);
+
+            // Analog, edge-detected: LY > 0.5 = down, LY < -0.5 = up; move only on the neutral->pushed edge.
+            // ±0.5 is vanilla's exact threshold (dir() subroutine, symmetric, no hysteresis). A wider deadzone
+            // would make double-taps re-arm HARDER, not easier — the dip between taps must reach |LY| <= 0.5.
+            int notADown = w.MarkForward();
+            w.PushVar(vLy); w.PushFloat(0.5f); w.Cmp(StbWriter.CmpGt); w.BrFalse(notADown);
+                int adHeld = w.MarkForward();
+                w.PushVar(vHeld); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(adHeld);   // held -> only set flag
+                    int adSkip = w.MarkForward();
+                    w.PushVar(vSel); w.PushInt(count - 1); w.Cmp(StbWriter.CmpLt); w.BrFalse(adSkip);
+                        SetVar(w, vSel, () => { w.PushVar(vSel); w.PushInt(1); w.Add(); });
+                    w.PlaceMark(adSkip);
+                w.PlaceMark(adHeld);
+                SetVar(w, vHeld, () => w.PushInt(1));
+                w.Jmp(afterAnalog);
+            w.PlaceMark(notADown);
+            int notAUp = w.MarkForward();
+            w.PushVar(vLy); w.PushFloat(-0.5f); w.Cmp(StbWriter.CmpLt); w.BrFalse(notAUp);
+                int auHeld = w.MarkForward();
+                w.PushVar(vHeld); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(auHeld);
+                    int auSkip = w.MarkForward();
+                    w.PushVar(vSel); w.PushInt(0); w.Cmp(StbWriter.CmpGt); w.BrFalse(auSkip);
+                        SetVar(w, vSel, () => { w.PushVar(vSel); w.PushInt(1); w.Sub(); });
+                    w.PlaceMark(auSkip);
+                w.PlaceMark(auHeld);
+                SetVar(w, vHeld, () => w.PushInt(1));
+                w.Jmp(afterAnalog);
+            w.PlaceMark(notAUp);
+            SetVar(w, vHeld, () => w.PushInt(0));   // stick neutral -> re-arm the edge
+            w.PlaceMark(afterAnalog);
+
+            // D-pad (already edge events from _GET_PADDOWN): DOWN then UP.
+            int notDDown = w.MarkForward();
+            w.PushVar(vPad); w.PushInt(StbCommands.PadDown); w.And(); w.BrFalse(notDDown);
+                int ddSkip = w.MarkForward();
+                w.PushVar(vSel); w.PushInt(count - 1); w.Cmp(StbWriter.CmpLt); w.BrFalse(ddSkip);
+                    SetVar(w, vSel, () => { w.PushVar(vSel); w.PushInt(1); w.Add(); });
+                w.PlaceMark(ddSkip);
+            w.PlaceMark(notDDown);
+            int notDUp = w.MarkForward();
+            w.PushVar(vPad); w.PushInt(StbCommands.PadUp); w.And(); w.BrFalse(notDUp);
+                int duSkip = w.MarkForward();
+                w.PushVar(vSel); w.PushInt(0); w.Cmp(StbWriter.CmpGt); w.BrFalse(duSkip);
+                    SetVar(w, vSel, () => { w.PushVar(vSel); w.PushInt(1); w.Sub(); });
+                w.PlaceMark(duSkip);
+            w.PlaceMark(notDUp);
+
+            // X confirms the highlighted line; otherwise loop for another frame.
+            w.PushVar(vPad); w.PushInt(StbCommands.PadCross); w.And(); w.BrFalse(loop);
+            // Restore pos + tail (as menu-show/label 11 do), then close the bubble.
+            w.PushInt(StbCommands.SetMesPos);    w.PushInt(Win); w.PushInt(0); w.Ext(3);
+            w.PushInt(StbCommands.SetMesShippo); w.PushInt(Win); w.PushInt(1); w.Ext(3);
+            w.PushInt(StbCommands.MesClose);     w.PushInt(Win); w.Ext(2);
+        }
+
         private static StbWriter BuildFishingBytecode(Spot s)
         {
             var w = new StbWriter();
@@ -1026,6 +1128,36 @@ namespace Dark_Cloud_Improved_Version
             w.BrFalse(idle);                          // no X -> fall out WITHOUT yielding: a simple event
 
             // Everything past here yields, so pressing X promotes this into a real event — and only then.
+
+            // ── VANILLA ENTRY MENU (Fish / Exchange FP / Fishing log / Quit) ────────────────────────────
+            // Norune shows this before fishing starts (its label 11). We reproduce it. But first WAIT for the
+            // mod to swap window 1 to our injected menu text: the swap happens on CustomFishingSpot.Tick, which
+            // runs on the mod's 50 ms loop (Thread.Sleep(50) ≈ 3 game frames) — NOT per frame. If the menu's
+            // _MES_MAKE runs before that tick lands, it builds a garbage-sized texture off the town's own event
+            // mes (which lacks msg 20) — the "heavily distorted" bubble. 8 yields (~133 ms) clears a full tick
+            // interval with margin, so the swap is reliably done first.
+            for (int i = 0; i < 8; i++) w.Yield();
+            EmitSelectMenu(w, 20, 4, /*sel*/2, /*pad*/3, /*ly*/4, /*held*/5, /*scratch*/6);
+
+            // Exchange FP (1) / Fishing log (2) each open their own engine menu then return; Quit (3) returns.
+            // Only "Fish" (0) falls through to the session setup below. (Norune's label 11 returns after FP/log
+            // exactly like this — the engine sub-menu runs on menu_mode after the event ends.)
+            int doFish = w.MarkForward();
+            w.PushVar(2); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrTrue(doFish);
+                int notFp = w.MarkForward();
+                w.PushVar(2); w.PushInt(1); w.Cmp(StbWriter.CmpEq); w.BrFalse(notFp);
+                    w.PushInt(StbCommands.GotoFpChange); w.Ext(1); w.Yield();
+                    w.Ret();
+                w.PlaceMark(notFp);
+                int notLog = w.MarkForward();
+                w.PushVar(2); w.PushInt(2); w.Cmp(StbWriter.CmpEq); w.BrFalse(notLog);
+                    w.PushInt(StbCommands.GotoFishRanking); w.Ext(1); w.Yield();
+                    w.Ret();
+                w.PlaceMark(notLog);
+                w.Ret();                              // Quit (3) or anything unexpected: back to walking
+            w.PlaceMark(doFish);
+
+            // "Fish": fall through to the fade + model swap + fishing-data load.
 
             // FADE TO BLACK BEFORE TOUCHING THE MODEL, and hide the player while we do it. Norune:
             //
@@ -1196,6 +1328,21 @@ namespace Dark_Cloud_Improved_Version
             var w = new StbWriter();
             w.Yield();                                // same rule as the main script — see BuildFishingBytecode
             w.Yield();                                // Norune yields twice here before touching the model
+
+            // ── VANILLA QUIT MENU (Continue fishing / Quit fishing) ─────────────────────────────────────
+            // Circle during fishing asks the engine for label 133 (this script). Norune's 133 shows a 2-option
+            // confirm before actually leaving. The session is already open, so window 1 already holds our menu
+            // text (msg 22). Choice lands in var8 (high range, clear of the position locals below).
+            EmitSelectMenu(w, 22, 2, /*sel*/8, /*pad*/9, /*ly*/10, /*held*/11, /*scratch*/12);
+            int doQuit = w.MarkForward();
+            w.PushVar(8); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(doQuit);   // sel != 0 (Quit) -> leave
+                // Continue (0): keep the session running. _SET_RETURN_CODE(11) is exactly what Norune's 133
+                // does to fall back into fishing instead of exiting.
+                w.PushInt(StbCommands.SetReturnCode); w.PushInt(11); w.Ext(2);
+                w.Yield();
+                w.Ret();
+            w.PlaceMark(doQuit);
+            // Quit: fall through to the fade-out + model restore + _EXIT_FISHING below.
 
             // FADE OUT OURSELVES before the model swap, don't rely on the fishing quit having done it. When
             // you quit while standing IN the trigger radius, the enter event point (in range) re-fires and
@@ -1717,6 +1864,94 @@ namespace Dark_Cloud_Improved_Version
 
         private const long EdEventInfo = 0x21D3D1D0;   // ELF 0x1d3d1d0 — running-event id (set by EdEventInit)
 
+        // ── CATCH-MESSAGE TEMPLATE (the empty-bubble fix) ──────────────────────────────────────────────
+        // The engine draws the fishing catch bubble via MakeMesWin(townTalkClsMes, 2000): message id 2000 in
+        // the TOWN's talk mes is the "[fish] (Xcm) caught! ..." template. Vanilla fishing towns ship it; our
+        // custom fishing towns do NOT, so the bubble renders EMPTY. Rather than rebuild the whole ~80 KB talk
+        // mes to add one entry, we hold a tiny 1-entry meswin buffer (msg 2000 only) in a reserved scratch
+        // region and SWAP the ClsMes talk-buffer pointer to it for the duration of a fishing session — no NPC
+        // dialogue runs while fishing, so the town's own messages are not needed in that window. The fish NAME
+        // ([fbfe]) and the numbers resolve from the ClsMes SYSTEM buffer (global system14e.bin) and value
+        // array, which are untouched — so injecting only the template is enough.
+        private const long TownTalkClsMes = 0x21D1B550;   // ELF 0x1d1b550 — the town talk/dialogue ClsMes
+        private const int  ClsMesTalkBuf  = 0x17A0;        // SetBuff: buffer ptr (GetTextLineDataTop reads this)
+        private const int  ClsMesTalkBuf2 = 0x17A8;        // SetBuff: buffer + u16@2 (kept consistent; nothing on the catch path reads it)
+
+        // meswin buffer format (cracked via GetTextLineDataTop 0x14f4b0): u16 count · u16 (SetBuff's +0x17A8
+        // delta) · count×{u16 id, u16 wordOff} · text. A message's text is at byte 2*(count + wordOff + 1);
+        // glyphs are 16-bit LE, 0xFF01 terminates. This is msg 2000's exact glyph stream from Norune's English
+        // talk mes (e01talk_1). The [fbXX] codes are placeholders the renderer fills: fbfe = fish name,
+        // fbfa/fbf9/fbf8 = the numbers (length, points, total).
+        private static readonly ushort[] CatchTemplateWords =
+        {
+            0xfbfe,0xff02,0xfd61,0xfbfa,0xfd3d,0xfd47,0xfd62,0xff00,0xfd3d,0xfd3b,0xfd4f,0xfd41,0xfd42,0xfd4e,
+            0xfd58,0xfd58,0xff03,0xfd26,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,0xfd41,0xff02,0xfd30,0xfd49,0xfd43,
+            0xfd48,0xfd4e,0xfd4d,0xff02,0xfd5c,0xfbf9,0xff00,0xfd34,0xfd49,0xfd4e,0xfd3b,0xfd46,0xff02,0xfd30,
+            0xfd49,0xfd43,0xfd48,0xfd4e,0xfd4d,0xff02,0xff02,0xff02,0xfbf8,0xff00,0xfd32,0xfd3f,0xfd3d,0xfd49,
+            0xfd4c,0xfd3e,0xff02,0xfbfe,0xff02,0xfbfa,0xfd3d,0xfd47,0xff01,
+        };
+        private const int  CatchMsgId = 2000;
+        private static bool _catchMesWritten;
+        private static int  _savedTalkBuf;    // guest ptr saved when we swap on window open (0 = not swapped)
+        private static int  _savedTalkBuf2;
+
+        /// <summary>Build the 1-entry meswin buffer for msg 2000 once, into the reserved scratch region. Layout:
+        /// count=1, entry(id=2000, wordOff=2), text at byte 8 — matching GetTextLineDataTop's 2*(count+off+1).</summary>
+        private static void EnsureCatchTemplate()
+        {
+            if (_catchMesWritten) return;
+            var b = new byte[8 + CatchTemplateWords.Length * 2];
+            void W16(int at, int v) { b[at] = (byte)v; b[at + 1] = (byte)(v >> 8); }
+            W16(0, 1);           // count = 1
+            W16(2, 8);           // +0x17A8 delta → text region (unused on the catch path, kept sane)
+            W16(4, CatchMsgId);  // entry id
+            W16(6, 2);           // entry wordOff → text at 2*(1+2+1) = byte 8
+            for (int i = 0; i < CatchTemplateWords.Length; i++) W16(8 + i * 2, CatchTemplateWords[i]);
+            Memory.WriteBytesBatch(CodeCaves.FishingCatchMes, b);
+            _catchMesWritten = true;
+            Log($"catch template (msg {CatchMsgId}) written to scratch 0x{CodeCaves.FishingCatchMes:X} ({b.Length} B)");
+        }
+
+        // ── FISHING MENU TEXT (event mes, window 1) ────────────────────────────────────────────────────
+        // The entry/exit menus draw their option text via _MES_MAKE(1, id): window 1 = EditEventMes1
+        // (0x21D1E4D0), fed by the town EVENT mes (<code>_1.mes). Vanilla fishing towns ship ids 20/21/22;
+        // custom towns do not, so the menus would render blank. We hold a 3-message buffer (20 = the 4-option
+        // entry menu, 21 = the no-pole line, 22 = the 2-option quit menu) and swap the event-mes buffer to it
+        // for the session, exactly like the catch template does for the talk mes. This is a COMPLETE meswin
+        // buffer (header + index + text) built offline and verified against GetTextLineDataTop; unlike the
+        // catch template it carries multiple entries, so it is stored whole rather than header-in-code.
+        private const long TownEventClsMes = 0x21D1E4D0;   // ELF EditEventMes1 — window 1 (GetMes(1))
+        private static readonly ushort[] MenuMesBuffer =
+        {
+            0x0003,0x0010,0x0014,0x0004,0x0015,0x0036,0x0016,0x0076,0xff02,0xff02,0xfd26,0xfd43,0xfd4d,0xfd42,
+            0xff00,0xff02,0xff02,0xfd25,0xfd52,0xfd3d,0xfd42,0xfd3b,0xfd48,0xfd41,0xfd3f,0xff02,0xfd26,0xfd30,
+            0xff00,0xff02,0xff02,0xfd26,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,0xfd41,0xff02,0xfd46,0xfd49,0xfd41,
+            0xff00,0xff02,0xff02,0xfd31,0xfd4f,0xfd43,0xfd4e,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,
+            0xfd41,0xff01,0xfd33,0xfd3f,0xfd3f,0xfd47,0xfd4d,0xff02,0xfd46,0xfd43,0xfd45,0xfd3f,0xff02,0xfd53,
+            0xfd49,0xfd4f,0xff02,0xfd3d,0xfd3b,0xfd48,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xff02,0xfd42,0xfd3f,
+            0xfd4c,0xfd3f,0xff00,0xfd3c,0xfd4f,0xfd4e,0xff02,0xfd53,0xfd49,0xfd4f,0xff02,0xfd3e,0xfd49,0xfd48,
+            0xfd55,0xfd4e,0xff02,0xfd42,0xfd3b,0xfd50,0xfd3f,0xff02,0xfd3b,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,
+            0xfd43,0xfd48,0xfd41,0xff02,0xfd4a,0xfd49,0xfd46,0xfd3f,0xfd6d,0xff01,0xff02,0xff02,0xfd23,0xfd49,
+            0xfd48,0xfd4e,0xfd43,0xfd48,0xfd4f,0xfd3f,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,0xfd41,
+            0xff00,0xff02,0xff02,0xfd31,0xfd4f,0xfd43,0xfd4e,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,
+            0xfd41,0xff01,
+        };
+        private static bool _menuMesWritten;
+        private static int  _savedEventBuf;
+        private static int  _savedEventBuf2;
+
+        /// <summary>Write the 3-message fishing-menu buffer to its scratch region once.</summary>
+        private static void EnsureMenuTemplate()
+        {
+            if (_menuMesWritten) return;
+            var b = new byte[MenuMesBuffer.Length * 2];
+            for (int i = 0; i < MenuMesBuffer.Length; i++)
+            { b[i * 2] = (byte)MenuMesBuffer[i]; b[i * 2 + 1] = (byte)(MenuMesBuffer[i] >> 8); }
+            Memory.WriteBytesBatch(CodeCaves.FishingMenuMes, b);
+            _menuMesWritten = true;
+            Log($"menu text (event msg 20/21/22) written to scratch 0x{CodeCaves.FishingMenuMes:X} ({b.Length} B)");
+        }
+
         private static void UpdateFishingWindow()
         {
             bool was = InFishingWindow;
@@ -1741,6 +1976,24 @@ namespace Dark_Cloud_Improved_Version
                 _drawFlagsSaved = true;
                 Log($"   villagers suspended for session: count {_savedVillagerCount} -> 0, " +
                     $"{VillagerDrawSlots} draw flags -> 0 (engine won't step OR draw freed villagers)");
+
+                // Supply the catch-message template the custom town's talk mes lacks (empty-bubble fix): swap
+                // the talk ClsMes buffer to our msg-2000-only mes for the session. No NPC dialogue runs while
+                // fishing, so the town's own messages are not needed until we restore on the way out.
+                EnsureCatchTemplate();
+                _savedTalkBuf  = Memory.ReadInt(TownTalkClsMes + ClsMesTalkBuf);
+                _savedTalkBuf2 = Memory.ReadInt(TownTalkClsMes + ClsMesTalkBuf2);
+                Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf,  (int)CodeCaves.FishingCatchMesGuest);
+                Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf2, (int)CodeCaves.FishingCatchMesGuest + 8);
+                Log($"   talk mes swapped to catch template (saved town buf 0x{_savedTalkBuf:X8})");
+
+                // Same for the EVENT mes (window 1): supply the entry/exit menu option text (ids 20/21/22).
+                EnsureMenuTemplate();
+                _savedEventBuf  = Memory.ReadInt(TownEventClsMes + ClsMesTalkBuf);
+                _savedEventBuf2 = Memory.ReadInt(TownEventClsMes + ClsMesTalkBuf2);
+                Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf,  (int)CodeCaves.FishingMenuMesGuest);
+                Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf2, (int)CodeCaves.FishingMenuMesGuest + 0x10);
+                Log($"   event mes swapped to menu text (saved town buf 0x{_savedEventBuf:X8})");
             }
             else
             {
@@ -1755,6 +2008,26 @@ namespace Dark_Cloud_Improved_Version
                     Log($"   villagers restored (count -> {_savedVillagerCount}, draw flags restored)");
                 }
                 _savedVillagerCount = -1;
+
+                // Restore the town's own talk mes — but only if we're still the pointer on it. A town reload
+                // during the session (EditInit) installs a fresh buffer; don't clobber that with a stale one.
+                if (_savedTalkBuf != 0 &&
+                    Memory.ReadInt(TownTalkClsMes + ClsMesTalkBuf) == (int)CodeCaves.FishingCatchMesGuest)
+                {
+                    Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf,  _savedTalkBuf);
+                    Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf2, _savedTalkBuf2);
+                    Log($"   talk mes restored (buf -> 0x{_savedTalkBuf:X8})");
+                }
+                _savedTalkBuf = 0;
+
+                if (_savedEventBuf != 0 &&
+                    Memory.ReadInt(TownEventClsMes + ClsMesTalkBuf) == (int)CodeCaves.FishingMenuMesGuest)
+                {
+                    Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf,  _savedEventBuf);
+                    Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf2, _savedEventBuf2);
+                    Log($"   event mes restored (buf -> 0x{_savedEventBuf:X8})");
+                }
+                _savedEventBuf = 0;
             }
         }
 
@@ -2093,6 +2366,25 @@ namespace Dark_Cloud_Improved_Version
         /// and writes the chosen item id back through the pointer. The handler REFUSES unless arg1's stack
         /// type is 3 (a pointer), so it must be pushed with PushVarRef.</summary>
         internal const int GotoChangeEsa = 25;
+
+        // ── Menu / select-cursor commands (entry & quit dialogs) ───────────────────────────────────────
+        internal const int MesMake        = 192;  // (window, msgId) — draw a message; window 1 = event mes (our menu text)
+        internal const int MesClose       = 193;  // (window)
+        internal const int SetMesShippo   = 196;  // (window, flag) — speech-bubble tail
+        internal const int SetMesDrawSpeed= 198;  // (window, speedFloat) — Norune's fishing menu sets 1.0
+        internal const int SetMesPos      = 197;  // (window, posMode)  — Norune's fishing menu uses 9, then 0 to reset
+        internal const int SetMesAutoset  = 195;  // (window, x1,y1,x2,y2) — auto-place the bubble to avoid the rect (Norune: 0,0,0,0)
+        internal const int SetMesCursor   = 199;  // (window, line) — draw the selection cursor at 0-based line
+        internal const int GetApad        = 903;  // (&lx, &ly[, &rx, &ry]) — analog stick floats; LY<-0.5 up, >0.5 down
+        internal const int GotoFpChange   = 24;   // () — Exchange FP (menu_mode 8, engine-drawn)
+        internal const int GotoFishRanking= 26;   // () — Fishing log (menu_mode 10, engine-drawn)
+        internal const int SetReturnCode  = 3;    // (code) — 11 keeps the fishing session running
+        internal const int SItemCheck     = 707;  // (itemId, &out) — out != 0 if the player owns the item (fishing rod = 185)
+        internal const int FishingRodItem = 185;  // the fishing pole checked by the "Fish" option
+
+        // _GET_PADDOWN result masks (post exch_ok_cancel). D-pad bits are unswapped; X arrives as 0x20.
+        internal const int PadUp   = 0x1000;
+        internal const int PadDown = 0x4000;
     }
 
     /// <summary>Emit STB VM bytecode: 12-byte instructions <c>{u32 op, u32 a1, u32 a2}</c>.</summary>
@@ -2257,6 +2549,31 @@ namespace Dark_Cloud_Improved_Version
                 for (int i = 0; i < 4; i++) _b[patchAt + i] = a1[i];
             }
         }
+
+        // Arithmetic / comparison / assignment primitives — verified against the interpreter's opcode switch
+        // (exe__10CRunScript 0x23E080). See docs/stb-script-format.md.
+        private const int OpStore = 5;    // pop value then ref; *ref = value; PUSHES value back (needs a Pop)
+        private const int OpAdd   = 6;
+        private const int OpSub   = 7;
+        private const int OpPop   = 4;
+        private const int OpCmp   = 14;   // a1 = comparator: 0x28== 0x29!= 0x2A< 0x2B<= 0x2C> 0x2D>=
+
+        internal const int CmpEq = 0x28, CmpNe = 0x29, CmpLt = 0x2A, CmpLe = 0x2B, CmpGt = 0x2C, CmpGe = 0x2D;
+
+        /// <summary>Discard the top stack value.</summary>
+        internal void Pop() => Emit(OpPop, 0, 0);
+        internal void Add() => Emit(OpAdd, 0, 0);
+        internal void Sub() => Emit(OpSub, 0, 0);
+
+        /// <summary>Compare: pops two, pushes bool. <paramref name="cmp"/> is one of the <c>Cmp*</c> constants.
+        /// The test is <c>(first OP second)</c> — the operand pushed FIRST is the left side. So <c>var &lt; n</c>
+        /// is PushVar(var); PushInt(n); Cmp(CmpLt). (Verified against exe__10CRunScript case 0xE.)</summary>
+        internal void Cmp(int cmp) => Emit(OpCmp, (uint)cmp, 0);
+
+        /// <summary>Assign <c>var[idx] = &lt;expression already on the stack&gt;</c>. Emits the ref, expects the
+        /// value to have been pushed by the caller BEFORE calling — no: emits nothing but the store, so the
+        /// order is PushVarRef(idx); &lt;push value&gt;; Store(). Store re-pushes the value, so a statement adds Pop().</summary>
+        internal void Store() { Emit(OpStore, 0, 0); }
 
         private void Emit(int op, uint a1, uint a2)
         {
