@@ -243,7 +243,19 @@ namespace Dark_Cloud_Improved_Version
         /// The 300+ block is per-event scripting and is what we have been safely overwriting all along
         /// (310, 305, 304). Everything below it is either an engine handler or the town itself.
         /// </summary>
-        private static bool IsSystemLabel(int id) => id < 300;
+        /// <summary>
+        /// Label ids we may hijack for the fishing scripts, in every town. Derived by an OFFLINE scan of all
+        /// 33 town event.stb files in the (immutable) vanilla ISO: these are the ONLY 300-block labels never
+        /// dispatched by any town's script (via _NEXT_EVENT/_FADEOUT_TO_EVENT) — i.e. dead placeholder slots
+        /// everywhere. Notably 300 is EXCLUDED: it is a real, dispatched event in Queens (e03) and Yellow
+        /// Drops (s13), so hijacking it — as the old size-first picker did — silently broke a town event.
+        /// A fixed whitelist beats a runtime scan here: the data can't change, a scan that found everything
+        /// used would leave the spot uninstallable, and one list keeps every area consistent. (BuildArena
+        /// still drops any of these a live event POINT references — cheap insurance for a future area — but
+        /// no town's event points touch the 300-block, verified live for the three fishing towns.)
+        /// </summary>
+        private static readonly System.Collections.Generic.HashSet<int> SafeHijackLabels =
+            new System.Collections.Generic.HashSet<int> { 301, 302, 303, 304, 305, 306, 307, 310 };
 
         private static int _installedMap = -1;
         private static int _lastSeenMap = int.MinValue;
@@ -308,39 +320,101 @@ namespace Dark_Cloud_Improved_Version
             if (map != _lastSeenMap)
             {
                 _lastSeenMap = map;
-                _installedMap = -1;
-                _slot = -1;
-                _fishingWasLive = false;
-                _fishLabelOff = 0;         // the pool + stb are rebuilt with the town — stale state is wrong
-                _exitLabelOff = 0;
-                _baitLabelOff = 0;
-                InFishingWindow = false;
-                _savedVillagerCount = -1;  // count belongs to the old town; don't restore it into the new one
-                _drawFlagsSaved = false;
-                _vbWatermark = -1;
-                _vbLastUsed = -1;
-                _vbStableTicks = 0;
-                _settleTicks = 0;
-                _lastParam = int.MinValue;
-                _lastMode = int.MinValue;
-                RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
-                PriscleenFish.Uninstall();
+                ResetInstallState();
             }
 
             if (map == _installedMap)
-            { WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick(); return; }
+            {
+                // A town can be rebuilt WITHOUT the map number changing — the initial save-load finishing its
+                // build after we installed, or stepping out of a building in the same area reloads the event
+                // script and wipes our label + event point. Detect that our install is actually still present;
+                // if it's gone, drop back to the install path (never mid-session). This is why the trigger
+                // vanished on first load and after leaving a building.
+                if (!InFishingWindow && ++_verifyTicks >= 20)
+                {
+                    _verifyTicks = 0;
+                    if (!FishingInstallPresent())
+                    {
+                        int ty = _slotAddr == 0 ? -99 : Memory.ReadInt(_slotAddr + EventPoints.Type);
+                        Log($"install incomplete (slot={_slot} type={ty}) — re-installing");
+                        ResetInstallState();
+                    }
+                }
+                if (map == _installedMap)
+                { WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick(); return; }
+            }
 
             if (!TryGetSpot(map, out Spot spot)) return;
 
             // The script buffer and the event array are both populated LATE, and the event array is built up
             // progressively. Installing into a half-built town is how you get silent nonsense, so wait.
-            if (!ScriptReady() || EventPoints.Base() == 0 || Memory.ReadInt(EventPoints.Count) <= 0)
-            { _settleTicks = 0; return; }
+            bool ready = ScriptReady();
+            int epBase = (int)EventPoints.Base();
+            int epCount = epBase == 0 ? 0 : Memory.ReadInt(EventPoints.Count);
+            if (!ready || epBase == 0 || epCount <= 0)
+            {
+                _settleTicks = 0;
+                if (++_notReadyTicks % 60 == 0)          // ~3s: surface WHY the install can't fire yet
+                    Log($"waiting to install (map {map}): scriptReady={ready} eventBase={epBase != 0} count={epCount}");
+                return;
+            }
+            _notReadyTicks = 0;
             if (++_settleTicks < 20) return;              // ~1 s of stability
 
             _installedMap = map;
             _settleTicks = 0;
             Install(spot);
+        }
+
+        private static int _verifyTicks;
+        private static int _notReadyTicks;
+
+        /// <summary>Clear all per-install state so the install path re-runs from scratch — used both on a map
+        /// change and when a same-map town rebuild has wiped our install.</summary>
+        private static void ResetInstallState()
+        {
+            _installedMap = -1;
+            _slot = -1;
+            _slotAddr = 0;
+            _fishingWasLive = false;
+            _fishLabelOff = 0;         // the pool + stb are rebuilt with the town — stale state is wrong
+            _exitLabelOff = 0;
+            _baitLabelOff = 0;
+            InFishingWindow = false;
+            _savedVillagerCount = -1;  // count belongs to the old town; don't restore it into the new one
+            _drawFlagsSaved = false;
+            _vbWatermark = -1;
+            _vbLastUsed = -1;
+            _vbStableTicks = 0;
+            _settleTicks = 0;
+            _verifyTicks = 0;
+            _lastParam = int.MinValue;
+            _lastMode = int.MinValue;
+            RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
+            PriscleenFish.Uninstall();
+        }
+
+        /// <summary>True only if BOTH halves of our install are still live: the renumbered fishing label in
+        /// the stb, AND our event point. A cold save-load can leave a PARTIAL install — the label gets
+        /// written but TryCreateEventPoint fails (no donor/free slot yet) or the point is wiped as the load
+        /// finishes — and a label-only check would wrongly report "installed" forever, so the "!" never
+        /// appears (the bug on first load into Yellow Drops). Checking the event point too forces a retry.</summary>
+        private static bool FishingInstallPresent()
+        {
+            // (1) our event point must exist and still be a live script trigger
+            if (_slot < 0 || _slotAddr == 0) return false;
+            if (Memory.ReadInt(_slotAddr + EventPoints.Type) != EventPoints.TypeScript) return false;
+            if (Memory.ReadInt(_slotAddr + EventPoints.ItemOrLabel) != FishingLabelId) return false;
+
+            // (2) our fishing label must still be in the stb label table
+            long stb = TownScript.Base();
+            if (stb == 0) return true;                       // can't tell yet — don't trigger a reinstall
+            int n = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
+            if (n <= 0 || n >= 4000 || tbl <= 0) return true;   // mid-rebuild / not ready — wait, don't thrash
+            for (int i = 0; i < n; i++)
+                if (Memory.ReadInt(stb + tbl + (long)i * TownScript.LabelStride) == FishingLabelId) return true;
+            return false;
         }
 
         private static bool TryGetSpot(int map, out Spot spot)
@@ -471,6 +545,23 @@ namespace Dark_Cloud_Improved_Version
         private static void BuildArena(long stb, int labelCount, int tbl)
         {
             _arena.Clear();
+
+            // PROTECT LABELS A LIVE EVENT POINT DISPATCHES. We only ever hijack labels the town isn't using —
+            // system labels (<300) are protected by id, but a town CAN put a real story trigger on a >=300
+            // label. So also protect any label an active type-3 event point references (ItemOrLabel). This is
+            // the guarantee that installing a fishing spot never silently breaks a story/quest trigger; without
+            // it, Allocate could retire a label something in the world still fires.
+            var referenced = new System.Collections.Generic.HashSet<int>();
+            long arr = EventPoints.Base();
+            int epn = arr == 0 ? 0 : Memory.ReadInt(EventPoints.Count);
+            for (int i = 0; i < epn && i <= MaxEventPoints; i++)
+            {
+                long e = EventPoints.Slot(arr, i);
+                if (Memory.ReadInt(e + EventPoints.Type) == EventPoints.TypeScript)
+                    referenced.Add(Memory.ReadInt(e + EventPoints.ItemOrLabel));
+            }
+            referenced.Remove(FishingLabelId);     // our own point, from a prior install — not a town event
+
             var all = new System.Collections.Generic.List<(int id, int off, int slot)>();
             for (int i = 0; i < labelCount; i++)
             {
@@ -479,20 +570,26 @@ namespace Dark_Cloud_Improved_Version
             }
             all.Sort((a, b) => a.off.CompareTo(b.off));
 
+            // Candidates come from the fixed SafeHijackLabels whitelist (offline-verified never dispatched in
+            // ANY town). No runtime bytecode scan: the vanilla data can't change, and a scan that found
+            // everything used would leave the spot uninstallable. The event-point set above is still consulted
+            // as cheap insurance (a future area could put a point on one), though none does today.
             var sizes = new System.Text.StringBuilder();
             for (int i = 0; i < all.Count; i++)
             {
                 int size = i + 1 < all.Count ? all[i + 1].off - all[i].off : 0;   // 0 = last, unknown end
-                bool sys = IsSystemLabel(all[i].id);
-                sizes.Append($"{all[i].id}:{(size > 0 ? size.ToString() : "end")}{(sys ? "*" : "")} ");
-                if (sys || size <= 0) continue;
+                bool safe = SafeHijackLabels.Contains(all[i].id);
+                bool epRef = referenced.Contains(all[i].id);
+                sizes.Append($"{all[i].id}:{(size > 0 ? size.ToString() : "end")}" +
+                             $"{(safe ? "+" : "")}{(epRef ? "@" : "")} ");
+                if (!safe || epRef || size <= 0) continue;   // + = safe hijack pool, @ = event-point (skip)
                 _arena.Add(new Lab
                 {
                     Slot = all[i].slot, Id = all[i].id, Off = all[i].off, Size = size,
                     Entry = (int)(tbl + all[i].slot * TownScript.LabelStride),
                 });
             }
-            Log($"   label regions (* = protected, never hijacked): {sizes}");
+            Log($"   label regions (+ = safe hijack pool, @ = event-point protected): {sizes}");
         }
 
         /// <summary>Bytes a script needs: header skip + code + string blob + alignment slack.</summary>
@@ -1100,6 +1197,17 @@ namespace Dark_Cloud_Improved_Version
             w.Yield();                                // same rule as the main script — see BuildFishingBytecode
             w.Yield();                                // Norune yields twice here before touching the model
 
+            // FADE OUT OURSELVES before the model swap, don't rely on the fishing quit having done it. When
+            // you quit while standing IN the trigger radius, the enter event point (in range) re-fires and
+            // pre-empts the quit's fade-out — so the screen was still showing when the exit's fade-in ran,
+            // i.e. no visible fade at all. Doing our own fade-out makes it consistent regardless: from an
+            // already-black screen this is a harmless no-op (stays black), from a visible one it fades out
+            // properly, and the model swap + villager reload then happen behind black as intended.
+            w.PushInt(StbCommands.FadeOut);           // 501
+            w.PushInt(30);
+            w.Ext(2);
+            EmitWaitLoop(w, StbCommands.CheckFade, exitOnNonZero: true);
+
             // Put the ORDINARY Toan back. If we do not, the player walks around town holding a fishing rod
             // with the fishing motion table — every normal animation would then be wrong in the same way the
             // cast was. (Skipped when the entry skipped the swap — there is nothing to undo.)
@@ -1182,60 +1290,80 @@ namespace Dark_Cloud_Improved_Version
         /// <c>EdCheckTime</c> reads, and more besides), CLONE a working point and override only what we mean
         /// to change. Copying a known-good record is more robust than reconstructing one from a partial map.
         /// </summary>
+        // The event array physically holds 256 points (LoadPTS calls EdInitEventPoint(..., 0x100)); the live
+        // count is EditMapInfo+0x1a250, mirrored to EventPoints.Count each frame by MoveChara. The array base
+        // (EventPoints.Base) is EditMapInfo+0x23260, so the count field is 0x9010 before it. When the town's
+        // own points fill the front of the array with no gap (a cold save-load — Yellow Drops packs 12 with
+        // none free), we APPEND at index=count and bump the count, exactly as the engine's own loader does.
+        private const int MaxEventPoints = 0x100;
+        private const long EventCountFromBase = -0x9010;   // EditMapInfo+0x1a250 relative to +0x23260
+
         private static bool TryCreateEventPoint(Spot s, int labelId, out int slot)
         {
             long arr = EventPoints.Base();
             int n = Memory.ReadInt(EventPoints.Count);
+            if (arr == 0 || n <= 0 || n > MaxEventPoints) { slot = -1; return false; }
 
-            // A live point to copy the unknown fields from — any occupied slot will do.
+            // A live point to copy the unknown fields from + the first reusable free slot (index 0 reserved).
             long donor = 0;
+            int freeIdx = -1;
             for (int i = 0; i < n; i++)
             {
-                long e = EventPoints.Slot(arr, i);
-                if (Memory.ReadInt(e + EventPoints.Type) != EventPoints.TypeFree) { donor = e; break; }
+                int ty = Memory.ReadInt(EventPoints.Slot(arr, i) + EventPoints.Type);
+                if (ty != EventPoints.TypeFree) { if (donor == 0) donor = EventPoints.Slot(arr, i); }
+                else if (i >= 1 && freeIdx < 0) freeIdx = i;
             }
-            if (donor == 0) { slot = -1; return false; }
+            if (donor == 0) { slot = -1; return false; }   // no template to clone — genuinely can't build one
 
-            for (int i = 1; i < n; i++)
+            // Reuse a free slot if one exists; otherwise append at index=count (physical room up to 256).
+            bool append = freeIdx < 0;
+            int target = append ? n : freeIdx;
+            if (target >= MaxEventPoints) { slot = -1; return false; }
+            long e = EventPoints.Slot(arr, target);
+
+            byte[] tmpl = Memory.ReadBytesBatch(donor, EventPoints.Stride);
+            Memory.WriteBytesBatch(e, tmpl);          // inherit every field we have not mapped
+
+            Memory.WriteInt(e + EventPoints.Enabled, 1);            // CheckEventPoint bails if this is 0
+            Memory.WriteInt(e + EventPoints.MapFlag, 0);            // no "already done" gate
+
+            // THE ONE THAT SILENTLY SWALLOWED THE LAST ATTEMPT. The donor is a door, whose PartIndex is
+            // >= 0 — so EdGetEvent tried to resolve a Georama part and either skipped the point or made
+            // our world coordinates part-relative. -1 means "free-standing, Position is world space".
+            Memory.WriteInt(e + EventPoints.PartIndex, -1);
+            Memory.WriteInt(e + EventPoints.ObjectPtr, 0);          // no CMapObject to inherit a position from
+            Memory.WriteInt(e + EventPoints.FramePtr, 0);           // no visibility gate
+
+            Memory.WriteInt(e + EventPoints.ItemOrLabel, labelId);  // type 3 -> the SCRIPT LABEL
+
+            // Suppress the sparkle. EdEventPointDraw (0x184750) draws an animated 3D sprite at a type-3
+            // point when +0x20 > 0 — a "shiny marker". We inherit +0x20 from the donor, so a re-install that
+            // clones a marked point shows a sparkle on the ground at the trigger. Our "!" prompt IS the
+            // indicator, so force it off for a consistent, marker-free trigger.
+            Memory.WriteInt(e + 0x20, 0);
+
+            // The donor is a door, so we inherited its name — a live MAP DESTINATION. Type 3 never jumps, but
+            // leaving a live map name on a point we are about to fire is asking for a day-long bug. Blank it.
+            Memory.WriteBytesBatch(e + EventPoints.Name, new byte[16]);
+
+            Memory.WriteFloat(e + EventPoints.Position, s.TrigX);
+            Memory.WriteFloat(e + EventPoints.Position + 4, s.TrigY);
+            Memory.WriteFloat(e + EventPoints.Position + 8, s.TrigZ);
+            Memory.WriteFloat(e + EventPoints.Radius, s.Radius);    // a scalar radius, NOT a box
+
+            // Type LAST: it is what marks the slot live. Writing it first would expose a half-built point.
+            Memory.WriteInt(e + EventPoints.Type, EventPoints.TypeScript);
+
+            // If we appended, raise the live count at its SOURCE (EditMapInfo+0x1a250) so EdGetEvent iterates
+            // far enough to see our new slot — MoveChara copies it into EventPoints.Count every frame.
+            if (append)
             {
-                long e = EventPoints.Slot(arr, i);
-                if (Memory.ReadInt(e + EventPoints.Type) != EventPoints.TypeFree) continue;
-
-                byte[] tmpl = Memory.ReadBytesBatch(donor, EventPoints.Stride);
-                Memory.WriteBytesBatch(e, tmpl);          // inherit every field we have not mapped
-
-                Memory.WriteInt(e + EventPoints.Enabled, 1);            // CheckEventPoint bails if this is 0
-                Memory.WriteInt(e + EventPoints.MapFlag, 0);            // no "already done" gate
-
-                // THE ONE THAT SILENTLY SWALLOWED THE LAST ATTEMPT. The donor is a door, whose PartIndex is
-                // >= 0 — so EdGetEvent tried to resolve a Georama part and either skipped the point or made
-                // our world coordinates part-relative. -1 means "free-standing, Position is world space".
-                Memory.WriteInt(e + EventPoints.PartIndex, -1);
-                Memory.WriteInt(e + EventPoints.ObjectPtr, 0);          // no CMapObject to inherit a position from
-                Memory.WriteInt(e + EventPoints.FramePtr, 0);           // no visibility gate
-
-                Memory.WriteInt(e + EventPoints.ItemOrLabel, labelId);  // type 3 -> the SCRIPT LABEL
-
-                // The donor is a door, so we inherited its name — the probe read ours back as 's1901', which
-                // is a MAP DESTINATION. Type 3 never jumps, so it is almost certainly inert, but leaving a
-                // live map name on a point we are about to fire is asking for the kind of bug that takes a
-                // day to find. Blank it.
-                Memory.WriteBytesBatch(e + EventPoints.Name, new byte[16]);
-
-                Memory.WriteFloat(e + EventPoints.Position, s.TrigX);
-                Memory.WriteFloat(e + EventPoints.Position + 4, s.TrigY);
-                Memory.WriteFloat(e + EventPoints.Position + 8, s.TrigZ);
-                Memory.WriteFloat(e + EventPoints.Radius, s.Radius);    // a scalar radius, NOT a box
-
-                // Type LAST: it is what marks the slot live. Writing it first would expose a half-built
-                // point to a frame of the engine's attention.
-                Memory.WriteInt(e + EventPoints.Type, EventPoints.TypeScript);
-
-                slot = i;
-                return true;
+                Memory.WriteInt(arr + EventCountFromBase, n + 1);
+                Log($"   appended event point at index {target} (count {n} -> {n + 1}); array was full");
             }
-            slot = -1;
-            return false;
+
+            slot = target;
+            return true;
         }
 
         /// <summary>
