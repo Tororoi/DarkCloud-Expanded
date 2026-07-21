@@ -801,23 +801,6 @@ namespace Dark_Cloud_Improved_Version
 
 
         /// <summary>
-        /// Label 134 — STOPGAP, not the real bait menu.
-        ///
-        /// Norune's 134 is 1,656 bytes: it builds an item-select menu from the baits you actually own (item
-        /// ids 166-170, 193, 197 appear in its bytecode) and feeds the choice to <c>_SET_FISHING_ESA</c>.
-        /// Porting it means relocating its jump targets AND accepting that its message ids would resolve
-        /// against a different town's .mes, so the prompts would be wrong text.
-        ///
-        /// <c>_SET_FISHING_ESA</c> itself takes a single int — the bait item id — so until the real menu is
-        /// ported, Square just equips one. <c>FishingLoadEsa</c> returns whatever bait was equipped to your
-        /// inventory first, so repeatedly pressing it does not lose items. It does NOT check that you own the
-        /// bait, so this hands you one; that is a cheat, and it is why this is a stopgap and not the answer.
-        ///
-        /// The real menu route is <c>_GOTO_CHANGE_ESA</c> (command 25), which drives the generic use-item
-        /// menu — but its first argument must be a STRING (the handler bails unless the stack type is 3), so
-        /// it needs a string offset in the town's own .stb.
-        /// </summary>
-        /// <summary>
         /// Build the bait's model and hang it on the hook.
         ///
         /// <c>_SET_FISHING_ESA</c> loads NOTHING — it only points the hook at item frame 0
@@ -2432,7 +2415,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int GotoFpChange   = 24;   // () — Exchange FP (menu_mode 8, engine-drawn)
         internal const int GotoFishRanking= 26;   // () — Fishing log (menu_mode 10, engine-drawn)
         internal const int SetReturnCode  = 3;    // (code) — 11 keeps the fishing session running
-        internal const int SItemCheck     = 707;  // (itemId, &out) — out != 0 if the player owns the item (fishing rod = 185)
+        internal const int SItemCheck     = 707;  // (itemId, &out) — out = inventory index (>=0) if owned, -1 if not (fishing rod = 185)
         internal const int FishingRodItem = 185;  // the fishing pole checked by the "Fish" option
 
         // _GET_PADDOWN result masks (post exch_ok_cancel). D-pad bits are unswapped; X arrives as 0x20.

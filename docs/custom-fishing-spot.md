@@ -1223,20 +1223,40 @@ address, which is how out-parameters work.
 134 → 10, 133 → 1). The labels we hijack declare 0, so any script of ours that touches `var0` must raise
 it or it is reaching outside its frame.
 
-### The bait menu is native: `_GOTO_CHANGE_ESA`
+### The bait menu (label 134) — the native `_GOTO_CHANGE_ESA` menu, DONE
 
-Command 25 opens the game's own use-item menu over a **static** bait list (the template at `_820` — we do
-not supply one), and takes a POINTER to a script local, which the menu writes the chosen item id into:
+`_GOTO_CHANGE_ESA` (command 25) drives the game's **own** use-item menu: it copies a **static** bait-list
+template (`_820`, so we supply nothing), calls `EdSetUseItem`, and sets `menu_mode = 9`. Its one meaningful
+argument is a **pointer** to a script local, which the menu writes the chosen item id into:
 
 ```c
-if (*param_1 == 3) {           // arg1's stack type must be 3 (pointer)
+if (*param_1 == 3) {           // arg1's stack type must be 3 = POINTER (not "a string" — an earlier note here was wrong)
     p_use_item = param_1[1];   // where to write the result
     ... EdSetUseItem(...); menu_mode = 9;
 }
 ```
 
-So label 134 is: `PushVarRef(0); EXT 25; YIELD;` then the load pipeline on `var0`. One YIELD suffices —
-while `menu_mode != 0`, `EdEventMode` runs the menu instead of stepping the script.
+`PushVarRef(0)` is exactly that pointer — no string offset needed. The complete, working label 134
+(`BuildBaitBytecode`):
+
+```
+YIELD                          # promote to a real event (§8b — a no-YIELD script is never an event)
+_GOTO_CHANGE_ESA(&var0)        # 25 — the use-item menu writes the chosen bait id into var0
+YIELD                          # while menu_mode != 0, EdEventMode runs the menu, not the script; we wake on close
+<bait-load pipeline on var0>   # build the bait's model + hook it — see "The bait needs a MODEL loaded" above
+_GOTO_FISHING()                # 997 — STAY in the session (return-code rule); without it Square would QUIT
+RET
+```
+
+Two things make it correct:
+
+- **The load pipeline must live here, not in the entry script.** `EdInitEventParamSimple` zeroes the
+  item-frame table at the start of every event, so anything the entry script loaded is already gone by the
+  time Square runs. And it waits with a `while (_LOAD_SYNC(&v)) YIELD` loop, **not** a frame count —
+  `_LOAD_ITEM` on an unlanded read builds a frame from an empty buffer and the game jumps through a garbage
+  pointer (crash), so losing the race is fatal, not cosmetic.
+- **`_GOTO_FISHING` at the end**, so `EventMode` takes `case 0xb: GameMode = 0x10` instead of the `default`
+  walking branch. Every fishing sub-script that RETs otherwise ends the session (see below).
 
 ### Labels 133 and 134 are hardcoded in the engine
 
@@ -1258,17 +1278,14 @@ to 133 and 134.
 **A fishing sub-script that just RETs will END THE SESSION.** Every one of them runs as an ordinary
 event, so when it returns, `EventMode` switches on its return code — and `default:` is `GameMode = 1`,
 walking. That is precisely how quitting is implemented: label 133 is `_EXIT_FISHING; _FADE_IN(60); RET`
-and the drop back to walking comes *from the default branch*, not from any command.
+and the drop back to walking comes *from the default branch*, not from any command. (Our label 133 now
+fronts this with a 2-option Continue/Quit confirm — Continue uses `_SET_RETURN_CODE(11)` to stay in the
+session; see §8c.)
 
-The corollary bit us: the bait label had the same shape, so pressing Square politely equipped the bait
-and then quit fishing. Any sub-script that means to STAY in the session must end by asking for fishing
+The corollary bit us: the bait label had the same shape, so an early build's Square politely equipped the
+bait and then quit fishing. Any sub-script that means to STAY in the session must end by asking for fishing
 again — `_GOTO_FISHING` (return code `0xB`) — so `EventMode` runs `case 0xb: GameMode = 0x10` instead of
-falling through.
-
-Label 134 is currently a STOPGAP: `_SET_FISHING_ESA(166)` (Throbbing Cherry) with no menu, and it does
-not check that you own the bait. The real menu route is `_GOTO_CHANGE_ESA` (command 25), which drives the
-generic use-item menu — but its handler bails unless the first stack entry is type 3 (**a string**), so
-it needs a string offset out of the town's own `.stb`.
+falling through. The real bait menu (above) ends with exactly that.
 
 ### The fishing rectangle can crash the game — size it to the terrain
 
@@ -1321,14 +1338,227 @@ load and nothing else.
 
 ### Still open on this path
 
-- **`fishingActive` stays 0** after `_LOAD_FISHING_DATA` alone — the spot is built but the session does
-  not start. `_GOTO_FISHING` (997) is now appended to the injected bytecode; untested.
 - **Queens has no free event-point slot** (50 of 51 used) — needs a different trigger.
 - **Yellow Drops' water level is a guess** (`water: 1`). The trigger sits *outside* the town's declared
   `WATER_SURFACE` square (±320 about the origin), so the liquid there is not that surface.
 - `FishingAddresses.OverworldState` (`0x21D19708`) is **the same address** as
   `EventPoints.ScriptLabelRequest`. One of those two names is wrong; worth settling before either is
   trusted.
+
+---
+
+## 8c. The fishing DIALOGUE system — menus, the no-pole line, the catch bubble
+
+§8b got the *session* working. This section is the **UI** on top of it — everything drawn in a message
+bubble: the entry menu you get on the trigger, the quit menu on Circle, the "you don't have a pole" line,
+and the catch bubble. All of it is reproduced in our own bytecode, because Norune draws it through
+`CALL_FUNC` subroutines compiled into *its* `.stb` that another town's script cannot reach. All of it is
+runtime-only: injected message text + `MesWin` STB commands, no ISO, no code injection.
+
+Companion: [fishing-species-names-records.md](fishing-species-names-records.md) (the `.mes` format + fish
+names); the mod's RE notes live in the `fishing-dialogue-and-mes-format` memory.
+
+### Two message windows: talk (0) and event (1)
+
+`GetMes(win)` = `DAT_01d3d3d0[win]` returns a `ClsMes`. Two windows matter:
+
+| win | global | guest / MMU | used for |
+|---|---|---|---|
+| 0 | `EditMes1` | `0x01D1B550` / `0x21D1B550` | villager talk **and the catch bubble** (msg 2000) |
+| 1 | `EditEventMes1` | `0x01D1E4D0` / `0x21D1E4D0` | **the menus and the no-pole line** (msg 20/21/22) |
+
+The no-pole line looks like a villager dialog box but it is **window 1** — same window as the menu, just
+drawn with no cursor and no tail and a low anchor (pos 8). Don't mistake it for the talk window.
+
+### The text lives in the `.mes` buffer, and custom towns don't have it
+
+The messages the fishing UI shows:
+
+| msg | window | text | present in |
+|---|---|---|---|
+| 20 | 1 (event) | the 4-line entry menu (Fish / Exchange FP / Fishing log / Quit) | vanilla fishing towns only |
+| 21 | 1 (event) | "Seems like you can fish here but you don't have a fishing pole." | " |
+| 22 | 1 (event) | the 2-line quit menu (Continue / Quit) | " |
+| 2000 | 0 (talk) | the catch template — `[fish] ([X]cm) caught! …Record [fish] [W]cm` | " |
+
+Queens/Brownboo/Yellow Drops have **none** of these, so a custom spot shows an empty bubble. The mod fixes
+it by building tiny `.mes` buffers in scratch and **swapping the window's buffer pointer** to them:
+
+- `EnsureMenuTemplate()` writes msg 20/21/22 to `CodeCaves.FishingMenuMes`; on fishing-window open it saves
+  and overwrites `EditEventMes1 + 0x17A0` / `+0x17A8` (window 1's buffer ptr) with our buffer.
+- `EnsureCatchTemplate()` writes msg 2000 to `CodeCaves.FishingCatchMes`; same swap on `EditMes1 + 0x17A0`.
+- `UpdateFishingWindow()` swaps on open, **restores on close**. See §fishing-window below.
+
+`.mes` format (`u16 count`, `u16` SetBuff delta, `count × {u16 id, u16 wordOff}`, then text at byte
+`2*(count+wordOff+1)`, 16-bit glyphs, `0xFF01` terminator, identical text **deduplicated**) is documented
+in [fishing-species-names-records.md](fishing-species-names-records.md). **Fish names are global**
+(`system14e.bin`, available in every town); only the catch *template* and the menu text are town-specific.
+
+### The swap races the menu — wait a full mod tick
+
+`UpdateFishingWindow` runs from `CustomFishingSpot.Tick`, which the mod calls on its **50 ms loop**
+(`TownCharacter`'s `while(true)` ends in `Thread.Sleep(50)` ≈ 3 game frames) — **not per frame**. If the
+menu's `_MES_MAKE` runs before that tick lands, `MakeMesTexture` measures the message off the town's *own*
+event buffer (which has no msg 20), computes a garbage size, and draws a **heavily distorted** bubble
+~25 % of the time. Fix: the entry script does **8 yields (~133 ms, > one 50 ms tick)** before `_MES_MAKE`,
+so the swap is reliably done first.
+
+### The `ClsMes` fields that matter (RE'd from `DrawMesWin` @ `0x153310`)
+
+The message window's behaviour is a handful of fields. Reversing the draw was necessary to make menus,
+the plain bubble, and the cursor all behave:
+
+| field | meaning | draw rule |
+|---|---|---|
+| `+0x58` | **shippo** (tail) flag | `DrawMesWin_sub` (`0x152030`) draws the tail sprite whenever `!= 0`, at a mid-screen anchor. **0 = no tail.** |
+| `+0x94` | **shown** flag | window draws (fades `+0x90` alpha up) only when `!= 0`. **Set to 1 at EVENT START, not by `_MES_MAKE`.** `_MES_CLOSE` sets it 0. |
+| `+0xA4` | **draw speed** = per-char reveal DELAY | **0 = instant**; 1.0 = one letter per frame (typing). |
+| `+0x1740` | **cursor line** | `DrawMesWin` draws the pointer + highlights the matching line only when `>= 0`. **-1 = no cursor.** |
+| `+0x16BC` | **current msgId** | `MakeMesWin`: same id → `GoNextPage`; different id → **rebuild** (`MakeMesTexture`). |
+| `+0x17A0`/`+0x17A8` | buffer ptr / buffer+delta | the swap target (`SetBuff`). |
+
+Two behaviours that cost real debugging cycles:
+
+- **`_MES_MAKE` (192)** → `MakeMesWin(clsMes, msgId)`. On a *new* id it rebuilds the texture but **does NOT
+  set `+0x94`**. So a message is visible only if `+0x94` was already 1 — which the engine sets **when the
+  event goes real**, once. A `_MES_CLOSE` before a following `_MES_MAKE` leaves it built-but-invisible.
+- The window is **only drawn in event mode**. Show a message then let the event end (`RET` → walking) and
+  it renders for a single frame and vanishes. Anything meant to stay on screen must keep yielding inside
+  the event (see the no-pole line).
+
+### The MesWin STB commands
+
+| id | command | handler | args |
+|---|---|---|---|
+| 192 | `_MES_MAKE` | `0x18F9D0` | (win, msgId) |
+| 193 | `_MES_CLOSE` | `0x18FB60` | (win) — sets `+0x94=0`, `+0x16BC=-1` |
+| 195 | `_SET_MES_AUTOSET` | — | (win, x1,y1,x2,y2) — auto-place the bubble avoiding the rect; Norune passes `0,0,0,0` |
+| 196 | `_SET_MES_SHIPPO` | `0x18FDD0` | (win, flag) → `+0x58` |
+| 197 | `_SET_MES_POS` | — | (win, posMode) — menus use **9**, the no-pole line **8**, then **0** to reset |
+| 198 | `_SET_MES_DRAWSPEED` | `0x18FF00` | (win, floatDelay) → `+0xA4` |
+| 199 | `_SET_MES_CURSOR` | `0x18FF70` | (win, line) → `+0x1740`; **-1 disables** |
+| 903 | `_GET_APAD` | — | (&lx, &ly[, &rx, &ry]) analog floats |
+| 1 | `_GET_PADDOWN` | — | (&out) button edge-events; X=`0x20`, dpad UP=`0x1000`, DOWN=`0x4000` |
+| 24 | `_GOTO_FP_CHANGE` | — | () — Exchange FP (native menu, `menu_mode 8`) |
+| 26 | `_GOTO_FISH_RANKING` | — | () — Fishing log (native menu, `menu_mode 10`) |
+| 3 | `_SET_RETURN_CODE` | — | (code) — **11 keeps the session** (see §8b return-code rule) |
+| 707 | `_SITEM_CHECK` | `0x1952D0` | (itemId, &out) — see rod gate below |
+
+### The select menu — `EmitSelectMenu`, reproduced from Norune's subroutines
+
+Norune's menu is three `CALL_FUNC` subroutines (menu-show `cb+19180`, select-loop `cb+16764`, direction
+`cb+16336`). We inline the same logic. Setup, then a per-frame cursor loop:
+
+```
+_SET_MES_SHIPPO(win, 0)            # tail OFF for the whole display
+_SET_MES_DRAWSPEED(win, 0.0)       # instant text
+_MES_MAKE(win, msgId)
+_SET_MES_POS(win, 9)
+_SET_MES_AUTOSET(win, 0,0,0,0)     # <-- this is what anchors the bubble; without it it sits top-left
+sel = 0 ; held = 0
+loop:
+  _SET_MES_CURSOR(win, sel)
+  YIELD
+  _GET_APAD(&scratch, &ly) ; _GET_PADDOWN(&pad)
+  # analog, edge-latched: LY > 0.5 = down, LY < -0.5 = up; move only neutral->pushed, re-arm on return.
+  #   ±0.5 symmetric, no hysteresis — identical to Norune's dir() (a wider deadzone makes double-taps WORSE).
+  # d-pad: pad & 0x4000 = down, pad & 0x1000 = up (already edge events).
+  if !(pad & 0x20 /*X*/): goto loop
+  _SET_MES_CURSOR(win, -1)         # <-- DISABLE the cursor on exit (vanilla does this)
+  _SET_MES_POS(win, 0)
+```
+
+Two mechanisms worth calling out, both learned from vanilla:
+
+- **`_SET_MES_CURSOR(win, -1)` on exit** disables the pointer/highlight, so any plain message shown
+  afterward (the no-pole line) renders as a bubble, not a lingering menu. Norune's select-loop does exactly
+  this before it returns.
+- **Analog feel is a pure threshold/edge match.** The step rate is identical to vanilla (both are event
+  scripts stepped once/frame by `EdEventMode → EdResumeEvent`), and `dir()` is symmetric ±0.5 with no
+  hysteresis. The re-arm requires the stick to return to `|LY| <= 0.5`; a tighter deadzone only makes fast
+  double-taps re-arm *harder*.
+
+The menu leaves the window **open** after a selection. Every dispatch path except the no-pole line calls
+`_MES_CLOSE` before its own transition (fishing / FP / log / quit), so the bubble doesn't render its bare
+frame during a fade. That is safe because `+0x94` is re-raised at the next event start.
+
+### The entry menu (label 400, msg 20) — 4 options
+
+Shown on the trigger's X press, before fishing — Norune's label 11. Choice lands in `var2`:
+
+| sel | option | action |
+|---|---|---|
+| 0 | **Fish** | rod gate → start fishing, or the no-pole line (below) |
+| 1 | **Exchange FP** | `_MES_CLOSE` + `_GOTO_FP_CHANGE` (24) + RET |
+| 2 | **Fishing log** | `_MES_CLOSE` + `_GOTO_FISH_RANKING` (26) + RET |
+| 3 | **Quit fishing** | `_MES_CLOSE` + RET |
+
+FP-exchange and Fishing-log are **native engine menus** (`menu_mode`), the same mechanism as the bait menu
+(§8b). They run after the event returns; the script just requests them and RETs.
+
+### The rod gate + the no-pole line (msg 21)
+
+"Fish" requires the fishing rod, **item 185**. The check is Norune's, verbatim:
+
+```
+_SITEM_CHECK(707, 185, &out)     # out = EdCheckItem(185)  (0x173270 -> SearchItemIndexNo 0x1BD940)
+                                 #   -> -1 if NOT owned, else the inventory index (>= 0)
+if (out < 0):  show msg 21 ; RET        # no pole
+else:          start fishing            # fall through to the §8b session setup
+```
+
+`_SITEM_CHECK` is *not* a boolean — it returns the item's slot index, so the test is `out < 0`, not
+`out == 0` (index 0 is a valid owned slot).
+
+The no-pole display (`EmitShowMessage`), which is why it reads as a plain villager bubble:
+
+```
+_SET_MES_SHIPPO(win, 0)          # NO tail  (setting it 1 here draws a stray triangle mid-screen)
+_MES_MAKE(win, 21)
+_SET_MES_POS(win, 8)             # low, talk-box anchor
+_SET_MES_AUTOSET(win, 0,0,0,0)
+_SET_MES_POS(win, 0)
+loop: YIELD ; _GET_PADDOWN(&pad) ; if !(pad & 0x20): goto loop     # WAIT for X
+_MES_CLOSE(win)
+```
+
+Three non-obvious requirements, each a fix from this work:
+
+1. **Do NOT `_MES_CLOSE` the menu before this.** `+0x94` (shown) is set only at event start; a close would
+   leave msg 21 built-but-invisible. The menu deliberately stays open going in.
+2. **WAIT (yield loop).** Window 1 only draws in event mode; without staying in the event the line flashes
+   one frame and the event ends. The wait also lets the player read it.
+3. **Cursor off, tail off.** The menu already set the cursor to -1 on exit; keep the tail at 0 (flag 1
+   draws the shippo triangle at its mid-screen anchor).
+
+### The quit menu (label 133, msg 22) — 2 options
+
+Circle during fishing → `ScriptLabelRequest = 133` (hardcoded, §8b). Choice in `var8`:
+
+| sel | option | action |
+|---|---|---|
+| 0 | **Continue fishing** | `_MES_CLOSE` + `_SET_RETURN_CODE(11)` + RET → **stays fishing** (the return-code rule) |
+| 1 | **Quit fishing** | `_MES_CLOSE` + fade-out + model restore + `_EXIT_FISHING` (falls through to the §8b exit) |
+
+### The catch bubble (msg 2000)
+
+On a catch, the engine's `chara_fishing` state machine calls `MakeMesWin(EditMes1 /*win 0*/, 2000)`.
+msg 2000 is `[fish] ([X]cm) caught! Fishing Points [Y]/Total Points [Z]/Record [fish] [W]cm`, where
+`[fbfe]` = the fish name (resolved from the **global** system buffer) and `[fbfa/f9/f8]` = the numbers.
+Custom towns lack msg 2000, so the bubble came up empty; injecting a tiny talk-mes buffer with msg 2000
+and swapping `EditMes1 + 0x17A0` on window-open fills it. Because the fish name comes from the global
+buffer, the template is the only town-specific piece.
+
+### `UpdateFishingWindow` — the swap/restore, and villager suspension
+
+`ComputeFishingWindow` returns true while a spot is live (cpoly/water set), while `GameMode == fishing`,
+or while in event mode with `EdEventInfo ∈ {400, 133, 134}` (our labels). On the **open** transition the
+mod swaps both buffers (window 0 catch, window 1 menu) and suspends the town villagers; on **close** it
+restores both buffers and the villager count/draw flags. The restore is guarded — it only writes back if
+our pointer is still installed, so a mid-session town reload (`EditInit` installing a fresh buffer) is not
+clobbered. Villager suspension is a separate concern documented in [[town-event-allocators]] (a leak there
+caused the Brownboo black-screen, see the `town-event-allocators` memory); the buffer swap is independent
+of it.
 
 ---
 
