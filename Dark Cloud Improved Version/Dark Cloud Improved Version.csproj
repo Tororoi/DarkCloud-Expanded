@@ -37,6 +37,9 @@
     <None Include="Resources\Fish\f19a.chr">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="Resources\Sign\fishsign.chr">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Content Include="ModIcon.ico" />

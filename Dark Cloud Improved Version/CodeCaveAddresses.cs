@@ -218,6 +218,17 @@ namespace Dark_Cloud_Improved_Version
         // 312 bytes; sits just above FishingCatchMes in the same MeshCave margin.
         internal const long FishingMenuMes       = 0x21FB4100;   // ends 0x21FB4238, below band top 0x21FB4300
         internal const uint FishingMenuMesGuest  = 0x01FB4100;
+
+        // ── Fishing sign injection (SignInjector) ────────────────────────────────────────────────────
+        // The bundled fishsign.chr (the game's own oasis kanban + e01b24 texture) lives in the MeshCave
+        // margin below the fishing-mes blocks. The build COPIES the pack, so this only needs validity during
+        // the one-shot build; then it can be reused. Stub + config follow it, all clear of 0x21FB4000.
+        internal const long SignChrCave       = 0x21FAE400;   // fishsign.chr (~20 KB) → ends ~0x21FB33A0
+        internal const uint SignChrCaveGuest  = 0x01FAE400;
+        internal const long SignStubCave      = 0x21FB3400;   // the cave stub (custom cmd-10 handler)
+        internal const uint SignStubCaveGuest = 0x01FB3400;
+        internal const long SignConfig        = 0x21FB3600;   // +0x00 ready, +0x04 built, +0x08 npcPtr, +0x10 name
+        internal const uint SignConfigGuest   = 0x01FB3600;
     }
 
 }

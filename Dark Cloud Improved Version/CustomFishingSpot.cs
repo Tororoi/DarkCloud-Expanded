@@ -341,7 +341,12 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
                 if (map == _installedMap)
-                { WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick(); return; }
+                {
+                    WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick();
+                    SignInjector.Arm();                                           // arm the sign cave stub (cold-window retry)
+                    SignInjector.Tick(_spot.TrigX, _spot.TrigY, _spot.TrigZ);     // build once + pin at the trigger
+                    return;
+                }
             }
 
             if (!TryGetSpot(map, out Spot spot)) return;
@@ -396,6 +401,7 @@ namespace Dark_Cloud_Improved_Version
             _lastMode = int.MinValue;
             RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
             PriscleenFish.Uninstall();
+            SignInjector.Uninstall();
         }
 
         /// <summary>True only if BOTH halves of our install are still live: the renumbered fishing label in
@@ -500,6 +506,7 @@ namespace Dark_Cloud_Improved_Version
             PatchFishDepth(spot);
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
+            SignInjector.PrepareAssets();                    // load the bundled fishsign.chr (town-agnostic)
 
             Log($"   event point [{slot}] type=3 label={labelId} " +
                 $"pos=({spot.TrigX},{spot.TrigY},{spot.TrigZ}) radius={spot.Radius} partIndex=-1 (world)");
