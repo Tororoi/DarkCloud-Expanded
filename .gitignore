@@ -346,12 +346,12 @@ SCUS_971.11
 .claude/
 
 # ── Game-derived data (never distribute) ────────────────────────────────────────────
-# ALL extracted / game-derived files live under game_data/ (see game_data/README.md).
-#   game_data/mod_runtime/  — assets the mod loads locally (fishsign.chr, f19a.chr, RubyMemeFix);
-#                             the .csproj sources them from here. Publishing needs runtime
-#                             ISO-extraction instead of bundling these.
-#   game_data/reference/    — dev/extraction artifacts (rock originals, baked meshes, viewers, etc.)
-# Custom, distributable resources stay tracked in the repo (brownboo_14.bin, the _simple rocks,
-# the font). The *.obj build rule above also ignores the rock meshes — the custom _simple.obj are
-# force-added (git add -f); the originals live in game_data/reference/rock_obj/.
-game_data/
+# ALL extracted / game-derived files live under game_data/, grouped by feature: fishsign/, priscleen/,
+# RubyMemeFix/, brownboo/, menu/. The mod loads a few runtime assets from there (the .csproj sources
+# them); publishing needs runtime ISO-extraction rather than bundling these.
+# Custom, distributable resources stay tracked (brownboo_14.bin + its rock_obj/ source rocks, the font).
+game_data
+
+# The *.obj rule far above ignores MSVC objects, but also catches custom mesh assets we ship under
+# Resources/ (e.g. the hand-simplified collision rocks). Those are our own geometry — always track them:
+!Dark Cloud Improved Version/Resources/**/*.obj

@@ -16,6 +16,8 @@ MAP_NO = 14
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.normpath(os.path.join(HERE, "..", "Dark Cloud Improved Version",
                                     "Resources", "FishingCollision", f"brownboo_{MAP_NO}.bin"))
+# The custom _simple.obj rocks live alongside the compiled .bin, in Resources/FishingCollision/rock_obj/.
+ROCK_DIR = os.path.join(os.path.dirname(OUT), "rock_obj")
 
 def load_obj(path):
     """Return a flat list of triangles [[x,y,z],[x,y,z],[x,y,z]] from an OBJ file."""
@@ -38,9 +40,9 @@ def load_obj(path):
     return tris
 
 def main():
-    files = sys.argv[1:] or sorted(glob.glob(os.path.join(HERE, "rock_obj", "*.obj")))
+    files = sys.argv[1:] or sorted(glob.glob(os.path.join(ROCK_DIR, "*.obj")))
     if not files:
-        print("no OBJ files given and none found in tools/rock_obj/"); return
+        print(f"no OBJ files given and none found in {ROCK_DIR}"); return
     all_tris = []
     for path in files:
         t = load_obj(path)

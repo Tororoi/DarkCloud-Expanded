@@ -18,8 +18,11 @@ ROCKS = ["iwa01", "iwa02", "iwa03"]
 OUT = os.path.normpath(os.path.join(HERE, "..", "Dark Cloud Improved Version",
                                     "Resources", "FishingCollision", f"brownboo_{MAP_NO}.bin"))
 
+# The custom _simple.obj rocks live alongside the compiled .bin, in Resources/FishingCollision/rock_obj/.
+ROCK_DIR = os.path.join(os.path.dirname(OUT), "rock_obj")
+
 def simple_path(rock):
-    return os.path.join(HERE, "rock_obj", f"{rock}_simple.obj")
+    return os.path.join(ROCK_DIR, f"{rock}_simple.obj")
 
 need_lathe = [r for r in ROCKS if not os.path.exists(simple_path(r))]
 lathe = {}

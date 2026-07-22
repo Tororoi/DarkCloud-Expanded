@@ -23,20 +23,20 @@
   </ItemGroup>
   <ItemGroup>
     <!-- RubyMemeFix = extracted c05 game data; sourced from the untracked game_data/ folder, LogicalName
-         keeps the manifest names so Resources.cs is unchanged. Not distributable (see game_data/README). -->
-    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Fire">
+         keeps the manifest names so Resources.cs is unchanged. Not distributable. -->
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Fire">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Fire</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Holy">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Holy">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Holy</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Ice">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Ice">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Ice</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Thunder">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Thunder">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Thunder</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Wind">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Wind">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Wind</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
@@ -48,11 +48,11 @@
     </None>
     <!-- Extracted game assets, sourced from the untracked game_data/ folder; Link keeps the output layout
          (Resources/Fish, Resources/Sign) so the runtime load paths are unchanged. Not distributable. -->
-    <None Include="..\game_data\mod_runtime\f19a.chr">
+    <None Include="..\game_data\priscleen\f19a.chr">
       <Link>Resources\Fish\f19a.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="..\game_data\mod_runtime\fishsign.chr">
+    <None Include="..\game_data\fishsign\fishsign.chr">
       <Link>Resources\Sign\fishsign.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
