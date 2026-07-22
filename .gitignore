@@ -344,3 +344,12 @@ SCUS_971.11
 
 # Claude Code local settings
 .claude/
+
+# Extracted game resources — provide from your OWN ISO; never commit (purged from history)
+Dark Cloud Improved Version/Resources/Fish/f19a.chr
+Dark Cloud Improved Version/Resources/Sign/fishsign.chr
+Dark Cloud Improved Version/Resources/FishingCollision/brownboo_14.bin
+custom_fish/blender/priscleen_bake.json
+tools/allmenu.mes.bin
+tools/fishsign_preview/tex_unswizzled.png
+tools/fishsign_preview/fishsign.obj
