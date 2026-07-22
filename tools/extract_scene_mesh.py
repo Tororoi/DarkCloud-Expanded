@@ -20,9 +20,14 @@ instance table (not in scene.scn), so they need a separate step to place precise
 
 Usage: extract_scene_mesh.py gedit/s04/scene.scn [name-prefix]
 """
+import os
 import struct, re, sys, math
 
-DAT_DIR = "/Users/thomascantwell/ROMs/dc_extracted"
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+DAT_DIR = DC1_DATA_DIR
 
 def load_scene(rel):
     hed = open(f"{DAT_DIR}/data.hed", "rb").read()

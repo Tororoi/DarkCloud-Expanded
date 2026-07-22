@@ -1,5 +1,10 @@
+import os
 import struct, re
-HED="/Users/thomascantwell/ROMs/dc_extracted/data.hed"; HD2="/Users/thomascantwell/ROMs/dc_extracted/data.hd2"; DAT="/Users/thomascantwell/ROMs/dc_extracted/data.dat"
+
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+HED=os.path.join(DC1_DATA_DIR, "data.hed"); HD2=os.path.join(DC1_DATA_DIR, "data.hd2"); DAT=os.path.join(DC1_DATA_DIR, "data.dat")
 OUT="docs/character-motion-table.md"
 hed=open(HED,'rb').read(); hd2=open(HD2,'rb').read(); dat=open(DAT,'rb')
 TOAN_NOTE = ("the source KEY block has one line **commented out** (`// KEY 540, 546, 0.4 //26\u6295\u3052\u958b\u59cb`,\n"

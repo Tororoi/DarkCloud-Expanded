@@ -6,12 +6,17 @@ Two independent questions, answered separately because they have different answe
   2. TILE PARTS — is any DEF_PATS part defined but never PLACED by the map builder?  (answer: a large set,
                   but see the caveat — not every placement path is traced yet)
 """
+import os
 import struct, re
 
-HED = "/Users/thomascantwell/ROMs/dc_extracted/data.hed"
-HD2 = "/Users/thomascantwell/ROMs/dc_extracted/data.hd2"
-DAT = "/Users/thomascantwell/ROMs/dc_extracted/data.dat"
-ELF = "/Users/thomascantwell/ROMs/dc_extracted/SCUS_971.11"
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+HED = os.path.join(DC1_DATA_DIR, "data.hed")
+HD2 = os.path.join(DC1_DATA_DIR, "data.hd2")
+DAT = os.path.join(DC1_DATA_DIR, "data.dat")
+ELF = os.path.join(DC1_DATA_DIR, "SCUS_971.11")
 OUT = "docs/dungeon-tiles.md"
 
 # The chain tables: {neighbour-mask, part id, rotation}. vaddr -> (name, entries)

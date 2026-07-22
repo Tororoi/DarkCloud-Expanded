@@ -1,6 +1,6 @@
 import re, random, collections, datetime
 
-ROOT = "/Users/thomascantwell/DarkCloud-Enhanced"
+ROOT = "."   # repo-root-relative; run this from the repo root: python3 tools/randomizer-probabilities.py
 SRC = ROOT + "/Dark Cloud Improved Version/EnemyData.cs"
 txt = open(SRC, encoding="utf-8").read()
 

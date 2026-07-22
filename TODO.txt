@@ -4,6 +4,22 @@ Rebuild the mod first (dotnet build in "Dark Cloud Improved Version"), then fish
 Both Brownboo tests below can be done in the SAME fishing session.
 
 
+DESIGN / REFACTOR TODOS  (not tests — bigger-picture work)
+==========================================================
+[A] ISO FILE-SELECT + PATCH FLOW  ->  then REVISIT the runtime ISO-reading code FIRST.
+    When the mod gains a "choose your ISO" file picker (so we can patch the disc directly), the first thing
+    to revisit is GameDataFiles + the Iso9660 reader in GameDataFiles.cs. Today it SEARCHES ~/ROMs / the app
+    dir / a config file for a DC1 ISO and reads archive entries on the fly. With a user-selected, validated
+    ISO path we likely have a more reliable approach available — we'd know the exact ISO up front and could
+    patch it once and/or extract just the entries we need deterministically, instead of on-demand searching.
+    (Runtime callers today: HarderEnemyAI, WeaponTextureSwap, CustomToanEffects.)
+
+[B] SIMPLIFICATION PASS.  Audit the rest of the mod for other places the same "read the disc / bundle assets
+    / hardcode a dev path" pattern could be simplified now that (a) original game data comes from the
+    player's own ISO at runtime and (b) game_data/ holds all non-distributable inputs. Flag any remaining
+    dev-machine assumptions and opportunities to make the mod's approach more reliable / less special-cased.
+
+
 [1] BROWNBOO — ROCK COLLISION + WIDER CAST RECT
 -----------------------------------------------
 Live setup: floors-only experiment ON (drops all native walls), rock collision appended, cast rect
@@ -20,13 +36,14 @@ ROCK COLLISION REBUILT AGAIN (PILLARS + TUNNELS, build_rock_pillars in tools/bro
     -12.7), so the "extend into the water to >= -9" requirement is met.
   - 807 tris. Budget: floors-only keeps 326 + 807 = 1133, under the 1228 buffer (native gather 769 < 1024).
 NEW WORKFLOW (rock collision now shaped in BLENDER, not the viewer):
-  - Export raw rocks:  python3 tools/export_rocks_obj.py  -> tools/rock_obj/iwa01.obj, iwa02.obj, iwa03.obj
+  - Export raw rocks:  python3 tools/export_rocks_obj.py  -> game_data/brownboo/rock_obj/iwa01.obj, ... (untracked)
     (game world coords, Y up, WaterLevel y=0). Simplify each into a low-poly collision mesh in Blender.
   - Constraints: keep tops closed/smooth (bobber rests on them); extend down to at least y=-9; keep the
     dolmen tunnels OPEN (delete the lintel spans); envelope slightly OUTWARD; keep all 3 rocks combined
     under ~800 tris (floors-only uses 326, buffer cap 1228).
   - Re-export from Blender as OBJ with the SAME axis (Y up) so coords round-trip.
-  - Save each finished mesh as tools/rock_obj/<rock>_simple.obj (e.g. iwa03_simple.obj), then:
+  - Save each finished mesh as "Dark Cloud Improved Version/Resources/FishingCollision/rock_obj/<rock>_simple.obj"
+    (tracked custom geometry; e.g. iwa03_simple.obj), then:
         python3 tools/assemble_rock_collision.py   -> brownboo_14.bin
     It uses your Blender mesh for any rock that has a *_simple.obj and a lathe PLACEHOLDER for the rest,
     so the full collision is always complete & in budget. (import_rocks_obj.py = raw all-OBJ convert.)
@@ -50,8 +67,9 @@ In-game behaviour to check:
 
 [2] BROWNBOO — POND-BOTTOM GROUND-GRID CAPTURE  (the "other brownboo thing")
 ---------------------------------------------------------------------------
-On spot load the mod dumps the base-ground grid to tools/ground_grid.csv (the accurate pond bottom,
-including the underwater cells collision skips).
+On spot load, IF DC_DUMP_DIR is set (see .env.sample), the mod dumps the base-ground grid to
+$DC_DUMP_DIR/ground_grid.csv (the accurate pond bottom, including the underwater cells collision skips).
+If DC_DUMP_DIR is unset the dump is skipped entirely.
 
   - Check the LOG: "GROUND GRID: dumped N cells across M area(s)".
       If it says "bad dims" for an area -> tell Claude the numbers (grid layout differs from the assumed
@@ -62,9 +80,9 @@ including the underwater cells collision skips).
 
 [3] PRISCLEEN (DC2 fish) — NOW WIRED, EXPERIMENTAL/UNTESTED  (do this AFTER [1] and [2] work)
 ------------------------------------------------------------------------------------------
-The DC2 Priscleen model is extracted, converted to a DC1-format .chr, bundled as a mod Resource
-(Resources/Fish/f19a.chr), and the runtime injection is wired (PriscleenFish.cs). It injects into DC1's
-cut species 8 when a species-8 fish is caught in Brownboo.
+The DC2 Priscleen model is extracted, converted to a DC1-format .chr at game_data/priscleen/f19a.chr
+(untracked game data; the .csproj copies it to Resources/Fish/ at build), and the runtime injection is
+wired (PriscleenFish.cs). It injects into DC1's cut species 8 when a species-8 fish is caught in Brownboo.
 
 NOTE: the fish-depth override was REMOVED (fish are back at vanilla WaterLevel-12) — the earlier -6 depth
 left the fish shallower than the hook reached, so nothing could bite. Fish should bite normally now.

@@ -241,7 +241,7 @@ namespace Dark_Cloud_Improved_Version
             _initTried = true;
             _filesOk = GameDataFiles.Available;
             if (!_filesOk)
-                Console.WriteLine($"[TexSwap] extracted game data not found at {GameDataFiles.DataDir} — palette swap disabled");
+                Console.WriteLine("[TexSwap] Dark Cloud ISO not found — palette swap disabled");
             return _filesOk;
         }
 

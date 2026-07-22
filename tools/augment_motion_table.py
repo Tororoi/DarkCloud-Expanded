@@ -9,11 +9,16 @@
     cmd 244 — frames where the enemy guards and the PLAYER's hit is negated, NOT the enemy's attack).
 Preserves intro, headers, JP names, meanings. Idempotent. Regenerate from a clean (un-augmented) table.
 """
+import os
 import re, struct
 
-HED = "/Users/thomascantwell/ROMs/dc_extracted/data.hed"
-HD2 = "/Users/thomascantwell/ROMs/dc_extracted/data.hd2"
-DAT = "/Users/thomascantwell/ROMs/dc_extracted/data.dat"
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+HED = os.path.join(DC1_DATA_DIR, "data.hed")
+HD2 = os.path.join(DC1_DATA_DIR, "data.hd2")
+DAT = os.path.join(DC1_DATA_DIR, "data.dat")
 MD  = "enemy-motion-table.md"
 FN_SET_DMG_COL, FN_SET_DMG_PARA, FN_SET_GUARD_FRAME = 131, 132, 244
 

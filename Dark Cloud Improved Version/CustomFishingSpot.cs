@@ -1802,12 +1802,15 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
         /// rect, for the viewer (tools/brownboo_viewer.py) to split into floor/slope/wall. Overwrites the
         /// stale reference each capture, which is correct — the rect it reflects is whatever is live now.</summary>
-        private const string FullGatherCsv = "/Users/thomascantwell/DarkCloud-Enhanced/tools/vanilla_cpoly.csv";
+        // Dev-only diagnostic; runs only when DC_DUMP_DIR is set (see .env.sample), else skipped — no fallback.
+        private static readonly string FullGatherCsv =
+            Environment.GetEnvironmentVariable("DC_DUMP_DIR") is string d ? Path.Combine(d, "vanilla_cpoly.csv") : null;
 
         /// <summary>Dump every cpoly triangle (3 verts + normal) to a CSV. One line per triangle:
         /// v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz.</summary>
         private static void DumpFullGather(long buf, int count)
         {
+            if (FullGatherCsv == null) return;   // DC_DUMP_DIR unset — diagnostic disabled
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz");
             for (int i = 0; i < count; i++)

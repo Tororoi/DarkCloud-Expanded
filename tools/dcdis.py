@@ -4,10 +4,15 @@ Usage: python3 tools/dcdis.py <hexvaddr> [num_insns]
        python3 tools/dcdis.py sym <substring>      # search symbols by name
        python3 tools/dcdis.py xref <hexoffset> [base_reg]  # find lwc1/swc1 at given offset
 """
+import os
 import struct, sys, bisect
 from capstone import Cs, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_LITTLE_ENDIAN
 
-ELF = "/Users/thomascantwell/ROMs/dc_extracted/SCUS_971.11"
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+ELF = os.path.join(DC1_DATA_DIR, "SCUS_971.11")
 elf = open(ELF, "rb").read()
 SYM_OFF, SYM_SZ, STR_OFF = 0x1cd5e0, 0x31610, 0x1a2510
 VA_BASE, FILE_BASE, MAIN_SIZE = 0x100000, 0x100, 0x1a2380

@@ -5,11 +5,16 @@ dun/monstor/<code>.stb in data.dat and write a markdown table (bone + radius), o
 Each sphere = (boneName, radius). The radius is the hittable size: CMonstorUnit::CheckDmg rebuilds a
 CCollisionData sphere from it each frame and CheckHitUser registers a weapon hit when dist ≤ radius.
 """
+import os
 import re, struct, io
 
-HED = "/Users/thomascantwell/ROMs/dc_extracted/data.hed"
-HD2 = "/Users/thomascantwell/ROMs/dc_extracted/data.hd2"
-DAT = "/Users/thomascantwell/ROMs/dc_extracted/data.dat"
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+HED = os.path.join(DC1_DATA_DIR, "data.hed")
+HD2 = os.path.join(DC1_DATA_DIR, "data.hd2")
+DAT = os.path.join(DC1_DATA_DIR, "data.dat")
 SRC = "Dark Cloud Improved Version/EnemyData.cs"
 MD  = "enemy-body-collision-table.md"
 FN_SET_BODY_COL = 130

@@ -412,7 +412,10 @@ namespace Dark_Cloud_Improved_Version
         /// file so it never clobbers the preserved full-vanilla reference the viewer reads
         /// (tools/vanilla_cpoly.csv). To recapture the full reference, disable the mod's cpoly edits and copy
         /// this file over it.</summary>
-        internal static string CPolyDumpPath = "/Users/thomascantwell/DarkCloud-Enhanced/tools/vanilla_cpoly_live.csv";
+        // Dev-only diagnostics. They run ONLY when DC_DUMP_DIR is set (a folder to dump into); if it's unset the
+        // dumps are skipped entirely — never a fallback path, never a personal path. (See .env.sample.)
+        private static readonly string DumpDir = Environment.GetEnvironmentVariable("DC_DUMP_DIR");
+        internal static string CPolyDumpPath = DumpDir == null ? null : System.IO.Path.Combine(DumpDir, "vanilla_cpoly_live.csv");
 
         /// <summary>
         /// Dump EVERY native cpoly triangle (verts + normal) to a CSV, so the viewer can render the exact
@@ -422,6 +425,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void DumpCPolyFile()
         {
+            if (CPolyDumpPath == null) return;   // DC_DUMP_DIR unset — diagnostic disabled
             int count = Memory.ReadInt(FishingSpot.CPolyNum);
             uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
             if (count <= 0 || count > 1024 || !Memory.IsValidGuest(p))
@@ -460,7 +464,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Where the base-ground grid dump is written, for the viewer to reconstruct the accurate
         /// pond-bottom bowl. One line per cell: area,i,j,worldX,worldZ,height,code.</summary>
-        internal static string GroundGridPath = "/Users/thomascantwell/DarkCloud-Enhanced/tools/ground_grid.csv";
+        internal static string GroundGridPath = DumpDir == null ? null : System.IO.Path.Combine(DumpDir, "ground_grid.csv");
 
         /// <summary>
         /// Dump the town's base-ground GRID (all 4 CEditArea grids) — the accurate pond-bottom source. Unlike
@@ -470,6 +474,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void DumpGroundGrid()
         {
+            if (GroundGridPath == null) return;   // DC_DUMP_DIR unset — diagnostic disabled
             long g = EditGround.Base();
             if (g == 0) { Log("   GROUND GRID: CEditGround null — skipping"); return; }
 

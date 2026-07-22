@@ -11,12 +11,17 @@ For each orphan we report: its own info.cfg title, its motion table, whether a m
 whether its motion table is byte-identical to an IN-TABLE model (which would let it borrow that model's
 script wholesale, since a script drives motions by INDEX).
 """
+import os
 import struct, re
 
-HED = "/Users/thomascantwell/ROMs/dc_extracted/data.hed"
-HD2 = "/Users/thomascantwell/ROMs/dc_extracted/data.hd2"
-DAT = "/Users/thomascantwell/ROMs/dc_extracted/data.dat"
-ELF = "/Users/thomascantwell/ROMs/dc_extracted/SCUS_971.11"
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+HED = os.path.join(DC1_DATA_DIR, "data.hed")
+HD2 = os.path.join(DC1_DATA_DIR, "data.hd2")
+DAT = os.path.join(DC1_DATA_DIR, "data.dat")
+ELF = os.path.join(DC1_DATA_DIR, "SCUS_971.11")
 OUT = "docs/orphaned-enemy-models.md"
 
 TBL_OFF, STRIDE, NREC = 0x17FC00, 0x9C, 167   # species table inside the ELF file
