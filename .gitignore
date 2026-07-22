@@ -345,11 +345,13 @@ SCUS_971.11
 # Claude Code local settings
 .claude/
 
-# Extracted game resources — provide from your OWN ISO; never commit (purged from history)
-Dark Cloud Improved Version/Resources/Fish/f19a.chr
-Dark Cloud Improved Version/Resources/Sign/fishsign.chr
-Dark Cloud Improved Version/Resources/FishingCollision/brownboo_14.bin
-custom_fish/blender/priscleen_bake.json
-tools/allmenu.mes.bin
-tools/fishsign_preview/tex_unswizzled.png
-tools/fishsign_preview/fishsign.obj
+# ── Game-derived data (never distribute) ────────────────────────────────────────────
+# ALL extracted / game-derived files live under game_data/ (see game_data/README.md).
+#   game_data/mod_runtime/  — assets the mod loads locally (fishsign.chr, f19a.chr, RubyMemeFix);
+#                             the .csproj sources them from here. Publishing needs runtime
+#                             ISO-extraction instead of bundling these.
+#   game_data/reference/    — dev/extraction artifacts (rock originals, baked meshes, viewers, etc.)
+# Custom, distributable resources stay tracked in the repo (brownboo_14.bin, the _simple rocks,
+# the font). The *.obj build rule above also ignores the rock meshes — the custom _simple.obj are
+# force-added (git add -f); the originals live in game_data/reference/rock_obj/.
+game_data/

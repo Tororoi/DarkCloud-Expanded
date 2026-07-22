@@ -15,7 +15,8 @@ Run:  python3 tools/export_rocks_obj.py   ->  tools/rock_obj/iwaNN.obj  (one per
 import os
 from extract_scene_mesh import load_scene, extract_mesh
 
-OUT = os.path.join(os.path.dirname(__file__), 'rock_obj')
+# Originals are direct game extractions -> the untracked game_data/reference/ tree (never committed).
+OUT = os.path.join(os.path.dirname(__file__), '..', 'game_data', 'reference', 'rock_obj')
 os.makedirs(OUT, exist_ok=True)
 
 scn = load_scene('gedit/s04/scene.scn')

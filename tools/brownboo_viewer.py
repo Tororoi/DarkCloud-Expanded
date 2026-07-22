@@ -14,7 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_scene_mesh import load_scene, parse_mds, read_verts, read_tris, xform, extract_mesh
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = HERE
+# The generated viewer embeds game scene geometry -> untracked game_data/reference/ (never committed).
+OUT = os.path.join(HERE, "..", "game_data", "reference")
+os.makedirs(OUT, exist_ok=True)
 HTML_NAME = "brownboo_viewer.html"
 
 scn = load_scene('gedit/s04/scene.scn')

@@ -22,11 +22,23 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.*" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources\RubyMemeFix\Fire" />
-    <EmbeddedResource Include="Resources\RubyMemeFix\Holy" />
-    <EmbeddedResource Include="Resources\RubyMemeFix\Ice" />
-    <EmbeddedResource Include="Resources\RubyMemeFix\Thunder" />
-    <EmbeddedResource Include="Resources\RubyMemeFix\Wind" />
+    <!-- RubyMemeFix = extracted c05 game data; sourced from the untracked game_data/ folder, LogicalName
+         keeps the manifest names so Resources.cs is unchanged. Not distributable (see game_data/README). -->
+    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Fire">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Fire</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Holy">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Holy</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Ice">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Ice</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Thunder">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Thunder</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\game_data\mod_runtime\RubyMemeFix\Wind">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Wind</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
@@ -34,10 +46,14 @@
     <None Include="Resources\FishingCollision\brownboo_14.bin">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="Resources\Fish\f19a.chr">
+    <!-- Extracted game assets, sourced from the untracked game_data/ folder; Link keeps the output layout
+         (Resources/Fish, Resources/Sign) so the runtime load paths are unchanged. Not distributable. -->
+    <None Include="..\game_data\mod_runtime\f19a.chr">
+      <Link>Resources\Fish\f19a.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="Resources\Sign\fishsign.chr">
+    <None Include="..\game_data\mod_runtime\fishsign.chr">
+      <Link>Resources\Sign\fishsign.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
