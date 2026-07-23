@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Dark_Cloud_Improved_Version.ModWindow"
         Title="Dark Cloud Enhanced Mod"
-        Width="574" Height="430"
+        Width="574" Height="470"
         CanResize="False"
         WindowStartupLocation="CenterScreen"
         ShowActivated="False"
@@ -43,26 +43,58 @@
         <Panel>
           <TextBlock x:Name="Label_UserMode_WelcomeTitle"
                      Text="Welcome to the Enhanced Mod!"
-                     Margin="46,39,0,0"
+                     Margin="46,10,0,0"
                      VerticalAlignment="Top" HorizontalAlignment="Left"/>
           <TextBlock x:Name="Label_UserMode_PlaceholderText"
                      Text="Loading..."
-                     Margin="46,70,0,0" Width="414" Height="110"
+                     Margin="46,30,0,0" Width="470" Height="40"
                      VerticalAlignment="Top" HorizontalAlignment="Left"
                      TextWrapping="Wrap" FontWeight="Normal"/>
+
+          <!-- ISO patch flow -->
+          <Border Margin="46,74,0,0" Width="414" Height="172"
+                  VerticalAlignment="Top" HorizontalAlignment="Left"
+                  Background="#CC161616" BorderBrush="#66FFFFFF" BorderThickness="1"
+                  CornerRadius="5" Padding="8">
+            <StackPanel Spacing="5">
+              <TextBlock Text="Patch your Dark Cloud ISO" FontWeight="Bold"/>
+              <TextBlock Text="Patches a COPY — your original ISO is untouched."
+                         FontWeight="Normal" FontSize="9" Foreground="#CFCFCF"/>
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <TextBlock Text="Stock ISO:" Width="60" VerticalAlignment="Center" FontWeight="Normal"/>
+                <TextBox x:Name="Txt_IsoPath" Width="258" Height="22" IsReadOnly="True" FontWeight="Normal"
+                         Watermark="Select your Dark Cloud (USA) .iso"/>
+                <Button x:Name="Btn_BrowseIso" Content="Browse…" FontWeight="Normal"
+                        Click="Btn_BrowseIso_Click"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <TextBlock Text="Output to:" Width="60" VerticalAlignment="Center" FontWeight="Normal"/>
+                <TextBox x:Name="Txt_OutDir" Width="258" Height="22" IsReadOnly="True" FontWeight="Normal"
+                         Watermark="(defaults to the ISO's folder)"/>
+                <Button x:Name="Btn_BrowseOut" Content="Browse…" FontWeight="Normal"
+                        Click="Btn_BrowseOut_Click"/>
+              </StackPanel>
+              <Button x:Name="Btn_CreatePatched" Content="Create Patched ISO"
+                      HorizontalAlignment="Left" FontWeight="Normal" IsEnabled="False"
+                      Click="Btn_CreatePatched_Click"/>
+              <TextBlock x:Name="Txt_PatchStatus" Text="" FontWeight="Normal"
+                         TextWrapping="Wrap" Width="392" Foreground="#8FD9B0"/>
+            </StackPanel>
+          </Border>
+
           <Button x:Name="Btn_UserMode_Quit" Content="Quit"
-                  Width="86" Height="26"
-                  Margin="49,205,0,0"
+                  Width="86" Height="24"
+                  Margin="49,254,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
                   Click="Btn_UserMode_Quit_Clicked"/>
           <TextBlock x:Name="label6" Text="Version: 1.0.1"
-                     Margin="49,264,0,0"
+                     Margin="49,290,0,0"
                      VerticalAlignment="Top" HorizontalAlignment="Left"
                      FontWeight="Normal"/>
           <Button x:Name="button2" Content="Join our Discord!"
                   Width="148" Height="23"
-                  Margin="349,261,0,0"
+                  Margin="349,288,0,0"
                   VerticalAlignment="Top" HorizontalAlignment="Left"
                   FontWeight="Normal"
                   Click="button2_Click"/>

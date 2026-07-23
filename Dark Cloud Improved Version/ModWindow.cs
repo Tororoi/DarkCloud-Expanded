@@ -4,7 +4,10 @@ using Avalonia.Threading;
 using MsBox.Avalonia;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Platform.Storage;
 using MsBoxButtonEnum = MessageBox.Avalonia.Enums.ButtonEnum;
 using MsBoxIcon = MsBox.Avalonia.Enums.Icon;
 using ButtonResult = MsBox.Avalonia.Enums.ButtonResult;
@@ -752,6 +755,55 @@ namespace Dark_Cloud_Improved_Version
         private void button2_Click(object sender, RoutedEventArgs e)
         {
             Process.Start(new ProcessStartInfo("https://discord.gg/8KcnBjgRHP") { UseShellExecute = true });
+        }
+
+        // ── ISO patch flow (General tab) ──────────────────────────────────────────────────────────────
+        private async void Btn_BrowseIso_Click(object sender, RoutedEventArgs e)
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select your Dark Cloud (USA) ISO",
+                AllowMultiple = false,
+                FileTypeFilter = new[] { new FilePickerFileType("PS2 ISO") { Patterns = new[] { "*.iso", "*.ISO" } } }
+            });
+            if (files.Count == 0) return;
+            string path = files[0].Path.LocalPath;
+            Txt_IsoPath.Text = path;
+            if (string.IsNullOrWhiteSpace(Txt_OutDir.Text))   // default the output folder to the ISO's own folder
+                Txt_OutDir.Text = Path.GetDirectoryName(path);
+            Btn_CreatePatched.IsEnabled = true;
+            Txt_PatchStatus.Text = "";
+        }
+
+        private async void Btn_BrowseOut_Click(object sender, RoutedEventArgs e)
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Select the output folder for the patched ISO",
+                AllowMultiple = false
+            });
+            if (folders.Count > 0) Txt_OutDir.Text = folders[0].Path.LocalPath;
+        }
+
+        private async void Btn_CreatePatched_Click(object sender, RoutedEventArgs e)
+        {
+            string iso = Txt_IsoPath.Text;
+            string outDir = string.IsNullOrWhiteSpace(Txt_OutDir.Text) ? Path.GetDirectoryName(iso) : Txt_OutDir.Text;
+            Btn_CreatePatched.IsEnabled = false; Btn_BrowseIso.IsEnabled = false; Btn_BrowseOut.IsEnabled = false;
+            try
+            {
+                string outIso = await Task.Run(() => IsoPatcher.Patch(iso, outDir,
+                    msg => Dispatcher.UIThread.Post(() => Txt_PatchStatus.Text = msg)));
+                Txt_PatchStatus.Text = $"Done! Patched ISO:\n{outIso}\nPnach published to your PCSX2 cheats folder — enable Cheats in PCSX2 for this game.";
+            }
+            catch (Exception ex)
+            {
+                Txt_PatchStatus.Text = "Patch failed: " + ex.Message;
+            }
+            finally
+            {
+                Btn_CreatePatched.IsEnabled = true; Btn_BrowseIso.IsEnabled = true; Btn_BrowseOut.IsEnabled = true;
+            }
         }
 
         #endregion
