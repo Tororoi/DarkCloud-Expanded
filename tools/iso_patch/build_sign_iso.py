@@ -224,15 +224,24 @@ def main():
 def reship_pnach(crc, old="A5C05C78"):
     """Copy the mod's pnach to <newCRC>.pnach (CRC in gametitle only; patches are address-based) so PCSX2
     applies it to the patched disc. Updates every copy: PCSX2 cheats (deployed), repo, and build output."""
-    import re
+    import re, glob
     new = f"{crc:08X}"
     dests = [os.path.expanduser("~/Library/Application Support/PCSX2/cheats"),
              os.path.join(REPO, "Dark Cloud Improved Version", "Resources", "PNACH"),
              os.path.join(REPO, "Dark Cloud Improved Version", "bin", "Debug", "net8.0", "Resources", "PNACH")]
+    norm = lambda t: re.sub(r'\[[0-9A-Fa-f]{8}\]', '[]', t)   # CRC-agnostic body, for identity matching
     for d in dests:
         src = os.path.join(d, old + ".pnach")
         if not os.path.exists(src): continue
-        open(os.path.join(d, new + ".pnach"), "w").write(re.sub(r'\[' + old + r'\]', '[' + new + ']', open(src).read()))
+        body = re.sub(r'\[' + old + r'\]', '[' + new + ']', open(src).read())
+        # remove OUR own stale patched-CRC pnach (earlier cave versions). Content-matched so we NEVER touch
+        # another game's cheat file that happens to share this shared PCSX2 cheats folder.
+        for stale in glob.glob(os.path.join(d, "*.pnach")):
+            nm = os.path.splitext(os.path.basename(stale))[0].upper()
+            if not re.fullmatch(r'[0-9A-F]{8}', nm) or nm in (old, new): continue
+            if norm(open(stale).read()) == norm(body):
+                os.remove(stale); print(f"  pnach rm stale {os.path.basename(stale)}.pnach")
+        open(os.path.join(d, new + ".pnach"), "w").write(body)
         print(f"  pnach -> {os.path.join(d, new + '.pnach')}")
 
 if __name__ == "__main__":
