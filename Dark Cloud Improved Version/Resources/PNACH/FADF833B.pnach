@@ -1,0 +1,435 @@
+gametitle=Dark Cloud [SCUS 97111] (U) [FADF833B]
+
+patch=1,EE,E1010003,extended,002A2534 //check if in dungeon
+patch=1,EE,201F75E0,extended,0C08AF00 //write jal MenuCalcbuf
+patch=1,EE,E1010003,extended,102A2534 //check if not dungeon
+patch=1,EE,201F75E0,extended,0C05DEFC //write jal EditSave
+
+//Ally Switching in Town
+patch=1,EE,E1040001,extended,01D90470 //cursor on Xiao
+patch=1,EE,E1010002,extended,21CD9551 //if ally amount < 2
+patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
+patch=1,EE,E1010001,extended,31CD9551 //if ally amount > 1
+patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+
+patch=1,EE,E1040002,extended,01D90470 //cursor on Goro
+patch=1,EE,E1010003,extended,21CD9551 //if ally amount < 3
+patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
+patch=1,EE,E1010002,extended,31CD9551 //if ally amount > 2
+patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+
+patch=1,EE,E1040003,extended,01D90470 //cursor on Ruby
+patch=1,EE,E1010004,extended,21CD9551 //if ally amount < 4
+patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMnuSPlay
+patch=1,EE,E1010003,extended,31CD9551 //if ally amount > 3
+patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+
+patch=1,EE,E1040004,extended,01D90470 //cursor on Ungaga
+patch=1,EE,E1010005,extended,21CD9551 //if ally amount < 5
+patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
+patch=1,EE,E1010004,extended,31CD9551 //if ally amount > 4
+patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+
+patch=1,EE,E1040005,extended,01D90470 //cursor on Osmond
+patch=1,EE,E1010006,extended,21CD9551
+patch=1,EE,201F7DB4,extended,0C08B3BC
+patch=1,EE,E1010005,extended,31CD9551
+patch=1,EE,201F7DB4,extended,0C05E0E0
+
+patch=1,EE,E1010000,extended,01D90470 //if cursor on toan
+patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit
+
+patch=1,EE,E1010004,extended,002A2518 //check if factory
+patch=1,EE,201F7DB4,extended,0C08B3BC //write jal comseplay
+
+
+patch=1,EE,E1066135,extended,01909B63 //check if ruby enabled
+patch=1,EE,E1053130,extended,01909B65 //check if ruby enabled
+patch=1,EE,21909C4D,extended,2C303609 //fix animation
+patch=1,EE,21909C51,extended,2C303809 //fix animation
+patch=1,EE,21909C55,extended,342E3009 //fix animation
+patch=1,EE,21909C6F,extended,2C303309 //fix animation
+patch=1,EE,21909C73,extended,2C303509 //fix animation
+
+patch=1,EE,E1023063,extended,01988BE1 //check if xiao enabled
+patch=1,EE,E1016334,extended,01988BE3 //check if xiao enabled
+patch=1,EE,21988C23,extended,362E3009 //fix run animation
+
+
+//Handling event cutscenes, talk dialogues etc.
+patch=1,EE,E1453063,extended,1029AA0E //check if not toan
+patch=1,EE,2016C0A4,extended,24020008 //disable stairs
+patch=1,EE,2016C0B0,extended,24020008 //disable stairs
+patch=1,EE,2017A24C,extended,00000000 //disable cutscenes
+patch=1,EE,2017A27C,extended,00000000 //disable cutscenes
+patch=1,EE,E1050003,extended,002A2518 //check if muska lacka
+patch=1,EE,E1040001,extended,002A2820 //check if jibubu house
+patch=1,EE,E1010001,extended,002A281C //check if inside
+patch=1,EE,2019DEA8,extended,00000000 //disable talk event
+patch=1,EE,E1010000,extended,002A281C //check if outside
+patch=1,EE,2019DEA8,extended,0C066F10 //re-enable events
+patch=1,EE,E10B0002,extended,002A2518 //check if queens
+patch=1,EE,E1040007,extended,002A2820 //check if basker
+patch=1,EE,E1010001,extended,002A281C //check if inside
+patch=1,EE,20173008,extended,00000000 //disable itemmenu event
+patch=1,EE,E1010000,extended,002A281C //check if outside
+patch=1,EE,20173008,extended,0C089050 //re-enable item menu
+patch=1,EE,E1050005,extended,002A2820 //check if yaya
+patch=1,EE,E1040000,extended,01F10004 //check sun/moon flag
+patch=1,EE,E1010001,extended,002A281C //check if inside
+patch=1,EE,2019DEA8,extended,00000000 //disable talk event
+patch=1,EE,E1010000,extended,002A281C //check if outside
+patch=1,EE,2019DEA8,extended,0C066F10 //re-enable events
+patch=1,EE,E1050001,extended,002A2518 //check if matataki
+patch=1,EE,E1040002,extended,002A2820 //check if bunbuku
+patch=1,EE,E1010001,extended,002A281C //check if inside
+patch=1,EE,2019DEA8,extended,00000000 //disable talk event
+patch=1,EE,E1010000,extended,002A281C //check if outside
+patch=1,EE,2019DEA8,extended,0C066F10 //re-enable events
+patch=1,EE,E1050000,extended,002A2518 //check if norune
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,240200F7 //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,24020015 //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1050001,extended,002A2518 //check if matataki
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,240200A7 //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402001B //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1050002,extended,002A2518 //check if queens
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,24020057 //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402001B //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1050003,extended,002A2518 //check if muska
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402001B //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402011F //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1050017,extended,002A2518 //check if yellowdrops
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,240200F0 //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E105000E,extended,002A2518 //check if brownboo
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,240200C8 //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1040026,extended,002A2518 //check if darkheaven
+patch=1,EE,E1010001,extended,01F10008 //check nearNPC flag
+patch=1,EE,21D3D434,extended,00000065 //change dialogue ID
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,21D3D434,extended,00000064 //change dialogue ID
+
+
+
+patch=1,EE,E1080000,extended,002A2518 //check if norune
+patch=1,EE,E107FFFF,extended,002A2820 //check if mayor
+patch=1,EE,E1030001,extended,002A281C //check if inside
+patch=1,EE,20199048,extended,24020000 //give dialogueoptions
+patch=1,EE,21D3D474,extended,0000000B //dialogueoptions ID
+patch=1,EE,21F10014,extended,00000001 //inside mayor flag
+patch=1,EE,E1020000,extended,002A281C //check if not inside
+patch=1,EE,20199048,extended,2402FFFF //del dialogueoptions
+patch=1,EE,21F10014,extended,00000000 //outside mayor flag
+
+patch=1,EE,E10B3063,extended,0029AA0E //check if toan
+patch=1,EE,2016C0A4,extended,24020004 //re-enable stairs
+patch=1,EE,2016C0B0,extended,24020005 //re-enable stairs
+patch=1,EE,2017A24C,extended,0C062604 //re-enable cutscenes
+patch=1,EE,2017A27C,extended,0C05DE7C //re-enable cutscenes
+patch=1,EE,E102000E,extended,102A2518 //check if not brownboo
+patch=1,EE,20199388,extended,3C0101D4 //return dialogues
+patch=1,EE,2019938C,extended,8C22D434 //return dialogues
+patch=1,EE,20173008,extended,0C089050 //re-enable item menu
+patch=1,EE,E1020017,extended,102A2518 //check if not yeldrops
+patch=1,EE,2019939C,extended,3C0101D4 //return dialogues
+patch=1,EE,201993A0,extended,8C22D474 //return dialogues
+
+//patch=1=EE,E1010001,extended,01F10008 //check nearNPCflag
+//patch=1,EE,20199388,extended,24020066 //change dialogue ID
+//patch=1,EE,E1010000,extended,01F10008 //check nearNPCflag
+//patch=1,EE,20199388,extended,24020015 //change dialogue ID
+//patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+
+patch=1,EE,E130000E,extended,002A2518 //check if brownboo
+patch=1,EE,E1253063,extended,0029AA0E //check if toan
+patch=1,EE,E1090001,extended,01D29938 //check if near pickle
+patch=1,EE,E1050001,extended,01F10010 //check nearNPC flag
+patch=1,EE,20199388,extended,240200C8 //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1020000,extended,01CE43FE //check talkhistory flag
+patch=1,EE,E10100C8,extended,01D1CC0C //check current dialogue
+patch=1,EE,21CE43FE,extended,00000001 //set talked flag
+patch=1,EE,E1020000,extended,01F10010 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E10A0005,extended,01D28474 //check for mint ID
+patch=1,EE,E1090001,extended,01D28498 //check if near mint
+patch=1,EE,E1050001,extended,01F10010 //check nearNPC flag
+patch=1,EE,20199388,extended,240200C8 //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1020000,extended,01CE444B //check talkhistory flag
+patch=1,EE,E10100C8,extended,01D1CC0C //check current dialogue
+patch=1,EE,21CE444B,extended,00000001 //set talked flag
+patch=1,EE,E1020000,extended,01F10010 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E10A0003,extended,01D28474 //check for cool ID
+patch=1,EE,E1090001,extended,01D28498 //check if near cool
+patch=1,EE,E1050001,extended,01F10010 //check nearNPC flag
+patch=1,EE,20199388,extended,240200C8 //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E10200FF,extended,11CDD811 //check if DS not 255
+patch=1,EE,E10100C8,extended,01D1CC0C //check current dialogue
+patch=1,EE,21CE4455,extended,00000001 //set sidequest start
+patch=1,EE,E1020000,extended,01F10010 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1040000,extended,01D28498 //check if notnear cool
+patch=1,EE,E1030000,extended,01D29938 //check ifnotnear pickle
+patch=1,EE,E1020000,extended,01D28498 //check ifnotnear mint
+patch=1,EE,20199388,extended,3C0101D4 //return dialogues
+patch=1,EE,2019938C,extended,8C22D434 //return dialogues
+patch=1,EE,E1093063,extended,1029AA0E //check if not toan
+patch=1,EE,E1050001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,240200C8 //change dialogue ID
+patch=1,EE,E1030001,extended,01D29938 //check if near pickle
+patch=1,EE,E1020000,extended,01CE43FE //check talkhistory flag
+patch=1,EE,E10100C8,extended,01D1CC0C //check current dialogue
+patch=1,EE,21CE43FE,extended,00000001 //set talked flag
+patch=1,EE,E1010000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+
+patch=1,EE,E10B0017,extended,002A2518 //check if yellowdrops
+patch=1,EE,2019939C,extended,2402000C //change dialogue ID
+patch=1,EE,201993A0,extended,00000000 //change dialogue ID
+patch=1,EE,E1080001,extended,002A281C //check if inside house
+patch=1,EE,E1070106,extended,01D1CC0C //check current dialogue
+patch=1,EE,E1060006,extended,01CD9551 //if ally amount > 5
+patch=1,EE,E1020000,extended,01D26FD4 //check NPC ID (shop)
+patch=1,EE,E1010000,extended,01CE4459 //check talkhistory
+patch=1,EE,21CE4459,extended,00000001 //set talked flag
+patch=1,EE,E1020001,extended,01D26FD4 //check NPC ID (storage)
+patch=1,EE,E1010000,extended,01CE445E //check talkhistory
+patch=1,EE,21CE445E,extended,00000001 //set talked flag
+
+patch=1,EE,E10A002A,extended,002A2518 //check if SM-entrance
+patch=1,EE,E1063063,extended,1029AA0E //check if not toan
+patch=1,EE,E1020001,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000C //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1020000,extended,01F10008 //check nearNPC flag
+patch=1,EE,20199388,extended,2402000A //change dialogue ID
+patch=1,EE,2019938C,extended,00000000 //change dialogue ID
+patch=1,EE,E1023063,extended,0029AA0E //check if toan
+patch=1,EE,20199388,extended,3C0101D4 //return dialogues
+patch=1,EE,2019938C,extended,8C22D434 //return dialogues
+
+patch=1,EE,E1020000,extended,01CE205C //check lim zone
+patch=1,EE,201AFA10,extended,8C235040 //disable heal
+patch=1,EE,202A2B88,extended,0000000A //disable heal
+patch=1,EE,E1010000,extended,11CE205C //check lim zone
+patch=1,EE,201AFA10,extended,8C235050 //enable heal
+
+patch=1,EE,E1020000,extended,01F10018 //check elementFlag
+patch=1,EE,2012D080,extended,0C04B084 //jal getvsync
+patch=1,EE,2012D08C,extended,10000004 //beq thing
+patch=1,EE,E1030001,extended,01F10018 //check elementFlag
+patch=1,EE,2012D080,extended,0C08345C //jal dngwep
+patch=1,EE,2012D08C,extended,0C08342C //jal menuweaponeff
+patch=1,EE,21F10018,extended,00000000 //reset elementFlag
+
+patch=1,EE,E1013232,extended,017ACC13 //check ungaga load
+patch=1,EE,217ACC13,extended,092C3434 //change throw speed
+
+patch=1,EE,E1030000,extended,01F1001C //check clock flag
+patch=1,EE,2017DF08,extended,C78C9104 //fix nowTime
+patch=1,EE,2017B898,extended,C78C9104 //fix nowTime2
+patch=1,EE,20171518,extended,0C04442C //jal fptosi
+patch=1,EE,E1030001,extended,01F1001C //check clock flag
+patch=1,EE,2017DF08,extended,C78C9100 //change nowTime
+patch=1,EE,2017B898,extended,C78C9100 //change nowTime2
+patch=1,EE,20171518,extended,00000000 //remove jal jptosi
+
+
+
+patch=1,EE,E1010000,extended,11CE4464 //check mayorquest flag
+patch=1,EE,2020C8E4,extended,3C0242DC //change max thirst
+
+patch=1,EE,201DC3C8,extended,AC34452C //write total damage
+patch=1,EE,201DB0DC,extended,3C0101DC //write damage source
+patch=1,EE,201DB0E0,extended,AC334530 //write damage source
+
+patch=1,EE,202A1B70,extended,3F000000 //write 0.5 funds inc
+patch=1,EE,21DBFB70,extended,C7808380 //change fund inc offset
+
+
+//patch=1,EE,2016BED8,extended,104000E6 //disable events
+
+//patch=1,EE,2016C084,extended,24020004
+
+patch=1,EE,E1020003,extended,002A2518 //check if muska lacka
+patch=1,EE,21D3CB68,extended,00000001 //force jibubu inside
+patch=1,EE,21D3CB6C,extended,00000001
+
+patch=1,EE,E1010001,extended,01F10000 //check eventpoint flag
+patch=1,EE,20184020,extended,00000000 //disable eventpoints
+patch=1,EE,E1010000,extended,01F10000
+patch=1,EE,20184020,extended,8E830010 //re-enable eventpoints
+
+patch=1,EE,E1010001,extended,01F1000C //check xiaoFlag
+patch=1,EE,2016A094,extended,3C0240A0 //change 1st person cam
+patch=1,EE,E1010000,extended,01F1000C //check if not xiaoFlag
+patch=1,EE,2016A094,extended,3C024160 //change 1st person cam
+
+patch=1,EE,201714A8,extended,3C024110 //start town bgm earlier
+
+patch=1,EE,20240364,extended,3C024000 //more consistentfishing
+
+patch=1,EE,21F10020,extended,00000001 //pnach active flag
+
+//Ungaga Mirage chara-loop gates (0x1DAE8A4 scene-draw + 0x1DB79C4 ShisaiShadow step, both beq/beqz on
+//iGpffff9e18) so the decoy clone draws + steps while enemies keep moving; plus the per-chara texgroup formula
+//(0x1DAE8D0/D4) for the weapon's separate texture pass. PINE can't write these (crashes PCSX2) — PCSX2 applies
+//them. THREE-STATE flag 0x01F10038: 1 = decoy up (NOP the gates), 2 = in a dungeon with no decoy (RESTORE the
+//vanilla words — PNACH conditionals don't auto-revert, so without this the NOPs persist after the first cast
+//and the chara loops run every frame, freezing enemy AI), 0 = town (touch nothing; the shared town overlay at
+//these addresses is left to its own overlay reload).
+patch=1,EE,E1060001,extended,01F10038 //if flag == 1 (decoy up): NOP the gates (apply next 6)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone draws, enemies keep moving)
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula: a2 = charaIndex*4 ...)
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11  (... + 0x11 -> chara[0]=0x11 body, chara[3]=0x1d weapon)
+patch=1,EE,21DB79C4,extended,00000000 //  NOP step gate (clone steps → head/hands animate natively)
+patch=1,EE,21DB7A18,extended,0C04E394 //  chara-loop: jal ClothStep (0x138E50) i/o ShadowStep → clone cloth PHYSICS, drawn via clone (ghost tint, no player flash)
+patch=1,EE,21DB7A1C,extended,70002E28 //  its delay slot: por a1,zero,zero (ClothStep param_2=0 = simulate, matches the player's own call)
+patch=1,EE,E1060002,extended,01F10038 //if flag == 2 (dungeon, no decoy): RESTORE vanilla (apply next 6)
+patch=1,EE,21DAE8A4,extended,10400037 //  restore scene gate  (beq v0,zero)
+patch=1,EE,21DAE8D0,extended,00000000 //  restore delay-slot nop
+patch=1,EE,21DAE8D4,extended,26060020 //  restore texgroup formula  (addiu a2,s0,0x20)
+patch=1,EE,21DB79C4,extended,1060001D //  restore step gate  (beqz v1) — loop gated when no decoy
+patch=1,EE,21DB7A18,extended,0C05583C //  restore jal ShadowStep (0x1560F0) — clone's ground shadow (never reached when loop gated)
+patch=1,EE,21DB7A1C,extended,00000000 //  restore its delay-slot nop
+patch=1,EE,E1060003,extended,01F10038 //if flag == 3 (decoy up + PAUSED): draw the clone but FREEZE it = flag 1 minus the step-gate NOP (apply next 6)
+patch=1,EE,21DAE8A4,extended,00000000 //  NOP scene gate (clone STILL drawn while paused)
+patch=1,EE,21DAE8D0,extended,00103080 //  sll a2,s0,2  (texgroup formula — weapon pass)
+patch=1,EE,21DAE8D4,extended,24C60011 //  addiu a2,a2,0x11
+patch=1,EE,21DB79C4,extended,1060001D //  RESTORE step gate (beqz v1) — loop gated → clone body+cloth frozen (the ONLY diff vs flag 1)
+patch=1,EE,21DB7A18,extended,0C04E394 //  keep jal ClothStep (loop gated → unreached; matches flag 1 to avoid jal churn)
+patch=1,EE,21DB7A1C,extended,70002E28 //  keep por a1,zero,zero
+
+//Ungaga Mirage clone heat-haze: (A) 4x the fire-raster sprite size — DrawRaster__9CFireOmni loads its
+//dims via lui v0,0x4170 (15.0) @0x162360 and lui v0,0x4180 (16.0) @0x162368; bump to 0x4270 (60.0) /
+//0x4280 (64.0). (B) relax the raster DIST gate — DrawRaster__11CDungeonMap gates each fire tile on
+//dist<=240.0 (lui v1,0x4370 @0x1C4714, only ~1.5 tiles from camera → haze vanished in hallways); bump
+//to 0x4780 (65536.0) so any tile in the ±4 camera window draws. Both gated on the decoy flag (1/3 = decoy
+//up) so ordinary dungeon fires are untouched; flag 2 restores vanilla. Torch fires have raster count 0,
+//so relaxing the gate only affects our injected clone raster. Shared main-seg fns; PCSX2 reverts per frame.
+//(C) stronger distortion — DrawRaster__9CFireOmni's per-scanline framebuffer displacement is amplitude
+//= (size/10000)*wave*gain * 16.0; that *16.0 scalar is lui v0,0x4180 @0x162FB4, bumped to 0x4200 (32.0 =
+//2x). (D) NARROWER aspect — H size @0x162360 dropped to 30.0 (0x41F0) while V size @0x162368 stays 48.0
+//(0x4240) → taller-than-wide shimmer. (E) SLOWER wave — RasterStep__9CFireOmni advances the wave phase by
+//rand*2.0 (lui v1,0x4000 @0x1622A4); halve to 0x3F80 (1.0) so the shimmer ripples at half speed. All gated
+//on the decoy flag; flag 2 restores vanilla.
+patch=1,EE,E1050001,extended,01F10038 //if decoy up: narrow size + relax dist gate + 2x distort + slow (apply next 5)
+patch=1,EE,20162360,extended,3C024234 //  H size 15.0 -> 45.0 (3x)
+patch=1,EE,20162368,extended,3C0242C0 //  V size 16.0 -> 96.0 (6x, tall)
+patch=1,EE,201C4714,extended,3C034780 //  dist gate 240.0 -> 65536.0
+patch=1,EE,20162FB4,extended,3C024240 //  distortion amplitude 16.0 -> 48.0 (3x)
+patch=1,EE,201622A4,extended,3C033F80 //  wave speed 2.0 -> 1.0 (half vanilla; 2x the previous 0.5)
+patch=1,EE,E1050003,extended,01F10038 //if decoy up + paused: same (apply next 5)
+patch=1,EE,20162360,extended,3C024234 //  H size 15.0 -> 45.0 (3x)
+patch=1,EE,20162368,extended,3C0242C0 //  V size 16.0 -> 96.0 (6x, tall)
+patch=1,EE,201C4714,extended,3C034780 //  dist gate 240.0 -> 65536.0
+patch=1,EE,20162FB4,extended,3C024240 //  distortion amplitude 16.0 -> 48.0 (3x)
+patch=1,EE,201622A4,extended,3C033F80 //  wave speed 2.0 -> 1.0 (half vanilla; 2x the previous 0.5)
+patch=1,EE,E1050002,extended,01F10038 //if dungeon, no decoy: restore vanilla (apply next 5)
+patch=1,EE,20162360,extended,3C024170 //  H size -> 15.0
+patch=1,EE,20162368,extended,3C024180 //  V size -> 16.0
+patch=1,EE,201C4714,extended,3C034370 //  dist gate -> 240.0
+patch=1,EE,20162FB4,extended,3C024180 //  distortion amplitude -> 16.0
+patch=1,EE,201622A4,extended,3C034000 //  wave speed -> 2.0
+
+patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
+patch=1,EE,2025E036,extended,00000000 //beeping sound value
+patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag
+patch=1,EE,2025E036,extended,0B3A0D00 //beeping sound value
+
+patch=1,EE,E1010001,extended,01F1002C //Option 2 Flag
+patch=1,EE,201AFFCC,extended,2442FF00 //Disable battle music
+patch=1,EE,E1010000,extended,01F1002C //Option 2 Flag
+patch=1,EE,201AFFCC,extended,2442FFFF //Enable battle music
+
+patch=1,EE,E1010001,extended,01F10030 //Option 3 Flag
+patch=1,EE,2012DF78,extended,3C023F60 //widescreen
+patch=1,EE,E1010000,extended,01F10030 //Option 3 Flag
+patch=1,EE,2012DF78,extended,3C023F80 //normal screen
+
+patch=1,EE,E10B0001,extended,01F10034 //Option 4 Flag
+patch=1,EE,20113EB4,extended,00000000
+patch=1,EE,20172300,extended,1000000D
+patch=1,EE,20156554,extended,00000000
+patch=1,EE,20156678,extended,3C1943C0
+patch=1,EE,20156684,extended,AC990CEC
+patch=1,EE,201729DC,extended,00000000
+patch=1,EE,20155FF0,extended,00000000
+patch=1,EE,20157364,extended,10000006
+patch=1,EE,201A3E80,extended,C6800004
+patch=1,EE,201A3D80,extended,C6800004
+patch=1,EE,2017BD10,extended,00000000
+patch=1,EE,E10B0000,extended,01F10034 //Option 4 Flag
+patch=1,EE,20113EB4,extended,64420008
+patch=1,EE,20172300,extended,04A0000D
+patch=1,EE,20156554,extended,10600004
+patch=1,EE,20156678,extended,00000000
+patch=1,EE,20156684,extended,00000000
+patch=1,EE,201729DC,extended,00000000
+patch=1,EE,20155FF0,extended,10400004
+patch=1,EE,20157364,extended,45010006
+patch=1,EE,201A3E80,extended,C6800000
+patch=1,EE,201A3D80,extended,C6800000
+patch=1,EE,2017BD10,extended,0C05C8BC
+//graphical improvements by Kozarovv and asasega
+
+
+patch=1,EE,E11B0001,extended,11F10024 //check mod flag
+patch=1,EE,E1150000,extended,002A2534 //check mainmenu
+patch=1,EE,21DD2914,extended,2402000A //disable start
+patch=1,EE,202210BC,extended,10420013 //disable save slot
+patch=1,EE,21354C68,extended,FD3BFD2C //text 1 La
+patch=1,EE,21354C6C,extended,FD48FD4F //text 2 un
+patch=1,EE,21354C70,extended,FD42FD3D //text 3 ch
+patch=1,EE,21354C74,extended,FD25FF02 //text 4  E
+patch=1,EE,21354C78,extended,FD42FD48 //text 5 nh
+patch=1,EE,21354C7C,extended,FD48FD3B //text 6 an
+patch=1,EE,21354C80,extended,FD3FFD3D //text 7 ce
+patch=1,EE,21354C84,extended,FF02FD3E //text 8 d
+patch=1,EE,21354C88,extended,FD49FD2D //text 9 Mo
+patch=1,EE,21354C8C,extended,FF02FD3E //text10 d
+patch=1,EE,21354C90,extended,FD4CFD49 //text11 or
+patch=1,EE,21354C94,extended,FD3EFF02 //text12  d
+patch=1,EE,21354C98,extended,FD4DFD43 //text13 is
+patch=1,EE,21354C9C,extended,FD3CFD3B //text14 ab
+patch=1,EE,21354CA0,extended,FD3FFD46 //text15 le
+patch=1,EE,21354CA4,extended,FD23FF02 //text16  C
+patch=1,EE,21354CA8,extended,FD3FFD42 //text17 he
+patch=1,EE,21354CAC,extended,FD4EFD3B //text18 at
+patch=1,EE,21354CB0,extended,FF01FD4D //text19 s�
+patch=1,EE,E1010002,extended,002A2534 //check current mode
+patch=1,EE,202A287C,extended,00000001 //change current mode
+patch=1,EE,E1020003,extended,002A2534 //check current mode
+patch=1,EE,E1010098,extended,102A35EC //check debug value
+patch=1,EE,202A35EC,extended,00000097 //change current mode
+
+patch=1,EE,E1030001,extended,01F10024 //check mod flag
+patch=1,EE,E1020000,extended,002A2534 //check main menu
+patch=1,EE,21DD2914,extended,24020008 //enable start
+patch=1,EE,202210BC,extended,10400013 //enable save slot

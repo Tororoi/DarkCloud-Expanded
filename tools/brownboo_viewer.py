@@ -348,7 +348,7 @@ def _load_obj_tris(path):
 # rock collision: prefer each rock's hand-simplified Blender mesh (tools/rock_obj/<rock>_simple.obj) —
 # exactly what the mod loads via assemble_rock_collision.py — and fall back to the smooth lathe for rocks
 # not yet done in Blender, so the viewer always matches the shipped .bin.
-_ROCK_OBJ = os.path.join(HERE, 'rock_obj')
+_ROCK_OBJ = os.path.join(HERE, '..', 'Dark Cloud Improved Version', 'Resources', 'FishingCollision', 'rock_obj')
 col_rocks = []
 _rock_src = []
 for _nm, (_v, _ts) in GOT.items():
@@ -379,7 +379,7 @@ for i in range(len(Pin)):
 # Fishing rect as a 3D BOX filled with a 6-unit point grid: from fish depth (WaterLevel - fishDepth)
 # up to BOX_TOP (arbitrary for now — later = the height at which bobber/hook collisions matter).
 # edges (compass: E=+X, W=-X, N=-Z, S=+Z): W=-320, E=310, N=-260, S=300
-RECT_X1, RECT_Z1, RECT_X2, RECT_Z2 = -320, -260, 310, 300
+RECT_X1, RECT_Z1, RECT_X2, RECT_Z2 = -250, -240, 250, 240
 FISH_DEPTH = 0 - 6      # WaterLevel 0 - fishDepth 6
 BOX_TOP = 54            # TODO: set to the real bobber/hook collision height
 def frange(a, b, step):
@@ -389,8 +389,8 @@ def frange(a, b, step):
 fishbox = [[x, y, z] for x in frange(RECT_X1, RECT_X2, 10)
                      for y in frange(FISH_DEPTH, BOX_TOP, 10)
                      for z in frange(RECT_Z1, RECT_Z2, 10)]
-# coordinate labels (shown with the fishing box): origin, the ! marker, and the 4 rect corners (at top)
-fishlabels = [[[0, 0, 0], "0,0"], [[74, 10, -20], "74,10,-20 (!)"]]
+# coordinate labels (shown with the fishing box): origin, the trigger + sign, and the 4 rect corners (at top)
+fishlabels = [[[0, 0, 0], "0,0"], [[212, 12, -53], "trigger (212,12,-53)"], [[212, 9, -61], "sign (212,9,-61)"]]
 for cxx, czz in [(RECT_X1, RECT_Z1), (RECT_X2, RECT_Z1), (RECT_X2, RECT_Z2), (RECT_X1, RECT_Z2)]:
     fishlabels.append([[cxx, BOX_TOP, czz], f"{cxx},{czz}"])
 
@@ -406,7 +406,16 @@ def uv_sphere(cx0, cy0, cz0, r, rings=10, segs=14):
             a, b, c, d = pt(i, j), pt(i+1, j), pt(i+1, j+1), pt(i, j+1)
             tris.append([a, b, c]); tris.append([a, c, d])
     return tris
-fishpoint = uv_sphere(74, 10, -20, 10)   # trigger (74,10,-20), InteractRadius 10
+fishpoint = uv_sphere(212, 12, -53, 10)   # trigger (212,12,-53), InteractRadius 10 — must match CustomFishingSpot.cs
+
+# The fishing SIGN mesh (kanban.mds), rendered at its baked scene position (212,9,-61), identity rotation.
+# Verts are local (origin-centred); the scene/mapinfo place it there, so we translate the local verts to match.
+SIGN_POS = (212, 9, -61)
+_kb = open(os.path.join(HERE, "..", "game_data", "fishsign", "kanban.mds"), "rb").read()
+_sv = read_verts(_kb, 0x80)               # kanban MDT is at 0x80
+sign_mesh = [[[_sv[i][0] + SIGN_POS[0], _sv[i][1] + SIGN_POS[1], _sv[i][2] + SIGN_POS[2]] for i in (a, b, c)]
+             for a, b, c in read_tris(_kb, 0x80)]
+print(f"sign mesh: {len(sign_mesh)} tris at {SIGN_POS}")
 
 # ---- VANILLA native cpoly, dumped live from RAM by GeoramaProbe.DumpCPolyFile ----
 # This is the EXACT collision the town already loads (PickUpPoly) at fishing-spot load. Splitting by
@@ -428,7 +437,7 @@ LAD_R, LAD_Y = 45, 25   # top platforms lean out up to ~42u from the base positi
 def van_cut(cx, cy, cz, miny):
     return miny >= LAD_Y and any(math.hypot(cx-lx, cz-lz) < LAD_R for lx, lz in LAD_POS)
 van_floor, van_wall, van_mid, van_dropped = [], [], [], []
-CPOLY_CSV = os.path.join(HERE, 'vanilla_cpoly.csv')
+CPOLY_CSV = os.path.join(OUT, 'vanilla_cpoly.csv')   # dumped by GeoramaProbe into game_data/brownboo/
 if os.path.exists(CPOLY_CSV):
     with open(CPOLY_CSV) as fh:
         next(fh, None)   # header row
@@ -459,7 +468,7 @@ else:
 # gather skips) reads distinctly from the dry land.
 import csv as _csv
 grid_bottom, grid_land = [], []
-GRID_CSV = os.path.join(HERE, 'ground_grid.csv')
+GRID_CSV = os.path.join(OUT, 'ground_grid.csv')
 if os.path.exists(GRID_CSV):
     cells = {}
     with open(GRID_CSV) as fh:
@@ -480,7 +489,7 @@ D = {'visual': visual, 'col_rocks': col_rocks, 'col_stilts': col_stilts, 'col_pl
      'col_build': col_build, 'col_perim': col_perim,
      'van_floor': van_floor, 'van_wall': van_wall, 'van_mid': van_mid, 'van_dropped': van_dropped,
      'grid_bottom': grid_bottom, 'grid_land': grid_land,
-     'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint}
+     'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint, 'sign': sign_mesh}
 js = json.dumps(D, separators=(',', ':'))   # embedded directly in the self-contained HTML
 LAY = [
     ('foamouter','foam: outer shore','D.visual.foam_outer','[120,175,205]',0.6,'#adf'),
@@ -495,7 +504,8 @@ LAY = [
     ('ladders','ladders','D.visual.ladders','[150,140,175]',1,'#bbf'),
     ('plants','plants','D.visual.plants','[110,160,90]',1,'#ad6'),
     ('crater','crater (full)','D.visual.crater','[58,54,50]',1,'#ccc'),
-    ('fishpoint','! marker + radius','D.fishpoint','[255,175,210]',0.95,'#fbd'),
+    ('sign','FISHING SIGN mesh','D.sign','[235,205,120]',1,'#eca'),
+    ('fishpoint','trigger ! + radius','D.fishpoint','[255,175,210]',0.95,'#fbd'),
     ('crock','COLL rocks','D.col_rocks','[150,25,25]',0.9,'#a33'),
     ('cstilt','COLL stilts','D.col_stilts','[255,150,40]',0.85,'#fa4'),
     ('cplant','COLL plants','D.col_plants','[80,230,120]',0.9,'#5e8'),
@@ -509,7 +519,7 @@ LAY = [
     ('gridland','ground grid: land','D.grid_land','[90,110,90]',0.7,'#7a7'),
 ]
 # vanilla layers ON by default (seeing the native collision is the point); mod-collision drafts + clutter OFF
-_on = ("vfloor", "vmid")   # only the vanilla floor + slope layers on by default; everything else off
+_on = ("vfloor", "vmid", "sign", "fishpoint")   # vanilla floor/slope + the sign mesh + trigger on by default
 def layer_count(src):
     obj = D
     for p in src.split('.')[1:]: obj = obj[p]
@@ -534,6 +544,7 @@ html = '''<div style="margin:0;background:#0d1117;color:#ddd;font-family:monospa
 <div style="position:fixed;top:8px;left:8px;font-size:11px;line-height:1.5;background:rgba(13,17,23,.85);padding:8px 10px;border-radius:6px;user-select:none">
 <b>Brownboo COMPLETE</b><br><span style="color:#888">drag=rotate scroll=zoom &middot; compass: N=-Z E=+X</span><br>
 CHECKS<div id="err" style="color:#f66"></div></div></div>
+<div id="coord" style="position:fixed;bottom:10px;left:10px;font-size:16px;font-weight:bold;background:rgba(13,17,23,.92);padding:7px 14px;border-radius:6px;color:#6ee7b7;user-select:none">move cursor over the water for coordinates</div>
 <script>try{
 const D=JSON_DATA;
 const CNT=CNT_DATA;
@@ -610,6 +621,17 @@ cv.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;cv.sty
 addEventListener('pointerup',()=>{drag=false;cv.style.cursor='grab';});
 addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
 cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;draw();},{passive:false});
+// Cursor -> world (x,z) on the water plane (y=0). Orthographic inverse of rot(): un-rotate (rx,ry) and
+// intersect world y=0. Needs the view tilted (sin(pitch) != 0) to resolve a ground point.
+const coordEl=document.getElementById('coord');
+cv.addEventListener('pointermove',e=>{
+ const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+ const f=Math.min(W,H)*0.5*zoom/300,rx=(mx-W/2)/f,ry=-(my-H/2)/f;
+ const cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch);
+ if(Math.abs(sp)<0.08){coordEl.textContent='tilt the view down to read coords';return;}
+ const z1=-ry/sp, wx=Math.round(rx*cyw+z1*syw), wz=Math.round(-rx*syw+z1*cyw);
+ coordEl.textContent='x = '+wx+'    z = '+wz+'    (water y=0)';
+});
 for(const cb of document.querySelectorAll('input')) cb.addEventListener('change',()=>{draw();updateTotal();});
 updateTotal();
 }catch(e){document.getElementById('err').textContent='ERR: '+e.message;}</script>'''

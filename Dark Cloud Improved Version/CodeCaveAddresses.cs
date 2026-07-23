@@ -219,15 +219,23 @@ namespace Dark_Cloud_Improved_Version
         internal const long FishingMenuMes       = 0x21FB4100;   // ends 0x21FB4238, below band top 0x21FB4300
         internal const uint FishingMenuMesGuest  = 0x01FB4100;
 
-        // ── Fishing sign injection (SignInjector) ────────────────────────────────────────────────────
-        // The bundled fishsign.chr (the game's own oasis kanban + e01b24 texture) lives in the MeshCave
-        // margin below the fishing-mes blocks. The build COPIES the pack, so this only needs validity during
-        // the one-shot build; then it can be reused. Stub + config follow it, all clear of 0x21FB4000.
-        internal const long SignChrCave       = 0x21FAE400;   // fishsign.chr (~20 KB) → ends ~0x21FB33A0
+        // ── Fishing sign injection ───────────────────────────────────────────────────────────────────
+        // This region (MeshCave margin, below the fishing-mes blocks, clear of 0x21FB4000) hosts the sign
+        // asset buffers + a one-shot load stub + config. It is shared by two mutually-exclusive approaches:
+        //   • GlobalSignLoader (CURRENT): loads the kanban as a GLOBAL CFrame via LoadMDSFile and registers
+        //     e01b24 into the system texture manager 0x1c75870 (the miracle-chest's path) — then a draw hook
+        //     renders it. The two asset buffers below pack exactly into 0x21FAE400..0x21FB3400.
+        //   • SignInjector (SUPERSEDED, not armed): built the sign as a villager from a bundled fishsign.chr.
+        //     Its SignChrCave alias covers the same bytes; only one loader is ever armed, so there is no clash.
+        internal const long SignMdsCave       = 0x21FAE400;   // kanban.mds  (2160 B) → ends 0x21FAEC70
+        internal const uint SignMdsCaveGuest  = 0x01FAE400;
+        internal const long SignImgCave       = 0x21FAEC70;   // e01b24_bank.img (18320 B, IM2) → ends 0x21FB3400
+        internal const uint SignImgCaveGuest  = 0x01FAEC70;
+        internal const long SignChrCave       = 0x21FAE400;   // (superseded) fishsign.chr alias — SignInjector
         internal const uint SignChrCaveGuest  = 0x01FAE400;
         internal const long SignStubCave      = 0x21FB3400;   // the cave stub (custom cmd-10 handler)
         internal const uint SignStubCaveGuest = 0x01FB3400;
-        internal const long SignConfig        = 0x21FB3600;   // +0x00 ready, +0x04 built, +0x08 npcPtr, +0x10 name
+        internal const long SignConfig        = 0x21FB3600;   // GlobalSignLoader: +0 ready +4 loaded +8 cframe +C fires
         internal const uint SignConfigGuest   = 0x01FB3600;
     }
 

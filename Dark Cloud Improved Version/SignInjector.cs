@@ -29,9 +29,12 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// STATUS: first pass — compiles; the MIPS stub, region placement and positioning all need LIVE TESTING.
     /// </summary>
+    // SUPERSEDED by GlobalSignLoader (loads the sign as a global CFrame + registers e01b24 into 0x1c75870,
+    // instead of building it as a villager whose texture resolved in the wrong context). Kept for reference;
+    // no longer called and disabled so it can never arm.
     internal static class SignInjector
     {
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;
 
         // ── RE'd addresses (guest / ELF vaddr; the stub encodes these directly) ──
         private const uint Initialize      = 0x001569E0;   // Initialize__12CNPCharacter(this)

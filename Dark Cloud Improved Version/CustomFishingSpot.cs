@@ -164,9 +164,10 @@ namespace Dark_Cloud_Improved_Version
             // by watching the count — if it approaches 1024 we must decouple the fish rect (roam bounds) from
             // this cast/gather rect. Mirrored in tools/brownboo_viewer.py (RECT_*).
             new Spot(14, "Brownboo lake", 0,
-                     -320f, -260f, 310f, 300f, water: 0f, ground: -15f,
-                     tx: 74f, ty: 10f, tz: -20f, radius: InteractRadius,
-                     sx: 74f, sy: 10f, sz: -20f, facing: -1.639f,
+                     -250f, -240f, 250f, 240f, water: 0f, ground: -15f,   // ±250 W/E, ±240 N/S, centre (0,0)
+                     // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
+                     tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
+                     sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
                      // BISECT (2026-07-20): back to the vanilla villager-clear pair (38/57) while
                      // TownCharacter.DisableBrownbooDialogue is ON. If the session now loads without
                      // crashing, the mod's per-frame Brownboo dialogue scan (which touches the villager
@@ -343,8 +344,7 @@ namespace Dark_Cloud_Improved_Version
                 if (map == _installedMap)
                 {
                     WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick();
-                    SignInjector.Arm();                                           // arm the sign cave stub (cold-window retry)
-                    SignInjector.Tick(_spot.TrigX, _spot.TrigY, _spot.TrigZ);     // build once + pin at the trigger
+                    GlobalSignLoader.PinMango();   // sign is now NATIVE (baked into scene.scn); only Mango needs runtime moving
                     return;
                 }
             }
@@ -401,7 +401,7 @@ namespace Dark_Cloud_Improved_Version
             _lastMode = int.MinValue;
             RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
             PriscleenFish.Uninstall();
-            SignInjector.Uninstall();
+            GlobalSignLoader.Uninstall();
         }
 
         /// <summary>True only if BOTH halves of our install are still live: the renumbered fishing label in
@@ -506,7 +506,7 @@ namespace Dark_Cloud_Improved_Version
             PatchFishDepth(spot);
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
-            SignInjector.PrepareAssets();                    // load the bundled fishsign.chr (town-agnostic)
+            GlobalSignLoader.PrepareAssets();                // dev-gated: read kanban.mds + e01b24_bank.img ($DC_SIGN_ASSETS)
 
             Log($"   event point [{slot}] type=3 label={labelId} " +
                 $"pos=({spot.TrigX},{spot.TrigY},{spot.TrigZ}) radius={spot.Radius} partIndex=-1 (world)");
