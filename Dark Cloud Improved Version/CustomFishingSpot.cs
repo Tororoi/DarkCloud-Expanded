@@ -242,15 +242,6 @@ namespace Dark_Cloud_Improved_Version
         private static int _lastGameMode = int.MinValue;
         private static int _watchdog;
 
-        // Byte offsets, within the exit script, of the first float operand of _SET_NPC_POS / _SET_NPC_ROT,
-        // and their live addresses once written. See PatchExitPosition.
-        private static int _exitPosOperand = -1, _exitRotOperand = -1;
-        private static long _exitPosAddr, _exitRotAddr;
-
-        /// <summary>Armed when a fishing session starts, so <see cref="SnapCameraBehindPlayer"/> fires once
-        /// on entry — and NOT every time the bait menu bounces us through event mode and back.</summary>
-        private static bool _snapCamera;
-
         private static bool _fishDepthPatched;
 
         /// <summary>Patch the inline fish-depth constant for this spot (WaterLevel - depth), if it sets one.
@@ -457,8 +448,6 @@ namespace Dark_Cloud_Improved_Version
                         $"_LOAD_MAIN_CHARA({FishingModel}) + _LOAD_FISHING_DATA(area={spot.AreaId}, " +
                         $"water={spot.Water}) + stance + bait + fishing");
 
-            _exitPosOperand = _exitRotOperand = -1;
-            _exitPosAddr = _exitRotAddr = 0;
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingExitLabel, BuildExitBytecode(spot, menuCbRel),
                                $"restore {NormalModel} + re-place player + _EXIT_FISHING   [Circle = leave]");
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingBaitLabel, BuildBaitBytecode(),
@@ -736,70 +725,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(stb + lab.Entry, targetId);   // no-op for a baked label; renames a fallback orphan
             Log($"   label {targetId} (the engine requests it by number, code @+0x{lab.Off:X})");
             WriteScript(stb, lab.Off, end, w, what);
-
-            // Remember where the exit script's position/rotation operands landed, so they can be kept in step
-            // with the player while they fish.
-            if (targetId == EventPoints.FishingExitLabel && _exitPosOperand >= 0)
-            {
-                long code = stb + lab.Off + TownScript.LabelCodeSkip;
-                _exitPosAddr = code + _exitPosOperand + 8;   // +8 = the a2 field of the first PushFloat
-                _exitRotAddr = code + _exitRotOperand + 8;
-                Log($"   exit position operands @0x{_exitPosAddr:X} / rot @0x{_exitRotAddr:X} " +
-                    $"— patched live so quitting does not move you");
-            }
         }
 
-        /// <summary>
-        /// Keep the exit script's <c>_SET_NPC_POS</c> / <c>_SET_NPC_ROT</c> operands equal to where the player
-        /// actually is.
-        ///
-        /// The exit script HAS to re-place the player, because <c>_LOAD_MAIN_CHARA</c> resets the model's
-        /// position and you would otherwise come out of fishing falling through the map. But vanilla does not
-        /// visibly move you on quit — and you can walk around while fishing, so restoring the ENTRY stance
-        /// yanks you back. Rewriting the literals each frame makes the re-place a no-op you cannot see.
-        ///
-        /// Instructions are 12 bytes {op, a1, a2}; the operand of a PushFloat is its a2, hence the +8 above
-        /// and the 12-byte strides here.
-        /// </summary>
-        /// <summary>
-        /// Swing the follow camera around behind the player as fishing begins, so you start out looking at
-        /// the water rather than at whatever you happened to walk in facing.
-        ///
-        /// NOT vanilla behaviour — the stock game leaves the camera alone. This is an added convenience, so
-        /// it gets its own switch.
-        ///
-        /// The camera's yaw is the direction it looks FROM, not the direction it looks toward: writing the
-        /// player's yaw straight in put the camera in front of them, staring back. Behind-the-shoulder is
-        /// therefore yaw + PI. (<c>_RESET_CAMERA_ANGLE</c> is no help here: it only sets the two globals that
-        /// <c>EventMode</c>'s <c>default:</c> branch reads, and fishing exits through <c>case 0xb</c>, which
-        /// never reaches them.)
-        ///
-        /// Writing BOTH the target and current yaw is what <c>SetAngleSoon</c> does, and it snaps instantly;
-        /// writing only <see cref="EditLoop.CameraAngle"/> would have it swing round instead.
-        /// </summary>
-        internal static bool SnapCameraOnStart = true;
-
-        private static void SnapCameraBehindPlayer()
-        {
-            if (!SnapCameraOnStart) return;
-
-            float behind = GeoramaProbe.ReadYaw() + (float)Math.PI;
-            Memory.WriteFloat(EditLoop.MainCamera + EditLoop.CameraAngle, behind);
-            Memory.WriteFloat(EditLoop.MainCamera + EditLoop.CameraAngleNow, behind);
-            Log($"camera snapped behind the player (yaw {behind:0.###})");
-        }
-
-        private static void PatchExitPosition()
-        {
-            if (_exitPosAddr == 0) return;
-            if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeFishing) return;
-            if (!ReadPos(out float x, out float y, out float z)) return;
-
-            Memory.WriteFloat(_exitPosAddr, x);
-            Memory.WriteFloat(_exitPosAddr + 12, y);
-            Memory.WriteFloat(_exitPosAddr + 24, z);
-            Memory.WriteFloat(_exitRotAddr + 12, GeoramaProbe.ReadYaw());   // the middle float is the yaw
-        }
 
 
         /// <summary>
@@ -1483,42 +1410,64 @@ namespace Dark_Cloud_Improved_Version
             w.Ext(2);
             EmitWaitLoop(w, StbCommands.CheckFade, exitOnNonZero: true);
 
-            // Put the ORDINARY Toan back. If we do not, the player walks around town holding a fishing rod
-            // with the fishing motion table — every normal animation would then be wrong in the same way the
-            // cast was. (Skipped when the entry skipped the swap — there is nothing to undo.)
+            // RESTORE THE ORDINARY TOAN AND PUT THE PLAYER BACK WHERE THEY ARE — exactly as Norune's exit does.
+            //
+            // _LOAD_MAIN_CHARA resets the model's position, so the exit MUST re-place the player or you come out
+            // of fishing falling through the map. And you can walk around while fishing (until you cast), so the
+            // re-place has to land wherever you actually are, not at the entry stance.
+            //
+            // Norune's 256 exit block does this without any per-frame help: _GET_NPC_POS / _GET_NPC_ROT read the
+            // live position into locals BEFORE the model swap, then _SET_NPC_POS / _SET_NPC_ROT write them back
+            // AFTER. (Skipped when the entry skipped the swap — there is nothing to undo, and nothing reset the
+            // position.)
+            //
+            // The position/rotation locals MUST be pushed float-safe (PushVarFloat / PushVarRefFloat, a2 = 8):
+            // that stamps each stack entry's type tag so _SET_NPC_POS's GetStackFloat REINTERPRETS the float
+            // bits instead of doing (float)(int)bits. With the plain int-mode push, a coord like 0x4309A6C0 is
+            // read as (float)1124760000 ≈ 1.12e9 and the player (and camera) is flung off the map — a black
+            // screen on quit. See PushVarFloat.
+            //
+            // BOTH GET and SET convert through the GLOBAL world-coord matrix (GetLocalPos in, GetWorldPos out).
+            // The reset forces it to identity so the round-trip is exact in raw world space regardless of the
+            // fishing setup or the player's per-CFrame flag; re-asserted after the swap so the villager reload
+            // downstream also runs against a clean matrix.
             if (!s.DiagSkipModel)
             {
+                // v2..v4 = position, v5..v7 = rotation. Deliberately NOT v0..v5: the wait loops below use
+                // GateVar (var1) and the confirm menu uses var8, and the float-mode push STAMPS a var's type
+                // tag — stamping the wait-loop's gate corrupts its truthiness check and hangs the exit after
+                // _EXIT_FISHING. Keep our floats clear of both reserved locals.
+                w.UseLocals(8);
+                EmitWorldCoordReset(w);                   // identity: GET/SET both operate in world space
+
+                w.PushInt(StbCommands.GetNpcPos);         // 131
+                w.PushInt(-1);
+                w.PushVarRefFloat(2); w.PushVarRefFloat(3); w.PushVarRefFloat(4);
+                w.Ext(5);
+
+                w.PushInt(StbCommands.GetNpcRot);         // 139
+                w.PushInt(-1);
+                w.PushVarRefFloat(5); w.PushVarRefFloat(6); w.PushVarRefFloat(7);
+                w.Ext(5);
+
                 w.PushInt(StbCommands.LoadMainChara);     // 999
                 w.PushString(NormalModel);
                 w.PushString(NormalModelCfg);
                 w.PushInt(0);
                 w.Ext(4);
-            }
 
-            // RE-PLACE THE PLAYER — but back where they ACTUALLY ARE, not at the entry stance.
-            //
-            // The re-placement itself is not optional: _LOAD_MAIN_CHARA resets the model's position, and
-            // without this you come out of fishing elsewhere on the map, falling. But vanilla does not visibly
-            // move you on exit, and snapping to the entry stance does — you can walk around while fishing, so
-            // by the time you quit you are rarely where you started.
-            //
-            // So we emit the position as literals and then REWRITE THOSE OPERANDS every frame while fishing
-            // (see PatchExitPosition) with the player's live position and yaw. The script restores exactly
-            // where you were standing, and the re-place is invisible.
-            if (s.HasStance)
-            {
-                EmitWorldCoordReset(w);
+                EmitWorldCoordReset(w);                   // re-assert identity AFTER the swap: the model load can
+                                                          // leave a non-identity matrix, which would both mis-place
+                                                          // the SET below and corrupt the villager reload downstream
 
-                w.PushInt(StbCommands.SetNpcPos);
+                w.PushInt(StbCommands.SetNpcPos);         // 137
                 w.PushInt(-1);
-                _exitPosOperand = w.Offset;           // the three floats that follow get patched live
-                w.PushFloat(s.StandX); w.PushFloat(s.StandY); w.PushFloat(s.StandZ);
+                w.PushVarFloat(2); w.PushVarFloat(3); w.PushVarFloat(4);
                 w.Ext(5);
 
-                w.PushInt(StbCommands.SetNpcRot);
+                w.PushInt(StbCommands.SetNpcRot);         // 138
                 w.PushInt(-1);
-                _exitRotOperand = w.Offset;
-                w.PushFloat(0f); w.PushFloat(s.Facing); w.PushFloat(0f);
+                w.PushVarFloat(5); w.PushVarFloat(6); w.PushVarFloat(7);
                 w.Ext(5);
             }
 
@@ -1649,22 +1598,14 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void WatchMatches()
         {
-            // ── FUNCTIONAL (always) ── swing the camera behind the player the frame fishing mode starts, keep
-            // the exit re-place operands current, and drive the per-session collision/camera setup.
+            // ── FUNCTIONAL (always) ── drive the per-session collision setup off the GameMode/water transition.
             int gm = Memory.ReadInt(EditLoop.GameMode);
             if (gm != _lastGameMode)
             {
                 if (Diagnostics) Log($"GameMode {_lastGameMode} -> {gm}   {GameModeName(gm)}");
                 _lastGameMode = gm;
-
-                if (gm == EditLoop.GameModeFishing && _snapCamera)
-                {
-                    _snapCamera = false;
-                    SnapCameraBehindPlayer();
-                }
             }
 
-            PatchExitPosition();
             WatchFishingStart();
 
             // ── OBSERVATIONAL (Diagnostics only) ── transition watches for debugging the trigger/mode chain.
@@ -1707,7 +1648,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Notice when a session actually begins, so the camera can be swung behind the player.
+        /// Notice when a session actually begins, so the per-session collision setup runs once.
         ///
         /// This used to also DISARM the event point and re-arm it on walk-away, because the old script fired
         /// on contact and returned immediately — so it re-ran every frame, re-loading fishing.pak and leaking
@@ -1722,7 +1663,6 @@ namespace Dark_Cloud_Improved_Version
 
             if (live && !_fishingWasLive)
             {
-                _snapCamera = true;
                 // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
                 // raycast honours: player movement (its own collision system) still keeps you on the boardwalk,
                 // and dropping the walls frees the poly budget for the rocks below.
@@ -1879,19 +1819,6 @@ namespace Dark_Cloud_Improved_Version
             why = "walking/other";
             return false;
         }
-        private static bool ReadPos(out float x, out float y, out float z)
-        {
-            x = y = z = 0f;
-            uint p = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) return false;
-
-            long c = Memory.ToMmu(p) + EditLoop.CharaPosition;
-            x = Memory.ReadFloat(c);
-            y = Memory.ReadFloat(c + 4);
-            z = Memory.ReadFloat(c + 8);
-            return true;
-        }
-
         private static void DumpSlot(string tag, long e)
         {
             if (!Diagnostics) return;

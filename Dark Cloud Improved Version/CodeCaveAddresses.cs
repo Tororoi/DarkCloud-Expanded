@@ -203,12 +203,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long MeshCaveGuest  = 0x01F56400;
         internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
 
-        // (The fishing catch bubble (talk msg 2000) and entry/quit menu text (event 20/21/22) that once lived
-        // in swapped scratch buffers here are now BAKED into each custom town's mes by IsoPatcher, so no
-        // runtime scratch region is needed for them — the engine reads them from the town's own mes.)
+        // ── FREE: 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ──────
+        // This 0x300-byte block once held the fishing catch-bubble (talk msg 2000) + entry/quit menu (event
+        // 20/21/22) scratch buffers for the old runtime ClsMes buffer-swap. Those messages are now BAKED into
+        // each custom town's mes by IsoPatcher (the engine reads them from the town's own mes), so this block
+        // is UNUSED and available for reuse. It stays inside the CodeCaveScanner ModReserved heap-tail claim
+        // (0x1F10000..0x1FB4300), which is why the sweeper still shows it clean.
 
         // ── Fishing sign injection ───────────────────────────────────────────────────────────────────
-        // This region (MeshCave margin, below the fishing-mes blocks, clear of 0x21FB4000) hosts the sign
+        // This region (MeshCave margin, in the space below the now-free 0x21FB4000 block) hosts the sign
         // asset buffers + a one-shot load stub + config. It is shared by two mutually-exclusive approaches:
         //   • GlobalSignLoader (CURRENT): loads the kanban as a GLOBAL CFrame via LoadMDSFile and registers
         //     e01b24 into the system texture manager 0x1c75870 (the miracle-chest's path) — then a draw hook

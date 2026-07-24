@@ -19,6 +19,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int SetNpcMotion  = 133;     // (charaId, motionIdx) — charaId -1 = the player; motion 0 = idle
         internal const int SetNpcPos     = 137;     // (charaId, x, y, z)   charaId -1 = the player
         internal const int SetNpcRot     = 138;     // (charaId, rx, ry, rz)
+        internal const int GetNpcPos     = 131;     // (charaId, &x, &y, &z) — reads position into locals (out-pointers)
+        internal const int GetNpcRot     = 139;     // (charaId, &rx, &ry, &rz) — reads rotation into locals
         internal const int NpcDraw       = 140;     // (flag, charaId)
 
         // The bait model pipeline. _SET_FISHING_ESA only points the hook at ITEM FRAME 0 — it does not load
@@ -130,12 +132,26 @@ namespace Dark_Cloud_Improved_Version
         /// id, and the VM derails. That is exactly what froze the game on the bait menu.
         /// </summary>
         private const int VarModeDirect = 1;
+        private const int VarModeFloat  = 8;   // direct, but stamps the entry's type tag so floats reinterpret (see PushVarFloat)
 
         internal void PushInt(int v)     => Emit(OpPush, TypeInt, unchecked((uint)v));
         internal void PushFloat(float v) => Emit(OpPush, TypeFloat, BitConverter.ToUInt32(BitConverter.GetBytes(v), 0));
 
-        /// <summary>Push local variable <paramref name="idx"/>'s value.</summary>
+        /// <summary>Push local variable <paramref name="idx"/>'s value (INT-typed slot).</summary>
         internal void PushVar(int idx) => Emit(OpVarValue, (uint)idx, VarModeDirect);
+
+        /// <summary>
+        /// Push a FLOAT local's value / a pointer to a FLOAT local. Same slot address as the int forms, but a2
+        /// = <see cref="VarModeFloat"/> (8) instead of 1. That difference matters ONLY for floats: on a value
+        /// push, mode 8 stamps the pushed entry's TYPE TAG to non-zero, and <c>GetStackFloat</c> reads a slot
+        /// as <c>type==0 ? (float)(int)bits : reinterpret&lt;float&gt;(bits)</c>. With mode 1 the tag stays 0, so
+        /// a position float like 0x4309A6C0 gets read as <c>(float)1124760000 ≈ 1.12e9</c> — the player is
+        /// flung off the map (black screen on quit). Norune tags every _GET/_SET_NPC_POS/ROT var this way.
+        /// (Int vars are unaffected — GetStackInt reads the value word directly — which is why the menu/bait
+        /// mode-1 vars are fine.)
+        /// </summary>
+        internal void PushVarFloat(int idx)    => Emit(OpVarValue, (uint)idx, VarModeFloat);
+        internal void PushVarRefFloat(int idx) => Emit(OpVarRef,   (uint)idx, VarModeFloat);
 
         /// <summary>
         /// Push a POINTER to local variable <paramref name="idx"/> — an OUT parameter.
