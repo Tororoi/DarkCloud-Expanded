@@ -397,14 +397,4 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const long Info = 0x21D3D1D0;     // ELF 0x1d3d1d0 — running-event id
     }
-
-    /// <summary>ClsMes windows whose talk-buffer pointer the fishing feature swaps to injected scratch (catch
-    /// bubble + menu text) for a session. SetBuff stores the buffer ptr at +0x17A0 (and a +0x17A8 delta).</summary>
-    internal static class MesWindows
-    {
-        internal const long TownTalk  = 0x21D1B550;   // ELF 0x1d1b550 — town talk/dialogue ClsMes (catch bubble, msg 2000)
-        internal const long TownEvent = 0x21D1E4D0;   // ELF EditEventMes1 — window 1 (menu text)
-        internal const int  BufPtr    = 0x17A0;        // SetBuff: buffer ptr (GetTextLineDataTop reads this)
-        internal const int  BufPtr2   = 0x17A8;        // SetBuff: buffer + u16@2 (kept consistent)
-    }
 }

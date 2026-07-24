@@ -356,9 +356,6 @@ namespace Dark_Cloud_Improved_Version
             InFishingWindow = false;
             _savedVillagerCount = -1;  // count belongs to the old town; don't restore it into the new one
             _drawFlagsSaved = false;
-            _savedTalkBuf = 0;         // talk/event buffers belong to the old town; don't restore into the new one
-            _savedEventBuf = 0;
-            FishingMenuText.Reset();   // re-write the templates after a reload (guest scratch may be cleared)
             _settleTicks = 0;
             _verifyTicks = 0;
             _lastParam = int.MinValue;
@@ -1780,13 +1777,6 @@ namespace Dark_Cloud_Improved_Version
         private static bool _villagersHidden;   // one-shot latch for UpdateVillagerHide
 
 
-        // Fishing-window ClsMes buffer-swap state — the town's ORIGINAL talk/event mes buffer pointers,
-        // saved while a session borrows the windows for the injected catch/menu text (see FishingMenuText).
-        private static int _savedTalkBuf;    // guest ptr saved when we swap on window open (0 = not swapped)
-        private static int _savedTalkBuf2;
-        private static int _savedEventBuf;
-        private static int _savedEventBuf2;
-
         private static void UpdateFishingWindow()
         {
             bool was = InFishingWindow;
@@ -1794,67 +1784,24 @@ namespace Dark_Cloud_Improved_Version
             if (InFishingWindow == was) return;
             Log($"fishing-window {(InFishingWindow ? "OPEN" : "closed")} ({why})");
 
-            if (InFishingWindow)
+            // The catch bubble (talk msg 2000) and entry/quit menu text (event 20/21/22) are BAKED into each
+            // custom town's mes by IsoPatcher, so the engine draws them natively — no buffer swap here.
+            // Villagers are hidden LAZILY by UpdateVillagerHide once the screen is fully black (they must stay
+            // on screen while the entry menu is up), so there is nothing to do on OPEN; on CLOSE, put them back.
+            if (InFishingWindow) return;
+
+            // Restore AFTER the exit script's _LOAD_VILLAGER (57) has rebuilt the villagers.
+            if (_savedVillagerCount > 0) Memory.WriteInt(Villagers.Count, _savedVillagerCount);
+            if (_drawFlagsSaved)
             {
-                // NOTE: hiding the villagers themselves is deliberately NOT done here. This open-block fires
-                // the moment the entry menu appears, and the townspeople must stay put while that menu is up
-                // (the player may pick FP / log / quit and walk away). The actual suspension is a separate
-                // one-shot — UpdateVillagerHide() — gated on the screen being fully faded to black, which is
-                // when the enter script commits to fishing and frees the villager buffer.
-
-                // Supply the catch-message template the custom town's talk mes lacks (empty-bubble fix): swap
-                // the talk ClsMes buffer to our msg-2000-only mes for the session. No NPC dialogue runs while
-                // fishing, so the town's own messages are not needed until we restore on the way out.
-                FishingMenuText.EnsureCatchTemplate();
-                _savedTalkBuf  = Memory.ReadInt(MesWindows.TownTalk + MesWindows.BufPtr);
-                _savedTalkBuf2 = Memory.ReadInt(MesWindows.TownTalk + MesWindows.BufPtr2);
-                Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr,  (int)CodeCaves.FishingCatchMesGuest);
-                Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr2, (int)CodeCaves.FishingCatchMesGuest + 8);
-                Log($"   talk mes swapped to catch template (saved town buf 0x{_savedTalkBuf:X8})");
-
-                // Same for the EVENT mes (window 1): supply the entry/exit menu option text (ids 20/21/22).
-                FishingMenuText.EnsureMenuTemplate();
-                _savedEventBuf  = Memory.ReadInt(MesWindows.TownEvent + MesWindows.BufPtr);
-                _savedEventBuf2 = Memory.ReadInt(MesWindows.TownEvent + MesWindows.BufPtr2);
-                Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr,  (int)CodeCaves.FishingMenuMesGuest);
-                Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr2, (int)CodeCaves.FishingMenuMesGuest + 0x10);
-                Log($"   event mes swapped to menu text (saved town buf 0x{_savedEventBuf:X8})");
+                for (int i = 0; i < Villagers.DrawSlots; i++)
+                    Memory.WriteInt(Villagers.ObjBase + (long)i * Villagers.ObjStride + Villagers.DrawFlag,
+                                    _savedDrawFlags[i]);
+                _drawFlagsSaved = false;
+                Log($"   villagers restored (count -> {_savedVillagerCount}, draw flags restored)");
             }
-            else
-            {
-                // Restore AFTER the exit script's _LOAD_VILLAGER (57) has rebuilt the villagers.
-                if (_savedVillagerCount > 0) Memory.WriteInt(Villagers.Count, _savedVillagerCount);
-                if (_drawFlagsSaved)
-                {
-                    for (int i = 0; i < Villagers.DrawSlots; i++)
-                        Memory.WriteInt(Villagers.ObjBase + (long)i * Villagers.ObjStride + Villagers.DrawFlag,
-                                        _savedDrawFlags[i]);
-                    _drawFlagsSaved = false;
-                    Log($"   villagers restored (count -> {_savedVillagerCount}, draw flags restored)");
-                }
-                _savedVillagerCount = -1;
-                _villagersHidden = false;   // re-arm the fade-gated hide for the next session
-
-                // Restore the town's own talk mes — but only if we're still the pointer on it. A town reload
-                // during the session (EditInit) installs a fresh buffer; don't clobber that with a stale one.
-                if (_savedTalkBuf != 0 &&
-                    Memory.ReadInt(MesWindows.TownTalk + MesWindows.BufPtr) == (int)CodeCaves.FishingCatchMesGuest)
-                {
-                    Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr,  _savedTalkBuf);
-                    Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr2, _savedTalkBuf2);
-                    Log($"   talk mes restored (buf -> 0x{_savedTalkBuf:X8})");
-                }
-                _savedTalkBuf = 0;
-
-                if (_savedEventBuf != 0 &&
-                    Memory.ReadInt(MesWindows.TownEvent + MesWindows.BufPtr) == (int)CodeCaves.FishingMenuMesGuest)
-                {
-                    Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr,  _savedEventBuf);
-                    Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr2, _savedEventBuf2);
-                    Log($"   event mes restored (buf -> 0x{_savedEventBuf:X8})");
-                }
-                _savedEventBuf = 0;
-            }
+            _savedVillagerCount = -1;
+            _villagersHidden = false;   // re-arm the fade-gated hide for the next session
         }
 
         /// <summary>
