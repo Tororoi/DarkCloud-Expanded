@@ -73,8 +73,10 @@ namespace Dark_Cloud_Improved_Version
         static void  Wr(FileStream fs, long off, byte[] b) { fs.Seek(off, SeekOrigin.Begin); fs.Write(b, 0, b.Length); }
         static uint  RdU32(FileStream fs, long off) => BitConverter.ToUInt32(Rd(fs, off, 4), 0);
         static void  WrU32(FileStream fs, long off, uint v) => Wr(fs, off, BitConverter.GetBytes(v));
-        static uint  U32(byte[] b, int o) => BitConverter.ToUInt32(b, o);
-        static void  U32(byte[] b, int o, uint v) => Array.Copy(BitConverter.GetBytes(v), 0, b, o, 4);
+        static uint   U32(byte[] b, int o) => BitConverter.ToUInt32(b, o);
+        static void   U32(byte[] b, int o, uint v) => Array.Copy(BitConverter.GetBytes(v), 0, b, o, 4);
+        static ushort U16(byte[] b, int o) => BitConverter.ToUInt16(b, o);
+        static void   U16(byte[] b, int o, ushort v) { b[o] = (byte)v; b[o + 1] = (byte)(v >> 8); }
         static long  Align(long x, int a = SECTOR) => (x + a - 1) & ~((long)a - 1);
 
         class Rec { public long RecOff; public uint Ext; public uint Size; }
@@ -183,7 +185,22 @@ namespace Dark_Cloud_Improved_Version
             foreach (string stbName in FishingStbs)
                 Redirect(stbName, ExtendStb(ReadArchive(stbName)));
 
-            // 5) ELF boot-cave + CRC
+            // 5) fishing text: carve the catch bubble (talk mes 2000) + entry/quit menu (event mes 20/21/22)
+            //    from the user's OWN Norune mes and append them to each custom fishing town's talk + event mes,
+            //    so the engine draws them natively — no runtime ClsMes buffer swap.
+            progress("Baking the fishing menu + catch text …");
+            ushort[] catchMsg = MesExtract(ReadArchive("gedit/e01/e01talk_1.mes"), 2000);
+            byte[] noruneEvent = ReadArchive("gedit/e01/e01_1.mes");
+            ushort[] menu20 = MesExtract(noruneEvent, 20), menu21 = MesExtract(noruneEvent, 21), menu22 = MesExtract(noruneEvent, 22);
+            foreach (string code in new[] { "e03", "s13", "s04" })
+            {
+                Redirect($"gedit/{code}/{code}talk_1.mes",
+                         AppendMes(ReadArchive($"gedit/{code}/{code}talk_1.mes"), (2000, catchMsg)));
+                Redirect($"gedit/{code}/{code}_1.mes",
+                         AppendMes(ReadArchive($"gedit/{code}/{code}_1.mes"), (20, menu20), (21, menu21), (22, menu22)));
+            }
+
+            // 6) ELF boot-cave + CRC
             progress("Patching the boot loader …");
             return ElfPatchAndCrc(fs, recs["SCUS_971.11"]);
         }
@@ -240,6 +257,70 @@ namespace Dark_Cloud_Improved_Version
             U32(outb, p + 4, (uint)codeOff);                          // == newTblOff (end of the last spare's code)
             U32(outb, 0x0C, (uint)newTblOff);                         // header now points at the relocated table
             U32(outb, 0x10, cnt + (uint)spares + 1);
+            return outb;
+        }
+
+        // ── town .mes text: bake in the fishing messages the custom towns lack ──────────────────────────
+        //
+        // Vanilla fishing towns' mes ship the catch bubble (talk mes msg 2000) and the entry/quit menu options
+        // (event mes 20/21/22); custom fishing towns do not, so those bubbles/menus rendered blank. Rather than
+        // swap the ClsMes buffer pointer at runtime, we carve the messages from the user's OWN Norune mes and
+        // append them to each custom town's mes, so the engine draws them natively.
+        //
+        // meswin .mes format (verified against every town's mes): u16 count, u16 endOff, count×{u16 id, u16
+        // wordOff}, then the text. A message's text starts at byte 2*(count + wordOff + 1) and ends at 0xFF01;
+        // files are zero-padded. Append keeps the existing text blob byte-for-byte and bumps every existing
+        // wordOff by the number of new entries — which exactly absorbs the shift from the grown index — so no
+        // existing message moves; the new text goes on the end.
+
+        /// <summary>The glyph words of message <paramref name="id"/> (from its text start to the 0xFF01
+        /// terminator, inclusive). Throws if the id is absent.</summary>
+        static ushort[] MesExtract(byte[] mes, int id)
+        {
+            int cnt = U16(mes, 0);
+            for (int i = 0; i < cnt; i++)
+            {
+                if (U16(mes, 4 + i * 4) != id) continue;
+                int tb = 2 * (cnt + U16(mes, 4 + i * 4 + 2) + 1);
+                var w = new List<ushort>();
+                while (tb + 1 < mes.Length)
+                {
+                    ushort g = U16(mes, tb); w.Add(g); tb += 2;
+                    if (g == 0xFF01) return w.ToArray();
+                }
+                break;
+            }
+            throw new IOException($"meswin message {id} not found (unexpected mes layout)");
+        }
+
+        /// <summary>Append <paramref name="add"/> messages to a meswin .mes, preserving the existing text
+        /// verbatim. The index is kept id-sorted.</summary>
+        static byte[] AppendMes(byte[] orig, params (int id, ushort[] words)[] add)
+        {
+            int cnt = U16(orig, 0), f2 = U16(orig, 2), n = add.Length, newCount = cnt + n;
+            int idxEnd = 4 + cnt * 4;                       // byte where the original text blob starts
+            var ents = new List<(int id, int off)>(newCount);
+            for (int i = 0; i < cnt; i++)                  // existing: +n absorbs the index-growth shift
+                ents.Add((U16(orig, 4 + i * 4), U16(orig, 4 + i * 4 + 2) + n));
+
+            var newText = new List<byte>();
+            int cum = orig.Length - idxEnd;                // the existing text blob (kept verbatim) sits first
+            foreach (var (id, words) in add)               // new: text laid out after the old blob
+            {
+                int textByte = 4 + newCount * 4 + cum;
+                ents.Add((id, textByte / 2 - newCount - 1));
+                foreach (ushort g in words) { newText.Add((byte)g); newText.Add((byte)(g >> 8)); }
+                cum += words.Length * 2;
+            }
+            ents.Sort((a, b) => a.id.CompareTo(b.id));     // the engine expects the index id-sorted
+
+            var outb = new byte[4 + newCount * 4 + (orig.Length - idxEnd) + newText.Count];
+            U16(outb, 0, (ushort)newCount);
+            U16(outb, 2, (ushort)(f2 + n));
+            int p = 4;
+            foreach (var (id, off) in ents) { U16(outb, p, (ushort)id); U16(outb, p + 2, (ushort)off); p += 4; }
+            Array.Copy(orig, idxEnd, outb, p, orig.Length - idxEnd); p += orig.Length - idxEnd;
+            newText.CopyTo(outb, p);
             return outb;
         }
 
