@@ -127,6 +127,9 @@ namespace Dark_Cloud_Improved_Version
             // band (node pool / cloth / per-bone buffers / weapon / mesh). Authoritative layout lives in
             // CodeCaveAddresses.cs — keep this in sync, or the sweeper starts reporting our OWN writes as the
             // game dirtying the region and quietly rejects caves that are actually clean.
+            // NOTE: the top 0x300 (0x1FB4000..0x1FB4300) is now FREE — it held the fishing catch/menu mes
+            // scratch buffers, retired when those messages were baked into the town mes (IsoPatcher). The claim
+            // deliberately still covers it (blanket heap-tail reservation), so it stays clean and reusable.
             (0x1F10000, 0xA4300), // 0x1F10000 .. 0x1FB4300 (the whole proven-clean heap tail)
         };
 
