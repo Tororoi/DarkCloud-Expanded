@@ -83,6 +83,34 @@ of locals you use. `fd[0]` already points there, so it needs no change.
 +0x08  saved funcdata*
 ```
 
+### Calling convention (`CALL_FUNC` / op 19)
+
+Verified against Norune, which uses it heavily (label 256 alone makes 45 calls; the fishing menu is a
+shared subroutine that label 11 *and* label 133 both call). A subroutine is just a `funcdata` sitting
+inline in the code region — **not** a label-table entry — reached by `a2 = funcdataFileOffset - codeBase`.
+
+- **Arguments go on the stack, first-pushed = `var0`.** `call_func` sets `varsBase = sp - fd[3]*8`, so the
+  caller's last `fd[3]` pushes become the callee's locals `0..fd[3]-1`. Non-arg locals (`fd[3]..fd[2]-1`)
+  are zeroed on entry.
+- **Return value comes back on the stack**: the callee does `PUSHVAR result; RET`, and `ret_func` restores
+  the caller's frame while leaving that value on top.
+- **A subroutine may `YIELD`** — its `RS_CALLDATA` frame survives across frames (the menu loop does this).
+- **Storing the result into a var** is the ref-first idiom (this is how you get a stack value into a local
+  anywhere): `PUSHVARREF &dest ; <push args> ; CALL_FUNC ; STORE ; POP`. The ref is pushed *before* the
+  args so it sits below `varsBase`, untouched by the call; after `RET` the stack is `[&dest, result]`, and
+  `STORE` writes `*dest = result` (then re-pushes it, hence the trailing `POP`).
+
+Example — Norune's shared fishing menu `menu(win, msgId, pos, x, y, count) -> line` at funcdata `0x4bd4`,
+called from label 11 with `count=4` and label 133 with `count=2`:
+
+```
+PUSHVARREF &v1 ; PUSHC 1 ; PUSHC 20 ; PUSHC 9 ; PUSHC 0 ; PUSHC 0 ; PUSHC 4 ; CALL_FUNC(0x4bd4) ; STORE ; POP
+```
+
+`fd[3]` on the callee (`6` here) MUST equal the number of args pushed, or the frame is off. (The mod's
+`WriteScript` writes `fd[3]` at `funcOff+0xC`; `fd[0]` at `funcOff+0` is the entry PC — see the header
+note that a zero there runs the wrong code.)
+
 ## 5. Instructions
 
 12 bytes each: `{ u32 op, u32 a1, u32 a2 }`. **Instructions are 12-byte aligned relative to their own

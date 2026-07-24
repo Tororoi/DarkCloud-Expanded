@@ -174,9 +174,73 @@ namespace Dark_Cloud_Improved_Version
             Redirect(SCENE_SCN, BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY));
 
-            // 4) ELF boot-cave + CRC
+            // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
+            //    installer always has dedicated room and never runs out on the town's tiny native spare pool
+            //    (that shortfall was the Queens/Yellow Drops "can't quit" bug — labels 133/134 got no room).
+            //    ids 500-509 are placeholders the runtime hijacks + renumbers to 400/133/134 exactly like a
+            //    town's own spares; the only runtime change is whitelisting them.
+            progress("Adding fishing-script label space …");
+            foreach (string stbName in FishingStbs)
+                Redirect(stbName, ExtendStb(ReadArchive(stbName)));
+
+            // 5) ELF boot-cave + CRC
             progress("Patching the boot loader …");
             return ElfPatchAndCrc(fs, recs["SCUS_971.11"]);
+        }
+
+        // ── event.stb: append spare labels so the runtime fishing installer never runs out of room ──
+        //
+        // Vanilla fishing towns host the minigame inside their event.stb (enter woven into label 256, plus
+        // dedicated labels 133/134). Custom fishing towns have no such labels, so the mod builds its scripts
+        // at runtime by hijacking the town's few spare labels — and Queens/Yellow Drops simply don't have
+        // enough, so quit/bait couldn't install. We give every custom fishing town its own spare pool by
+        // appending empty labels to its event.stb (baked into the ISO, exactly how vanilla ships fishing in
+        // the STB). The label table has zero slack (it ends right at codeBase), so we RELOCATE it: append the
+        // new label-code space, then a grown copy of the table (originals unchanged + new entries), and point
+        // the header at it. Original labels keep their absolute codeOffsets since the original code never moves.
+        static readonly string[] FishingStbs =
+            { "gedit/e03/event.stb", "gedit/s13/event.stb", "gedit/s04/event.stb" };   // Queens, Yellow Drops, Brownboo
+        // A custom fishing spot installs exactly FOUR scripts. We bake exactly four spare labels — one per
+        // script — carrying their FINAL ids and sized (measured Need() + margin) to hold that script in a
+        // SINGLE label. The mod's install claims each by id and writes straight into it: no runtime renumber,
+        // and nothing spills across two labels (the old "arena run" that retired a second label). The three
+        // custom fishing towns have no native 133/134/400/9600, so these ids are collision-free.
+        // ⚠ FishSpareIds MUST match CustomFishingSpot.{MenuSubLabelId=9600, FishingLabelId=400} and
+        // EventPoints.{FishingExitLabel=133, FishingBaitLabel=134}. Sizes measured 2026-07-24:
+        // menu 1780, enter 1994, quit 892, bait 436.
+        internal const int FishTermId = 9500;
+        static readonly int[] FishSpareIds   = { 9600, 400, 133, 134 };         // menu, enter, quit, bait
+        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0x500, 0x300 };  // one size per id, same order
+
+        static byte[] ExtendStb(byte[] stb)
+        {
+            uint cbase = U32(stb, 0x08);                               // header: CodeBase @0x08
+            uint tbl = U32(stb, 0x0C), cnt = U32(stb, 0x10);           // header: LabelTable @0x0C, LabelCount @0x10
+            int origEnd = stb.Length;
+            int spares = FishSpareSizes.Length;
+            int total = 0; foreach (int s in FishSpareSizes) total += s;
+            int newTblOff = origEnd + total;                          // terminator points here; code fills [origEnd, newTblOff)
+            var outb = new byte[newTblOff + (int)(cnt + spares + 1) * 8];
+            Array.Copy(stb, outb, origEnd);                            // original STB verbatim (appended space stays 0)
+            Array.Copy(stb, (int)tbl, outb, newTblOff, (int)cnt * 8);  // original label table, copied unchanged
+            int p = newTblOff + (int)cnt * 8;
+            int codeOff = origEnd;
+            for (int k = 0; k < spares; k++)                           // new spares -> point into the appended code space
+            {
+                U32(outb, p, (uint)FishSpareIds[k]);                    // FINAL id — the mod claims it by number
+                U32(outb, p + 4, (uint)codeOff);                        // codeOffset is ABSOLUTE (runtime uses stb+off)
+                // gap[+0] = entry PC as a codeBase-relative offset to the first instruction
+                // (codeOff + LabelCodeSkip 0x38 - codeBase); every real label carries this, WriteScript
+                // never sets it, so a zero-filled baked label runs from the wrong PC and returns instantly.
+                U32(outb, codeOff, (uint)(codeOff + 0x38 - (int)cbase));
+                codeOff += FishSpareSizes[k];
+                p += 8;
+            }
+            U32(outb, p, FishTermId);                                  // terminator label: makes the last spare's size computable
+            U32(outb, p + 4, (uint)codeOff);                          // == newTblOff (end of the last spare's code)
+            U32(outb, 0x0C, (uint)newTblOff);                         // header now points at the relocated table
+            U32(outb, 0x10, cnt + (uint)spares + 1);
+            return outb;
         }
 
         // ── scene.scn: append a `kanban` PTS part cloned from s04a01, + a 26th part-table entry ──

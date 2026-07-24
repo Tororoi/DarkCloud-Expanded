@@ -39,9 +39,9 @@ Every label listed in a per-area table below is **already in use** — a system 
 
 ## How labels work
 
-Each town's `event.stb` holds a table of `{labelId, codeOffset}` entries. Code jumps between labels with **`_NEXT_EVENT` (cmd 5)** and **`_FADEOUT_TO_EVENT` (cmd 17)** — the *only* label-dispatch commands in the town VM. A label is **in use** if it is a low-numbered system/town-event handler, or is dispatched by one of those two commands anywhere in the town script, or is occupied by this mod.
+Each town's `event.stb` holds a table of `{labelId, codeOffset}` entries; `codeOffset` points at the label's 56-byte **funcdata** (entry PC, local count, arg count), and the label's code follows it. Code reaches other labels/code three ways: **`_NEXT_EVENT` (cmd 5)** and **`_FADEOUT_TO_EVENT` (cmd 17)** dispatch a label by *id*; **`CALL_FUNC` (cmd 19)** calls a *funcdata by codeBase-relative offset* (a subroutine — args on the stack, return on the stack, may `YIELD`) and returns. A label is **in use** if it is a low-numbered system/town-event handler, is dispatched by 5/17 anywhere in the town script, is a `CALL_FUNC` target, or is occupied by this mod.
 
-The spare labels are **not invented by the mod** — they are real, fully-authored event scripts that ship in each town's vanilla `event.stb` but that nothing ever dispatches (orphaned/cut content). The mod overwrites their bytecode and renumbers the existing table slot; it never grows the label table. Each town was authored separately, so the count and contents of these orphans differ per area.
+**Two sources of hijackable labels.** (1) *Native orphans* — real, fully-authored event scripts that ship in a town's vanilla `event.stb` but that nothing ever dispatches (cut content). The mod overwrites their bytecode and renumbers the existing table slot. Each town was authored separately, so their count and size differ per area, and in several towns they are too few/small to hold the full minigame. (2) *ISO-baked labels* — for the three custom-fishing towns only (`e03`, `s13`, `s04`), `IsoPatcher.ExtendStb` **grows the label table** during ISO patching: it appends **exactly four** labels carrying the mod's FINAL ids — menu `9600`, ENTER `400`, QUIT `133`, BAIT `134` (plus a size-terminator) — past the original code, each sized to hold its one script in a single label: `0x800 / 0xA00 / 0x500 / 0x300` (measured `Need()` + margin). The three towns have no native `133/134/400/9600`, so these ids are collision-free. The installer **claims each by id** (`ClaimLabel`/`FindLabelById`) and writes straight in — no renumber, and nothing spans two labels. Each carries a correct funcdata entry-PC (`codeOff + 0x38 − codeBase` — a zero there would run the wrong PC and hang the town). This is what removed the old "no room for the quit label" failure. The native-orphan pool is now only a **fallback** for an unpatched disc (or a spot added to a town with no baked labels), where the installer renames orphans the old way.
 
 ### ID conventions
 
@@ -51,8 +51,8 @@ The spare labels are **not invented by the mod** — they are real, fully-author
 | `200`–`260` | Town event slots — NPC / building-door / quest events. |
 | `256` | Town master / init script; also hosts vanilla fishing. See below. |
 | `300` | A live town sub-event in most areas. In use everywhere. |
-| `301`–`310` | 300-block sub-events. `301`–`307` and `310` are dispatched by **no** town — the free pool this mod draws from. |
-| `400`+ | Free high range; this mod's custom-fishing ENTER label is `400`. |
+| `301`–`310` | 300-block sub-events. `301`–`307` and `310` are dispatched by **no** town — native-orphan fallback pool. |
+| `400`,`133`,`134`,`9600` | The mod's four fishing labels, ISO-baked with these final ids into `e03`/`s13`/`s04` (see above): `400`=ENTER (named by a type-3 event point), `133`=QUIT + `134`=BAIT (engine-requested by number), `9600`=menu subroutine (`CALL_FUNC` target, never dispatched by id). |
 
 ### Label `256` in detail
 
@@ -60,15 +60,18 @@ The spare labels are **not invented by the mod** — they are real, fully-author
 
 ## Labels this mod adds (custom fishing)
 
-A custom fishing spot creates three labels at runtime and consumes part of the town's spare pool:
+A custom fishing spot installs **four** labels. In the three ISO-patched towns each is baked with its final id and claimed directly; on an unpatched disc they fall back to renamed native orphans:
 
 | Label | Role | Source |
 |------:|------|--------|
-| `400` | Fishing **ENTER** — a fresh type-3 event point points at it. | new; may span 1–2 spare labels (rest *retired*). |
-| `133` | Fishing **QUIT** — engine requests this number. | a spare label, renumbered. |
-| `134` | Fishing **BAIT** menu — engine-requested number. | a spare label, renumbered. |
+| `9600` | Shared **menu-select** subroutine — `menu(msgId, count) → line`. Both the entry and quit menus `CALL_FUNC` it, exactly as vanilla's `0x4bd4` is called from Norune's label 11 and 133. | ISO-baked label `9600` (fallback: a renamed orphan). |
+| `400` | Fishing **ENTER** — a fresh type-3 event point points at it. | ISO-baked label `400` (fallback: a renamed orphan). |
+| `133` | Fishing **QUIT** — engine requests this number. | ISO-baked label `133` (fallback: a renamed orphan). |
+| `134` | Fishing **BAIT** menu — engine-requested number. | ISO-baked label `134` (fallback: a renamed orphan). |
 
-*Retired* = a spare whose code the ENTER script overwrote; its id is set to a dead value (`9000+`) so the engine can never dispatch into the middle of the mod's bytecode. `133`/`134` are collision-free (no fishing town has native 133/134).
+The menu subroutine is parked in its own label so the entry/quit scripts share one implementation and stay smaller — the same reason vanilla factors it out. Its id (`9600`) is never dispatched by number; it is only reached via `CALL_FUNC`.
+
+*Retired* = a spare whose code an overwriting script spanned into; its id is set to a dead value (`9000+`) so the engine can never dispatch into the middle of the mod's bytecode. `133`/`134` are collision-free (no fishing town has native 133/134).
 
 ## Spare label pool (free for custom events)
 
@@ -78,16 +81,16 @@ Every area's 300-block labels dispatched by **no** town. `†` marks a label tha
 |------|---------|------:|------------|-------------------------|-----------|
 | Norune Village | `e01` | 0 | **none** | — | **none** |
 | Matataki Village | `e02` | 1 | 301 | — | 301 |
-| Queens | `e03` | 2 | 301, 302, 303, 304, 305 | 301, 302, 303, 304 | 305 |
+| Queens | `e03` | 2 | 301–305 (native fallback) **+ baked 9600/400/133/134** | baked 9600/400/133/134 | 301–305 |
 | Muska Lacka | `e04` | 3 | 301, 302, 303 | — | 301, 302, 303 |
 | Factory | `e05` | 4 | 301, 302, 303 | — | 301, 302, 303 |
 | Goro's House | `s01` | 11 | 301 | — | 301 |
 | Spirit Tree | `s03` | 13 | **none** | — | **none** |
-| Brownboo Village | `s04` | 14 | 301, 302, 303, 304, 305, 306, 307 | 301, 302, 303 | 304, 305, 306, 307 |
+| Brownboo Village | `s04` | 14 | 301–307 (native fallback) **+ baked 9600/400/133/134** | baked 9600/400/133/134 | 301–307 |
 | East Harbor | `s09` | 19 | 301, 302, 303, 304, 305 | — | 301, 302, 303, 304, 305 |
 | Georama edit scene | `s11` | 21 | **none** | — | **none** |
 | Georama edit scene | `s12` | 22 | **none** | — | **none** |
-| Yellow Drops | `s13` | 23 | 301, 302, 303, 304, 305, 310 | 301, 302, 303, 304 | 305, 310 |
+| Yellow Drops | `s13` | 23 | 301–305, 310 (native fallback) **+ baked 9600/400/133/134** | baked 9600/400/133/134 | 301–305, 310 |
 | Dark Heaven Castle (distant) | `s14` | 24 | **none** | — | **none** |
 | King Seeda's Room | `s16` | 26 | 301† | — | 301† |
 | Georama edit scene | `s17` | 27 | **none** | — | **none** |
@@ -196,11 +199,12 @@ Every area's 300-block labels dispatched by **no** town. `†` marks a label tha
 | 209 | 820 | vanilla | Town event slot — NPC / building-door / quest (fixed number). _(obs: enter-building door)_ |
 | 256 | 58420 | vanilla | Town master / init script — villager & scene setup on every entry; also hosts vanilla fishing (see above). |
 | 300 | 636 | vanilla | Town sub-event, dispatched locally via `_FADEOUT_TO_EVENT`. |
-| 400 | — | mod | Custom fishing **ENTER** (former label 301 + 302 retired). |
-| 133 | — | mod | Custom fishing **QUIT** — occupies former label 303. |
-| 134 | — | mod | Custom fishing **BAIT** menu — occupies former label 304. |
+| 9600 | — | mod | Custom fishing shared **menu** subroutine — `CALL_FUNC` target for the entry/quit menus. |
+| 400 | — | mod | Custom fishing **ENTER**. |
+| 133 | — | mod | Custom fishing **QUIT**. |
+| 134 | — | mod | Custom fishing **BAIT** menu. |
 
-> Mod runtime consumption: `400`←301 (+302 retired), `133`←303, `134`←304. Still-free spares: 305.
+> Mod runtime consumption: four ISO-baked labels — `9600` (menu), `400` (ENTER), `133` (QUIT), `134` (BAIT) — each claimed by id and written straight in (no renumber, no spanning). The native pool (301–305) is untouched here; it is only the fallback for an unpatched disc.
 
 
 ### Muska Lacka — `gedit/e04` (MapNo 3)
@@ -296,11 +300,12 @@ Every area's 300-block labels dispatched by **no** town. `†` marks a label tha
 | 150 | 1772 | vanilla | Common system handler. |
 | 256 | 1860 | vanilla | Town master / init script — villager & scene setup on every entry; also hosts vanilla fishing (see above). |
 | 300 | 900 | vanilla | Live town sub-event (dispatched in Queens, Yellow Drops & most maps). |
-| 400 | — | mod | Custom fishing **ENTER** (former label 301). |
-| 133 | — | mod | Custom fishing **QUIT** — occupies former label 302. |
-| 134 | — | mod | Custom fishing **BAIT** menu — occupies former label 303. |
+| 9600 | — | mod | Custom fishing shared **menu** subroutine — `CALL_FUNC` target for the entry/quit menus. |
+| 400 | — | mod | Custom fishing **ENTER**. |
+| 133 | — | mod | Custom fishing **QUIT**. |
+| 134 | — | mod | Custom fishing **BAIT** menu. |
 
-> Mod runtime consumption: `400`←301, `133`←302, `134`←303. Still-free spares: 304, 305, 306, 307.
+> Mod runtime consumption: four ISO-baked labels — `9600` (menu), `400` (ENTER), `133` (QUIT), `134` (BAIT) — each claimed by id and written straight in (no renumber, no spanning). The native pool (301–307) is untouched here; it is only the fallback for an unpatched disc.
 
 
 ### East Harbor — `gedit/s09` (MapNo 19)
@@ -356,11 +361,12 @@ Every area's 300-block labels dispatched by **no** town. `†` marks a label tha
 | 150 | 644 | vanilla | Common system handler. |
 | 256 | 3196 | vanilla | Town master / init script — villager & scene setup on every entry; also hosts vanilla fishing (see above). |
 | 300 | 644 | vanilla | Town sub-event, dispatched locally via `_NEXT_EVENT`. |
-| 400 | — | mod | Custom fishing **ENTER** (former label 301 + 302 retired). |
-| 133 | — | mod | Custom fishing **QUIT** — occupies former label 303. |
-| 134 | — | mod | Custom fishing **BAIT** menu — occupies former label 304. |
+| 9600 | — | mod | Custom fishing shared **menu** subroutine — `CALL_FUNC` target for the entry/quit menus. |
+| 400 | — | mod | Custom fishing **ENTER**. |
+| 133 | — | mod | Custom fishing **QUIT**. |
+| 134 | — | mod | Custom fishing **BAIT** menu. |
 
-> Mod runtime consumption: `400`←301 (+302 retired), `133`←303, `134`←304. Still-free spares: 305, 310.
+> Mod runtime consumption: four ISO-baked labels — `9600` (menu), `400` (ENTER), `133` (QUIT), `134` (BAIT) — each claimed by id and written straight in (no renumber, no spanning). The native pool (301–305, 310) is untouched here; it is only the fallback for an unpatched disc.
 
 
 ### Dark Heaven Castle (distant) — `gedit/s14` (MapNo 24)

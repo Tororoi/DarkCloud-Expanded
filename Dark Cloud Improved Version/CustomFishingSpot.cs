@@ -174,11 +174,17 @@ namespace Dark_Cloud_Improved_Version
                      // array every frame) was what referenced villager data after cmd 38 freed it. If it
                      // still crashes, the referencer is engine-side and we fall back to diagNoVillagerClear
                      // + EnforcePoolWatermark. Flip both together.
+                     // BISECT RESULT (2026-07-23): stilts garbage is NOT the model load and NOT the buffer
+                     // clears (both skipped -> still garbage). Clobber is intrinsic to entering fishing mode
+                     // (fishing-init / HUD texture setup evicting the stilts' GS block). Diagnostics reverted.
                      diagNoVillagerClear: false,
-                     // fishDepth override REMOVED: patching fish to WaterLevel-6 left them shallower than
-                     // the hook reaches (hook depth was not changed to match) so nothing could bite. With no
-                     // override the fish stay at vanilla WaterLevel-12, which the hook reaches — fish bite again.
-                     // (If we want shallower fish later, the hook/bobber depth must be patched in tandem.)
+                     // Fish depth left at vanilla (WaterLevel-12): shallow fishing (fishDepth 6) needs the HOOK
+                     // raised to match, but the hook is pinned to the fishing-rod's `hari` animation bone at
+                     // ~WaterLevel-9 — the only pure-runtime lever that moves it is the GroundLevel clamp, which
+                     // makes it rest on an invisible surface. RE'd: FishingStepFish (food = hookY-3) / CFish::
+                     // BiteHook (bite when fish-food < 1.0) / FishLineStep (clamp) / EdMoveChara (FishLineSetHook
+                     // pins the hook to SearchFrame(rod,"hari")). Shallow-depth approach parked pending a call on
+                     // the clamp vs. a per-tick bone rewrite. See [[fishing-depth-and-bite]].
                      // Fabricated collision: the lake shore (fish kept in) + the two large rocks (fish kept
                      // out), traced with the overhead cursor and decimated. Walls span the fish's depth band.
                      perimeter: new[]
@@ -255,8 +261,13 @@ namespace Dark_Cloud_Improved_Version
         /// still drops any of these a live event POINT references — cheap insurance for a future area — but
         /// no town's event points touch the 300-block, verified live for the three fishing towns.)
         /// </summary>
+        // 301-310: the towns' own native spare labels (offline-verified never dispatched). This pool is the
+        // FALLBACK path only — a spot on an unpatched disc, or a town without baked labels. The three custom
+        // fishing towns are ISO-patched with labels 9600/400/133/134 already numbered (IsoPatcher.ExtendStb),
+        // which the installer claims directly by id (ClaimLabel/FindLabelById), bypassing this pool entirely.
         private static readonly System.Collections.Generic.HashSet<int> SafeHijackLabels =
-            new System.Collections.Generic.HashSet<int> { 301, 302, 303, 304, 305, 306, 307, 310 };
+            new System.Collections.Generic.HashSet<int>
+            { 301, 302, 303, 304, 305, 306, 307, 310 };
 
         private static int _installedMap = -1;
         private static int _lastSeenMap = int.MinValue;
@@ -343,7 +354,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 if (map == _installedMap)
                 {
-                    WatchMatches(); UpdateFishingWindow(); EnforcePoolWatermark(); PriscleenFish.Tick();
+                    WatchMatches(); UpdateFishingWindow(); UpdateVillagerHide(); EnforcePoolWatermark(); PriscleenFish.Tick();
                     GlobalSignLoader.PinMango();   // sign is now NATIVE (baked into scene.scn); only Mango needs runtime moving
                     return;
                 }
@@ -457,40 +468,53 @@ namespace Dark_Cloud_Improved_Version
             Log($"   pool at install: used {Memory.ReadInt(FishingPool.Used) * FishingPool.BlockSize / 1024} KB " +
                 $"of {Memory.ReadInt(FishingPool.Capacity) * FishingPool.BlockSize / 1024} KB");
 
-            BuildArena(stb, labelCount, tbl);
-            if (_arena.Count == 0) { Log("   no spare labels — skipping"); return; }
+            BuildArena(stb, labelCount, tbl);   // native-orphan pool, used only as the unbaked-town fallback
 
-            // Our entry script is ~1.5 KB and no single spare label is that big (the 300-block runs 650-800 B
-            // each). But their code regions TILE the buffer, so a run of adjacent ones can be treated as one
-            // arena and written straight through.
-            Lab lab = Allocate(stb, Need(BuildFishingBytecode(spot)), out int end);
+            // Each script goes into the ISO-baked label that already carries its final id (9600/400/133/134),
+            // sized to fit it in one label — so nothing is renumbered or split. ClaimLabel falls back to a
+            // renamed native orphan on an unpatched disc. The MENU is claimed FIRST so its offset is known
+            // before the entry/quit scripts CALL_FUNC it; on the fallback path that also marks its orphan used
+            // before the entry script's arena is carved out. If it can't be placed, menuCbRel stays -1 and
+            // both menus fall back to inline copies.
+            int codeBaseVal = Memory.ReadInt(stb + TownScript.CodeBase);
+            int menuCbRel = -1;
+            Lab menuLab = ClaimLabel(stb, labelCount, tbl, MenuSubLabelId, Need(BuildMenuSubroutine()), out int menuEnd);
+            if (menuLab != null)
+            {
+                Memory.WriteInt(stb + menuLab.Entry, MenuSubLabelId);   // no-op for a baked label; renames a fallback orphan
+                WriteScript(stb, menuLab.Off, menuEnd, BuildMenuSubroutine(),
+                            "shared menu-select subroutine (CALL_FUNC target for entry + quit menus)");
+                menuCbRel = menuLab.Off - codeBaseVal;
+                Log($"   menu subroutine: label {MenuSubLabelId} (code @+0x{menuLab.Off:X}, CALL_FUNC cb-rel 0x{menuCbRel:X})");
+            }
+            else Log("   no spare label for the shared menu subroutine — entry/quit menus fall back to inline");
+
+            Lab lab = ClaimLabel(stb, labelCount, tbl, FishingLabelId, Need(BuildFishingBytecode(spot, menuCbRel)), out int end);
             if (lab == null)
             {
                 Log("   the spare labels cannot hold the fishing script — skipping");
                 return;
             }
 
-            // Give the script an id of our own rather than inheriting the label's. Otherwise the town keeps a
-            // live entry pointing at our code, and any event of ITS OWN that happens to use that id would run
-            // the fishing script — drawing a "!" and offering to fish wherever it fired. Only OUR event point
-            // names this id, so nothing else can reach it.
+            // The entry label answers to an id nothing else dispatches (400): only OUR event point names it,
+            // so no town event of its own can reach the fishing script.
             int codeOff = lab.Off;
-            Memory.WriteInt(stb + lab.Entry, FishingLabelId);
+            Memory.WriteInt(stb + lab.Entry, FishingLabelId);   // no-op for a baked label; renames a fallback orphan
             int labelId = FishingLabelId;
 
-            Log($"   script @0x{stb:X}  labels={labelCount}  label {lab.Id} -> {labelId} " +
-                $"(code @+0x{codeOff:X}, arena {end - codeOff}B across {SpanCount(codeOff, end)} label(s))");
+            Log($"   entry script @0x{stb:X}  labels={labelCount}  label {labelId} " +
+                $"(code @+0x{codeOff:X}, {end - codeOff}B region)");
 
-            WriteScript(stb, codeOff, end, BuildFishingBytecode(spot),
+            WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, menuCbRel),
                         $"_LOAD_MAIN_CHARA({FishingModel}) + _LOAD_FISHING_DATA(area={spot.AreaId}, " +
                         $"water={spot.Water}) + stance + bait + fishing");
             _fishLabelOff = codeOff;    // arms EnforcePoolWatermark's running-label identification
 
             _exitPosOperand = _exitRotOperand = -1;
             _exitPosAddr = _exitRotAddr = 0;
-            InstallEngineLabel(stb, EventPoints.FishingExitLabel, BuildExitBytecode(spot),
+            InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingExitLabel, BuildExitBytecode(spot, menuCbRel),
                                $"restore {NormalModel} + re-place player + _EXIT_FISHING   [Circle = leave]");
-            InstallEngineLabel(stb, EventPoints.FishingBaitLabel, BuildBaitBytecode(),
+            InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingBaitLabel, BuildBaitBytecode(),
                                $"_GOTO_CHANGE_ESA + load the chosen bait   [Square = bait menu]");
 
             if (!TryCreateEventPoint(spot, labelId, out int slot))
@@ -615,6 +639,11 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private const int FishingLabelId = 400;
 
+        /// <summary>Id for the shared menu-select subroutine's label. Nothing dispatches it as an event — it is
+        /// only ever reached by CALL_FUNC (vanilla parks the same routine as an anonymous funcdata) — so this
+        /// just needs to be an id no town uses and clear of the <see cref="RetiredLabelId"/> range.</summary>
+        private const int MenuSubLabelId = 9600;
+
         /// <summary>
         /// Claim a run of adjacent unused labels totalling at least <paramref name="need"/> bytes, and return
         /// the FIRST one — its id is what the script will answer to.
@@ -670,11 +699,42 @@ namespace Dark_Cloud_Improved_Version
             return null;
         }
 
-        private static int SpanCount(int off, int end)
+        /// <summary>
+        /// The label to write <paramref name="targetId"/>'s script into. PREFERS the ISO-baked label that
+        /// already carries this id (<see cref="IsoPatcher.ExtendStb"/> stamps 9600/400/133/134 straight into
+        /// the three custom fishing towns): it is correctly numbered and sized to hold its one script, so we
+        /// write into it directly — no renumber, no arena run, no spanning. FALLS BACK to renaming a native
+        /// orphan for a town/ISO without the baked labels (an unpatched disc, or a spot added to a new town).
+        /// </summary>
+        private static Lab ClaimLabel(long stb, int labelCount, int tbl, int targetId, int need, out int end)
         {
-            int n = 0;
-            foreach (var l in _arena) if (l.Off >= off && l.Off < end) n++;
-            return n;
+            Lab baked = FindLabelById(stb, labelCount, tbl, targetId);
+            if (baked != null) { end = baked.Off + baked.Size; return baked; }
+            return Allocate(stb, need, out end);   // native-orphan fallback; caller renames it to targetId
+        }
+
+        /// <summary>Find the label whose id is <paramref name="id"/> and return its code region (its size is
+        /// the gap to the next label by offset). Null if absent. Used to claim a pre-baked, pre-numbered
+        /// fishing label directly, without the fit-allocator's size search.</summary>
+        private static Lab FindLabelById(long stb, int labelCount, int tbl, int id)
+        {
+            int myOff = -1, mySlot = -1;
+            var offs = new int[labelCount];
+            for (int i = 0; i < labelCount; i++)
+            {
+                long e = stb + tbl + i * TownScript.LabelStride;
+                offs[i] = Memory.ReadInt(e + 4);
+                if (Memory.ReadInt(e) == id) { myOff = offs[i]; mySlot = i; }
+            }
+            if (mySlot < 0) return null;
+            int next = int.MaxValue;
+            for (int i = 0; i < labelCount; i++) if (offs[i] > myOff && offs[i] < next) next = offs[i];
+            return new Lab
+            {
+                Id = id, Slot = mySlot, Off = myOff,
+                Size = next == int.MaxValue ? 0 : next - myOff,
+                Entry = tbl + mySlot * TownScript.LabelStride,
+            };
         }
 
         /// <summary>
@@ -704,6 +764,9 @@ namespace Dark_Cloud_Improved_Version
             // 1. The labels we hijack declare 0, so a script that touches var0 without raising this would be
             // reaching outside its frame.
             if (w.Locals > 0) Memory.WriteInt(stb + codeOff + 8, w.Locals);
+            // fd[3] (funcOff+0xC) = argument count. Native/baked spares carry 0 here, so only a genuine
+            // subroutine (the shared menu) needs it — but a wrong non-zero value would misframe the callee.
+            if (w.ArgCount > 0) Memory.WriteInt(stb + codeOff + 0xC, w.ArgCount);
 
             Memory.WriteBytesBatch(stb + codeOff + TownScript.LabelCodeSkip, bc);
             if (blob.Length > 0) Memory.WriteBytesBatch(stb + blobOff, blob);
@@ -715,17 +778,17 @@ namespace Dark_Cloud_Improved_Version
         /// Give the town a label the ENGINE asks for by number (133 = quit, 134 = bait). The id is not
         /// negotiable, so if the town has no such label we claim a spare and REWRITE ITS ID.
         /// </summary>
-        private static void InstallEngineLabel(long stb, int targetId, StbWriter w, string what)
+        private static void InstallEngineLabel(long stb, int labelCount, int tbl, int targetId, StbWriter w, string what)
         {
-            Lab lab = Allocate(stb, Need(w), out int end);
+            Lab lab = ClaimLabel(stb, labelCount, tbl, targetId, Need(w), out int end);
             if (lab == null)
             {
                 Log($"   NO room for label {targetId} — that fishing button will do nothing");
                 return;
             }
 
-            Memory.WriteInt(stb + lab.Entry, targetId);
-            Log($"   label {lab.Id} re-numbered to {targetId} (the engine requests it by number)");
+            Memory.WriteInt(stb + lab.Entry, targetId);   // no-op for a baked label; renames a fallback orphan
+            Log($"   label {targetId} (the engine requests it by number, code @+0x{lab.Off:X})");
             WriteScript(stb, lab.Off, end, w, what);
 
             // The pool-watermark enforcement and the fishing-window signal identify "one of OUR labels is
@@ -957,10 +1020,16 @@ namespace Dark_Cloud_Improved_Version
             w.Ext(2);
             w.Yield();                              // the menu owns the frames; we wake when it closes
 
-            // The load now waits on the disc rather than on a frame count, so it is as short as it can safely
-            // be — vanilla returns you to fishing the instant you pick a bait, and this is the closest we get
-            // without the crash risk of guessing.
-            EmitBaitLoad(w);
+            // ONLY load a bait if the player actually PICKED one. The menu leaves var0 <= 0 on cancel (var0 is
+            // a zeroed local, and the engine writes an id only on a real selection). Vanilla's label 134 guards
+            // the load with exactly this `var0 > 0` test; without it, cancelling still ran the load and pointed
+            // _SET_FISHING_ESA at item 0 — which reads back as the first esa-table entry (Evy) with no model on
+            // the hook. The load itself waits on the disc rather than a frame count (crash-safe).
+            w.PushVar(0); w.PushInt(0); w.Cmp(StbWriter.CmpGt);
+            int cancelled = w.MarkForward();
+            w.BrFalse(cancelled);                   // var0 <= 0 -> menu was cancelled, leave the esa untouched
+                EmitBaitLoad(w);
+            w.PlaceMark(cancelled);
 
             // GO BACK TO FISHING. Every fishing sub-script runs as a normal event, and when an event RETs,
             // EventMode switches on its return code — whose `default:` branch is `GameMode = 1`, i.e. WALKING.
@@ -1004,8 +1073,21 @@ namespace Dark_Cloud_Improved_Version
         /// Scratch locals <paramref name="vPad"/>/<paramref name="vLy"/>/<paramref name="vHeld"/>/
         /// <paramref name="vScratch"/> are clobbered.
         /// </summary>
+        /// <summary>Inline form: emit the menu straight into the caller's frame, leaving the choice in
+        /// <paramref name="vSel"/>. Used only as a fallback when no shared subroutine could be allocated.</summary>
         private static void EmitSelectMenu(StbWriter w, int msgId, int count,
                                            int vSel, int vPad, int vLy, int vHeld, int vScratch)
+            => EmitMenuBody(w, () => w.PushInt(msgId), () => w.PushInt(count - 1),
+                            vSel, vPad, vLy, vHeld, vScratch);
+
+        /// <summary>
+        /// The menu cursor loop, shared by the inline form (<see cref="EmitSelectMenu"/>) and the CALL_FUNC
+        /// subroutine (<see cref="BuildMenuSubroutine"/>). msgId and (count-1) are supplied via delegates so
+        /// the SAME bytecode serves both a literal-const inline copy and a subroutine reading them from its
+        /// arg locals — one implementation to maintain, exactly as vanilla shares its 0x4bd4/0x4264 pair.
+        /// </summary>
+        private static void EmitMenuBody(StbWriter w, System.Action pushMsgId, System.Action pushCountMinus1,
+                                         int vSel, int vPad, int vLy, int vHeld, int vScratch)
         {
             const int Win = 1;
             // Locals is a COUNT (indices 0..count-1), so reserve highest-index + 1 — see WriteScript.
@@ -1016,7 +1098,7 @@ namespace Dark_Cloud_Improved_Version
             // AUTO-PLACE the bubble (this is what was missing — without _SET_MES_AUTOSET the bubble sat top-left).
             w.PushInt(StbCommands.SetMesShippo);    w.PushInt(Win); w.PushInt(0); w.Ext(3);
             w.PushInt(StbCommands.SetMesDrawSpeed); w.PushInt(Win); w.PushFloat(0.0f); w.Ext(3); // 0 = instant (per-char delay); vanilla's select-loop value
-            w.PushInt(StbCommands.MesMake);       w.PushInt(Win); w.PushInt(msgId); w.Ext(3);
+            w.PushInt(StbCommands.MesMake);       w.PushInt(Win); pushMsgId(); w.Ext(3);
             w.PushInt(StbCommands.SetMesPos);     w.PushInt(Win); w.PushInt(9); w.Ext(3);
             w.PushInt(StbCommands.SetMesAutoset); w.PushInt(Win); w.PushInt(0); w.PushInt(0); w.PushInt(0); w.PushInt(0); w.Ext(6);
             SetVar(w, vSel,  () => w.PushInt(0));
@@ -1038,7 +1120,7 @@ namespace Dark_Cloud_Improved_Version
                 int adHeld = w.MarkForward();
                 w.PushVar(vHeld); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(adHeld);   // held -> only set flag
                     int adSkip = w.MarkForward();
-                    w.PushVar(vSel); w.PushInt(count - 1); w.Cmp(StbWriter.CmpLt); w.BrFalse(adSkip);
+                    w.PushVar(vSel); pushCountMinus1(); w.Cmp(StbWriter.CmpLt); w.BrFalse(adSkip);
                         SetVar(w, vSel, () => { w.PushVar(vSel); w.PushInt(1); w.Add(); });
                     w.PlaceMark(adSkip);
                 w.PlaceMark(adHeld);
@@ -1064,7 +1146,7 @@ namespace Dark_Cloud_Improved_Version
             int notDDown = w.MarkForward();
             w.PushVar(vPad); w.PushInt(StbCommands.PadDown); w.And(); w.BrFalse(notDDown);
                 int ddSkip = w.MarkForward();
-                w.PushVar(vSel); w.PushInt(count - 1); w.Cmp(StbWriter.CmpLt); w.BrFalse(ddSkip);
+                w.PushVar(vSel); pushCountMinus1(); w.Cmp(StbWriter.CmpLt); w.BrFalse(ddSkip);
                     SetVar(w, vSel, () => { w.PushVar(vSel); w.PushInt(1); w.Add(); });
                 w.PlaceMark(ddSkip);
             w.PlaceMark(notDDown);
@@ -1089,6 +1171,54 @@ namespace Dark_Cloud_Improved_Version
             w.PushInt(StbCommands.SetMesShippo); w.PushInt(Win); w.PushInt(1); w.Ext(3);
         }
 
+        // The shared menu subroutine's frame: locals 0,1 are the arguments (msgId, count); 2..6 are its
+        // scratch. Matches vanilla 0x4bd4 (args in the low locals, cursor state above).
+        private const int MenuMsgArg = 0, MenuCountArg = 1;
+        private const int MenuSel = 2, MenuPad = 3, MenuLy = 4, MenuHeld = 5, MenuScratch = 6;
+
+        /// <summary>
+        /// Build the shared menu-select subroutine — the CALL_FUNC target that both the entry menu and the quit
+        /// confirm invoke, exactly as Norune's label 11 and 133 both call its 0x4bd4. Takes (msgId, count) as
+        /// stack args and returns the chosen 0-based line ON THE STACK (push then RET), which the caller STOREs.
+        /// </summary>
+        private static StbWriter BuildMenuSubroutine()
+        {
+            var w = new StbWriter();
+            w.SetArgs(2);                                        // var0 = msgId, var1 = count
+            EmitMenuBody(w, () => w.PushVar(MenuMsgArg),
+                            () => { w.PushVar(MenuCountArg); w.PushInt(1); w.Sub(); },
+                            MenuSel, MenuPad, MenuLy, MenuHeld, MenuScratch);
+            w.PushVar(MenuSel);                                  // vanilla returns v6 the same way: push, then RET
+            w.Ret();
+            return w;
+        }
+
+        /// <summary>
+        /// Invoke the shared menu subroutine and leave the choice in <paramref name="destVar"/>. This is
+        /// vanilla's call shape verbatim (label 11 / 133): push the destination REF first so it sits below the
+        /// args, push the args, CALL_FUNC, then STORE (which writes *destVar and re-pushes the value) and POP.
+        /// </summary>
+        private static void EmitMenuCall(StbWriter w, int msgId, int count, int destVar, int menuCbRel)
+        {
+            w.UseLocals(destVar + 1);
+            w.PushVarRef(destVar);        // ref stays at the bottom of the stack for the trailing STORE
+            w.PushInt(msgId);             // arg0 -> callee var0
+            w.PushInt(count);             // arg1 -> callee var1
+            w.CallFunc(menuCbRel);        // returns the chosen line on the stack
+            w.Store();                    // *destVar = choice
+            w.Pop();
+        }
+
+        /// <summary>Emit the entry/quit menu: the shared CALL_FUNC subroutine when one was allocated
+        /// (<paramref name="menuCbRel"/> &gt;= 0), else an inline copy as a fallback. Either way the choice
+        /// lands in <paramref name="destVar"/> for the caller to branch on.</summary>
+        private static void EmitMenu(StbWriter w, int msgId, int count, int destVar, int menuCbRel,
+                                     int vPad, int vLy, int vHeld, int vScratch)
+        {
+            if (menuCbRel >= 0) EmitMenuCall(w, msgId, count, destVar, menuCbRel);
+            else EmitSelectMenu(w, msgId, count, destVar, vPad, vLy, vHeld, vScratch);
+        }
+
         /// <summary>Show event-mes <paramref name="msgId"/> in window 1 (no cursor), wait for X, then close.
         /// This is Norune's no-pole line: window 1, pos 8 (anchors it talk-box style). Two things are essential
         /// here. (1) The caller must NOT have closed the menu window first — the show-flag (ClsMes+0x94) is set
@@ -1098,6 +1228,7 @@ namespace Dark_Cloud_Improved_Version
         private static void EmitShowMessage(StbWriter w, int msgId, int padVar)
         {
             const int Win = 1;
+            w.UseLocals(padVar + 1);    // self-declare: the inline menu no longer reserves this var for us
             // Tail OFF (flag 0) for the whole display: DrawMesWin_sub draws the shippo tail whenever
             // ClsMes+0x58 != 0, and its anchor sits mid-screen — turning it on here is what put the stray
             // triangle above the player. Vanilla also shows this line with the tail off.
@@ -1122,7 +1253,7 @@ namespace Dark_Cloud_Improved_Version
             w.PushInt(StbCommands.MesClose); w.PushInt(1); w.Ext(2);
         }
 
-        private static StbWriter BuildFishingBytecode(Spot s)
+        private static StbWriter BuildFishingBytecode(Spot s, int menuCbRel)
         {
             var w = new StbWriter();
 
@@ -1157,6 +1288,15 @@ namespace Dark_Cloud_Improved_Version
 
             // Everything past here yields, so pressing X promotes this into a real event — and only then.
 
+            // Snap the player out of whatever animation they were in (mid-walk, most often) to idle the
+            // instant the menu commits. Without this the last motion FREEZES on screen for the whole menu —
+            // you press X while walking and stand there mid-stride. Norune's label 11 does exactly this here:
+            // _SET_NPC_MOTION(charaId -1 = player, motion 0 = idle), before it opens the menu.
+            w.PushInt(StbCommands.SetNpcMotion);      // 133
+            w.PushInt(-1);                            // charaId -1 = the player
+            w.PushInt(0);                             // motion 0 = idle/stand
+            w.Ext(3);
+
             // ── VANILLA ENTRY MENU (Fish / Exchange FP / Fishing log / Quit) ────────────────────────────
             // Norune shows this before fishing starts (its label 11). We reproduce it. But first WAIT for the
             // mod to swap window 1 to our injected menu text: the swap happens on CustomFishingSpot.Tick, which
@@ -1165,7 +1305,7 @@ namespace Dark_Cloud_Improved_Version
             // mes (which lacks msg 20) — the "heavily distorted" bubble. 8 yields (~133 ms) clears a full tick
             // interval with margin, so the swap is reliably done first.
             for (int i = 0; i < 8; i++) w.Yield();
-            EmitSelectMenu(w, 20, 4, /*sel*/2, /*pad*/3, /*ly*/4, /*held*/5, /*scratch*/6);
+            EmitMenu(w, 20, 4, /*sel*/2, menuCbRel, /*pad*/3, /*ly*/4, /*held*/5, /*scratch*/6);
 
             // Exchange FP (1) / Fishing log (2) each open their own engine menu then return; Quit (3) returns.
             // Only "Fish" (0) falls through to the session setup below. (Norune's label 11 returns after FP/log
@@ -1364,17 +1504,25 @@ namespace Dark_Cloud_Improved_Version
         /// The RET matters: we set no return code, so <c>EventMode</c> takes its <c>default:</c> branch and
         /// puts <c>GameMode</c> back to 1 (walking). That is how Norune's exit path ends too.
         /// </summary>
-        private static StbWriter BuildExitBytecode(Spot s)
+        private static StbWriter BuildExitBytecode(Spot s, int menuCbRel)
         {
             var w = new StbWriter();
             w.Yield();                                // same rule as the main script — see BuildFishingBytecode
             w.Yield();                                // Norune yields twice here before touching the model
 
+            // Snap the player to idle before the confirm menu, exactly as Norune's 133 opens with
+            // _SET_NPC_MOTION(-1, 0) (and as our entry script does). Without it the player holds the fishing
+            // pose frozen behind the "Quit fishing?" menu; on Continue the session resumes the fishing motion.
+            w.PushInt(StbCommands.SetNpcMotion);      // 133
+            w.PushInt(-1);                            // charaId -1 = the player
+            w.PushInt(0);                             // motion 0 = idle/stand
+            w.Ext(3);
+
             // ── VANILLA QUIT MENU (Continue fishing / Quit fishing) ─────────────────────────────────────
             // Circle during fishing asks the engine for label 133 (this script). Norune's 133 shows a 2-option
             // confirm before actually leaving. The session is already open, so window 1 already holds our menu
             // text (msg 22). Choice lands in var8 (high range, clear of the position locals below).
-            EmitSelectMenu(w, 22, 2, /*sel*/8, /*pad*/9, /*ly*/10, /*held*/11, /*scratch*/12);
+            EmitMenu(w, 22, 2, /*sel*/8, menuCbRel, /*pad*/9, /*ly*/10, /*held*/11, /*scratch*/12);
             int doQuit = w.MarkForward();
             w.PushVar(8); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(doQuit);   // sel != 0 (Quit) -> leave
                 // Continue (0): keep the session running. _SET_RETURN_CODE(11) is exactly what Norune's 133
@@ -1907,6 +2055,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  VillagerDrawSlots = 10;       // MainDraw's hardcoded EdDrawCharacter count
         private static readonly int[] _savedDrawFlags = new int[VillagerDrawSlots];
         private static bool _drawFlagsSaved;
+        private static bool _villagersHidden;   // one-shot latch for UpdateVillagerHide
 
         private const long EdEventInfo = 0x21D3D1D0;   // ELF 0x1d3d1d0 — running-event id (set by EdEventInit)
 
@@ -2007,21 +2156,11 @@ namespace Dark_Cloud_Improved_Version
 
             if (InFishingWindow)
             {
-                // Suspend BOTH villager paths BEFORE the enter script frees + overwrites the visuals:
-                //  (1) STEP — EdEventNPCStep loops `i < count`, so zero the count.
-                _savedVillagerCount = Memory.ReadInt(VillagerCount);
-                if (_savedVillagerCount > 0) Memory.WriteInt(VillagerCount, 0);
-                //  (2) DRAW — EdDrawCharacter walks a fixed 10 slots gated by CheckDraw's +0x146C flag;
-                //      zero the 10 fixed-address flags so CheckDraw returns 0 and skips the freed visual.
-                for (int i = 0; i < VillagerDrawSlots; i++)
-                {
-                    long f = VillagerObjBase + (long)i * VillagerObjStride + VillagerDrawFlag;
-                    _savedDrawFlags[i] = Memory.ReadInt(f);
-                    Memory.WriteInt(f, 0);
-                }
-                _drawFlagsSaved = true;
-                Log($"   villagers suspended for session: count {_savedVillagerCount} -> 0, " +
-                    $"{VillagerDrawSlots} draw flags -> 0 (engine won't step OR draw freed villagers)");
+                // NOTE: hiding the villagers themselves is deliberately NOT done here. This open-block fires
+                // the moment the entry menu appears, and the townspeople must stay put while that menu is up
+                // (the player may pick FP / log / quit and walk away). The actual suspension is a separate
+                // one-shot — UpdateVillagerHide() — gated on the screen being fully faded to black, which is
+                // when the enter script commits to fishing and frees the villager buffer.
 
                 // Supply the catch-message template the custom town's talk mes lacks (empty-bubble fix): swap
                 // the talk ClsMes buffer to our msg-2000-only mes for the session. No NPC dialogue runs while
@@ -2054,6 +2193,7 @@ namespace Dark_Cloud_Improved_Version
                     Log($"   villagers restored (count -> {_savedVillagerCount}, draw flags restored)");
                 }
                 _savedVillagerCount = -1;
+                _villagersHidden = false;   // re-arm the fade-gated hide for the next session
 
                 // Restore the town's own talk mes — but only if we're still the pointer on it. A town reload
                 // during the session (EditInit) installs a fresh buffer; don't clobber that with a stale one.
@@ -2075,6 +2215,52 @@ namespace Dark_Cloud_Improved_Version
                 }
                 _savedEventBuf = 0;
             }
+        }
+
+        /// <summary>
+        /// Hides the town's villagers for the session — but only once the screen has fully faded to black.
+        ///
+        /// This is split out of <see cref="UpdateFishingWindow"/> on purpose. That method's OPEN transition
+        /// fires at entry-menu time, and the townspeople must stay on screen while the menu is up (the player
+        /// can still back out with FP / log / quit). The enter script only commits to fishing AFTER the menu:
+        /// it fades to black (_FADE_OUT), waits for the fade to finish, and THEN frees the villager buffer
+        /// (cmd 38) and loads the 1.8 MB fishing model over it. Hiding the villagers exactly at "fully black"
+        /// means the pop-out is invisible (the user sees them right up to the fade) yet the count is zeroed
+        /// and the draw flags cleared before the engine can step/draw a villager whose memory is being reused.
+        ///
+        /// Fade state (EdFadeInOut 0x189860): a fade-out holds <c>fade_in_out == -1</c> and flips
+        /// <c>fade_end</c> to 1 only when the black alpha reaches full (128), staying there until the fade-in.
+        /// So "fully black on a fade-out" == <c>fade_in_out == -1 &amp;&amp; fade_end != 0</c>. We also hide on a
+        /// live session (cpoly / fishing mode) as a safety net for attaching mid-session, where the buffer is
+        /// already freed and leaving villagers stepping would crash.
+        /// </summary>
+        private static void UpdateVillagerHide()
+        {
+            if (_villagersHidden || !InFishingWindow) return;
+
+            bool fullyBlack = Memory.ReadInt(FishingSpot.FadeInOut) == -1 &&
+                              Memory.ReadInt(FishingSpot.FadeEnd) != 0;
+            bool sessionLive = Memory.ReadInt(FishingSpot.CPolyNum) > 0 ||
+                               Memory.ReadFloat(FishingSpot.WaterLevel) != 0f ||
+                               Memory.ReadInt(EditLoop.GameMode) == EditLoop.GameModeFishing;
+            if (!fullyBlack && !sessionLive) return;   // entry menu still up (or fade still ramping) — leave them
+
+            // (1) STEP — EdEventNPCStep loops `i < count`, so zero the count.
+            _savedVillagerCount = Memory.ReadInt(VillagerCount);
+            if (_savedVillagerCount > 0) Memory.WriteInt(VillagerCount, 0);
+            // (2) DRAW — EdDrawCharacter walks a fixed 10 slots gated by CheckDraw's +0x146C flag; zero the 10
+            //     fixed-address flags so CheckDraw returns 0 and skips the freed visual.
+            for (int i = 0; i < VillagerDrawSlots; i++)
+            {
+                long f = VillagerObjBase + (long)i * VillagerObjStride + VillagerDrawFlag;
+                _savedDrawFlags[i] = Memory.ReadInt(f);
+                Memory.WriteInt(f, 0);
+            }
+            _drawFlagsSaved = true;
+            _villagersHidden = true;
+            Log($"   villagers hidden at fade-to-black: count {_savedVillagerCount} -> 0, " +
+                $"{VillagerDrawSlots} draw flags -> 0 " +
+                $"({(fullyBlack ? "fade complete" : "session live")})");
         }
 
         private static bool ComputeFishingWindow(out string why)
@@ -2348,6 +2534,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int LoadMainChara  = 999;    // (chrPath, cfgName, flag) — swaps the player's model
         internal const int FadeIn        = 500;     // (frames) — 500 is FADE_IN, not FADE_OUT
         internal const int SetWorldCoord = 7;       // (x, y, z, rx, ry, rz)
+        internal const int SetNpcMotion  = 133;     // (charaId, motionIdx) — charaId -1 = the player; motion 0 = idle
         internal const int SetNpcPos     = 137;     // (charaId, x, y, z)   charaId -1 = the player
         internal const int SetNpcRot     = 138;     // (charaId, rx, ry, rz)
         internal const int NpcDraw       = 140;     // (flag, charaId)
@@ -2539,6 +2726,28 @@ namespace Dark_Cloud_Improved_Version
         internal void Ext(int stackEntries) => Emit(OpExt, (uint)stackEntries, 0);
 
         internal void Ret() => Emit(OpRet, 0, 0);
+
+        private const int OpCallFunc = 19;
+
+        /// <summary>
+        /// Number of arguments this script is CALLED with (funcdata fd[3]). CALL_FUNC frames the callee as
+        /// <c>varsBase = sp - args*8</c>, so the caller's pushed args become the callee's first locals. 0 for a
+        /// normal event label; the shared menu subroutine declares 2 (msgId, count). WriteScript writes it.
+        /// </summary>
+        internal int ArgCount { get; private set; }
+
+        /// <summary>Declare this as a callable subroutine taking <paramref name="n"/> stack arguments (which
+        /// occupy locals 0..n-1). Also reserves them as locals.</summary>
+        internal void SetArgs(int n) { ArgCount = n; UseLocals(n); }
+
+        /// <summary>
+        /// CALL_FUNC (op 19): call the funcdata at <paramref name="cbRelFuncOff"/> — a codeBase-relative FILE
+        /// offset. Args are pushed by the caller first (they become the callee's locals 0..args-1); a return
+        /// value the callee pushes before RET is left on the stack. a1 is unused (0 in every vanilla call).
+        /// The offset is an absolute layout value known at emit time, so — unlike jumps/strings — it needs no
+        /// post-placement fixup.
+        /// </summary>
+        internal void CallFunc(int cbRelFuncOff) => Emit(OpCallFunc, 0, unchecked((uint)cbRelFuncOff));
 
         /// <summary>Suspend until the next frame. A script that never yields is run to completion inside
         /// <c>EdEventInit</c> and demoted to a "simple event" — it never becomes a real event, so its return

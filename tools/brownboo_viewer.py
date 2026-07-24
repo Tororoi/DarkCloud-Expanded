@@ -33,8 +33,15 @@ craterids = [f's04g01{n:02d}' for n in range(2, 17)] + ['s040101']
 visual = {
     'watersurf':   T(lambda n: 'czapp' in n),
     'shore':       T(lambda n: n.startswith('s04g0117')),
-    'boardwalk':   T(lambda n: n.startswith('s04g03')),
-    'stilts':      T(lambda n: n.startswith('s04g0401') or n in ('s04g402', 's04g403', 's04g404')),
+    # The boardwalk structure splits cleanly BY NODE (like the za01 foam split below), verified from the
+    # mesh: s04g03a* is the DECK — the horizontal walking planks (150+ horizontal tris) plus their railings;
+    # s04g03b* is the above-water STILTS — all-vertical posts, 88% below the deck (y<7), the piling faces
+    # you see between the deck and the waterline. s04g0401 (y -15..0) is the same posts continued UNDERWATER
+    # (also the collision-stilt source at col_stilts). Isolating s04g03b* is the point: it's the exact mesh
+    # whose texture garbles on fishing entry, so its texture can be identified and watched in isolation.
+    'boardwalk':   T(lambda n: n.startswith('s04g03a')),
+    'stilts':      T(lambda n: n.startswith('s04g03b')),   # above-water posts (the garbled-texture mesh)
+    'stilts_base': T(lambda n: n.startswith('s04g0401')),  # the posts continued below the waterline
     'rock':        T(lambda n: n.startswith('iwa')),
     'fence':       T(lambda n: n.startswith('st0')),
     'crater':      T(lambda n: any(n.startswith(c) for c in craterids)),
@@ -496,8 +503,9 @@ LAY = [
     ('foamobj','foam: interior (stilts/plants)','D.visual.foam_obj','[80,105,125]',0.5,'#7ab'),
     ('watersurf','water surface','D.visual.watersurf','[40,110,140]',0.30,'#8bd'),
     ('shore','shore ring','D.visual.shore','[95,82,60]',1,'#ccc'),
-    ('board','boardwalk','D.visual.boardwalk','[70,85,110]',1,'#ccc'),
-    ('stilts','stilts','D.visual.stilts','[55,65,80]',1,'#ccc'),
+    ('board','boardwalk deck','D.visual.boardwalk','[70,85,110]',1,'#ccc'),
+    ('stilts','stilts (above water)','D.visual.stilts','[235,120,60]',1,'#f95'),
+    ('stiltsbase','stilts (underwater)','D.visual.stilts_base','[110,70,45]',0.7,'#c85'),
     ('rock','rock','D.visual.rock','[125,98,72]',1,'#ccc'),
     ('fence','fence','D.visual.fence','[75,75,62]',1,'#ccc'),
     ('houses','houses','D.visual.houses','[95,72,52]',1,'#c96'),
