@@ -38,6 +38,11 @@ namespace Dark_Cloud_Improved_Version
     {
         internal static bool Enabled = true;
 
+        /// <summary>Verbose fishing instrumentation: per-tick MATCH / GameMode / EventReturnCode transition
+        /// logging, the event-slot readback dump, and the collision poly-gather dump. OFF by default (quiet);
+        /// flip on while debugging fishing. Purely observational — no game state depends on it.</summary>
+        internal static bool Diagnostics = false;
+
         /// <summary>A spot to install. Rect corners and the water plane come from the town's own
         /// <c>WATER_SURFACE</c> (see GeoramaProbe's dump); the trigger box just has to be somewhere the
         /// player will walk.</summary>
@@ -74,45 +79,25 @@ namespace Dark_Cloud_Improved_Version
             internal readonly float FishDepth;
             internal bool HasFishDepth => !float.IsNaN(FishDepth);
 
-            /// <summary>
-            /// FABRICATED COLLISION. The town's native cpoly is all ABOVE the fish (it's the land), so fish
-            /// and hook fall through it. When set, the mod REPLACES cpoly with vertical walls built from these
-            /// outlines — the water Perimeter (a closed loop, fish kept in) and any Obstacles (rocks/pillars,
-            /// fish kept out). Each is a flat float array of x,z pairs. Walls span the fish's depth band, so
-            /// a fish swimming at WaterLevel-FishDepth physically cannot cross them.
-            /// </summary>
-            internal readonly float[] Perimeter;
-            internal readonly float[][] Obstacles;
-            internal bool HasCollision => Perimeter != null;
 
             /// <summary>DIAGNOSTIC: skip the turi model swap. Proven the model load (not the rect, not pool
             /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
             internal readonly bool DiagSkipModel;
-
-            /// <summary>DIAGNOSTIC: do NOT clear/reload the town's villagers. <c>_CLEAR_VILLAGER_BUFF</c> only
-            /// rewinds the villager allocator, it does not delete the objects — so the model then loads over
-            /// memory the town still references. Harmless in Yellow Drops; a candidate cause in Brownboo.
-            /// With this set, the entry skips the clear and the exit skips the reload (nothing to restore).</summary>
-            internal readonly bool DiagNoVillagerClear;
 
             internal Spot(int mapNo, string name, int areaId,
                           float x1, float z1, float x2, float z2, float water, float ground,
                           float tx, float ty, float tz, float radius,
                           float sx = float.NaN, float sy = float.NaN, float sz = float.NaN,
                           float facing = float.NaN, bool diagSkipModel = false,
-                          bool diagNoVillagerClear = false,
                           float fx1 = float.NaN, float fz1 = float.NaN, float fx2 = float.NaN,
-                          float fz2 = float.NaN, float fishDepth = float.NaN,
-                          float[] perimeter = null, float[][] obstacles = null)
+                          float fz2 = float.NaN, float fishDepth = float.NaN)
             {
                 MapNo = mapNo; Name = name; AreaId = areaId;
                 X1 = x1; Z1 = z1; X2 = x2; Z2 = z2; Water = water; Ground = ground;
                 TrigX = tx; TrigY = ty; TrigZ = tz; Radius = radius;
                 StandX = sx; StandY = sy; StandZ = sz; Facing = facing;
                 DiagSkipModel = diagSkipModel;
-                DiagNoVillagerClear = diagNoVillagerClear;
                 FishX1 = fx1; FishZ1 = fz1; FishX2 = fx2; FishZ2 = fz2; FishDepth = fishDepth;
-                Perimeter = perimeter; Obstacles = obstacles;
             }
         }
 
@@ -146,7 +131,7 @@ namespace Dark_Cloud_Improved_Version
             // (-1.00, -0.07), toward the pond centre. This crashed repeatedly before, but that was
             // _CLEAR_VILLAGER_BUFF (it rewinds the villager allocator without deleting the objects, and the
             // model loads over memory Brownboo still references), NOT the location or the boardwalk.
-            // diagNoVillagerClear skips the clear, so the spot should now work.
+            // The vanilla villager clear (cmd 38/57, behind the fade) handles this; the spot works.
             //
             // WATER LEVEL = 0: confirmed by eye (bobber sits right on the surface at 0), and the near-water
             // heights are ~1 and below — the ~7 readings were the raised banks, not the waterline. So the
@@ -167,17 +152,10 @@ namespace Dark_Cloud_Improved_Version
                      -250f, -240f, 250f, 240f, water: 0f, ground: -15f,   // ±250 W/E, ±240 N/S, centre (0,0)
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
-                     sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
-                     // BISECT (2026-07-20): back to the vanilla villager-clear pair (38/57) while
-                     // TownCharacter.DisableBrownbooDialogue is ON. If the session now loads without
-                     // crashing, the mod's per-frame Brownboo dialogue scan (which touches the villager
-                     // array every frame) was what referenced villager data after cmd 38 freed it. If it
-                     // still crashes, the referencer is engine-side and we fall back to diagNoVillagerClear
-                     // + EnforcePoolWatermark. Flip both together.
+                     sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f
                      // BISECT RESULT (2026-07-23): stilts garbage is NOT the model load and NOT the buffer
                      // clears (both skipped -> still garbage). Clobber is intrinsic to entering fishing mode
-                     // (fishing-init / HUD texture setup evicting the stilts' GS block). Diagnostics reverted.
-                     diagNoVillagerClear: false,
+                     // (fishing-init / HUD texture setup evicting the stilts' GS block).
                      // Fish depth left at vanilla (WaterLevel-12): shallow fishing (fishDepth 6) needs the HOOK
                      // raised to match, but the hook is pinned to the fishing-rod's `hari` animation bone at
                      // ~WaterLevel-9 — the only pure-runtime lever that moves it is the GroundLevel clamp, which
@@ -185,24 +163,7 @@ namespace Dark_Cloud_Improved_Version
                      // BiteHook (bite when fish-food < 1.0) / FishLineStep (clamp) / EdMoveChara (FishLineSetHook
                      // pins the hook to SearchFrame(rod,"hari")). Shallow-depth approach parked pending a call on
                      // the clamp vs. a per-tick bone rewrite. See [[fishing-depth-and-bite]].
-                     // Fabricated collision: the lake shore (fish kept in) + the two large rocks (fish kept
-                     // out), traced with the overhead cursor and decimated. Walls span the fish's depth band.
-                     perimeter: new[]
-                     {
-                         -243f,-72f, -147f,-250f, -115f,-271f, -91f,-281f, -37f,-294f, 55f,-296f, 71f,-292f,
-                         164f,-239f, 218f,-176f, 266f,-68f, 287f,10f, 295f,24f, 291f,95f, 285f,108f, 285f,131f,
-                         249f,169f, 205f,204f, 179f,214f, 98f,232f, 76f,232f, 10f,245f, -67f,230f, -192f,160f,
-                         -248f,59f, -258f,25f, -251f,-31f, -235f,-69f,
-                     },
-                     // Obstacle footprints extracted from Brownboo's own mesh (gedit/s04/scene.scn), decoded
-                     // offline: each is the underwater XZ hull of an "iwa" (rock) node, in world coords (pond
-                     // centre = 0,0), expanded 3u outward for fish clearance. Precise, not hand-traced.
-                     obstacles: new[]
-                     {
-                         new[] { -207f,-34f, -203f,-58f, -166f,-86f, -135f,-88f, -123f,-84f, -88f,-50f, -91f,-9f, -100f,6f, -151f,29f, -186f,10f },   // iwa01 (west)
-                         new[] { -49f,150f, -48f,145f, -38f,136f, -28f,134f, 50f,136f, 62f,147f, 64f,153f, 62f,168f, 49f,175f, -38f,168f },           // iwa02 (north)
-                         new[] { 182f,-48f, 186f,-66f, 203f,-81f, 212f,-84f, 231f,-76f, 245f,-51f, 247f,-33f, 229f,-18f, 219f,-15f, 197f,-25f },       // iwa03 (east)
-                     }),
+                     ),
 
             // Yellow Drops: the yellow liquid.
             //
@@ -275,7 +236,6 @@ namespace Dark_Cloud_Improved_Version
 
         private static int _slot = -1;
         private static long _slotAddr;
-        private static int _labelId;
         private static Spot _spot;
         private static int _lastParam = int.MinValue;
         private static int _lastMode = int.MinValue;
@@ -354,7 +314,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 if (map == _installedMap)
                 {
-                    WatchMatches(); UpdateFishingWindow(); UpdateVillagerHide(); EnforcePoolWatermark(); PriscleenFish.Tick();
+                    WatchMatches(); UpdateFishingWindow(); UpdateVillagerHide(); PriscleenFish.Tick();
                     GlobalSignLoader.PinMango();   // sign is now NATIVE (baked into scene.scn); only Mango needs runtime moving
                     return;
                 }
@@ -393,19 +353,12 @@ namespace Dark_Cloud_Improved_Version
             _slot = -1;
             _slotAddr = 0;
             _fishingWasLive = false;
-            _fishLabelOff = 0;         // the pool + stb are rebuilt with the town — stale state is wrong
-            _exitLabelOff = 0;
-            _baitLabelOff = 0;
             InFishingWindow = false;
             _savedVillagerCount = -1;  // count belongs to the old town; don't restore it into the new one
             _drawFlagsSaved = false;
-            _savedTalkBuf = 0;         // talk buffer belongs to the old town; don't restore it into the new one
-            _catchMesWritten = false;  // re-write the template after a reload (guest scratch may be cleared)
+            _savedTalkBuf = 0;         // talk/event buffers belong to the old town; don't restore into the new one
             _savedEventBuf = 0;
-            _menuMesWritten = false;
-            _vbWatermark = -1;
-            _vbLastUsed = -1;
-            _vbStableTicks = 0;
+            FishingMenuText.Reset();   // re-write the templates after a reload (guest scratch may be cleared)
             _settleTicks = 0;
             _verifyTicks = 0;
             _lastParam = int.MinValue;
@@ -463,8 +416,6 @@ namespace Dark_Cloud_Improved_Version
 
             Log($"installing '{spot.Name}' (MapNo {spot.MapNo})");
 
-            // (NOTE: villagers finish loading a few SECONDS after this point — never capture a pool
-            // watermark here; see EnforcePoolWatermark's stability guard.)
             Log($"   pool at install: used {Memory.ReadInt(FishingPool.Used) * FishingPool.BlockSize / 1024} KB " +
                 $"of {Memory.ReadInt(FishingPool.Capacity) * FishingPool.BlockSize / 1024} KB");
 
@@ -508,7 +459,6 @@ namespace Dark_Cloud_Improved_Version
             WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, menuCbRel),
                         $"_LOAD_MAIN_CHARA({FishingModel}) + _LOAD_FISHING_DATA(area={spot.AreaId}, " +
                         $"water={spot.Water}) + stance + bait + fishing");
-            _fishLabelOff = codeOff;    // arms EnforcePoolWatermark's running-label identification
 
             _exitPosOperand = _exitRotOperand = -1;
             _exitPosAddr = _exitRotAddr = 0;
@@ -524,7 +474,6 @@ namespace Dark_Cloud_Improved_Version
             }
             _slot = slot;
             _slotAddr = EventPoints.Slot(EventPoints.Base(), slot);
-            _labelId = labelId;
             _spot = spot;
 
             PatchFishDepth(spot);
@@ -790,12 +739,6 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(stb + lab.Entry, targetId);   // no-op for a baked label; renames a fallback orphan
             Log($"   label {targetId} (the engine requests it by number, code @+0x{lab.Off:X})");
             WriteScript(stb, lab.Off, end, w, what);
-
-            // The pool-watermark enforcement and the fishing-window signal identify "one of OUR labels is
-            // running" by comparing CRunScript+0x3C (the RS_PROG_HEADER ptr reload() stores) against
-            // stbBase + these offsets.
-            if (targetId == EventPoints.FishingExitLabel) _exitLabelOff = lab.Off;
-            else if (targetId == EventPoints.FishingBaitLabel) _baitLabelOff = lab.Off;
 
             // Remember where the exit script's position/rotation operands landed, so they can be kept in step
             // with the player while they fish.
@@ -1363,11 +1306,8 @@ namespace Dark_Cloud_Improved_Version
             // Clearing here rather than not-clearing also fixes the OTHER symptom: with villagers still loaded
             // through a session, an open town (Brownboo) shows them — and one renders garbled, because the
             // texture manager reuses a block the model/bait overwrote. Gone for the session, gone the glitch.
-            if (!s.DiagNoVillagerClear)
-            {
-                w.PushInt(StbCommands.ClearVillagerBuff); // 38 — paired with _LOAD_VILLAGER on exit
-                w.Ext(1);
-            }
+            w.PushInt(StbCommands.ClearVillagerBuff); // 38 — paired with _LOAD_VILLAGER on exit
+            w.Ext(1);
 
             // RESET THE FISHING POOL TO ITS BASE *BEFORE* THE MODEL LOAD. This is the Brownboo fix.
             //
@@ -1601,12 +1541,9 @@ namespace Dark_Cloud_Improved_Version
             //
             // After _EXIT_FISHING, so the fishing data is torn down first; behind the fade, so the reload is
             // invisible; and followed by a load-wait, so the town is whole before the screen comes back.
-            if (!s.DiagNoVillagerClear)               // nothing was cleared, so nothing to reload
-            {
-                w.PushInt(StbCommands.LoadVillager);      // 57
-                w.Ext(1);
-                EmitWaitLoop(w, StbCommands.LoadSync, exitOnNonZero: false);
-            }
+            w.PushInt(StbCommands.LoadVillager);      // 57
+            w.Ext(1);
+            EmitWaitLoop(w, StbCommands.LoadSync, exitOnNonZero: false);
 
             w.PushInt(StbCommands.FadeIn);            // 500(60), as Norune's own exit block does
             w.PushInt(60);
@@ -1715,6 +1652,27 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void WatchMatches()
         {
+            // ── FUNCTIONAL (always) ── swing the camera behind the player the frame fishing mode starts, keep
+            // the exit re-place operands current, and drive the per-session collision/camera setup.
+            int gm = Memory.ReadInt(EditLoop.GameMode);
+            if (gm != _lastGameMode)
+            {
+                if (Diagnostics) Log($"GameMode {_lastGameMode} -> {gm}   {GameModeName(gm)}");
+                _lastGameMode = gm;
+
+                if (gm == EditLoop.GameModeFishing && _snapCamera)
+                {
+                    _snapCamera = false;
+                    SnapCameraBehindPlayer();
+                }
+            }
+
+            PatchExitPosition();
+            WatchFishingStart();
+
+            // ── OBSERVATIONAL (Diagnostics only) ── transition watches for debugging the trigger/mode chain.
+            if (!Diagnostics) return;
+
             int param = Memory.ReadInt(EventPoints.MatchedParam);
             if (param != _lastParam)
             {
@@ -1732,7 +1690,7 @@ namespace Dark_Cloud_Improved_Version
 
             // _GOTO_FISHING's whole job is `TownMode = 0xB`. If the mode never reaches 0xB, the command did
             // not run (or bailed on GetChara). If it reaches 0xB and then reverts, the mode ran and something
-            // rejected the state — a very different bug. Watch it instead of inferring it.
+            // rejected the state — watch it instead of inferring it.
             int mode = Memory.ReadInt(EditLoop.EventReturnCode);
             if (mode != _lastMode)
             {
@@ -1740,26 +1698,6 @@ namespace Dark_Cloud_Improved_Version
                     (mode == EditLoop.ReturnCodeFishing ? "   (script asked for fishing)" : ""));
                 _lastMode = mode;
             }
-
-            // The chain is: script sets ReturnCode=0xB -> EdEventMode returns it -> EventMode does
-            // `case 0xb: GameMode = 0x10`. EventMode ONLY runs while GameMode == 0xE (event mode). So the
-            // whole question is whether our event ever entered 0xE. Sampling GameMode only when the return
-            // code changed was looking at the one instant that cannot answer that — watch every transition.
-            int gm = Memory.ReadInt(EditLoop.GameMode);
-            if (gm != _lastGameMode)
-            {
-                Log($"GameMode {_lastGameMode} -> {gm}   {GameModeName(gm)}");
-                _lastGameMode = gm;
-
-                if (gm == EditLoop.GameModeFishing && _snapCamera)
-                {
-                    _snapCamera = false;
-                    SnapCameraBehindPlayer();
-                }
-            }
-
-            PatchExitPosition();
-            WatchFishingStart();
 
             // Did our slot survive? The array is built progressively during load, and something later in the
             // sequence could reclaim it.
@@ -1785,41 +1723,17 @@ namespace Dark_Cloud_Improved_Version
             bool live = Memory.ReadInt(FishingSpot.CPolyNum) > 0
                         || Memory.ReadFloat(FishingSpot.WaterLevel) != 0f;
 
-            // THE LEAK (black screen after ~4 start/quit/restart cycles): the turi model (1771.7 KB) +
-            // fishing.pak (1568 KB) load from the villager allocator (EdVillagerBuffer 0x1D1B360), and only
-            // _CLEAR_VILLAGER_BUFF rewinds it. Brownboo skips that command (diagNoVillagerClear), so every
-            // session permanently stacks +3340 KB (used = N*3340+3553; FishingExit itself only frees what
-            // came after FishingInit). Session 4 exceeds the 14369 KB capacity -> load fails behind the
-            // fade -> permanent black screen.
-            //
-            // A mod-side rewind at SESSION END was tried and CRASHED the next session: town events (NPC
-            // dialogs) allocate from EdEventBuffer, which chains on top of this counter — rewinding while
-            // the town is live let dialog data and the next session's loads share memory. Vanilla only ever
-            // rewinds at session START (38 inside the enter script, behind the fade, no live events) — any
-            // real fix must do the same. See the memory note; the vanilla-faithful fix is in progress.
-            if (!live && _fishingWasLive && _spot.DiagNoVillagerClear)
-            {
-                int cur = Memory.ReadInt(FishingPool.Used);
-                Log($"   session ended: pool used {cur * FishingPool.BlockSize / 1024} KB " +
-                    $"(watermark {(_vbWatermark < 0 ? -1 : _vbWatermark * FishingPool.BlockSize / 1024)} KB " +
-                    $"— rewound at next spot approach)");
-            }
-
             if (live && !_fishingWasLive)
             {
                 _snapCamera = true;
-                // EXPERIMENT: drop every vertical wall from the native cpoly, keeping only the floors/slopes
-                // the hook/bobber raycast honours. Tests whether player movement (its own collision system)
-                // still keeps you on the boardwalk and whether the bobber/hook behave with walls gone.
-                if (FloorsOnlyExperiment) ReplaceWithFloorsOnly();
-                // Keep the town's native terrain collision (hook/bobber vs sand/rocks/houses) and APPEND our
-                // fish-containment walls on top of it. See InjectCollision.
-                else if (InjectFakeCollision && _spot.HasCollision) InjectCollision(_spot);
-
-                // APPEND the simplified rock collision (decoded offline, tools/export_rock_collision.py) so
-                // the bobber can't cast onto/through the rocks and fish can't swim through them. Runs after
-                // the floors-only compaction, so it fills the slots freed by the dropped walls.
-                if (AppendRocks) AppendRockCollision(_spot.MapNo);
+                // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
+                // raycast honours: player movement (its own collision system) still keeps you on the boardwalk,
+                // and dropping the walls frees the poly budget for the rocks below.
+                FishingCollision.ReplaceWithFloorsOnly(_spot.MapNo);
+                // APPEND the simplified rock collision (decoded offline, tools/export_rock_collision.py) so the
+                // bobber can't cast onto/through the rocks and fish can't swim through them. Runs after the
+                // floors-only compaction, so it fills the slots freed by the dropped walls.
+                FishingCollision.AppendRockCollision(_spot.MapNo);
 
                 // TEST AID for the Priscleen port: stamp the loaded fish as species 8 (no-op unless the
                 // PriscleenFish.ForceAllSpecies8 switch is on).
@@ -1828,194 +1742,7 @@ namespace Dark_Cloud_Improved_Version
             _fishingWasLive = live;
         }
 
-        /// <summary>
-        /// EXPERIMENT: rewrite the native cpoly to keep ONLY near-horizontal polys (floors + slopes), dropping
-        /// every vertical wall. The hypothesis being tested: (a) the hook/bobber only ever land on floor-ish
-        /// polys (FishLineStep honours |normal.Y| &gt; 0.2), so walls never mattered to them, and (b) the
-        /// player's OWN movement collision — a separate system from cpoly — is what keeps them on the boardwalk
-        /// during a session. If both hold, we can throw away ~460 wall polys and free the whole budget.
-        ///
-        /// Pure runtime memory op: forward-compact the buffer in place (write index never outruns read index)
-        /// and lower CPolyNum. Runs once, AFTER PickUpPoly has gathered — so no bearing on the 1024 gather cap.
-        /// Reloading the town restores the full native set.
-        /// </summary>
-        internal static bool FloorsOnlyExperiment = true;
-
-        /// <summary>The floor-ness cutoff: the engine's own raycast (FishLineStep, DAT_2a1a64) counts a poly as
-        /// ground when |normal.Y| &gt; 0.2 on the normalised normal. Keeping exactly that set preserves every
-        /// poly the hook/bobber can land on and discards only true walls.</summary>
-        private const float FloorNormalYMin = 0.2f;
-
-        private static void ReplaceWithFloorsOnly()
-        {
-            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) { Log("   floors-only: cpoly ptr invalid — skipping"); return; }
-            long buf = Memory.ToMmu(p);
-
-            int nativeCount = Memory.ReadInt(FishingSpot.CPolyNum);
-            if (nativeCount <= 0 || nativeCount > FishingSpot.CPolyMax)
-            { Log($"   floors-only: native count {nativeCount} unusable — skipping"); return; }
-
-            // Capture the FULL gather (floors + walls) at the current cast rect, BEFORE we compact — this is
-            // the ground-truth geometry the viewer splits into floor/slope/wall, so widening the rect can be
-            // verified. Runs here (not in the probe) because CustomFishingSpot.Tick fires before the probe,
-            // so by the time the probe dumps, the walls are already gone.
-            DumpFullGather(buf, nativeCount);
-
-            int keep = 0, walls = 0, ladtops = 0;
-            for (int i = 0; i < nativeCount; i++)
-            {
-                long poly = buf + (long)i * 0x50;
-                float nx = Memory.ReadFloat(poly + 0x30);
-                float ny = Memory.ReadFloat(poly + 0x30 + 4);
-                float nz = Memory.ReadFloat(poly + 0x30 + 8);
-                float nl = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
-                if (nl <= 0f || Math.Abs(ny) / nl <= FloorNormalYMin) { walls++; continue; }   // a wall — drop it
-
-                // Also drop floor polys sitting on TOP of the in-water ladders (platforms above the water,
-                // not pond floor) — the bobber/hook have no business catching on them. Gated on the poly's
-                // LOWEST vertex, so pond floor near a ladder base (low Y) is kept; only the high tops go.
-                if (IsLadderTopFloor(poly)) { ladtops++; continue; }
-
-                if (keep != i)
-                    Memory.WriteBytesBatch(buf + (long)keep * 0x50, Memory.ReadBytesBatch(poly, 0x50));
-                keep++;
-            }
-
-            Memory.WriteInt(FishingSpot.CPolyNum, keep);
-            Log($"   floors-only: kept {keep} floor/slope polys (dropped {walls} walls + {ladtops} " +
-                $"ladder-top floors) — cpoly {nativeCount} → {keep}");
-        }
-
-        /// <summary>Brownboo's in-water ladder (s04r*) XZ positions, from gedit/s04/mapinfo.cfg. Used to
-        /// reclaim the FLOOR platforms on top of each ladder. Radius/height must match the viewer's van_cut
-        /// (tools/brownboo_viewer.py: LAD_POS / LAD_R / LAD_Y).</summary>
-        private static readonly (float x, float z)[] BrownbooLadders =
-        {
-            (0f, 74f), (-57f, 48f), (32f, -67f), (82f, 109f), (62f, -127f), (-55f, -116f), (-91f, 76f),
-        };
-        private const float LadderRadius  = 45f;   // top platforms lean out up to ~42u from the base position
-        private const float LadderTopMinY = 25f;   // a floor poly at/above this height near a ladder is a top
-
-        /// <summary>True if a cpoly triangle is a floor platform on top of one of Brownboo's ladders: its
-        /// lowest vertex is above <see cref="LadderTopMinY"/> AND its centre lies within
-        /// <see cref="LadderRadius"/> of a ladder. Brownboo-only (the positions are its own).</summary>
-        private static bool IsLadderTopFloor(long poly)
-        {
-            if (_spot.MapNo != 14) return false;
-
-            float y0 = Memory.ReadFloat(poly + 4);
-            float y1 = Memory.ReadFloat(poly + 0x10 + 4);
-            float y2 = Memory.ReadFloat(poly + 0x20 + 4);
-            if (Math.Min(y0, Math.Min(y1, y2)) < LadderTopMinY) return false;
-
-            float cx = (Memory.ReadFloat(poly) + Memory.ReadFloat(poly + 0x10) + Memory.ReadFloat(poly + 0x20)) / 3f;
-            float cz = (Memory.ReadFloat(poly + 8) + Memory.ReadFloat(poly + 0x10 + 8) + Memory.ReadFloat(poly + 0x20 + 8)) / 3f;
-            foreach (var (lx, lz) in BrownbooLadders)
-            {
-                float dx = cx - lx, dz = cz - lz;
-                if (dx * dx + dz * dz < LadderRadius * LadderRadius) return true;
-            }
-            return false;
-        }
-
-        /// <summary>Append the simplified rock collision from the DCFC .bin to cpoly. Runs after the
-        /// floors-only compaction, so it lands in the slots freed by the dropped walls.</summary>
-        internal static bool AppendRocks = true;
-
-        private static void AppendRockCollision(int mapNo)
-        {
-            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) { Log("   rocks: cpoly ptr invalid — skipping"); return; }
-            long buf = Memory.ToMmu(p);
-
-            int count = Memory.ReadInt(FishingSpot.CPolyNum);
-            if (count <= 0 || count > FishingSpot.CPolyMax) { Log($"   rocks: cpoly count {count} unusable"); return; }
-
-            byte[] template = Memory.ReadBytesBatch(buf, 0x50);   // a real poly, for its non-vertex fields
-            var polys = new System.Collections.Generic.List<byte[]>();
-            int added = AddMeshTriangles(polys, template, mapNo);
-            if (added == 0) { Log($"   rocks: no mesh file for map {mapNo} (or 0 tris)"); return; }
-
-            int total = count + polys.Count;
-            if (total > FishingSpot.CPolyBufferMax)
-            { Log($"   rocks: {count} + {polys.Count} = {total} > {FishingSpot.CPolyBufferMax} buffer — skipping"); return; }
-
-            for (int i = 0; i < polys.Count; i++)
-                Memory.WriteBytesBatch(buf + (long)(count + i) * 0x50, polys[i]);
-            Memory.WriteInt(FishingSpot.CPolyNum, total);
-            Log($"   rocks: appended {polys.Count} rock tris (cpoly {count} → {total})");
-        }
-
-        /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
-        /// rect, for the viewer (tools/brownboo_viewer.py) to split into floor/slope/wall. Overwrites the
-        /// stale reference each capture, which is correct — the rect it reflects is whatever is live now.</summary>
-        // Dev-only diagnostic; runs only when DC_DUMP_DIR is set (see .env.sample), else skipped — no fallback.
-        private static readonly string FullGatherCsv =
-            Environment.GetEnvironmentVariable("DC_DUMP_DIR") is string d ? Path.Combine(d, "vanilla_cpoly.csv") : null;
-
-        /// <summary>Dump every cpoly triangle (3 verts + normal) to a CSV. One line per triangle:
-        /// v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz.</summary>
-        private static void DumpFullGather(long buf, int count)
-        {
-            if (FullGatherCsv == null) return;   // DC_DUMP_DIR unset — diagnostic disabled
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz");
-            for (int i = 0; i < count; i++)
-            {
-                long poly = buf + (long)i * 0x50;
-                for (int v = 0; v < 3; v++)
-                {
-                    sb.Append(Memory.ReadFloat(poly + v * 0x10).ToString("0.###")).Append(',');
-                    sb.Append(Memory.ReadFloat(poly + v * 0x10 + 4).ToString("0.###")).Append(',');
-                    sb.Append(Memory.ReadFloat(poly + v * 0x10 + 8).ToString("0.###")).Append(',');
-                }
-                sb.Append(Memory.ReadFloat(poly + 0x30).ToString("0.###")).Append(',');
-                sb.Append(Memory.ReadFloat(poly + 0x30 + 4).ToString("0.###")).Append(',');
-                sb.Append(Memory.ReadFloat(poly + 0x30 + 8).ToString("0.###"));
-                sb.AppendLine();
-            }
-            try
-            {
-                System.IO.File.WriteAllText(FullGatherCsv, sb.ToString());
-                Log($"   full-gather: wrote {count} polys (floors+walls) -> {FullGatherCsv}");
-            }
-            catch (Exception e)
-            {
-                Log($"   full-gather: write FAILED: {e.Message}");
-            }
-        }
-
-        /// <summary>Turn OFF to leave the native cpoly untouched (no fish walls). See InjectCollision.</summary>
-        internal static bool InjectFakeCollision = false;   // OFF: leave native cpoly untouched to read the vanilla count
-
         private static bool _fishingWasLive;
-
-        // ── POOL-WATERMARK ENFORCEMENT (the black-screen fix, vanilla-faithful) ────────────────────
-        //
-        // THE LEAK: the turi model (1771.7 KB) + fishing.pak (1568 KB) allocate from the villager bump
-        // allocator (EdVillagerBuffer 0x1D1B360) and only _CLEAR_VILLAGER_BUFF rewinds it. Brownboo's
-        // script must SKIP that command (diagNoVillagerClear): it is an open town whose villagers stay
-        // live through a session — 38 frees their memory and the model load lands on top of data the
-        // town still references (the original "can't start a session" crash). Yellow Drops keeps the
-        // vanilla 38/57 pair and provably doesn't leak (allocator-watch log 2026-07-20). Without any
-        // rewind, Brownboo stacked +3340 KB per session and blacked out on the 4th.
-        //
-        // THE FIX mirrors vanilla's discipline at vanilla's moment, minus the villager clear: rewind
-        // used to the VILLAGER WATERMARK (villagers loaded, nothing else) whenever OUR enter label is
-        // the running script and the game is still in walk mode — i.e. the player is standing at the
-        // prompt, before X promotes it to an event and the fade/loads begin. Identification is exact:
-        // CRunScript+0x3C holds the running label's header ptr (reload() @0x23DE10 stores it).
-        //
-        // Two hard-won constraints honoured here:
-        //   • the watermark must be captured AFTER the villagers finish loading (they land seconds
-        //     after Install — a too-early 0 KB baseline made a rewind free LIVE villagers, which
-        //     crashed exactly like the original 38 bug). Hence the stability guard.
-        //   • never rewind after the event starts (GameMode 14) — the loads bump `used` in stages and
-        //     a mid-load rewind would free memory the load is writing.
-        private static int _fishLabelOff;          // enter label's code offset in the stb (0 = none)
-        private static int _exitLabelOff;          // exit label's code offset
-        private static int _baitLabelOff;          // bait label's code offset
 
         /// <summary>
         /// TRUE while a fishing session (or its enter/exit script) owns the game — the window where the
@@ -2029,7 +1756,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static bool InFishingWindow { get; private set; }
 
-        // The engine's event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < VillagerCount`
+        // The engine's event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < Villagers.Count`
         // and calls VIRTUAL functions on each villager object (DAT_01d3d228 + i*0x14A0, vtable @ +0xA0).
         // A fishing session frees the villager buffer (cmd 38) and loads the 1.8 MB model over those
         // objects, so their vtable pointers become garbage — and the stepper jumps through one to an
@@ -2039,7 +1766,6 @@ namespace Dark_Cloud_Improved_Version
         // zero the count for the whole fishing window (villagers are freed/suspended then anyway) and
         // restore it on the way out. One write covers every event-mode villager iterator (EdEventNPCStep,
         // EdEventMode, GetNPC/GetChara), not just the one we traced.
-        private const long VillagerCount = 0x21D3D3C8;   // ELF DAT_01d3d3c8 — live NPC count
         private static int _savedVillagerCount = -1;
 
         // The engine's villager DRAW (EdDrawCharacter 0x1725F0, called from MainDraw with a HARDCODED count
@@ -2049,103 +1775,17 @@ namespace Dark_Cloud_Improved_Version
         // only the VISUAL sub-object they point to (+0xA0) is freed and overwritten, and dispatching its
         // vtable (+0xAC) through the garbage pointer is the recLUT crash. Zero the fixed draw flags and
         // CheckDraw returns 0 first, so the freed visual is never touched. Restore on exit.
-        private const long VillagerObjBase   = 0x21D25B90;
-        private const int  VillagerObjStride = 0x14A0;
-        private const int  VillagerDrawFlag  = 0x146C;
-        private const int  VillagerDrawSlots = 10;       // MainDraw's hardcoded EdDrawCharacter count
-        private static readonly int[] _savedDrawFlags = new int[VillagerDrawSlots];
+        private static readonly int[] _savedDrawFlags = new int[Villagers.DrawSlots];
         private static bool _drawFlagsSaved;
         private static bool _villagersHidden;   // one-shot latch for UpdateVillagerHide
 
-        private const long EdEventInfo = 0x21D3D1D0;   // ELF 0x1d3d1d0 — running-event id (set by EdEventInit)
 
-        // ── CATCH-MESSAGE TEMPLATE (the empty-bubble fix) ──────────────────────────────────────────────
-        // The engine draws the fishing catch bubble via MakeMesWin(townTalkClsMes, 2000): message id 2000 in
-        // the TOWN's talk mes is the "[fish] (Xcm) caught! ..." template. Vanilla fishing towns ship it; our
-        // custom fishing towns do NOT, so the bubble renders EMPTY. Rather than rebuild the whole ~80 KB talk
-        // mes to add one entry, we hold a tiny 1-entry meswin buffer (msg 2000 only) in a reserved scratch
-        // region and SWAP the ClsMes talk-buffer pointer to it for the duration of a fishing session — no NPC
-        // dialogue runs while fishing, so the town's own messages are not needed in that window. The fish NAME
-        // ([fbfe]) and the numbers resolve from the ClsMes SYSTEM buffer (global system14e.bin) and value
-        // array, which are untouched — so injecting only the template is enough.
-        private const long TownTalkClsMes = 0x21D1B550;   // ELF 0x1d1b550 — the town talk/dialogue ClsMes
-        private const int  ClsMesTalkBuf  = 0x17A0;        // SetBuff: buffer ptr (GetTextLineDataTop reads this)
-        private const int  ClsMesTalkBuf2 = 0x17A8;        // SetBuff: buffer + u16@2 (kept consistent; nothing on the catch path reads it)
-
-        // meswin buffer format (cracked via GetTextLineDataTop 0x14f4b0): u16 count · u16 (SetBuff's +0x17A8
-        // delta) · count×{u16 id, u16 wordOff} · text. A message's text is at byte 2*(count + wordOff + 1);
-        // glyphs are 16-bit LE, 0xFF01 terminates. This is msg 2000's exact glyph stream from Norune's English
-        // talk mes (e01talk_1). The [fbXX] codes are placeholders the renderer fills: fbfe = fish name,
-        // fbfa/fbf9/fbf8 = the numbers (length, points, total).
-        private static readonly ushort[] CatchTemplateWords =
-        {
-            0xfbfe,0xff02,0xfd61,0xfbfa,0xfd3d,0xfd47,0xfd62,0xff00,0xfd3d,0xfd3b,0xfd4f,0xfd41,0xfd42,0xfd4e,
-            0xfd58,0xfd58,0xff03,0xfd26,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,0xfd41,0xff02,0xfd30,0xfd49,0xfd43,
-            0xfd48,0xfd4e,0xfd4d,0xff02,0xfd5c,0xfbf9,0xff00,0xfd34,0xfd49,0xfd4e,0xfd3b,0xfd46,0xff02,0xfd30,
-            0xfd49,0xfd43,0xfd48,0xfd4e,0xfd4d,0xff02,0xff02,0xff02,0xfbf8,0xff00,0xfd32,0xfd3f,0xfd3d,0xfd49,
-            0xfd4c,0xfd3e,0xff02,0xfbfe,0xff02,0xfbfa,0xfd3d,0xfd47,0xff01,
-        };
-        private const int  CatchMsgId = 2000;
-        private static bool _catchMesWritten;
-        private static int  _savedTalkBuf;    // guest ptr saved when we swap on window open (0 = not swapped)
-        private static int  _savedTalkBuf2;
-
-        /// <summary>Build the 1-entry meswin buffer for msg 2000 once, into the reserved scratch region. Layout:
-        /// count=1, entry(id=2000, wordOff=2), text at byte 8 — matching GetTextLineDataTop's 2*(count+off+1).</summary>
-        private static void EnsureCatchTemplate()
-        {
-            if (_catchMesWritten) return;
-            var b = new byte[8 + CatchTemplateWords.Length * 2];
-            void W16(int at, int v) { b[at] = (byte)v; b[at + 1] = (byte)(v >> 8); }
-            W16(0, 1);           // count = 1
-            W16(2, 8);           // +0x17A8 delta → text region (unused on the catch path, kept sane)
-            W16(4, CatchMsgId);  // entry id
-            W16(6, 2);           // entry wordOff → text at 2*(1+2+1) = byte 8
-            for (int i = 0; i < CatchTemplateWords.Length; i++) W16(8 + i * 2, CatchTemplateWords[i]);
-            Memory.WriteBytesBatch(CodeCaves.FishingCatchMes, b);
-            _catchMesWritten = true;
-            Log($"catch template (msg {CatchMsgId}) written to scratch 0x{CodeCaves.FishingCatchMes:X} ({b.Length} B)");
-        }
-
-        // ── FISHING MENU TEXT (event mes, window 1) ────────────────────────────────────────────────────
-        // The entry/exit menus draw their option text via _MES_MAKE(1, id): window 1 = EditEventMes1
-        // (0x21D1E4D0), fed by the town EVENT mes (<code>_1.mes). Vanilla fishing towns ship ids 20/21/22;
-        // custom towns do not, so the menus would render blank. We hold a 3-message buffer (20 = the 4-option
-        // entry menu, 21 = the no-pole line, 22 = the 2-option quit menu) and swap the event-mes buffer to it
-        // for the session, exactly like the catch template does for the talk mes. This is a COMPLETE meswin
-        // buffer (header + index + text) built offline and verified against GetTextLineDataTop; unlike the
-        // catch template it carries multiple entries, so it is stored whole rather than header-in-code.
-        private const long TownEventClsMes = 0x21D1E4D0;   // ELF EditEventMes1 — window 1 (GetMes(1))
-        private static readonly ushort[] MenuMesBuffer =
-        {
-            0x0003,0x0010,0x0014,0x0004,0x0015,0x0036,0x0016,0x0076,0xff02,0xff02,0xfd26,0xfd43,0xfd4d,0xfd42,
-            0xff00,0xff02,0xff02,0xfd25,0xfd52,0xfd3d,0xfd42,0xfd3b,0xfd48,0xfd41,0xfd3f,0xff02,0xfd26,0xfd30,
-            0xff00,0xff02,0xff02,0xfd26,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,0xfd41,0xff02,0xfd46,0xfd49,0xfd41,
-            0xff00,0xff02,0xff02,0xfd31,0xfd4f,0xfd43,0xfd4e,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,
-            0xfd41,0xff01,0xfd33,0xfd3f,0xfd3f,0xfd47,0xfd4d,0xff02,0xfd46,0xfd43,0xfd45,0xfd3f,0xff02,0xfd53,
-            0xfd49,0xfd4f,0xff02,0xfd3d,0xfd3b,0xfd48,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xff02,0xfd42,0xfd3f,
-            0xfd4c,0xfd3f,0xff00,0xfd3c,0xfd4f,0xfd4e,0xff02,0xfd53,0xfd49,0xfd4f,0xff02,0xfd3e,0xfd49,0xfd48,
-            0xfd55,0xfd4e,0xff02,0xfd42,0xfd3b,0xfd50,0xfd3f,0xff02,0xfd3b,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,
-            0xfd43,0xfd48,0xfd41,0xff02,0xfd4a,0xfd49,0xfd46,0xfd3f,0xfd6d,0xff01,0xff02,0xff02,0xfd23,0xfd49,
-            0xfd48,0xfd4e,0xfd43,0xfd48,0xfd4f,0xfd3f,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,0xfd41,
-            0xff00,0xff02,0xff02,0xfd31,0xfd4f,0xfd43,0xfd4e,0xff02,0xfd40,0xfd43,0xfd4d,0xfd42,0xfd43,0xfd48,
-            0xfd41,0xff01,
-        };
-        private static bool _menuMesWritten;
-        private static int  _savedEventBuf;
-        private static int  _savedEventBuf2;
-
-        /// <summary>Write the 3-message fishing-menu buffer to its scratch region once.</summary>
-        private static void EnsureMenuTemplate()
-        {
-            if (_menuMesWritten) return;
-            var b = new byte[MenuMesBuffer.Length * 2];
-            for (int i = 0; i < MenuMesBuffer.Length; i++)
-            { b[i * 2] = (byte)MenuMesBuffer[i]; b[i * 2 + 1] = (byte)(MenuMesBuffer[i] >> 8); }
-            Memory.WriteBytesBatch(CodeCaves.FishingMenuMes, b);
-            _menuMesWritten = true;
-            Log($"menu text (event msg 20/21/22) written to scratch 0x{CodeCaves.FishingMenuMes:X} ({b.Length} B)");
-        }
+        // Fishing-window ClsMes buffer-swap state — the town's ORIGINAL talk/event mes buffer pointers,
+        // saved while a session borrows the windows for the injected catch/menu text (see FishingMenuText).
+        private static int _savedTalkBuf;    // guest ptr saved when we swap on window open (0 = not swapped)
+        private static int _savedTalkBuf2;
+        private static int _savedEventBuf;
+        private static int _savedEventBuf2;
 
         private static void UpdateFishingWindow()
         {
@@ -2165,29 +1805,29 @@ namespace Dark_Cloud_Improved_Version
                 // Supply the catch-message template the custom town's talk mes lacks (empty-bubble fix): swap
                 // the talk ClsMes buffer to our msg-2000-only mes for the session. No NPC dialogue runs while
                 // fishing, so the town's own messages are not needed until we restore on the way out.
-                EnsureCatchTemplate();
-                _savedTalkBuf  = Memory.ReadInt(TownTalkClsMes + ClsMesTalkBuf);
-                _savedTalkBuf2 = Memory.ReadInt(TownTalkClsMes + ClsMesTalkBuf2);
-                Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf,  (int)CodeCaves.FishingCatchMesGuest);
-                Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf2, (int)CodeCaves.FishingCatchMesGuest + 8);
+                FishingMenuText.EnsureCatchTemplate();
+                _savedTalkBuf  = Memory.ReadInt(MesWindows.TownTalk + MesWindows.BufPtr);
+                _savedTalkBuf2 = Memory.ReadInt(MesWindows.TownTalk + MesWindows.BufPtr2);
+                Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr,  (int)CodeCaves.FishingCatchMesGuest);
+                Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr2, (int)CodeCaves.FishingCatchMesGuest + 8);
                 Log($"   talk mes swapped to catch template (saved town buf 0x{_savedTalkBuf:X8})");
 
                 // Same for the EVENT mes (window 1): supply the entry/exit menu option text (ids 20/21/22).
-                EnsureMenuTemplate();
-                _savedEventBuf  = Memory.ReadInt(TownEventClsMes + ClsMesTalkBuf);
-                _savedEventBuf2 = Memory.ReadInt(TownEventClsMes + ClsMesTalkBuf2);
-                Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf,  (int)CodeCaves.FishingMenuMesGuest);
-                Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf2, (int)CodeCaves.FishingMenuMesGuest + 0x10);
+                FishingMenuText.EnsureMenuTemplate();
+                _savedEventBuf  = Memory.ReadInt(MesWindows.TownEvent + MesWindows.BufPtr);
+                _savedEventBuf2 = Memory.ReadInt(MesWindows.TownEvent + MesWindows.BufPtr2);
+                Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr,  (int)CodeCaves.FishingMenuMesGuest);
+                Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr2, (int)CodeCaves.FishingMenuMesGuest + 0x10);
                 Log($"   event mes swapped to menu text (saved town buf 0x{_savedEventBuf:X8})");
             }
             else
             {
                 // Restore AFTER the exit script's _LOAD_VILLAGER (57) has rebuilt the villagers.
-                if (_savedVillagerCount > 0) Memory.WriteInt(VillagerCount, _savedVillagerCount);
+                if (_savedVillagerCount > 0) Memory.WriteInt(Villagers.Count, _savedVillagerCount);
                 if (_drawFlagsSaved)
                 {
-                    for (int i = 0; i < VillagerDrawSlots; i++)
-                        Memory.WriteInt(VillagerObjBase + (long)i * VillagerObjStride + VillagerDrawFlag,
+                    for (int i = 0; i < Villagers.DrawSlots; i++)
+                        Memory.WriteInt(Villagers.ObjBase + (long)i * Villagers.ObjStride + Villagers.DrawFlag,
                                         _savedDrawFlags[i]);
                     _drawFlagsSaved = false;
                     Log($"   villagers restored (count -> {_savedVillagerCount}, draw flags restored)");
@@ -2198,19 +1838,19 @@ namespace Dark_Cloud_Improved_Version
                 // Restore the town's own talk mes — but only if we're still the pointer on it. A town reload
                 // during the session (EditInit) installs a fresh buffer; don't clobber that with a stale one.
                 if (_savedTalkBuf != 0 &&
-                    Memory.ReadInt(TownTalkClsMes + ClsMesTalkBuf) == (int)CodeCaves.FishingCatchMesGuest)
+                    Memory.ReadInt(MesWindows.TownTalk + MesWindows.BufPtr) == (int)CodeCaves.FishingCatchMesGuest)
                 {
-                    Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf,  _savedTalkBuf);
-                    Memory.WriteInt(TownTalkClsMes + ClsMesTalkBuf2, _savedTalkBuf2);
+                    Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr,  _savedTalkBuf);
+                    Memory.WriteInt(MesWindows.TownTalk + MesWindows.BufPtr2, _savedTalkBuf2);
                     Log($"   talk mes restored (buf -> 0x{_savedTalkBuf:X8})");
                 }
                 _savedTalkBuf = 0;
 
                 if (_savedEventBuf != 0 &&
-                    Memory.ReadInt(TownEventClsMes + ClsMesTalkBuf) == (int)CodeCaves.FishingMenuMesGuest)
+                    Memory.ReadInt(MesWindows.TownEvent + MesWindows.BufPtr) == (int)CodeCaves.FishingMenuMesGuest)
                 {
-                    Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf,  _savedEventBuf);
-                    Memory.WriteInt(TownEventClsMes + ClsMesTalkBuf2, _savedEventBuf2);
+                    Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr,  _savedEventBuf);
+                    Memory.WriteInt(MesWindows.TownEvent + MesWindows.BufPtr2, _savedEventBuf2);
                     Log($"   event mes restored (buf -> 0x{_savedEventBuf:X8})");
                 }
                 _savedEventBuf = 0;
@@ -2246,20 +1886,20 @@ namespace Dark_Cloud_Improved_Version
             if (!fullyBlack && !sessionLive) return;   // entry menu still up (or fade still ramping) — leave them
 
             // (1) STEP — EdEventNPCStep loops `i < count`, so zero the count.
-            _savedVillagerCount = Memory.ReadInt(VillagerCount);
-            if (_savedVillagerCount > 0) Memory.WriteInt(VillagerCount, 0);
+            _savedVillagerCount = Memory.ReadInt(Villagers.Count);
+            if (_savedVillagerCount > 0) Memory.WriteInt(Villagers.Count, 0);
             // (2) DRAW — EdDrawCharacter walks a fixed 10 slots gated by CheckDraw's +0x146C flag; zero the 10
             //     fixed-address flags so CheckDraw returns 0 and skips the freed visual.
-            for (int i = 0; i < VillagerDrawSlots; i++)
+            for (int i = 0; i < Villagers.DrawSlots; i++)
             {
-                long f = VillagerObjBase + (long)i * VillagerObjStride + VillagerDrawFlag;
+                long f = Villagers.ObjBase + (long)i * Villagers.ObjStride + Villagers.DrawFlag;
                 _savedDrawFlags[i] = Memory.ReadInt(f);
                 Memory.WriteInt(f, 0);
             }
             _drawFlagsSaved = true;
             _villagersHidden = true;
             Log($"   villagers hidden at fade-to-black: count {_savedVillagerCount} -> 0, " +
-                $"{VillagerDrawSlots} draw flags -> 0 " +
+                $"{Villagers.DrawSlots} draw flags -> 0 " +
                 $"({(fullyBlack ? "fade complete" : "session live")})");
         }
 
@@ -2276,217 +1916,22 @@ namespace Dark_Cloud_Improved_Version
 
             // The ENTER/EXIT window is event mode — but so is every town dialogue/cutscene, and hiding the
             // villagers for those is what made them vanish during normal play. The engine stamps the RUNNING
-            // event's id into EdEventInfo (set by EdEventInit before the enter script's fade + loads, so it's
+            // event's id into EditEvent.Info (set by EdEventInit before the enter script's fade + loads, so it's
             // early enough), and it is EXACTLY our fishing label — verified live: dialogue events read 0x2 /
             // 0x80, our fishing enter reads 0x190 = FishingLabelId (400). Exit/bait run the engine's own
             // fishing labels 133/134. So the running-event id is the clean, position-independent discriminator.
             if (gm == EditLoop.GameModeEvent)
             {
-                int ev = Memory.ReadInt(EdEventInfo);
+                int ev = Memory.ReadInt(EditEvent.Info);
                 if (ev == FishingLabelId || ev == EventPoints.FishingExitLabel || ev == EventPoints.FishingBaitLabel)
                 { why = $"our fishing event ({ev})"; return true; }
                 // Latch through any mid-session event blip (e.g. a frame between fishing and the exit label
-                // where EdEventInfo hasn't updated yet) so a freed villager can't flicker back for one frame.
+                // where EditEvent.Info hasn't updated yet) so a freed villager can't flicker back for one frame.
                 if (InFishingWindow) { why = "event mode (latched)"; return true; }
             }
             why = "walking/other";
             return false;
         }
-        private static int _vbWatermark = -1;      // villager-allocator used (blocks) with ONLY villagers
-        private static int _vbLastUsed = -1;       // stability tracking for the capture
-        private static int _vbStableTicks;
-        private const int VbStableNeeded = 40;     // ~2 s of unchanged `used` before trusting it
-
-        private static void EnforcePoolWatermark()
-        {
-            if (_fishLabelOff == 0 || !_spot.DiagNoVillagerClear) return;
-
-            int used = Memory.ReadInt(FishingPool.Used);
-            if (used == _vbLastUsed) _vbStableTicks++;
-            else { _vbLastUsed = used; _vbStableTicks = 0; }
-
-            if (Memory.ReadInt(EditLoop.GameMode) != 1) return;           // 1 = walking: the prompt phase
-            if (Memory.ReadInt(FishingSpot.CPolyNum) > 0 ||
-                Memory.ReadFloat(FishingSpot.WaterLevel) != 0f) return;   // a session is live
-
-            uint running = Memory.ReadUInt(TownAddressesRunScriptHeader) & Memory.PhysAddrMask;
-            uint expect = (Memory.ReadUInt(TownScript.EdEventData) + (uint)_fishLabelOff) & Memory.PhysAddrMask;
-            if (running != expect) return;                                // some other script is running
-
-            if (_vbWatermark < 0)
-            {
-                if (_vbStableTicks < VbStableNeeded) return;              // villagers may still be loading
-                _vbWatermark = used;
-                Log($"pool watermark captured: {used * FishingPool.BlockSize / 1024} KB (villagers resident)");
-                return;
-            }
-
-            if (used > _vbWatermark)
-            {
-                Memory.WriteInt(FishingPool.Used, _vbWatermark);
-                Log($"pool rewound at spot approach: used {used * FishingPool.BlockSize / 1024} KB -> " +
-                    $"{_vbWatermark * FishingPool.BlockSize / 1024} KB (freed previous session's model+pak+fish)");
-            }
-        }
-
-        /// <summary>CRunScript object +0x3C = RS_PROG_HEADER ptr of the running label (stored by reload()).</summary>
-        private const long TownAddressesRunScriptHeader = RunScript.Object + 0x3C;
-
-        /// <summary>
-        /// APPEND fabricated fish-containment walls to the town's native collision, without disturbing it.
-        ///
-        /// The native cpoly (built by CEditGround::PickUpPoly at spot load) is the town's REAL terrain — the
-        /// sloped sand bottom, the shore banks, the rocks and the houses — world-placed with true surface
-        /// normals. FishLineStep raycasts the hook and bobber straight DOWN against it and only honours
-        /// floor-ish polys (|normal.Y| > 0.2), so that native mesh is exactly what stops the hook/bobber
-        /// passing through terrain and what makes a cast onto a rock/land rest above WaterLevel+5 (which
-        /// FishingCheckUkiHook then rejects). We must NOT overwrite it — an earlier version did, which is
-        /// why the hook/bobber clipped through everything and casts onto rocks succeeded.
-        ///
-        /// Our walls are purely for the FISH (a separate collision path): vertical quads (normal.Y = 0), so
-        /// they are invisible to the hook/bobber raycast and only fence the fish. We write them into the
-        /// slots ABOVE the native count and bump CPolyNum. PickUpPoly hangs the game above 0x400, so we cap.
-        ///
-        /// A CCPoly is 0x50 bytes: three verts (+0x00/+0x10/+0x20, x/y/z) and a normal (+0x30). We copy an
-        /// existing poly as a template so its flag/padding bytes stay valid, and rewrite only verts + normal.
-        /// </summary>
-        private static void InjectCollision(Spot s)
-        {
-            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) return;
-            long buf = Memory.ToMmu(p);
-
-            int nativeCount = Memory.ReadInt(FishingSpot.CPolyNum);
-            if (nativeCount <= 0 || nativeCount > FishingSpot.CPolyMax) { Log($"   collision: native count {nativeCount} unusable — skipping"); return; }
-
-            byte[] template = Memory.ReadBytesBatch(buf, 0x50);   // a real poly, for its non-vertex fields
-            float depth = s.HasFishDepth ? s.FishDepth : 12f;
-            float yLow  = s.Water - depth - 4f;                   // a bit below the fish
-            float yHigh = s.Water + 3f;                           // a bit above the surface
-
-            var polys = new System.Collections.Generic.List<byte[]>();
-
-            // (1) Fish-containment walls along the shore perimeter. The native sand shore is a sloped FLOOR
-            //     (no vertical barrier), and fish swim at a fixed depth, so they need a real wall to fence
-            //     them in. Vertical (normal.Y = 0) → invisible to the hook/bobber, which is what we want.
-            AddWallLoop(polys, template, s.Perimeter, yLow, yHigh, inward: true);
-
-            // (2) The rocks' EXACT triangles, decoded from the town's visual mesh (they have no native
-            //     collision — they're decorative). Real surface normals: top faces (normal.Y > 0.2) stop
-            //     the hook/bobber and reject casts onto the rock; side faces fence the fish. This replaces
-            //     the crude convex-hull walls with the true geometry.
-            int meshTris = AddMeshTriangles(polys, template, s.MapNo);
-
-            int total = nativeCount + polys.Count;
-            if (total > FishingSpot.CPolyBufferMax)
-            {
-                Log($"   collision: native {nativeCount} + {polys.Count} added = {total} > {FishingSpot.CPolyBufferMax} buffer — skipping");
-                return;
-            }
-
-            for (int i = 0; i < polys.Count; i++)
-                Memory.WriteBytesBatch(buf + (long)(nativeCount + i) * 0x50, polys[i]);
-            Memory.WriteInt(FishingSpot.CPolyNum, total);
-            Log($"   collision: {nativeCount} native + {polys.Count - meshTris} shore walls + {meshTris} exact rock tris → {total}");
-        }
-
-        /// <summary>Emit two triangles per edge of a closed x,z loop — a vertical wall from yLow to yHigh with
-        /// a horizontal normal facing into (inward) or away from (obstacle) the loop's centre.</summary>
-        private static void AddWallLoop(System.Collections.Generic.List<byte[]> outp, byte[] template,
-                                        float[] loop, float yLow, float yHigh, bool inward)
-        {
-            int n = loop.Length / 2;
-            float cx = 0, cz = 0;
-            for (int i = 0; i < n; i++) { cx += loop[i * 2]; cz += loop[i * 2 + 1]; }
-            cx /= n; cz /= n;
-
-            for (int i = 0; i < n; i++)
-            {
-                float ax = loop[i * 2], az = loop[i * 2 + 1];
-                int j = (i + 1) % n;
-                float bx = loop[j * 2], bz = loop[j * 2 + 1];
-
-                // normal perpendicular to the edge, in XZ; flip so it points toward (inward) / away (obstacle)
-                float nx = -(bz - az), nz = bx - ax;
-                float len = (float)Math.Sqrt(nx * nx + nz * nz); if (len < 1e-3f) continue;
-                nx /= len; nz /= len;
-                float mx = (ax + bx) * 0.5f, mz = (az + bz) * 0.5f;
-                bool pointsToCentre = (nx * (cx - mx) + nz * (cz - mz)) > 0;
-                if (pointsToCentre != inward) { nx = -nx; nz = -nz; }
-
-                outp.Add(MakeTri(template, ax, yLow, az, bx, yLow, bz, bx, yHigh, bz, nx, nz));
-                outp.Add(MakeTri(template, ax, yLow, az, bx, yHigh, bz, ax, yHigh, az, nx, nz));
-            }
-        }
-
-        private static byte[] MakeTri(byte[] template,
-                                      float x0, float y0, float z0, float x1, float y1, float z1,
-                                      float x2, float y2, float z2, float nx, float nz)
-        {
-            byte[] q = (byte[])template.Clone();
-            PutVec(q, 0x00, x0, y0, z0);
-            PutVec(q, 0x10, x1, y1, z1);
-            PutVec(q, 0x20, x2, y2, z2);
-            PutVec(q, 0x30, nx, 0f, nz);   // horizontal normal
-            return q;
-        }
-
-        private static string MeshCollisionFile(int mapNo) =>
-            Path.Combine(AppContext.BaseDirectory, "Resources", "FishingCollision", $"brownboo_{mapNo}.bin");
-
-        /// <summary>Append the spot's EXACT mesh triangles (decoded offline from the town's visual mesh) to
-        /// the poly list, each with a real plane normal so the hook/bobber rest on up-facing faces and the
-        /// fish are stopped by side faces. Returns the number of triangles added (0 if no data file).</summary>
-        private static int AddMeshTriangles(System.Collections.Generic.List<byte[]> outp, byte[] template, int mapNo)
-        {
-            string path = MeshCollisionFile(mapNo);
-            if (!File.Exists(path)) return 0;
-
-            byte[] data;
-            try { data = File.ReadAllBytes(path); }
-            catch (Exception e) { Log($"   mesh collision: read failed ({e.Message})"); return 0; }
-
-            // Header: 'DCFC', uint version, uint mapNo, uint triCount; then triCount * 9 floats (3 verts).
-            if (data.Length < 16 || data[0] != (byte)'D' || data[1] != (byte)'C' || data[2] != (byte)'F' || data[3] != (byte)'C')
-            { Log("   mesh collision: bad magic"); return 0; }
-            int triCount = BitConverter.ToInt32(data, 12);
-            int need = 16 + triCount * 9 * 4;
-            if (triCount < 0 || data.Length < need) { Log($"   mesh collision: truncated ({data.Length} < {need})"); return 0; }
-
-            float F(int i) => BitConverter.ToSingle(data, i);
-            int p = 16, added = 0;
-            for (int t = 0; t < triCount; t++, p += 36)
-            {
-                float ax = F(p),      ay = F(p + 4),  az = F(p + 8);
-                float bx = F(p + 12), by = F(p + 16), bz = F(p + 20);
-                float cx = F(p + 24), cy = F(p + 28), cz = F(p + 32);
-
-                // plane normal = (b-a) x (c-a), normalized
-                float ux = bx - ax, uy = by - ay, uz = bz - az;
-                float vx = cx - ax, vy = cy - ay, vz = cz - az;
-                float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-                float len = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
-                if (len < 1e-6f) continue;
-                nx /= len; ny /= len; nz /= len;
-
-                byte[] q = (byte[])template.Clone();
-                PutVec(q, 0x00, ax, ay, az);
-                PutVec(q, 0x10, bx, by, bz);
-                PutVec(q, 0x20, cx, cy, cz);
-                PutVec(q, 0x30, nx, ny, nz);
-                outp.Add(q);
-                added++;
-            }
-            return added;
-        }
-
-        private static void PutVec(byte[] b, int off, float x, float y, float z)
-        {
-            Array.Copy(BitConverter.GetBytes(x), 0, b, off + 0, 4);
-            Array.Copy(BitConverter.GetBytes(y), 0, b, off + 4, 4);
-            Array.Copy(BitConverter.GetBytes(z), 0, b, off + 8, 4);
-        }
-
         private static bool ReadPos(out float x, out float y, out float z)
         {
             x = y = z = 0f;
@@ -2502,6 +1947,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DumpSlot(string tag, long e)
         {
+            if (!Diagnostics) return;
             Log($"{tag} enabled={Memory.ReadInt(e + EventPoints.Enabled)} " +
                 $"mapFlag={Memory.ReadInt(e + EventPoints.MapFlag)} " +
                 $"partIndex={Memory.ReadInt(e + EventPoints.PartIndex)} " +
@@ -2520,323 +1966,4 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[CustomFishingSpot] " + s);
     }
 
-    /// <summary>The STB command ids we use. Confirmed from the dispatch table — whose 8-byte entries are
-    /// <c>{handler, id}</c>, NOT <c>{id, handler}</c>. Reading them the other way round shifts every command
-    /// by one and turns <c>_LOAD_FISHING_DATA</c> into <c>_LOAD_MAIN_CHARA</c>.</summary>
-    internal static class StbCommands
-    {
-        internal const int LoadFishingData = 998;   // (area, x1, z1, x2, z2, water, ground)
-        internal const int GotoFishing     = 997;   // ()
-        internal const int InitFish        = 996;   // (x1, z1, x2, z2)
-        internal const int ExitFishing     = 995;   // ()
-        internal const int SetFishingEsa   = 994;   // ()
-
-        internal const int LoadMainChara  = 999;    // (chrPath, cfgName, flag) — swaps the player's model
-        internal const int FadeIn        = 500;     // (frames) — 500 is FADE_IN, not FADE_OUT
-        internal const int SetWorldCoord = 7;       // (x, y, z, rx, ry, rz)
-        internal const int SetNpcMotion  = 133;     // (charaId, motionIdx) — charaId -1 = the player; motion 0 = idle
-        internal const int SetNpcPos     = 137;     // (charaId, x, y, z)   charaId -1 = the player
-        internal const int SetNpcRot     = 138;     // (charaId, rx, ry, rz)
-        internal const int NpcDraw       = 140;     // (flag, charaId)
-
-        // The bait model pipeline. _SET_FISHING_ESA only points the hook at ITEM FRAME 0 — it does not load
-        // anything. The frame has to be built first, and _LOAD_ITEM_FILE is a BACKGROUND (async) read.
-        internal const int LoadItemFile     = 49;   // (itemId) — starts an async load of the item's chr + img
-        internal const int LoadItem         = 50;   // (0) — builds item frame 0 from the loaded files
-        internal const int ClearEventBuff   = 39;   // ()
-        internal const int ActiveFileBuffer = 44;   // (a, b)
-
-        /// <summary>
-        /// (&amp;out) — out = non-zero while ANY background disc read is still in flight.
-        ///
-        /// This is the load-complete poll, and it existed all along: <c>ReadBGSync</c> pumps the reader and
-        /// scans <c>bg_read_info</c> for a slot that is queued but not yet complete. Non-blocking, so a script
-        /// loops on it. Norune's mystery <c>call_func 400</c> is nothing more than
-        /// <c>while (_LOAD_SYNC(&amp;v)) YIELD;</c>
-        ///
-        /// I previously concluded no such command existed, having grepped the command names for CHECK / READ /
-        /// BG / WAIT / FILE — none of which match "_LOAD_SYNC".
-        /// </summary>
-        internal const int LoadSync = 34;
-
-        internal const int FadeOut            = 501; // (frames) — 501 is FADE_OUT; 500 is FADE_IN
-        internal const int ClearVillagerBuff  = 38;  // ()
-
-        /// <summary>() — rewinds the villager buffer and reloads every NPC (and its textures) for the current
-        /// map from disc. Reads its list from globals, no args. Used on fishing exit to un-garble whatever
-        /// villager texture block the session's model/bait loads overwrote.</summary>
-        internal const int LoadVillager = 57;
-
-        /// <summary>(&amp;out) — out = non-zero while a fade is still in progress. Same shape as
-        /// <see cref="LoadSync"/>: poll it in a YIELD loop instead of counting frames.</summary>
-        internal const int CheckFade = 502;
-
-        /// <summary>() — raises the "!" prompt for this frame. It is a PER-FRAME flag (EdEventInit clears it,
-        /// the ladder code sets it the same way), so it has to be re-asserted every frame it should show.</summary>
-        internal const int DrawExclamationMark = 10;
-
-        /// <summary>(&amp;out) — out = the buttons pressed this frame (after exch_ok_cancel).</summary>
-        internal const int GetPadDown = 1;
-
-        /// <summary>
-        /// X (Cross) AS A SCRIPT SEES IT — 0x20, not 0x40.
-        ///
-        /// <c>EdMoveChara</c> tests the raw pad with <c>PadDown(0x40)</c> for confirm, so 0x40 is Cross in
-        /// engine code. But <c>_GET_PADDOWN</c> pipes the pad through <c>exch_ok_cancel</c> first, which
-        /// SWAPS bits 0x20 and 0x40:
-        ///
-        /// <code>
-        ///   v = pad &amp; ~0x60;
-        ///   if (pad &amp; 0x20) v |= 0x40;
-        ///   if (pad &amp; 0x40) v |= 0x20;
-        /// </code>
-        ///
-        /// So a script testing 0x40 is testing CIRCLE. That is why the fishing prompt answered to Circle.
-        /// </summary>
-        internal const int PadCross = 0x20;
-
-        /// <summary>(&amp;outVar) — opens the game's native bait menu (menu_mode 9) over a static bait list,
-        /// and writes the chosen item id back through the pointer. The handler REFUSES unless arg1's stack
-        /// type is 3 (a pointer), so it must be pushed with PushVarRef.</summary>
-        internal const int GotoChangeEsa = 25;
-
-        // ── Menu / select-cursor commands (entry & quit dialogs) ───────────────────────────────────────
-        internal const int MesMake        = 192;  // (window, msgId) — draw a message; window 1 = event mes (our menu text)
-        internal const int MesClose       = 193;  // (window)
-        internal const int SetMesShippo   = 196;  // (window, flag) — speech-bubble tail
-        internal const int SetMesDrawSpeed= 198;  // (window, speedFloat) — Norune's fishing menu sets 1.0
-        internal const int SetMesPos      = 197;  // (window, posMode)  — Norune's fishing menu uses 9, then 0 to reset
-        internal const int SetMesAutoset  = 195;  // (window, x1,y1,x2,y2) — auto-place the bubble to avoid the rect (Norune: 0,0,0,0)
-        internal const int SetMesCursor   = 199;  // (window, line) — draw the selection cursor at 0-based line
-        internal const int GetApad        = 903;  // (&lx, &ly[, &rx, &ry]) — analog stick floats; LY<-0.5 up, >0.5 down
-        internal const int GotoFpChange   = 24;   // () — Exchange FP (menu_mode 8, engine-drawn)
-        internal const int GotoFishRanking= 26;   // () — Fishing log (menu_mode 10, engine-drawn)
-        internal const int SetReturnCode  = 3;    // (code) — 11 keeps the fishing session running
-        internal const int SItemCheck     = 707;  // (itemId, &out) — out = inventory index (>=0) if owned, -1 if not (fishing rod = 185)
-        internal const int FishingRodItem = 185;  // the fishing pole checked by the "Fish" option
-
-        // _GET_PADDOWN result masks (post exch_ok_cancel). D-pad bits are unswapped; X arrives as 0x20.
-        internal const int PadUp   = 0x1000;
-        internal const int PadDown = 0x4000;
-    }
-
-    /// <summary>Emit STB VM bytecode: 12-byte instructions <c>{u32 op, u32 a1, u32 a2}</c>.</summary>
-    internal sealed class StbWriter
-    {
-        private const int OpPush  = 3;
-        private const int OpExt   = 21;
-        private const int OpRet   = 15;
-        private const int OpYield = 23;
-
-        private const int TypeInt    = 1;
-        private const int TypeFloat  = 2;
-        private const int TypeString = 3;
-
-        private readonly System.Collections.Generic.List<byte> _b = new System.Collections.Generic.List<byte>();
-        private readonly System.Collections.Generic.List<(string Text, int PatchAt)> _strs =
-            new System.Collections.Generic.List<(string, int)>();
-
-        private const int OpVarValue = 1;   // push the VALUE of local var a1
-        private const int OpVarRef   = 2;   // push a POINTER to local var a1 (stack type 3)
-
-        /// <summary>
-        /// Variable ADDRESSING MODE, and it lives in <c>a2</c> — not <c>a1</c>, which is the variable index.
-        ///
-        /// <c>exe()</c> case 1/2 switch on <c>a2</c>: 1 = direct (<c>vars[a1]</c>), and 2/4/8/0x10/0x20 are
-        /// indirect/array forms that pop an index first. Emitting <c>a2 = 0</c> matches NOTHING, so the
-        /// instruction pushes nothing at all — the stack then runs short, EXT reads garbage as the command
-        /// id, and the VM derails. That is exactly what froze the game on the bait menu.
-        /// </summary>
-        private const int VarModeDirect = 1;
-
-        internal void PushInt(int v)     => Emit(OpPush, TypeInt, unchecked((uint)v));
-        internal void PushFloat(float v) => Emit(OpPush, TypeFloat, BitConverter.ToUInt32(BitConverter.GetBytes(v), 0));
-
-        /// <summary>Push local variable <paramref name="idx"/>'s value.</summary>
-        internal void PushVar(int idx) => Emit(OpVarValue, (uint)idx, VarModeDirect);
-
-        /// <summary>
-        /// Push a POINTER to local variable <paramref name="idx"/> — an OUT parameter.
-        ///
-        /// This is how <c>_GOTO_CHANGE_ESA</c> hands back the bait you picked: its handler takes
-        /// <c>p_use_item = arg1.value</c> (and refuses unless <c>arg1.type == 3</c>), opens the menu, and the
-        /// menu writes the chosen item id through that pointer. So stack type 3 is "pointer", not "string" —
-        /// a string push is just a pointer into the .stb, which is why <see cref="PushString"/> shares it.
-        /// </summary>
-        internal void PushVarRef(int idx) => Emit(OpVarRef, (uint)idx, VarModeDirect);
-
-        /// <summary>Highest local variable index used, or -1. A label's header declares how many locals it
-        /// has (header slot 0's op field), and the VM reserves that many.</summary>
-        internal int Locals { get; private set; }
-
-        internal void UseLocals(int n) { if (n > Locals) Locals = n; }
-
-        /// <summary>Byte offset of the next instruction — used to find an operand again so the mod can patch
-        /// it live (see the exit script's position, which is rewritten every frame while fishing).</summary>
-        internal int Offset => _b.Count;
-
-        /// <summary>
-        /// Push a string. The operand is NOT a file offset — it is an offset relative to the script's CODE
-        /// BASE (the u32 at header +0x08). Norune's model swap reads `a2 = 0xED18` and the string really
-        /// lives at file 0xEE00, and 0xEE00 - 0xED18 = 0xE8, which is exactly its codeBase. That also matches
-        /// <c>load__10CRunScript</c>, which caches <c>base + *(base + 8)</c>.
-        ///
-        /// The offset cannot be known until the string is placed, so this emits a placeholder and remembers
-        /// where to patch it. Call <see cref="EmitStrings"/> once the layout is decided.
-        /// </summary>
-        internal void PushString(string text)
-        {
-            _strs.Add((text, _b.Count + 8));   // the a2 field of the instruction we are about to emit
-            Emit(OpPush, TypeString, 0);
-        }
-
-        /// <summary>
-        /// Lay the pushed strings out at <paramref name="blobOffset"/> (an offset within the .stb buffer),
-        /// patch every placeholder, and return the bytes to write there. Call AFTER the bytecode is complete;
-        /// <see cref="ToArray"/> then returns the patched code.
-        /// </summary>
-        internal byte[] EmitStrings(int blobOffset, int codeBase)
-        {
-            var blob = new System.Collections.Generic.List<byte>();
-            foreach (var (text, patchAt) in _strs)
-            {
-                byte[] a2 = BitConverter.GetBytes(blobOffset + blob.Count - codeBase);
-                for (int i = 0; i < 4; i++) _b[patchAt + i] = a2[i];
-                blob.AddRange(System.Text.Encoding.ASCII.GetBytes(text));
-                blob.Add(0);
-            }
-            return blob.ToArray();
-        }
-
-        internal bool HasStrings => _strs.Count > 0;
-
-        /// <summary>Bytes the string blob will occupy (each string is NUL-terminated). Needed to size an
-        /// allocation BEFORE the layout is decided.</summary>
-        internal int StringBytes
-        {
-            get
-            {
-                int n = 0;
-                foreach (var (text, _) in _strs) n += text.Length + 1;
-                return n;
-            }
-        }
-
-        /// <summary>Call. <paramref name="stackEntries"/> counts the command id as well as the arguments.</summary>
-        internal void Ext(int stackEntries) => Emit(OpExt, (uint)stackEntries, 0);
-
-        internal void Ret() => Emit(OpRet, 0, 0);
-
-        private const int OpCallFunc = 19;
-
-        /// <summary>
-        /// Number of arguments this script is CALLED with (funcdata fd[3]). CALL_FUNC frames the callee as
-        /// <c>varsBase = sp - args*8</c>, so the caller's pushed args become the callee's first locals. 0 for a
-        /// normal event label; the shared menu subroutine declares 2 (msgId, count). WriteScript writes it.
-        /// </summary>
-        internal int ArgCount { get; private set; }
-
-        /// <summary>Declare this as a callable subroutine taking <paramref name="n"/> stack arguments (which
-        /// occupy locals 0..n-1). Also reserves them as locals.</summary>
-        internal void SetArgs(int n) { ArgCount = n; UseLocals(n); }
-
-        /// <summary>
-        /// CALL_FUNC (op 19): call the funcdata at <paramref name="cbRelFuncOff"/> — a codeBase-relative FILE
-        /// offset. Args are pushed by the caller first (they become the callee's locals 0..args-1); a return
-        /// value the callee pushes before RET is left on the stack. a1 is unused (0 in every vanilla call).
-        /// The offset is an absolute layout value known at emit time, so — unlike jumps/strings — it needs no
-        /// post-placement fixup.
-        /// </summary>
-        internal void CallFunc(int cbRelFuncOff) => Emit(OpCallFunc, 0, unchecked((uint)cbRelFuncOff));
-
-        /// <summary>Suspend until the next frame. A script that never yields is run to completion inside
-        /// <c>EdEventInit</c> and demoted to a "simple event" — it never becomes a real event, so its return
-        /// code is never acted on. See <c>BuildFishingBytecode</c>.</summary>
-        internal void Yield() => Emit(OpYield, 0, 0);
-
-        private const int OpJmp     = 16;   // pc = codeBase + a1
-        private const int OpBrFalse = 17;   // pops; branches if false
-        private const int OpBrTrue  = 18;   // pops; branches if true
-
-        private readonly System.Collections.Generic.List<int> _marks = new System.Collections.Generic.List<int>();
-        private readonly System.Collections.Generic.List<(int PatchAt, int Mark)> _jumps =
-            new System.Collections.Generic.List<(int, int)>();
-
-        /// <summary>Remember this spot as a jump target. Like strings, a jump's operand is an offset from the
-        /// script's CODE BASE, so it cannot be resolved until we know where the script will be written.</summary>
-        internal int Mark()
-        {
-            _marks.Add(_b.Count);
-            return _marks.Count - 1;
-        }
-
-        /// <summary>Reserve a mark for a spot not emitted yet (a forward branch); fix it with
-        /// <see cref="PlaceMark"/>.</summary>
-        internal int MarkForward()
-        {
-            _marks.Add(-1);
-            return _marks.Count - 1;
-        }
-
-        internal void PlaceMark(int mark) => _marks[mark] = _b.Count;
-
-        private const int OpAnd = 24;
-
-        /// <summary>Pop two, push (a &amp; b). Used to test a single button out of the pad bitmask.</summary>
-        internal void And() => Emit(OpAnd, 0, 0);
-
-        internal void Jmp(int mark)     => EmitJump(OpJmp, mark);
-        internal void BrTrue(int mark)  => EmitJump(OpBrTrue, mark);
-        internal void BrFalse(int mark) => EmitJump(OpBrFalse, mark);
-
-        private void EmitJump(int op, int mark)
-        {
-            _jumps.Add((_b.Count + 4, mark));      // a1 is the operand for jumps, at instruction + 4
-            Emit(op, 0, 0);
-        }
-
-        /// <summary>Resolve jump targets once the script's position is known.</summary>
-        internal void EmitJumps(int scriptOffset, int codeBase)
-        {
-            foreach (var (patchAt, mark) in _jumps)
-            {
-                byte[] a1 = BitConverter.GetBytes(scriptOffset + _marks[mark] - codeBase);
-                for (int i = 0; i < 4; i++) _b[patchAt + i] = a1[i];
-            }
-        }
-
-        // Arithmetic / comparison / assignment primitives — verified against the interpreter's opcode switch
-        // (exe__10CRunScript 0x23E080). See docs/stb-script-format.md.
-        private const int OpStore = 5;    // pop value then ref; *ref = value; PUSHES value back (needs a Pop)
-        private const int OpAdd   = 6;
-        private const int OpSub   = 7;
-        private const int OpPop   = 4;
-        private const int OpCmp   = 14;   // a1 = comparator: 0x28== 0x29!= 0x2A< 0x2B<= 0x2C> 0x2D>=
-
-        internal const int CmpEq = 0x28, CmpNe = 0x29, CmpLt = 0x2A, CmpLe = 0x2B, CmpGt = 0x2C, CmpGe = 0x2D;
-
-        /// <summary>Discard the top stack value.</summary>
-        internal void Pop() => Emit(OpPop, 0, 0);
-        internal void Add() => Emit(OpAdd, 0, 0);
-        internal void Sub() => Emit(OpSub, 0, 0);
-
-        /// <summary>Compare: pops two, pushes bool. <paramref name="cmp"/> is one of the <c>Cmp*</c> constants.
-        /// The test is <c>(first OP second)</c> — the operand pushed FIRST is the left side. So <c>var &lt; n</c>
-        /// is PushVar(var); PushInt(n); Cmp(CmpLt). (Verified against exe__10CRunScript case 0xE.)</summary>
-        internal void Cmp(int cmp) => Emit(OpCmp, (uint)cmp, 0);
-
-        /// <summary>Assign <c>var[idx] = &lt;expression already on the stack&gt;</c>. Emits the ref, expects the
-        /// value to have been pushed by the caller BEFORE calling — no: emits nothing but the store, so the
-        /// order is PushVarRef(idx); &lt;push value&gt;; Store(). Store re-pushes the value, so a statement adds Pop().</summary>
-        internal void Store() { Emit(OpStore, 0, 0); }
-
-        private void Emit(int op, uint a1, uint a2)
-        {
-            _b.AddRange(BitConverter.GetBytes(op));
-            _b.AddRange(BitConverter.GetBytes(a1));
-            _b.AddRange(BitConverter.GetBytes(a2));
-        }
-
-        internal byte[] ToArray() => _b.ToArray();
-    }
 }

@@ -371,4 +371,40 @@ namespace Dark_Cloud_Improved_Version
         /// worth copying for any spot whose "water" is not water (e.g. Yellow Drops' liquid).</summary>
         internal const long DrawUnderWater = 0x202A1FA0;
     }
+
+    /// <summary>Town villager (NPC) globals the fishing feature suspends for a session, to stop the
+    /// freed-villager crash/flicker (see CustomFishingSpot villager-hide).</summary>
+    internal static class Villagers
+    {
+        // The event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < Count`; the town's villager clear
+        // must pair with suspending this count. Zeroing it for the fishing window covers every event-mode
+        // villager iterator (EdEventNPCStep, EdEventMode, GetNPC/GetChara).
+        internal const long Count = 0x21D3D3C8;    // ELF DAT_01d3d3c8 — live NPC count
+
+        // Villager DRAW (EdDrawCharacter 0x1725F0) is called from MainDraw with a HARDCODED count of 10, so the
+        // Count knob does NOT cover it. CheckDraw__12CNPCharacter (0x156670) draws a slot only when its draw
+        // flag @ +0x146C != 0. The objects live at a FIXED base (stride 0x14A0) the model load does NOT
+        // overwrite — only the VISUAL sub-object they point to (+0xA0) is freed; dispatching its vtable (+0xAC)
+        // through the garbage pointer is the recLUT crash. Zero the fixed draw flags and CheckDraw returns 0.
+        internal const long ObjBase   = 0x21D25B90;
+        internal const int  ObjStride = 0x14A0;
+        internal const int  DrawFlag  = 0x146C;
+        internal const int  DrawSlots = 10;        // MainDraw's hardcoded EdDrawCharacter count
+    }
+
+    /// <summary>The running-event id, set by EdEventInit before the enter script's fade + loads.</summary>
+    internal static class EditEvent
+    {
+        internal const long Info = 0x21D3D1D0;     // ELF 0x1d3d1d0 — running-event id
+    }
+
+    /// <summary>ClsMes windows whose talk-buffer pointer the fishing feature swaps to injected scratch (catch
+    /// bubble + menu text) for a session. SetBuff stores the buffer ptr at +0x17A0 (and a +0x17A8 delta).</summary>
+    internal static class MesWindows
+    {
+        internal const long TownTalk  = 0x21D1B550;   // ELF 0x1d1b550 — town talk/dialogue ClsMes (catch bubble, msg 2000)
+        internal const long TownEvent = 0x21D1E4D0;   // ELF EditEventMes1 — window 1 (menu text)
+        internal const int  BufPtr    = 0x17A0;        // SetBuff: buffer ptr (GetTextLineDataTop reads this)
+        internal const int  BufPtr2   = 0x17A8;        // SetBuff: buffer + u16@2 (kept consistent)
+    }
 }
