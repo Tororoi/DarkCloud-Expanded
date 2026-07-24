@@ -341,6 +341,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long CPoly     = 0x202A2B68; // CCPoly* — the collision PickUpPoly gathered
         internal const long CPolyNum  = 0x202A2B6C; // int.
 
+        // Screen-fade state (EdFadeOut/EdFadeIn 0x189790/0x189710, EdFadeOutCheck 0x189810).
+        //   fade_in_out: 0 = idle (faded in / normal), -1 = fading OUT to black, +1 = fading IN.
+        //   fade_end   : 0 while a fade is ramping, 1 once it has finished.
+        // The fishing ENTER script sets fade_in_out = -1 (via _FADE_OUT) at the moment the player
+        // commits to fishing — AFTER the entry menu, BEFORE the villager buffer is freed. That is
+        // the clean "fishing is actually starting" signal, so the entry menu itself stays populated.
+        internal const long FadeInOut = 0x202A29F8; // int
+        internal const long FadeEnd   = 0x202A29FC; // int
+
         // TWO distinct ceilings (RE'd — see _LOAD_FISHING_DATA 0x1969a0 / FishingLoad 0x1a87e0):
         //   • GATHER: _LOAD_FISHING_DATA gathers into a 0x14000-byte STACK buffer (1024 CCPoly) and, right
         //     after, asserts `if (count > 0x400) hang`. So the NATIVE gather must stay <= 1024 or the game

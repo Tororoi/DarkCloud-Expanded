@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class PriscleenFish
     {
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;
 
         /// <summary>TEST AID: stamp every Brownboo fish's CFish species (+0) to 8 so ANY catch shows
         /// Priscleen (species 8 does not spawn naturally yet). Set false for normal play.</summary>
