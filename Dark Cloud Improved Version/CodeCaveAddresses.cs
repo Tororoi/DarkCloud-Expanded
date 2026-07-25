@@ -203,31 +203,18 @@ namespace Dark_Cloud_Improved_Version
         internal const long MeshCaveGuest  = 0x01F56400;
         internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
 
-        // ── FREE: 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ──────
-        // This 0x300-byte block once held the fishing catch-bubble (talk msg 2000) + entry/quit menu (event
-        // 20/21/22) scratch buffers for the old runtime ClsMes buffer-swap. Those messages are now BAKED into
-        // each custom town's mes by IsoPatcher (the engine reads them from the town's own mes), so this block
-        // is UNUSED and available for reuse. It stays inside the CodeCaveScanner ModReserved heap-tail claim
-        // (0x1F10000..0x1FB4300), which is why the sweeper still shows it clean.
+        // ── 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ─────────────
+        // +0x00 (4 B) NOW HOLDS the shallow-fishing bobber-anchor global (TownAddresses.FishLineShallow.BobberPtr):
+        //   the cold-patched FishLineStep reads game-addr 0x01FB4000 for the bobber's point address, and a data
+        //   write here toggles vanilla point[18] vs shallow point[21]. The rest of the block is spare. (It once
+        //   held the old ClsMes catch/menu scratch, now baked into each town's mes by IsoPatcher.) Inside the
+        //   CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so the sweeper still shows it clean.
 
-        // ── Fishing sign injection ───────────────────────────────────────────────────────────────────
-        // This region (MeshCave margin, in the space below the now-free 0x21FB4000 block) hosts the sign
-        // asset buffers + a one-shot load stub + config. It is shared by two mutually-exclusive approaches:
-        //   • GlobalSignLoader (CURRENT): loads the kanban as a GLOBAL CFrame via LoadMDSFile and registers
-        //     e01b24 into the system texture manager 0x1c75870 (the miracle-chest's path) — then a draw hook
-        //     renders it. The two asset buffers below pack exactly into 0x21FAE400..0x21FB3400.
-        //   • SignInjector (SUPERSEDED, not armed): built the sign as a villager from a bundled fishsign.chr.
-        //     Its SignChrCave alias covers the same bytes; only one loader is ever armed, so there is no clash.
-        internal const long SignMdsCave       = 0x21FAE400;   // kanban.mds  (2160 B) → ends 0x21FAEC70
-        internal const uint SignMdsCaveGuest  = 0x01FAE400;
-        internal const long SignImgCave       = 0x21FAEC70;   // e01b24_bank.img (18320 B, IM2) → ends 0x21FB3400
-        internal const uint SignImgCaveGuest  = 0x01FAEC70;
-        internal const long SignChrCave       = 0x21FAE400;   // (superseded) fishsign.chr alias — SignInjector
-        internal const uint SignChrCaveGuest  = 0x01FAE400;
-        internal const long SignStubCave      = 0x21FB3400;   // the cave stub (custom cmd-10 handler)
-        internal const uint SignStubCaveGuest = 0x01FB3400;
-        internal const long SignConfig        = 0x21FB3600;   // GlobalSignLoader: +0 ready +4 loaded +8 cframe +C fires
-        internal const uint SignConfigGuest   = 0x01FB3600;
+        // ── FREE: 0x21FAE400 .. 0x21FB4000 (MeshCave margin, ~0x5C00 B) ──────────────────────────────────
+        // Formerly the runtime fishing-sign asset/stub/config caves (SignMdsCave/SignImgCave/SignStubCave/
+        // SignConfig, used by the retired runtime sign-injection loaders). The sign is
+        // now baked into each town's scene.scn, so this whole span is free. Inside the CodeCaveScanner
+        // ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean and reusable.
     }
 
 }

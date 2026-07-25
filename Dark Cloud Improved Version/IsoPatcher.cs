@@ -171,9 +171,10 @@ namespace Dark_Cloud_Improved_Version
             progress("Injecting the fishing-sign texture …");
             Redirect(HOST_PAK, PakPrepend(ReadArchive(HOST_PAK), "fishsign.img", e01b24Img));
 
-            // 3) mesh: inject the kanban as a native georama part + its mapinfo placement
+            // 3) mesh: inject the kanban as a native georama part + its mapinfo placement, and enable
+            //    backface culling on Brownboo's upper crater walls (see CullUpperCraterWalls).
             progress("Injecting the fishing-sign mesh …");
-            Redirect(SCENE_SCN, BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds));
+            Redirect(SCENE_SCN, CullUpperCraterWalls(BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds)));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY));
 
             // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
@@ -363,6 +364,42 @@ namespace Dark_Cloud_Improved_Version
             U32(outp, ent + 0x10, (uint)blob); U32(outp, ent + 0x14, (uint)psize);
             U32(outp, 4, (uint)(n + 1));
             return outp;
+        }
+
+        // ── scene.scn: enable backface culling on Brownboo's upper crater walls (edit-mode view fix) ──
+        // The crater wall is a vertical stack of `s04g01NN__X` mesh nodes. At MDS load the engine's
+        // SetFrameAttr reads the node-name suffix after "__" and turns each letter into a render flag:
+        // 's' enables backface culling (single-sided), 'n' leaves it off (two-sided). The artist tagged the
+        // lower rings (Y 0..300) `__s` but the upper rings (Y 300..1200) `__n`, so the upper walls draw
+        // double-sided — their inward-facing back faces show through as stray geometry that hides the town
+        // from an overhead edit-mode camera. Flipping the 12 upper nodes' suffix to `__s` makes them
+        // attribute-identical to the (correctly culled) lower rings. One byte per node; geometry unchanged.
+        static readonly string[] UPPER_WALL_NODES = {
+            "s04g0105__n", "s04g0106__n", "s04g0107__n", "s04g0108__n", "s04g0109__n", "s04g0110__n",
+            "s04g0111__n", "s04g0112__n", "s04g0113__n", "s04g0114__n", "s04g0115__n", "s04g0116__n",
+        };
+
+        static byte[] CullUpperCraterWalls(byte[] scene)
+        {
+            foreach (string node in UPPER_WALL_NODES)
+            {
+                byte[] key = Encoding.Latin1.GetBytes(node + "\0");   // the null-terminated node-name field
+                int at = Find(scene, key);
+                if (at < 0) throw new IOException($"crater-wall node '{node}' not found in scene.scn");
+                scene[at + node.Length - 1] = (byte)'s';              // trailing 'n' -> 's' (culling on)
+            }
+            return scene;
+        }
+
+        static int Find(byte[] hay, byte[] needle)
+        {
+            for (int i = 0; i <= hay.Length - needle.Length; i++)
+            {
+                int j = 0;
+                while (j < needle.Length && hay[i + j] == needle[j]) j++;
+                if (j == needle.Length) return i;
+            }
+            return -1;
         }
 
         static byte[] BuildInjectedMapinfo(byte[] cfg, int x, int y, int z, int ry)
