@@ -22,21 +22,22 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.*" />
   </ItemGroup>
   <ItemGroup>
-    <!-- RubyMemeFix = extracted c05 game data; sourced from the untracked game_data/ folder, LogicalName
-         keeps the manifest names so Resources.cs is unchanged. Not distributable. -->
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Fire">
+    <!-- RubyMemeFix = extracted c05 game data from the UNTRACKED game_data/ folder. Every include below is
+         guarded by Exists() so the build NEVER requires an untracked file: a clean checkout (no game_data/)
+         builds fine and simply omits these assets. Present for local dev only; never redistributed. -->
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Fire" Condition="Exists('..\game_data\RubyMemeFix\Fire')">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Fire</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Holy">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Holy" Condition="Exists('..\game_data\RubyMemeFix\Holy')">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Holy</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Ice">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Ice" Condition="Exists('..\game_data\RubyMemeFix\Ice')">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Ice</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Thunder">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Thunder" Condition="Exists('..\game_data\RubyMemeFix\Thunder')">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Thunder</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Wind">
+    <EmbeddedResource Include="..\game_data\RubyMemeFix\Wind" Condition="Exists('..\game_data\RubyMemeFix\Wind')">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Wind</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
@@ -46,13 +47,15 @@
     <None Include="Resources\FishingCollision\brownboo_14.bin">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <!-- Extracted game assets, sourced from the untracked game_data/ folder; Link keeps the output layout
-         (Resources/Fish, Resources/Sign) so the runtime load paths are unchanged. Not distributable. -->
-    <None Include="..\game_data\priscleen\f19a.chr">
+    <!-- Extracted game assets from the UNTRACKED game_data/ folder. Guarded by Exists() so a clean checkout
+         builds without them (these features degrade gracefully at runtime when the file is absent). Link
+         keeps the output layout (Resources/Fish, Resources/Sign) so runtime load paths are unchanged. Never
+         redistributed. f19a (Priscleen, from a DC2 disc) is pending a runtime-extraction path. -->
+    <None Include="..\game_data\priscleen\f19a.chr" Condition="Exists('..\game_data\priscleen\f19a.chr')">
       <Link>Resources\Fish\f19a.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="..\game_data\fishsign\fishsign.chr">
+    <None Include="..\game_data\fishsign\fishsign.chr" Condition="Exists('..\game_data\fishsign\fishsign.chr')">
       <Link>Resources\Sign\fishsign.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

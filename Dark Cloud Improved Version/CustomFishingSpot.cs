@@ -12,10 +12,10 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// <code>
     /// walk into a type-3 event point
-    ///   -> EdGetEvent: matchedParam = 3, matchedPoint
-    ///   -> EdMoveChara: label = matchedPoint[+0x1C]      // an event point's +0x1C is a SCRIPT LABEL for type 3
+    ///   -> the engine matches the point and reads its script label
     ///   -> the VM runs that label
     /// </code>
+    /// (engine functions / record offsets: game_data/docs/fishing-engine-re.md §event-dispatch)
     ///
     /// So this needs exactly two data writes, both of which the mod can do:
     ///
@@ -101,16 +101,15 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // Water planes are the HEIGHT values the probe read out of each town's WATER_SURFACE table.
+        // Water planes are the HEIGHT values the probe read out of each town's water-surface table.
         //
-        // Rectangles are kept near 200x200 on purpose: PickUpPoly HANGS THE GAME if it gathers more than
-        // 0x400 polys (a dev assert that shipped). Norune's real 200x200 spot gathers 197, so that is the
-        // proven-safe scale. Do not widen these without watching cpoly.
+        // Rectangles are kept near 200x200 on purpose: the engine's collision-poly gather HANGS THE GAME
+        // above a fixed cap, and a 200x200 spot stays well under. Do not widen these without watching cpoly.
         //
-        // The trigger is a RADIUS around a world point, not a box — EdGetEvent tests
-        // `DistVector(pos, player) < point[0x60]`. Keep it modest: EdGetEvent matches ONE point, so an
-        // over-large radius wins over every door and their "!" markers vanish (which is what happened at
-        // 2000 units).
+        // The trigger is a RADIUS around a world point, not a box, and the engine matches only ONE point —
+        // so an over-large radius wins over every door and their "!" markers vanish (what happened at 2000
+        // units). Keep it modest.
+        // (poly cap + match test: game_data/docs/fishing-engine-re.md §fishing-load, §event-dispatch)
         private static readonly Spot[] Spots =
         {
             // Queens: the canal (static WATER e03c01/c02/c08), surface at Y=31.
@@ -156,13 +155,10 @@ namespace Dark_Cloud_Improved_Version
                      // BISECT RESULT (2026-07-23): stilts garbage is NOT the model load and NOT the buffer
                      // clears (both skipped -> still garbage). Clobber is intrinsic to entering fishing mode
                      // (fishing-init / HUD texture setup evicting the stilts' GS block).
-                     // Fish depth left at vanilla (WaterLevel-12): shallow fishing (fishDepth 6) needs the HOOK
-                     // raised to match, but the hook is pinned to the fishing-rod's `hari` animation bone at
-                     // ~WaterLevel-9 — the only pure-runtime lever that moves it is the GroundLevel clamp, which
-                     // makes it rest on an invisible surface. RE'd: FishingStepFish (food = hookY-3) / CFish::
-                     // BiteHook (bite when fish-food < 1.0) / FishLineStep (clamp) / EdMoveChara (FishLineSetHook
-                     // pins the hook to SearchFrame(rod,"hari")). Shallow-depth approach parked pending a call on
-                     // the clamp vs. a per-tick bone rewrite. See [[fishing-depth-and-bite]].
+                     // Fish depth left at vanilla: shallow fishing needs the HOOK raised to match, but the hook
+                     // is pinned to the rod's fishing animation, so the only pure-runtime lever (a ground clamp)
+                     // makes it rest on an invisible surface. Parked pending a call on the clamp vs. a per-tick
+                     // bone rewrite. See [[fishing-depth-and-bite]] + game_data/docs/fishing-engine-re.md §fishing-line.
                      ),
 
             // Yellow Drops: the yellow liquid.
@@ -694,10 +690,10 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
 
-            // Declare our locals. A label's header (the 4 slots after the 8-byte gap) starts with the LOCAL
-            // VARIABLE COUNT in its op field — Norune's label 256 says 27, label 134 says 10, label 133 says
-            // 1. The labels we hijack declare 0, so a script that touches var0 without raising this would be
-            // reaching outside its frame.
+            // Declare our locals. A label's header starts with the LOCAL VARIABLE COUNT. The labels we hijack
+            // declare 0, so a script that touches var0 without raising this would be reaching outside its
+            // frame. (header layout + Norune's per-label counts: memory stb-label-header-format.md,
+            // game_data/docs/fishing-engine-re.md §stb-label-header)
             if (w.Locals > 0) Memory.WriteInt(stb + codeOff + 8, w.Locals);
             // fd[3] (funcOff+0xC) = argument count. Native/baked spares carry 0 here, so only a genuine
             // subroutine (the shared menu) needs it — but a wrong non-zero value would misframe the callee.
@@ -740,8 +736,8 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Build the bait's model and hang it on the hook.
         ///
-        /// <c>_SET_FISHING_ESA</c> loads NOTHING — it only points the hook at item frame 0
-        /// (<c>FishingLoadEsa: EsaFrame = itemFrames[0]</c>). The frame has to be built first:
+        /// <c>_SET_FISHING_ESA</c> loads NOTHING — it only points the hook at item frame 0. The frame has to
+        /// be built first:
         ///
         /// <code>
         ///   _LOAD_ITEM_FILE(id)        // async background read (LoadFileBG)
@@ -753,10 +749,10 @@ namespace Dark_Cloud_Improved_Version
         ///   _SET_FISHING_ESA(id)
         /// </code>
         ///
-        /// This has to be emitted into EVERY script that wants bait, not done once at startup:
-        /// <c>EdInitEventParamSimple</c> ZEROES the item-frame table at the start of every event, so by the
-        /// time label 134 runs, whatever the entry script loaded is already gone. That is exactly why
-        /// pressing Square removed the bait instead of adding it.
+        /// This has to be emitted into EVERY script that wants bait, not done once at startup: the engine
+        /// zeroes the item-frame table at the start of every event, so by the time label 134 runs, whatever
+        /// the entry script loaded is already gone. That is exactly why pressing Square removed the bait
+        /// instead of adding it. (game_data/docs/fishing-engine-re.md §fishing-esa)
         /// </summary>
         /// <summary>
         /// <c>while (poll(&amp;v)) YIELD;</c> — wait on something the engine will finish in its own time.
@@ -868,10 +864,10 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Label 134 — the REAL bait menu.
         ///
-        /// <c>_GOTO_CHANGE_ESA</c> (command 25) drives the game's own use-item menu: it copies a STATIC bait
-        /// list (the template at <c>_820</c> — so we do not have to supply one), calls <c>EdSetUseItem</c>
-        /// and sets <c>menu_mode = 9</c>. Its one meaningful argument is a POINTER to a script local, which
-        /// the menu writes the chosen item id into. Hence <see cref="StbWriter.PushVarRef"/>.
+        /// <c>_GOTO_CHANGE_ESA</c> (command 25) drives the game's own use-item menu: it copies a built-in bait
+        /// list (so we do not have to supply one) and opens the menu. Its one meaningful argument is a POINTER
+        /// to a script local, which the menu writes the chosen item id into. Hence
+        /// <see cref="StbWriter.PushVarRef"/>. (game_data/docs/fishing-engine-re.md §fishing-esa)
         ///
         /// The single YIELD after it is enough: while <c>menu_mode != 0</c>, <c>EdEventMode</c> runs the menu
         /// instead of stepping the script, so we resume only once the player has chosen.
@@ -918,9 +914,9 @@ namespace Dark_Cloud_Improved_Version
         /// The STB VM is 12-byte instructions {op, a1, a2}. Push type 1 = int, 2 = float (IEEE bits).
         /// EXT (op 21) takes the STACK ENTRY COUNT in a1, including the command id, which is the first entry.
         ///
-        /// Modelled directly on Norune's real call (label 256, +0x0E8E0), which pushes 998 then the area and
-        /// six floats and does EXT argc=8. We push negative floats as literals rather than using the negate
-        /// op the original happens to use.
+        /// Modelled directly on Norune's real _LOAD_FISHING_DATA call, which pushes 998 then the area and six
+        /// floats and does EXT argc=8. We push negative floats as literals rather than using the negate op the
+        /// original happens to use. (exact script offset: game_data/docs/fishing-engine-re.md §norune-script)
         /// </summary>
         /// <summary>Emit <c>var[idx] = &lt;value pushed by <paramref name="push"/>&gt;</c> as a statement
         /// (STORE re-pushes the stored value, so this drops it with POP).</summary>
@@ -1235,8 +1231,8 @@ namespace Dark_Cloud_Improved_Version
 
             // RESET THE FISHING POOL TO ITS BASE *BEFORE* THE MODEL LOAD. This is the Brownboo fix.
             //
-            // _LOAD_MAIN_CHARA(turi, flag=1) loads the 1.8 MB model into allocator 0x1d1b360 — the same pool
-            // _LOAD_FISHING_DATA uses. Norune loads the model FIRST and clears the event buffer AFTER, which
+            // _LOAD_MAIN_CHARA(turi, flag=1) loads the 1.8 MB model into the same pool _LOAD_FISHING_DATA
+            // uses (see §fishing-load). Norune loads the model FIRST and clears the event buffer AFTER, which
             // works only because its pool pointer already sits low. Brownboo has more resident event data, so
             // the pointer is high, and model-start + 1.8 MB runs off the end of the pool -> overflow -> crash
             // (confirmed: skipping the model reaches fishing fine, cpoly=4). Resetting the pool to base first
@@ -1245,11 +1241,9 @@ namespace Dark_Cloud_Improved_Version
             w.Ext(1);
 
             // We do NOT mirror Norune's _NPC_DRAW(0,-1) here (nor _NPC_DRAW(1,-1) on exit), and that is not a
-            // shortcut — for the player it is a NO-OP. _NPC_DRAW's per-character draw flags are an array
-            // indexed 0..15 for VILLAGERS; the player is id -1, which GetChara resolves to the main-character
-            // pointer directly, bypassing that array. The only other thing it writes is DAT_01d3d230, which
-            // has ZERO readers in the whole binary (verified by xref). So Norune's hide/show around the model
-            // swap is vestigial — it changes nothing the renderer looks at.
+            // shortcut — for the player it is a NO-OP. Its per-character draw flags are a villager-only array;
+            // the player (id -1) bypasses it, and its only other write has zero readers in the binary. So
+            // Norune's hide/show around the model swap is vestigial. (game_data/docs/fishing-engine-re.md §npc-draw)
 
             // SWAP TOAN FOR THE FISHING TOAN.
             //     _LOAD_MAIN_CHARA("chara/c01d_turi.chr", "c01d_turi.cfg", 1)
@@ -1261,7 +1255,7 @@ namespace Dark_Cloud_Improved_Version
                 w.PushInt(StbCommands.LoadMainChara);     // 999 — into the pool we just reset to base
                 w.PushString(FishingModel);
                 w.PushString(FishingModelCfg);
-                w.PushInt(1);                             // flag 1 = load into the fishing pool 0x1d1b360
+                w.PushInt(1);                             // flag 1 = load into the fishing pool
                 w.Ext(4);
                 w.Yield();
             }
@@ -1292,10 +1286,9 @@ namespace Dark_Cloud_Improved_Version
             w.Ext(5);                                 // 1 command id + 4 arguments
 
             // Snap the player into the fishing stance. Norune does exactly this — _SET_WORLD_COORD, then
-            // _SET_NPC_POS(-1, 40, 0, 96) and _SET_NPC_ROT(-1, 0, 3.14, 0) — where (40, 0, 96) is the
-            // part-local position of its own fishing event point. Without it the player keeps whatever
+            // _SET_NPC_POS / _SET_NPC_ROT at its own fishing point. Without it the player keeps whatever
             // position and facing they walked in with, so the cast is aimed at dry land and the engine
-            // rejects it. This is the rod "bug".
+            // rejects it. This is the rod "bug". (Norune's exact coords: game_data/docs/fishing-engine-re.md §norune-script)
             //
             // _SET_WORLD_COORD is set to IDENTITY so that the position and rotation below are plain world
             // coordinates. Norune passes the pond part's transform instead, because its numbers are
@@ -1317,20 +1310,16 @@ namespace Dark_Cloud_Improved_Version
 
             // NO BAIT LOAD HERE — and that is deliberate. Norune loads bait ONLY from label 134.
             //
-            // Loading it here corrupts the heap. _CLEAR_EVENT_BUFF (which the item load needs) is a bump
-            // allocator RESET:
+            // Loading it here corrupts the heap. _CLEAR_EVENT_BUFF (which the item load needs) RESETS the
+            // bump allocator that _LOAD_FISHING_DATA just allocated fishing.pak and the fish out of. So doing
+            // the item load after the fishing load rewinds the arena and drops the bait on top of the fishing
+            // data. The session still runs, because that memory is already in hand; but the arena is wrecked,
+            // and the next thing to allocate from it — area streaming, once you walk far enough — lands in the
+            // wreckage.
             //
-            //     EdEventBuffer = EdVillagerBuffer + n * 0x10;      // pointer back to base
-            //
-            // and the fields it rewinds (0x1d1b368/36c) belong to the allocator at 0x1d1b360 — the SAME one
-            // _LOAD_FISHING_DATA just allocated fishing.pak and the fish out of. So doing the item load after
-            // the fishing load rewinds the arena and drops the bait on top of the fishing data. The session
-            // still runs, because that memory is already in hand; but the arena is wrecked, and the next thing
-            // to allocate from it — area streaming, once you walk far enough — lands in the wreckage.
-            //
-            // That was the crash-after-fishing-when-you-walk-away. Vanilla starts a session with no bait
-            // (FishingInit sets esa_type = -1) and you pick one with Square, so this is also the faithful
-            // behaviour, not just the safe one.
+            // That was the crash-after-fishing-when-you-walk-away. Vanilla starts a session with no bait and
+            // you pick one with Square, so this is also the faithful behaviour, not just the safe one.
+            // (allocator + fields: game_data/docs/fishing-engine-re.md §fishing-load)
 
             w.PushInt(StbCommands.GotoFishing);       // 997 — sets the event return code to 0xB
             w.Ext(1);                                 // command id only; matches Norune's `push 997; EXT argc=1`
@@ -1352,18 +1341,13 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Label 133 — the engine's hardcoded "leave fishing" script.
         ///
-        /// In fishing mode <c>EdMoveChara</c> runs a <c>chara_fishing</c> state machine that asks for script
-        /// labels BY NUMBER when you press a button:
-        ///
-        /// <code>
-        ///   EdPadDown(0x40) -> chara_fishing = 2      // Cross  = cast
-        ///   EdPadDown(0x20) -> ScriptLabelRequest = 0x85   // 133 = quit
-        ///   EdPadDown(0x80) -> ScriptLabelRequest = 0x86   // 134 = bait menu
-        /// </code>
+        /// In fishing mode the engine asks for script labels BY NUMBER when you press a button — Cross casts,
+        /// Circle requests label 133 (quit), Square requests 134 (bait menu).
         ///
         /// Norune's script HAS labels 133 and 134. A town that never had fishing does not — so the button
         /// asks for a label that does not exist and nothing happens, which is exactly why the session could
         /// not be exited. We synthesise 133 ourselves; it is tiny.
+        /// (button -> label map: game_data/docs/fishing-engine-re.md §fishing-buttons)
         ///
         /// The RET matters: we set no return code, so <c>EventMode</c> takes its <c>default:</c> branch and
         /// puts <c>GameMode</c> back to 1 (walking). That is how Norune's exit path ends too.
@@ -1503,21 +1487,19 @@ namespace Dark_Cloud_Improved_Version
         /// Claim a free slot and make it a type-3 trigger for <paramref name="labelId"/>.
         ///
         /// The first attempt wrote only type / label / position / box, and the point was SILENTLY REJECTED:
-        /// <c>CheckEventPoint</c> opens with <c>if (*piVar5 == 0) return 0;</c> — <b>+0x00 must be non-zero</b>
-        /// (every real point in the dumps reads <c>00:1</c>). That is why nothing happened in Queens or
-        /// Brownboo even though the install logged success.
+        /// the engine's point check bails unless the Enabled field is non-zero. That is why nothing happened
+        /// in Queens or Brownboo even though the install logged success.
         ///
-        /// Rather than reverse-engineer the remaining fields (there is a time window at +0x40/+0x44 that
-        /// <c>EdCheckTime</c> reads, and more besides), CLONE a working point and override only what we mean
-        /// to change. Copying a known-good record is more robust than reconstructing one from a partial map.
+        /// Rather than reverse-engineer the remaining fields (there is a time window and more besides), CLONE
+        /// a working point and override only what we mean to change. Copying a known-good record is more
+        /// robust than reconstructing one from a partial map.
         /// </summary>
-        // The event array physically holds 256 points (LoadPTS calls EdInitEventPoint(..., 0x100)); the live
-        // count is EditMapInfo+0x1a250, mirrored to EventPoints.Count each frame by MoveChara. The array base
-        // (EventPoints.Base) is EditMapInfo+0x23260, so the count field is 0x9010 before it. When the town's
-        // own points fill the front of the array with no gap (a cold save-load — Yellow Drops packs 12 with
-        // none free), we APPEND at index=count and bump the count, exactly as the engine's own loader does.
+        // The event array physically holds 256 points; the live count is mirrored to EventPoints.Count each
+        // frame. When the town's own points fill the front of the array with no gap (a cold save-load — Yellow
+        // Drops packs 12 with none free), we APPEND at index=count and bump the count, exactly as the engine's
+        // own loader does. (array base / count field offsets: game_data/docs/fishing-engine-re.md §event-point-record)
         private const int MaxEventPoints = 0x100;
-        private const long EventCountFromBase = -0x9010;   // EditMapInfo+0x1a250 relative to +0x23260
+        private const long EventCountFromBase = -0x9010;   // count field, relative to the event-array base
 
         private static bool TryCreateEventPoint(Spot s, int labelId, out int slot)
         {
@@ -1545,7 +1527,7 @@ namespace Dark_Cloud_Improved_Version
             byte[] tmpl = Memory.ReadBytesBatch(donor, EventPoints.Stride);
             Memory.WriteBytesBatch(e, tmpl);          // inherit every field we have not mapped
 
-            Memory.WriteInt(e + EventPoints.Enabled, 1);            // CheckEventPoint bails if this is 0
+            Memory.WriteInt(e + EventPoints.Enabled, 1);            // the engine's point check bails if this is 0
             Memory.WriteInt(e + EventPoints.MapFlag, 0);            // no "already done" gate
 
             // THE ONE THAT SILENTLY SWALLOWED THE LAST ATTEMPT. The donor is a door, whose PartIndex is
@@ -1557,10 +1539,10 @@ namespace Dark_Cloud_Improved_Version
 
             Memory.WriteInt(e + EventPoints.ItemOrLabel, labelId);  // type 3 -> the SCRIPT LABEL
 
-            // Suppress the sparkle. EdEventPointDraw (0x184750) draws an animated 3D sprite at a type-3
-            // point when +0x20 > 0 — a "shiny marker". We inherit +0x20 from the donor, so a re-install that
-            // clones a marked point shows a sparkle on the ground at the trigger. Our "!" prompt IS the
-            // indicator, so force it off for a consistent, marker-free trigger.
+            // Suppress the sparkle. The engine draws an animated 3D "shiny marker" at a type-3 point when the
+            // field below is > 0. We inherit it from the donor, so a re-install that clones a marked point
+            // shows a sparkle at the trigger. Our "!" prompt IS the indicator, so force it off.
+            // (draw routine + field: game_data/docs/fishing-engine-re.md §event-point-record)
             Memory.WriteInt(e + 0x20, 0);
 
             // The donor is a door, so we inherited its name — a live MAP DESTINATION. Type 3 never jumps, but
@@ -1575,8 +1557,8 @@ namespace Dark_Cloud_Improved_Version
             // Type LAST: it is what marks the slot live. Writing it first would expose a half-built point.
             Memory.WriteInt(e + EventPoints.Type, EventPoints.TypeScript);
 
-            // If we appended, raise the live count at its SOURCE (EditMapInfo+0x1a250) so EdGetEvent iterates
-            // far enough to see our new slot — MoveChara copies it into EventPoints.Count every frame.
+            // If we appended, raise the live count at its SOURCE so the engine iterates far enough to see our
+            // new slot — it copies that into EventPoints.Count every frame. (§event-point-record)
             if (append)
             {
                 Memory.WriteInt(arr + EventCountFromBase, n + 1);
@@ -1693,25 +1675,23 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static bool InFishingWindow { get; private set; }
 
-        // The engine's event-mode NPC stepper (EdEventNPCStep 0x1987D0) loops `for i < Villagers.Count`
-        // and calls VIRTUAL functions on each villager object (DAT_01d3d228 + i*0x14A0, vtable @ +0xA0).
-        // A fishing session frees the villager buffer (cmd 38) and loads the 1.8 MB model over those
-        // objects, so their vtable pointers become garbage — and the stepper jumps through one to an
-        // unmapped page (the recLUT crash). Brownboo is populated so the count is large and it steps the
-        // freed villagers; Yellow Drops is nearly empty so the loop body never runs — which is why only
-        // Brownboo crashed. Vanilla's villager clear must pair with suspending this count; we do the same:
-        // zero the count for the whole fishing window (villagers are freed/suspended then anyway) and
-        // restore it on the way out. One write covers every event-mode villager iterator (EdEventNPCStep,
-        // EdEventMode, GetNPC/GetChara), not just the one we traced.
+        // The engine's event-mode NPC stepper loops `for i < Villagers.Count` and calls VIRTUAL functions on
+        // each villager object. A fishing session frees the villager buffer (cmd 38) and loads the 1.8 MB
+        // model over those objects, so their vtable pointers become garbage — and the stepper jumps through
+        // one to an unmapped page (the recLUT crash). Brownboo is populated so the count is large and it
+        // steps the freed villagers; Yellow Drops is nearly empty so the loop body never runs — which is why
+        // only Brownboo crashed. Vanilla's villager clear must pair with suspending this count; we do the
+        // same: zero the count for the whole fishing window and restore it on the way out. One write covers
+        // every event-mode villager iterator, not just the one we traced.
+        // (iterators + object layout: game_data/docs/fishing-engine-re.md §villager-suspend)
         private static int _savedVillagerCount = -1;
 
-        // The engine's villager DRAW (EdDrawCharacter 0x1725F0, called from MainDraw with a HARDCODED count
-        // of 10 — so the count knob above does NOT cover it). Each slot is gated by CheckDraw__12CNPCharacter
-        // (0x156670), which returns "draw" only when the villager object's draw flag @ +0x146C != 0. The
-        // objects live at a FIXED base (0x21D25B90, stride 0x14A0) that the model load does NOT overwrite —
-        // only the VISUAL sub-object they point to (+0xA0) is freed and overwritten, and dispatching its
-        // vtable (+0xAC) through the garbage pointer is the recLUT crash. Zero the fixed draw flags and
-        // CheckDraw returns 0 first, so the freed visual is never touched. Restore on exit.
+        // The engine's villager DRAW walks a HARDCODED 10 slots (so the count knob above does NOT cover it),
+        // each gated by a per-object draw flag. The objects live at a FIXED base that the model load does NOT
+        // overwrite — only the VISUAL sub-object they point to is freed, and dispatching its vtable through
+        // the garbage pointer is the recLUT crash. Zero the fixed draw flags and the gate returns 0 first, so
+        // the freed visual is never touched. Restore on exit.
+        // (draw routine + object/flag offsets: game_data/docs/fishing-engine-re.md §villager-suspend)
         private static readonly int[] _savedDrawFlags = new int[Villagers.DrawSlots];
         private static bool _drawFlagsSaved;
         private static bool _villagersHidden;   // one-shot latch for UpdateVillagerHide
@@ -1755,11 +1735,11 @@ namespace Dark_Cloud_Improved_Version
         /// means the pop-out is invisible (the user sees them right up to the fade) yet the count is zeroed
         /// and the draw flags cleared before the engine can step/draw a villager whose memory is being reused.
         ///
-        /// Fade state (EdFadeInOut 0x189860): a fade-out holds <c>fade_in_out == -1</c> and flips
-        /// <c>fade_end</c> to 1 only when the black alpha reaches full (128), staying there until the fade-in.
-        /// So "fully black on a fade-out" == <c>fade_in_out == -1 &amp;&amp; fade_end != 0</c>. We also hide on a
-        /// live session (cpoly / fishing mode) as a safety net for attaching mid-session, where the buffer is
-        /// already freed and leaving villagers stepping would crash.
+        /// Fade state: a fade-out holds <c>fade_in_out == -1</c> and flips <c>fade_end</c> to 1 only when the
+        /// black alpha reaches full, staying there until the fade-in. So "fully black on a fade-out" ==
+        /// <c>fade_in_out == -1 &amp;&amp; fade_end != 0</c>. We also hide on a live session (cpoly / fishing mode)
+        /// as a safety net for attaching mid-session, where the buffer is already freed and leaving villagers
+        /// stepping would crash. (fade global: game_data/docs/fishing-engine-re.md §fade-state)
         /// </summary>
         private static void UpdateVillagerHide()
         {
@@ -1772,11 +1752,11 @@ namespace Dark_Cloud_Improved_Version
                                Memory.ReadInt(EditLoop.GameMode) == EditLoop.GameModeFishing;
             if (!fullyBlack && !sessionLive) return;   // entry menu still up (or fade still ramping) — leave them
 
-            // (1) STEP — EdEventNPCStep loops `i < count`, so zero the count.
+            // (1) STEP — the event-mode NPC stepper loops `i < count`, so zero the count.
             _savedVillagerCount = Memory.ReadInt(Villagers.Count);
             if (_savedVillagerCount > 0) Memory.WriteInt(Villagers.Count, 0);
-            // (2) DRAW — EdDrawCharacter walks a fixed 10 slots gated by CheckDraw's +0x146C flag; zero the 10
-            //     fixed-address flags so CheckDraw returns 0 and skips the freed visual.
+            // (2) DRAW — the villager draw walks a fixed 10 slots gated by a per-object flag; zero the 10
+            //     fixed-address flags so the gate returns 0 and skips the freed visual. (§villager-suspend)
             for (int i = 0; i < Villagers.DrawSlots; i++)
             {
                 long f = Villagers.ObjBase + (long)i * Villagers.ObjStride + Villagers.DrawFlag;
@@ -1803,10 +1783,11 @@ namespace Dark_Cloud_Improved_Version
 
             // The ENTER/EXIT window is event mode — but so is every town dialogue/cutscene, and hiding the
             // villagers for those is what made them vanish during normal play. The engine stamps the RUNNING
-            // event's id into EditEvent.Info (set by EdEventInit before the enter script's fade + loads, so it's
-            // early enough), and it is EXACTLY our fishing label — verified live: dialogue events read 0x2 /
-            // 0x80, our fishing enter reads 0x190 = FishingLabelId (400). Exit/bait run the engine's own
-            // fishing labels 133/134. So the running-event id is the clean, position-independent discriminator.
+            // event's id into EditEvent.Info early enough (before the enter script's fade + loads), and it is
+            // EXACTLY our fishing label — verified live: dialogue events read other ids, our fishing enter
+            // reads FishingLabelId (400), and exit/bait run the engine's own labels 133/134. So the
+            // running-event id is the clean, position-independent discriminator.
+            // (discriminator source: game_data/docs/fishing-engine-re.md §running-event)
             if (gm == EditLoop.GameModeEvent)
             {
                 int ev = Memory.ReadInt(EditEvent.Info);
