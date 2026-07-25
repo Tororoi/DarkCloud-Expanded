@@ -102,8 +102,10 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
-        /// <summary>Append the simplified rock collision from the DCFC .bin to cpoly. Runs after the
-        /// floors-only compaction, so it lands in the slots freed by the dropped walls.</summary>
+        /// <summary>Append the town's fabricated fishing collision from the DCFC .bin to cpoly — the decoded
+        /// rock triangles plus any hand-picked triangles (both baked into the .bin by
+        /// tools/export_rock_collision.py). Runs after the floors-only compaction, so it lands in the slots
+        /// freed by the dropped walls.</summary>
         internal static void AppendRockCollision(int mapNo)
         {
             uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
@@ -116,16 +118,16 @@ namespace Dark_Cloud_Improved_Version
             byte[] template = Memory.ReadBytesBatch(buf, 0x50);   // a real poly, for its non-vertex fields
             var polys = new System.Collections.Generic.List<byte[]>();
             int added = AddMeshTriangles(polys, template, mapNo);
-            if (added == 0) { Log($"   rocks: no mesh file for map {mapNo} (or 0 tris)"); return; }
+            if (added == 0) { Log($"   collision: no mesh file for map {mapNo} (or 0 tris)"); return; }
 
             int total = count + polys.Count;
             if (total > FishingSpot.CPolyBufferMax)
-            { Log($"   rocks: {count} + {polys.Count} = {total} > {FishingSpot.CPolyBufferMax} buffer — skipping"); return; }
+            { Log($"   collision: {count} + {polys.Count} = {total} > {FishingSpot.CPolyBufferMax} buffer — skipping"); return; }
 
             for (int i = 0; i < polys.Count; i++)
                 Memory.WriteBytesBatch(buf + (long)(count + i) * 0x50, polys[i]);
             Memory.WriteInt(FishingSpot.CPolyNum, total);
-            Log($"   rocks: appended {polys.Count} rock tris (cpoly {count} → {total})");
+            Log($"   collision: appended {polys.Count} fabricated tris (cpoly {count} → {total})");
         }
 
         /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
