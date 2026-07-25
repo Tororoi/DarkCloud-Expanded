@@ -1,0 +1,4 @@
+# Hand-picked extra fishing-collision triangles for Brownboo (map 14), selected in brownboo_viewer.
+# One triangle per line: x0,y0,z0, x1,y1,z1, x2,y2,z2 (world space). Blank lines / # comments ignored.
+# Appended to the rock collision by tools/export_rock_collision.py -> brownboo_14.bin.
+# (currently empty — no hand-picked extras)

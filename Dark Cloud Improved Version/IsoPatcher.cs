@@ -171,10 +171,13 @@ namespace Dark_Cloud_Improved_Version
             progress("Injecting the fishing-sign texture …");
             Redirect(HOST_PAK, PakPrepend(ReadArchive(HOST_PAK), "fishsign.img", e01b24Img));
 
-            // 3) mesh: inject the kanban as a native georama part + its mapinfo placement, and enable
-            //    backface culling on Brownboo's upper crater walls (see CullUpperCraterWalls).
+            // 3) mesh: inject the kanban as a native georama part + its mapinfo placement, delete the crater
+            //    rings' + floors' stray corner triangles, then enable backface culling on the upper crater
+            //    walls. Order matters: RemoveRingCornerTris keys off the upper rings' original `__n` names,
+            //    and CullUpperCraterWalls renames those to `__s`, so removal must run before the cull rename.
             progress("Injecting the fishing-sign mesh …");
-            Redirect(SCENE_SCN, CullUpperCraterWalls(BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds)));
+            Redirect(SCENE_SCN, CullUpperCraterWalls(RemoveRingCornerTris(
+                                    BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds))));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY));
 
             // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
@@ -400,6 +403,105 @@ namespace Dark_Cloud_Improved_Version
                 if (j == needle.Length) return i;
             }
             return -1;
+        }
+
+        static int FindLast(byte[] hay, byte[] needle, int before)
+        {
+            for (int i = Math.Min(before, hay.Length - needle.Length); i >= 0; i--)
+            {
+                int j = 0;
+                while (j < needle.Length && hay[i + j] == needle[j]) j++;
+                if (j == needle.Length) return i;
+            }
+            return -1;
+        }
+
+        // ── scene.scn: delete stray horizontal triangles that a top-down edit camera sees (edit-mode view fix) ──
+        // Two sets, both up-facing horizontal triangles sitting outside the town, so they stay visible from an
+        // overhead edit camera even after the vertical walls cull:
+        //   • Each square crater ring carries 4 tiny corner-fill triangles at its (±500,±500) corners. A ring's
+        //     ONLY up-facing tris are those 4 corners, so we remove every up-facing tri (yMax = +inf).
+        //   • The crater floors s04g0117__s and s04g0117__s1 (the pond bottom) are genuinely horizontal surfaces
+        //     (Y 0..76 / mostly up-facing) but each ALSO has 2 sunken corner strays down at Y=-100. For them we
+        //     remove up-facing tris only BELOW Y=-50, catching just those without touching the real floor.
+        //     Together the two nodes hold all 4 crater-floor corners.
+        // Each such tri lives in a primType-3 triangle LIST (independent tris), so collapsing its two trailing
+        // index-records onto the first yields a zero-area triangle the GS discards — no strip/layout disturbance.
+        // Record stride is 3 or 4 ints depending on whether the mesh carries a per-vertex colour block (see the
+        // stride computed below); s04g0117__s1 is a 4-int-record "variant" mesh. Must run BEFORE
+        // CullUpperCraterWalls (which renames the upper rings' `__n` suffix to `__s`).
+        static readonly (string node, double yMax)[] CORNER_TRI_NODES = {
+            ("s040101__s", 1e9), ("s04g0102__s", 1e9), ("s04g0103__s", 1e9), ("s04g0104__s", 1e9),
+            ("s04g0105__n", 1e9), ("s04g0106__n", 1e9), ("s04g0107__n", 1e9), ("s04g0108__n", 1e9),
+            ("s04g0109__n", 1e9), ("s04g0110__n", 1e9), ("s04g0111__n", 1e9), ("s04g0112__n", 1e9),
+            ("s04g0113__n", 1e9), ("s04g0114__n", 1e9), ("s04g0115__n", 1e9), ("s04g0116__n", 1e9),
+            ("s04g0117__s", -50.0), ("s04g0117__s1", -50.0),
+        };
+
+        static byte[] RemoveRingCornerTris(byte[] scene)
+        {
+            foreach (var (node, yMax) in CORNER_TRI_NODES)
+            {
+                int mdt = FindMdt(scene, node);
+                uint dl = BitConverter.ToUInt32(scene, mdt + 10 * 4);
+                int vcount = (int)BitConverter.ToUInt32(scene, mdt + 3 * 4);           // hw[3] = vertex count
+                int vbase = mdt + (int)BitConverter.ToUInt32(scene, mdt + 4 * 4);      // hw[4] = vertex-block offset
+                uint hw8 = BitConverter.ToUInt32(scene, mdt + 8 * 4);                  // colour block offset, or 0xffffffff
+                int rb = (hw8 != 0xffffffff && hw8 > 0 ? 4 : 3) * 4;                   // record size in bytes (4-int if colour)
+                int numsub = (int)BitConverter.ToUInt32(scene, (int)(mdt + dl + 8));   // submesh count
+                int o = (int)(dl + 0x10);
+                for (int sm = 0; sm < numsub; sm++)
+                {
+                    int prim = BitConverter.ToInt32(scene, mdt + o);
+                    int vcnt = BitConverter.ToInt32(scene, mdt + o + 4);
+                    o += 0xC;
+                    int recbase = mdt + o;                                             // first index-record of this submesh
+                    o += vcnt * rb;
+                    if (prim != 3) continue;                                           // only the triangle LIST holds them
+                    for (int k = 0; k + 2 < vcnt; k += 3)
+                    {
+                        int i0 = BitConverter.ToInt32(scene, recbase + (k + 0) * rb);
+                        int i1 = BitConverter.ToInt32(scene, recbase + (k + 1) * rb);
+                        int i2 = BitConverter.ToInt32(scene, recbase + (k + 2) * rb);
+                        if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vcount || i1 >= vcount || i2 >= vcount) continue;
+                        if (i0 == i1 || i1 == i2 || i0 == i2) continue;
+                        double cyc = (F(scene, vbase + i0 * 0x10 + 4) + F(scene, vbase + i1 * 0x10 + 4) + F(scene, vbase + i2 * 0x10 + 4)) / 3.0;
+                        if (cyc >= yMax) continue;                                      // only strays below the cutoff
+                        if (!UpFacing(scene, vbase, i0, i1, i2)) continue;
+                        U32(scene, recbase + (k + 1) * rb, (uint)i0);                  // collapse -> zero-area tri
+                        U32(scene, recbase + (k + 2) * rb, (uint)i0);
+                    }
+                }
+            }
+            return scene;
+        }
+
+        // True if triangle (i0,i1,i2) faces straight up. Verts are LOCAL XYZW floats at vbase + idx*0x10;
+        // these nodes have identity rotation, so a local +Y normal is a world +Y normal.
+        static bool UpFacing(byte[] s, int vbase, int i0, int i1, int i2)
+        {
+            float ax = F(s, vbase + i0 * 0x10), ay = F(s, vbase + i0 * 0x10 + 4), az = F(s, vbase + i0 * 0x10 + 8);
+            float bx = F(s, vbase + i1 * 0x10), by = F(s, vbase + i1 * 0x10 + 4), bz = F(s, vbase + i1 * 0x10 + 8);
+            float cx = F(s, vbase + i2 * 0x10), cy = F(s, vbase + i2 * 0x10 + 4), cz = F(s, vbase + i2 * 0x10 + 8);
+            double nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+            double ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+            double nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+            double len = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            return len > 0 && ny / len > 0.9;
+        }
+
+        static float F(byte[] b, int o) => BitConverter.ToSingle(b, o);
+
+        static int FindMdt(byte[] scene, string node)
+        {
+            int at = Find(scene, Encoding.Latin1.GetBytes(node + "\0"));               // node name lives at node+8
+            if (at < 0) throw new IOException($"ring node '{node}' not found in scene.scn");
+            int meshOff = BitConverter.ToInt32(scene, (at - 8) + 0x28);                // meshOff at node+0x28
+            int mds = FindLast(scene, Encoding.ASCII.GetBytes("MDS\0"), at);           // owning MDS block base
+            foreach (int cand in new[] { meshOff, mds + meshOff })                     // meshOff: absolute or block-relative
+                if (cand > 0 && cand < scene.Length - 3 && scene[cand] == 'M' && scene[cand + 1] == 'D' && scene[cand + 2] == 'T')
+                    return cand;
+            throw new IOException($"MDT for '{node}' not resolved");
         }
 
         static byte[] BuildInjectedMapinfo(byte[] cfg, int x, int y, int z, int ry)

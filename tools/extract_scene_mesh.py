@@ -71,7 +71,11 @@ def parse_mds(scn, mds):
     nxt = scn.find(b"MDS\x00", mds + 4)
     end = nxt if nxt != -1 else min(mds + 0x8000, len(scn))
     out, seen = [], set()
-    b = mds + 0x20
+    # start at the node table (MDS header is 0x10 bytes; table offset lives at +0xC, normally 0x10). Starting
+    # at 0x10 rather than 0x20 catches single-node blocks whose only node sits at the very start of the table
+    # (e.g. Brownboo's pond bottom s04g0117__s1) — the dedup-by-meshOff below prevents any double counting.
+    tbl = struct.unpack_from("<I", scn, mds + 0xC)[0]
+    b = mds + (tbl if 0x10 <= tbl < 0x80 else 0x10)
     while b + 0x70 <= end:
         if _is_mesh_node(scn, mds, b):
             mo = struct.unpack_from("<i", scn, b + 0x28)[0]
@@ -108,29 +112,33 @@ def read_tris(scn, fo):
 
     Format: 16-u32 MDT header; vertices XYZW at hw[4] (stride 0x10, count hw[3]). Display list at
     hw[10] = a 4-int preamble whose 3rd int (@hw[10]+8) is the SUBMESH COUNT, then that many submeshes.
-    Each submesh = a 3-int header (primType, vertexCount, materialIdx) followed by vertexCount records
-    of 3 ints each; the record's FIRST int is the position index (the other two are uv/normal indices).
+    Each submesh = a 3-int header (primType, vertexCount, materialIdx) followed by vertexCount records;
+    the record's FIRST int is the position index (the rest are uv/normal[/colour] indices).
     primType 3 = triangle LIST (every 3 records = 1 tri); primType 4 = triangle STRIP (each record
     after the first two = 1 tri, winding alternates). Submeshes mix list and strip within one mesh.
+
+    RECORD STRIDE (matches the engine: iVar20 in CreateVUdataFromMDT): a mesh with an EXTRA per-vertex
+    attribute block (vertex COLOUR) at hw[8] uses 4-int records; a plain mesh (hw[8] == 0xffffffff) uses
+    3-int records. This is the "variant" the older decoder mis-read as an absurd submesh table — e.g.
+    Brownboo's pond bottom s04g0117__s1 and the obj*/shadow outline meshes. hw[8]>0 ⇒ stride 4.
     """
     if scn[fo:fo+3] != b"MDT": return []
     hw = struct.unpack_from("<16I", scn, fo)
     dl, vcount = hw[10], hw[3]
     if dl == 0 or fo + dl + 0x10 > len(scn): return []
     numsub = struct.unpack_from("<I", scn, fo + dl + 8)[0]
-    # A handful of decorative meshes (plants, obj56) use a display-list VARIANT with a different
-    # preamble; the standard read gets an absurd numsub (> vertex count). Reject rather than emit
-    # garbage triangles — these aren't needed for collision. TODO: crack the variant if wanted.
     if numsub <= 0 or numsub > vcount: return []
+    stride = 4 if (hw[8] != 0xffffffff and hw[8] > 0) else 3   # 4-int records when a colour block is present
+    rb = stride * 4                                            # record size in bytes
     o = dl + 0x10
     tris = []
     for _ in range(numsub):
         if fo + o + 0xC > len(scn): break
         prim, vcnt = struct.unpack_from("<ii", scn, fo + o)
         o += 0xC
-        if vcnt < 0 or fo + o + vcnt * 12 > len(scn): break
-        pos = [struct.unpack_from("<i", scn, fo + o + r*12)[0] for r in range(vcnt)]
-        o += vcnt * 12
+        if vcnt < 0 or fo + o + vcnt * rb > len(scn): break
+        pos = [struct.unpack_from("<i", scn, fo + o + r*rb)[0] for r in range(vcnt)]
+        o += vcnt * rb
         def ok(a, b, c): return 0 <= a < vcount and 0 <= b < vcount and 0 <= c < vcount and a != b and b != c and a != c
         if prim == 3:
             for k in range(0, vcnt - 2, 3):

@@ -30,22 +30,28 @@ def T(pred):
     return out
 
 craterids = [f's04g01{n:02d}' for n in range(2, 17)] + ['s040101']
-visual = {
-    'watersurf':   T(lambda n: 'czapp' in n),
-    'shore':       T(lambda n: n.startswith('s04g0117')),
+# Layer predicates over scene-node NAMES. Kept as named predicates (not inline lambdas) so the same rule
+# builds both the flat per-layer triangle lists AND the per-node labels/borders (see nodelabels below).
+def is_pond(n):    return n == 's04g0117__s1'                       # the POND BOTTOM (its own toggle now)
+def is_shore(n):   return n.startswith('s04g0117') and not is_pond(n)
+PRED = {
+    'watersurf':   lambda n: 'czapp' in n,
+    'shore':       is_shore,
+    'pond':        is_pond,
     # The boardwalk structure splits cleanly BY NODE (like the za01 foam split below), verified from the
     # mesh: s04g03a* is the DECK — the horizontal walking planks (150+ horizontal tris) plus their railings;
-    # s04g03b* is the above-water STILTS — all-vertical posts, 88% below the deck (y<7), the piling faces
-    # you see between the deck and the waterline. s04g0401 (y -15..0) is the same posts continued UNDERWATER
-    # (also the collision-stilt source at col_stilts). Isolating s04g03b* is the point: it's the exact mesh
-    # whose texture garbles on fishing entry, so its texture can be identified and watched in isolation.
-    'boardwalk':   T(lambda n: n.startswith('s04g03a')),
-    'stilts':      T(lambda n: n.startswith('s04g03b')),   # above-water posts (the garbled-texture mesh)
-    'stilts_base': T(lambda n: n.startswith('s04g0401')),  # the posts continued below the waterline
-    'rock':        T(lambda n: n.startswith('iwa')),
-    'fence':       T(lambda n: n.startswith('st0')),
-    'crater':      T(lambda n: any(n.startswith(c) for c in craterids)),
+    # s04g03b* is the above-water STILTS — all-vertical posts, 88% below the deck (y<7). s04g0401/402/403/404
+    # (y -15..0) are the same posts continued UNDERWATER (also the collision-stilt source at col_stilts).
+    'boardwalk':   lambda n: n.startswith('s04g03a'),
+    'stilts':      lambda n: n.startswith('s04g03b'),            # above-water posts (the garbled-texture mesh)
+    'stilts_base': lambda n: re.match(r's04g0?40[1-4]$', n) is not None,  # underwater posts (0401/402/403/404)
+    'rock':        lambda n: n.startswith('iwa'),
+    'fence':       lambda n: n.startswith('st0'),
+    'crater':      lambda n: any(n.startswith(c) for c in craterids),
+    # NOTE: enter__s is NOT here — it is a CHILD of the crater wall s04g0102__s, so its own matrix alone
+    # (what T()/extract_mesh uses) puts it underground. It's built with full parent accumulation below.
 }
+visual = {k: T(p) for k, p in PRED.items()}
 
 # ---- instanced meshes placed from mapinfo.cfg ----
 cfg = load_scene('gedit/s04/mapinfo.cfg').decode('latin1', 'replace')
@@ -85,7 +91,103 @@ def subfile_mesh(off, size, skip=None):
 def placeY(v, pos, ry):
     th = math.radians(ry); c = math.cos(th); s = math.sin(th)
     return [[x*c+z*s+pos[0], y+pos[1], -x*s+z*c+pos[2]] for x, y, z in v]
-houses, ladders, plants = [], [], []
+
+def _compose(a, b):
+    """Column-major 4x4 product a*b (xform convention: out.x = m[0]x+m[4]y+m[8]z+m[12])."""
+    r = [0.0] * 16
+    for c in range(4):
+        for row in range(4):
+            r[c*4+row] = sum(a[k*4+row] * b[c*4+k] for k in range(4))
+    return r
+
+def subtree_meshes(off, size, want):
+    """{node_name: [world (house-LOCAL) tris]} for nodes whose name matches want(name), with the FULL
+    parent-chain transform accumulated. The house doors/windows (obj23-32) hang off `null3_*` locator
+    nodes several levels deep, so their own matrix alone (what subfile_mesh uses) puts them at the origin;
+    accumulating the parents lands them on the correct wall."""
+    end = off + size
+    for m in re.finditer(rb'MDS\x00', scn[off:end]):
+        mds = off + m.start()
+        ver, cnt, tbl = struct.unpack_from('<3I', scn, mds+4)
+        if not (0 < cnt < 400):
+            continue
+        nodes = []
+        for i in range(cnt):
+            b = mds + tbl + i*0x70
+            nm = scn[b+8:b+8+16].split(b'\x00')[0].decode('latin1', 'replace')
+            mo = struct.unpack_from('<i', scn, b+0x28)[0]
+            par = struct.unpack_from('<i', scn, b+0x2c)[0]
+            mat = list(struct.unpack_from('<16f', scn, b+0x30))
+            nodes.append((nm, mo, par, mat))
+        world = [None] * cnt
+        def wm(i):
+            if world[i] is None:
+                nm, mo, par, mat = nodes[i]
+                world[i] = mat if par < 0 or par >= cnt else _compose(wm(par), mat)
+            return world[i]
+        out = {}
+        for i, (nm, mo, par, mat) in enumerate(nodes):
+            if mo == 0 or not want(nm):
+                continue
+            fo = next((c for c in (mo, mds+mo) if 0 < c < len(scn) and scn[c:c+3] == b'MDT'), None)
+            if not fo:
+                continue
+            M = wm(i); wv = [xform(M, v) for v in read_verts(scn, fo)]
+            out.setdefault(nm, []).extend([[wv[a], wv[b], wv[c]] for a, b, c in read_tris(scn, fo)])
+        return out
+    return {}
+
+def accum_extract(want):
+    """{node_name: [world tris]} for matching nodes ANYWHERE in scene.scn, with full parent-chain transforms.
+    Unlike extract_mesh (own matrix only, right for root nodes), this resolves nodes parented under another —
+    e.g. enter__s, a child of the crater wall s04g0102__s."""
+    out = {}
+    for m in re.finditer(rb'MDS\x00', scn):
+        mds = m.start()
+        try:
+            ver, cnt, tbl = struct.unpack_from('<3I', scn, mds+4)
+        except struct.error:
+            continue
+        if not (0 < cnt < 400) or mds + tbl + cnt*0x70 > len(scn):
+            continue
+        nodes = []
+        for i in range(cnt):
+            b = mds + tbl + i*0x70
+            nm = scn[b+8:b+8+16].split(b'\x00')[0].decode('latin1', 'replace')
+            mo = struct.unpack_from('<i', scn, b+0x28)[0]
+            par = struct.unpack_from('<i', scn, b+0x2c)[0]
+            mat = list(struct.unpack_from('<16f', scn, b+0x30))
+            nodes.append((nm, mo, par, mat))
+        world = [None] * cnt
+        def wm(i):
+            if world[i] is None:
+                nm, mo, par, mat = nodes[i]
+                world[i] = mat if (par < 0 or par >= cnt) else _compose(wm(par), mat)
+            return world[i]
+        for i, (nm, mo, par, mat) in enumerate(nodes):
+            if mo == 0 or not want(nm):
+                continue
+            fo = next((c for c in (mo, mds+mo) if 0 < c < len(scn) and scn[c:c+3] == b'MDT'), None)
+            if not fo:
+                continue
+            M = wm(i); wv = [xform(M, v) for v in read_verts(scn, fo)]
+            out.setdefault(nm, []).extend([[wv[a], wv[b], wv[c]] for a, b, c in read_tris(scn, fo)])
+    return out
+
+# obj23-32 in the house sub-files are the DOORS (obj23/25/27/31, ~143 tris, floor-to-eave) and WINDOWS
+# (obj24/26/28/32, ~32 tris, up on the wall). subfile_mesh drops them (skip obj*) because without the
+# parent chain they collapse to the origin; subtree_meshes places them on the wall so we can show them.
+# door/window obj numbers reused per house (obj29/30 are a door+window in s04h02, distinct from the
+# same-named world shadow meshes, which live in other MDS blocks that subtree_meshes never touches).
+def is_door(n):   return re.match(r'obj(23|25|27|29|31)(_\d)?$', n) is not None
+def is_window(n): return re.match(r'obj(24|26|28|30|32)(_\d)?$', n) is not None
+houses, ladders, plants, doors, windows = [], [], [], [], []
+placed_labels = []   # [[centroid, name, bbox, layId], ...] for placed instances (labelled like scene nodes)
+def _bbox_centroid(tris):
+    ps = [p for tri in tris for p in tri]
+    xs = [p[0] for p in ps]; ys = [p[1] for p in ps]; zs = [p[2] for p in ps]
+    cen = [round(sum(xs)/len(xs), 1), round(sum(ys)/len(ys), 1), round(sum(zs)/len(zs), 1)]
+    return cen, [round(min(xs), 1), round(min(ys), 1), round(min(zs), 1), round(max(xs), 1), round(max(ys), 1), round(max(zs), 1)]
 used = {}
 for name, pos, rot in placements:
     if name.startswith('s04g') or name.startswith('s04w'): continue
@@ -93,13 +195,34 @@ for name, pos, rot in placements:
     ents = scndir.get(name, [])
     if not ents: continue
     off, size = ents[min(idx, len(ents)-1)]
-    # houses embed a reusable door template (obj*) at local origin — exclude it (it isn't there in-game)
+    # houses embed the door/window objs deep in the hierarchy — exclude them from the body pass and place
+    # them separately (below) with full parent transforms.
     skip = (lambda n: n.startswith('obj')) if name.startswith('s04h') else None
     v, t = subfile_mesh(off, size, skip)
-    if not v: continue
-    pv = placeY(v, pos, rot[1]); tris = [[pv[a], pv[b], pv[c]] for a, b, c in t]
-    (houses if name.startswith('s04h') else ladders if name.startswith('s04r') else plants).extend(tris)
+    if v:
+        pv = placeY(v, pos, rot[1]); tris = [[pv[a], pv[b], pv[c]] for a, b, c in t]
+        lay = 'houses' if name.startswith('s04h') else 'ladders' if name.startswith('s04r') else 'plants'
+        (houses if lay == 'houses' else ladders if lay == 'ladders' else plants).extend(tris)
+        cen, bb = _bbox_centroid(tris); placed_labels.append([cen, f"{name}#{idx}", bb, lay])
+    if name.startswith('s04h'):
+        for nm, tset in subtree_meshes(off, size, lambda n: is_door(n) or is_window(n)).items():
+            flat = [p for tri in tset for p in tri]
+            placed = placeY(flat, pos, rot[1])
+            ptris = [placed[k:k+3] for k in range(0, len(placed), 3)]
+            lay = 'doors' if is_door(nm) else 'windows'
+            (doors if lay == 'doors' else windows).extend(ptris)
+            cen, bb = _bbox_centroid(ptris); placed_labels.append([cen, f"{nm}@{name}#{idx}", bb, lay])
 visual['houses'] = houses; visual['ladders'] = ladders; visual['plants'] = plants
+visual['doors'] = doors; visual['windows'] = windows
+print(f"doors: {len(doors)} tris, windows: {len(windows)} tris")
+
+# entrance ramp (enter__s) — parented under the crater wall s04g0102__s, so build it with accumulation
+entrance = []
+for nm, tset in accum_extract(lambda n: n.startswith('enter')).items():
+    entrance.extend(tset)
+    cen, bb = _bbox_centroid(tset); placed_labels.append([cen, nm, bb, 'entrance'])
+visual['entrance'] = entrance
+print(f"entrance: {len(entrance)} tris (parent-accumulated)")
 
 # ---- split the water-edge foam (za01) into outer-shore vs interior (stilt/plant rings) ----
 # The foam splits cleanly BY NODE, no heuristic needed: s04w02__za01 IS the continuous outer-shore ring
@@ -109,6 +232,31 @@ visual['houses'] = houses; visual['ladders'] = ladders; visual['plants'] = plant
 visual['foam_outer'] = T(lambda n: n.startswith('s04w02') and 'za01' in n)   # the shore ring
 visual['foam_obj']   = T(lambda n: n.startswith('s04w01') and 'za01' in n)   # stilt/plant foam
 print("foam split:", len(visual['foam_outer']), "outer-shore ring +", len(visual['foam_obj']), "stilt/plant")
+
+# ---- per-node labels (name + highlighted bounding-box border), drawn as an overlay like the fishing
+# coord labels — NOT as extra checkboxes. Each carries the LAY layer id it belongs to, so a label only
+# shows when both the "node labels" toggle and that node's layer are on. Scene nodes are mapped to their
+# layer via PRED (+ the foam node-split); placed instances (houses/doors/windows/…) were collected above.
+LAYMAP = {'watersurf': 'watersurf', 'shore': 'shore', 'pond': 'pond', 'boardwalk': 'board',
+          'stilts': 'stilts', 'stilts_base': 'stiltsbase', 'rock': 'rock', 'fence': 'fence',
+          'crater': 'crater', 'entrance': 'entrance'}
+def scene_layid(name):
+    for k, p in PRED.items():
+        if p(name):
+            return LAYMAP.get(k)
+    if name.startswith('s04w02') and 'za01' in name: return 'foamouter'
+    if name.startswith('s04w01') and 'za01' in name: return 'foamobj'
+    return None
+nodelabels = list(placed_labels)
+for name, (v, ts) in GOT.items():
+    lay = scene_layid(name)
+    if not v or lay is None:
+        continue
+    xs = [p[0] for p in v]; ys = [p[1] for p in v]; zs = [p[2] for p in v]
+    cen = [round(sum(xs)/len(xs), 1), round(sum(ys)/len(ys), 1), round(sum(zs)/len(zs), 1)]
+    bb = [round(min(xs), 1), round(min(ys), 1), round(min(zs), 1), round(max(xs), 1), round(max(ys), 1), round(max(zs), 1)]
+    nodelabels.append([cen, name, bb, lay])
+print(f"node labels: {len(nodelabels)} ({len(placed_labels)} placed + {len(nodelabels)-len(placed_labels)} scene)")
 
 # ---- collision (rocks) ----
 def hull(pts):
@@ -496,22 +644,27 @@ D = {'visual': visual, 'col_rocks': col_rocks, 'col_stilts': col_stilts, 'col_pl
      'col_build': col_build, 'col_perim': col_perim,
      'van_floor': van_floor, 'van_wall': van_wall, 'van_mid': van_mid, 'van_dropped': van_dropped,
      'grid_bottom': grid_bottom, 'grid_land': grid_land,
-     'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint, 'sign': sign_mesh}
+     'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint, 'sign': sign_mesh,
+     'nodelabels': nodelabels}
 js = json.dumps(D, separators=(',', ':'))   # embedded directly in the self-contained HTML
 LAY = [
     ('foamouter','foam: outer shore','D.visual.foam_outer','[120,175,205]',0.6,'#adf'),
     ('foamobj','foam: interior (stilts/plants)','D.visual.foam_obj','[80,105,125]',0.5,'#7ab'),
     ('watersurf','water surface','D.visual.watersurf','[40,110,140]',0.30,'#8bd'),
     ('shore','shore ring','D.visual.shore','[95,82,60]',1,'#ccc'),
+    ('pond','pond BOTTOM (s04g0117__s1)','D.visual.pond','[70,150,200]',1,'#4bd'),
     ('board','boardwalk deck','D.visual.boardwalk','[70,85,110]',1,'#ccc'),
     ('stilts','stilts (above water)','D.visual.stilts','[235,120,60]',1,'#f95'),
     ('stiltsbase','stilts (underwater)','D.visual.stilts_base','[110,70,45]',0.7,'#c85'),
     ('rock','rock','D.visual.rock','[125,98,72]',1,'#ccc'),
     ('fence','fence','D.visual.fence','[75,75,62]',1,'#ccc'),
     ('houses','houses','D.visual.houses','[95,72,52]',1,'#c96'),
+    ('doors','doors (obj23/25/27/31)','D.visual.doors','[200,140,70]',1,'#e94'),
+    ('windows','windows (obj24/26/28/32)','D.visual.windows','[110,190,220]',1,'#7ce'),
     ('ladders','ladders','D.visual.ladders','[150,140,175]',1,'#bbf'),
     ('plants','plants','D.visual.plants','[110,160,90]',1,'#ad6'),
     ('crater','crater (full)','D.visual.crater','[58,54,50]',1,'#ccc'),
+    ('entrance','entrance ramp (enter__s)','D.visual.entrance','[180,175,90]',1,'#dd8'),
     ('sign','FISHING SIGN mesh','D.sign','[235,205,120]',1,'#eca'),
     ('fishpoint','trigger ! + radius','D.fishpoint','[255,175,210]',0.95,'#fbd'),
     ('crock','COLL rocks','D.col_rocks','[150,25,25]',0.9,'#a33'),
@@ -544,6 +697,12 @@ checks += (f'<label><input type=checkbox id=t_fishrect> <span style="color:#f4a"
 # overlay (not a layer): recolour any VISIBLE poly the bobber can't land on (|normal.Y| <= 0.2, too steep)
 # that also sits above the water — the pass-through spots — bright pink, whatever layer it belongs to.
 checks += '<label><input type=checkbox id=t_steep> <span style="color:#ff2db4">steep &amp; above-water (highlight)</span></label><br>'
+# global render options (not layers): fill / wireframe / backface-cull / node labels+borders.
+checks += ('<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">'
+           '<label><input type=checkbox id=r_fill checked> fill</label> '
+           '<label><input type=checkbox id=r_wire> wireframe</label> '
+           '<label><input type=checkbox id=r_cull> backface cull</label><br>'
+           '<label><input type=checkbox id=r_labels> node labels + borders</label></div>')
 checks += '<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">selected: <b id="tot" style="color:#fff">0</b> polys</div>'
 cnt_js = json.dumps(_cnt, separators=(',', ':'))
 pushes = "".join(f"if(on('t_{i}')&&{src}) L.push({{t:{src},c:{c},a:{a}}});\n" for i, lb, src, c, a, lc in LAY)
@@ -553,6 +712,12 @@ html = '''<div style="margin:0;background:#0d1117;color:#ddd;font-family:monospa
 <b>Brownboo COMPLETE</b><br><span style="color:#888">drag=rotate scroll=zoom &middot; compass: N=-Z E=+X</span><br>
 CHECKS<div id="err" style="color:#f66"></div></div></div>
 <div id="coord" style="position:fixed;bottom:10px;left:10px;font-size:16px;font-weight:bold;background:rgba(13,17,23,.92);padding:7px 14px;border-radius:6px;color:#6ee7b7;user-select:none">move cursor over the water for coordinates</div>
+<div style="position:fixed;bottom:10px;right:10px;width:300px;font-size:11px;background:rgba(13,17,23,.94);padding:8px 10px;border-radius:6px">
+<b>Selected polys: <span id="selcount" style="color:#f44">0</span></b>
+<button id="selclear" style="float:right;font-size:10px">clear</button><br>
+<span style="color:#888">click a poly to select (red) &middot; shift+click to add/remove</span>
+<textarea id="sellist" readonly spellcheck="false" placeholder="clicked polys appear here: x0,y0,z0, x1,y1,z1, x2,y2,z2 (one triangle per line)" style="width:100%;height:130px;margin-top:5px;background:#0d1117;color:#6ee7b7;border:1px solid #333;border-radius:4px;font-family:monospace;font-size:10px;box-sizing:border-box"></textarea>
+</div>
 <script>try{
 const D=JSON_DATA;
 const CNT=CNT_DATA;
@@ -586,18 +751,79 @@ function draw(){
      const wl=Math.hypot(wnx,wny,wnz)||1, cy=(tri[0][1]+tri[1][1]+tri[2][1])/3;
      if(Math.abs(wny)/wl<=STEEP_NY && cy>WATER){ c=[255,45,180]; a=1; }
    }
-   all.push({k:'t',r,c,a,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
+   all.push({k:'t',r,c,a,w:tri,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
  }}
  if(on('t_fishrect')) for(const p of D.fishbox){const r=rot(p);all.push({k:'p',r,depth:r[2]});}
  all.sort((p,q)=>p.depth-q.depth);
+ const rfill=on('r_fill'), rwire=on('r_wire'), rcull=on('r_cull'), rlabels=on('r_labels');
+ PICK=[];   // visible triangles this frame, for click-picking (screen pts + world tri + depth)
  for(const o of all){
   if(o.k==='p'){cx.fillStyle='#ff1493';cx.fillRect(W/2+o.r[0]*f-1.4,H/2-o.r[1]*f-1.4,2.8,2.8);continue;}
   const pts=o.r.map(p=>[W/2+p[0]*f,H/2-p[1]*f]);
+  // backface cull: skip triangles whose 2D screen winding is back-facing (engine-style, one winding kept)
+  const area=(pts[1][0]-pts[0][0])*(pts[2][1]-pts[0][1])-(pts[1][1]-pts[0][1])*(pts[2][0]-pts[0][0]);
+  if(rcull && area>=0) continue;
+  PICK.push({pts,depth:o.depth,w:o.w});
   cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);cx.lineTo(pts[1][0],pts[1][1]);cx.lineTo(pts[2][0],pts[2][1]);cx.closePath();
-  const c=o.c;cx.fillStyle='rgba('+(c[0]*o.sh|0)+','+(c[1]*o.sh|0)+','+(c[2]*o.sh|0)+','+o.a+')';cx.fill();
+  const c=o.c;
+  if(rfill){ cx.fillStyle='rgba('+(c[0]*o.sh|0)+','+(c[1]*o.sh|0)+','+(c[2]*o.sh|0)+','+o.a+')';cx.fill(); }
+  if(rwire){ cx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.9)';cx.lineWidth=0.6;cx.stroke(); }
  }
+ drawSelected(f);
+ if(rlabels) drawNodeLabels(f);
  if(on('t_fishrect')) drawLabels();
  drawCompass();
+}
+// ---- click-to-select polygons (bright red), copyable for adding as fishing collision ----
+let PICK=[], SELECTED=[];   // SELECTED: array of world triangles [[x,y,z],[x,y,z],[x,y,z]]
+function triKey(t){ return t.map(p=>p.map(v=>Math.round(v*10)/10).join(',')).join('|'); }
+function drawSelected(f){
+ for(const t of SELECTED){
+  const p=t.map(v=>{const r=rot(v);return [W/2+r[0]*f,H/2-r[1]*f];});
+  cx.beginPath();cx.moveTo(p[0][0],p[0][1]);cx.lineTo(p[1][0],p[1][1]);cx.lineTo(p[2][0],p[2][1]);cx.closePath();
+  cx.fillStyle='rgba(255,20,20,0.85)';cx.fill();
+  cx.strokeStyle='#fff';cx.lineWidth=1.2;cx.stroke();
+ }
+}
+function ptInTri(px,py,a,b,c){
+ const s=(ax,ay,bx,by)=>(px-bx)*(ay-by)-(ax-bx)*(py-by);
+ const d1=s(a[0],a[1],b[0],b[1]),d2=s(b[0],b[1],c[0],c[1]),d3=s(c[0],c[1],a[0],a[1]);
+ return !(((d1<0)||(d2<0)||(d3<0))&&((d1>0)||(d2>0)||(d3>0)));
+}
+function pickAt(mx,my,add){
+ let best=null;
+ for(const o of PICK){ if(ptInTri(mx,my,o.pts[0],o.pts[1],o.pts[2])){ if(!best||o.depth>best.depth) best=o; } }
+ if(!best){ if(!add){SELECTED=[];updateSel();draw();} return; }
+ const k=triKey(best.w);
+ if(add){ const i=SELECTED.findIndex(t=>triKey(t)===k); if(i>=0) SELECTED.splice(i,1); else SELECTED.push(best.w); }
+ else { SELECTED=[best.w]; }
+ updateSel(); draw();
+}
+function updateSel(){
+ const el=document.getElementById('sellist'), n=document.getElementById('selcount');
+ if(n) n.textContent=SELECTED.length;
+ if(el) el.value=SELECTED.map(t=>t.map(p=>p.map(v=>Math.round(v*100)/100).join(',')).join(', ')).join(String.fromCharCode(10));
+}
+// Node labels + highlighted bounding-box borders — drawn like the fishing-coord labels (overlay, not
+// checkboxes). A label shows only when its layer's checkbox is on, so it follows what you have visible.
+function drawNodeLabels(f){
+ cx.save();cx.font='bold 11px monospace';cx.textAlign='left';cx.textBaseline='middle';
+ for(const nl of D.nodelabels){
+  const [cen,name,bb,lay]=nl;
+  const t=document.getElementById('t_'+lay); if(!t||!t.checked) continue;
+  // highlighted border: the node's world bounding box, projected + drawn as 12 edges
+  const C=[[bb[0],bb[1],bb[2]],[bb[3],bb[1],bb[2]],[bb[3],bb[1],bb[5]],[bb[0],bb[1],bb[5]],
+           [bb[0],bb[4],bb[2]],[bb[3],bb[4],bb[2]],[bb[3],bb[4],bb[5]],[bb[0],bb[4],bb[5]]].map(p=>{const r=rot(p);return [W/2+r[0]*f,H/2-r[1]*f];});
+  const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  cx.strokeStyle='rgba(255,235,120,0.9)';cx.lineWidth=1;cx.beginPath();
+  for(const [a,b] of E){ cx.moveTo(C[a][0],C[a][1]);cx.lineTo(C[b][0],C[b][1]); }
+  cx.stroke();
+  // name label at the node centroid
+  const r=rot(cen), x=W/2+r[0]*f, y=H/2-r[1]*f, w=cx.measureText(name).width;
+  cx.fillStyle='rgba(0,0,0,.8)';cx.fillRect(x+3,y-7,w+6,14);
+  cx.fillStyle='#ffeb78';cx.fillText(name,x+6,y);
+ }
+ cx.restore();
 }
 function drawLabels(){
  const f=Math.min(W,H)*0.5*zoom/300;
@@ -624,10 +850,14 @@ function drawCompass(){
  cx.restore();
 }
 draw();
-let drag=false,px,py;
-cv.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;cv.style.cursor='grabbing';});
-addEventListener('pointerup',()=>{drag=false;cv.style.cursor='grab';});
-addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
+let drag=false,px,py,downX,downY,downShift,moved=false;
+cv.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
+addEventListener('pointerup',e=>{drag=false;cv.style.cursor='grab';
+ if(!moved){const r=cv.getBoundingClientRect();pickAt(e.clientX-r.left,e.clientY-r.top,downShift);}});
+addEventListener('pointermove',e=>{if(!drag)return;
+ if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;
+ yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
+document.getElementById('selclear').onclick=()=>{SELECTED=[];updateSel();draw();};
 cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;draw();},{passive:false});
 // Cursor -> world (x,z) on the water plane (y=0). Orthographic inverse of rot(): un-rotate (rx,ry) and
 // intersect world y=0. Needs the view tilted (sin(pitch) != 0) to resolve a ground point.
