@@ -64,6 +64,26 @@ def build_injected_scene(scene: bytes, kanban_mds: bytes, template_name=b"s04a01
     return bytes(scn)
 
 
+# Brownboo's upper crater walls render double-sided and hide the town from an overhead edit-mode camera.
+# At MDS load the engine's SetFrameAttr turns each letter of a node name's "__" suffix into a render flag:
+# 's' enables backface culling (single-sided), 'n' leaves it off (two-sided). The artist tagged the lower
+# rings (world Y 0..300) __s but the upper rings (Y 300..1200) __n. Flipping the 12 upper nodes to __s makes
+# them cull exactly like the lower rings (attribute-identical) — one byte per node, geometry unchanged.
+UPPER_WALL_NODES = [f"s04g01{i:02d}__n" for i in range(5, 17)]
+
+
+def cull_upper_crater_walls(scene: bytes) -> bytes:
+    """Enable backface culling on Brownboo's upper crater walls by flipping their `__n` suffix to `__s`."""
+    scn = bytearray(scene)
+    for node in UPPER_WALL_NODES:
+        key = node.encode() + b"\x00"                            # the null-terminated node-name field
+        at = scn.find(key)
+        if at < 0:
+            raise ValueError(f"crater-wall node {node!r} not found in scene.scn")
+        scn[at + len(node) - 1] = ord('s')                      # trailing 'n' -> 's'
+    return bytes(scn)
+
+
 def build_injected_mapinfo(cfg: bytes, x: float, y: float, z: float, ry=0, part_name="kanban") -> bytes:
     """Return mapinfo.cfg with a GROUND "<part_name>" placement at (x,y,z), Y-rotation ry (0 = south).
     Inserted after the last GROUND "s04a01" block so it sits with the other georama placements."""
@@ -89,9 +109,11 @@ if __name__ == "__main__":   # offline self-test against the extracted disc
     kb = open("game_data/fishsign/kanban.mds", "rb").read()
     scn0 = bytes(load_scene('gedit/s04/scene.scn'))
     cfg0 = bytes(load_scene('gedit/s04/mapinfo.cfg'))
-    scn1 = build_injected_scene(scn0, kb)
+    scn1 = cull_upper_crater_walls(build_injected_scene(scn0, kb))
     cfg1 = build_injected_mapinfo(cfg0, 212, 9, -61)
     print(f"scene.scn {len(scn0)} -> {len(scn1)}  parts {struct.unpack_from('<I',scn0,4)[0]} -> {struct.unpack_from('<I',scn1,4)[0]}")
+    culled = sum(scn1.count(f"s04g01{i:02d}__s\x00".encode()) for i in range(5, 17))
+    print(f"upper crater walls culled: {culled}/12 nodes now __s (the 3 remaining '__n' nodes are buildings)")
     refs = re.findall(r'(?:GROUND|WATER)\s+"([^"]+)"', cfg1.decode('latin1'))
     print(f"mapinfo.cfg {len(cfg0)} -> {len(cfg1)}  GROUND/WATER {len(refs)}  kanban present={'kanban' in refs}")
     i = cfg1.decode('latin1').find('"kanban"')

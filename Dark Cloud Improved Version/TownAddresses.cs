@@ -528,21 +528,48 @@ namespace Dark_Cloud_Improved_Version
     /// so a town with more resident data gets a SMALLER fishing pool. Reading this tells us whether the model
     /// fits, instead of finding out by crashing.
     /// </summary>
+    // NOTE: the fish depth is NOT patched in code (FishingInitFish's inline `lui r2,0x4140` = 12.0). Patching
+    // that just-JIT'd fishing instruction crashes PCSX2; shallow fishing moves the fish by a data write to the
+    // fish-slot Y instead (CustomFishingSpot.ApplyShallowFishDepth). See FishLineShallow below.
+
     /// <summary>
-    /// FishingInitFish places fish at <c>WaterLevel - 12</c>, where the 12.0 is built INLINE as
-    /// <c>lui r2, 0x4140</c> (0x41400000 = 12.0) at 0x001A94D4 — not a data constant. Patching that one
-    /// instruction's immediate changes the fish depth: e.g. 0x40C0 = 6.0, 0x4040 = 3.0. In-place, one
-    /// instruction, restored on town change — same class as the other cold-window code patches we ship.
+    /// Shallow-hook via the fishing line's BOBBER ANCHOR, done recompiler-safely.
+    ///
+    /// The bobber (uki) binds to main-line point[18] in six FishLineStep instructions (`lui $2,0x1d5;
+    /// addiu $reg,$2,0x5f50`). Moving it toward the hook (point 23) shortens the below-water run so the hook
+    /// rests shallower with the line length (cast reach) unchanged. But patching those instructions directly
+    /// crashes PCSX2 once a prior fishing session has JIT-compiled FishLineStep (writing hot code). So instead:
+    ///
+    ///  (1) ONCE, in the COLD window (ApplyNewChanges, before any fishing), rewrite the six sites in place to
+    ///      `lui $reg,0x01FB; lw $reg,0x4000($reg)` — i.e. LOAD the bobber's point address from a mod global
+    ///      at game-addr 0x01FB4000 instead of computing point[18]. Rewriting cold code is safe.
+    ///  (2) Per town, a pure DATA write to that global selects the anchor: point[18] (vanilla) or point[21]
+    ///      (shallow). No further code writes, so no recompiler hazard.
+    ///
+    /// $2 is throwaway at every site (recomputed per address), so clobbering it is safe. See
+    /// game_data/docs/fishing-engine-re.md §fishing-line.
     /// </summary>
-    internal static class FishDepthPatch
+    internal static class FishLineShallow
     {
-        internal const long Instr = 0x201A94D4;
-        internal const uint Original = 0x3C024140;   // lui r2, 0x4140  (= 12.0)
-        internal static uint For(float depth)        // lui r2, hi16(depth as float)
+        internal const long BobberPtr    = 0x21FB4000;   // mod view of the global; game reads game-addr 0x01FB4000
+        internal const uint PointVanilla = 0x001D55F50;  // point[18] — the vanilla bobber anchor
+        internal const uint PointShallow = 0x001D55F80;  // point[21] — shallow (2 segments below the surface)
+
+        // Each site: (lui addr, addiu/lw addr, dest reg). reg = the original addiu's target ($4 or $5).
+        internal static readonly (long lui, long ld, int reg)[] Sites =
         {
-            uint bits = System.BitConverter.ToUInt32(System.BitConverter.GetBytes(depth), 0);
-            return 0x3C020000u | (bits >> 16);
-        }
+            (0x201AA464, 0x201AA468, 5),
+            (0x201AA478, 0x201AA47C, 5),
+            (0x201AA954, 0x201AA958, 5),
+            (0x201AA9B4, 0x201AA9B8, 4),
+            (0x201AA9BC, 0x201AA9C0, 5),
+            (0x201AAB30, 0x201AAB34, 4),
+        };
+
+        internal const uint OrigLui = 0x3C0201D5;                                  // lui $2, 0x1d5
+        internal static uint OrigAddiu(int reg) => 0x24025F50u | ((uint)reg << 16); // addiu $reg,$2,0x5f50
+        internal static uint NewLui(int reg)    => 0x3C0001FBu | ((uint)reg << 16); // lui $reg, 0x01FB
+        internal static uint NewLw(int reg)     => 0x8C004000u | ((uint)reg << 21) | ((uint)reg << 16); // lw $reg,0x4000($reg)
     }
 
     internal static class FishingPool

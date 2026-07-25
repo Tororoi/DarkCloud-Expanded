@@ -43,6 +43,9 @@ namespace Dark_Cloud_Improved_Version
         /// flip on while debugging fishing. Purely observational — no game state depends on it.</summary>
         internal static bool Diagnostics = false;
 
+        // BISECT (2026-07-24): the three Brownboo fishing-code instruction patches, toggled individually to find
+        // which one(s) cause the Brownboo-specific crash. Add back one at a time; restore all to true when done.
+
         /// <summary>A spot to install. Rect corners and the water plane come from the town's own
         /// <c>WATER_SURFACE</c> (see GeoramaProbe's dump); the trigger box just has to be somewhere the
         /// player will walk.</summary>
@@ -76,9 +79,11 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>Fish depth below the water surface. Vanilla is 12 (FishingInitFish places fish at
             /// WaterLevel-12); shallow ponds want less. Patched per-town into the inline constant. NaN = 12.</summary>
+            /// <summary>Shallow fishing: fish sit at WaterLevel-FishDepth (vanilla 12) via a data write, and the
+            /// bobber anchor is repointed (data toggle over the cold FishLineStep patch) so the hook rises to
+            /// reach them. NaN = vanilla depth. See game_data/docs/fishing-engine-re.md §fishing-line.</summary>
             internal readonly float FishDepth;
             internal bool HasFishDepth => !float.IsNaN(FishDepth);
-
 
             /// <summary>DIAGNOSTIC: skip the turi model swap. Proven the model load (not the rect, not pool
             /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
@@ -113,7 +118,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Spot[] Spots =
         {
             // Queens: the canal (static WATER e03c01/c02/c08), surface at Y=31.
-            new Spot(2, "Queens canal", 0,
+            new Spot(2, "Queens canal", 1,      // area 1 (was 0=Norune) — distinct fish table per town, see area-0 crash
                      -100f, -40f, 100f, 40f, water: 31f, ground: 10f,
                      tx: 0f, ty: 31f, tz: 0f, radius: 200f),
 
@@ -147,18 +152,23 @@ namespace Dark_Cloud_Improved_Version
             // runs before our wall-removal and has a hard 1024 cap, so widening the rect can only be checked
             // by watching the count — if it approaches 1024 we must decouple the fish rect (roam bounds) from
             // this cast/gather rect. Mirrored in tools/brownboo_viewer.py (RECT_*).
-            new Spot(14, "Brownboo lake", 0,
+            new Spot(14, "Brownboo lake", 2,    // area 2 (was 0=Norune) — distinct fish table per town, see area-0 crash
                      -250f, -240f, 250f, 240f, water: 0f, ground: -15f,   // ±250 W/E, ±240 N/S, centre (0,0)
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
-                     sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f
+                     sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
+                     fishDepth: 6f        // shallow pond: fish at WaterLevel-6 (data write), and the bobber anchor
+                                          // is toggled to point 21 (data write over the cold FishLineStep patch) so
+                                          // the hook rises to ~-3 / bait ~-6 to reach them. All data-only —
+                                          // patching hot fishing code crashes PCSX2 (recompiler). Line length
+                                          // (cast reach) unchanged.
                      // BISECT RESULT (2026-07-23): stilts garbage is NOT the model load and NOT the buffer
                      // clears (both skipped -> still garbage). Clobber is intrinsic to entering fishing mode
                      // (fishing-init / HUD texture setup evicting the stilts' GS block).
-                     // Fish depth left at vanilla: shallow fishing needs the HOOK raised to match, but the hook
-                     // is pinned to the rod's fishing animation, so the only pure-runtime lever (a ground clamp)
-                     // makes it rest on an invisible surface. Parked pending a call on the clamp vs. a per-tick
-                     // bone rewrite. See [[fishing-depth-and-bite]] + game_data/docs/fishing-engine-re.md §fishing-line.
+                     // Shallow fishing: the RESTING hook follows the fishing-line physics, NOT the rod animation
+                     // (in the waiting state it is not pinned to the rod bone). Moving the bobber's anchor toward
+                     // the hook shortens the below-water run so it rises; done via the cold-patch data toggle
+                     // (InstallShallowLinePatch / SetShallowLine). See game_data/docs/fishing-engine-re.md §fishing-line.
                      ),
 
             // Yellow Drops: the yellow liquid.
@@ -180,7 +190,7 @@ namespace Dark_Cloud_Improved_Version
             // Water level is still the town's declared WATER_SURFACE height (1). Note the trigger is OUTSIDE
             // that surface's square (+/-320 about the origin), so this liquid is probably NOT that surface —
             // if the bobber floats above or sinks below the visible liquid, this is the number to move.
-            new Spot(23, "Yellow Drops liquid", 0,
+            new Spot(23, "Yellow Drops liquid", 4,  // area 4 (was 0=Norune) — distinct fish table per town, see area-0 crash
                      -609f, -444f, -409f, -244f, water: 1f, ground: -15f,
                      tx: -575f, ty: 9f, tz: -286f, radius: InteractRadius,
                      sx: -582.9f, sy: 9.6f, sz: -276.8f, facing: 2.31f),
@@ -238,24 +248,81 @@ namespace Dark_Cloud_Improved_Version
         private static int _lastGameMode = int.MinValue;
         private static int _watchdog;
 
-        private static bool _fishDepthPatched;
+        // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See TownAddresses.FishLineShallow. ─────────
+        private static bool _shallowLineInstalled;
 
-        /// <summary>Patch the inline fish-depth constant for this spot (WaterLevel - depth), if it sets one.
-        /// In-place, one instruction, at install time; undone on town change by <see cref="RestoreFishDepth"/>.</summary>
-        private static void PatchFishDepth(Spot spot)
+        /// <summary>Install the cold-window FishLineStep rewrite ONCE (from ApplyNewChanges, before any fishing
+        /// has JIT-compiled the function). It re-points the bobber's six anchor loads at a mod data global, so
+        /// from then on the anchor is chosen by a pure data write — no more code writes, no recompiler hazard.
+        /// Verify-before-write: if the sites aren't vanilla (someone fished before the mod started), it skips
+        /// rather than corrupt hot code.</summary>
+        private static bool _shallowLineGaveUp;
+
+        internal static void InstallShallowLinePatch()
         {
-            if (!spot.HasFishDepth) return;
-            if (Memory.ReadUInt(FishDepthPatch.Instr) != FishDepthPatch.Original) return;  // already patched / moved
-            Memory.WriteInt(FishDepthPatch.Instr, unchecked((int)FishDepthPatch.For(spot.FishDepth)));
-            _fishDepthPatched = true;
-            Log($"   fish depth patched to WaterLevel-{spot.FishDepth} (was -12)");
+            if (_shallowLineInstalled || _shallowLineGaveUp) return;
+
+            // Safety: if a fishing session has already happened this boot, FishLineStep is JIT'd (hot) and writing
+            // it would crash. That can only occur if fishing beat this poll (loaded onto a spot, fished in ~1s).
+            // In that rare case, give up permanently — leave vanilla depth, never patch hot code.
+            if (_anyFishingSeen)
+            {
+                _shallowLineGaveUp = true;
+                Log("shallow-line: a fishing session preceded the cold patch — SKIPPING permanently (vanilla depth, no crash)");
+                return;
+            }
+
+            // Poll: only patch once the game's FishLineStep code is actually present (all six sites read vanilla).
+            // Before the game finishes loading, or mid-transition, the read is garbage — so we RETRY (called from
+            // ApplyNewChanges AND every Tick) rather than give up. This still lands well before any fishing JITs
+            // the function. (Fishing hot-JITs it in the recompiler but leaves the EE memory bytes vanilla, so the
+            // read can't tell "hot" from "cold" — the early timing is what keeps the write safe.)
+            bool allVanilla = true, allPatched = true;
+            foreach (var (lui, ld, reg) in FishLineShallow.Sites)
+            {
+                uint gotLui = Memory.ReadUInt(lui);
+                if (gotLui != FishLineShallow.OrigLui)     allVanilla = false;
+                if (gotLui != FishLineShallow.NewLui(reg)) allPatched = false;
+            }
+            if (allPatched) { _shallowLineInstalled = true; return; }   // already patched this boot (mod relaunch)
+            if (!allVanilla) return;                                    // not loaded yet — retry next tick
+
+            Memory.WriteUInt(FishLineShallow.BobberPtr, FishLineShallow.PointVanilla);   // default anchor = point[18]
+            foreach (var (lui, ld, reg) in FishLineShallow.Sites)
+            {
+                Memory.WriteUInt(lui, FishLineShallow.NewLui(reg));   // lui $reg, 0x01FB
+                Memory.WriteUInt(ld,  FishLineShallow.NewLw(reg));    // lw  $reg, 0x4000($reg)
+            }
+            _shallowLineInstalled = true;
+            Log("shallow-line: FishLineStep bobber anchor now reads the data global (cold patch installed)");
         }
 
-        private static void RestoreFishDepth()
+        /// <summary>Per-town data toggle: bobber at point 21 (shallow) or point 18 (vanilla). Safe any time —
+        /// the cold patch already made FishLineStep read this global every frame.</summary>
+        private static void SetShallowLine(bool shallow)
         {
-            if (!_fishDepthPatched) return;
-            Memory.WriteInt(FishDepthPatch.Instr, unchecked((int)FishDepthPatch.Original));
-            _fishDepthPatched = false;
+            if (!_shallowLineInstalled) return;
+            Memory.WriteUInt(FishLineShallow.BobberPtr,
+                             shallow ? FishLineShallow.PointShallow : FishLineShallow.PointVanilla);
+        }
+
+        /// <summary>Move the spawned fish to WaterLevel-FishDepth by writing their slot Y directly (data only) —
+        /// replaces the crash-prone FishingInitFish code patch. Fish Y is otherwise fixed, so one write sticks.</summary>
+        private static void ApplyShallowFishDepth(Spot spot)
+        {
+            if (!spot.HasFishDepth) return;
+            uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return;
+            long baseAddr = Memory.ToMmu(p);
+            float y = Memory.ReadFloat(FishingSpot.WaterLevel) - spot.FishDepth;
+            int num = Memory.ReadInt(FishingSpot.FishNum);
+            for (int i = 0; i < num && i < 6; i++)
+            {
+                long fish = baseAddr + (long)i * FishSlotOffsets.Stride;
+                Memory.WriteFloat(fish + FishSlotOffsets.LivePosY, y);
+                Memory.WriteFloat(fish + FishSlotOffsets.AiTargetY, y);
+            }
+            Log($"   fish moved to WaterLevel-{spot.FishDepth} ({num} fish)");
         }
 
         private static string GameModeName(int gm) => gm switch
@@ -270,6 +337,9 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!Enabled) return;
+
+            InstallShallowLinePatch();   // idempotent retry: lands the cold FishLineStep patch once the game's
+                                         // code is present (ApplyNewChanges may fire before it is), before fishing
 
             int map = Memory.ReadInt(EditLoop.MapNo);
 
@@ -302,7 +372,7 @@ namespace Dark_Cloud_Improved_Version
                 if (map == _installedMap)
                 {
                     WatchMatches(); UpdateFishingWindow(); UpdateVillagerHide(); PriscleenFish.Tick();
-                    GlobalSignLoader.PinMango();   // sign is now NATIVE (baked into scene.scn); only Mango needs runtime moving
+                    if (_spot.MapNo == 14) VillagerPlacement.PinMango();   // Brownboo: nudge Mango out from under the (baked) sign
                     return;
                 }
             }
@@ -347,9 +417,9 @@ namespace Dark_Cloud_Improved_Version
             _verifyTicks = 0;
             _lastParam = int.MinValue;
             _lastMode = int.MinValue;
-            RestoreFishDepth();     // undo any per-town fish-depth patch before the next town
+            SetShallowLine(false);  // data-only: bobber anchor back to vanilla point[18] for the next town
             PriscleenFish.Uninstall();
-            GlobalSignLoader.Uninstall();
+            VillagerPlacement.Uninstall();
         }
 
         /// <summary>True only if BOTH halves of our install are still live: the renumbered fishing label in
@@ -458,10 +528,11 @@ namespace Dark_Cloud_Improved_Version
             _slotAddr = EventPoints.Slot(EventPoints.Base(), slot);
             _spot = spot;
 
-            PatchFishDepth(spot);
+            // Shallow hook (data-only): point the cold-patched bobber anchor at point 21 for spots that want it.
+            // The fish are moved to match on the fishing-window open (ApplyShallowFishDepth), once they've spawned.
+            SetShallowLine(spot.HasFishDepth);
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
-            GlobalSignLoader.PrepareAssets();                // dev-gated: read kanban.mds + e01b24_bank.img ($DC_SIGN_ASSETS)
 
             Log($"   event point [{slot}] type=3 label={labelId} " +
                 $"pos=({spot.TrigX},{spot.TrigY},{spot.TrigZ}) radius={spot.Radius} partIndex=-1 (world)");
@@ -1643,6 +1714,8 @@ namespace Dark_Cloud_Improved_Version
             bool live = Memory.ReadInt(FishingSpot.CPolyNum) > 0
                         || Memory.ReadFloat(FishingSpot.WaterLevel) != 0f;
 
+            if (live) _anyFishingSeen = true;   // FishLineStep is JIT'd from here on — gates the cold patch
+
             if (live && !_fishingWasLive)
             {
                 // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
@@ -1658,10 +1731,22 @@ namespace Dark_Cloud_Improved_Version
                 // PriscleenFish.ForceAllSpecies8 switch is on).
                 PriscleenFish.ForceSpecies8OnFish();
             }
+
+            // Move the fish to the shallow depth ONCE they've spawned. The window goes live (cpoly/water) a few
+            // frames before _INIT_FISH actually places the fish, so retry each tick until Fish/FishNum are valid.
+            if (!live) _shallowFishApplied = false;
+            else if (!_shallowFishApplied && _spot.HasFishDepth)
+            {
+                uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+                if (Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0)
+                { ApplyShallowFishDepth(_spot); _shallowFishApplied = true; }
+            }
             _fishingWasLive = live;
         }
 
         private static bool _fishingWasLive;
+        private static bool _shallowFishApplied;   // one-shot per session: fish moved to WaterLevel-FishDepth
+        private static bool _anyFishingSeen;       // set once any fishing session opens (FishLineStep is now JIT'd/hot)
 
         /// <summary>
         /// TRUE while a fishing session (or its enter/exit script) owns the game — the window where the
