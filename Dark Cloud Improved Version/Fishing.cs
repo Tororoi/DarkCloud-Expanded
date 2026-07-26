@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class Fishing
     {
         internal static readonly Random Rng = new Random();
-        internal static byte[] fishArray = new byte[5];
+        internal static byte[] fishArray = new byte[6];   // up to 6 slots (custom Brownboo/Queens/Yellow Drops)
 
         // Bait detection
         private static ushort[] _bagSnapshot = null;
@@ -62,7 +62,7 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
-            if (FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData))
+            if (FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData) && ResolveLiveSlotBase(ref areaData))
             {
                 InitSlots(areaData);
                 InitQuestState(areaData);
@@ -76,6 +76,21 @@ namespace Dark_Cloud_Improved_Version
             }
             UpdateFishRecordsAndAriseBonus();
             FishDataFarmer.OnSessionDetected();
+        }
+
+        /// <summary>
+        /// Fills in <see cref="AreaFishData.SlotBase"/> for custom fishing spots (Brownboo/Queens/Yellow Drops),
+        /// which have no fixed captured CFish base. Native areas ship a non-zero <c>SlotBase</c> and pass through.
+        /// The custom base is the live CFish array (<c>*FishingSpot.Fish</c>), populated once the game places fish.
+        /// Returns false when the CFish pointer isn't ready yet, so the caller skips slot-dependent work.
+        /// </summary>
+        private static bool ResolveLiveSlotBase(ref AreaFishData areaData)
+        {
+            if (areaData.SlotBase != 0) return true;            // native area — fixed base already set
+            uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return false;          // CFish array not allocated yet
+            areaData.SlotBase = (int)Memory.ToMmu(p);
+            return true;
         }
 
         /// <summary>
@@ -105,6 +120,7 @@ namespace Dark_Cloud_Improved_Version
             ProcessPendingRecordUpdate();
             if (_fishingAreaId == -1) return;
             if (!FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
+            if (!ResolveLiveSlotBase(ref areaData)) return;   // custom area: CFish not ready yet this tick
             CheckFishingQuest(areaData);
             // FishPhaseLogger.PollSlotDynamics(areaData);
             SteerFishToPlayer(areaData);
@@ -118,6 +134,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void InitQuestState(AreaFishData areaData)
         {
+            if (areaData.QuestBase == 0) return;               // custom spot: no fishing quest
             if (Memory.ReadByte(areaData.QuestBase) != 1) return;
             questActive[areaData.QuestBase] = true;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
@@ -643,7 +660,7 @@ namespace Dark_Cloud_Improved_Version
         private static void SteerFishToPlayer(AreaFishData areaData)
         {
             bool hasPassiveSteering = areaData.Id == FishingAreas.MatatakiWaterfall.Id ||
-                                      areaData.Id == FishingAreas.QueensHarbor.Id;
+                                      areaData.Id == FishingAreas.EastHarbor.Id;
             if (!hasMardanSword && !hasPassiveSteering) return;
 
             float playerX = Memory.ReadFloat(Addresses.positionX);

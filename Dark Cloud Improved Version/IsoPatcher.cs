@@ -176,8 +176,8 @@ namespace Dark_Cloud_Improved_Version
             //    walls. Order matters: RemoveRingCornerTris keys off the upper rings' original `__n` names,
             //    and CullUpperCraterWalls renames those to `__s`, so removal must run before the cull rename.
             progress("Injecting the fishing-sign mesh …");
-            Redirect(SCENE_SCN, CullUpperCraterWalls(RemoveRingCornerTris(
-                                    BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds))));
+            Redirect(SCENE_SCN, CullBuildings(CullUpperCraterWalls(RemoveRingCornerTris(
+                                    BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds)))));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY));
 
             // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
@@ -394,15 +394,47 @@ namespace Dark_Cloud_Improved_Version
             return scene;
         }
 
-        static int Find(byte[] hay, byte[] needle)
+        static int Find(byte[] hay, byte[] needle) => FindFrom(hay, needle, 0);
+
+        static int FindFrom(byte[] hay, byte[] needle, int start)
         {
-            for (int i = 0; i <= hay.Length - needle.Length; i++)
+            for (int i = Math.Max(0, start); i <= hay.Length - needle.Length; i++)
             {
                 int j = 0;
                 while (j < needle.Length && hay[i + j] == needle[j]) j++;
                 if (j == needle.Length) return i;
             }
             return -1;
+        }
+
+        // ── scene.scn: make Brownboo's houses single-sided so the camera, when it ends up INSIDE a house, sees
+        //    straight through it instead of hitting the near walls (the camera already clips in; the problem is
+        //    the occlusion). Same SetFrameAttr suffix mechanism as the crater walls — the '__s' suffix turns on
+        //    backface culling, so a wall viewed from inside (its exterior face pointing away) is culled and the
+        //    whole house becomes see-through from within, while looking identical from outside. h0201/h0202 are
+        //    already '__s'; the '__n' houses flip to '__s'; the suffix-less houses get a '__s' written into the
+        //    16-byte name field's null padding (verified all-zero, so no bytes shift).
+        static byte[] CullBuildings(byte[] scene)
+        {
+            foreach (string node in new[] { "h0101__n", "h0102__n", "h0103__n" })   // '__n' -> '__s'
+            {
+                int at = Find(scene, Encoding.Latin1.GetBytes(node + "\0"));
+                if (at < 0) throw new IOException($"building node '{node}' not found in scene.scn");
+                scene[at + node.Length - 1] = (byte)'s';
+            }
+            foreach (var (node, expect) in new[] { ("h0104", 1), ("h0301", 3), ("h0302", 3) })  // append '__s'
+            {
+                byte[] key = Encoding.Latin1.GetBytes(node + "\0");
+                byte[] suf = Encoding.Latin1.GetBytes("__s\0");
+                int from = 0, hits = 0, at;
+                while ((at = FindFrom(scene, key, from)) >= 0)
+                {
+                    Array.Copy(suf, 0, scene, at + node.Length, suf.Length);   // overwrite '\0' + padding
+                    from = at + node.Length; hits++;
+                }
+                if (hits != expect) throw new IOException($"building node '{node}': found {hits}, expected {expect}");
+            }
+            return scene;
         }
 
         static int FindLast(byte[] hay, byte[] needle, int before)
@@ -575,10 +607,83 @@ namespace Dark_Cloud_Improved_Version
             Wr(fs, ElfOff(CAVE_VA), cave);
             WrU32(fs, ElfOff(DETOUR_VA), J(CAVE_VA));
 
+            PatchFishingLoadFish(fs, ElfOff);
+
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
             for (int i = 0; i < pelf.Length / 4; i++) crc ^= U32(pelf, i * 4);
             return crc;
+        }
+
+        // ── FishingLoadFish species-selection rewrite (baked, race-free) ─────────────────────────────
+        // Densely rewrites the per-slot species selector [0x1a8a48,0x1a8d44) so the LOADER itself hands
+        // back the right fish for every area — including the mod's custom towns (dedicated areas 5/6/7 =
+        // Brownboo/Queens/Yellow Drops) — with no runtime re-species and thus no race. Native areas 0-4
+        // keep their exact distributions, with two requested vanilla edits folded in: area 2 (Matataki)
+        // Gummy->Niler and area 3 (East Harbor) Piccoly->Gobbler. Equal-weight pools are `rand%N -> byte
+        // table` lookups, so adding a fish later is one table byte + bumping N (212 bytes of nop headroom
+        // remain in-region). Assembled by tools/iso_patch/asm_fishpools.py; the full original and new
+        // listings live in game_data/docs/fishing-loadfish-re.md.
+        static void PatchFishingLoadFish(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint REGION_VA = 0x001A8A48;   // start of the per-slot species-selection region
+            // vanilla anchors spread across the region — reject a non-vanilla / already-patched ISO
+            foreach (var (va, word) in new (uint va, uint word)[]
+            {
+                (0x001A8A48, 0x2413FFFF),   // addiu $s3,$zero,-1   (default species; becomes `jal rand`)
+                (0x001A8A8C, 0x100000AD),   // b 0x1a8d44           (old area-dispatch fall-through)
+                (0x001A8D40, 0x24130010),   // addiu $s3,$zero,0x10 (last native leaf — Heela)
+            })
+                if (RdU32(fs, ElfOff(va)) != word)
+                    throw new IOException($"FishingLoadFish region 0x{va:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+
+            uint[] region =
+            {
+                0x0C0411BE, 0x2413FFFF, 0x24030005, 0x12C3005C, 0x24030006, 0x12C3006B,
+                0x24030007, 0x12C3006C, 0x24030001, 0x12C30011, 0x24030002, 0x12C30023,
+                0x24030003, 0x12C30031, 0x24030004, 0x12C3003A, 0x00000000, 0x24030004,
+                0x0043001A, 0x3C01001A, 0x34218AB0, 0x00001010, 0x00220821, 0x90330000,
+                0x100000A6, 0x00000000, 0x07060201, 0x24030064, 0x0043001A, 0x00000000,
+                0x00000000, 0x00001010, 0x24130001, 0x28410023, 0x14200065, 0x00000000,
+                0x24130004, 0x28410046, 0x14200061, 0x00000000, 0x24130009, 0x28410050,
+                0x1420005D, 0x00000000, 0x2413000A, 0x10000091, 0x00000000, 0x0050001A,
+                0x00000000, 0x00000000, 0x00001810, 0x1060004A, 0x00000000, 0x24030003,
+                0x0043001A, 0x3C01001A, 0x34218B40, 0x00001010, 0x00220821, 0x90330000,
+                0x10000082, 0x00000000, 0x00070402, 0x24030005, 0x0043001A, 0x3C01001A,
+                0x34218B68, 0x00001010, 0x00220821, 0x90330000, 0x10000078, 0x00000000,
+                0x0C010300, 0x0000000D, 0x0050001A, 0x00000000, 0x00000000, 0x00001810,
+                0x1060002F, 0x00000000, 0x24030064, 0x0043001A, 0x00000000, 0x00000000,
+                0x00001010, 0x2413000E, 0x28410028, 0x14200030, 0x00000000, 0x2413000F,
+                0x28410046, 0x1420002C, 0x00000000, 0x24130010, 0x10000060, 0x00000000,
+                0x24030032, 0x0043001A, 0x00000000, 0x00000000, 0x00001810, 0x10600018,
+                0x00000000, 0x24030004, 0x0043001A, 0x3C01001A, 0x34218C08, 0x00001010,
+                0x00220821, 0x90330000, 0x10000050, 0x00000000, 0x060E0B0B, 0x24130000,
+                0x1000004C, 0x00000000, 0x24030004, 0x0043001A, 0x3C01001A, 0x34218C3C,
+                0x00001010, 0x00220821, 0x90330000, 0x10000043, 0x00000000, 0x0C0E020A,
+                0x0C0411BE, 0x24030005, 0x0043001A, 0x00000000, 0x00001010, 0x24130005,
+                0x24030011, 0x0062980A, 0x10000038, 0x00000000, 0x10000036, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            };
+            for (int i = 0; i < region.Length; i++)
+                WrU32(fs, ElfOff(REGION_VA + (uint)i * 4), region[i]);
+
+            // FishNum per area: default 6; area 0 -> 4 (native override kept); area 4 -> 5. The area-4
+            // compare instruction @0x1a8998 doubles as the stored value, so the compare const stays 4 and
+            // the `5` is written into that branch's delay slot @0x1a89a0 (a nop in vanilla).
+            if (RdU32(fs, ElfOff(0x001A8980)) != 0x24020005)
+                throw new IOException("FishNum default site 0x1A8980 is not vanilla.");
+            WrU32(fs, ElfOff(0x001A8980), 0x24020006);          // FishNum default 5 -> 6
+            if (RdU32(fs, ElfOff(0x001A89A0)) != 0x00000000)
+                throw new IOException("FishNum area-4 delay slot 0x1A89A0 is not a nop.");
+            WrU32(fs, ElfOff(0x001A89A0), 0x24020005);          // area 4 (Muska Lacka) -> 5 (bne delay slot)
         }
 
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──

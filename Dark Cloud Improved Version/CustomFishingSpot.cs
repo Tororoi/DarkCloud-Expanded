@@ -118,7 +118,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Spot[] Spots =
         {
             // Queens: the canal (static WATER e03c01/c02/c08), surface at Y=31.
-            new Spot(2, "Queens canal", 1,      // area 1 (was 0=Norune) — distinct fish table per town, see area-0 crash
+            new Spot(2, "Queens canal", 6,      // area 6 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — 100% Bobo
                      -100f, -40f, 100f, 40f, water: 31f, ground: 10f,
                      tx: 0f, ty: 31f, tz: 0f, radius: 200f),
 
@@ -152,12 +152,12 @@ namespace Dark_Cloud_Improved_Version
             // runs before our wall-removal and has a hard 1024 cap, so widening the rect can only be checked
             // by watching the count — if it approaches 1024 we must decouple the fish rect (roam bounds) from
             // this cast/gather rect. Mirrored in tools/brownboo_viewer.py (RECT_*).
-            new Spot(14, "Brownboo lake", 2,    // area 2 (was 0=Norune) — distinct fish table per town, see area-0 crash
+            new Spot(14, "Brownboo lake", 5,    // area 5 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — Piccoly/Negie/Gummy + Garayan
                      -250f, -240f, 250f, 240f, water: 0f, ground: -15f,   // ±250 W/E, ±240 N/S, centre (0,0)
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
                      sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
-                     fishDepth: 6f        // shallow pond: fish at WaterLevel-6 (data write), and the bobber anchor
+                     fishDepth: 7.6f      // shallow pond: fish at WaterLevel-7.6 (write the CFrame translation Y @ fish+0x1264, the authoritative depth). And the bobber anchor
                                           // is toggled to point 21 (data write over the cold FishLineStep patch) so
                                           // the hook rises to ~-3 / bait ~-6 to reach them. All data-only —
                                           // patching hot fishing code crashes PCSX2 (recompiler). Line length
@@ -190,7 +190,7 @@ namespace Dark_Cloud_Improved_Version
             // Water level is still the town's declared WATER_SURFACE height (1). Note the trigger is OUTSIDE
             // that surface's square (+/-320 about the origin), so this liquid is probably NOT that surface —
             // if the bobber floats above or sinks below the visible liquid, this is the number to move.
-            new Spot(23, "Yellow Drops liquid", 4,  // area 4 (was 0=Norune) — distinct fish table per town, see area-0 crash
+            new Spot(23, "Yellow Drops liquid", 7,  // area 7 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — Tarton/Nonky/Negie/Bon
                      -609f, -444f, -409f, -244f, water: 1f, ground: -15f,
                      tx: -575f, ty: 9f, tz: -286f, radius: InteractRadius,
                      sx: -582.9f, sy: 9.6f, sz: -276.8f, facing: 2.31f),
@@ -314,14 +314,24 @@ namespace Dark_Cloud_Improved_Version
             uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(p)) return;
             long baseAddr = Memory.ToMmu(p);
-            float y = Memory.ReadFloat(FishingSpot.WaterLevel) - spot.FishDepth;
+            float water = Memory.ReadFloat(FishingSpot.WaterLevel);
             int num = Memory.ReadInt(FishingSpot.FishNum);
+
+            // DIAGNOSTIC: the game re-drives LivePosZ back to the seed depth after a one-shot write, so there's a
+            // stored "home depth" copy we aren't touching. Scan fish[0]'s whole slot header for every float near
+            // the seed depth (WaterLevel-12) so we can find which field the game reads each frame.
+            // Fish depth = the CFrame translation Y at fish+0x1264 (Get/SetPosition go through the frame at
+            // fish+0x1250; +0xB0..0xB8 is only a readout cache). FishingStepFish moves the fish with a depth
+            // delta hardcoded to 0, so a write to the real translation is a fixed point and sticks.
+            const int FrameDepthY = 0x1264;   // CFrame translation Y (depth) — the authoritative field
+            float depth = water - spot.FishDepth;
             for (int i = 0; i < num && i < 6; i++)
             {
                 long fish = baseAddr + (long)i * FishSlotOffsets.Stride;
-                Memory.WriteFloat(fish + FishSlotOffsets.LivePosY, y);
-                Memory.WriteFloat(fish + FishSlotOffsets.AiTargetY, y);
+                Memory.WriteFloat(fish + FrameDepthY, depth);                 // authoritative
+                Memory.WriteFloat(fish + FishSlotOffsets.LivePosZ, depth);    // readout cache (immediate visual)
             }
+            Log($"   [depthprobe] fish[0] +0x1264 now {Memory.ReadFloat(baseAddr + FrameDepthY)} (target {depth})");
             Log($"   fish moved to WaterLevel-{spot.FishDepth} ({num} fish)");
         }
 
@@ -342,6 +352,7 @@ namespace Dark_Cloud_Improved_Version
                                          // code is present (ApplyNewChanges may fire before it is), before fishing
 
             int map = Memory.ReadInt(EditLoop.MapNo);
+            CameraPassThrough.Apply(map);   // Brownboo: let the follow-camera pass through buildings (MapNo-gated inside)
 
             // Leaving a town and coming back RELOADS it — the script buffer is re-read and the event array
             // rebuilt, so our install is gone. Remembering "already installed for map 23" would then skip a
@@ -1732,9 +1743,11 @@ namespace Dark_Cloud_Improved_Version
                 PriscleenFish.ForceSpecies8OnFish();
             }
 
-            // Move the fish to the shallow depth ONCE they've spawned. The window goes live (cpoly/water) a few
-            // frames before _INIT_FISH actually places the fish, so retry each tick until Fish/FishNum are valid.
-            if (!live) _shallowFishApplied = false;
+            // Move the fish to the shallow depth once they spawn. The custom-town SPECIES now come straight
+            // from the loader (IsoPatcher.PatchFishingLoadFish bakes dedicated areas 5/6/7 into FishingLoadFish),
+            // so there's no mod-side re-species and no race — nothing to do here for species. Depth still waits
+            // for the fish: the window goes live (cpoly/water) a few frames before _INIT_FISH places them.
+            if (!live) { _shallowFishApplied = false; }
             else if (!_shallowFishApplied && _spot.HasFishDepth)
             {
                 uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;

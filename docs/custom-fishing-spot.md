@@ -64,7 +64,7 @@ into the retail build. Keep custom rectangles modest.
 | 999 | `_LOAD_MAIN_CHARA` | `0x196910` | (NOT fishing — this is what 999 really is) | |
 
 Four town scripts declare spots: `gedit\e01\event.stb` (Norune), `gedit\e02\event.stb` (Matataki +
-Peanut Pond), `gedit\e04\event.stb` (Muska Lacka), `gedit\s09\event.stb` (Queens Harbor).
+Peanut Pond), `gedit\e04\event.stb` (Muska Lacka), `gedit\s09\event.stb` (East Harbor).
 
 ### How a spot is actually TRIGGERED — the type-3 event point
 
@@ -188,7 +188,7 @@ Six `CFish` objects are allocated but only `FishNum` are used — 4 for areas 0 
 | 0 — Norune Pond | Gobbler(1), Nonky(2), Gummy(6), Niler(7) | `rnd()` scaled to 0–3 |
 | 1 — Peanut Pond | Gobbler(1) 35%, BakuBaku(4) 35%, Umadakara(9) 10%, Tarton(10) 20% | `rnd()*100` |
 | 2 — Matataki Waterfall | Nonky(2), BakuBaku(4), Gummy(6) — even thirds | `rand()%3` |
-| 3 — Queens Harbor | Bobo(0) 20%, Kaiji(3) 20%, Piccoly(11) 20%, Bon(12) 20%, Hamahama(13) 20% | `rand()%100` |
+| 3 — East Harbor | Bobo(0) 20%, Kaiji(3) 20%, Piccoly(11) 20%, Bon(12) 20%, Hamahama(13) 20% | `rand()%100` |
 | 4 — Muska Lacka Oasis | Negie(14) 40%, Den(15) 30%, Heela(16) 30% | `rand()%100` |
 
 **Areas 2 and 4 additionally roll for rares** before the normal table: `rand() % N == 0` yields
@@ -204,7 +204,7 @@ Mardan Garayan(5), and one in five of *those* is upgraded to Baron Garayan(17).
 | 2 | 35 | |
 | 0 | 50 | worst |
 
-Area 3 also sets `draw_under_water = 0`, which is why Queens Harbor has no underwater camera.
+Area 3 also sets `draw_under_water = 0`, which is why East Harbor has no underwater camera.
 
 ### Species ids are patchable immediates
 
@@ -254,7 +254,7 @@ Each town's Georama models live in `gedit\<town>\scene.scn`, named `<town><lette
 | e02 Matataki | `e02m01`, `e02m02` | 2 — the waterfall and Peanut Pond |
 | e04 Muska Lacka | `e04m01` | 1 — the oasis |
 | e03 (no fishing) | **none** | 0 |
-| s09 Queens Harbor | none — the harbour is fixed geometry | 1 |
+| s09 East Harbor | none — the harbour is fixed geometry | 1 |
 
 Variants are the usual Georama set: `_0/_1/_2` build levels, `_a`, `_c` collision, `_r`, `_k`, `_s`.
 `e01m01_r.mds` is the only one carrying real geometry (~40 KB, texture `e01b15`) — this is Norune's
@@ -378,7 +378,7 @@ is fully collidable and fully picked up by `PickUpPoly`.
 | Muska Lacka e04 | none | oasis = LAKE part |
 | **Moon Factory e05** | **none — no `WATER`, no `WATER_IMG`, no `WATER_SURFACE`** | — |
 | Brownboo s04 | `s04w01` (水面), `s04w02` (波 waves), + others | the `WATER` list also carries stairs — it is really "static object" |
-| Queens Harbor s09 | none listed; `WATER_SURFACE` only | water is in the `s0901/2/3` meshes |
+| East Harbor s09 | none listed; `WATER_SURFACE` only | water is in the `s0901/2/3` meshes |
 
 Inside those meshes the animated surfaces are named frames:
 
@@ -396,7 +396,7 @@ the ones sitting in *water* meshes are the fishing signs:
 |---|---|---|
 | **Matataki e02** | **`e02w11_0.mds`** — `kanban`, `kanban1`, `kanban2` | the fishing signs — inside a **static** water mesh, not Georama |
 | **Muska Lacka e04** | **`e04w01_0.mds`** — `kanban`, `kanban_1`, `kanban_1_1` | the oasis sign — this **is** the LAKE part's water mesh, so it moves with the part |
-| **Queens Harbor s09** | `s0901_c.mds` — 5 `kanban` frames | baked into the harbour's static mesh |
+| **East Harbor s09** | `s0901_c.mds` — 5 `kanban` frames | baked into the harbour's static mesh |
 | Norune e01 | *none* — the pond mesh `e01m01_r.mds` has frames `ike` (池), `item00`, `func_item00` | its sign is unnamed geometry inside the lake part |
 | Queens e03 | only house shop signs + `e03h11_w.mds` (the fountain) | no fishing sign |
 | Moon Factory e05 | **zero `kanban` frames** | no sign anywhere |
@@ -489,7 +489,7 @@ to be a Georama part rather than static map geometry.
 | Muska Lacka | e04 | **yes** | LAKE part 11 (`e04m01`) | **yes** | in the lake part (`e04w01_0`) | area 4 |
 | Moon Factory | e05 | **yes** — 14 × `BLD_PARTS`, 1 `EDITAREA` | **no water system at all** | n/a | none | — |
 | Brownboo | s04 | **NO** — no `EDITAREA`, no parts; a fixed `GROUND` list | static `WATER` (`s04w01`/`s04w02`) | no | none | — |
-| Queens Harbor | s09 | **NO** — 7 static models | static, in the map mesh | no | baked | area 3 |
+| East Harbor | s09 | **NO** — 7 static models | static, in the map mesh | no | baked | area 3 |
 
 ### Town ↔ folder identification — GET THIS RIGHT
 
@@ -905,7 +905,7 @@ frame:
 
 | town | `e01b24` in its `img.pak`? |
 |---|---|
-| Norune e01, Matataki e02, Muska Lacka e04, Queens Harbor s09 | **yes** |
+| Norune e01, Matataki e02, Muska Lacka e04, East Harbor s09 | **yes** |
 | **Queens e03, Moon Factory e05, Brownboo s04** | **no** |
 
 It is present in exactly the four fishing towns and absent from exactly the three targets. `e01b24`
