@@ -553,7 +553,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const long BobberPtr    = 0x21FB4000;   // mod view of the global; game reads game-addr 0x01FB4000
         internal const uint PointVanilla = 0x001D55F50;  // point[18] — the vanilla bobber anchor
-        internal const uint PointShallow = 0x001D55F80;  // point[21] — shallow (2 segments below the surface)
+        internal const uint PointShallow = 0x001D55F70;  // point[20] — shallow anchor
 
         // Each site: (lui addr, addiu/lw addr, dest reg). reg = the original addiu's target ($4 or $5).
         internal static readonly (long lui, long ld, int reg)[] Sites =

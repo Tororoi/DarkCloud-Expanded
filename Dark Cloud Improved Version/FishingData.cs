@@ -439,7 +439,8 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal struct AreaFishData
     {
-        internal int      Id;
+        internal int      Id;              // town MapNo (0x202A2518) — the key OnSessionStart resolves to
+        internal int      Area;            // FishingLoadFish area arg (0-4 native, 5/6/7 custom) — for logging
         internal string   Name;
         internal int      SlotBase;
         internal int      SlotCount;
@@ -465,7 +466,7 @@ namespace Dark_Cloud_Improved_Version
         /// Dusk=2, Night=3). The rare-fish pre-check fires when (random % $s0 == 0),
         /// giving a per-slot trigger probability of approximately 1/$s0. When triggered the
         /// common-fish selection is skipped and <see cref="RareSplits"/> governs instead.
-        /// Null for areas with no rare fish (Norune, Peanut Pond, Queens Harbor).
+        /// Null for areas with no rare fish (Norune, Peanut Pond, East Harbor).
         /// The time→divisor mapping is inferred from empirical rates; the game function at
         /// VA 0x00187E60 that returns the time index has not been fully decoded.
         /// </summary>
@@ -495,7 +496,7 @@ namespace Dark_Cloud_Improved_Version
     {
         internal static readonly AreaFishData NorunePond = new AreaFishData
         {
-            Id = 0, Name = "Norune Pond",
+            Id = 0, Area = 0, Name = "Norune Pond",
             SlotBase = FishSlotOffsets.AreaBase_Norune, SlotCount = 4, QuestBase = 0x21CE4416, GiverName = "Pike",
             FishIds = new byte[]
             {
@@ -514,8 +515,8 @@ namespace Dark_Cloud_Improved_Version
         };
         internal static readonly AreaFishData MatatakiWaterfall = new AreaFishData
         {
-            Id = 1, Name = "Matataki Waterfall",
-            SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+            Id = 1, Area = 2, Name = "Matataki Waterfall",
+            SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 6, QuestBase = 0x21CE441E, GiverName = "Pao",
             FishIds = new byte[]
             {
                 Fish.Gummy.Id, Fish.Nonky.Id, Fish.BakuBaku.Id,
@@ -525,7 +526,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 [Fish.Nonky.Id]    = 1f / 3f,  // random%3 == 0
                 [Fish.BakuBaku.Id] = 1f / 3f,  // random%3 == 1
-                [Fish.Gummy.Id]    = 1f / 3f,  // random%3 == 2
+                [Fish.Niler.Id]    = 1f / 3f,  // random%3 == 2
             },
             // Rare-fish trigger: random % $s0 == 0. $s0 values inferred from empirical rates.
             RareDivisors = new int[] { 25, 35, 20, 50 },   // [Morning, Afternoon, Dusk, Night]
@@ -541,8 +542,8 @@ namespace Dark_Cloud_Improved_Version
         // Resolved from area ID 1 via player Y position: Peanut Pond ≈ Y=-1103, Waterfall ≈ Y=720. Split at Y=0.
         internal static readonly AreaFishData PeanutPond = new AreaFishData
         {
-            Id = 100, Name = "Peanut Pond",
-            SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 5, QuestBase = 0x21CE441E, GiverName = "Pao",
+            Id = 100, Area = 1, Name = "Peanut Pond",
+            SlotBase = FishSlotOffsets.AreaBase_Matataki, SlotCount = 6, QuestBase = 0x21CE441E, GiverName = "Pao",
             FishIds = new byte[]
             {
                 Fish.Tarton.Id, Fish.Gobbler.Id, Fish.BakuBaku.Id,
@@ -559,10 +560,10 @@ namespace Dark_Cloud_Improved_Version
             RareSplits   = null,
             SpawnFish    = _ => SpawnRandomMod100(PeanutPond.CommonWeights),              // RandomMod100 (VA 0x001A8B00)
         };
-        internal static readonly AreaFishData QueensHarbor = new AreaFishData
+        internal static readonly AreaFishData EastHarbor = new AreaFishData
         {
-            Id = 19, Name = "Queens Harbor",
-            SlotBase = FishSlotOffsets.AreaBase_Queens, SlotCount = 5, QuestBase = 0x21CE4427, GiverName = "Sam",
+            Id = 19, Area = 3, Name = "East Harbor",
+            SlotBase = FishSlotOffsets.AreaBase_Queens, SlotCount = 6, QuestBase = 0x21CE4427, GiverName = "Sam",
             QuestsDoneAddr = 0x21CE442F, PostLoopSrc = 0x21CE4430, PostLoopDst = 0x202A1FA0,
             FishIds = new byte[]
             {
@@ -573,18 +574,18 @@ namespace Dark_Cloud_Improved_Version
             {
                 [Fish.Bobo.Id]     = 0.20f,  // random%100 < 20
                 [Fish.Kaiji.Id]    = 0.20f,  // 20 ≤ random%100 < 40
-                [Fish.Piccoly.Id]  = 0.20f,  // 40 ≤ random%100 < 60
+                [Fish.Gobbler.Id]  = 0.20f,  // 40 ≤ random%100 < 60
                 [Fish.Bon.Id]      = 0.20f,  // 60 ≤ random%100 < 80
                 [Fish.Hamahama.Id] = 0.20f,  // 80 ≤ random%100 < 100
             },
             RareDivisors = null,
             RareSplits   = null,
-            SpawnFish    = _ => SpawnRandomMod100(QueensHarbor.CommonWeights),             // RandomMod100 (VA 0x001A8C1C)
+            SpawnFish    = _ => SpawnRandomMod100(EastHarbor.CommonWeights),             // RandomMod100 (VA 0x001A8C1C)
         };
         internal static readonly AreaFishData MuskaLackaOasis = new AreaFishData
         {
-            Id = 3, Name = "Muska Lacka Oasis",
-            SlotBase = FishSlotOffsets.AreaBase_MuskaLacka, SlotCount = 4, QuestBase = 0x21CE4431, GiverName = "Devia",
+            Id = 3, Area = 4, Name = "Muska Lacka Oasis",
+            SlotBase = FishSlotOffsets.AreaBase_MuskaLacka, SlotCount = 5, QuestBase = 0x21CE4431, GiverName = "Devia",
             FishIds = new byte[]
             {
                 Fish.Negie.Id, Fish.Den.Id, Fish.Heela.Id,
@@ -605,6 +606,70 @@ namespace Dark_Cloud_Improved_Version
             },
             SpawnFish = time => SpawnWithRareCheck(MuskaLackaOasis.RareDivisors, time,    // RandomMod100 (VA 0x001A8CF0)
                 () => SpawnRandomMod100(MuskaLackaOasis.CommonWeights)),
+        };
+
+        // ---- Custom fishing spots (ISO-patched dedicated areas 5/6/7) ----
+        // These towns' fish pools are baked straight into FishingLoadFish by IsoPatcher.PatchFishingLoadFish
+        // (dedicated area branches 5/6/7), so the loader spawns the right species with no runtime re-species.
+        // SlotBase is resolved live at session start (Fishing.OnSessionStart) from the CFish* pointer, since
+        // these areas don't have a fixed captured base like the native AreaBase_* constants. QuestBase = 0 →
+        // no fishing quest (guarded in InitQuestState). CommonWeights/SpawnFish mirror the baked distribution
+        // for logging/reference; the authoritative selection is the baked loader.
+
+        internal static readonly AreaFishData Brownboo = new AreaFishData
+        {
+            Id = 14, Area = 5, Name = "Brownboo", SlotBase = 0, SlotCount = 6, QuestBase = 0,
+            FishIds = new byte[]
+            {
+                Fish.Piccoly.Id, Fish.Negie.Id, Fish.Gummy.Id,
+                Fish.MardanGarayan.Id, Fish.BaronGarayan.Id,
+            },
+            CommonWeights = new Dictionary<byte, float>
+            {
+                [Fish.Piccoly.Id] = 0.50f,
+                [Fish.Negie.Id]   = 0.25f,
+                [Fish.Gummy.Id]   = 0.25f,
+            },
+            RareDivisors = new int[] { 20, 20, 20, 20 },   // [Morning, Afternoon, Dusk, Night]
+            RareSplits = new Dictionary<byte, float>
+            {
+                [Fish.MardanGarayan.Id] = 4f / 5f,  // new_random % 5 != 0
+                [Fish.BaronGarayan.Id]  = 1f / 5f,  // new_random % 5 == 0
+            },
+            SpawnFish = time => SpawnWithRareCheck(Brownboo.RareDivisors, time,    // RandomMod100 (VA 0x001A8CF0)
+                () => SpawnRandomMod100(Brownboo.CommonWeights)),
+        };
+
+        internal static readonly AreaFishData Queens = new AreaFishData
+        {
+            Id = 2, Area = 6, Name = "Queens", SlotBase = 0, SlotCount = 6, QuestBase = 0,
+            FishIds = new byte[] { Fish.Bobo.Id },
+            CommonWeights = new Dictionary<byte, float>
+            {
+                [Fish.Bobo.Id] = 1.00f,
+            },
+            RareDivisors = null,
+            RareSplits   = null,
+            SpawnFish    = _ => Fish.Bobo.Id,
+        };
+
+        internal static readonly AreaFishData YellowDrops = new AreaFishData
+        {
+            Id = 23, Area = 7, Name = "Yellow Drops", SlotBase = 0, SlotCount = 6, QuestBase = 0,
+            FishIds = new byte[]
+            {
+                Fish.Tarton.Id, Fish.Nonky.Id, Fish.Negie.Id, Fish.Bon.Id,
+            },
+            CommonWeights = new Dictionary<byte, float>
+            {
+                [Fish.Tarton.Id] = 0.25f,
+                [Fish.Nonky.Id]  = 0.25f,
+                [Fish.Negie.Id]  = 0.25f,
+                [Fish.Bon.Id]    = 0.25f,
+            },
+            RareDivisors = null,
+            RareSplits   = null,
+            SpawnFish    = _ => SpawnFourWayEqual(YellowDrops.CommonWeights),
         };
 
         // ---- Spawn mechanism functions ----
@@ -660,7 +725,11 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Dictionary<int, AreaFishData> ById;
         static FishingAreas()
         {
-            AreaFishData[] allAreas = { NorunePond, MatatakiWaterfall, PeanutPond, QueensHarbor, MuskaLackaOasis };
+            AreaFishData[] allAreas =
+            {
+                NorunePond, MatatakiWaterfall, PeanutPond, EastHarbor, MuskaLackaOasis,
+                Brownboo, Queens, YellowDrops,
+            };
             ById = new Dictionary<int, AreaFishData>(allAreas.Length);
             foreach (AreaFishData area in allAreas) ById[area.Id] = area;
         }

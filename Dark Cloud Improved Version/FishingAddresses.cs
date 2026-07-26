@@ -367,7 +367,7 @@ namespace Dark_Cloud_Improved_Version
         internal const long AngleFish  = 0x202A2B5C;
         internal const long BattleFish = 0x202A2B60;
 
-        /// <summary>int. 0 disables the underwater view. Area 3 (Queens Harbor) ships with it off —
+        /// <summary>int. 0 disables the underwater view. Area 3 (East Harbor) ships with it off —
         /// worth copying for any spot whose "water" is not water (e.g. Yellow Drops' liquid).</summary>
         internal const long DrawUnderWater = 0x202A1FA0;
     }

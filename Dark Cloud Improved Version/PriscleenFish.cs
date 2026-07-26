@@ -32,7 +32,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>TEST AID: stamp every Brownboo fish's CFish species (+0) to 8 so ANY catch shows
         /// Priscleen (species 8 does not spawn naturally yet). Set false for normal play.</summary>
-        internal static bool ForceAllSpecies8 = true;
+        internal static bool ForceAllSpecies8 = false;   // test aid only — the real per-town pools are baked into FishingLoadFish
 
         private const int Species = 8;
 

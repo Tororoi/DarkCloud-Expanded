@@ -72,6 +72,27 @@ def build_injected_scene(scene: bytes, kanban_mds: bytes, template_name=b"s04a01
 UPPER_WALL_NODES = [f"s04g01{i:02d}__n" for i in range(5, 17)]
 
 
+def cull_buildings(scene: bytes) -> bytes:
+    """Make Brownboo's houses single-sided (SetFrameAttr '__s' suffix) so the camera, when it clips INSIDE a
+    house, sees through it. '__n' houses -> '__s'; suffix-less houses get '__s' written into the 16-byte name
+    field's null padding (no shift). h0201/h0202 already '__s'."""
+    scn = bytearray(scene)
+    for node in ("h0101__n", "h0102__n", "h0103__n"):
+        at = scn.find(node.encode() + b"\x00")
+        if at < 0:
+            raise ValueError(f"building node {node!r} not found in scene.scn")
+        scn[at + len(node) - 1] = ord('s')
+    for node, expect in (("h0104", 1), ("h0301", 3), ("h0302", 3)):
+        key = node.encode() + b"\x00"
+        frm, hits = 0, 0
+        while (at := scn.find(key, frm)) >= 0:
+            scn[at + len(node):at + len(node) + 4] = b"__s\x00"
+            frm, hits = at + len(node), hits + 1
+        if hits != expect:
+            raise ValueError(f"building node {node!r}: found {hits}, expected {expect}")
+    return bytes(scn)
+
+
 def cull_upper_crater_walls(scene: bytes) -> bytes:
     """Enable backface culling on Brownboo's upper crater walls by flipping their `__n` suffix to `__s`."""
     scn = bytearray(scene)
@@ -180,6 +201,7 @@ if __name__ == "__main__":   # offline self-test against the extracted disc
     cfg0 = bytes(load_scene('gedit/s04/mapinfo.cfg'))
     scn1, removed = remove_ring_corner_tris(build_injected_scene(scn0, kb))
     scn1 = cull_upper_crater_walls(scn1)                          # cull rename AFTER removal (it renames __n->__s)
+    scn1 = cull_buildings(scn1)                                   # make houses single-sided (camera see-through)
     cfg1 = build_injected_mapinfo(cfg0, 212, 9, -61)
     print(f"scene.scn {len(scn0)} -> {len(scn1)}  parts {struct.unpack_from('<I',scn0,4)[0]} -> {struct.unpack_from('<I',scn1,4)[0]}")
     culled = sum(scn1.count(f"s04g01{i:02d}__s\x00".encode()) for i in range(5, 17))

@@ -566,7 +566,7 @@ namespace Dark_Cloud_Improved_Version
             2  => "Queens",
             3  => "Muska Lacka",
             14 => "Brownboo",
-            19 => "Queens Harbor",
+            19 => "East Harbor",
             23 => "Yellow Drops",
             38 => "Dark Heaven Castle",
             42 => "Muska Lacka (outside)",
