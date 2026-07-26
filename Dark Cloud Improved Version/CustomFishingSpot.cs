@@ -306,32 +306,29 @@ namespace Dark_Cloud_Improved_Version
                              shallow ? FishLineShallow.PointShallow : FishLineShallow.PointVanilla);
         }
 
-        /// <summary>Move the spawned fish to WaterLevel-FishDepth by writing their slot Y directly (data only) —
-        /// replaces the crash-prone FishingInitFish code patch. Fish Y is otherwise fixed, so one write sticks.</summary>
+        /// <summary>Move the spawned fish to WaterLevel-FishDepth by writing their depth directly (data only) —
+        /// replaces the crash-prone FishingInitFish code patch.
+        ///
+        /// Depth is the CFrame translation Y at <c>fish+0x1264</c> (Fish::Get/SetPosition route through the frame
+        /// at fish+0x1250; the +0xB0..0xB8 "LivePos" fields are only a readout cache). FishingStepFish moves the
+        /// fish with a depth delta hardcoded to 0, so the depth is a fixed point of its per-frame read/add/write
+        /// loop — one write to the real translation sticks (we also mirror the cache for the same-frame visual).</summary>
         private static void ApplyShallowFishDepth(Spot spot)
         {
             if (!spot.HasFishDepth) return;
             uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(p)) return;
             long baseAddr = Memory.ToMmu(p);
-            float water = Memory.ReadFloat(FishingSpot.WaterLevel);
+            float depth = Memory.ReadFloat(FishingSpot.WaterLevel) - spot.FishDepth;
             int num = Memory.ReadInt(FishingSpot.FishNum);
 
-            // DIAGNOSTIC: the game re-drives LivePosZ back to the seed depth after a one-shot write, so there's a
-            // stored "home depth" copy we aren't touching. Scan fish[0]'s whole slot header for every float near
-            // the seed depth (WaterLevel-12) so we can find which field the game reads each frame.
-            // Fish depth = the CFrame translation Y at fish+0x1264 (Get/SetPosition go through the frame at
-            // fish+0x1250; +0xB0..0xB8 is only a readout cache). FishingStepFish moves the fish with a depth
-            // delta hardcoded to 0, so a write to the real translation is a fixed point and sticks.
             const int FrameDepthY = 0x1264;   // CFrame translation Y (depth) — the authoritative field
-            float depth = water - spot.FishDepth;
             for (int i = 0; i < num && i < 6; i++)
             {
                 long fish = baseAddr + (long)i * FishSlotOffsets.Stride;
                 Memory.WriteFloat(fish + FrameDepthY, depth);                 // authoritative
                 Memory.WriteFloat(fish + FishSlotOffsets.LivePosZ, depth);    // readout cache (immediate visual)
             }
-            Log($"   [depthprobe] fish[0] +0x1264 now {Memory.ReadFloat(baseAddr + FrameDepthY)} (target {depth})");
             Log($"   fish moved to WaterLevel-{spot.FishDepth} ({num} fish)");
         }
 
