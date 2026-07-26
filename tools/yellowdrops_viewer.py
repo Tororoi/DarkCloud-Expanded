@@ -52,7 +52,6 @@ LAYERS_SPEC = [
     ('factory',      lambda n: n == 'sphere27',                                     [90,105,135],   '#9ac', False),
     ('factoryroof',  lambda n: n.startswith('sphere'),                              [120,95,150],   '#b8e', False),
     ('factorywindows', lambda n: n == 'doumu_c' or n in ('obj22__n','obj28__n'),    [110,180,210],  '#8cd', False),
-    ('terrain',     lambda n: n in ('kebe_c','miti_c') or n.startswith('miti'),      [95,88,70],     '#cba', True),
     ('decor',       lambda n: n.startswith('revol') or n.startswith('naka') or n.startswith('cube') or n.startswith('kage'), [110,100,120], '#a9c', False),
 ]
 
@@ -105,8 +104,6 @@ def tri_sphere(cx, cy, cz, r, n=9):
 
 layers.append({'key': 'trigger', 'label': 'trigger ! (sphere)', 'tris': tri_sphere(*TRIG, 10),
                'color': [255,110,180], 'alpha': 0.9, 'border': '#f7c', 'on': True})
-layers.append({'key': 'other', 'label': LABELS['other'], 'tris': layer_tris['other'],
-               'color': [120,120,120], 'alpha': 1.0, 'border': '#999', 'on': False})
 
 # ---- markers: the current cast rect (outline points) + stance; trigger is a mesh layer above ----
 def rect_points(x1, z1, x2, z2, y, per=40):
@@ -136,5 +133,6 @@ tot = sum(len(t) for t in layer_tris.values())
 print(f"placed instances: {len(PLACED)}  layers: {len(layers)}  triangles: {tot}")
 for key, *_ in LAYERS_SPEC:
     print(f"  {key:14s} {len(layer_tris[key]):5d} tris")
-print(f"  {'other':14s} {len(layer_tris['other']):5d} tris")
+if layer_tris['other']:
+    print(f"  WARNING: {len(layer_tris['other'])} unclassified tris dropped (no 'other' toggle)")
 print(f"-> {os.path.join(OUT, HTML_NAME)}")
