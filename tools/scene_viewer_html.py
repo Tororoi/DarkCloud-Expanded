@@ -103,22 +103,68 @@ function draw(){
  all.sort((p,q)=>p.depth-q.depth);
  const rfill=on('r_fill'), rwire=on('r_wire'), rcull=on('r_cull'), rlabels=on('r_labels');
  PICK=[];
+ // Correct per-pixel occlusion via a software z-buffer (handles interpenetrating models the painter's-order
+ // fill can't). Full-res when settled; HALF-res while dragging (FASTDRAW) then scaled up, to keep it smooth.
+ if(rfill) zfill(all,f,rcull, FASTDRAW?0.5:1);
  for(const o of all){
   if(o.k==='p'){cx.fillStyle='#ff1493';cx.fillRect(W/2+o.r[0]*f-1.4,H/2-o.r[1]*f-1.4,2.8,2.8);continue;}
   const pts=o.r.map(p=>[W/2+p[0]*f,H/2-p[1]*f]);
   const area=(pts[1][0]-pts[0][0])*(pts[2][1]-pts[0][1])-(pts[1][1]-pts[0][1])*(pts[2][0]-pts[0][0]);
   if(rcull && area>=0) continue;
   PICK.push({pts,depth:o.depth,w:o.w});
-  cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);cx.lineTo(pts[1][0],pts[1][1]);cx.lineTo(pts[2][0],pts[2][1]);cx.closePath();
-  const c=o.c;
-  if(rfill){ cx.fillStyle='rgba('+(c[0]*o.sh|0)+','+(c[1]*o.sh|0)+','+(c[2]*o.sh|0)+','+o.a+')';cx.fill(); }
-  if(rwire){ cx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.9)';cx.lineWidth=0.6;cx.stroke(); }
+  if(rwire){ cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);cx.lineTo(pts[1][0],pts[1][1]);cx.lineTo(pts[2][0],pts[2][1]);cx.closePath();
+   cx.strokeStyle='rgba('+o.c[0]+','+o.c[1]+','+o.c[2]+',0.9)';cx.lineWidth=0.6;cx.stroke(); }
  }
  drawSelected(f);
  if(rlabels) drawNodeLabels(f);
  if(on('t_points')) drawLabels();
  drawCompass();
 }
+// ---- software z-buffer fill (correct occlusion for interpenetrating models) ----
+// Two passes: opaque (writes depth) then transparent (depth-tested, alpha-blended, back-to-front). `all`
+// is pre-sorted ascending by view depth (far first), which is the order the painter fill used, so nearer =
+// LARGER depth -> keep the larger-depth pixel. Convention verified against the existing painter output.
+let ZIMG=null, ZBUF=null, ZCAN=null, ZCTX=null, ZW=0, ZH=0;
+function zfill(all,f,rcull,scale){
+ const sw=Math.max(1,Math.round(W*scale)), sh=Math.max(1,Math.round(H*scale));
+ if(ZW!==sw||ZH!==sh){ ZW=sw;ZH=sh; ZIMG=cx.createImageData(sw,sh); ZBUF=new Float32Array(sw*sh);
+   if(!ZCAN){ZCAN=document.createElement('canvas');ZCTX=ZCAN.getContext('2d');} ZCAN.width=sw;ZCAN.height=sh; }
+ const d=ZIMG.data, zb=ZBUF;
+ for(let i=0;i<d.length;i+=4){ d[i]=13;d[i+1]=17;d[i+2]=23;d[i+3]=255; }
+ zb.fill(-Infinity);
+ const op=[],tr=[];
+ for(const o of all){ if(o.k!=='t') continue; (o.a>=0.95?op:tr).push(o); }
+ for(const o of op) raster(o,f,d,zb,rcull,true,sw,sh,scale);   // opaque: write depth
+ for(const o of tr) raster(o,f,d,zb,rcull,false,sw,sh,scale);  // transparent: test only, blend
+ if(scale===1){ cx.putImageData(ZIMG,0,0); }
+ else { ZCTX.putImageData(ZIMG,0,0); cx.imageSmoothingEnabled=true; cx.drawImage(ZCAN,0,0,sw,sh,0,0,W,H); }
+}
+function raster(o,f,d,zb,rcull,wd,sw,sh,scale){
+ const ax=(W/2+o.r[0][0]*f)*scale, ay=(H/2-o.r[0][1]*f)*scale, bx=(W/2+o.r[1][0]*f)*scale, by=(H/2-o.r[1][1]*f)*scale, gx=(W/2+o.r[2][0]*f)*scale, gy=(H/2-o.r[2][1]*f)*scale;
+ const area=(bx-ax)*(gy-ay)-(by-ay)*(gx-ax);
+ if(area===0 || (rcull && area>=0)) return;
+ const z0=o.r[0][2],z1=o.r[1][2],z2=o.r[2][2], c=o.c, a=o.a;
+ const cr=Math.min(255,c[0]*o.sh)|0, cg=Math.min(255,c[1]*o.sh)|0, cb=Math.min(255,c[2]*o.sh)|0;
+ let minx=Math.max(0,Math.floor(Math.min(ax,bx,gx))), maxx=Math.min(sw-1,Math.ceil(Math.max(ax,bx,gx)));
+ let miny=Math.max(0,Math.floor(Math.min(ay,by,gy))), maxy=Math.min(sh-1,Math.ceil(Math.max(ay,by,gy)));
+ const inv=1/area;
+ for(let y=miny;y<=maxy;y++){
+  for(let x=minx;x<=maxx;x++){
+   const px=x+0.5, py=y+0.5;
+   const eBC=(gx-bx)*(py-by)-(gy-by)*(px-bx);
+   const eCA=(ax-gx)*(py-gy)-(ay-gy)*(px-gx);
+   const eAB=(bx-ax)*(py-ay)-(by-ay)*(px-ax);
+   if((eBC<0||eCA<0||eAB<0)&&(eBC>0||eCA>0||eAB>0)) continue;   // outside (edges not all same sign)
+   const z=(eBC*z0+eCA*z1+eAB*z2)*inv, idx=y*sw+x;
+   if(z<=zb[idx]) continue;
+   if(wd) zb[idx]=z;
+   const o4=idx*4;
+   if(a>=0.95){ d[o4]=cr; d[o4+1]=cg; d[o4+2]=cb; }
+   else { d[o4]=cr*a+d[o4]*(1-a); d[o4+1]=cg*a+d[o4+1]*(1-a); d[o4+2]=cb*a+d[o4+2]*(1-a); }
+  }
+ }
+}
+let FASTDRAW=false;   // true while dragging -> use the cheap painter fill; false -> z-buffer
 let PICK=[], SELECTED=[];
 function triKey(t){ return t.map(p=>p.map(v=>Math.round(v*10)/10).join(',')).join('|'); }
 function drawSelected(f){
@@ -189,14 +235,19 @@ function drawCompass(){
 }
 draw();
 let drag=false,px,py,downX,downY,downShift,moved=false;
-cv.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
-addEventListener('pointerup',e=>{drag=false;cv.style.cursor='grab';
- if(!moved){const r=cv.getBoundingClientRect();pickAt(e.clientX-r.left,e.clientY-r.top,downShift);}});
+cv.addEventListener('pointerdown',e=>{drag=true;FASTDRAW=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
+addEventListener('pointerup',e=>{drag=false;FASTDRAW=false;cv.style.cursor='grab';
+ if(!moved){const r=cv.getBoundingClientRect();pickAt(e.clientX-r.left,e.clientY-r.top,downShift);}
+ else draw();});   // re-render the settled view with the z-buffer after a drag
 addEventListener('pointermove',e=>{if(!drag)return;
  if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;
  yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
 document.getElementById('selclear').onclick=()=>{SELECTED=[];updateSel();draw();};
-cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;draw();},{passive:false});
+let zoomTimer=null;
+cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;FASTDRAW=true;draw();
+ if(zoomTimer)clearTimeout(zoomTimer);
+ zoomTimer=setTimeout(()=>{FASTDRAW=false;draw();},150);   // snap back to full-res once the wheel settles
+},{passive:false});
 const coordEl=document.getElementById('coord');
 cv.addEventListener('pointermove',e=>{
  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
