@@ -142,11 +142,11 @@ namespace Dark_Cloud_Improved_Version
                      -240f, -100f, 900f, 150f, water: 31f, ground: 10f,
                      tx: 250f, ty: 70f, tz: -70f, radius: 10f,
                      sx: 250f, sy: 70f, sz: -70f, facing: 0f,            // stance: face +Z (south) toward the water
-                     // The canal tide sits low under the rod (afternoon 31), so STRETCH the line 1.3x (distp
-                     // 1.667->2.167) to reach the surface — keeps the vanilla bobber anchor (no ShallowBobber).
-                     // That drops the hook from ~WaterLevel-8.3 to ~-10.8 and the bait (hook-3) to ~-13.8, so
-                     // lower the fish to match: WaterLevel-14.5 keeps the vanilla fish-to-bait gap (~0.67) → bites.
-                     lineScale: 1.3f, fishDepth: 14.5f),
+                     // The canal tide sits low under the rod (afternoon 31), so STRETCH the line 1.25x (distp
+                     // 1.667->2.083) to reach the surface — keeps the vanilla bobber anchor (no ShallowBobber).
+                     // That drops the hook from ~WaterLevel-8.3 to ~-10.4 and the bait (hook-3) to ~-13.4, so
+                     // lower the fish to match: WaterLevel-14.08 keeps the vanilla fish-to-bait gap (~0.67) → bites.
+                     lineScale: 1.25f, fishDepth: 14.08f),
 
             // Brownboo: the pond (static WATER s04w01). WATER_SURFACE centred on the origin, ±120, HEIGHT 0.
             // Stance at the +X edge facing the water: (74, 10, -20), yaw -1.639 — forward (-1.00, -0.07).

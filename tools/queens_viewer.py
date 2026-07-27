@@ -14,7 +14,7 @@ import os, sys, re, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scene_placed import placed_meshes
 from scene_viewer_html import build_html
-from extract_scene_mesh import load_scene
+from extract_scene_mesh import load_scene, read_verts, read_tris
 from georama_parts import part_models
 from georama_default import default_layout
 from georama_collision import collision_local, place_base
@@ -70,7 +70,8 @@ WATER_Y = 31.0
 RECT = (-240.0, -100.0, 900.0, 150.0)        # x1,z1,x2,z2 (fish/cast box)
 TRIG = (250.0, 70.0, -70.0)                  # trigger (the "!" marker); radius 10
 TRIG_R = 10.0
-SIGN_FACING = 0                              # 0 = facing north (-Z), matches _SET_NPC_ROT yaw 0
+SIGN_POS = (250.0, 70.0, -64.0)              # baked sign position (QSIGN_* in IsoPatcher.cs): 6 units south (+Z) of the trigger
+SIGN_RY  = 180                               # mapinfo ry (degrees): facing north (-Z), opposite Brownboo's +Z-facing ry 0
 
 # ---- layer taxonomy (ordered; first match wins). Main geometry ON by default; clutter OFF. ----
 def _num(prefix, n):
@@ -224,28 +225,33 @@ def tri_sphere(cx, cy, cz, r, n=9):
 layers.append({'key': 'trigger', 'label': f'trigger ! (r{TRIG_R:.0f})', 'tris': tri_sphere(*TRIG, TRIG_R),
                'color': [255,110,180], 'alpha': 0.9, 'border': '#f7c', 'on': True})
 
-# ---- fishing-sign marker: a post + a board facing north (-Z), at the trigger spot ----
-def sign_marker(cx, cy, cz, facing=0, post_h=60, board_w=40, board_h=28):
-    # board normal points north (-Z) when facing==0; rotate about Y by facing*90deg
-    th = facing * math.pi / 2; ca, sa = math.cos(th), math.sin(th)
-    def R(x, z): return (x*ca - z*sa + cx, z*ca + x*sa + cz)
-    tris, gy = [], cy       # ground at trigger Y (bank); post rises from there
-    # post (thin vertical quad strip, 4 sides)
-    pw = 2.5
-    for dx, dz in ((pw,0),(0,pw),(-pw,0),(0,-pw)):
-        x0, z0 = R(dx, dz); x1, z1 = R(-dz, dx)
-        a=[x0,gy,z0]; b=[x1,gy,z1]; c=[x1,gy+post_h,z1]; d=[x0,gy+post_h,z0]
-        tris += [[a,b,c],[a,c,d]]
-    # board near the top, in the XY plane (spanning ±board_w/2 in the sign's local X, facing -Z)
-    by = gy + post_h; hw = board_w/2
-    l = R(-hw, 0); r = R(hw, 0)
-    a=[l[0],by,l[1]]; b=[r[0],by,r[1]]; c=[r[0],by+board_h,r[1]]; d=[l[0],by+board_h,l[1]]
-    tris += [[a,b,c],[a,c,d]]
-    return tris
+# ---- fishing SIGN: the real kanban.mds mesh at its baked position, ry 180 (facing north) ----
+# Same source the ISO patcher injects (carved from the user's ISO into game_data/fishsign/; untracked).
+# Verts are LOCAL (origin-centred); the mapinfo places + rotates them, so we do the same here.
+_kb = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "game_data", "fishsign", "kanban.mds"), "rb").read()
+_sv = read_verts(_kb, 0x80)                  # kanban MDT is at 0x80
+def _place_sign(v):
+    th = math.radians(SIGN_RY); c = math.cos(th); s = math.sin(th)
+    x, y, z = v[0], v[1], v[2]
+    return [x*c + z*s + SIGN_POS[0], y + SIGN_POS[1], -x*s + z*c + SIGN_POS[2]]
+sign_mesh = [[_place_sign(_sv[i]) for i in (a, b, c)] for a, b, c in read_tris(_kb, 0x80)]
+print(f"sign mesh: {len(sign_mesh)} tris at {SIGN_POS} ry{SIGN_RY}")
 
 layers.append({'key': 'sign', 'label': 'fishing sign (faces N)',
-               'tris': sign_marker(TRIG[0], TRIG[1], TRIG[2], SIGN_FACING),
+               'tris': sign_mesh,
                'color': [210,160,90], 'alpha': 1.0, 'border': '#e94', 'on': True})
+
+# ---- fishing-sign COLLISION: the single solid panel the ISO patcher bakes (BuildKanbanCollision).
+# Must match IsoPatcher.BuildKanbanCollision Box(-6.5, 6.5, 0, 16, -1, 2), placed like the sign (ry 180).
+def _box_tris(x0, x1, y0, y1, z0, z1):
+    v = [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1],[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]]
+    faces = [(0,1,2),(0,2,3),(4,6,5),(4,7,6),(0,4,5),(0,5,1),(3,2,6),(3,6,7),(0,3,7),(0,7,4),(1,5,6),(1,6,2)]
+    return [[_place_sign(v[a]), _place_sign(v[b]), _place_sign(v[c])] for a, b, c in faces]
+sign_coll = _box_tris(-6.5, 6.5, 0, 16, -1, 2)
+print(f"sign collision: {len(sign_coll)} tris (single panel)")
+layers.append({'key': 'signcol', 'label': 'sign collision (kanban_a)',
+               'tris': sign_coll,
+               'color': [230,60,60], 'alpha': 0.35, 'border': '#e33', 'on': True})
 
 # ---- markers: the current cast rect (outline points) + origin ----
 def rect_points(x1, z1, x2, z2, y, per=40):
@@ -259,6 +265,7 @@ def rect_points(x1, z1, x2, z2, y, per=40):
 points = rect_points(*RECT, WATER_Y) + [[0, WATER_Y, 0]]
 point_labels = [
     [list(TRIG), f"trigger ({TRIG[0]:.0f},{TRIG[1]:.0f},{TRIG[2]:.0f}) r{TRIG_R:.0f}"],
+    [list(SIGN_POS), f"sign ({SIGN_POS[0]:.0f},{SIGN_POS[1]:.0f},{SIGN_POS[2]:.0f})"],
     [[RECT[0], WATER_Y, RECT[1]], f"rect ({RECT[0]:.0f},{RECT[1]:.0f})"],
     [[RECT[2], WATER_Y, RECT[3]], f"rect ({RECT[2]:.0f},{RECT[3]:.0f})"],
     [[0, WATER_Y, 0], "0,0"],
