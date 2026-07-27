@@ -26,6 +26,15 @@ namespace Dark_Cloud_Improved_Version
         const string MAPINFO    = "gedit/s04/mapinfo.cfg";
         const int    SIGN_X = 212, SIGN_Y = 9, SIGN_Z = -61, SIGN_RY = 0;
 
+        // Queens (e03): the sign 3 units SOUTH (+Z) of the fishing trigger (250,70,-70), facing NORTH (-Z, so
+        // ry 180 — opposite Brownboo's +Z-facing ry 0). e03 has no kanban part natively, so we clone the SAME
+        // s04a01 PTS header (self-contained; the e01b24 texture is already registered globally by the boot-cave)
+        // and inject the kanban mesh + placement into e03's own scene.scn / mapinfo.cfg.
+        const string E03_SCENE   = "gedit/e03/scene.scn";
+        const string E03_MAPINFO = "gedit/e03/mapinfo.cfg";
+        const string E03_ANCHOR  = "e03g04";   // an existing GROUND block to insert the kanban placement after
+        const int    QSIGN_X = 250, QSIGN_Y = 70, QSIGN_Z = -64, QSIGN_RY = 180;   // 6 units south (+Z) of the trigger
+
         // ELF boot-cave (register fishsign.img's e01b24 into 0x1c75870 at boot)
         const uint GetPackFile = 0x0013F720, EnterIMGFile = 0x00132BA0, LoadFile = 0x0013F360;
         const uint SysTexMgr = 0x01C75870, DETOUR_VA = 0x00180D7C, REJOIN_VA = 0x00180D84;
@@ -176,9 +185,17 @@ namespace Dark_Cloud_Improved_Version
             //    walls. Order matters: RemoveRingCornerTris keys off the upper rings' original `__n` names,
             //    and CullUpperCraterWalls renames those to `__s`, so removal must run before the cull rename.
             progress("Injecting the fishing-sign mesh …");
+            byte[] s04scene = ReadArchive(SCENE_SCN);
+            byte[] tmplHdr  = PartHeader(s04scene, "s04a01");   // the kanban PTS header, reused for e03 too
             Redirect(SCENE_SCN, CullBuildings(CullUpperCraterWalls(RemoveRingCornerTris(
-                                    BuildInjectedScene(ReadArchive(SCENE_SCN), kanbanMds)))));
-            Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY));
+                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr)))));
+            Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY, "s04a01"));
+
+            // Queens (e03): same kanban mesh + globally-registered e01b24 texture; no crater cleanup (that is
+            // Brownboo-only). Just add the part + its placement to e03's own scene / mapinfo.
+            // Queens' sign stands on walkable ground, so it also gets a `kanban_a` collision (post + board).
+            Redirect(E03_SCENE,   BuildInjectedScene(ReadArchive(E03_SCENE), kanbanMds, tmplHdr, BuildKanbanCollision()));
+            Redirect(E03_MAPINFO, BuildInjectedMapinfo(ReadArchive(E03_MAPINFO), QSIGN_X, QSIGN_Y, QSIGN_Z, QSIGN_RY, E03_ANCHOR, "kanban_a.mds"));
 
             // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
             //    installer always has dedicated room and never runs out on the town's tiny native spare pool
@@ -407,15 +424,81 @@ namespace Dark_Cloud_Improved_Version
         // ── scene.scn: append a `kanban` PTS part cloned from s04a01, + a 26th part-table entry ──
         static readonly int[] SIZE_FIELDS = { 0x4C, 0x50, 0x54, 0x78, 0x90, 0xA8, 0xC0, 0xD8 };
         const int MDSSIZE_FIELD = 0x58;
+        // LoadPTS (0x19f6f0) reads the `_a` collision variant's OFFSET at part+0x78 and its SIZE (gate) at
+        // part+0x7c; if size>0 it feeds part+offset to LoadCollisionFile -> CreateCollisionMDT.
+        const int COLL_OFF_FIELD = 0x78, COLL_SIZE_FIELD = 0x7C;
 
-        static byte[] BuildInjectedScene(byte[] scene, byte[] kanbanMds)
+        /// <summary>The kanban's collision: a single solid PANEL hugging the sign, as an MDS-wrapped COLLISION
+        /// MDT. This mirrors how Muska Lacka's native sign is collided (e04m01_a @ the kanban): one flat box
+        /// ~13 wide x ~3 thick x 16 tall spanning the whole sign, NOT thin post/board boxes (those were too
+        /// flimsy and let the player clip through). Verts are LOCAL — the mapinfo places/rotates them with the
+        /// sign, so they line up with the visual. Format reverse-engineered from CreateCollisionMDT
+        /// (0x127250) + LoadCollisionFile (0x126f70): MDT needs magic, +0x08 total size, +0x0C vert count,
+        /// +0x10 POS offset, +0x28 display-list offset, +0x38 colour block (0 = none); the DL has the triangle
+        /// count at +0x14 and 5-int32 records (v0,v1,v2,colour,pad) at +0x18; POS verts are x,y,z,1 at 0x10.</summary>
+        static byte[] BuildKanbanCollision()
+        {
+            var verts = new List<float[]>();
+            var tris  = new List<int[]>();
+            void Box(float x0, float x1, float y0, float y1, float z0, float z1)
+            {
+                int b = verts.Count;
+                verts.Add(new[]{x0,y0,z0}); verts.Add(new[]{x1,y0,z0}); verts.Add(new[]{x1,y0,z1}); verts.Add(new[]{x0,y0,z1});
+                verts.Add(new[]{x0,y1,z0}); verts.Add(new[]{x1,y1,z0}); verts.Add(new[]{x1,y1,z1}); verts.Add(new[]{x0,y1,z1});
+                int[][] f = { new[]{0,1,2}, new[]{0,2,3}, new[]{4,6,5}, new[]{4,7,6}, new[]{0,4,5}, new[]{0,5,1},
+                              new[]{3,2,6}, new[]{3,6,7}, new[]{0,3,7}, new[]{0,7,4}, new[]{1,5,6}, new[]{1,6,2} };
+                foreach (var t in f) tris.Add(new[]{ b+t[0], b+t[1], b+t[2] });   // winding is moot — collision is two-sided
+            }
+            // One solid panel over the whole sign (kanban local bbox is X[-6,6] Y[0,16] Z[0,2]); ~3 thick in Z
+            // and slightly over-wide, matching Muska Lacka's native ~13 x 3 x 16 sign collision.
+            Box(-6.5f, 6.5f, 0f, 16f, -1f, 2f);
+
+            int vc = verts.Count, tc = tris.Count;
+            int posOff = 0x40, dlOff = posOff + vc * 0x10, mdtLen = dlOff + 0x18 + tc * 0x14;
+            var mdt = new byte[mdtLen];
+            U32(mdt, 0x00, 0x0054444Du);            // 'MDT\0'
+            U32(mdt, 0x08, (uint)mdtLen);           // total size (memcpy in CreateCollisionMDT)
+            U32(mdt, 0x0C, (uint)vc);               // POS vertex count (CreateBBox)
+            U32(mdt, 0x10, (uint)posOff);           // POS offset
+            U32(mdt, 0x28, (uint)dlOff);            // display-list offset
+            U32(mdt, 0x38, 0);                      // colour block: none
+            for (int i = 0; i < vc; i++)
+            {
+                int o = posOff + i * 0x10;
+                Array.Copy(BitConverter.GetBytes(verts[i][0]), 0, mdt, o + 0, 4);
+                Array.Copy(BitConverter.GetBytes(verts[i][1]), 0, mdt, o + 4, 4);
+                Array.Copy(BitConverter.GetBytes(verts[i][2]), 0, mdt, o + 8, 4);
+                Array.Copy(BitConverter.GetBytes(1.0f),        0, mdt, o + 12, 4);
+            }
+            U32(mdt, dlOff + 0x14, (uint)tc);       // triangle count
+            for (int i = 0; i < tc; i++)
+            {
+                int o = dlOff + 0x18 + i * 0x14;
+                U32(mdt, o + 0, (uint)tris[i][0]); U32(mdt, o + 4, (uint)tris[i][1]); U32(mdt, o + 8, (uint)tris[i][2]);
+                // +0x0C colour index, +0x10 pad — left 0
+            }
+
+            // MDS wrapper: [0x10 header][0x70 node][MDT @ 0x80] — the node has an identity matrix + parent -1.
+            const int nodeOff = 0x10, mdtStart = 0x80;
+            var mds = new byte[mdtStart + mdt.Length];
+            U32(mds, 0x00, 0x0053444Du); U32(mds, 0x04, 1); U32(mds, 0x08, 1); U32(mds, 0x0C, 0x10);   // MDS,ver,nodeCount,tblOff
+            U32(mds, nodeOff + 0x04, 0x70);
+            byte[] nn = Encoding.Latin1.GetBytes("kanban_a");
+            Array.Copy(nn, 0, mds, nodeOff + 0x08, nn.Length);
+            U32(mds, nodeOff + 0x28, mdtStart);            // meshOff (MDS-relative) -> the collision MDT
+            U32(mds, nodeOff + 0x2C, 0xFFFFFFFFu);         // parent = -1
+            for (int i = 0; i < 4; i++) Array.Copy(BitConverter.GetBytes(1.0f), 0, mds, nodeOff + 0x30 + i * 0x14, 4);  // identity 4x4
+            Array.Copy(mdt, 0, mds, mdtStart, mdt.Length);
+            return mds;
+        }
+
+        /// <summary>Injects a `kanban` part into a scene.scn. <paramref name="templateHeader"/> is a 0x160-byte
+        /// PTS part header (carved from s04a01 with <see cref="PartHeader"/>) — self-contained, so the same one
+        /// is reused for Brownboo AND Queens.</summary>
+        static byte[] BuildInjectedScene(byte[] scene, byte[] kanbanMds, byte[] templateHeader, byte[] collisionMds = null)
         {
             var scn = new List<byte>(scene);
-            byte[] s = scene;
-            int n = (int)U32(s, 4);
-            int toff = -1;
-            for (int i = 0; i < n; i++) { int e = 0x10 + i * 0x30; if (NameAt(s, e, 0x10) == "s04a01") { toff = (int)U32(s, e + 0x10); break; } }
-            if (toff < 0) throw new IOException("template part s04a01 not found in scene.scn");
+            int n = (int)U32(scene, 4);
 
             var kb = (byte[])kanbanMds.Clone();
             const int NODE = 0x10, MAT = NODE + 0x30, TRANS = MAT + 12 * 4;      // node 0 matrix / translation row
@@ -424,14 +507,26 @@ namespace Dark_Cloud_Improved_Version
             for (int k = 0; k < 3; k++) Array.Copy(BitConverter.GetBytes(0.0f), 0, kb, TRANS + k * 4, 4);   // origin
 
             var part = new List<byte>();
-            part.AddRange(new ArraySegment<byte>(s, toff, 0x160));               // clone s04a01's 0x160 PTS header
+            part.AddRange(templateHeader);                                      // the reusable 0x160 PTS header
             byte[] pname = Encoding.Latin1.GetBytes("kanban_0.mds");
             for (int i = 0; i < 0x10; i++) part[0x08 + i] = i < pname.Length ? pname[i] : (byte)0;
             part.AddRange(kb);
+            int collOff = 0, collLen = 0;
+            if (collisionMds != null)
+            {
+                while ((part.Count & 0xF) != 0) part.Add(0);          // 16-align the collision block
+                collOff = part.Count; collLen = collisionMds.Length;
+                part.AddRange(collisionMds);
+            }
             int psize = part.Count;
             byte[] pa = part.ToArray();
             foreach (int o in SIZE_FIELDS) U32(pa, o, (uint)psize);
             U32(pa, MDSSIZE_FIELD, (uint)kb.Length);
+            if (collisionMds != null)
+            {
+                U32(pa, COLL_OFF_FIELD,  (uint)collOff);              // part+0x78: `_a` collision offset (overrides the SIZE_FIELDS write)
+                U32(pa, COLL_SIZE_FIELD, (uint)collLen);             // part+0x7c: its size — LoadPTS loads it only when > 0
+            }
 
             int blob = (int)Align(scn.Count, 16);
             while (scn.Count < blob) scn.Add(0);
@@ -612,17 +707,35 @@ namespace Dark_Cloud_Improved_Version
             throw new IOException($"MDT for '{node}' not resolved");
         }
 
-        static byte[] BuildInjectedMapinfo(byte[] cfg, int x, int y, int z, int ry)
+        static byte[] BuildInjectedMapinfo(byte[] cfg, int x, int y, int z, int ry, string anchorPart, string atari = "")
         {
             string t = Encoding.Latin1.GetString(cfg);
+            // Slot 5 (after name + level1/2/3 + one blank) is the `_a` (atari/collision) mesh — matches how
+            // native GROUND blocks reference e.g. "e03g04_a.mds".
             string blk = "\r\n\tGROUND\t\"kanban\",\t\t//fishing sign\r\n"
                        + "\t\t\"\",\t\t\t//level1\r\n\t\t\"\",\t\t\t//level2\r\n\t\t\"\",\t\t\t//level3\r\n"
-                       + "\t\t\"\",\t\t\t//\r\n\t\t\"\",\t\t\t//\r\n\t\t\"\",\t\t\t//\r\n\t\t\"\",\t\t\t//?\r\n"
+                       + "\t\t\"\",\t\t\t//\r\n\t\t\"" + atari + "\",\t\t\t//atari\r\n\t\t\"\",\t\t\t//\r\n\t\t\"\",\t\t\t//?\r\n"
                        + $"\t\t{x}\t,{y}\t,{z},\t//position\r\n\t\t0\t,{ry}\t,0\t//rotation\r\n";
-            var matches = Regex.Matches(t, "\\tGROUND\\t\"s04a01\",.*?\\r\\n\\t\\t-?\\d[^\\r\\n]*\\r\\n\\t\\t\\d[^\\r\\n]*,[^\\r\\n]*\\r\\n", RegexOptions.Singleline);
-            if (matches.Count == 0) throw new IOException("no GROUND s04a01 block found in mapinfo.cfg");
+            var matches = Regex.Matches(t, "\\tGROUND\\t\"" + Regex.Escape(anchorPart) + "\",.*?\\r\\n\\t\\t-?\\d[^\\r\\n]*\\r\\n\\t\\t\\d[^\\r\\n]*,[^\\r\\n]*\\r\\n", RegexOptions.Singleline);
+            if (matches.Count == 0) throw new IOException($"no GROUND {anchorPart} block found in mapinfo.cfg");
             int ins = matches[matches.Count - 1].Index + matches[matches.Count - 1].Length;
             return Encoding.Latin1.GetBytes(t.Substring(0, ins) + blk + t.Substring(ins));
+        }
+
+        /// <summary>Carve a part's 0x160-byte PTS header out of a scene.scn (used as the kanban template).</summary>
+        static byte[] PartHeader(byte[] scene, string partName)
+        {
+            int n = (int)U32(scene, 4);
+            for (int i = 0; i < n; i++)
+            {
+                int e = 0x10 + i * 0x30;
+                if (NameAt(scene, e, 0x10) == partName)
+                {
+                    int off = (int)U32(scene, e + 0x10);
+                    return new ArraySegment<byte>(scene, off, 0x160).ToArray();
+                }
+            }
+            throw new IOException($"template part {partName} not found in scene.scn");
         }
 
         static string NameAt(byte[] b, int o, int max) { int e = Array.IndexOf(b, (byte)0, o, max); if (e < 0) e = o + max; return Encoding.Latin1.GetString(b, o, e - o); }
