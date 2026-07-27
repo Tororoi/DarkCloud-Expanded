@@ -17,7 +17,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CatchBubbleDiag
     {
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;   // root cause found + fixed (talk-mes buffer overflow); off unless re-diagnosing
 
         // The town ClsMes family. The catch bubble draws into the town-talk ones (EditMes1/2); the fish name,
         // the X/Square/Hook prompt, and the mod's fishing menu are separate objects — watch them all so we see
