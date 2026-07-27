@@ -27,8 +27,9 @@ def _scndir(scn):
 
 
 def _ground_placements(cfg):
-    """[(subfile_name, pos[x,y,z], rot[x,y,z])] for each GROUND entry (position row then rotation row,
-    after the LOD-name string lines)."""
+    """[(subfile_name, pos[x,y,z], rot[x,y,z])] for each GROUND or WATER entry (position row then rotation
+    row, after the LOD-name string lines). WATER (canal/river meshes, e.g. Queens e03c*) uses the same
+    name+pos+rot layout as GROUND; towns without WATER entries are unaffected."""
     lines = cfg.splitlines()
     out, i = [], 0
 
@@ -43,10 +44,10 @@ def _ground_placements(cfg):
             return None
 
     while i < len(lines):
-        m = re.match(r'\s*GROUND\s+"([^"]+)"', lines[i])
+        m = re.match(r'\s*(?:GROUND|WATER)\s+"([^"]+)"', lines[i])
         if m:
             name, nums, j = m.group(1), [], i + 1
-            while j < len(lines) and not lines[j].strip().startswith('GROUND') and len(nums) < 2:
+            while j < len(lines) and not re.match(r'\s*(?:GROUND|WATER)\s+"', lines[j]) and len(nums) < 2:
                 r = numrow(lines[j])
                 if r and len(r) >= 3:
                     nums.append(r[:3])
@@ -137,7 +138,7 @@ def placed_meshes(scene_rel, mapinfo_rel):
             tris = _flatten(m)
             if not tris:
                 continue
-            out.append({'name': nn, 'inst': inst, 'verts': wv, 'tris': tris})
+            out.append({'name': nn, 'inst': inst, 'verts': wv, 'tris': tris, 'sub': name})
     return out
 
 

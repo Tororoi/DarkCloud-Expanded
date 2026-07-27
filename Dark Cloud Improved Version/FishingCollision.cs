@@ -43,7 +43,7 @@ namespace Dark_Cloud_Improved_Version
             // the ground-truth geometry the viewer splits into floor/slope/wall, so widening the rect can be
             // verified. Runs here (not in the probe) because CustomFishingSpot.Tick fires before the probe,
             // so by the time the probe dumps, the walls are already gone.
-            DumpFullGather(buf, nativeCount);
+            DumpFullGather(buf, nativeCount, mapNo);
 
             int keep = 0, walls = 0, ladtops = 0;
             for (int i = 0; i < nativeCount; i++)
@@ -130,18 +130,66 @@ namespace Dark_Cloud_Improved_Version
             Log($"   collision: appended {polys.Count} fabricated tris (cpoly {count} → {total})");
         }
 
+        // Fish array + collision-count layout: `Fish` (ptr) @0x202A2B58, `FishNum` @0x202A2B64; each CFish is
+        // 0x2410 bytes; SetCPoly__5CFishFP6CCPolyi (0x240470) stores the poly list @+0x2400 and the COUNT
+        // @+0x2404, which Step__5CFishFv (0x240480) reads to test movement against.
+        private const long FishPtr = 0x202A2B58, FishNumAddr = 0x202A2B64;
+        private const long FishStride = 0x2410, FishCPolyCount = 0x2404;
+
+        /// <summary>Re-point every live fish's cpoly COUNT at the current cpoly_num.
+        ///
+        /// _LOAD_FISHING_DATA copies the gathered polys into the global cpoly and _INIT_FISH hands each fish a
+        /// SNAPSHOT of the count (SetCPoly -> fish+0x2404) a few frames later — but BEFORE that our
+        /// AppendRockCollision has grown the buffer (45 -> 758). So the fish test only the original polys and
+        /// swim straight through the containment walls we appended at the TAIL. The list pointer they hold is
+        /// the same growing buffer, so only the count is stale: bump it and they test the whole buffer.
+        /// Runs every live frame (the fish appear a few frames after the append); cheap (&lt;=6 int writes,
+        /// and only when the value actually differs).</summary>
+        internal static void SyncFishCPolyCount()
+        {
+            uint fishBase = Memory.ReadUInt(FishPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(fishBase)) return;
+            int num = Memory.ReadInt(FishNumAddr);
+            if (num <= 0 || num > 6) return;
+            int count = Memory.ReadInt(FishingSpot.CPolyNum);
+            if (count <= 0 || count > FishingSpot.CPolyBufferMax) return;
+            long b = Memory.ToMmu(fishBase);
+            for (int i = 0; i < num; i++)
+            {
+                long fish = b + (long)i * FishStride;
+                if (Memory.ReadInt(fish + FishCPolyCount) != count)
+                    Memory.WriteIntFast(fish + FishCPolyCount, count);
+            }
+        }
+
         /// <summary>Where the FULL native gather (floors + walls, pre-removal) is written at the CURRENT cast
         /// rect, for the viewer (tools/brownboo_viewer.py) to split into floor/slope/wall. Overwrites the
         /// stale reference each capture, which is correct — the rect it reflects is whatever is live now.</summary>
         // Dev-only diagnostic; runs only when DC_DUMP_DIR is set (see .env.sample), else skipped — no fallback.
-        private static readonly string FullGatherCsv =
-            Environment.GetEnvironmentVariable("DC_DUMP_DIR") is string d ? Path.Combine(d, "vanilla_cpoly.csv") : null;
+        // Per-town path (game_data/<town>/vanilla_cpoly.csv, sibling of DC_DUMP_DIR) so each town's dump feeds
+        // its own viewer and towns don't clobber each other. DC_DUMP_DIR itself points at game_data/brownboo,
+        // so map 14 resolves to exactly the historical path.
+        private static string FullGatherCsvFor(int mapNo)
+        {
+            string town = mapNo switch { 2 => "queens", 14 => "brownboo", 23 => "yellowdrops", _ => null };
+            if (town == null) return null;
+            // Prefer DC_DUMP_DIR's parent (game_data) when the env var is set; otherwise derive game_data from
+            // the running assembly's location (bin/Debug/net8.0 -> repo root) so the dump works even when the
+            // mod is launched from an IDE that never sourced .env.
+            string dumpDir = Environment.GetEnvironmentVariable("DC_DUMP_DIR");
+            string gameData = !string.IsNullOrEmpty(dumpDir)
+                ? Path.GetDirectoryName(dumpDir.TrimEnd('/', '\\'))
+                : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "game_data"));
+            return Path.Combine(gameData, town, "vanilla_cpoly.csv");
+        }
 
         /// <summary>Dump every cpoly triangle (3 verts + normal) to a CSV. One line per triangle:
         /// v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz.</summary>
-        private static void DumpFullGather(long buf, int count)
+        private static void DumpFullGather(long buf, int count, int mapNo)
         {
-            if (!CustomFishingSpot.Diagnostics || FullGatherCsv == null) return;   // needs the debug flag AND a DC_DUMP_DIR path
+            if (!CustomFishingSpot.Diagnostics) { Log("   full-gather: Diagnostics off — skipping vanilla-cpoly dump"); return; }
+            string csv = FullGatherCsvFor(mapNo);
+            if (csv == null) { Log($"   full-gather: map {mapNo} has no dump folder — skipping"); return; }
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("v0x,v0y,v0z,v1x,v1y,v1z,v2x,v2y,v2z,nx,ny,nz");
             for (int i = 0; i < count; i++)
@@ -160,8 +208,9 @@ namespace Dark_Cloud_Improved_Version
             }
             try
             {
-                System.IO.File.WriteAllText(FullGatherCsv, sb.ToString());
-                Log($"   full-gather: wrote {count} polys (floors+walls) -> {FullGatherCsv}");
+                Directory.CreateDirectory(Path.GetDirectoryName(csv));
+                System.IO.File.WriteAllText(csv, sb.ToString());
+                Log($"   full-gather: wrote {count} polys (floors+walls) -> {csv}");
             }
             catch (Exception e)
             {
@@ -169,8 +218,11 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        private static string MeshCollisionFile(int mapNo) =>
-            Path.Combine(AppContext.BaseDirectory, "Resources", "FishingCollision", $"brownboo_{mapNo}.bin");
+        private static string MeshCollisionFile(int mapNo)
+        {
+            string town = mapNo switch { 2 => "queens", 14 => "brownboo", 23 => "yellowdrops", _ => "brownboo" };
+            return Path.Combine(AppContext.BaseDirectory, "Resources", "FishingCollision", $"{town}_{mapNo}.bin");
+        }
 
         /// <summary>Append the spot's EXACT mesh triangles (decoded offline from the town's visual mesh) to
         /// the poly list, each with a real plane normal so the hook/bobber rest on up-facing faces and the

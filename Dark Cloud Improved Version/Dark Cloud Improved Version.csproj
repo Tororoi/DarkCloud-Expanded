@@ -47,6 +47,12 @@
     <None Include="Resources\FishingCollision\brownboo_14.bin">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <!-- Queens fishing collision embeds ISO-derived bridge/pipe geometry, so it lives in the UNTRACKED
+         game_data/ tree (built by tools/export_queens_collision.py) and is Linked in, guarded by Exists(). -->
+    <None Include="..\game_data\queens\queens_2.bin" Condition="Exists('..\game_data\queens\queens_2.bin')">
+      <Link>Resources\FishingCollision\queens_2.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <!-- Extracted game assets from the UNTRACKED game_data/ folder. Guarded by Exists() so a clean checkout
          builds without them (these features degrade gracefully at runtime when the file is absent). Link
          keeps the output layout (Resources/Fish, Resources/Sign) so runtime load paths are unchanged. Never
