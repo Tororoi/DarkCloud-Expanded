@@ -117,10 +117,17 @@ namespace Dark_Cloud_Improved_Version
         // (poly cap + match test: game_data/docs/fishing-engine-re.md §fishing-load, §event-dispatch)
         private static readonly Spot[] Spots =
         {
-            // Queens: the canal (static WATER e03c01/c02/c08), surface at Y=31.
+            // Queens: the canal (static WATER e03c01/c02/c08), surface at Y=31. Trigger + fishing sign on the
+            // north bank at (250,70,-70) — bank collision Y=70 confirmed (georama_collision), water is just
+            // south (canal Z[-50,52]); stance faces +Z (south) across the canal. Radius 10 = tight "!" bubble.
+            // ⚠ RECT is 1140x250 (viewer-matched, spans both bridges). This is FAR over the ~200x200 the
+            // poly-gather (PickUpPoly, hard 1024 cap, no bounds check -> stack smash) is safe at. Watch the
+            // "FISHING SPOT LOADED" cpoly count (flip Diagnostics on); if it nears 1024, decouple — keep a
+            // small cast/gather rect here and move the big roam box to the FishX1..FishZ2 params.
             new Spot(2, "Queens canal", 6,      // area 6 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — 100% Bobo
-                     -100f, -40f, 100f, 40f, water: 31f, ground: 10f,
-                     tx: 0f, ty: 31f, tz: 0f, radius: 200f),
+                     -240f, -100f, 900f, 150f, water: 31f, ground: 10f,
+                     tx: 250f, ty: 70f, tz: -70f, radius: 10f,
+                     sx: 250f, sy: 70f, sz: -70f, facing: 0f),           // stance: face +Z (south) toward the water
 
             // Brownboo: the pond (static WATER s04w01). WATER_SURFACE centred on the origin, ±120, HEIGHT 0.
             // Stance at the +X edge facing the water: (74, 10, -20), yaw -1.639 — forward (-1.00, -0.07).
@@ -237,6 +244,24 @@ namespace Dark_Cloud_Improved_Version
             { 301, 302, 303, 304, 305, 306, 307, 310 };
 
         private static int _installedMap = -1;
+
+        // Location of the installed fishing bytecode, so CanalTide can re-bake just its water arg on a tide
+        // change (see RebuildFishingScript). 0 = not installed.
+        private static long _fishStb;
+        private static int _fishCodeOff, _fishEnd, _fishMenuCbRel;
+
+        /// <summary>Re-write ONLY the fishing bytecode in place so its baked water level picks up the current
+        /// tide (BuildFishingBytecode re-reads <see cref="CanalTide.QueensWaterLevel"/>). Skips itself during a
+        /// live session (never rewrite a running script) and if the town's stb has moved (a rebuild — the
+        /// install path handles that). Queens only; no labels or event points are touched.</summary>
+        internal static void RebuildFishingScript()
+        {
+            if (_installedMap != CanalTide.QueensMapNo || _fishStb == 0 || InFishingWindow) return;
+            long stb = TownScript.Base();
+            if (stb == 0 || stb != _fishStb) return;
+            WriteScript(stb, _fishCodeOff, _fishEnd, BuildFishingBytecode(_spot, _fishMenuCbRel),
+                        "re-bake fishing water level for the current tide");
+        }
         private static int _lastSeenMap = int.MinValue;
         private static int _settleTicks;
 
@@ -415,6 +440,7 @@ namespace Dark_Cloud_Improved_Version
         private static void ResetInstallState()
         {
             _installedMap = -1;
+            _fishStb = 0;
             _slot = -1;
             _slotAddr = 0;
             _fishingWasLive = false;
@@ -521,6 +547,10 @@ namespace Dark_Cloud_Improved_Version
             WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, menuCbRel),
                         $"_LOAD_MAIN_CHARA({FishingModel}) + _LOAD_FISHING_DATA(area={spot.AreaId}, " +
                         $"water={spot.Water}) + stance + bait + fishing");
+            // remember exactly where the fishing bytecode lives so the CanalTide tide change can re-bake just
+            // its water arg (BuildFishingBytecode re-reads CanalTide.QueensWaterLevel) without touching the
+            // labels or the event point.
+            _fishStb = stb; _fishCodeOff = codeOff; _fishEnd = end; _fishMenuCbRel = menuCbRel;
 
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingExitLabel, BuildExitBytecode(spot, menuCbRel),
                                $"restore {NormalModel} + re-place player + _EXIT_FISHING   [Circle = leave]");
@@ -1345,7 +1375,11 @@ namespace Dark_Cloud_Improved_Version
             w.PushFloat(s.Z1);
             w.PushFloat(s.X2);
             w.PushFloat(s.Z2);
-            w.PushFloat(s.Water);
+            // Queens: the canal water level follows the day/night clock (CanalTide); everywhere else it is the
+            // spot's fixed height. Fish seed at WaterLevel-depth and the bobber rides it, so this shifts the
+            // whole session up/down with the tide.
+            float water = s.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : s.Water;
+            w.PushFloat(water);
             w.PushFloat(s.Ground);
             w.Ext(8);                                 // 1 command id + 7 arguments
 
@@ -1744,18 +1778,28 @@ namespace Dark_Cloud_Improved_Version
             // from the loader (IsoPatcher.PatchFishingLoadFish bakes dedicated areas 5/6/7 into FishingLoadFish),
             // so there's no mod-side re-species and no race — nothing to do here for species. Depth still waits
             // for the fish: the window goes live (cpoly/water) a few frames before _INIT_FISH places them.
-            if (!live) { _shallowFishApplied = false; }
-            else if (!_shallowFishApplied && _spot.HasFishDepth)
+            if (!live) { _shallowFishApplied = false; _fishCPolySynced = false; }
+            else
             {
                 uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
-                if (Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0)
+                bool fishPlaced = Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0;
+
+                if (fishPlaced && !_shallowFishApplied && _spot.HasFishDepth)
                 { ApplyShallowFishDepth(_spot); _shallowFishApplied = true; }
+
+                // Fish freeze their cpoly COUNT at _INIT_FISH — BEFORE our one-shot append grew the buffer, so
+                // the appended containment walls fall past that count and fish swim through them. The moment the
+                // fish exist (count is set), re-point it at the live cpoly_num ONCE; the append has already run
+                // this same Tick (block above), and nothing rewrites the count afterwards, so no per-frame pin.
+                if (fishPlaced && !_fishCPolySynced)
+                { FishingCollision.SyncFishCPolyCount(); _fishCPolySynced = true; }
             }
             _fishingWasLive = live;
         }
 
         private static bool _fishingWasLive;
         private static bool _shallowFishApplied;   // one-shot per session: fish moved to WaterLevel-FishDepth
+        private static bool _fishCPolySynced;      // one-shot per session: fish cpoly count re-pointed at live cpoly_num
         private static bool _anyFishingSeen;       // set once any fishing session opens (FishLineStep is now JIT'd/hot)
 
         /// <summary>

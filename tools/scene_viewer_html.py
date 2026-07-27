@@ -18,8 +18,74 @@ build_html(title, layers, node_labels=..., points=..., point_labels=..., coord_n
 import json
 
 
+# Georama editor module (injected into the shared renderer when build_html(georama=...) is given). Parts
+# render THROUGH the z-buffer with the scene; click a palette part to pick up, click a platform to place,
+# drag a placed part to move it, R=rotate, Del=delete, Esc=drop. Uses the renderer's rot()/W/H/zoom/draw.
+_GEORAMA_JS = r'''const GEO=D.georama;
+let gpl=[],gHeld=null,gRot=0,gSel=-1,gMove=-1,gCur=null,gShowColl=false,gShowParts=true;const gUsed=new Set();
+const GF=()=>Math.min(W,H)*0.5*zoom/300;
+function gFp(n,r){const p=GEO.parts[n];return (r&1)?[p.fd,p.fw]:[p.fw,p.fd];}
+function gXform(tris,X,Y,Z,r){const a=r*Math.PI/2,ca=Math.cos(a),sa=Math.sin(a),o=[];
+ for(const t of tris){const nt=[];for(const p of t){const x=p[0],z=p[2];nt.push([x*ca-z*sa+X,p[1]+Y,x*sa+z*ca+Z]);}o.push(nt);}return o;}
+function gCellC(reg,cx,cz,fw,fd){const R=GEO.regions[reg];return [R.x0+(cx+fw/2)*GEO.cell,R.y,R.z0+(cz+fd/2)*GEO.cell];}
+function gPush(all,tri,c,a){const r=[rot(tri[0]),rot(tri[1]),rot(tri[2])];
+ const nz=(r[1][0]-r[0][0])*(r[2][1]-r[0][1])-(r[1][1]-r[0][1])*(r[2][0]-r[0][0]);
+ const nx=(r[1][1]-r[0][1])*(r[2][2]-r[0][2])-(r[1][2]-r[0][2])*(r[2][1]-r[0][1]);
+ const ny=(r[1][2]-r[0][2])*(r[2][0]-r[0][0])-(r[1][0]-r[0][0])*(r[2][2]-r[0][2]);
+ const nl=Math.hypot(nx,ny,nz)||1;
+ all.push({k:'t',g:1,r,c,a,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nl)});}
+function gAddTris(all){
+ for(const rd of GEO.roads){const y=rd.y+0.5,q=[[rd.x-50,y,rd.z-50],[rd.x+50,y,rd.z-50],[rd.x+50,y,rd.z+50],[rd.x-50,y,rd.z+50]];
+  gPush(all,[q[0],q[1],q[2]],[100,100,120],1);gPush(all,[q[0],q[2],q[3]],[100,100,120],1);}
+ if(gShowParts)gpl.forEach((o,i)=>{const wt=gXform(GEO.parts[o.name].tris,o.x,o.y,o.z,o.rot),k=GEO.parts[o.name].kind,
+   col=i===gSel?[120,230,150]:(k==='tree'?[90,170,110]:[200,165,120]);for(const t of wt)gPush(all,t,col,1);});
+ if(gShowColl)gpl.forEach(o=>{const ct=GEO.parts[o.name].ctris;if(ct){const wt=gXform(ct,o.x,o.y,o.z,o.rot);
+   for(const t of wt)gPush(all,t,[230,20,20],1);}});
+ if(gHeld&&gCur){const fp=gFp(gHeld,gRot),ct=gCellC(gCur.reg,gCur.cx,gCur.cz,fp[0],fp[1]),wt=gXform(GEO.parts[gHeld].tris,ct[0],ct[1],ct[2],gRot),
+   col=GEO.parts[gHeld].kind==='tree'?[150,230,160]:[255,210,150];for(const t of wt)gPush(all,t,col,0.55);}}
+function gPick(mx,my){const f=GF(),rx=(mx-W/2)/f,ry=-(my-H/2)/f,cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch),cp=Math.cos(pitch);
+ if(Math.abs(sp)<0.05)return null;
+ for(const R of GEO.regions){const z1=(R.y*cp-ry)/sp,wx=rx*cyw+z1*syw,wz=-rx*syw+z1*cyw;
+  const cX=Math.floor((wx-R.x0)/GEO.cell),cZ=Math.floor((wz-R.z0)/GEO.cell);
+  if(cX>=0&&cX<R.nx&&cZ>=0&&cZ<R.nz)return {reg:R.id,cx:cX,cz:cZ,wx,wz};}return null;}
+function gPickPart(mx,my){const pk=gPick(mx,my);if(!pk)return -1;let b=1e9,s=-1;
+ gpl.forEach((o,i)=>{const dx=o.x-pk.wx,dz=o.z-pk.wz,d=dx*dx+dz*dz;if(d<b&&d<14000){b=d;s=i;}});return s;}
+function gMoveTo(mx,my){const pk=gPick(mx,my);if(!pk||gMove<0)return;const o=gpl[gMove],fp=gFp(o.name,o.rot),R=GEO.regions[pk.reg];
+ const cx0=Math.max(0,Math.min(pk.cx,R.nx-fp[0])),cz0=Math.max(0,Math.min(pk.cz,R.nz-fp[1])),ct=gCellC(pk.reg,cx0,cz0,fp[0],fp[1]);
+ o.x=ct[0];o.y=ct[1];o.z=ct[2];gUpd();}
+function gPlace(mx,my){const pk=gPick(mx,my);if(!pk)return;const fp=gFp(gHeld,gRot),R=GEO.regions[pk.reg];
+ const cx0=Math.max(0,Math.min(pk.cx,R.nx-fp[0])),cz0=Math.max(0,Math.min(pk.cz,R.nz-fp[1])),ct=gCellC(pk.reg,cx0,cz0,fp[0],fp[1]);
+ gpl.push({name:gHeld,x:ct[0],y:ct[1],z:ct[2],rot:gRot});if(GEO.parts[gHeld].kind==='bldg'){gUsed.add(gHeld);gSetHeld(null);}gUpd();gPalRefresh();draw();}
+function gOverlay(f){cx.lineWidth=0.5;cx.font='11px monospace';const P=p=>{const r=rot(p);return [W/2+r[0]*f,H/2-r[1]*f];};
+ for(const R of GEO.regions){cx.strokeStyle='rgba(90,150,170,0.45)';cx.beginPath();
+  for(let i=0;i<=R.nx;i++){const a=P([R.x0+i*GEO.cell,R.y,R.z0]),b=P([R.x0+i*GEO.cell,R.y,R.z0+R.nz*GEO.cell]);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}
+  for(let j=0;j<=R.nz;j++){const a=P([R.x0,R.y,R.z0+j*GEO.cell]),b=P([R.x0+R.nx*GEO.cell,R.y,R.z0+j*GEO.cell]);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}
+  cx.stroke();const c=P([R.x0,R.y,R.z0]);cx.fillStyle='#8bd';cx.fillText('reg '+R.id+' y='+R.y,c[0]+3,c[1]-3);}
+ if(gCur){const R=GEO.regions[gCur.reg],fp=gHeld?gFp(gHeld,gRot):[1,1],x=R.x0+gCur.cx*GEO.cell,z=R.z0+gCur.cz*GEO.cell,y=R.y;
+  const cc=[[x,y,z],[x+fp[0]*GEO.cell,y,z],[x+fp[0]*GEO.cell,y,z+fp[1]*GEO.cell],[x,y,z+fp[1]*GEO.cell]].map(P);
+  cx.strokeStyle=gHeld?'#6ee7b7':'#8ac';cx.lineWidth=2;cx.beginPath();cx.moveTo(cc[0][0],cc[0][1]);for(let k=1;k<4;k++)cx.lineTo(cc[k][0],cc[k][1]);cx.closePath();cx.stroke();}}
+function gUpd(){document.getElementById('gpc').textContent=gpl.length;
+ document.getElementById('gout').value=gpl.map(o=>o.name+' ('+Math.round(o.x)+','+Math.round(o.z)+') y'+o.y+' r'+o.rot).join(String.fromCharCode(10));}
+function gPalRefresh(){for(const b of document.querySelectorAll('.gpb')){b.classList.toggle('sel',b.dataset.p===gHeld);
+  b.classList.toggle('used',b.dataset.k==='bldg'&&gUsed.has(b.dataset.p)&&b.dataset.p!==gHeld);}}
+function gSetHeld(n){if(n&&GEO.parts[n].kind==='bldg'&&gUsed.has(n))return;gHeld=n;gSel=-1;
+ document.getElementById('gheld').textContent=n||'none';gPalRefresh();draw();}
+function gDefault(){gpl=GEO.default.map(o=>Object.assign({},o));gUsed.clear();
+ for(const o of gpl)if(GEO.parts[o.name]&&GEO.parts[o.name].kind==='bldg')gUsed.add(o.name);gSel=-1;gUpd();gPalRefresh();draw();}
+for(const b of document.querySelectorAll('.gpb'))b.onclick=()=>gSetHeld(b.dataset.p);
+document.getElementById('gparts').onchange=e=>{gShowParts=e.target.checked;draw();};
+document.getElementById('gcoll').onchange=e=>{gShowColl=e.target.checked;draw();};
+document.getElementById('greset').onclick=gDefault;
+document.getElementById('gclear').onclick=()=>{gpl=[];gUsed.clear();gSel=-1;gUpd();gPalRefresh();draw();};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+ if(k==='r'){if(gHeld)gRot=(gRot+1)&3;else if(gSel>=0){gpl[gSel].rot=(gpl[gSel].rot+1)&3;gUpd();}draw();}
+ else if(k==='escape')gSetHeld(null);
+ else if(k==='delete'||k==='backspace'){if(gSel>=0){const o=gpl[gSel];if(GEO.parts[o.name]&&GEO.parts[o.name].kind==='bldg')gUsed.delete(o.name);gpl.splice(gSel,1);gSel=-1;gUpd();gPalRefresh();draw();}}});
+gDefault();'''
+
+
 def build_html(title, layers, node_labels=None, points=None, point_labels=None,
-               points_label="markers + coords", coord_note="water y=0"):
+               points_label="markers + coords", coord_note="water y=0", points_on=True, georama=None):
     node_labels = node_labels or []
     points = points or []
     point_labels = point_labels or []
@@ -28,7 +94,39 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
     D = {'nodelabels': node_labels, 'points': points, 'plabels': point_labels}
     for L in layers:
         D[L['key']] = L['tris']
+    if georama is not None:
+        D['georama'] = georama       # {parts:{name:{tris,kind,fw,fd}}, regions:[...], default:[...], roads:[...], cell}
     js = json.dumps(D, separators=(',', ':'))
+
+    # ---- optional georama editor: parts palette + placement/move, rendered THROUGH the z-buffer ----
+    if georama is not None:
+        def gpal_group(kind, title):
+            items = "".join(
+                f'<button class="gpb" data-p="{nm}" data-k="{kind}">{nm[3:]} '
+                f'<span>{georama["parts"][nm]["fw"]}x{georama["parts"][nm]["fd"]}</span></button>'
+                for nm in sorted(georama['parts']) if georama['parts'][nm]['kind'] == kind)
+            return f'<div class="gpt">{title}</div>{items}' if items else ''
+        gpalette = ('<style>.gpb{margin:1px;font-size:10px;background:#1b2330;color:#cde;border:1px solid #345;'
+                    'border-radius:3px;cursor:pointer}.gpb span{color:#789}.gpb.sel{background:#2b6;color:#032}'
+                    '.gpb.used{opacity:.35}.gpt{color:#9ab;margin:5px 0 2px;font-size:10px;font-weight:bold}</style>'
+                    '<div style="position:fixed;top:118px;right:8px;width:180px;font-size:11px;background:rgba(13,17,23,.93);'
+                    'padding:8px 10px;border-radius:6px;max-height:calc(96vh - 118px);overflow:auto;user-select:none">'
+                    '<b>Georama parts</b><br><span style="color:#888">click=pick up &middot; drag a placed part=move<br>'
+                    'R=rotate Del=delete Esc=drop</span>'
+                    + gpal_group('bldg', 'Buildings (once)') + gpal_group('road', 'Roads') + gpal_group('tree', 'Trees')
+                    + '<div style="margin-top:6px;border-top:1px solid #444;padding-top:4px">held: '
+                    '<b id="gheld" style="color:#6ee7b7">none</b><br>'
+                    '<label style="color:#cde;cursor:pointer"><input type="checkbox" id="gparts" checked '
+                    'style="vertical-align:middle"> show parts</label><br>'
+                    '<label style="color:#f7787f;cursor:pointer"><input type="checkbox" id="gcoll" '
+                    'style="vertical-align:middle"> part collision (_a)</label><br>'
+                    '<button id="greset">reset to default</button> <button id="gclear">clear</button><br>'
+                    'placed: <b id="gpc">0</b></div>'
+                    '<textarea id="gout" readonly style="width:100%;height:90px;margin-top:5px;background:#0d1117;'
+                    'color:#6ee7b7;border:1px solid #333;border-radius:4px;font-size:10px;box-sizing:border-box"></textarea></div>')
+        georama_js = _GEORAMA_JS
+    else:
+        gpalette, georama_js = '', 'const GEO=null;'
 
     cnt = {f"t_{L['key']}": len(L['tris']) for L in layers}
     cnt_js = json.dumps(cnt, separators=(',', ':'))
@@ -38,7 +136,7 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
         f'<span style="color:{L["border"]}">{L["label"]}</span> '
         f'<span style="color:#777">({len(L["tris"])})</span></label><br>'
         for L in layers)
-    checks += (f'<label><input type=checkbox id=t_points checked> '
+    checks += (f'<label><input type=checkbox id=t_points {"checked" if points_on else ""}> '
                f'<span style="color:#f4a">{points_label}</span> '
                f'<span style="color:#777">({len(points)} pts)</span></label><br>')
     checks += '<label><input type=checkbox id=t_steep> <span style="color:#ff2db4">steep &amp; above-water (highlight)</span></label><br>'
@@ -58,6 +156,7 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
 <div style="position:fixed;top:8px;left:8px;font-size:11px;line-height:1.5;background:rgba(13,17,23,.85);padding:8px 10px;border-radius:6px;user-select:none;max-height:96vh;overflow:auto">
 <b>TITLE</b><br><span style="color:#888">drag=rotate scroll=zoom &middot; compass: N=-Z E=+X</span><br>
 CHECKS<div id="err" style="color:#f66"></div></div></div>
+GPALETTE
 <div id="coord" style="position:fixed;bottom:10px;left:10px;font-size:16px;font-weight:bold;background:rgba(13,17,23,.92);padding:7px 14px;border-radius:6px;color:#6ee7b7;user-select:none">move cursor over the surface for coordinates</div>
 <div style="position:fixed;bottom:10px;right:10px;width:300px;font-size:11px;background:rgba(13,17,23,.94);padding:8px 10px;border-radius:6px">
 <b>Selected polys: <span id="selcount" style="color:#f44">0</span></b>
@@ -100,6 +199,7 @@ function draw(){
    all.push({k:'t',r,c,a,w:tri,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
  }}
  if(on('t_points')) for(const p of D.points){const r=rot(p);all.push({k:'p',r,depth:r[2]});}
+ if(GEO)gAddTris(all);   // georama parts render THROUGH the z-buffer with the scene
  all.sort((p,q)=>p.depth-q.depth);
  const rfill=on('r_fill'), rwire=on('r_wire'), rcull=on('r_cull'), rlabels=on('r_labels');
  PICK=[];
@@ -111,13 +211,14 @@ function draw(){
   const pts=o.r.map(p=>[W/2+p[0]*f,H/2-p[1]*f]);
   const area=(pts[1][0]-pts[0][0])*(pts[2][1]-pts[0][1])-(pts[1][1]-pts[0][1])*(pts[2][0]-pts[0][0]);
   if(rcull && area>=0) continue;
-  PICK.push({pts,depth:o.depth,w:o.w});
+  if(!o.g) PICK.push({pts,depth:o.depth,w:o.w});   // georama parts (g) are not collision-pickable
   if(rwire){ cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);cx.lineTo(pts[1][0],pts[1][1]);cx.lineTo(pts[2][0],pts[2][1]);cx.closePath();
    cx.strokeStyle='rgba('+o.c[0]+','+o.c[1]+','+o.c[2]+',0.9)';cx.lineWidth=0.6;cx.stroke(); }
  }
  drawSelected(f);
  if(rlabels) drawNodeLabels(f);
  if(on('t_points')) drawLabels();
+ if(GEO)gOverlay(f);
  drawCompass();
 }
 // ---- software z-buffer fill (correct occlusion for interpenetrating models) ----
@@ -233,13 +334,22 @@ function drawCompass(){
  }
  cx.restore();
 }
+GEORAMA_JS
 draw();
 let drag=false,px,py,downX,downY,downShift,moved=false;
-cv.addEventListener('pointerdown',e=>{drag=true;FASTDRAW=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
-addEventListener('pointerup',e=>{drag=false;FASTDRAW=false;cv.style.cursor='grab';
+cv.addEventListener('pointerdown',e=>{
+ if(GEO&&!gHeld){const rr=cv.getBoundingClientRect(),gm=gPickPart(e.clientX-rr.left,e.clientY-rr.top);
+   if(gm>=0){gMove=gm;gSel=gm;FASTDRAW=true;draw();return;}}   // grab a placed part to move it
+ drag=true;FASTDRAW=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
+addEventListener('pointerup',e=>{
+ if(GEO&&gMove>=0){gMove=-1;FASTDRAW=false;draw();return;}
+ if(GEO&&gHeld){const rr=cv.getBoundingClientRect();gPlace(e.clientX-rr.left,e.clientY-rr.top);return;}
+ drag=false;FASTDRAW=false;cv.style.cursor='grab';
  if(!moved){const r=cv.getBoundingClientRect();pickAt(e.clientX-r.left,e.clientY-r.top,downShift);}
  else draw();});   // re-render the settled view with the z-buffer after a drag
-addEventListener('pointermove',e=>{if(!drag)return;
+addEventListener('pointermove',e=>{
+ if(GEO&&gMove>=0){const rr=cv.getBoundingClientRect();gMoveTo(e.clientX-rr.left,e.clientY-rr.top);draw();return;}
+ if(!drag)return;
  if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;
  yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
 document.getElementById('selclear').onclick=()=>{SELECTED=[];updateSel();draw();};
@@ -251,6 +361,7 @@ cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;FAST
 const coordEl=document.getElementById('coord');
 cv.addEventListener('pointermove',e=>{
  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+ if(GEO){const pk=gPick(mx,my);gCur=pk;if(gHeld&&!drag)draw();}
  const f=Math.min(W,H)*0.5*zoom/300,rx=(mx-W/2)/f,ry=-(my-H/2)/f;
  const cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch);
  if(Math.abs(sp)<0.08){coordEl.textContent='tilt the view down to read coords';return;}
@@ -262,7 +373,8 @@ updateTotal();
 }catch(e){document.getElementById('err').textContent='ERR: '+e.message;}</script>'''
 
     return (html.replace('TITLE', title).replace('CHECKS', checks).replace('PUSHES', pushes)
-            .replace('JSON_DATA', js).replace('CNT_DATA', cnt_js)
+            .replace('JSON_DATA', js).replace('CNT_DATA', cnt_js).replace('GPALETTE', gpalette)
+            .replace('GEORAMA_JS', georama_js)
             .replace('COORDY', repr(float(_coord_y(coord_note)))).replace('COORDNOTE', coord_note))
 
 

@@ -12,6 +12,7 @@ Run: python3 tools/brownboo_viewer.py   ->  tools/brownboo_viewer.html (+ .json)
 import os, struct, re, sys, math, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_scene_mesh import load_scene, parse_mds, read_verts, read_tris, xform, extract_mesh
+from scene_viewer_html import build_html
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # The generated viewer embeds game scene geometry -> untracked game_data/brownboo/ (never committed).
@@ -646,7 +647,6 @@ D = {'visual': visual, 'col_rocks': col_rocks, 'col_stilts': col_stilts, 'col_pl
      'grid_bottom': grid_bottom, 'grid_land': grid_land,
      'fishbox': fishbox, 'fishlabels': fishlabels, 'fishpoint': fishpoint, 'sign': sign_mesh,
      'nodelabels': nodelabels}
-js = json.dumps(D, separators=(',', ':'))   # embedded directly in the self-contained HTML
 LAY = [
     ('foamouter','foam: outer shore','D.visual.foam_outer','[120,175,205]',0.6,'#adf'),
     ('foamobj','foam: interior (stilts/plants)','D.visual.foam_obj','[80,105,125]',0.5,'#7ab'),
@@ -681,198 +681,19 @@ LAY = [
 ]
 # vanilla layers ON by default (seeing the native collision is the point); mod-collision drafts + clutter OFF
 _on = ("vfloor", "vmid", "sign", "fishpoint")   # vanilla floor/slope + the sign mesh + trigger on by default
-def layer_count(src):
+# ---- render via the shared scene viewer (tools/scene_viewer_html.py): z-buffer occlusion, layer
+# toggles, node labels, cursor->world coord readout, poly picking. LAY colours are JSON list-literal
+# strings (they were embedded into JS) -> parse them back to lists here. ----
+def _resolve(ref):
     obj = D
-    for p in src.split('.')[1:]: obj = obj[p]
-    return len(obj)
-_cnt = {f"t_{i}": layer_count(src) for i, lb, src, c, a, lc in LAY}   # poly (triangle) count per layer
-checks = "".join(
-    f'<label><input type=checkbox id=t_{i} {"checked" if i in _on else ""}> '
-    f'<span style="color:{lc}">{lb}</span> <span style="color:#777">({_cnt[f"t_{i}"]})</span></label><br>'
-    for i, lb, src, c, a, lc in LAY)
-# fishrect is special: a hot-pink 3D point-grid box + coordinate labels (POINTS, not polys), handled in
-# draw() not as a layer — shown with a point count and excluded from the poly total.
-checks += (f'<label><input type=checkbox id=t_fishrect> <span style="color:#f4a">fishing box + coords</span> '
-           f'<span style="color:#777">({len(D["fishbox"])} pts)</span></label><br>')
-# overlay (not a layer): recolour any VISIBLE poly the bobber can't land on (|normal.Y| <= 0.2, too steep)
-# that also sits above the water — the pass-through spots — bright pink, whatever layer it belongs to.
-checks += '<label><input type=checkbox id=t_steep> <span style="color:#ff2db4">steep &amp; above-water (highlight)</span></label><br>'
-# global render options (not layers): fill / wireframe / backface-cull / node labels+borders.
-checks += ('<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">'
-           '<label><input type=checkbox id=r_fill checked> fill</label> '
-           '<label><input type=checkbox id=r_wire> wireframe</label> '
-           '<label><input type=checkbox id=r_cull> backface cull</label><br>'
-           '<label><input type=checkbox id=r_labels> node labels + borders</label></div>')
-checks += '<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">selected: <b id="tot" style="color:#fff">0</b> polys</div>'
-cnt_js = json.dumps(_cnt, separators=(',', ':'))
-pushes = "".join(f"if(on('t_{i}')&&{src}) L.push({{t:{src},c:{c},a:{a}}});\n" for i, lb, src, c, a, lc in LAY)
-html = '''<div style="margin:0;background:#0d1117;color:#ddd;font-family:monospace;overflow:hidden">
-<canvas id="c" style="display:block;cursor:grab;touch-action:none"></canvas>
-<div style="position:fixed;top:8px;left:8px;font-size:11px;line-height:1.5;background:rgba(13,17,23,.85);padding:8px 10px;border-radius:6px;user-select:none">
-<b>Brownboo COMPLETE</b><br><span style="color:#888">drag=rotate scroll=zoom &middot; compass: N=-Z E=+X</span><br>
-CHECKS<div id="err" style="color:#f66"></div></div></div>
-<div id="coord" style="position:fixed;bottom:10px;left:10px;font-size:16px;font-weight:bold;background:rgba(13,17,23,.92);padding:7px 14px;border-radius:6px;color:#6ee7b7;user-select:none">move cursor over the water for coordinates</div>
-<div style="position:fixed;bottom:10px;right:10px;width:300px;font-size:11px;background:rgba(13,17,23,.94);padding:8px 10px;border-radius:6px">
-<b>Selected polys: <span id="selcount" style="color:#f44">0</span></b>
-<button id="selclear" style="float:right;font-size:10px">clear</button><br>
-<span style="color:#888">click a poly to select (red) &middot; shift+click to add/remove</span>
-<textarea id="sellist" readonly spellcheck="false" placeholder="clicked polys appear here: x0,y0,z0, x1,y1,z1, x2,y2,z2 (one triangle per line)" style="width:100%;height:130px;margin-top:5px;background:#0d1117;color:#6ee7b7;border:1px solid #333;border-radius:4px;font-family:monospace;font-size:10px;box-sizing:border-box"></textarea>
-</div>
-<script>try{
-const D=JSON_DATA;
-const CNT=CNT_DATA;
-function updateTotal(){let s=0;for(const k in CNT){const e=document.getElementById(k);if(e&&e.checked)s+=CNT[k];}const t=document.getElementById('tot');if(t)t.textContent=s;}
-const cv=document.getElementById('c'),cx=cv.getContext('2d');
-let W,H;function resize(){W=cv.width=innerWidth||900;H=cv.height=innerHeight||700;}resize();addEventListener('resize',()=>{resize();draw();});
-let yaw=0.6,pitch=0.55,zoom=1.5;   // +pitch = camera ABOVE the model, looking down
-const WATER=0, STEEP_NY=0.2;   // bobber lands on |normal.Y|>0.2; <=0.2 is too steep to collide
-const on=id=>document.getElementById(id).checked;
-function layers(){const L=[];
-PUSHES
-return L;}
-function rot(p){let x=p[0],y=p[1],z=p[2];let cy=Math.cos(yaw),sy=Math.sin(yaw);let x1=x*cy-z*sy,z1=x*sy+z*cy;
- let cp=Math.cos(pitch),sp=Math.sin(pitch);let y1=y*cp-z1*sp,z2=y*sp+z1*cp;return [x1,y1,z2];}
-function draw(){
- cx.fillStyle='#0d1117';cx.fillRect(0,0,W,H);
- const f=Math.min(W,H)*0.5*zoom/300, all=[];
- const steep=on('t_steep');
- for(const L of layers()){ if(!L.t) continue; for(const tri of L.t){
-   const r=[rot(tri[0]),rot(tri[1]),rot(tri[2])];
-   const nz=(r[1][0]-r[0][0])*(r[2][1]-r[0][1])-(r[1][1]-r[0][1])*(r[2][0]-r[0][0]);
-   const nx=(r[1][1]-r[0][1])*(r[2][2]-r[0][2])-(r[1][2]-r[0][2])*(r[2][1]-r[0][1]);
-   const ny=(r[1][2]-r[0][2])*(r[2][0]-r[0][0])-(r[1][0]-r[0][0])*(r[2][2]-r[0][2]);
-   const nlen=Math.hypot(nx,ny,nz)||1;
-   let c=L.c,a=L.a;
-   if(steep){
-     // WORLD-space normal (not the rotated one) decides slope; centroid decides above-water
-     const wnx=(tri[1][1]-tri[0][1])*(tri[2][2]-tri[0][2])-(tri[1][2]-tri[0][2])*(tri[2][1]-tri[0][1]);
-     const wny=(tri[1][2]-tri[0][2])*(tri[2][0]-tri[0][0])-(tri[1][0]-tri[0][0])*(tri[2][2]-tri[0][2]);
-     const wnz=(tri[1][0]-tri[0][0])*(tri[2][1]-tri[0][1])-(tri[1][1]-tri[0][1])*(tri[2][0]-tri[0][0]);
-     const wl=Math.hypot(wnx,wny,wnz)||1, cy=(tri[0][1]+tri[1][1]+tri[2][1])/3;
-     if(Math.abs(wny)/wl<=STEEP_NY && cy>WATER){ c=[255,45,180]; a=1; }
-   }
-   all.push({k:'t',r,c,a,w:tri,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
- }}
- if(on('t_fishrect')) for(const p of D.fishbox){const r=rot(p);all.push({k:'p',r,depth:r[2]});}
- all.sort((p,q)=>p.depth-q.depth);
- const rfill=on('r_fill'), rwire=on('r_wire'), rcull=on('r_cull'), rlabels=on('r_labels');
- PICK=[];   // visible triangles this frame, for click-picking (screen pts + world tri + depth)
- for(const o of all){
-  if(o.k==='p'){cx.fillStyle='#ff1493';cx.fillRect(W/2+o.r[0]*f-1.4,H/2-o.r[1]*f-1.4,2.8,2.8);continue;}
-  const pts=o.r.map(p=>[W/2+p[0]*f,H/2-p[1]*f]);
-  // backface cull: skip triangles whose 2D screen winding is back-facing (engine-style, one winding kept)
-  const area=(pts[1][0]-pts[0][0])*(pts[2][1]-pts[0][1])-(pts[1][1]-pts[0][1])*(pts[2][0]-pts[0][0]);
-  if(rcull && area>=0) continue;
-  PICK.push({pts,depth:o.depth,w:o.w});
-  cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);cx.lineTo(pts[1][0],pts[1][1]);cx.lineTo(pts[2][0],pts[2][1]);cx.closePath();
-  const c=o.c;
-  if(rfill){ cx.fillStyle='rgba('+(c[0]*o.sh|0)+','+(c[1]*o.sh|0)+','+(c[2]*o.sh|0)+','+o.a+')';cx.fill(); }
-  if(rwire){ cx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+',0.9)';cx.lineWidth=0.6;cx.stroke(); }
- }
- drawSelected(f);
- if(rlabels) drawNodeLabels(f);
- if(on('t_fishrect')) drawLabels();
- drawCompass();
-}
-// ---- click-to-select polygons (bright red), copyable for adding as fishing collision ----
-let PICK=[], SELECTED=[];   // SELECTED: array of world triangles [[x,y,z],[x,y,z],[x,y,z]]
-function triKey(t){ return t.map(p=>p.map(v=>Math.round(v*10)/10).join(',')).join('|'); }
-function drawSelected(f){
- for(const t of SELECTED){
-  const p=t.map(v=>{const r=rot(v);return [W/2+r[0]*f,H/2-r[1]*f];});
-  cx.beginPath();cx.moveTo(p[0][0],p[0][1]);cx.lineTo(p[1][0],p[1][1]);cx.lineTo(p[2][0],p[2][1]);cx.closePath();
-  cx.fillStyle='rgba(255,20,20,0.85)';cx.fill();
-  cx.strokeStyle='#fff';cx.lineWidth=1.2;cx.stroke();
- }
-}
-function ptInTri(px,py,a,b,c){
- const s=(ax,ay,bx,by)=>(px-bx)*(ay-by)-(ax-bx)*(py-by);
- const d1=s(a[0],a[1],b[0],b[1]),d2=s(b[0],b[1],c[0],c[1]),d3=s(c[0],c[1],a[0],a[1]);
- return !(((d1<0)||(d2<0)||(d3<0))&&((d1>0)||(d2>0)||(d3>0)));
-}
-function pickAt(mx,my,add){
- let best=null;
- for(const o of PICK){ if(ptInTri(mx,my,o.pts[0],o.pts[1],o.pts[2])){ if(!best||o.depth>best.depth) best=o; } }
- if(!best){ if(!add){SELECTED=[];updateSel();draw();} return; }
- const k=triKey(best.w);
- if(add){ const i=SELECTED.findIndex(t=>triKey(t)===k); if(i>=0) SELECTED.splice(i,1); else SELECTED.push(best.w); }
- else { SELECTED=[best.w]; }
- updateSel(); draw();
-}
-function updateSel(){
- const el=document.getElementById('sellist'), n=document.getElementById('selcount');
- if(n) n.textContent=SELECTED.length;
- if(el) el.value=SELECTED.map(t=>t.map(p=>p.map(v=>Math.round(v*100)/100).join(',')).join(', ')).join(String.fromCharCode(10));
-}
-// Node labels + highlighted bounding-box borders — drawn like the fishing-coord labels (overlay, not
-// checkboxes). A label shows only when its layer's checkbox is on, so it follows what you have visible.
-function drawNodeLabels(f){
- cx.save();cx.font='bold 11px monospace';cx.textAlign='left';cx.textBaseline='middle';
- for(const nl of D.nodelabels){
-  const [cen,name,bb,lay]=nl;
-  const t=document.getElementById('t_'+lay); if(!t||!t.checked) continue;
-  // highlighted border: the node's world bounding box, projected + drawn as 12 edges
-  const C=[[bb[0],bb[1],bb[2]],[bb[3],bb[1],bb[2]],[bb[3],bb[1],bb[5]],[bb[0],bb[1],bb[5]],
-           [bb[0],bb[4],bb[2]],[bb[3],bb[4],bb[2]],[bb[3],bb[4],bb[5]],[bb[0],bb[4],bb[5]]].map(p=>{const r=rot(p);return [W/2+r[0]*f,H/2-r[1]*f];});
-  const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-  cx.strokeStyle='rgba(255,235,120,0.9)';cx.lineWidth=1;cx.beginPath();
-  for(const [a,b] of E){ cx.moveTo(C[a][0],C[a][1]);cx.lineTo(C[b][0],C[b][1]); }
-  cx.stroke();
-  // name label at the node centroid
-  const r=rot(cen), x=W/2+r[0]*f, y=H/2-r[1]*f, w=cx.measureText(name).width;
-  cx.fillStyle='rgba(0,0,0,.8)';cx.fillRect(x+3,y-7,w+6,14);
-  cx.fillStyle='#ffeb78';cx.fillText(name,x+6,y);
- }
- cx.restore();
-}
-function drawLabels(){
- const f=Math.min(W,H)*0.5*zoom/300;
- cx.save();cx.font='bold 12px monospace';cx.textAlign='left';cx.textBaseline='middle';
- for(const lb of D.fishlabels){const r=rot(lb[0]);const x=W/2+r[0]*f,y=H/2-r[1]*f;
-  cx.fillStyle='#ff1493';cx.beginPath();cx.arc(x,y,3,0,7);cx.fill();
-  const w=cx.measureText(lb[1]).width;cx.fillStyle='rgba(0,0,0,.75)';cx.fillRect(x+4,y-7,w+5,14);
-  cx.fillStyle='#ff9fd6';cx.fillText(lb[1],x+6,y);}
- cx.restore();
-}
-// Compass overlay: world convention N=-Z, S=+Z, E=+X, W=-X. Rotates with the view so you can call
-// out headings. N is red + thicker.
-function drawCompass(){
- const cxp=W-80,cyp=58,CR=34;
- cx.save();cx.font='bold 13px monospace';cx.textAlign='center';cx.textBaseline='middle';cx.lineWidth=1;
- cx.fillStyle='rgba(13,17,23,.7)';cx.beginPath();cx.arc(cxp,cyp,CR+13,0,7);cx.fill();
- const dirs=[['N',[0,0,-1],'#f66'],['E',[1,0,0],'#9cf'],['S',[0,0,1],'#999'],['W',[-1,0,0],'#9cf']];
- for(const d of dirs){
-  const r=rot(d[1]);let sx=r[0],sy=-r[1];const L2=Math.hypot(sx,sy)||1;sx/=L2;sy/=L2;
-  cx.strokeStyle=d[2];cx.lineWidth=d[0]=='N'?2.5:1.3;
-  cx.beginPath();cx.moveTo(cxp,cyp);cx.lineTo(cxp+sx*CR,cyp+sy*CR);cx.stroke();
-  cx.fillStyle=d[2];cx.fillText(d[0],cxp+sx*(CR+9),cyp+sy*(CR+9));
- }
- cx.restore();
-}
-draw();
-let drag=false,px,py,downX,downY,downShift,moved=false;
-cv.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
-addEventListener('pointerup',e=>{drag=false;cv.style.cursor='grab';
- if(!moved){const r=cv.getBoundingClientRect();pickAt(e.clientX-r.left,e.clientY-r.top,downShift);}});
-addEventListener('pointermove',e=>{if(!drag)return;
- if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;
- yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
-document.getElementById('selclear').onclick=()=>{SELECTED=[];updateSel();draw();};
-cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;draw();},{passive:false});
-// Cursor -> world (x,z) on the water plane (y=0). Orthographic inverse of rot(): un-rotate (rx,ry) and
-// intersect world y=0. Needs the view tilted (sin(pitch) != 0) to resolve a ground point.
-const coordEl=document.getElementById('coord');
-cv.addEventListener('pointermove',e=>{
- const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
- const f=Math.min(W,H)*0.5*zoom/300,rx=(mx-W/2)/f,ry=-(my-H/2)/f;
- const cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch);
- if(Math.abs(sp)<0.08){coordEl.textContent='tilt the view down to read coords';return;}
- const z1=-ry/sp, wx=Math.round(rx*cyw+z1*syw), wz=Math.round(-rx*syw+z1*cyw);
- coordEl.textContent='x = '+wx+'    z = '+wz+'    (water y=0)';
-});
-for(const cb of document.querySelectorAll('input')) cb.addEventListener('change',()=>{draw();updateTotal();});
-updateTotal();
-}catch(e){document.getElementById('err').textContent='ERR: '+e.message;}</script>'''
-open(os.path.join(OUT, HTML_NAME), 'w').write(
-    html.replace('CHECKS', checks).replace('PUSHES', pushes).replace('JSON_DATA', js).replace('CNT_DATA', cnt_js))
+    for p in ref.split('.')[1:]: obj = obj[p]
+    return obj
+layers = [{'key': key, 'label': lb, 'tris': _resolve(src),
+           'color': json.loads(c) if isinstance(c, str) else c, 'alpha': a, 'border': lc,
+           'on': key in _on} for key, lb, src, c, a, lc in LAY]
+html = build_html(
+    title="Brownboo COMPLETE",
+    layers=layers, node_labels=nodelabels, points=fishbox, point_labels=fishlabels,
+    points_label="fishing box + coords", coord_note="water y=0", points_on=False)
+open(os.path.join(OUT, HTML_NAME), 'w').write(html)
 print("visual:", {k: len(v) for k, v in visual.items()})
