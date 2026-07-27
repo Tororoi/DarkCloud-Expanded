@@ -158,9 +158,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static float TargetY(TimeOfDay tod) => tod switch
         {
-            TimeOfDay.Night   => 55f,
-            TimeOfDay.Morning => 43f,
-            TimeOfDay.Dusk    => 43f,
+            TimeOfDay.Night   => 52f,
+            TimeOfDay.Morning => 40f,
+            TimeOfDay.Dusk    => 40f,
             _                 => 31f,   // Afternoon (and any fallback): vanilla low
         };
     }

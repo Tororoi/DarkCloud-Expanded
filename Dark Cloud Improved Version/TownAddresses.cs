@@ -555,6 +555,13 @@ namespace Dark_Cloud_Improved_Version
         internal const uint PointVanilla = 0x001D55F50;  // point[18] — the vanilla bobber anchor
         internal const uint PointShallow = 0x001D55F70;  // point[20] — shallow anchor
 
+        // Line LENGTH lever (separate from the bobber anchor): distp = the per-segment rest length of the
+        // 24-point Verlet line, a plain .data float read every frame by FishLineInit/FishLineStep — a pure
+        // data write is recompiler-safe. Scaling it stretches the WHOLE line (cast reach AND hang depth), so
+        // a spot over low water (Queens canal) can reach the surface. Restore to vanilla off-session.
+        internal const long  DistpAddr    = 0x202A1FA4;
+        internal const float VanillaDistp = 1.6666666f;   // 5/3 (read from SCUS_971.11 .data)
+
         // Each site: (lui addr, addiu/lw addr, dest reg). reg = the original addiu's target ($4 or $5).
         internal static readonly (long lui, long ld, int reg)[] Sites =
         {

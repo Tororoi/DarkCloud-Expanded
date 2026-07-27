@@ -85,6 +85,18 @@ namespace Dark_Cloud_Improved_Version
             internal readonly float FishDepth;
             internal bool HasFishDepth => !float.IsNaN(FishDepth);
 
+            /// <summary>Stretch the fishing line while fishing here: <c>distp</c> (the Verlet rope's per-segment
+            /// rest length) is multiplied by this, so the whole line reaches farther down. For a spot whose
+            /// water sits low under the rod (Queens canal, tide 31). NaN/0 = vanilla length. This is INDEPENDENT
+            /// of <see cref="ShallowBobber"/> — Queens stretches the line but keeps the vanilla bobber anchor.</summary>
+            internal readonly float LineScale;
+            internal bool HasLineScale => LineScale > 0f;
+
+            /// <summary>Move the bobber's line anchor toward the hook (Brownboo's shallow pond) so the hook
+            /// rises to the fish. SEPARATE from <see cref="FishDepth"/>: a spot can lower its fish (FishDepth)
+            /// and/or lengthen its line (LineScale) while keeping the vanilla bobber anchor.</summary>
+            internal readonly bool ShallowBobber;
+
             /// <summary>DIAGNOSTIC: skip the turi model swap. Proven the model load (not the rect, not pool
             /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
             internal readonly bool DiagSkipModel;
@@ -95,7 +107,8 @@ namespace Dark_Cloud_Improved_Version
                           float sx = float.NaN, float sy = float.NaN, float sz = float.NaN,
                           float facing = float.NaN, bool diagSkipModel = false,
                           float fx1 = float.NaN, float fz1 = float.NaN, float fx2 = float.NaN,
-                          float fz2 = float.NaN, float fishDepth = float.NaN)
+                          float fz2 = float.NaN, float fishDepth = float.NaN,
+                          float lineScale = float.NaN, bool shallowBobber = false)
             {
                 MapNo = mapNo; Name = name; AreaId = areaId;
                 X1 = x1; Z1 = z1; X2 = x2; Z2 = z2; Water = water; Ground = ground;
@@ -103,6 +116,7 @@ namespace Dark_Cloud_Improved_Version
                 StandX = sx; StandY = sy; StandZ = sz; Facing = facing;
                 DiagSkipModel = diagSkipModel;
                 FishX1 = fx1; FishZ1 = fz1; FishX2 = fx2; FishZ2 = fz2; FishDepth = fishDepth;
+                LineScale = lineScale; ShallowBobber = shallowBobber;
             }
         }
 
@@ -127,7 +141,12 @@ namespace Dark_Cloud_Improved_Version
             new Spot(2, "Queens canal", 6,      // area 6 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — 100% Bobo
                      -240f, -100f, 900f, 150f, water: 31f, ground: 10f,
                      tx: 250f, ty: 70f, tz: -70f, radius: 10f,
-                     sx: 250f, sy: 70f, sz: -70f, facing: 0f),           // stance: face +Z (south) toward the water
+                     sx: 250f, sy: 70f, sz: -70f, facing: 0f,            // stance: face +Z (south) toward the water
+                     // The canal tide sits low under the rod (afternoon 31), so STRETCH the line 1.3x (distp
+                     // 1.667->2.167) to reach the surface — keeps the vanilla bobber anchor (no ShallowBobber).
+                     // That drops the hook from ~WaterLevel-8.3 to ~-10.8 and the bait (hook-3) to ~-13.8, so
+                     // lower the fish to match: WaterLevel-14.5 keeps the vanilla fish-to-bait gap (~0.67) → bites.
+                     lineScale: 1.3f, fishDepth: 14.5f),
 
             // Brownboo: the pond (static WATER s04w01). WATER_SURFACE centred on the origin, ±120, HEIGHT 0.
             // Stance at the +X edge facing the water: (74, 10, -20), yaw -1.639 — forward (-1.00, -0.07).
@@ -164,6 +183,7 @@ namespace Dark_Cloud_Improved_Version
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
                      sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
+                     shallowBobber: true, // Brownboo raises the hook via the bobber-anchor toggle (point 21), NOT a line stretch
                      fishDepth: 7.6f      // shallow pond: fish at WaterLevel-7.6 (write the CFrame translation Y @ fish+0x1264, the authoritative depth). And the bobber anchor
                                           // is toggled to point 21 (data write over the cold FishLineStep patch) so
                                           // the hook rises to ~-3 / bait ~-6 to reach them. All data-only —
@@ -275,6 +295,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See TownAddresses.FishLineShallow. ─────────
         private static bool _shallowLineInstalled;
+        private static bool _distpScaled;   // is the shared line rest-length currently stretched for this spot?
 
         /// <summary>Install the cold-window FishLineStep rewrite ONCE (from ApplyNewChanges, before any fishing
         /// has JIT-compiled the function). It re-points the bobber's six anchor loads at a mod data global, so
@@ -452,6 +473,7 @@ namespace Dark_Cloud_Improved_Version
             _lastParam = int.MinValue;
             _lastMode = int.MinValue;
             SetShallowLine(false);  // data-only: bobber anchor back to vanilla point[18] for the next town
+            if (_distpScaled) { Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp); _distpScaled = false; }
             PriscleenFish.Uninstall();
             VillagerPlacement.Uninstall();
         }
@@ -566,9 +588,10 @@ namespace Dark_Cloud_Improved_Version
             _slotAddr = EventPoints.Slot(EventPoints.Base(), slot);
             _spot = spot;
 
-            // Shallow hook (data-only): point the cold-patched bobber anchor at point 21 for spots that want it.
+            // Shallow hook (data-only): point the cold-patched bobber anchor at point 21 for spots that ask
+            // for it (Brownboo). Queens lowers its fish + stretches its line instead, keeping the vanilla anchor.
             // The fish are moved to match on the fishing-window open (ApplyShallowFishDepth), once they've spawned.
-            SetShallowLine(spot.HasFishDepth);
+            SetShallowLine(spot.ShallowBobber);
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
@@ -1794,6 +1817,17 @@ namespace Dark_Cloud_Improved_Version
                 if (fishPlaced && !_fishCPolySynced)
                 { FishingCollision.SyncFishCPolyCount(); _fishCPolySynced = true; }
             }
+
+            // Line LENGTH (Queens): stretch the shared Verlet rest-length while this spot is live so the line
+            // reaches the low canal, and restore vanilla the moment the session ends. distp is read every frame
+            // (data-only, recompiler-safe), so pin it here rather than as a one-shot.
+            bool wantStretch = live && _spot.HasLineScale;
+            if (wantStretch)
+                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * _spot.LineScale);
+            else if (_distpScaled)
+                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp);
+            _distpScaled = wantStretch;
+
             _fishingWasLive = live;
         }
 
