@@ -39,7 +39,15 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool Diagnostics = true;      // log frame-find + writes while we validate the lever
         private const  long  FadeAlpha    = 0x21D3D1CC;  // Ed time-change fade box alpha: 0 clear .. 128 black
-        private const  long  WaterCWaterY = 0x21D53734;  // Water[0]+0x44 — the rippling reflection plane
+
+        // Canal RIPPLE lever. The animated water is the mapinfo WATER "e03c08" body drawn by
+        // DrawWaterSurface__11CEditGround. The CEditGround is *(gp-0x6f18) = *(0x202A28D8) — NOT edit_info; its
+        // CWater array is at base+0x15040 (4 bodies, stride 0x3B0), pos.y @ +0x44, active @ +0x20 (Y-follow flag
+        // off, so a write to +0x44 holds). The canal body sits at Y31; the two fountain pools (Y113 / Y5.6) are
+        // left alone. Re-pinned every frame because a Queens area transition rebuilds the array back to Y31.
+        private const long RippleEditGroundPtr = 0x202A28D8;
+        private const long RippleArrOff = 0x15040, RippleStride = 0x3B0;
+        private const int  RippleSlots  = 4;
         private static long  _frame;                   // cached mizu__a01 CFrame (mmu); 0 = unknown
         private static float _shownLvl = float.NaN;    // water level currently displayed (lags target while hidden)
         private static float _lastMizu = float.NaN;    // last level written to the mesh (set-once while stable)
@@ -92,22 +100,40 @@ namespace Dark_Cloud_Improved_Version
             }
             else _pend = 0;
 
-            // Write the shown level: the mesh CFrame set-once while stable (re-applied on a fresh frame), and
-            // the ripple CWater plane pinned every frame (DrawWaterSurface re-derives it).
+            // Write the shown level to the SURFACE mesh (CFrame set-once while stable, re-applied on a fresh
+            // frame) and to the RIPPLE (CEditGround CWater body, pinned every frame — see PinRipple).
             if (_frame != 0 && (freshFrame || Math.Abs(_shownLvl - _lastMizu) > 0.01f))
             {
                 Memory.WriteFloat(_frame + FrameMatTransY, _shownLvl - MizuBaselineY);
                 Memory.WriteIntFast(_frame + FrameWorldDirty, 0);   // force world-matrix recompute from local
                 _lastMizu = _shownLvl;
             }
-            // NOTE: the rippling reflection (CWater Water[0]+0x44) is left alone — per-frame pinning it fought
-            // the engine and never took. The mesh surface tracks the tide; the ripple overlay does not (yet).
+            PinRipple(_shownLvl);
 
             // Re-bake the FISHING water (baked into the injected script at install) once the shown level has
             // settled on a new level — re-writes only the fishing bytecode, skipped mid-session.
             int t = (int)MathF.Round(target);
             if (Math.Abs(_shownLvl - target) < 0.01f && t != _rebakeLvl)
             { CustomFishingSpot.RebuildFishingScript(); _rebakeLvl = t; }
+        }
+
+        /// <summary>Pin the canal ripple (CEditGround CWater body for WATER "e03c08") to the shown tide level so
+        /// it tracks the mizu surface. Writes pos.y (+0x44) of the active body sitting in the tide range; the two
+        /// fountain pools (Y~113 / ~5.6) are outside it and left alone. Cheap enough to run every frame, which is
+        /// needed because a town-area transition rebuilds the array back to the mapinfo Y (31).</summary>
+        private static void PinRipple(float level)
+        {
+            uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(egGuest)) return;
+            long arr = Memory.ToMmu(egGuest) + RippleArrOff;
+            for (int i = 0; i < RippleSlots; i++)
+            {
+                long b = arr + i * RippleStride;
+                if (Memory.ReadInt(b + 0x20) == 0) continue;               // inactive body
+                float y = Memory.ReadFloat(b + 0x44);
+                if (y < 20f || y > 80f) continue;                          // a fountain pool, not the canal
+                if (Math.Abs(y - level) > 0.01f) Memory.WriteFloat(b + 0x44, level);
+            }
         }
 
         private static bool FrameStillMizu(long f)
