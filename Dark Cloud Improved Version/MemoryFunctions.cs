@@ -34,8 +34,24 @@ namespace Dark_Cloud_Improved_Version
             }
             else
             {
-                string sockPath = Path.Combine(Path.GetTempPath(),
-                    slot == 0 ? "pcsx2.sock" : $"pcsx2_slot{slot}.sock");
+                // PCSX2 puts the PINE socket in $TMPDIR on macOS, $XDG_RUNTIME_DIR on Linux
+                // (falling back to /tmp), and non-default slots are named pcsx2.sock.<port>.
+                string sockName = slot == 0 ? "pcsx2.sock" : $"pcsx2.sock.{28011 + slot}";
+                var candidates = new List<string>();
+                string xdg = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+                if (!string.IsNullOrEmpty(xdg))
+                {
+                    candidates.Add(Path.Combine(xdg, sockName));
+                    candidates.Add(Path.Combine(xdg, "app", "net.pcsx2.PCSX2", sockName)); // Flatpak
+                }
+                candidates.Add(Path.Combine(Path.GetTempPath(), sockName)); // macOS $TMPDIR
+                candidates.Add("/tmp/" + sockName);
+
+                string sockPath = candidates.Distinct().FirstOrDefault(File.Exists);
+                if (sockPath == null)
+                    throw new FileNotFoundException(
+                        "PINE socket not found. Looked in: " + string.Join(", ", candidates.Distinct()));
+
                 _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
                 _socket.Connect(new UnixDomainSocketEndPoint(sockPath));
             }
@@ -63,7 +79,9 @@ namespace Dark_Cloud_Improved_Version
             catch (Exception ex)
             {
                 Console.WriteLine("PINE connection failed: " + ex.Message);
-                Console.WriteLine("Ensure PINE is enabled in PCSX2: Settings → Advanced → PINE Server (port 28011)");
+                Console.WriteLine("Ensure PINE is enabled in PCSX2: Settings → Advanced → PINE (slot 28011), then start the game.");
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    Console.WriteLine("On Linux/macOS the socket should appear as pcsx2.sock in $XDG_RUNTIME_DIR (Linux) or $TMPDIR (macOS) once PINE is on.");
                 return -2;
             }
         }

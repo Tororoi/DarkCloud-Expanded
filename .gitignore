@@ -344,3 +344,17 @@ SCUS_971.11
 
 # Claude Code local settings
 .claude/
+
+# ── Game-derived data (never distribute) ────────────────────────────────────────────
+# ALL extracted / game-derived files live under game_data/, grouped by feature: fishsign/, priscleen/,
+# RubyMemeFix/, brownboo/, menu/. The mod loads a few runtime assets from there (the .csproj sources
+# them); publishing needs runtime ISO-extraction rather than bundling these.
+# Custom, distributable resources stay tracked (brownboo_14.bin + its rock_obj/ source rocks, the font).
+game_data
+
+# The *.obj rule far above ignores MSVC objects, but also catches custom mesh assets we ship under
+# Resources/ (e.g. the hand-simplified collision rocks). Those are our own geometry — always track them:
+!Dark Cloud Improved Version/Resources/**/*.obj
+
+# Local env values for dev tools/diagnostics (copy of .env.sample); never commit
+.env
