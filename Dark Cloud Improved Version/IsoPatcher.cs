@@ -798,6 +798,12 @@ namespace Dark_Cloud_Improved_Version
 
             PatchFishingLoadFish(fs, ElfOff);
             PatchFishBox(fs, ElfOff);
+            PatchTownCamera(fs, ElfOff);
+            PatchTownCameraSmoothRest(fs, ElfOff);   // no-wall rest = SMOOTH ease-to-far (was hard snap that killed pull-ins)
+            PatchTownCameraRotateFree(fs, ElfOff);
+            PatchTownCameraNoWidthRotate(fs, ElfOff);   // stop CheckCameraWidth from rotating the camera AWAY from walls
+            PatchTownCameraNoAngleForce(fs, ElfOff);    // stop CameraAutoMove from absolutely snapping the angle (the bounce)
+            PatchFishingCameraTarget(fs, ElfOff);
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -917,6 +923,207 @@ namespace Dark_Cloud_Improved_Version
                     throw new IOException($"Fish collision-box site 0x{SITE + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
             for (int i = 0; i < patched.Length; i++)
                 WrU32(fs, ElfOff(SITE + (uint)i * 4), patched[i]);
+        }
+
+        // ── Town camera → dungeon-style dynamic pull-in (baked, all towns) ───────────────────────────
+        // Goal: town follow-camera should REST far and only pull IN when a wall is behind it — the way the
+        // dungeon camera behaves. The town driver EdMoveChara (0x16a160) + CameraAutoMove (0x169b70) and
+        // the dungeon driver MoveChara (0x1db08a0) + CameraAutoMove (0x1dbe760) are near-identical copies;
+        // the behaviour difference is three baked values:
+        //   1. NO-WALL REST DISTANCE. EdMoveChara HARD-PINS distance every frame there is no wall:
+        //      `if (bVar6) SetDistance(camera_near_dist)` @0x16BBC8 (lwc1 f12,camera_near_dist). THAT is
+        //      why the town camera sat AT the near distance — near was the resting distance, not a floor.
+        //      Repoint that one load to camera_far_dist (0x2A1F18→0x2A1F1C, imm 0x8728→0x872C) so the town
+        //      rests at far (80) and CameraAutoMove pulls it in toward near on walls. The OTHER
+        //      SetDistance(near) @0x16B724 is the genuine wall pull-in and MUST stay near.
+        //   2. near = the pull-in FLOOR (how close a wall may push the camera): town 70 @0x2A1F18 →
+        //      dungeon 10 @0x2A22F8. far=80 in both. With rest now at far, near is only the collision floor.
+        //   3. rotate-toward-target ease-in divisors, two `lui $v0,<half>`: town /10(0x4120) & /15(0x4170)
+        //      → dungeon /20(0x41a0) & /30(0x41f0). Larger divisor = smoother slide-around.
+        // Baking these makes every town's camera behave like the dungeon's, so the runtime CameraPassThrough
+        // hack is no longer needed.
+        static void PatchTownCamera(FileStream fs, Func<uint, long> ElfOff)
+        {
+            (uint va, uint vanilla, uint patched, string what)[] sites =
+            {
+                (0x0016BBC8, 0xC78C8728, 0xC78C872C, "EdMoveChara no-wall REST: SetDistance(near)->SetDistance(far) (lwc1 f12,camera_far_dist)"),
+                (0x00169C20, 0x3C024120, 0x3C0241A0, "CameraAutoMove rot divisor /10 -> /20 (lui $v0,0x41a0)"),
+                (0x00169C48, 0x3C024170, 0x3C0241F0, "CameraAutoMove rot divisor /15 -> /30 (lui $v0,0x41f0)"),
+                (0x002A1F18, 0x428C0000, 0x41200000, "camera_near_dist 70.0 -> 10.0 (pull-in floor, was rest)"),
+            };
+            foreach (var s in sites)
+                if (RdU32(fs, ElfOff(s.va)) != s.vanilla)
+                    throw new IOException($"Town-camera site 0x{s.va:X} ({s.what}) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            foreach (var s in sites)
+                WrU32(fs, ElfOff(s.va), s.patched);
+        }
+
+        // ── Town camera: pull-in + snap-to-wall on single-wall hits (graft the dungeon autoCamTrial) ──
+        // WHY the town gets stuck: EdMoveChara's camera-collision block and the dungeon's autoCamTrial run
+        // the SAME CheckHits + CameraAutoMove — EXCEPT on the single/last wall hit, where the dungeon does
+        // SetPos(cam, hitpoint) AND (post-hit) pulls the follow DISTANCE toward the wall, while the town
+        // only angle-rotates via CameraAutoMove and never reduces distance, so it sticks at far against
+        // building boxes. Key fact from Step__13CCameraFollow: the camera position is DERIVED as
+        // ref + distance(cam+0x2d0)*sin/cos(angle) — so SetPos alone is overwritten by the next Step;
+        // only SetDistance (which writes +0x2d0) actually moves the camera in. So the graft must set the
+        // DISTANCE to the wall distance, then SetPos to place it. We redirect the town's LAST-hit
+        // `jal CameraAutoMove` (@0x16B58C; ABI a0=cam,a1=poly,a2=hitpoint) to a baked helper that does
+        //   dist = DistVector(GetRef(cam), hitpoint);  SetDistance(dist, cam);  SetPos(cam, hitpoint);
+        // EXPERIMENT: unconditional (dungeon gates SetPos on near<=dist<far, else CameraAutoMove — fold in
+        // once confirmed). Helper lives in verified-clean .text zero-padding at 0x27D084.
+        static void PatchTownCameraWallSnap(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint WRAP = 0x0027D084;   // zero-padding slack in .text (verified clean, 0x418 B run)
+            const uint SITE = 0x0016B58C;   // town EdMoveChara last-hit `jal CameraAutoMove`
+            uint[] wrap =                   // GetRef+DistVector+SetDistance(+0x2d0)+SetPos; own stack frame
+            {
+                0x27BDFFD0, 0xAFBF002C, 0xAFA40028, 0xAFA60024,   // frame; save ra, cam(a0), hitpoint(a2)
+                0x27A50010, 0x0C0491A8, 0x00000000,               // a1=&ref; jal GetRef(cam,&ref)
+                0x27A40010, 0x8FA50024, 0x0C048D64, 0x00000000,   // a0=&ref; a1=hitpoint; jal DistVector -> f0
+                0x46000306, 0x8FA40028, 0x0C0492DC, 0x00000000,   // mov.s f12,f0; a0=cam; jal SetDistance
+                0x8FA40028, 0x8FA50024, 0x0C0490A4, 0x00000000,   // a0=cam; a1=hitpoint; jal SetPos
+                0x8FBF002C, 0x03E00008, 0x27BD0030,               // lw ra; jr ra; addiu sp,+0x30 (delay)
+            };
+            if (RdU32(fs, ElfOff(SITE)) != 0x0C05A6DC)
+                throw new IOException($"Town camera last-hit site 0x{SITE:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            for (int i = 0; i < wrap.Length; i++)
+                if (RdU32(fs, ElfOff(WRAP + (uint)i * 4)) != 0)
+                    throw new IOException($"Camera-snap wrapper slack 0x{WRAP + (uint)i * 4:X} is not empty — unexpected ISO.");
+            for (int i = 0; i < wrap.Length; i++)
+                WrU32(fs, ElfOff(WRAP + (uint)i * 4), wrap[i]);
+            WrU32(fs, ElfOff(SITE), 0x0C09F421);       // jal 0x27D084 (wrapper) ; was jal CameraAutoMove
+        }
+
+        // ── Town camera: let the stick rotate INTO walls (the dungeon has no rotation block) ──────────
+        // EdMoveChara actively BLOCKS camera rotation when a wall is within ~5 units on that side: the side
+        // CheckHits clear bVar4 (register s6) / bVar5 (register s4), and the stick-rotation AddAngle calls
+        // are gated on them — `beq s6,zero` @0x16B86C (rotate-right) and `beq s4,zero` @0x16B8A4
+        // (rotate-left). THAT is the "hits a wall and won't turn any further": the camera stops rotating at
+        // the wall, so it never turns far enough for the pull-in to trigger. The dungeon's autoCamTrial has
+        // no such block — it lets the camera rotate and just pulls the distance in. NOP the two gate
+        // branches so the stick always rotates; PatchTownCameraWallSnap then pulls in to slide along the wall.
+        static void PatchTownCameraRotateFree(FileStream fs, Func<uint, long> ElfOff)
+        {
+            (uint va, uint vanilla, string what)[] gates =
+            {
+                (0x0016B86C, 0x12C00007, "stick rotate-RIGHT gate `beq s6,zero` (bVar4 wall-block)"),
+                (0x0016B8A4, 0x12800007, "stick rotate-LEFT  gate `beq s4,zero` (bVar5 wall-block)"),
+            };
+            foreach (var g in gates)
+                if (RdU32(fs, ElfOff(g.va)) != g.vanilla)
+                    throw new IOException($"Town camera rotate-gate 0x{g.va:X} ({g.what}) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            foreach (var g in gates)
+                WrU32(fs, ElfOff(g.va), 0x00000000);   // nop the wall-block branch — stick rotates freely into walls
+        }
+
+        // ── Town camera: stop CameraAutoMove from hard-snapping the angle onto the wall (the bounce) ──
+        // Once the camera can reach behind a wall, CameraAutoMove (0x169b70) pulls in via SetDistance
+        // (good) but then SetAngle @0x169CD0 ABSOLUTELY sets the camera's angle to face the wall EVERY
+        // frame — fighting the follow/stick, which oscillates = the "bounce". The AddAngle calls right
+        // after (0x169CF8/0x169D14) are the gentle slide-toward-the-open-side, which we keep. NOP only the
+        // absolute SetAngle so the camera pulls in and slides while keeping the player-following angle.
+        // (If it still bounces, the AddAngle slide is next; if it won't slide enough, revisit.)
+        static void PatchTownCameraNoAngleForce(FileStream fs, Func<uint, long> ElfOff)
+        {
+            // Remove ALL angle manipulation from CameraAutoMove — the absolute SetAngle AND the two
+            // side-dependent AddAngle "slide" calls (they flip direction as the side distances jitter, which
+            // rocks the camera = the bounce). Left with ONLY SetDistance (pull-in) + AddHeight; the camera
+            // keeps its player-following angle and just eases in.
+            (uint va, uint vanilla, string what)[] sites =
+            {
+                (0x00169CD0, 0x0C0492C8, "SetAngle (absolute angle -> wall)"),
+                (0x00169CF8, 0x0C0492D4, "AddAngle (slide, side +)"),
+                (0x00169D14, 0x0C0492D4, "AddAngle (slide, side -)"),
+            };
+            foreach (var s in sites)
+                if (RdU32(fs, ElfOff(s.va)) != s.vanilla)
+                    throw new IOException($"CameraAutoMove angle site 0x{s.va:X} ({s.what}) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            foreach (var s in sites)
+                WrU32(fs, ElfOff(s.va), 0x00000000);   // nop all angle-setting; keep pure pull-in
+        }
+
+        // ── Town camera: stop the width-check from rotating the camera AWAY from walls ───────────────
+        // KEY realization (user): the camera won't turn INTO a wall, which means it DOES detect the wall —
+        // the town response is to ROTATE AWAY, not pull in. In EdMoveChara, CheckCameraWidth (0x14b830)
+        // detects a wall beside the camera and then AddAngle @0x16B024 + SetAngleSoon @0x16B04C swing the
+        // camera's target angle away from it, so the camera can never get BEHIND the wall where the main
+        // CheckHits->CameraAutoMove pull-in would fire. The dungeon's autoCamTrial never calls
+        // CheckCameraWidth. NOP the two rotate-away calls so the camera can turn into the wall and the
+        // pull-in/slide takes over (detection is already there — that's why it was avoiding the wall).
+        static void PatchTownCameraNoWidthRotate(FileStream fs, Func<uint, long> ElfOff)
+        {
+            (uint va, uint vanilla, string what)[] sites =
+            {
+                (0x0016B024, 0x0C0492D4, "CheckCameraWidth AddAngle (nudge away from wall)"),
+                (0x0016B04C, 0x0C0492CC, "CheckCameraWidth SetAngleSoon (swing target angle away from wall)"),
+            };
+            foreach (var s in sites)
+                if (RdU32(fs, ElfOff(s.va)) != s.vanilla)
+                    throw new IOException($"CheckCameraWidth site 0x{s.va:X} ({s.what}) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            foreach (var s in sites)
+                WrU32(fs, ElfOff(s.va), 0x00000000);   // nop the rotate-away so the camera can turn into walls
+        }
+
+        // ── Town camera: SMOOTH ease-to-far rest (not a hard snap) ───────────────────────────────────
+        // Diagnosis (force-distance test): the no-wall rest-pin `SetDistance(far)` @0x16BBCC hard-slams the
+        // follow distance to 80 EVERY frame there's no wall. Wall detection flickers as the player moves, so
+        // any pull-in is instantly nuked back to 80 — the camera "won't stray from 80". The dungeon never
+        // hard-sets; it eases: AddDistance((far-dist)/10). Redirect the rest-pin call to a baked helper that
+        // does exactly that, so a pull-in decays gently and survives brief detection gaps.
+        //   helper: f0=GetDistance(cam); f12=(far-f0)*0.1; AddDistance(f12,cam)
+        // f12 already holds `far` at the call (PatchTownCamera repointed 0x16BBC8's load to camera_far_dist).
+        static void PatchTownCameraSmoothRest(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint WRAP = 0x0027D084;   // zero-padding slack in .text (verified clean)
+            const uint SITE = 0x0016BBCC;   // no-wall rest-pin `jal SetDistance` (bVar6 branch)
+            uint[] wrap =
+            {
+                0x27BDFFE0, 0xAFBF001C, 0xAFA40018, 0xE7AC0014,   // frame; save ra, cam(a0), far(f12)
+                0x0C0492E0, 0x00000000,                           // jal GetDistance (a0=cam) -> f0=dist
+                0xC7A10014, 0x46000801,                           // f1=far; sub.s f0,f1,f0 (= far-dist)
+                0xC7828080, 0x46020302,                           // f2=0.1; mul.s f12,f0,f2 (= (far-dist)*0.1)
+                0x8FA40018, 0x0C0492E4, 0x00000000,               // a0=cam; jal AddDistance(delta,cam)
+                0x8FBF001C, 0x03E00008, 0x27BD0020,               // lw ra; jr ra; addiu sp,+0x20 (delay)
+            };
+            // NOTE: only the REST (ease-to-far) is smoothed. The pull-in (CameraAutoMove SetDistance
+            // @0x169BE8) is LEFT as a hard set: easing the pull-in makes the camera sit inside the wall and
+            // crawl out to the surface (visible clip-in). Snapping straight to the wall is clean now that the
+            // target is the real wall (player collision) and the angle no longer bounces. Asymmetric on
+            // purpose: instant in, gentle out.
+            if (RdU32(fs, ElfOff(SITE)) != 0x0C0492DC)
+                throw new IOException($"Town rest-pin site 0x{SITE:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            for (int i = 0; i < wrap.Length; i++)
+                if (RdU32(fs, ElfOff(WRAP + (uint)i * 4)) != 0)
+                    throw new IOException($"Smooth-ease wrapper slack 0x{WRAP + (uint)i * 4:X} is not empty — unexpected ISO.");
+            for (int i = 0; i < wrap.Length; i++)
+                WrU32(fs, ElfOff(WRAP + (uint)i * 4), wrap[i]);
+            WrU32(fs, ElfOff(SITE), 0x0C09F421);       // rest: jal wrapper (ease-to-far) ; was jal SetDistance (hard snap)
+        }
+
+        // ── Fishing camera → center on the bobber instead of the player/bobber midpoint ──────────────
+        // While the line is cast (chara_fishing states with the hook in water), EdMoveChara aims the
+        // follow-camera at the MIDPOINT of the player and the float:
+        //     FishLineGetUki(&t);              // t = bobber world pos          @0x16D0B4
+        //     sceVu0AddVector(&t,&t,&player);  // t = bobber + player           @0x16D0C8
+        //     sceVu0ScaleVector(0.5f,&t,&t);   // t = (bobber + player) * 0.5   @0x16D0E0
+        //     SetFollow(t.x,t.y,t.z,cam);      // camera looks at the midpoint  @0x16D0F8
+        // NOP-ing the add+scale calls leaves `t` = the raw bobber position, so the shot centers on the
+        // float where the action is. Both delay slots are already nop, so this is two jal->nop writes.
+        // Runs only during fishing (the enclosing block is gated on the fishing flag), so it needs no
+        // town gating and improves every fishing spot, vanilla or custom. The distance/height are still
+        // driven by the shared pull-in block (PatchTownCamera near/far), so this composes cleanly.
+        static void PatchFishingCameraTarget(FileStream fs, Func<uint, long> ElfOff)
+        {
+            (uint va, uint vanilla, string what)[] sites =
+            {
+                (0x0016D0C8, 0x0C0485E8, "jal sceVu0AddVector (bobber += player)"),
+                (0x0016D0E0, 0x0C0485FA, "jal sceVu0ScaleVector (midpoint *= 0.5)"),
+            };
+            foreach (var s in sites)
+                if (RdU32(fs, ElfOff(s.va)) != s.vanilla)
+                    throw new IOException($"Fishing-camera site 0x{s.va:X} ({s.what}) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            foreach (var s in sites)
+                WrU32(fs, ElfOff(s.va), 0x00000000);   // nop -> keep the bobber position as the camera target
         }
 
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──

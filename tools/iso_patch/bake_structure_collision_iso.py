@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Bake the structure/perimeter/short-wall camera collision (+ player-only canal walls) into a town's ground
+`_a`, as a POST-STEP on the mod's already-patched ISO.
+
+Run this AFTER the mod's "Patch ISO" (IsoPatcher) has produced its disc: this reads that ISO's current
+e03/scene.scn (already carrying the fishing-sign kanban etc.), bakes our collision into it, and redirects
+the scene into the ISO's free DATA.DAT tail — so the resulting disc has EVERY mod ISO patch plus this
+collision. It operates IN PLACE and re-uses the free tail IsoPatcher already opened (no second dummy-absorb).
+
+  DC1_DATA_DIR=... python3 tools/iso_patch/bake_structure_collision_iso.py [e03 ...]
+      [--iso "/path/Dark Cloud - Expanded.iso"]           # default: ~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso
+  --standalone : instead make a fresh copy of $DC1_ISO + absorb dummy first (isolated collision-only test)
+
+Pair with the mod's CameraWallCollision.TerrainOnly = true.
+"""
+import os, sys, struct, shutil
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, ".."))
+import ps2iso
+from bake_structure_camera_collision import bake_structures_from_bytes
+
+SEC = ps2iso.SECTOR
+def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
+
+TOWNS = {"e03": ("gedit/e03/scene.scn", "gedit/e03/mapinfo.cfg")}
+DEFAULT_ISO = os.path.expanduser("~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso")
+
+
+def _hd2_slot(hd2_r, i): return hd2_r["ext"] * SEC + 16 + i * 32
+
+
+def _free_tail(f, dat_size, hd2_r, hed):
+    """Highest used byte across all DATA.HD2 entries (aligned) = the free tail after IsoPatcher's redirects."""
+    n = len(hed) // 80
+    mx = 0
+    for i in range(n):
+        f.seek(_hd2_slot(hd2_r, i)); off, size = struct.unpack("<II", f.read(8))
+        if 0 < off + size <= dat_size:
+            mx = max(mx, off + size)
+    return align(mx)
+
+
+def main():
+    args = sys.argv[1:]
+    standalone = "--standalone" in args
+    args = [a for a in args if a != "--standalone"]
+    iso = DEFAULT_ISO
+    if "--iso" in args:
+        k = args.index("--iso"); iso = args[k + 1]; del args[k:k + 2]
+    codes = args or ["e03"]
+
+    if standalone:
+        src = os.environ.get("DC1_ISO")
+        if not src:
+            raise SystemExit("Set $DC1_ISO for --standalone")
+        iso = os.path.join(os.path.expanduser("~/ROMs"), "Patched ISOs", "Dark Cloud - StructureCollision.iso")
+        os.makedirs(os.path.dirname(iso), exist_ok=True)
+        print(f"copying -> {iso} ...")
+        shutil.copyfile(src, iso)
+    if not os.path.exists(iso):
+        raise SystemExit(f"ISO not found: {iso}\n(run the mod's Patch ISO first, or pass --iso / --standalone)")
+
+    with open(iso, "r+b") as f:
+        recs = ps2iso.parse_root(f)
+        hed_r, hd2_r, dat_r = recs["DATA.HED"], recs["DATA.HD2"], recs["DATA.DAT"]
+        dat_iso = dat_r["ext"] * SEC
+        dat_size = dat_r["size"]
+        if standalone:
+            free_off, free_bytes = ps2iso.absorb_dummy(f, recs)
+            recs = ps2iso.parse_root(f); dat_r = recs["DATA.DAT"]; dat_size = dat_r["size"]
+            print(f"absorbed dummy: +{free_bytes/1e6:.1f} MB free")
+        hed = ps2iso.read_file(f, hed_r)
+        tail = _free_tail(f, dat_size, hd2_r, hed)
+        print(f"target ISO: {iso}")
+        print(f"free tail @ DATA.DAT {tail:#x}  ({(dat_size - tail)/1e6:.1f} MB free)")
+
+        def redirect_file(name, new_data, verify_head=None):
+            nonlocal tail
+            i = ps2iso.archive_find(hed, name)
+            if i is None:
+                raise SystemExit(f"{name} not in archive")
+            slot = _hd2_slot(hd2_r, i)
+            f.seek(slot); o0, s0 = struct.unpack("<II", f.read(8))
+            if tail + len(new_data) > dat_size:
+                raise SystemExit("ran out of DATA.DAT tail space")
+            f.seek(dat_iso + tail); f.write(new_data)
+            sec, cnt = tail >> 11, (len(new_data) + SEC - 1) // SEC
+            f.seek(slot); f.write(struct.pack("<IIII", tail, len(new_data), sec, cnt))
+            f.seek(dat_iso + sec * SEC); back = f.read(len(new_data))
+            if verify_head is not None:
+                assert back[:len(verify_head)] == verify_head, f"{name} readback bad"
+            print(f"redirected {name}: {s0:,} -> {len(new_data):,} B  @sector {sec:#x} count {cnt}")
+            tail = align(tail + len(new_data))
+
+        def read_archive(name):
+            i = ps2iso.archive_find(hed, name)
+            f.seek(_hd2_slot(hd2_r, i)); off, size = struct.unpack("<II", f.read(8))
+            f.seek(dat_iso + off); return f.read(size)
+
+        for code in codes:
+            if code not in TOWNS:
+                print(f"skip {code}"); continue
+            scene_rel, mapinfo_rel = TOWNS[code]
+            scene0 = read_archive(scene_rel)               # current scene (post-IsoPatcher: has the kanban etc.)
+            mapinfo0 = read_archive(mapinfo_rel)
+            baked, stats, manifest = bake_structures_from_bytes(scene_rel, scene0, mapinfo0)
+            cam_nodes = sum(s[2] for s in stats); inv_nodes = sum(s[3] for s in stats)
+            cam_tris = sum(s[4] for s in stats); inv_tris = sum(s[5] for s in stats)
+            print(f"{code}: {cam_nodes} camera nodes ({cam_tris} tris) + {inv_nodes} player-only ({inv_tris} tris), "
+                  f"scene {len(scene0):,} -> {len(baked):,} B")
+            redirect_file(scene_rel, baked, b"SCN\x00")
+
+        print(f"\nDONE (in place) -> {iso}\nBoot with the mod (CameraWallCollision.TerrainOnly=true).")
+
+
+if __name__ == "__main__":
+    main()

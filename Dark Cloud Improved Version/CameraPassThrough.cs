@@ -24,9 +24,14 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CameraPassThrough
     {
-        internal static bool Enabled = true;
+        // Disabled while testing the dungeon-style dynamic pull-in (IsoPatcher.PatchTownCamera). Brownboo
+        // and Queens are exactly where the pull-in must be judged, so this runtime pass-through would mask it.
+        // Flip back to true if the baked camera patch needs to be rolled back.
+        internal static bool Enabled = false;
 
-        private const int  BrownbooMapNo = 14;
+        // Custom fishing towns whose follow-camera should pass through buildings (Brownboo 14, Queens 2). The
+        // map-parts/static-parts gather is generic per-town, so the same clear applies to any of them.
+        private static readonly int[] Towns = { 14, 2 };
         private const long EditGroundPtr = 0x21D1968C;   // holds the CEditGround* (DAT_01d1968c / uVar10 in EdMoveChara)
 
         // map-parts array (georama-placed tiles)
@@ -45,7 +50,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static void Apply(int mapNo)
         {
-            if (!Enabled || mapNo != BrownbooMapNo) return;
+            if (!Enabled || Array.IndexOf(Towns, mapNo) < 0) return;
 
             uint p = Memory.ReadUInt(EditGroundPtr) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(p)) return;

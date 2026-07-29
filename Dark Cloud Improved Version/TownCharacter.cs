@@ -1050,10 +1050,11 @@ namespace Dark_Cloud_Improved_Version
 
                 TownEditMode.Tick();       //overhead camera + safe exit, every town
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
-                CanalTide.Tick();          //Queens canal water rises/falls with the day-night clock
-                CatchBubbleDiag.Tick();    //TEMP: log town-event ClsMes bubble boxes to chase the Queens catch-bubble stretch
-                WaterRippleDiag.Tick();    //TEMP: log Queens CWater[0..2] state to resolve whether the ripple Y is pinnable
+                CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
                 GeoramaProbe.Tick();  //no-op unless GeoramaProbe.Enabled; dumps each town once on entry
+                CameraWallCollision.Tick();  //camera uses PLAYER collision (visible walls) instead of the pushed-out camera polys
+                CameraMeshCollision.Tick();  //PROOF (off by default): hand-built CCollisionMDT box on one part
+                CameraDiag.Tick();    //TEMP: log follow-camera distance + positions
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket
             }
