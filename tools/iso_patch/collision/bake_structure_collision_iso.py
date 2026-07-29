@@ -7,7 +7,7 @@ e03/scene.scn (already carrying the fishing-sign kanban etc.), bakes our collisi
 the scene into the ISO's free DATA.DAT tail — so the resulting disc has EVERY mod ISO patch plus this
 collision. It operates IN PLACE and re-uses the free tail IsoPatcher already opened (no second dummy-absorb).
 
-  DC1_DATA_DIR=... python3 tools/iso_patch/bake_structure_collision_iso.py [e03 ...]
+  DC1_DATA_DIR=... python3 tools/iso_patch/collision/bake_structure_collision_iso.py [e03 ...]
       [--iso "/path/Dark Cloud - Expanded.iso"]           # default: ~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso
   --standalone : instead make a fresh copy of $DC1_ISO + absorb dummy first (isolated collision-only test)
 
@@ -15,10 +15,16 @@ Pair with the mod's CameraWallCollision.TerrainOnly = true.
 """
 import os, sys, struct, shutil
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)                              # collision/ (bake_player_camera_collision)
+sys.path.insert(0, os.path.join(HERE, ".."))         # iso_patch/ (ps2iso)
+sys.path.insert(0, os.path.join(HERE, "..", ".."))   # tools/ (shared infra, via bake_player's imports)
+# This bake reads scene/mapinfo from the ISO (via bake_structures_from_bytes' monkeypatched load_scene) and its
+# canal/perimeter geometry is authored constants — it never touches an extracted disc. DC1_DATA_DIR is only
+# extract_scene_mesh's import-time guard, so default it (to the tools dir; never dereferenced) so callers that
+# have only the ISO — e.g. IsoPatcher's post-step — can run us without an extracted-disc dir.
+os.environ.setdefault("DC1_DATA_DIR", os.path.join(HERE, "..", ".."))
 import ps2iso
-from bake_structure_camera_collision import bake_structures_from_bytes
+from bake_player_camera_collision import bake_structures_from_bytes
 
 SEC = ps2iso.SECTOR
 def align(x, a=SEC): return (x + a - 1) & ~(a - 1)

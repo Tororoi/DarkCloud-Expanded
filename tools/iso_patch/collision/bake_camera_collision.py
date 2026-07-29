@@ -14,7 +14,9 @@ root node (identity transform, verified) -> new scene.scn bytes.
   bake_scene(scene_rel, name_re='e03h\\d\\d$') -> (new_scn_bytes, stats)
 """
 import os, sys, struct, re
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)                                     # this dir (build_coll_mdt)
+sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (shared infra)
 from extract_scene_mesh import load_scene
 import scene_placed, scene_splice as ss, georama_collision as gc
 from georama_parts import part_models
