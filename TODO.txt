@@ -1,114 +1,45 @@
 DARK CLOUD MOD — WHAT TO TEST WHEN BACK AT THE PC
 ==================================================
-Rebuild the mod first (dotnet build in "Dark Cloud Improved Version"), then fish in Brownboo.
-Both Brownboo tests below can be done in the SAME fishing session.
+The camera work below is baked into the ISO/ELF, NOT runtime — so you must RE-PATCH A FRESH ISO COPY
+(rebuild the mod, then run the patch flow on a clean disc copy) to pick it up.
+
+
+[0] CAMERA — DUNGEON-STYLE PULL-IN (ALL TOWNS) + FISHING CAMERA  *** TEST THIS ***
+---------------------------------------------------------------------------------
+What changed (all IsoPatcher ELF patches — need a fresh re-patch, not just a rebuild):
+  - PatchTownCamera: town follow-camera now behaves like the dungeon camera. near distance 70 -> 10
+    (camera can pull in close to the player instead of being pinned far), and the rotate-toward-target
+    divisors were softened (/10,/15 -> /20,/30) for a smoother slide-around. far stays 80 (unchanged).
+  - PatchFishingCameraTarget: while the line is in the water the camera now CENTERS ON THE BOBBER
+    (was aimed at the midpoint between player and bobber).
+  - CameraPassThrough is now DISABLED (Enabled = false). Brownboo + Queens no longer punch the camera
+    through buildings; they rely entirely on the new pull-in. That's why they're the key test spots.
+
+Test A — town camera pull-in (walk around, no fishing):
+  - In Brownboo AND Queens, move so the camera would normally shove into a building / rock / wall.
+    EXPECT: the camera slides in closer to the player instead of clipping through the geometry.
+    You should NOT see the inside of walls/buildings anymore.
+  - Also sanity-check a normal town or two: the closer near (10) shouldn't make the camera feel
+    cramped or jittery in open areas. If it snaps in too aggressively or feels too close, note where.
+  - The near floor is a starting value (dungeon's 10). If it's too close for towns, it's a one-word
+    retune upward (e.g. 10 -> 20/30) — tell Claude what felt right.
+
+Test B — fishing camera:
+  - Cast into the water. EXPECT: the shot is centered on the BOBBER (the float), not floating halfway
+    back toward the player. Confirm the framing tracks the float as it drifts.
+  - Confirm the fishing camera ALSO pulls in near walls now (it inherits the same near=10) — e.g. in the
+    Queens canal with a wall/bridge behind you the view should tuck in rather than clip.
+  - The downward fishing angle (camera height ~40) is unchanged — should look the same as before.
+  - If bobber-centering loses too much of the player, Claude can do a weighted blend (e.g. 25% player /
+    75% bobber) via a code cave instead — say so.
 
 
 DESIGN / REFACTOR TODOS  (not tests — bigger-picture work)
 ==========================================================
-[A] ISO FILE-SELECT + PATCH FLOW  ->  then REVISIT the runtime ISO-reading code FIRST.
-    When the mod gains a "choose your ISO" file picker (so we can patch the disc directly), the first thing
-    to revisit is GameDataFiles + the Iso9660 reader in GameDataFiles.cs. Today it SEARCHES ~/ROMs / the app
-    dir / a config file for a DC1 ISO and reads archive entries on the fly. With a user-selected, validated
-    ISO path we likely have a more reliable approach available — we'd know the exact ISO up front and could
-    patch it once and/or extract just the entries we need deterministically, instead of on-demand searching.
-    (Runtime callers today: HarderEnemyAI, WeaponTextureSwap, CustomToanEffects.)
-
-[B] SIMPLIFICATION PASS.  Audit the rest of the mod for other places the same "read the disc / bundle assets
-    / hardcode a dev path" pattern could be simplified now that (a) original game data comes from the
-    player's own ISO at runtime and (b) game_data/ holds all non-distributable inputs. Flag any remaining
-    dev-machine assumptions and opportunities to make the mod's approach more reliable / less special-cased.
-
-
-[1] BROWNBOO — ROCK COLLISION + WIDER CAST RECT
------------------------------------------------
-Live setup: floors-only experiment ON (drops all native walls), rock collision appended, cast rect
-widened to W=-320 / E=310.
-
-ROCK COLLISION REBUILT AGAIN (PILLARS + TUNNELS, build_rock_pillars in tools/brownboo_viewer.py):
-  - iwa01 & iwa02 are DOLMENS (2 pillars + a lintel). We keep only the PILLARS: geometry above y=40 (the
-    lintel/top rock) is ignored, so each archway stays an OPEN TUNNEL — a walking player's held bobber
-    passes through without snagging. iwa03 = the small single rock.
-  - Pillar tops are capped at 40 and given a bobber-safe bounded-slope top (no too-steep above-water face:
-    min |normal.Y|/len = 0.253 > 0.2, validated in the viewer AND the exported .bin).
-  - The pillars' tunnel-facing INNER sides have NO above-water collision (so the bobber passes) and are
-    sealed only below the waterline. Outer sides slope down past the water to the pillar bases (Y reaches
-    -12.7), so the "extend into the water to >= -9" requirement is met.
-  - 807 tris. Budget: floors-only keeps 326 + 807 = 1133, under the 1228 buffer (native gather 769 < 1024).
-NEW WORKFLOW (rock collision now shaped in BLENDER, not the viewer):
-  - Export raw rocks:  python3 tools/export_rocks_obj.py  -> game_data/brownboo/rock_obj/iwa01.obj, ... (untracked)
-    (game world coords, Y up, WaterLevel y=0). Simplify each into a low-poly collision mesh in Blender.
-  - Constraints: keep tops closed/smooth (bobber rests on them); extend down to at least y=-9; keep the
-    dolmen tunnels OPEN (delete the lintel spans); envelope slightly OUTWARD; keep all 3 rocks combined
-    under ~800 tris (floors-only uses 326, buffer cap 1228).
-  - Re-export from Blender as OBJ with the SAME axis (Y up) so coords round-trip.
-  - Save each finished mesh as "Dark Cloud Improved Version/Resources/FishingCollision/rock_obj/<rock>_simple.obj"
-    (tracked custom geometry; e.g. iwa03_simple.obj), then:
-        python3 tools/assemble_rock_collision.py   -> brownboo_14.bin
-    It uses your Blender mesh for any rock that has a *_simple.obj and a lathe PLACEHOLDER for the rest,
-    so the full collision is always complete & in budget. (import_rocks_obj.py = raw all-OBJ convert.)
-STATUS: ALL THREE hand-built in Blender & assembled — iwa01=76, iwa02=81, iwa03=37 (194 tris total, all
-winding-consistent). No more lathe placeholders. Re-run tools/assemble_rock_collision.py after any re-edit.
-IN-GAME CHECK: bobber rests cleanly on each rock top, fish don't clip, and the dolmen tunnels (iwa01 holes,
-iwa02 arch) are walkable without the held bobber snagging.
-
-Watch the LOG on the "FISHING SPOT LOADED" line:
-  - "floors-only: kept N ... (cpoly G -> N)"   G = the native GATHER count. MUST be under 1024 or the
-    game HANGS (that's the risk from widening the rect). If it hangs on entry with no log, the rect
-    over-gathered — tell Claude and we decouple the fish rect from the cast/gather rect.
-  - "rocks: appended 443 rock tris (cpoly N -> N+443)"   total ~780, well under the 1228 buffer cap.
-
-In-game behaviour to check:
-  - Cast ONTO a rock -> bobber rests on top (above water) and the cast is REJECTED (rocks block casts).
-  - Small rock (iwa03) -> bobber rests on its top, does NOT sink into the visual rock.
-  - Fish do NOT swim through the rocks.
-  - Collision sits just OUTSIDE the visual rock everywhere (nothing clips into the model).
-
-
-[2] BROWNBOO — POND-BOTTOM GROUND-GRID CAPTURE  (the "other brownboo thing")
----------------------------------------------------------------------------
-On spot load, IF DC_DUMP_DIR is set (see .env.sample), the mod dumps the base-ground grid to
-$DC_DUMP_DIR/ground_grid.csv (the accurate pond bottom, including the underwater cells collision skips).
-If DC_DUMP_DIR is unset the dump is skipped entirely.
-
-  - Check the LOG: "GROUND GRID: dumped N cells across M area(s)".
-      If it says "bad dims" for an area -> tell Claude the numbers (grid layout differs from the assumed
-      bounds; the dump code needs adjusting).
-  - Then re-run:  python3 tools/brownboo_viewer.py
-      Toggle "ground grid: pond BOTTOM" and confirm it forms the bowl shape (not flat / not garbage).
-
-
-[3] PRISCLEEN (DC2 fish) — NOW WIRED, EXPERIMENTAL/UNTESTED  (do this AFTER [1] and [2] work)
-------------------------------------------------------------------------------------------
-The DC2 Priscleen model is extracted, converted to a DC1-format .chr at game_data/priscleen/f19a.chr
-(untracked game data; the .csproj copies it to Resources/Fish/ at build), and the runtime injection is
-wired (PriscleenFish.cs). It injects into DC1's cut species 8 when a species-8 fish is caught in Brownboo.
-
-NOTE: the fish-depth override was REMOVED (fish are back at vanilla WaterLevel-12) — the earlier -6 depth
-left the fish shallower than the hook reached, so nothing could bite. Fish should bite normally now.
-
-Species 8 doesn't spawn normally, so to SEE Priscleen you must flip the test switch:
-  In PriscleenFish.cs set  ForceAllSpecies8 = true   (stamps every Brownboo fish as species 8), rebuild.
-  Then fish in Brownboo and CATCH ANY FISH -> it should reel up as the Priscleen model, flapping.
-
-FIXED (was showing "Bobo" = the f01a stand-in): the swap used to match the BG slot by a HARD-CODED size
-and only the first match. It now matches by FILENAME (f01a) across ALL 32 BG slots, gated on the caught
-species (BattleFish == 8) — robust to whichever BG/fish slot is used. There's a ~120-frame window after the
-read completes, so no race.
-
-Watch the LOG:
-  - "[PriscleenFish] name_419[8] redirected to stand-in f01a ... Priscleen model 131536B ready" (spot load)
-  - "[PriscleenFish] TEST: stamped N Brownboo fish as species 8"                          (on fishing start)
-  - "[PriscleenFish] injected Priscleen (131536B) into BG slot N buffer 0x........ (file 'chara/f01a.chr')"
-                                                                                          (when you reel one in)
-If the 3rd line never prints, tell Claude the log — the gate (species) or filename match needs adjusting.
-
-What to look for / report (these are the untested unknowns):
-  - Does the caught fish show the Priscleen MODEL at all (vs invisible / garbage / crash)?
-  - Does it FLAP (motion index 1 = the reeled-in animation)?  [KEYs kept in DC2 order 0=4-14/1=18-28/2=40-80]
-  - Texture correct?  (VERTEX_ANIME 1 vs DC2's skin1/skin2 — may need an ALLOC_DBUFF tweak)
-  - Any crash on catch?  (if so, note the exact moment)
-
-NOTE: this test aid makes ALL Brownboo fish Priscleen and doesn't set the name/stats yet. The real
-feature (species 8 in the spawn table + fish_info[8] + "Priscleen" name via .mes patch) comes after the
-model itself is confirmed working. Set ForceAllSpecies8 back to false for normal play.
+[B] SIMPLIFICATION PASS.  Audit the mod for places the old "read the disc / bundle assets / hardcode a
+    dev path" pattern could be simplified now that (a) original game data comes from the player's own ISO
+    and (b) game_data/ holds all non-distributable inputs, AND (c) the ISO select+patch flow now exists
+    (IsoPatcher.Patch, wired from ModWindow). In particular revisit GameDataFiles + the Iso9660 reader:
+    with a user-selected, validated ISO path we know the exact disc up front and could patch/extract
+    deterministically instead of the current on-the-fly ~/ROMs / app-dir / config search.
+    (Runtime on-demand callers today: HarderEnemyAI, WeaponTextureSwap, CustomToanEffects.)

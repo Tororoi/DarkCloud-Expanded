@@ -395,7 +395,7 @@ namespace Dark_Cloud_Improved_Version
                                          // code is present (ApplyNewChanges may fire before it is), before fishing
 
             int map = Memory.ReadInt(EditLoop.MapNo);
-            CameraPassThrough.Apply(map);   // Brownboo: let the follow-camera pass through buildings (MapNo-gated inside)
+            CameraPassThrough.Apply(map);   // Brownboo + Queens: let the follow-camera pass through buildings (MapNo-gated inside)
 
             // Leaving a town and coming back RELOADS it — the script buffer is re-read and the event array
             // rebuilt, so our install is gone. Remembering "already installed for map 23" would then skip a

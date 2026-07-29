@@ -461,6 +461,27 @@ written into e05's table may therefore render untextured or with garbage. This i
 needs live testing before the plan is sound; a fishing spot there works regardless (§4), but the
 animated surface may not.
 
+### SHIPPED: driving the canal ripple with the tide (`CanalTide.PinRipple`)
+
+The `WATER_SURFACE` table above is the **definition** (parsed from the cfg into `*edit_info + 0x17CD0`). It
+is NOT what renders each frame. At load the definitions are copied into **`CEditGround`'s own CWater array**,
+and `DrawWaterSurface__11CEditGround` (`0x1A3360`, called from `MainDraw`) draws THOSE bodies — the animated,
+`WATER_SHAKE`-rippled water you actually see. So the canal has **two** renderings that must be moved together
+for the tide: the scene MESH `mizu__a01` (its CFrame Y, §5 / `CanalTide`) and this CWater render BODY.
+
+- **The live CEditGround is `*(gp-0x6f18)` = guest `*(0x202A28D8)`.** This is the single biggest trap: it is a
+  DIFFERENT global from both `edit_info` (`0x202A27B0`, the *definitions*) and the global `Water[]` BSS object
+  (`0x21D536F0`, drawn by the plain `DrawWaterSurface__Fv`). Reading the render bodies off `edit_info` or the
+  global `Water[]` gives all-zeros/inactive — three separate ripple investigations died on exactly that before
+  the right pointer (`gp-0x6f18`, the one `MainDraw` actually passes to the draw call) was found.
+- **CWater array @ `CEditGround + 0x15040`**, 4 bodies, stride `0x3B0`. Per body: active flag `+0x20` (draws
+  when != 0), pos `+0x40` (**Y at `+0x44`** = the surface height), X/Y/Z follow-camera flags `+0x24/+0x28/+0x2C`.
+  Queens has 3 active: **canal at Y31** (followY=0, so Y is fixed and `+0x44` holds a write), fountain Y113,
+  pool Y5.6 — matching the three `WATER_SURFACE`/`WATER` declarations.
+- **`CanalTide.PinRipple`** writes the canal body's `+0x44` to the shown tide level every frame (identifies the
+  canal body by Y in the tide range; the two pools are excluded). Per-frame because a Queens area transition
+  rebuilds the array back to the mapinfo Y (31). Same day/night levels as the mesh, so ripple + surface track.
+
 The Moon Factory's only animated frame is **`moyou__a01z`** (模様 = "pattern") in `e05g02_c.mds`, plus
 `moyou01/3__cfzappa01` in `e05g06_c.mds`. There is **no** frame named for liquid anywhere in e05 — no
 `mizu`, `taki`, `ike`, `eki` or `abura`. So the yellow liquid is unnamed terrain geometry; `moyou` is
