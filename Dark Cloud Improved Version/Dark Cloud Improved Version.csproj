@@ -22,11 +22,11 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.*" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources\RubyMemeFix\Fire" />
+<!--<EmbeddedResource Include="Resources\RubyMemeFix\Fire" />
     <EmbeddedResource Include="Resources\RubyMemeFix\Holy" />
     <EmbeddedResource Include="Resources\RubyMemeFix\Ice" />
     <EmbeddedResource Include="Resources\RubyMemeFix\Thunder" />
-    <EmbeddedResource Include="Resources\RubyMemeFix\Wind" />
+    <EmbeddedResource Include="Resources\RubyMemeFix\Wind" /> -->
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
