@@ -1,0 +1,914 @@
+#!/usr/bin/env python3
+"""Bake CAMERA + PLAYER collision for a town into its scene.scn ground meshes. Single home for the whole Queens
+(e03) collision bake: the hand-authored geometry (BOTH-frame walls / pipe drums / flat quads, player-only
+railings + canal containment, the generated perimeter wall — formerly the both_walls / player_walls /
+invisible_walls / perimeter_wall modules) AND the orchestration that groups it and splices it into the scene.
+
+Two collision variants per ground sub-file (both origin-placed, so world tris == sub-file-local):
+  * PLAYER `_a` (part+0x14 -> frame +0xd0): simplified structure meshes + perimeter + BOTH-frame walls + canal
+    invisible walls + railings + the loading-zone trigger quads (attribute-tagged). Split PER ground sub.
+  * CAMERA `_c` (part+0x20 -> frame +0xdc): simplified structure meshes + perimeter + BOTH-frame walls ONLY
+    (no canal/railings/triggers = player-only). Consolidated onto the one sub that ships a `_c` variant.
+Buildings keep their vanilla `_a`/`_c` (buildings=False). grouped_collision() pools each frame's tris and
+kd_splits them into <=100-poly, spatially-compact nodes (tight bbox = free runtime gather culling); it is shared
+with queens_viewer.py so both write / show the identical grouping.
+
+Shared primitives kept in their own modules (used by other tools too): scene_placed (placement), mdt_codec /
+georama_collision (mesh decode), build_coll_mdt (collision-MDT serialiser). The MDS-splice + kd-split helpers
+(kd_split / _replace_a_block / _variant_off) live here now. ISO wrapper: iso_patch/bake_structure_collision_iso.py.
+
+  bake_structures(scene_rel, town='e03', max_tris=100) -> (new_scn, stats, manifest)
+"""
+import os, sys, struct, re, math
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)                                     # this dir (build_coll_mdt)
+sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (scene_placed, mdt_codec, georama_collision…)
+from extract_scene_mesh import load_scene, xform
+import scene_placed
+from scene_placed import placed_meshes
+import mdt_codec
+from build_coll_mdt import build_coll_mdt
+import georama_collision as gc
+
+
+# ==========================================================================
+# MDS splice + kd-split primitives (former bake_terrain_camera_collision.py).
+# ==========================================================================
+def _dir(scn):
+    out, o = [], 0x10
+    while o + 0x30 <= len(scn):
+        nm = scn[o:o + 16].split(b'\x00')[0].decode('latin1', 'replace')
+        if not nm or not nm[0].isalnum():
+            break
+        off, size = struct.unpack_from('<II', scn, o + 0x10)
+        out.append((nm, off, size, o))
+        o += 0x30
+    return out
+
+
+def kd_split(tris, max_tris=100):
+    """Recursively median-split the triangle soup along its longest centroid axis until each leaf <= max_tris.
+    Gives compact, balanced buckets (tight bboxes -> effective per-node culling)."""
+    def cen(t):
+        return ((t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3, (t[0][2] + t[1][2] + t[2][2]) / 3)
+
+    def rec(ts):
+        if len(ts) <= max_tris:
+            return [ts]
+        cs = [cen(t) for t in ts]
+        axis = max(range(3), key=lambda a: max(c[a] for c in cs) - min(c[a] for c in cs))
+        order = sorted(range(len(ts)), key=lambda i: cs[i][axis])
+        mid = len(ts) // 2
+        return rec([ts[i] for i in order[:mid]]) + rec([ts[i] for i in order[mid:]])
+
+    return rec(list(tris))
+
+
+def _variant_off(sub, name, suffix='_a'):
+    """Offset (within `sub`) of the `<name><suffix>.mds` MDS variant block, or None. suffix='_a' = player
+    collision, '_c' = camera collision, etc."""
+    m = next(re.finditer((re.escape(name) + suffix + r'\.mds\x00').encode(), sub), None)
+    if not m:
+        return None
+    off = struct.unpack_from('<I', sub, m.end() + 3)[0]
+    return off if 0 < off < len(sub) and sub[off:off + 3] == b'MDS' else None
+
+
+def _replace_a_block(scn, sub_name, new_mds, suffix='_a'):
+    """Replace `sub_name`'s entire `<name><suffix>` MDS block with new_mds; fix trailing variant offsets and the
+    SCN directory. suffix='_a' (player) by default; '_c' rewrites the camera-collision variant. Returns
+    (new_scn, delta)."""
+    scn = bytearray(scn)
+    entry = next((e for e in _dir(scn) if e[0] == sub_name), None)
+    if entry is None:
+        raise KeyError(sub_name)
+    _, sub_off, sub_size, _ = entry
+    sub = bytes(scn[sub_off:sub_off + sub_size])
+    vo = _variant_off(sub, sub_name, suffix)
+    if vo is None:
+        raise KeyError(f"{sub_name}: no {suffix}")
+
+    # variant entries (real ones: offset -> 'MDS'); the _a block ends at the next variant after it
+    variants = []
+    for m in re.finditer(rb'[\w]+\.mds\x00', sub):
+        fpos = m.end() + 3
+        if fpos + 4 > len(sub):
+            continue
+        toff = struct.unpack_from('<I', sub, fpos)[0]
+        if 0 < toff < sub_size and sub[toff:toff + 3] == b'MDS':
+            variants.append((sub_off + fpos, toff))
+    after = [t for _, t in variants if t > vo]
+    old_size = (min(after) if after else sub_size) - vo
+
+    new_mds = bytearray(new_mds)
+    while len(new_mds) % 0x10:
+        new_mds.append(0)
+    delta = len(new_mds) - old_size
+
+    out = bytearray(scn[:sub_off + vo]) + new_mds + bytearray(scn[sub_off + vo + old_size:])
+    # trailing variant offsets shift by delta (positions are before the block, unmoved)
+    for pos, toff in variants:
+        if toff > vo:
+            struct.pack_into('<I', out, pos, toff + delta)
+    # SCN directory
+    for name, off, size, eoff in _dir(scn):
+        if off == sub_off:
+            struct.pack_into('<I', out, eoff + 0x14, size + delta)
+        elif off > sub_off:
+            struct.pack_into('<I', out, eoff + 0x10, off + delta)
+    return bytes(out), delta
+
+
+# ==========================================================================
+# Hand-authored Queens (e03) collision geometry (was both_walls.py etc.)
+# ==========================================================================
+# BOTH-frame walls + flat-ground quads + pipe drums (former both_walls.py):
+
+# town -> [ ((x0,y0,z0), (x1,y1,z1), height), ... ]
+_BOTH_WALLS = {
+    'e03': [
+        # North play-area boundary U. Replaces the deleted raised-border strip + its vertical walls (the ~180
+        # terrain tris in simplify_terrain._REMOVE) AND the removed north perimeter (perimeter_wall._REMOVE). Inner
+        # edge x=-400 west / z=-1000 north / x=900 east; from the y70 ground up +430 -> y500 (blocks player at the
+        # ground and the camera up to the old perimeter height). Open to the south (z>-150) where the player enters.
+        ((-400.0, 70.0, -150.0), (-400.0, 70.0, -1000.0), 430.0),   # west   (x=-400)
+        ((-400.0, 70.0, -1000.0), (900.0, 70.0, -1000.0), 430.0),   # north  (z=-1000)
+        ((900.0, 70.0, -1000.0), (900.0, 70.0, -150.0), 430.0),     # east   (x=900)
+        # south wall plane z=1300 (x -400..600) simplified from 60 terrain tris to one quad; y0 up +270 -> y270
+        ((-400.0, 0.0, 1300.0), (600.0, 0.0, 1300.0), 270.0),
+        # canal side walls (x -200..900), simplified to one quad each; y0 up +70 -> y70:
+        ((-200.0, 0.0, -50.0), (900.0, 0.0, -50.0), 70.0),   # south canal wall z=-50
+        ((-200.0, 0.0, 50.0), (900.0, 0.0, 50.0), 70.0),     # north canal wall z=50
+        # east wall plane x=600 (z 200..1300) simplified from 66 terrain tris to one quad; y0 up +270 -> y270
+        ((600.0, 0.0, 200.0), (600.0, 0.0, 1300.0), 270.0),
+        # y370 platform's inner wall (y170->370), L-shape simplified from 80 tris to 2 quads:
+        ((650.0, 170.0, 1300.0), (1500.0, 170.0, 1300.0), 200.0),   # south leg z=1300, x 650..1500
+        ((1500.0, 170.0, 250.0), (1500.0, 170.0, 1300.0), 200.0),   # east leg  x=1500, z 250..1300
+    ],
+}
+
+
+# Explicit hand-adjusted tris (both frames), for cases an edge-extrude can't express. e03: the wall segment ABOVE
+# the x=600 quad (y270->~370), with its bottom edge SMOOTHED from y262-271 to y270 to line up with the flat quad
+# top (the originals are deleted in simplify_terrain._REMOVE).
+_MANUAL_TRIS = {
+    'e03': [
+        [[600, 270.0, 600], [600, 367.0, 600], [600, 370.0, 500]],
+        [[600, 270.0, 600], [600, 370.0, 500], [600, 270.0, 500]],
+        [[600, 270.0, 400], [600, 370.0, 400], [600, 366.0, 300]],
+        [[600, 270.0, 400], [600, 366.0, 300], [600, 270.0, 300]],
+        [[600, 270.0, 300], [600, 366.0, 300], [600, 370.0, 200]],
+        [[600, 270.0, 300], [600, 370.0, 200], [600, 270.0, 200]],
+        [[600, 270.0, 700], [600, 370.0, 700], [600, 367.0, 600]],
+        [[600, 270.0, 700], [600, 367.0, 600], [600, 270.0, 600]],
+        [[600, 270.0, 500], [600, 370.0, 500], [600, 370.0, 400]],
+        [[600, 270.0, 500], [600, 370.0, 400], [600, 270.0, 400]],
+        [[600, 270.0, 800], [600, 370.0, 800], [600, 370.0, 700]],
+        [[600, 270.0, 800], [600, 370.0, 700], [600, 270.0, 700]],
+        [[600, 270.0, 1000], [600, 376.0, 1000], [600, 376.0, 900]],
+        [[600, 270.0, 1000], [600, 376.0, 900], [600, 270.0, 900]],
+        [[600, 270.0, 1200], [600, 366.0, 1200], [600, 370.0, 1100]],
+        [[600, 270.0, 1200], [600, 370.0, 1100], [600, 270.0, 1100]],
+        [[600, 270.0, 900], [600, 376.0, 900], [600, 370.0, 800]],
+        [[600, 270.0, 900], [600, 370.0, 800], [600, 270.0, 800]],
+        [[600, 270.0, 1100], [600, 370.0, 1100], [600, 376.0, 1000]],
+        [[600, 270.0, 1100], [600, 376.0, 1000], [600, 270.0, 1000]],
+        [[600, 270.0, 1300], [600, 366.0, 1200], [600, 270.0, 1200]],
+        # y370 platform floor (horizontal), L-shape simplified from 48 tris to 2 quads (4 tris):
+        [[600, 370.0, 1300], [1600, 370.0, 1300], [1600, 370.0, 1400]],   # south leg x[600,1600] z[1300,1400]
+        [[600, 370.0, 1300], [1600, 370.0, 1400], [600, 370.0, 1400]],
+        [[1500, 370.0, 100], [1600, 370.0, 100], [1600, 370.0, 1300]],    # east leg x[1500,1600] z[100,1300]
+        [[1500, 370.0, 100], [1600, 370.0, 1300], [1500, 370.0, 1300]],
+        # east canal-end wall face (x=1400, spans canal z[-50,50]): 3 vertical tris (y89-170) simplified to 2 and
+        # extended DOWN to y64 (the floor tri's edge) to close the gap. Originals removed in simplify_terrain._REMOVE.
+        [[1400, 64.0, -50], [1400, 64.0, 50], [1400, 170.0, 50]],
+        [[1400, 64.0, -50], [1400, 170.0, 50], [1400, 170.0, -50]],
+    ],
+}
+
+
+# Flat GROUND rectangles (both frames): each (x0,x1,z0,z1,y) REPLACES every flat terrain tri whose footprint
+# falls inside it at that y (a corner-set + the ground connecting the corners) with ONE quad. The matching
+# removal lives in simplify_terrain (below, via _in_flat_region reading _FLAT_REGIONS). Non-flat tris
+# (walls/slopes) inside the footprint are untouched.
+_FLAT_REGIONS = {
+    'e03': [
+        (-400.0, 900.0, -1000.0, -150.0, 70.0),    # y70 ground, x[-400,900] z[-1000,-150]
+        (650.0, 1500.0, 250.0, 1300.0, 170.0),     # y170 ground, x[650,1500] z[250,1300]
+        (-300.0, 600.0, 300.0, 1300.0, 0.0),       # y0 ground, x[-300,600] z[300,1300]
+        # canal-area ground:
+        (-400.0, 900.0, 50.0, 200.0, 70.0),        # y70 north bank (top edge steps 150<->200, quad slightly over-covers)
+        (-400.0, 900.0, -100.0, -50.0, 70.0),      # y70 south bank
+        (-400.0, -200.0, -50.0, 50.0, 70.0),       # y70 west end (canal doesn't reach here)
+        (-200.0, 1300.0, -50.0, 50.0, 0.0),        # y0 canal floor
+        # west y270 platform + a y0 patch:
+        (-500.0, -400.0, 50.0, 500.0, 270.0),      # y270 west platform (z 50..500)
+        (-500.0, -400.0, 600.0, 1300.0, 270.0),    # y270 west platform (z 600..1300)
+        (-500.0, 100.0, 1300.0, 1400.0, 270.0),    # y270 north strip (z 1300..1400)
+        (-400.0, -300.0, 1000.0, 1300.0, 0.0),     # y0 patch (z 1000..1300)
+    ],
+}
+
+
+def flat_ground_tris(town='e03'):
+    out = []
+    for x0, x1, z0, z1, y in _FLAT_REGIONS.get(town, []):
+        out.append([[x0, y, z0], [x1, y, z0], [x1, y, z1]])
+        out.append([[x0, y, z0], [x1, y, z1], [x0, y, z1]])
+    return out
+
+
+# SOLID octagonal drums (both frames) replacing the hollow obj1/obj9 pipe tubes (which had an extruded inner hole).
+# Each tube = an octagon in the X-Y plane (cardinal radius R, diagonal d) extruded along z; the drum is that outer
+# octagon, side-walled and end-capped (no hole). obj1/obj9 are dropped from is_cam_node so only the drum remains.
+_PIPE_DRUMS = {
+    'e03': [   # (center_x, center_y, z0, z1, R, d) — each obj instance is TWO short stub-pipes (NOT a crossing
+               # tube): a south stub z[-50,-40] and a north stub z[40,50] at each bank. 3 instances => 6 pipes.
+               # Keep the ORIGINAL 10-unit extent (don't span the canal); just the solid octagon, hole removed.
+        (198.0, 50.0, -50.0, -40.0, 12.0, 9.0), (198.0, 50.0, 40.0, 50.0, 12.0, 9.0),
+        (601.0, 50.0, -50.0, -40.0, 12.0, 9.0), (601.0, 50.0, 40.0, 50.0, 12.0, 9.0),
+        (1100.0, 50.0, -50.0, -40.0, 12.0, 9.0), (1100.0, 50.0, 40.0, 50.0, 12.0, 9.0),
+    ],
+}
+
+
+def pipe_drum_tris(town='e03'):
+    out = []
+    for cx, cy, z0, z1, R, d in _PIPE_DRUMS.get(town, []):
+        oct2d = [(0, -R), (d, -d), (R, 0), (d, d), (0, R), (-d, d), (-R, 0), (-d, -d)]
+        r0 = [[cx + dx, cy + dy, z0] for dx, dy in oct2d]
+        r1 = [[cx + dx, cy + dy, z1] for dx, dy in oct2d]
+        for i in range(8):                                        # side walls
+            j = (i + 1) % 8
+            out.append([r0[i][:], r0[j][:], r1[j][:]])
+            out.append([r0[i][:], r1[j][:], r1[i][:]])
+        wall_ring = r0 if abs(z0) > abs(z1) else r1               # the end flush against the canal wall (|z|=50)
+        for ring in (r0, r1):                                     # end caps (fan from vertex 0)
+            if ring is wall_ring:                                 # no cap where the stub is embedded in the wall
+                continue
+            for i in range(1, 7):
+                out.append([ring[0][:], ring[i][:], ring[i + 1][:]])
+    return out
+
+
+def both_wall_tris(town='e03'):
+    out = []
+    for a, b, h in _BOTH_WALLS.get(town, []):
+        a0, b0 = list(a), list(b)
+        a1 = [a[0], a[1] + h, a[2]]
+        b1 = [b[0], b[1] + h, b[2]]
+        out.append([a0, b0, b1])
+        out.append([a0, b1, a1])
+    out += [[list(p) for p in t] for t in _MANUAL_TRIS.get(town, [])]
+    out += flat_ground_tris(town)
+    out += pipe_drum_tris(town)
+    return out
+
+# ==========================================================================
+# Player-only railings/containment (former player_walls.py)
+# ==========================================================================
+
+# town -> [ ((x0,y0,z0), (x1,y1,z1), height), ... ]   base edge + upward extrude height
+# NOTE: the two platform south-edge railings moved to perimeter_wall._EXTRA (both frames, per user); the canal
+# containment below is the only genuine player-only invisible wall left here.
+_PLAYER_WALLS = {
+    'e03': [
+        # canal containment: fill the y0->50 gap at x=-200 (z -50..50) between the canal floor edge (y0) and the
+        # wall segment above it (y50-70), so a player in the canal can't slip out to the west
+        ((-200.0, 0.0, -50.0), (-200.0, 0.0, 50.0), 50.0),
+    ],
+}
+
+
+def player_wall_tris(town='e03'):
+    out = []
+    for a, b, h in _PLAYER_WALLS.get(town, []):
+        a0, b0 = list(a), list(b)
+        a1 = [a[0], a[1] + h, a[2]]
+        b1 = [b[0], b[1] + h, b[2]]
+        out.append([a0, b0, b1])
+        out.append([a0, b1, a1])
+    return out
+
+# ==========================================================================
+# Player-only invisible walls: canal containment (former invisible_walls.py)
+# ==========================================================================
+
+_E03 = """
+0,70,50, 700,70,50, 700,168.25,50
+0,70,50, 700,168.25,50, 0,168.25,50
+-100,168.25,50, -200,70,50, -100,70,50
+-100,168.25,50, -200,168.25,50, -200,70,50
+-68,169.98,50, -100,168.25,50, -100,70,50
+-68,169.98,50, -100,70,50, -68,70,50
+-68.21,76.68,25.02, -68.21,78.9,0, -68.21,178.88,0
+-68.21,176.66,-25.02, -68.21,78.9,0, -68.21,76.68,-25.02
+-68.21,76.68,25.02, -68.21,178.88,0, -68.21,176.66,25.02
+-68.21,176.66,-25.02, -68.21,178.88,0, -68.21,78.9,0
+-68.21,176.66,25.02, -68,70,50, -68.21,76.68,25.02
+-68.21,176.66,25.02, -68,169.98,50, -68,70,50
+-68.21,76.68,-25.02, -68,169.98,-50, -68.21,176.66,-25.02
+-68.21,76.68,-25.02, -68,70,-50, -68,169.98,-50
+-68,169.98,-50, -68,70,-50, -200,70,-50
+-68,169.98,-50, -200,70,-50, -200,170,-50
+-200,170,-50, -200,70,-50, -200,70,50
+-200,170,-50, -200,70,50, -200,168.25,50
+-28,70,50, 0,70,50, 0,168.25,50
+-28,70,50, 0,168.25,50, -28,169.98,50
+-27.79,176.66,25.02, -27.79,78.9,0, -27.79,76.68,25.02
+-27.79,76.68,25.02, -28,169.98,50, -27.79,176.66,25.02
+-27.79,76.68,25.02, -28,70,50, -28,169.98,50
+-27.79,76.68,-25.02, -27.79,78.9,0, -27.79,178.88,0
+-27.79,176.66,25.02, -27.79,178.88,0, -27.79,78.9,0
+-27.79,76.68,-25.02, -27.79,178.88,0, -27.79,176.66,-25.02
+-27.79,176.66,-25.02, -28,70,-50, -27.79,76.68,-25.02
+-27.79,176.66,-25.02, -28,169.98,-50, -28,70,-50
+-28,169.98,-50, 200,70,-50, -28,70,-50
+-28,169.98,-50, 200,172.16,-50, 200,70,-50
+300,70,-50, 200,70,-50, 200,172.16,-50
+300,70,-50, 200,172.16,-50, 300,172.16,-50
+780,70,-50, 300,70,-50, 300,172.16,-50
+780,70,-50, 300,172.16,-50, 780,172,-50
+779.79,76.68,-25.02, 780,70,-50, 780,172,-50
+779.79,178.68,-25.02, 779.79,78.9,0, 779.79,76.68,-25.02
+779.79,76.68,-25.02, 780,172,-50, 779.79,178.68,-25.02
+779.79,76.68,25.02, 779.79,180.9,0, 779.79,178.68,25.02
+779.79,178.68,-25.02, 779.79,180.9,0, 779.79,78.9,0
+779.79,76.68,25.02, 779.79,78.9,0, 779.79,180.9,0
+779.79,178.68,25.02, 780,70,50, 779.79,76.68,25.02
+779.79,178.68,25.02, 780,172,50, 780,70,50
+780,172,50, 700,168.25,50, 700,70,50
+780,172,50, 700,70,50, 780,70,50
+820.21,178.68,25.02, 820.21,78.9,0, 820.21,76.68,25.02
+820.21,76.68,-25.02, 820.21,78.9,0, 820.21,180.9,0
+820.21,76.68,-25.02, 820.21,180.9,0, 820.21,178.68,-25.02
+820.21,178.68,-25.02, 820,70,-50, 820.21,76.68,-25.02
+820.21,178.68,-25.02, 820,172,-50, 820,70,-50
+820.21,178.68,25.02, 820.21,180.9,0, 820.21,78.9,0
+820.21,76.68,25.02, 820,172,50, 820.21,178.68,25.02
+820.21,76.68,25.02, 820,70,50, 820,172,50
+820,70,50, 900,168.25,50, 820,172,50
+820,70,50, 900,70,50, 900,168.25,50
+900,70,50, 1000,168.25,50, 900,168.25,50
+900,70,50, 1000,98,50, 1000,168.25,50
+1000,98,50, 1100,98,50, 1100,177.19,50
+1000,98,50, 1100,177.19,50, 1000,168.25,50
+1100,98,50, 1200,210.73,50, 1100,177.19,50
+1100,98,50, 1200,128,50, 1200,210.73,50
+1300,232.25,50, 1200,128,50, 1300,128,50
+1300,232.25,50, 1200,210.73,50, 1200,128,50
+1300,232.25,50, 1300,128,50, 1400,170,50
+1300,232.25,50, 1400,170,50, 1400,244,50
+820,172,-50, 900,70,-50, 820,70,-50
+820,172,-50, 900,172.16,-50, 900,70,-50
+1000,98,-50, 900,70,-50, 900,172.16,-50
+1000,98,-50, 900,172.16,-50, 1000,253.7,-50
+1100,98,-50, 1000,98,-50, 1000,253.7,-50
+1100,98,-50, 1000,253.7,-50, 1100,253.7,-50
+1200,128,-50, 1100,98,-50, 1100,253.7,-50
+1200,128,-50, 1100,253.7,-50, 1200,253.7,-50
+1200,128,-50, 1300,255.2,-50, 1300,128,-50
+1200,128,-50, 1200,253.7,-50, 1300,255.2,-50
+1300,128,-50, 1300,255.2,-50, 1400,244,-50
+1400,170,50, 1400,244,-50, 1400,244,50
+1300,128,-50, 1400,244,-50, 1400,170,-50
+1400,170,50, 1400,170,-50, 1400,244,-50
+"""
+
+_INVIS_DATA = {'e03': _E03}
+
+
+def invisible_tris(town='e03', max_height=5.0):
+    """Canal-containment collision. max_height caps each wall's vertical extent (top pulled down to base +
+    max_height) so the FEET-level player check still hits it but the higher camera clears it — this is why we
+    can leave these in the shared collision instead of excluding them from the camera."""
+    txt = _INVIS_DATA.get(town, '')
+    tris = []
+    for line in txt.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        n = [float(x) for x in line.split(',')]
+        tris.append([[n[0], n[1], n[2]], [n[3], n[4], n[5]], [n[6], n[7], n[8]]])
+    if max_height is not None:
+        # The walls' BOTTOM edge already follows the ground contour. Build the ground height per XZ (min y
+        # seen at that column = the bottom), then pull every vertex down to ground(XZ) + max_height, so the
+        # new top edge follows the same contour 5 units up instead of being flattened.
+        def _k(p):
+            return (round(p[0], 1), round(p[2], 1))
+        ground = {}
+        for t in tris:
+            for p in t:
+                kk = _k(p)
+                ground[kk] = min(ground.get(kk, p[1]), p[1])
+        tris = [[[p[0], min(p[1], ground[_k(p)] + max_height), p[2]] for p in t] for t in tris]
+    return tris
+
+# ==========================================================================
+# Perimeter wall — the outer boundary that keeps the camera in town.
+# ==========================================================================
+# The 7 corner points (XZ) of the simplified outer boundary, finalized in the viewer. Formerly derived at build
+# time from a traced reference outline via Douglas-Peucker; frozen to that result, so NO game-mesh vertices are
+# retained here — just the authored corners.
+_PERIM_CORNERS = {
+    'e03': [(-500.0, -1100.0), (-500.0, 1400.0), (1600.0, 1400.0), (1600.0, -100.0),
+            (1500.0, -150.0), (1000.0, -150.0), (1000.0, -1100.0)],
+}
+
+# Corner-loop walls made REDUNDANT by an inner wall (the north-U in _BOTH_WALLS bounds the camera there now),
+# dropped by rounded-int key.
+_PREMOVE_E03 = """
+1000,500,-150, 1000,170,-1100, 1000,170,-150
+1000,500,-150, 1000,500,-1100, 1000,170,-1100
+1000,500,-1100, -500,170,-1100, 1000,170,-1100
+1000,500,-1100, -500,500,-1100, -500,170,-1100
+"""
+
+# Extra hand-authored perimeter segments (BOTH frames) the corner loop doesn't cover: the two platform
+# south-edge railings at z=-150 (base EDGE extruded UP; the camera should hug these, so perimeter not canal).
+_EXTRA = {
+    'e03': [
+        ((900.0, 270.0, -150.0), (1000.0, 270.0, -150.0), 130.0),    # east platform south edge (y270 -> 400)
+        ((-400.0, 273.0, -150.0), (-500.0, 273.0, -150.0), 130.0),   # west platform south edge (y273 -> 403)
+    ],
+}
+
+
+def _pkey(t):
+    return tuple(sorted(tuple(round(c) for c in p) for p in t))
+
+
+_PREMOVE = {'e03': set(_pkey([[float(x) for x in l.split(',')][i:i + 3] for i in (0, 3, 6)])
+                       for l in _PREMOVE_E03.strip().split('\n'))}
+
+
+def perimeter_wall_tris(town='e03', y_bottom=170.0, y_top=500.0):
+    """Straight flat wall quads (2 tris each) between the frozen corner points, spanning [y_bottom, y_top],
+    plus the hand-authored _EXTRA railings. Both frames. Walls in _PREMOVE (redundant vs an inner wall) dropped."""
+    corners = _PERIM_CORNERS.get(town, [])
+    walls = []
+    n = len(corners)
+    for i in range(n):
+        a = corners[i]; b = corners[(i + 1) % n]
+        At = (a[0], y_top, a[1]); Bt = (b[0], y_top, b[1])
+        Ab = (a[0], y_bottom, a[1]); Bb = (b[0], y_bottom, b[1])
+        walls.append([list(At), list(Bt), list(Bb)])
+        walls.append([list(At), list(Bb), list(Ab)])
+    rem = _PREMOVE.get(town, set())
+    out = [w for w in walls if _pkey(w) not in rem]
+    for a, b, h in _EXTRA.get(town, []):                              # extra railings: base edge extruded up
+        a0, b0 = list(a), list(b)
+        a1 = [a[0], a[1] + h, a[2]]; b1 = [b[0], b[1] + h, b[2]]
+        out.append([a0, b0, b1]); out.append([a0, b1, a1])
+    return out
+
+
+def _num(prefix, n):
+    m = re.match(prefix + r'(\d+)', n)
+    return int(m.group(1)) if m else None
+
+
+def is_cam_node(nm):
+    # obj42 here = the VISIBLE short-wall mesh (y70-76), NOT the 626-tri collision node named obj42 inside the
+    # ground `_a` (that's the town-wide player collision with the tall invisible walls — unrelated, dropped).
+    # No 'kanban' — the injected fishing sign isn't a terrain structure and has no ground-style `_a`.
+    # obj1/obj9 (the canal pipes) are EXCLUDED here — their hollow tube collision is replaced by solid octagonal
+    # drums (both_walls.pipe_drum_tris).
+    return nm.startswith('grid3') or _num('obj', nm) in (40, 44, 6, 33, 34, 43, 45, 42)
+
+
+def _key(t):
+    return tuple(sorted(tuple(round(c, 1) for c in p) for p in t))
+
+
+def _obj42_coll(scn):
+    """obj42 short-wall COLLISION tris (world = local), per ground sub-file that contains it."""
+    DIR = scene_placed._scndir(scn)
+    out = {}
+    for g in [n for n in DIR if re.match(r'e03g\d\d$', n)]:
+        off, size = DIR[g]; sub = scn[off:off + size]; vo = gc._variant_a(sub, g)
+        if vo is None:
+            continue
+        mds = off + vo; nodes, wm = scene_placed._accum(scn, mds)
+        tris = []
+        for i, (nn, mo, par, mat) in enumerate(nodes):
+            if nn != 'obj42':
+                continue
+            fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c + 3] == b'MDT'), None)
+            if not fo:
+                continue
+            M = wm(i)
+            for a, b, c in gc.parse_coll_mdt(scn, fo):
+                tris.append([list(xform(M, a)), list(xform(M, b)), list(xform(M, c))])
+        if tris:
+            out[g] = tris
+    return out
+
+
+def trigger_nodes(scn):
+    """Event-trigger collision quads baked into each ground `_a` (the loading zones): tris whose colour-block
+    entry has a non-zero destination tag (the +0x40 short GetEventPoly reads). Returns
+    {sub: [(node_name, [tri,...], [colour_entry_16b,...]), ...]}. These MUST survive into the rebuilt `_a`,
+    else EdEventPointCpPoly gathers no tagged poly at the event point and the town exit stops working.
+    (Queens e03: e03g04 nodes 'map' dest=1 / 'minato' dest=3; e03g05 node 'obj41_2' dest=2.)"""
+    DIR = scene_placed._scndir(scn)
+    out = {}
+    for g in [n for n in DIR if re.match(r'e03g\d\d$', n)]:
+        off, size = DIR[g]; sub = scn[off:off + size]; vo = gc._variant_a(sub, g)
+        if vo is None:
+            continue
+        mds = off + vo; nodes, wm = scene_placed._accum(scn, mds)
+        found = []
+        for ni, (nn, mo, par, mat) in enumerate(nodes):
+            if mo == 0:
+                continue
+            fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c + 3] == b'MDT'), None)
+            if not fo:
+                continue
+            w = struct.unpack_from('<16I', scn, fo)
+            POS, DL, COL = w[4], w[10], w[14]
+            tc = struct.unpack_from('<I', scn, fo + DL + 0x14)[0]; rb = fo + DL + 0x18
+            M = wm(ni)
+            tris, ents = [], []
+            for t in range(tc):
+                i0, i1, i2, ci, _pad = struct.unpack_from('<5i', scn, rb + t * 0x14)
+                if not (COL and ci >= 0):
+                    continue
+                ent = scn[fo + COL + ci * 0x10: fo + COL + ci * 0x10 + 0x10]
+                if len(ent) < 0x10 or (struct.unpack_from('<H', ent, 0)[0] == 0):   # +0x40 short 0 = plain surface
+                    continue
+                def V(i):
+                    p = struct.unpack_from('<3f', scn, fo + POS + i * 0x10)
+                    return list(xform(M, p))
+                tris.append([V(i0), V(i1), V(i2)]); ents.append(ent)
+            if tris:
+                found.append((nn, tris, ents))
+        if found:
+            out[g] = found
+    return out
+
+
+def _face_ny(t):
+    """|unit face-normal.y| of a triangle. ~1 = horizontal (roof/floor), ~0 = vertical (wall)."""
+    (x1, y1, z1), (x2, y2, z2), (x3, y3, z3) = t
+    ux, uy, uz = x2 - x1, y2 - y1, z2 - z1
+    vx, vy, vz = x3 - x1, y3 - y1, z3 - z1
+    ny = uz * vx - ux * vz
+    L = math.sqrt((uy * vz - uz * vy) ** 2 + ny * ny + (ux * vy - uy * vx) ** 2)
+    return abs(ny) / L if L else 1.0
+
+
+def _building_lods(scn, off, sub):
+    """Absolute offsets of a building sub-file's VISIBLE-mesh LODs, in decreasing detail. The sub-file leads
+    with the LOD chain (MDS#0 full .. MDS#k coarsest) before the collision/shadow blocks; take the leading run
+    of MDS blocks that actually decode to triangles."""
+    lods = []
+    for m in re.finditer(b'MDS\x00', sub):
+        mds = off + m.start()
+        nodes, wm = scene_placed._accum(scn, mds)
+        tc = 0
+        for i, (nn, mo, par, mat) in enumerate(nodes):
+            if mo == 0:
+                continue
+            fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c + 3] == b'MDT'), None)
+            if fo:
+                try:
+                    tc += len(scene_placed._flatten(mdt_codec.parse_mdt(scn, fo)))
+                except Exception:
+                    pass
+        if tc == 0:
+            break                                    # end of the LOD chain (shadow/collision blocks follow)
+        lods.append(mds)
+    return lods
+
+
+def building_collision_nodes(scn, max_tris=100, wall_max_ny=None, lod=2):
+    """Per e03h* building sub-file: a coarse LOD of its VISIBLE mesh decoded in BUILDING-LOCAL space (node
+    matrices only, NO mapinfo placement — buildings are georama PARTS, transformed at runtime), kd-split into
+    <=max_tris nodes. Returns {sub: [(node_name, local_tris), ...]}. The georama part placement moves these at
+    runtime exactly like the native multi-node building `_a` (e03h01 ships 6: obj7/car2/car1/car3/grid43/lt1).
+    lod picks the LOD (0=full detail .. clamped to the coarsest available); the town-load memory pool
+    (CDataAlloc2 @0x1d3a050, holds meshes+collision, hangs on overflow) is TIGHT, and the full mesh (LOD0, ~17.5k
+    tris → ~2.6MB of pool) overflows it — a coarse LOD stays COMPLETE (same bbox, roofs walkable) at ~1/3 the
+    tris. The whole (coarse) mesh is kept — several Queens buildings have WALKABLE roofs, so dropping horizontal
+    faces left holes. Optional wall_max_ny (0..1) additionally keeps only |face-normal.y| <= it — off by default."""
+    DIR = scene_placed._scndir(scn)
+    out = {}
+    for g in sorted(n for n in DIR if re.match(r'e03h\d\d$', n)):
+        off, size = DIR[g]; sub = scn[off:off + size]
+        if gc._variant_a(sub, g) is None:            # only buildings that ship an `_a` (placed + collidable)
+            continue
+        lods = _building_lods(scn, off, sub)
+        if not lods:
+            continue
+        mds = lods[min(lod, len(lods) - 1)]          # coarsest available at/below the requested LOD
+        nodes, wm = scene_placed._accum(scn, mds)
+        tris = []
+        for i, (nn, mo, par, mat) in enumerate(nodes):
+            if mo == 0:
+                continue
+            fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c + 3] == b'MDT'), None)
+            if not fo:
+                continue
+            try:
+                m = mdt_codec.parse_mdt(scn, fo)     # strict visible-mesh decode (same as placed_meshes)
+            except Exception:
+                continue
+            M = wm(i)
+            lv = [list(xform(M, (p[0], p[1], p[2]))) for p in m.pos]   # BUILDING-LOCAL (node matrix only)
+            for a, b, c in scene_placed._flatten(m):
+                tris.append([lv[a], lv[b], lv[c]])
+        if wall_max_ny is not None:
+            tris = [t for t in tris if _face_ny(t) <= wall_max_ny]
+        if not tris:
+            continue
+        stem = g[3:]                                  # 'e03h01' -> 'h01' (short, unique node-name base)
+        named = [(f'{stem}w{bi}', bk) for bi, bk in enumerate(kd_split(tris, max_tris))]
+        out[g] = named
+    return out
+
+
+def _unique_names(names):
+    cnt = {}
+    for n in names:
+        cnt[n] = cnt.get(n, 0) + 1
+    occ, out = {}, []
+    for n in names:
+        if cnt[n] > 1:
+            k = occ.get(n, 0); occ[n] = k + 1
+            out.append(f'{n}_{k}')
+        else:
+            out.append(n)
+    return out
+
+
+def _fit(name, used, maxlen=15):
+    cand = name[:maxlen]; k = 0
+    while cand in used:
+        k += 1; suf = '~' + str(k); cand = name[:maxlen - len(suf)] + suf
+    used.add(cand)
+    return cand
+
+
+def build_flat_mds(named):
+    """named: [(node_name, [tri,...]) | (node_name, [tri,...], [colour_entry_16b,...]), ...]. Build a flat `_a`
+    (node 0 root, rest its children). Camera and player both gather the whole thing — the 5-unit canal walls
+    clear the camera by height, so no camera/player split is needed. A 3-tuple carries per-triangle colour-block
+    attributes (the event-trigger tags) through build_coll_mdt so loading zones keep their destination."""
+    n = len(named)
+    header = struct.pack('<4sIII', b'MDS\x00', 1, n, 0x10)
+    table = bytearray(); blob = bytearray()
+    cur = 0x10 + n * 0x70
+    for i, entry in enumerate(named):
+        nm, t = entry[0], entry[1]
+        attrs = entry[2] if len(entry) > 2 else None
+        node = bytearray(0x70)
+        struct.pack_into('<II', node, 0, 0, 0x70)
+        b = nm.encode('latin1', 'replace')[:15]
+        node[8:8 + len(b)] = b
+        mdt = build_coll_mdt(t, attrs=attrs)
+        struct.pack_into('<i', node, 0x28, cur)
+        blob += mdt; cur += len(mdt)
+        struct.pack_into('<i', node, 0x2c, -1 if i == 0 else 0)
+        struct.pack_into('<16f', node, 0x30, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+        table += node
+    return header + bytes(table) + bytes(blob)
+
+
+# ==========================================================================
+# Terrain simplification — drop the game's structure-collision tris that a
+# hand-authored wall/quad above now stands in for (so they're never emitted).
+# ==========================================================================
+# Removal REGIONS (authored bounds), replacing a former 528-entry list of exact game vertices. Each region drops
+# the collision of a structure a hand-authored piece replaces. Where a box would also cover KEPT geometry (a floor
+# sharing the footprint), tris are matched by their own PLANE (all verts coplanar) or restricted to horizontal
+# faces, so a broad box never deletes a neighbour. Verified to remove EXACTLY the old set — only 6 irregular
+# corner/scatter tris need the exact residue below.
+def _box(t, x0, x1, y0, y1, z0, z1, e=0.5):
+    return all(x0 - e <= p[0] <= x1 + e and y0 - e <= p[1] <= y1 + e and z0 - e <= p[2] <= z1 + e for p in t)
+
+
+def _plane_x(t, xv, z0, z1, y0, y1, e=0.5):        # tri coplanar with x=xv, within a z/y window
+    return all(abs(p[0] - xv) < e and z0 - e <= p[2] <= z1 + e and y0 - e <= p[1] <= y1 + e for p in t)
+
+
+def _plane_z(t, zv, x0, x1, y0, y1, e=0.5):        # tri coplanar with z=zv, within an x/y window
+    return all(abs(p[2] - zv) < e and x0 - e <= p[0] <= x1 + e and y0 - e <= p[1] <= y1 + e for p in t)
+
+
+def _horiz(t):                                     # near-horizontal face (a floor/top; |normal.y| > 0.7)
+    e1 = [t[1][i] - t[0][i] for i in range(3)]; e2 = [t[2][i] - t[0][i] for i in range(3)]
+    n = [e1[1]*e2[2] - e1[2]*e2[1], e1[2]*e2[0] - e1[0]*e2[2], e1[0]*e2[1] - e1[1]*e2[0]]
+    return abs(n[1]) > 0.7 * (math.hypot(*n) or 1.0)
+
+
+def _in_remove_region(t):
+    """True if t is structure collision the bake drops because a hand-authored wall/quad replaces it (e03)."""
+    return (
+        _plane_z(t, 1300, -400, 600, 0, 270)         # south wall plane      -> _BOTH_WALLS quad
+        or _plane_x(t, 600, 200, 1300, 0, 272)       # east wall plane        -> _BOTH_WALLS quad
+        or _plane_x(t, 600, 200, 1250, 262, 376)     # wall segment above it  -> smoothed _MANUAL_TRIS
+        or _box(t, -500, -400, 70, 170, -900, -200)  # west boundary strip, now behind the north-U
+        or _plane_x(t, -400, -1000, -150, 70, 276)   # north-U border wall, west leg  -> _BOTH_WALLS U
+        or _plane_x(t, 900, -1000, -150, 70, 276)    # north-U border wall, east leg
+        or _plane_z(t, -1000, -400, 900, 70, 276)    # north-U border wall, north leg
+        or (_box(t, -500, 1000, 260, 278, -1100, -1000) and _horiz(t))  # north-U raised top, north leg
+        or (_box(t, -500, -350, 260, 278, -1000, -150) and _horiz(t))   # north-U raised top, west leg
+        or (_box(t, 850, 1000, 260, 278, -1000, -150) and _horiz(t))    # north-U raised top, east leg
+        or _plane_x(t, 1500, 250, 1300, 170, 370)    # y170-370 platform inner wall, east leg -> _BOTH_WALLS
+        or _plane_z(t, 1300, 650, 1500, 170, 370)    # y170-370 platform inner wall, south leg
+        or _box(t, 650, 1600, 370, 370, 100, 1400)   # y370 platform floor    -> _MANUAL_TRIS quads
+        or _box(t, 1400, 1600, 64, 89, -50, 50)      # east canal wall (part is also east of x=1600)
+        or _plane_x(t, 1400, -50, 50, 89, 170)       # east canal-end wall face -> _BOTH_WALLS
+    )
+
+
+def _rmkey(t):
+    return tuple(sorted(tuple(round(c) for c in p) for p in t))
+
+
+# The handful of irregular corner/scatter tris no clean region captures without also deleting a kept neighbour.
+_REMOVE_RESIDUE_E03 = """
+600,270,1300, 600,366,1200, 600,262,1200
+650,370,1300, 600,370,1300, 600,370,1400
+650,370,1300, 600,370,1400, 650,370,1400
+-400,270,150, -400,267,50, -500,270,50
+-200,50,50, -600,0,50, -600,50,50
+-200,50,50, -200,0,50, -600,0,50
+"""
+
+_RESIDUE = set(_rmkey([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3, 6)])
+               for ln in _REMOVE_RESIDUE_E03.strip().split('\n') if ln.strip())
+
+
+def _in_flat_region(t):
+    """True if every vertex of t sits inside a both_walls._FLAT_REGIONS rectangle at that region's y (a flat
+    ground patch that's been collapsed to one quad). Walls/slopes in the footprint span other y and are kept."""
+    for x0, x1, z0, z1, y in _FLAT_REGIONS.get('e03', []):
+        if all(x0 - 1 <= p[0] <= x1 + 1 and z0 - 1 <= p[2] <= z1 + 1 and abs(p[1] - y) <= 2 for p in t):
+            return True
+    return False
+
+
+def _canal_wall(t):
+    """South (z=-50) / north (z=50) canal side-wall tris within x[-200,900], y[0,70] — collapsed to 2 quads
+    (both_walls). The full north wall runs wider (x<-200); only the x[-200,900] span is simplified here."""
+    return ((all(abs(p[2] + 50) < 1 for p in t) or all(abs(p[2] - 50) < 1 for p in t))
+            and all(-1 <= p[1] <= 71 and -201 <= p[0] <= 901 for p in t))
+
+
+def simplify_terrain(tris):
+    """SHARED terrain simplifications, applied before the terrain feeds BOTH the `_a` (player) and `_c` (camera)
+    collision (they diverge only in what's ADDED: canal is `_a`-only, triggers are `_a`-only, perimeter is both).
+      (1) Drop everything at/west of the x=-500 perimeter boundary — the outer terrain + the west edge-slope.
+      (1b) Drop everything fully EAST of the x=1600 perimeter boundary (the outer east terrain).
+      (2) Drop the removal REGIONS (structures a hand-authored wall/quad replaces) + the 6-tri exact residue.
+      (3) Delete flat ground inside a _FLAT_REGIONS rectangle — replaced by one quad (flat_ground_tris).
+      (4) Delete the x[-200,900] canal side walls — replaced by 2 quads (_BOTH_WALLS)."""
+    return [t for t in tris if max(p[0] for p in t) > -499.0 and min(p[0] for p in t) < 1600.0
+            and not _in_remove_region(t) and _rmkey(t) not in _RESIDUE
+            and not _in_flat_region(t) and not _canal_wall(t)]
+
+
+def _pool_split(pool, prefix, used, max_tris=100):
+    """kd_split a POOLED triangle soup into <=max_tris spatially-compact nodes with unique names. Pooling across
+    source meshes (then splitting) packs NEARBY polys into the same node regardless of which mesh they came from,
+    so every node has a tight bounding box — which is exactly what the runtime frame-gather self-cull keys off."""
+    return [(_fit(f'{prefix}{bi}', used, 15), bk) for bi, bk in enumerate(kd_split(pool, max_tris))]
+
+
+def grouped_collision(placed, scn, town='e03', max_tris=100):
+    """Spatially REGROUP the whole custom collision, shared by the ISO bake (bake_structures) and the viewer so
+    both write / show the identical node grouping.
+
+    All non-trigger tris of a frame are pooled and kd_split into <=max_tris nodes (nearby polys share a node).
+    Player `_a` stays split per ground sub-file (each sub keeps its own collision; the town-wide hand-authored
+    walls anchor on the first ground). Camera `_c` is consolidated on the single sub that ships a `_c` variant.
+    Returns {'subs':[...], 'player':{sub:(named, trigs)}, 'camera':[named], 'sets':{...}} where
+      named = [(name, tris)], trigs = [(name, tris, colour_entries)], and 'sets' holds the raw component tri
+      lists ('structure','bwalls','perimeter','invisible') for the viewer's isolate-this-piece toggles."""
+    from collections import defaultdict
+    bysub = defaultdict(list)
+    for pm in placed:
+        if not is_cam_node(pm['name']):
+            continue
+        v = pm['verts']
+        t = simplify_terrain([[list(v[a]), list(v[b]), list(v[c])] for a, b, c in pm['tris']])
+        if t:
+            bysub[pm['sub']].extend(t)                             # pool structure tris by sub (names not needed)
+    subs = sorted(bysub)
+    perim, bw = perimeter_wall_tris(town), both_wall_tris(town)
+    inv, pw = invisible_tris(town), player_wall_tris(town)
+    triggers = trigger_nodes(scn)
+
+    # ---- PLAYER `_a`: per sub, pool everything (structure + town-wide walls on sub 0), split; triggers stay tagged
+    player = {}
+    for i, sub in enumerate(subs):
+        used = set()
+        pool = list(bysub[sub])
+        if i == 0:                                                 # first ground anchors the town-wide walls
+            pool += perim + bw + inv + pw
+        named = _pool_split(pool, 'pcol', used, max_tris)
+        trigs = [(_fit(tn, used, 15), tt, te) for tn, tt, te in triggers.get(sub, [])]
+        player[sub] = (named, trigs)
+
+    # ---- CAMERA `_c`: consolidated structure + both-walls + perimeter (NO canal/railings/triggers = player-only)
+    cam_pool = [t for sub in subs for t in bysub[sub]] + perim + bw
+    camera = _pool_split(cam_pool, 'ccol', set(), max_tris)
+
+    sets = {'structure': [t for sub in subs for t in bysub[sub]], 'bwalls': bw,
+            'perimeter': perim, 'invisible': inv + pw}
+    return {'subs': subs, 'player': player, 'camera': camera, 'sets': sets}
+
+
+def bake_structures(scene_rel, town='e03', max_tris=100, buildings=False, wall_max_ny=None, building_lod=2):
+    scn = load_scene(scene_rel)
+    P = placed_meshes(scene_rel, scene_rel.replace('scene.scn', 'mapinfo.cfg'))
+    G = grouped_collision(P, scn, town, max_tris)
+
+    stats, manifest = [], []
+    dirnames = set(scene_placed._scndir(scn).keys())
+
+    # ---- PLAYER `_a` per ground sub-file ----
+    for sub in G['subs']:
+        if sub not in dirnames:            # skip anything that isn't a real SCN sub-file (e.g. injected parts)
+            continue
+        named, trigs = G['player'][sub]
+        for mn, bk in named:
+            manifest.append((sub, 'player', mn, len(bk), 'shared'))
+        for mn, tt, _te in trigs:
+            manifest.append((sub, mn, mn, len(tt), 'trigger'))
+        allnodes = list(named) + [(mn, tt, te) for mn, tt, te in trigs]
+        mds = build_flat_mds(allnodes)
+        scn, delta = _replace_a_block(scn, sub, mds)
+        tris_ct = sum(len(bk) for _, bk in named) + sum(len(tt) for _, tt, _ in trigs)
+        stats.append((sub, len(allnodes), len(allnodes), 0, tris_ct, 0, delta))
+
+    # ---- CAMERA `_c`: consolidated on the first ground that ships a `_c` variant (origin-placed, world==local;
+    #      e03g05 has no `_c`). The town camera reads this via the native camera frame (+0xdc), so the mod must
+    #      NOT alias camera=player. Buildings keep their vanilla `_a`/`_c`.
+    cam_named = G['camera']
+    DIRmap = scene_placed._scndir(scn)
+    cam_host = next((s for s in G['subs'] if s in DIRmap
+                     and _variant_off(scn[DIRmap[s][0]:DIRmap[s][0] + DIRmap[s][1]], s, '_c') is not None), None)
+    if cam_host and cam_named:
+        cam_mds = build_flat_mds(cam_named)
+        scn, cdelta = _replace_a_block(scn, cam_host, cam_mds, suffix='_c')
+        for _mn, _bk in cam_named:
+            manifest.append((cam_host, 'camera', _mn, len(_bk), 'camera'))
+        stats.append((cam_host + '_c', len(cam_named), len(cam_named), 0, sum(len(e[1]) for e in cam_named), 0, cdelta))
+
+    # ---- BUILDINGS (default OFF): replace each e03h* `_a` with its wall silhouette split into <=max_tris nodes, in
+    #      BUILDING-LOCAL space so the georama part placement moves it at runtime (see building_collision_nodes).
+    if buildings:
+        for sub, named in building_collision_nodes(scn, max_tris, wall_max_ny, building_lod).items():
+            if sub not in dirnames:
+                continue
+            for mn, bk in named:
+                manifest.append((sub, 'building', mn, len(bk), 'building'))
+            mds = build_flat_mds(named)
+            scn, delta = _replace_a_block(scn, sub, mds)
+            tris_ct = sum(len(bk) for _, bk in named)
+            stats.append((sub, 1, len(named), 0, tris_ct, 0, delta))
+    return scn, stats, manifest
+
+
+def bake_structures_from_bytes(scene_rel, scene_bytes, mapinfo_bytes=None, town='e03', max_tris=100):
+    """bake_structures with the scene (and optionally mapinfo) supplied as bytes rather than read from disk —
+    for baking straight out of an ISO."""
+    import extract_scene_mesh as esm
+    mapinfo_rel = scene_rel.replace('scene.scn', 'mapinfo.cfg')
+
+    def patched(rel, _o=esm.load_scene):
+        if rel == scene_rel:
+            return scene_bytes
+        if mapinfo_bytes is not None and rel == mapinfo_rel:
+            return mapinfo_bytes
+        return _o(rel)
+
+    # Patch load_scene on every module that resolves it: esm (source), scene_placed / gc (which imported it),
+    # AND THIS module's own binding — bake_structures calls the bare `load_scene(scene_rel)` it imported locally,
+    # so without patching our own global the direct call would still read the disc (and require DC1_DATA_DIR).
+    g = globals()
+    saved = (esm.load_scene, scene_placed.load_scene, gc.load_scene, g['load_scene'])
+    esm.load_scene = scene_placed.load_scene = gc.load_scene = g['load_scene'] = patched
+    try:
+        return bake_structures(scene_rel, town, max_tris)
+    finally:
+        esm.load_scene, scene_placed.load_scene, gc.load_scene, g['load_scene'] = saved
+
+
+if __name__ == '__main__':
+    scene = sys.argv[1] if len(sys.argv) > 1 else 'gedit/e03/scene.scn'
+    new_scn, stats, manifest = bake_structures(scene)
+    grew = sum(s[-1] for s in stats)
+    print(f"shared-collision bake: {len(stats)} sub-files, scene grew {grew:+} bytes")
+    for sub, ns, cn, iv, ct, it, d in stats:
+        print(f"  {sub}: {cn} collision nodes ({ct} tris) from {ns} sources  (Δ{d:+})")
+    # validate: within-sub-file name uniqueness (flat _a, no camcol/aroot)
+    DIR = scene_placed._scndir(new_scn)
+    for g in ('e03g04', 'e03g05'):
+        off, size = DIR[g]; sub = new_scn[off:off + size]; vo = gc._variant_a(sub, g); mds = off + vo
+        cnt, tbl = struct.unpack_from('<II', new_scn, mds + 8)
+        names = [new_scn[mds + tbl + i * 0x70 + 8:mds + tbl + i * 0x70 + 8 + 16].split(b'\x00')[0].decode('latin1') for i in range(cnt)]
+        print(f"  {g}_a: {cnt} nodes, names-unique={len(set(names)) == cnt}")

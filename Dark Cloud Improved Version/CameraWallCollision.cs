@@ -18,12 +18,16 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CameraWallCollision
     {
-        internal static bool Enabled = true;
+        // DISABLED: the collision bake now writes a proper custom CAMERA collision into the ground `_c` variant
+        // (terrain + canal + perimeter, no triggers — bake_player_camera_collision), so the camera reads the
+        // NATIVE `_c` frame directly and no player-frame aliasing is needed. Buildings keep their vanilla `_a`
+        // (player) and `_c` (camera). Re-enable only to revert to the old shared-`_a` alias scheme.
+        internal static bool Enabled = false;
         internal static bool DumpPositions = true;   // one-shot per town: log part positions to find invisible walls
 
         // EXPERIMENT: gather ONLY the custom split-terrain collision baked into the ground parts — skip
         // buildings entirely, and (inverting the normal exclusion) alias ONLY the origin base-ground static
-        // parts. Pairs with tools/bake_terrain_camera_collision.py. Set false for the normal all-parts alias.
+        // parts. Pairs with tools/bake_player_camera_collision.py. Set false for the normal all-parts alias.
         internal static bool TerrainOnly = true;
 
         private const long EditGroundPtr = 0x21D1968C;

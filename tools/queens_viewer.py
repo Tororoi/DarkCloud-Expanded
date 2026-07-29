@@ -10,17 +10,18 @@ selection -> copyable triangle list, and a z-buffer fill (half-res while draggin
 
 Run: python3 tools/queens_viewer.py  ->  game_data/queens/queens_viewer.html
 """
-import os, sys, re, math
+import os, sys, re, math, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'iso_patch', 'collision'))
+import scene_placed
+import bake_player_camera_collision as _bscc
 from scene_placed import placed_meshes
 from scene_viewer_html import build_html
-from extract_scene_mesh import load_scene, read_verts, read_tris
+from extract_scene_mesh import load_scene, read_verts, read_tris, xform
 from georama_parts import part_models
 from georama_default import default_layout
-from georama_collision import collision_local, place_base
+from georama_collision import collision_local, parse_coll_mdt
 from queens_fishing_collision import fishing_collision_tris
-from bake_terrain_camera_collision import kd_split
-from invisible_walls import invisible_tris
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "game_data", "queens")   # embeds game geometry -> untracked
@@ -153,98 +154,64 @@ for tname, ty, col, bd, on in TIDES:
                    'label': f'tide: {tname} y={ty:.0f}', 'tris': plane_quads(CANAL, ty),
                    'color': col, 'alpha': 0.55, 'border': bd, 'on': on})
 
-# base-ground collision (the `_a`/atari meshes of e03g04/e03g05) — SPLIT per node so we can see which
-# terrain node is the canal-water containment vs the real terrain walls. These are the two origin STATIC
-# parts the mod's CameraWallCollision currently EXCLUDES wholesale (the over-correction) — each node is its
-# own toggle + label so we can decide which to actually drop.
-BASE_COLL = place_base('gedit/e03/scene.scn', 'gedit/e03/mapinfo.cfg', r'e03g\d\d$')
-_bgcol = {'e03g04': [235, 55, 55], 'e03g05': [235, 150, 40]}
-for _nm, _tris in BASE_COLL.items():
-    if not _tris: continue
-    _vs = [p for t in _tris for p in t]
-    _cen = [sum(v[i] for v in _vs)/len(_vs) for i in range(3)]
-    _bb = [min(v[0] for v in _vs), min(v[1] for v in _vs), min(v[2] for v in _vs),
-           max(v[0] for v in _vs), max(v[1] for v in _vs), max(v[2] for v in _vs)]
-    _key = f'bg_{_nm}'
-    layers.append({'key': _key, 'label': f'base-ground _a: {_nm} ({len(_tris)}) — camera EXCLUDES', 'tris': _tris,
-                   'color': _bgcol.get(_nm, [220, 60, 60]), 'alpha': 0.55, 'border': '#e44', 'on': False})
-    nodelabels.append([_cen, f'{_nm} (_a coll)', _bb, _key])
-    print(f"base-ground {_nm}: {len(_tris)} tris  xz x[{_bb[0]:.0f},{_bb[3]:.0f}] z[{_bb[2]:.0f},{_bb[5]:.0f}]  (canal water z[-50,50])")
+# ---- CUSTOM COLLISION BAKE — regrouped into the EXACT nodes the ISO bake writes (bscc.grouped_collision):
+#      all non-trigger tris of a frame are pooled and kd_split into <=100-poly nodes, so nearby polys share a
+#      node (tight per-node bbox = free runtime gather culling). Four toggles: custom CAMERA collision (_c),
+#      custom PLAYER collision (_a), plus perimeter walls and invisible walls broken out on their own. Each
+#      split node still gets its own node-label box (gated on its layer) so "node labels" reveals the grouping.
+_scn_bytes = _bscc.load_scene('gedit/e03/scene.scn')
+_G = _bscc.grouped_collision(PLACED, _scn_bytes, 'e03', 100)
 
-# ---- SPLIT camera-collision NODES: take the VISIBLE meshes of the specified terrain-structure nodes
-#      (grid3*, obj40/44 bridges, obj1/9 pipes, obj6/33/34/43/45, kanban) and split a COPY of each into
-#      <=100-poly collision nodes (kd_split). This is the geometry the camera would actually collide with;
-#      NOT the flat ground _a and NOT the buildings. One colour per node so the split is visible. ON by default.
-def _hue(i, n):
-    h = (i / max(n, 1)) * 6.0
-    x = 1 - abs(h % 2 - 1)
-    r, g, b = [(1, x, 0), (x, 1, 0), (0, 1, x), (0, x, 1), (x, 0, 1), (1, 0, x)][int(h) % 6]
-    return [int(60 + 195 * c) for c in (r, g, b)]
+def _add_nodes(named, layerkey, prefix=''):
+    tris = []
+    for mn, bk in named:
+        tris += bk
+        vs = [p for t in bk for p in t]
+        cen = [sum(v[i] for v in vs) / len(vs) for i in range(3)]
+        bb = [min(v[0] for v in vs), min(v[1] for v in vs), min(v[2] for v in vs),
+              max(v[0] for v in vs), max(v[1] for v in vs), max(v[2] for v in vs)]
+        nodelabels.append([cen, f'{prefix}{mn}', bb, layerkey])
+    return tris
 
-def _is_cam_node(nm):
-    return (nm.startswith('grid3')
-            or _num('obj', nm) in (40, 44, 1, 9, 6, 33, 34, 43, 45, 42))
+# custom CAMERA collision (_c): structure/terrain + both-walls + perimeter, pooled + spatially split
+_cam_tris = _add_nodes(_G['camera'], 'camcol')
+layers.append({'key': 'camcol', 'label': f'custom camera collision _c ({len(_G["camera"])} nodes, {len(_cam_tris)} tris)',
+               'tris': _cam_tris, 'color': [80, 200, 255], 'alpha': 0.5, 'border': '#5bf', 'on': True})
 
-# per specified node instance: its world visible tris -> kd_split -> <=100-poly collision nodes
-_cam_srcs = []
-for pm in PLACED:
-    if not _is_cam_node(pm['name']):
-        continue
-    v, ts = pm['verts'], pm['tris']
-    tris = [[list(v[a]), list(v[b]), list(v[c])] for a, b, c in ts]
-    if tris:
-        label = pm['name'] if pm['inst'] == 0 else f"{pm['name']}#{pm['inst']}"
-        _cam_srcs.append((label, kd_split(tris, 100)))
+# custom PLAYER collision (_a): per ground sub, pooled + split (= the camera set + canal invisible walls +
+# railings; the loading-zone triggers below are also part of `_a` but kept on their own toggle).
+_ply_tris, _ply_nodes = [], 0
+for _sub in _G['subs']:
+    _named, _trigs = _G['player'][_sub]
+    _ply_tris += _add_nodes(_named, 'plycol', f'{_sub}:')
+    _ply_nodes += len(_named)
+layers.append({'key': 'plycol', 'label': f'custom player collision _a ({_ply_nodes} nodes, {len(_ply_tris)} tris)',
+               'tris': _ply_tris, 'color': [120, 255, 160], 'alpha': 0.5, 'border': '#6f9', 'on': True})
 
-_total_nodes = sum(len(b) for _, b in _cam_srcs)
-_src_tris = sum(sum(len(bk) for bk in b) for _, b in _cam_srcs)
+# perimeter walls (both frames) + invisible walls (player-only: canal containment + railings), broken out
+_PERIM = _G['sets']['perimeter']
+layers.append({'key': 'perimeter', 'label': f'perimeter walls ({len(_PERIM)})', 'tris': _PERIM,
+               'color': [255, 90, 40], 'alpha': 0.6, 'border': '#f62', 'on': False})
+_INV = _G['sets']['invisible']
+layers.append({'key': 'invwalls', 'label': f'invisible walls ({len(_INV)})', 'tris': _INV,
+               'color': [235, 40, 120], 'alpha': 0.7, 'border': '#e28', 'on': False})
+print(f"camera _c: {len(_G['camera'])} nodes / {len(_cam_tris)} tris; "
+      f"player _a: {_ply_nodes} nodes / {len(_ply_tris)} tris (+3 trigger nodes)")
+print(f"perimeter {len(_PERIM)} + invisible {len(_INV)} tris (broken out)")
 
-# Give every SOURCE a unique name up front: nodes that share a name (grid3_4_1_1_1_1_ x4, all inst=0 from
-# placed_meshes) get an occurrence suffix _0/_1/... so the name alone identifies the source. Everything
-# downstream (viewer keys, and eventually the baked collision MDS node names) keys off this unique name —
-# no bare position or running-index needed to bind.
-_namecount = {}
-for _l, _ in _cam_srcs:
-    _namecount[_l] = _namecount.get(_l, 0) + 1
-_occ, _uniq = {}, []
-for _l, _ in _cam_srcs:
-    if _namecount[_l] > 1:
-        _k = _occ.get(_l, 0); _occ[_l] = _k + 1
-        _uniq.append(f'{_l}_{_k}')
-    else:
-        _uniq.append(_l)
-
-_ni = 0
-for _si, (_srcname, _buckets) in enumerate(_cam_srcs):
-    _uname = _uniq[_si]
-    for _bi, _bt in enumerate(_buckets):
-        _vs = [p for t in _bt for p in t]
-        _cen = [sum(v[i] for v in _vs) / len(_vs) for i in range(3)]
-        _bb = [min(v[0] for v in _vs), min(v[1] for v in _vs), min(v[2] for v in _vs),
-               max(v[0] for v in _vs), max(v[1] for v in _vs), max(v[2] for v in _vs)]
-        _key = f'camnode_{_uname}_{_bi}'            # unique because _uname is unique
-        layers.append({'key': _key, 'label': f'cam node {_uname}#{_bi} ({len(_bt)} polys)', 'tris': _bt,
-                       'color': _hue(_ni, _total_nodes), 'alpha': 0.85, 'border': '#000', 'on': True})
-        nodelabels.append([_cen, f'{_uname}#{_bi}', _bb, _key])
-        _ni += 1
-assert len(set(_uniq)) == len(_uniq), "source names still not unique"
-print(f"split camera-collision nodes (from VISIBLE meshes): {_total_nodes} nodes (<=100 polys) "
-      f"from {len(_cam_srcs)} uniquely-named sources, {_src_tris} tris")
-
-# ---- INVISIBLE WALLS (player-only collision, baked as siblings of camcol so the camera never gathers them):
-#      the canal containment + western top-perimeter walls. Shown as a distinct toggle. ON by default.
-_INV = invisible_tris('e03')
-layers.append({'key': 'invwalls', 'label': f'invisible walls: canal (PLAYER ONLY, {len(_INV)})', 'tris': _INV,
-               'color': [235, 40, 120], 'alpha': 0.7, 'border': '#e28', 'on': True})
-# generated perimeter wall (from the outer edge of the reference outline) + the reference for comparison
-from perimeter_wall import perimeter_wall_tris, _parse as _pw_parse, _REF_E03
-_PERIM = perimeter_wall_tris('e03')
-layers.append({'key': 'perimwall', 'label': f'perimeter wall: generated (CAMERA + player, {len(_PERIM)})', 'tris': _PERIM,
-               'color': [255, 90, 40], 'alpha': 0.6, 'border': '#f62', 'on': True})
-_PREF = [[list(p) for p in t] for t in _pw_parse(_REF_E03)]
-layers.append({'key': 'perimref', 'label': f'perimeter reference outline ({len(_PREF)})', 'tris': _PREF,
-               'color': [120, 120, 255], 'alpha': 0.5, 'border': '#88f', 'on': False})
-print(f"player-only: {len(_INV)} canal + {len(_PERIM)} perimeter-wall tris (ref {len(_PREF)})")
+# ---- LOADING-ZONE trigger quads (the town exits): attribute-tagged collision polys in the vanilla ground
+#      `_a`. EdEventPointCpPoly gathers these around each event point; GetEventPoly reads the destination from
+#      the hit poly's colour tag (+0x40 short). The bake must carry them over (bake_player_camera_collision
+#      .trigger_nodes) or the exits stop working — this is exactly what broke when we dropped `_a`.
+_TRIGS = _bscc.trigger_nodes(_bscc.load_scene('gedit/e03/scene.scn'))
+_trig_tris, _dests = [], []
+for _sub, _tns in _TRIGS.items():
+    for _tn, _tt, _te in _tns:
+        _trig_tris += _tt
+        _dests.append(f'{_tn} dest={struct.unpack_from("<H", _te[0], 0)[0]}')
+layers.append({'key': 'loadzones', 'label': f'loading-zone triggers: {", ".join(_dests)}', 'tris': _trig_tris,
+               'color': [255, 240, 40], 'alpha': 0.95, 'border': '#ff0', 'on': True})
+print(f"loading zones: {len(_trig_tris)} trigger tris — {'; '.join(_dests)}")
 
 # ---- CUSTOM fishing collision (appended to cpoly at fishing time, exported to queens_2.bin): the two
 #      bridge meshes + obj9 pipes (full, unsimplified) + the hand-authored canal containment walls. This is
@@ -430,8 +397,9 @@ for nm, d in part_models('gedit/e03/scene.scn', r'e03[hrt]\d').items():
     gtris = [[[p[0] - cxm, p[1] - miny, p[2] - czm] for p in t] for t in d['tris']]
     kind = 'road' if nm.startswith('e03r') else 'tree' if nm.startswith('e03t') else 'bldg'
     fw, fd = (1, 1) if kind in ('road', 'tree') else GFOOT.get(nm, (3, 3))
-    GPARTS[nm] = {'tris': gtris, 'kind': kind, 'fw': fw, 'fd': fd}
-    # collision hull, centered on the SAME (cxm,czm,miny) as the visual so it tracks the placed part
+    GPARTS[nm] = {'tris': gtris, 'kind': kind, 'fw': fw, 'fd': fd, '_ctr': (cxm, miny, czm)}
+    # native `_a` collision hull, centered on the SAME (cxm,czm,miny) as the visual so it tracks the placed
+    # part (fallback for parts without a baked wall collision, e.g. roads/trees)
     if nm in COLL:
         GPARTS[nm]['ctris'] = [[[p[0] - cxm, p[1] - miny, p[2] - czm] for p in t] for t in COLL[nm]]
 _dl = default_layout('gedit/e03/gdata0.edt')
@@ -440,50 +408,46 @@ GDEFAULT += [{'name': 'e03t01', 'x': t['x'], 'y': t['y'], 'z': t['z'], 'rot': t[
 GROADS = [{'x': r['x'], 'y': r['y'], 'z': r['z']} for r in _dl['roads']]
 GEORAMA = {'parts': GPARTS, 'regions': GREGIONS, 'default': GDEFAULT, 'roads': GROADS, 'cell': 100}
 
-# ---- CAMERA COLLISION the mod INCLUDES: building `_a` collision hulls, placed like the visible parts
-# (gXform convention: rot*90deg). GREEN = exactly what the camera hugs; each building gets a node label.
-def _geo_xform(tris, X, Y, Z, r):
-    a = r * math.pi / 2; ca, sa = math.cos(a), math.sin(a)
-    return [[[p[0]*ca - p[2]*sa + X, p[1] + Y, p[0]*sa + p[2]*ca + Z] for p in t] for t in tris]
-_cam_incl = []
-for _b in GDEFAULT:
-    _part = GPARTS.get(_b['name'])
-    if not _part or 'ctris' not in _part: continue
-    _wt = _geo_xform(_part['ctris'], _b['x'], _b['y'], _b['z'], _b['rot'])
-    _cam_incl += _wt
-    _vs = [p for t in _wt for p in t]
-    if _vs:
-        _cen = [sum(v[i] for v in _vs)/len(_vs) for i in range(3)]
-        _bb = [min(v[0] for v in _vs), min(v[1] for v in _vs), min(v[2] for v in _vs),
-               max(v[0] for v in _vs), max(v[1] for v in _vs), max(v[2] for v in _vs)]
-        nodelabels.append([_cen, f"{_b['name']} (_a)", _bb, 'camincl'])
-layers.append({'key': 'camincl', 'label': f'CAMERA hugs: building _a collision ({len(_cam_incl)})',
-               'tris': _cam_incl, 'color': [60, 220, 120], 'alpha': 0.5, 'border': '#3d8', 'on': False})
-print(f"camera-included building collision: {len(_cam_incl)} tris across {len(GDEFAULT)} placed parts")
-
-# ---- CAMERA COLLISION candidate (user-chosen): the FULL VISIBLE meshes (not _a) of a chosen object set —
-# tall enough to actually stop the camera, where the player-height _a lets it fly over. This is the set we
-# feed the camera. Toggle it to verify coverage before wiring the mod. GREEN.
-_CAM_OBJ = ('obj40', 'obj44', 'obj1', 'obj9', 'obj6', 'obj33', 'obj34', 'obj43', 'obj45')
-def _cam_match(nm):
-    if nm.startswith('grid3'): return True
-    return any(nm == o or nm.startswith(o + '__') for o in _CAM_OBJ)
-_cam_vis, _matched = [], set()
-for m in PLACED:                                   # scene structures (obj*/grid3) — world verts + tri indices
-    nm = m.get('name', '')
-    if _cam_match(nm):
-        _matched.add(nm.split('__')[0])
-        vs = m['verts']
-        for tri in m['tris']:
-            _cam_vis.append([vs[tri[0]], vs[tri[1]], vs[tri[2]]])
-for _b in GDEFAULT:                                # georama BUILDINGS — full visible mesh (not _a)
-    _part = GPARTS.get(_b['name'])
-    if _part and _b['name'].startswith('e03h'):
-        _cam_vis += _geo_xform(_part['tris'], _b['x'], _b['y'], _b['z'], _b['rot'])
-_cam_vis += sign_mesh                              # kanban sign
-layers.append({'key': 'camvis', 'label': f'CAMERA collision: VISIBLE meshes ({len(_cam_vis)})',
-               'tris': _cam_vis, 'color': [60, 220, 120], 'alpha': 0.4, 'border': '#3d8', 'on': False})
-print(f"camera collision (visible meshes): {len(_cam_vis)} tris; matched objects: {sorted(_matched)}")
+# ---- GEORAMA (buildings) — under the current scheme buildings keep their VANILLA collision (player `_a` +
+#      camera `_c`); nothing is baked for them. The georama editor's "georama collision" toggle therefore shows
+#      GPARTS['ctris'] = the native `_a` player hull (set above), and "vanilla cam coll _c" shows the `_c` below.
+# ---- VANILLA CAMERA COLLISION (`_c` variant = part+0x20 -> camera frame +0xdc): the COARSE hull the vanilla
+#      game uses for the CAMERA (10-16 tris/building, far simpler than the `_a` player collision — the "missing
+#      piece": vanilla keeps detail only for the player). Two toggles: static scene assets (grounds, world) and
+#      georama buildings (attached to GPARTS.camtris, so the "vanilla cam coll" georama toggle moves it w/ parts).
+_scn = load_scene('gedit/e03/scene.scn'); _DIR = scene_placed._scndir(_scn)
+def _variant_coll(name, suf):
+    if name not in _DIR: return None
+    off, size = _DIR[name]; sub = _scn[off:off + size]
+    m = next(re.finditer((re.escape(name) + suf + r'\.mds\x00').encode(), sub), None)
+    if not m: return None
+    vo = struct.unpack_from('<I', sub, m.end() + 3)[0]
+    if not (0 < vo < len(sub) and sub[vo:vo + 3] == b'MDS'): return None
+    mds = off + vo; nodes, wm = scene_placed._accum(_scn, mds); tris = []
+    for i, (nn, mo, par, mat) in enumerate(nodes):
+        if mo == 0: continue
+        fo = next((c for c in (mo, mds + mo) if 0 < c < len(_scn) and _scn[c:c + 3] == b'MDT'), None)
+        if not fo: continue
+        M = wm(i)
+        for a, b, c in parse_coll_mdt(_scn, fo):
+            tris.append([list(xform(M, a)), list(xform(M, b)), list(xform(M, c))])
+    return tris
+_vcam_static = []
+for _g in ('e03g04', 'e03g05'):        # mapinfo GROUND parts are origin-placed, so local == world
+    _t = _variant_coll(_g, r'_c')
+    if _t: _vcam_static += _t
+layers.append({'key': 'vcam_static', 'label': f'vanilla cam coll _c: static assets ({len(_vcam_static)})',
+               'tris': _vcam_static, 'color': [80, 200, 255], 'alpha': 0.5, 'border': '#5bf', 'on': False})
+_vgeo = 0
+for _bn in [n for n in _DIR if re.match(r'e03h\d\d$', n)]:
+    _part = GPARTS.get(_bn)
+    if not _part or '_ctr' not in _part: continue
+    _t = _variant_coll(_bn, r'_c')
+    if not _t: continue
+    _cxm, _my, _czm = _part['_ctr']
+    _part['camtris'] = [[[q[0] - _cxm, q[1] - _my, q[2] - _czm] for q in t] for t in _t]
+    _vgeo += len(_t)
+print(f"vanilla camera coll (_c): {len(_vcam_static)} static tris + {_vgeo} georama tris")
 
 for _lyr in layers:               # start with everything toggled OFF
     _lyr['on'] = False

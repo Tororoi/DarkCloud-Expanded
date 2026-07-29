@@ -12,14 +12,15 @@ see whether the camera gather handles the poly volume.
     runtime ELF patches — boot the resulting ISO with the mod running.
 
 Usage:
-  DC1_ISO=/path/to/'Dark Cloud (USA).iso'  python3 tools/iso_patch/bake_building_collision_iso.py [e03 ...]
+  DC1_ISO=/path/to/'Dark Cloud (USA).iso'  python3 tools/iso_patch/collision/bake_building_collision_iso.py [e03 ...]
   -> ~/ROMs/Patched ISOs/Dark Cloud - CamCollision.iso
 """
 import os, sys, struct, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)                          # ps2iso
-sys.path.insert(0, os.path.join(HERE, ".."))      # bake_camera_collision
+sys.path.insert(0, HERE)                              # collision/ (bake_camera_collision)
+sys.path.insert(0, os.path.join(HERE, ".."))         # iso_patch/ (ps2iso)
+sys.path.insert(0, os.path.join(HERE, "..", ".."))   # tools/ (shared infra)
 import ps2iso
 from bake_camera_collision import bake_scene_from_bytes
 

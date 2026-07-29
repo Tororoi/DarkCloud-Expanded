@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -72,9 +73,68 @@ namespace Dark_Cloud_Improved_Version
             using (var fs = new FileStream(outIso, FileMode.Open, FileAccess.ReadWrite))
                 crc = ApplySignPatch(fs, progress);
 
+            // Town camera/structure collision bake — scene data only (the ELF CRC above is unaffected). Runs
+            // AFTER the stream above is closed so the baker can reopen the ISO.
+            progress("Baking town camera collision …");
+            BakeStructureCollision(outIso, progress);
+
             progress("Publishing pnach to PCSX2 …");
             ReshipPnach(crc);
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
+        }
+
+        // ── town camera/structure collision bake (post-step; Python for now, port to C# later) ──────────
+        // Invoke the proven baker tools/iso_patch/collision/bake_structure_collision_iso.py against our output ISO. It
+        // rebuilds e03's ground `_a` from that ISO's OWN structure meshes + trigger quads (nothing game-derived
+        // is bundled — the collision is carved from the user's disc; the perimeter/canal walls are authored
+        // constants) and redirects it into the free DATA.DAT tail, composing with the redirects ApplySignPatch
+        // already made. Scene data only — the ELF CRC is untouched. Repo root is derived like FishingCollision's
+        // game_data path (AppContext.BaseDirectory/../../../..), overridable via DC_REPO; python via DC_PYTHON.
+        // TODO: port the bake to pure C# for the standalone distributed build (subprocess needs python3 + repo).
+        static void BakeStructureCollision(string outIso, Action<string> progress)
+        {
+            string repo = Environment.GetEnvironmentVariable("DC_REPO");
+            if (string.IsNullOrEmpty(repo))
+                repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+            string script = Path.Combine(repo, "tools", "iso_patch", "collision", "bake_structure_collision_iso.py");
+            if (!File.Exists(script))
+            {
+                progress($"⚠ collision baker not found at {script} — camera collision NOT baked (set DC_REPO).");
+                return;
+            }
+            string py = Environment.GetEnvironmentVariable("DC_PYTHON");
+            if (string.IsNullOrEmpty(py)) py = "python3";
+            var psi = new ProcessStartInfo
+            {
+                FileName = py,
+                WorkingDirectory = repo,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add(script);
+            psi.ArgumentList.Add("--iso");
+            psi.ArgumentList.Add(outIso);
+
+            string so, se; int code;
+            try
+            {
+                using var p = Process.Start(psi) ?? throw new IOException($"Process.Start returned null for '{py}'.");
+                so = p.StandardOutput.ReadToEnd();
+                se = p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                code = p.ExitCode;
+            }
+            catch (Exception e)
+            {
+                throw new IOException($"Could not run the collision baker ('{py}'). Is Python installed / on PATH? "
+                                      + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
+            }
+            if (code != 0)
+                throw new IOException($"Collision bake failed (exit {code}).\n{so}\n{se}");
+            foreach (string line in so.Split('\n'))
+                if (line.Contains("redirected") || line.Contains("camera nodes") || line.Contains("DONE"))
+                    progress(line.Trim());
         }
 
         // ── little-endian FileStream I/O ──
@@ -803,6 +863,7 @@ namespace Dark_Cloud_Improved_Version
             PatchTownCameraRotateFree(fs, ElfOff);
             PatchTownCameraNoWidthRotate(fs, ElfOff);   // stop CheckCameraWidth from rotating the camera AWAY from walls
             PatchTownCameraNoAngleForce(fs, ElfOff);    // stop CameraAutoMove from absolutely snapping the angle (the bounce)
+            PatchTownCameraPredictive(fs, ElfOff);      // pull-in casts at the TARGET angle so it leads a fast rotation (anti-clip)
             PatchFishingCameraTarget(fs, ElfOff);
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
@@ -1098,6 +1159,51 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < wrap.Length; i++)
                 WrU32(fs, ElfOff(WRAP + (uint)i * 4), wrap[i]);
             WrU32(fs, ElfOff(SITE), 0x0C09F421);       // rest: jal wrapper (ease-to-far) ; was jal SetDistance (hard snap)
+        }
+
+        // ── Town camera: PREDICTIVE pull-in — cast the wall raycast at the TARGET angle, not the current ──
+        // The clip-on-fast-rotation cause: the pull-in and the camera move are two-phase and lag by a frame.
+        // EdMoveChara reads the camera's CURRENT position (GetPos @0x16AE64 -> sp+0x2c0), casts player->camera
+        // (CheckHits), and SetDistance()s to the nearest wall — all for the angle the camera is at NOW. Then
+        // the stick rotates the TARGET angle (cam+0x2d8) and, later in the frame, Step__13CCameraFollow eases
+        // the camera toward it and rebuilds the position as ref + dist*[sin,cos](angle) + height. So on a fast
+        // swing the camera reaches a new angle a frame (or more) before the pull-in that would clear the wall
+        // there has run — it pokes through. CheckCameraWidth's 10-unit de-penetration can't reach a deeper
+        // one-frame burial.
+        // Fix: make the WHOLE collision block operate on where the camera is HEADING. sp+0x2c0 (the position
+        // GetPos returns) feeds the gather box, CheckCameraWidth, the pull-in ray, and the vertical check — so
+        // redirect that one GetPos to a helper that returns the position at the TARGET angle instead of the
+        // current one. Then the instant pull-in leads the sweep (rotating toward a wall pulls in before the
+        // camera arrives); rotating away, the already-small distance eases out gently (PatchTownCameraSmoothRest).
+        // Both directions are covered, and when not rotating target==current so behaviour is unchanged.
+        // Helper == Step's own position math (sinf @0x11D8A0, cosf @0x11D6B0; fields ref@+0x2c0/2c4/2c8,
+        // dist@+0x2d0, height@+0x2d4, target-angle@+0x2d8), signature identical to GetPos(cam a0, out a1).
+        static void PatchTownCameraPredictive(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint WRAP = 0x0027D0D0;   // .text zero-padding, just past PatchTownCameraSmoothRest's helper (0x27D084..C4)
+            const uint SITE = 0x0016AE64;   // EdMoveChara camera-collision `jal GetPos(cam,&pos=sp+0x2c0)`
+            uint[] wrap =                   // GetPos-shaped helper: out = ref + dist*[sin,cos](targetAngle) + height
+            {
+                0x27BDFFD0, 0xAFBF002C, 0xAFA40028, 0xAFA50024,   // frame -0x30; save ra, cam(a0), out(a1)
+                0xC48C02D8, 0x0C047628, 0x00000000,               // f12=targetAngle(+0x2d8); jal sinf(0x11D8A0)
+                0xE7A00018, 0x8FA40028,                           // stash sin@0x18(sp); reload cam
+                0xC48C02D8, 0x0C0475AC, 0x00000000,               // f12=targetAngle; jal cosf(0x11D6B0)
+                0xE7A0001C, 0x8FA40028, 0x8FA50024,               // stash cos@0x1c(sp); reload cam, out
+                0xC48202D0,                                       // f2 = dist(+0x2d0)
+                0xC7A40018, 0x46022102, 0xC48602C0, 0x46043100, 0xE4A40000,   // out.x = ref.x + dist*sin
+                0xC48602C4, 0xC48802D4, 0x46083180, 0xE4A60004,               // out.y = ref.y + height
+                0xC7A4001C, 0x46022102, 0xC48602C8, 0x46043100, 0xE4A40008,   // out.z = ref.z + dist*cos
+                0x3C013F80, 0x44812000, 0xE4A4000C,               // out.w = 1.0
+                0x8FBF002C, 0x03E00008, 0x27BD0030,               // lw ra; jr ra; addiu sp,+0x30 (delay)
+            };
+            if (RdU32(fs, ElfOff(SITE)) != 0x0C04919C)   // jal 0x00124670 (GetPos__7CCamera)
+                throw new IOException($"Predictive-camera site 0x{SITE:X} (jal GetPos) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+            for (int i = 0; i < wrap.Length; i++)
+                if (RdU32(fs, ElfOff(WRAP + (uint)i * 4)) != 0)
+                    throw new IOException($"Predictive-camera wrapper slack 0x{WRAP + (uint)i * 4:X} is not empty — unexpected ISO.");
+            for (int i = 0; i < wrap.Length; i++)
+                WrU32(fs, ElfOff(WRAP + (uint)i * 4), wrap[i]);
+            WrU32(fs, ElfOff(SITE), 0x0C09F434);         // jal 0x27D0D0 (predicted pos) ; was jal GetPos (current pos)
         }
 
         // ── Fishing camera → center on the bobber instead of the player/bobber midpoint ──────────────
