@@ -1052,9 +1052,10 @@ namespace Dark_Cloud_Improved_Version
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
                 CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
                 GeoramaProbe.Tick();  //no-op unless GeoramaProbe.Enabled; dumps each town once on entry
-                CameraWallCollision.Tick();  //camera uses PLAYER collision (visible walls) instead of the pushed-out camera polys
-                CameraMeshCollision.Tick();  //PROOF (off by default): hand-built CCollisionMDT box on one part
-                CameraDiag.Tick();    //TEMP: log follow-camera distance + positions
+                TownCamera.Start();          //FROM-SCRATCH town/fishing camera — runs on its OWN ~60 Hz thread (started once) so strafing doesn't judder
+                CameraWallCollision.Tick();  //(off) old frame-alias approach — shelved
+                CameraMeshCollision.Tick();  //(off) PROOF: hand-built CCollisionMDT box on one part
+                CameraDiag.Tick();           //TEMP: log follow-camera distance + positions
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket
             }
