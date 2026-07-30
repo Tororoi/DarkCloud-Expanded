@@ -18,17 +18,19 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CameraWallCollision
     {
-        // DISABLED: the collision bake now writes a proper custom CAMERA collision into the ground `_c` variant
-        // (terrain + canal + perimeter, no triggers — bake_player_camera_collision), so the camera reads the
-        // NATIVE `_c` frame directly and no player-frame aliasing is needed. Buildings keep their vanilla `_a`
-        // (player) and `_c` (camera). Re-enable only to revert to the old shared-`_a` alias scheme.
-        internal static bool Enabled = false;
-        internal static bool DumpPositions = true;   // one-shot per town: log part positions to find invisible walls
+        // RE-ENABLED (2026-07) for the BUILDINGS. The dungeon camera never clips because it rebuilds a COMPLETE
+        // collision buffer every frame (its whole tile grid); the town's PickUpCameraPoly is culled/capped AND
+        // keyed to each part's CAMERA frame. Our bake gave the GROUND a proper `_c`, but buildings keep a coarse
+        // vanilla camera hull → the camera can't see the building walls in tight corridors → clips. Aliasing each
+        // BUILDING's camera frame (+0xDC) to its detailed PLAYER frame (+0xD0) gives the camera complete building
+        // geometry (the town equivalent of the dungeon's complete buffer). TerrainOnly=false = alias the MAP
+        // (building) parts, while LEAVING the origin base-ground on our custom baked `_c`. Best of both.
+        internal static bool Enabled = false;   // OFF — camera being rewritten from scratch (2026-07); this frame-alias approach shelved
+        internal static bool DumpPositions = true;   // one-shot per town: logs which parts got aliased (confirms coverage)
 
-        // EXPERIMENT: gather ONLY the custom split-terrain collision baked into the ground parts — skip
-        // buildings entirely, and (inverting the normal exclusion) alias ONLY the origin base-ground static
-        // parts. Pairs with tools/bake_player_camera_collision.py. Set false for the normal all-parts alias.
-        internal static bool TerrainOnly = true;
+        // false = alias MAP/building parts (+ non-origin static) to player collision, keep origin ground on custom `_c`.
+        // true  = the old terrain-only experiment (origin ground only, skip buildings).
+        internal static bool TerrainOnly = false;
 
         private const long EditGroundPtr = 0x21D1968C;
 
