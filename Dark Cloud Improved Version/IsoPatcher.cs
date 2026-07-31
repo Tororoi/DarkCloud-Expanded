@@ -831,6 +831,10 @@ namespace Dark_Cloud_Improved_Version
             return b;
         }
 
+        // Opt-in: bake the native occlusion-camera prototype instead of the C#-driver decouple. When true,
+        // ALSO set TownCamera.Enabled=false (the C# driver must not run alongside it). See PatchNativeCameraPostPass.
+        internal static bool EnableNativeCameraPrototype = true;
+
         static uint ElfPatchAndCrc(FileStream fs, Rec elf)
         {
             long elfIso = (long)elf.Ext * SECTOR;
@@ -862,7 +866,10 @@ namespace Dark_Cloud_Improved_Version
             // ── Camera: rewritten from scratch as a runtime C# controller (TownCamera). The ONLY ISO patch is
             //    the 4-byte DECOUPLE below; everything else (orbit, collision) lives in C#. Old EdMoveChara-tweak
             //    patches were removed 2026-07 (recoverable via git). Fishing-shot recenter kept.
-            PatchDecoupleCamera(fs, ElfOff);             // NOP FollowOn → MainCamera stays follow-OFF → C# owns it
+            if (EnableNativeCameraPrototype)
+                PatchNativeCameraPostPass(fs, ElfOff);   // native occlusion-camera prototype (lets vanilla + Step run)
+            else
+                PatchDecoupleCamera(fs, ElfOff);         // NOP FollowOn → MainCamera stays follow-OFF → C# owns it
             PatchFishingCameraTarget(fs, ElfOff);        // center the fishing shot on the bobber (kept)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
@@ -1000,6 +1007,109 @@ namespace Dark_Cloud_Improved_Version
             if (RdU32(fs, ElfOff(VA)) != 0x0C0492C0)
                 throw new IOException($"Camera-decouple site 0x{VA:X} is not vanilla jal FollowOn — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(VA), 0x0C0492C4);   // jal FollowOff (0x124B10) → clears follow every frame, before Step
+        }
+
+        // ── NATIVE camera — ELF port, LEVERAGE vanilla's own controller + surgical edits ─────────────
+        // Opt-in (EnableNativeCameraPrototype). We DON'T reimplement the camera: EdMoveChara already has a full
+        // controller (decompile line 583) — right-stick rotation (AddAngle), stick-Y height (AddHeight), L1/R1
+        // rotation (PadOn 8/4), auto-follow-behind when idle, distance/height clamping. We surgically fix the two
+        // things that made it feel bad:
+        //   1. Its rotation is COLLISION-GATED by bVar4(=s6)/bVar5(=s4) — "is the right/left side clear of walls"
+        //      — so it refuses to rotate INTO a wall (the original "bounce"/stuck feel). Those flags are cleared
+        //      only at 0x16B1E8 (`clear s6`, right within 5u) and 0x16B2FC (`clear s4`, left within 5u); NOP both
+        //      → flags stay true → FREE rotation everywhere. (Stage 2 adds smooth pull-in to replace the gating.)
+        //   2. Stub CheckCameraWidth (single caller 0x16AF98) → its width-slide AND the bVar gating inside that
+        //      block are disabled; its `if (result != 0)` block just never fires.
+        // Everything else stays vanilla (this REPLACES PatchDecoupleCamera; the C# TownCamera driver must be OFF).
+        // Reversible: restore the guarded vanilla words. Addresses RE'd via Ghidra-EE (docs/town-camera-elf-port-plan).
+        static void PatchNativeCameraPostPass(FileStream fs, Func<uint, long> ElfOff)
+        {
+            // CLEAN FREE-CAMERA BASE + STAGE-2 PULL-IN: strip ALL of vanilla's camera collision, then add our OWN
+            // smooth pull-in with a space buffer. Sites guarded before any write. (To A/B vanilla's orbit-the-hit-point
+            // slide instead, drop the CameraAutoMove stub and NOP its AddAngle 0x169CF8/D14 + AddHeight 0x169D50.)
+            const uint STUB_VA  = 0x0014B830;   // CheckCameraWidth entry           (guard addiu sp,-0x100)
+            const uint BVAR4_VA = 0x0016B1E8;   // `clear s6` (bVar4=false, right blocked → gates rotation)
+            const uint BVAR5_VA = 0x0016B2FC;   // `clear s4` (bVar5=false, left  blocked → gates rotation)
+            const uint CAM_VA   = 0x00169B70;   // CameraAutoMove entry (slide/auto-follow/rotate/height-when-close)
+            const uint VADJ_VA  = 0x0016B6A8;   // vertical-adjust SetHeight (raise to clear a ceiling within 18u)
+            const uint RSTD_VA  = 0x0016B724;   // reset: SetDistance(near)   \ fires when clipped-close or too-high
+            const uint RSTH_VA  = 0x0016B738;   // reset: SetHeight(10)       |  → snaps + flips the camera to the
+            const uint RSTA_VA  = 0x0016B764;   // reset: AddAngle(flip)      / opposite side of the player
+            const uint PULLIN_VA = 0x0014B838;  // our pull-in fn, hosted in reclaimed CheckCameraWidth slack (2544B)
+            const uint HOOK_VA  = 0x0016B5DC;   // jal CheckHitVertical → retarget to our pull-in (s5=buf,s8=count live)
+            // Town camera clamps distance to [near=70, far=80] AFTER our hook, easing our pull-in back UP to 70 every
+            // frame (line 618-621) — so the pull-in "mostly passes through". NOP the near-clamp + the bVar6 SetDistance
+            // so our pull-in owns +0x2D0. (Far-clamp 0x16B994 left as a safety; we already clamp target ≤ BASE 80.)
+            const uint NCLAMP_VA = 0x0016B9E8;  // AddDistance(+(70-dist)/10) near-clamp → fights pull-in
+            const uint SDST_VA   = 0x0016BBCC;  // if(bVar6) SetDistance(70) → hard-resets distance
+
+            void Guard(uint va, uint want, string what) {
+                if (RdU32(fs, ElfOff(va)) != want)
+                    throw new IOException($"Native-camera site 0x{va:X} ({what}) not vanilla — unmodified Dark Cloud (USA) ISO expected.");
+            }
+            Guard(STUB_VA,  0x27BDFF00, "CheckCameraWidth");
+            Guard(BVAR4_VA, 0x7000B628, "rotation-gate R"); Guard(BVAR5_VA, 0x7000A628, "rotation-gate L");
+            Guard(CAM_VA,   0x27BDFFA0, "CameraAutoMove");
+            Guard(VADJ_VA,  0x0C0492EC, "vertical SetHeight");
+            Guard(RSTD_VA,  0x0C0492DC, "reset SetDistance"); Guard(RSTH_VA, 0x0C0492EC, "reset SetHeight");
+            Guard(RSTA_VA,  0x0C0492D4, "reset AddAngle");
+            Guard(HOOK_VA,  0x0C052820, "pull-in hook (jal CheckHitVertical)");
+            Guard(NCLAMP_VA, 0x0C0492E4, "distance near-clamp"); Guard(SDST_VA, 0x0C0492DC, "bVar6 SetDistance");
+
+            WrU32(fs, ElfOff(STUB_VA + 0), 0x03E00008);   // CheckCameraWidth → jr ra
+            WrU32(fs, ElfOff(STUB_VA + 4), 0x00001021);   //   addu v0,zero,zero (return 0 → width-slide off)
+            WrU32(fs, ElfOff(BVAR4_VA), 0x00000000);      // free rotation right (bVar4 stays true)
+            WrU32(fs, ElfOff(BVAR5_VA), 0x00000000);      // free rotation left  (bVar5 stays true)
+            WrU32(fs, ElfOff(CAM_VA + 0), 0x03E00008);    // CameraAutoMove → jr ra (no collision slide/rotate/height)
+            WrU32(fs, ElfOff(CAM_VA + 4), 0x00000000);    //   nop (delay slot)
+            WrU32(fs, ElfOff(VADJ_VA), 0x00000000);       // no ceiling height-rise ("angle goes up")
+            WrU32(fs, ElfOff(RSTD_VA), 0x00000000);       // no reset distance snap
+            WrU32(fs, ElfOff(RSTH_VA), 0x00000000);       // no reset height snap
+            WrU32(fs, ElfOff(RSTA_VA), 0x00000000);       // no reset angle flip ("reset to opposite side")
+            WrU32(fs, ElfOff(NCLAMP_VA), 0x00000000);     // no near-clamp ease-up (was forcing dist back to 70)
+            WrU32(fs, ElfOff(SDST_VA), 0x00000000);       // no bVar6 SetDistance(70) hard-reset
+
+            // ── STAGE 2: our own smooth pull-in (hosted in the reclaimed CheckCameraWidth slack) ──
+            // Wraps `jal CheckHitVertical` @0x16B5DC (s5=CCPoly buffer, s8=poly count live in callee-saved regs):
+            // calls the real CheckHitVertical (transparent, returns its v0), then reads MainCamera ref(+0x2C0)/
+            // angle(+0x2D8)/height(+0x2D4), casts the TRUE 3D sightline ray from ref up to the actual camera pos
+            // (ref.y + height) toward the orbit dir at BASE=80, CheckHit(s5,s8,rayFrom→rayTo, mode=0). mode=0 is
+            // critical: it hits ALL polys — mode=1 skipped the tall area-dividing walls (attribute bit 0) while
+            // buildings (bit clear) still registered, so the camera passed through walls. AND param_6=1 (NEAREST):
+            // CheckHit with param_6=0 returns the FIRST poly in buffer order, which on our 80u ray is often a far
+            // one (dist≥80 → clamps to base → no pull-in); param_6=1 tracks the nearest hit. On hit, shrinks
+            // distance(+0x2D0) to horiz(hit)−MARGIN(8, the space buffer) — floored at MIN 12 (target ≤72<BASE so no
+            // max-clamp needed), then eased toward it: fast-in 0.4 / slow-out 0.15 (both directions ease, no hard snap).
+            // MIN must stay UNDER the wall distance or the floor lands the camera PAST close walls (Queens canal walls
+            // ~19-34u out). Trade-off: low MIN lets the camera near the player at buildings — real fix = height-rise
+            // (go OVER when forced close), TODO. ⚠ EE-ASM GOTCHAS baked in (see mips_asm.py): FP compares use c.OLT.s
+            // (.word 0x46..0034) NOT keystone c.lt.s (0x3C — the R5900 doesn't set cc for it); a nop follows every
+            // mtc1 and every FP compare (two EE latency hazards). One-frame-stale angle (line 583 after) imperceptible.
+            // See memory [[native-camera-functions]]. Tunables: BASE 0x42A0(80), MARGIN 0x4100(8), MIN 0x4140(12), ease-in 0x3ECCCCCD(0.4)/out 0x3E19999A(0.15).
+            uint[] pullIn =
+            {
+                0x27BDFFA0, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
+                0x8C239678, 0x1060005F, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
+                0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xAFA0002C, 0xC46C02D8,
+                0x0C047628, 0x00000000, 0xE7A00010, 0x8FA30058, 0xC46C02D8, 0x0C0475AC,
+                0x00000000, 0xE7A00014, 0x8FA30058, 0x3C0842A0, 0x44884000, 0x00000000,
+                0xC7A00010, 0x46080002, 0xC7A10020, 0x46000800, 0xE7A00030, 0xC46002D4,
+                0xC7A10024, 0x46000800, 0xE7A00034, 0xC7A00014, 0x46080002, 0xC7A10028,
+                0x46000800, 0xE7A00038, 0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020,
+                0x27A70030, 0x27A80040, 0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018,
+                0x0C052754, 0x00000000, 0x8FA30058, 0x04400011, 0x00000000, 0xC7A00040,
+                0xC7A10020, 0x46010001, 0x46000002, 0xC7A20048, 0xC7A30028, 0x46031081,
+                0x46021082, 0x46020000, 0x46000004, 0x3C084100, 0x44881000, 0x00000000,
+                0x46020001, 0x10000004, 0x00000000, 0x3C0842A0, 0x44880000, 0x00000000,
+                0x3C084140, 0x44881000, 0x00000000, 0x46020034, 0x00000000, 0x45000002,
+                0x00000000, 0x46001006, 0xC46102D0, 0x46010034, 0x00000000, 0x45010005,
+                0x00000000, 0x3C083E19, 0x3508999A, 0x10000003, 0x00000000, 0x3C083ECC,
+                0x3508CCCD, 0x44881800, 0x00000000, 0x46010081, 0x46031082, 0x46020800,
+                0xE46002D0, 0x8FA20054, 0x8FBF0050, 0x03E00008, 0x27BD0060,
+            };
+            for (int i = 0; i < pullIn.Length; i++)
+                WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
+            WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
         }
 
         // ── Fishing camera → center on the bobber instead of the player/bobber midpoint ──────────────

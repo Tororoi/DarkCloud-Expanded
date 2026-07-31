@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class TownCamera
     {
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;
 
         // Tunables (Phase 0)
         internal static float Distance = 80f;   // orbit radius around the player
