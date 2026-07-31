@@ -48,8 +48,75 @@ namespace Dark_Cloud_Improved_Version
             if (!Enabled) return;
             uint eg = Memory.ReadUInt(EditGroundPtr) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(eg)) { _lastEg = 0xFFFFFFFF; return; }
+            Monitor();   // per-frame jump watcher
             if (eg != _lastEg) { _lastEg = eg; _settle = 90; _retries = 8; return; }   // ~1.5s after area change
             if (_settle > 0 && --_settle == 0) Dump();   // one dump per area (periodic spam disabled post-diagnosis)
+        }
+
+        // Per-frame watcher for the reproducible camera JUMP. Computes the ACTUAL camera eye position the way Step
+        // renders it (ref + dist*{sin,cos}(SMOOTHED angle +0x2DC) + height), and when the eye leaps in one frame,
+        // breaks down WHICH component moved: dist(+0x2D0), target angle(+0x2D8), smoothed angle(+0x2DC), height(+0x2D4),
+        // or ref(+0x2C0). The pull-in only touches dist — so a jump in angle/ref points outside our code (vanilla).
+        // Full-precision per-frame RECORDER (the "simulator input"). Keeps the last ~15s in a ring and rewrites a CSV
+        // every 60 frames, so after reproducing a jump the file holds it. Columns are the raw camera state PLUS what
+        // our pull-in WOULD compute (simTarget = nearest-hit − MARGIN, floored MIN) so we can replay the 0.15 ease
+        // offline and see whether the game's dist matches our model (→ our code) or diverges (→ vanilla writing dist).
+        private static readonly System.Collections.Generic.List<string> _csv = new();
+        private static int _csvTick = 0, _csvFlush = 0;
+        private static string CsvPath => System.IO.Path.Combine(DumpDir ?? AppContext.BaseDirectory, "camera_trace.csv");
+
+        private static void Monitor()
+        {
+            uint camRaw = Memory.ReadUInt(MainCameraPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(camRaw)) return;
+            long cm = Memory.ToMmu(camRaw);
+            float a8 = Memory.ReadFloat(cm + 0x2A8);
+            float[] cf = Memory.ReadFloatBatch(cm + 0x2C0, 8);  // 2C0 ref xyz,2D0 dist,2D4 h,2D8 angT,2DC angS
+            float refx = cf[0], refy = cf[1], refz = cf[2], dist = cf[4], h = cf[5], angT = cf[6], angS = cf[7];
+            float hit = NearestHitHoriz(refx, refy, refz, angT, h, out _, out _);   // our ray at the target angle
+            float simTarget = hit < 0 ? 80f : Math.Max(12f, hit - 8f);
+            float eyeX = refx + dist * (float)Math.Sin(angS);   // the REAL eye (Step renders with +0x2DC = angS)
+            float eyeZ = refz + dist * (float)Math.Cos(angS);
+            _csvTick++;
+            _csv.Add($"{_csvTick},{dist:0.####},{angT:0.######},{angS:0.######},{a8:0.###},{simTarget:0.###},{refx:0.###},{refz:0.###},{eyeX:0.###},{eyeZ:0.###}");
+            if (_csv.Count > 900) _csv.RemoveRange(0, _csv.Count - 900);
+            if (++_csvFlush >= 60)
+            {
+                _csvFlush = 0;
+                try { System.IO.File.WriteAllText(CsvPath, "tick,dist,angT,angS,a8,simTarget,refx,refz,eyeX,eyeZ\n" + string.Join("\n", _csv)); }
+                catch (Exception e) { Log("csv write failed: " + e.Message); }
+            }
+        }
+
+        // nearest-hit horiz distance (-1 miss) along the pull-in ray, vs the live buffer — for the trace's target column.
+        private static float NearestHitHoriz(float refx, float refy, float refz, float ang, float h, out float hcx, out float hcz)
+        {
+            hcx = hcz = 0;
+            uint structRaw = Memory.ReadUInt(WorkBufferPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(structRaw)) return -1;
+            long structMmu = Memory.ToMmu(structRaw);
+            uint baseRaw = Memory.ReadUInt(structMmu) & Memory.PhysAddrMask;
+            int used = Memory.ReadInt(structMmu + 8);
+            if (!Memory.IsValidGuest(baseRaw)) return -1;
+            long b = Memory.ToMmu(baseRaw);
+            const float BASE = 80f;
+            float[] rf = { refx, refy, refz };
+            float[] rt = { refx + BASE * (float)Math.Sin(ang), refy + h, refz + BASE * (float)Math.Cos(ang) };
+            float best = -1;
+            int lim = Math.Min(MaxPolys, Math.Max(1, used / 5 + 4));
+            for (int i = 0; i < lim; i++)
+            {
+                float[] p = Memory.ReadFloatBatch(b + (long)i * 0x50, 15);
+                float nl = (float)Math.Sqrt(p[12] * p[12] + p[13] * p[13] + p[14] * p[14]);
+                if (!(IsFinite(p[0]) && Math.Abs(p[0]) < 1e5f && nl > 1e-4f && (p[0] != p[4] || p[2] != p[6]))) continue;
+                if (RayHitsTri(rf, rt, p))
+                {
+                    float cx = (p[0] + p[4] + p[8]) / 3f, cz = (p[2] + p[6] + p[10]) / 3f;
+                    float dx = cx - refx, dz = cz - refz, hd = (float)Math.Sqrt(dx * dx + dz * dz);
+                    if (best < 0 || hd < best) { best = hd; hcx = cx; hcz = cz; }
+                }
+            }
+            return best;
         }
 
         /// <summary>Force a dump now (e.g. from a key binding) regardless of the settle timer.</summary>
