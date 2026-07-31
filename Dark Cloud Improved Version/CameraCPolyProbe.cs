@@ -73,17 +73,24 @@ namespace Dark_Cloud_Improved_Version
             float a8 = Memory.ReadFloat(cm + 0x2A8);
             float[] cf = Memory.ReadFloatBatch(cm + 0x2C0, 8);  // 2C0 ref xyz,2D0 dist,2D4 h,2D8 angT,2DC angS
             float refx = cf[0], refy = cf[1], refz = cf[2], dist = cf[4], h = cf[5], angT = cf[6], angS = cf[7];
-            float hit = NearestHitHoriz(refx, refy, refz, angT, h, out _, out _);   // our ray at the target angle
-            float simTarget = hit < 0 ? 80f : Math.Max(12f, hit - 8f);
-            float eyeX = refx + dist * (float)Math.Sin(angS);   // the REAL eye (Step renders with +0x2DC = angS)
-            float eyeZ = refz + dist * (float)Math.Cos(angS);
+            // Native pull-in writes its live state to scratch 0x2014BB00.. each frame (see IsoPatcher pullin.s):
+            float nHoriz  = Memory.ReadFloat(0x2014BB00);   // horiz target the climb saw (= hitHoriz - MARGIN)
+            float nClimbH = Memory.ReadFloat(0x2014BB04);   // climb-written height (0 = no climb this frame)
+            float hitHoriz = Memory.ReadFloat(0x2014BB08);  // raw wall horizontal distance from ref (0 = no hit)
+            float hitY    = Memory.ReadFloat(0x2014BB0C);   // world height where the ray struck the wall
+            // Straight-line check: the eye sits at horizontal `dist` from ref; the wall is at `hitHoriz`. If the eye held
+            // a constant horizontal gap to the wall it would trace a vertical line. `clr` = that gap (should ≈ MARGIN);
+            // (hitHoriz,hitY) over the climb traces the wall's cross-section — hitHoriz rising with hitY ⇒ sloped wall.
+            float clr = hitHoriz > 0f ? hitHoriz - dist : 0f;
             _csvTick++;
-            _csv.Add($"{_csvTick},{dist:0.####},{angT:0.######},{angS:0.######},{a8:0.###},{simTarget:0.###},{refx:0.###},{refz:0.###},{eyeX:0.###},{eyeZ:0.###}");
+            // refx/refz let the analyzer isolate STATIONARY segments (player against one wall) so the wall
+            // cross-section reads cleanly instead of smearing across different walls.
+            _csv.Add($"{_csvTick},{dist:0.##},{h:0.##},{hitHoriz:0.##},{hitY:0.##},{clr:0.##},{nClimbH:0.##},{refx:0.##},{refz:0.##}");
             if (_csv.Count > 900) _csv.RemoveRange(0, _csv.Count - 900);
             if (++_csvFlush >= 60)
             {
                 _csvFlush = 0;
-                try { System.IO.File.WriteAllText(CsvPath, "tick,dist,angT,angS,a8,simTarget,refx,refz,eyeX,eyeZ\n" + string.Join("\n", _csv)); }
+                try { System.IO.File.WriteAllText(CsvPath, "tick,dist,h,hitHoriz,hitY,clr,nClimbH,refx,refz\n" + string.Join("\n", _csv)); }
                 catch (Exception e) { Log("csv write failed: " + e.Message); }
             }
         }

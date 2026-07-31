@@ -26,6 +26,14 @@ wrong way (PCSX2 reproduces this). keystone does NOT insert the gap. YOU must wr
     bc1f  label
     nop                # delay slot (separate concern)
 
+⛔ NEVER use keystone's `sqrt.s` (cost a debugging session, FIX 9): the R5900 encodes SQRT.S as
+`sqrt.s fd, ft` — the OPERAND is in the ft field (bits 20-16). Standard MIPS (and keystone) encode it
+as `sqrt.s fd, fs` with the operand in fs (bits 15-11). So keystone's `sqrt.s $f5,$f5` = 0x46002944
+square-roots the WRONG register on the EE (ft=f0, not f5) and writes garbage. It only "works" when the
+operand is $f0 (both fields 0). Hand-encode as `.word`: for `sqrt.s $fD,$fS` emit
+0x46000004 | (fS<<16) | (fD<<6)  — operand in the ft slot. e.g. sqrt.s $f5,$f5 -> 0x46050144.
+(rsqrt.s likely has the same 3-operand EE shape; verify before use.)
+
 SECOND EE HAZARD — `mtc1` LATENCY (also bit me, FIX 7): after `mtc1 $tN, $fM` (GPR->FPR move,
 e.g. loading a float constant), a dependent FPU op (c.lt.s/sub.s/mul.s/add.s reading $fM) in the
 VERY NEXT slot gets the STALE $fM. Put a `nop` (or independent instr) between them:
