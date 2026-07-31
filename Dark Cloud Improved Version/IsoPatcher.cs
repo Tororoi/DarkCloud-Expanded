@@ -1035,6 +1035,12 @@ namespace Dark_Cloud_Improved_Version
             const uint RSTD_VA  = 0x0016B724;   // reset: SetDistance(near)   \ fires when clipped-close or too-high
             const uint RSTH_VA  = 0x0016B738;   // reset: SetHeight(10)       |  → snaps + flips the camera to the
             const uint RSTA_VA  = 0x0016B764;   // reset: AddAngle(flip)      / opposite side of the player
+            const uint HFLOOR_SNAP_VA = 0x0016BC54; // floor-snap SetHeight(5/35): clamps height UP to 5 when it's lower,
+                                                    // which blocks the ground-relative DROP (camera below the player when
+                                                    // he walks uphill). NOP so height can go < 5 / negative; our baseline
+                                                    // keeps the eye BASE_H above the ground under it, so it never clips.
+            const uint STICKY1_VA = 0x0016B834; // vanilla stick-Y AddHeight (accumulative, height<30 branch) — replaced by
+            const uint STICKY2_VA = 0x0016B84C; //   our deadzoned absolute stick offset in the pull-in. NOP both.
             const uint PULLIN_VA = 0x0014B838;  // our pull-in fn, hosted in reclaimed CheckCameraWidth slack (2544B)
             const uint HOOK_VA  = 0x0016B5DC;   // jal CheckHitVertical → retarget to our pull-in (s5=buf,s8=count live)
             // Town camera clamps distance to [near=70, far=80] AFTER our hook, easing our pull-in back UP to 70 every
@@ -1083,6 +1089,12 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(SANGLE_VA), 0x00000000);     // no reset SetAngleSoon → angle easing survives (fixes slide jump)
             WrU32(fs, ElfOff(SANGLE2_VA), 0x00000000);    // no sibling SetAngleSoon (MapNo 0x23)
             WrU32(fs, ElfOff(RSTVT_VA), 0x00000000);      // no reset Step(cam,-1) → +0x2DC angle snap gone (block inert)
+            Guard(HFLOOR_SNAP_VA, 0x0C0492EC, "height floor-snap SetHeight");
+            WrU32(fs, ElfOff(HFLOOR_SNAP_VA), 0x00000000); // no floor-snap → height can drop below 5 (camera below player)
+            Guard(STICKY1_VA, 0x0C0492F4, "vanilla stick-Y AddHeight #1");
+            Guard(STICKY2_VA, 0x0C0492F4, "vanilla stick-Y AddHeight #2");
+            WrU32(fs, ElfOff(STICKY1_VA), 0x00000000);    // our deadzoned stick offset replaces the vanilla accumulative one
+            WrU32(fs, ElfOff(STICKY2_VA), 0x00000000);
 
             // ── STAGE 2: our own smooth pull-in (hosted in the reclaimed CheckCameraWidth slack) ──
             // Wraps `jal CheckHitVertical` @0x16B5DC (s5=CCPoly buffer, s8=poly count live in callee-saved regs):
@@ -1104,8 +1116,9 @@ namespace Dark_Cloud_Improved_Version
             // mtc1 and every FP compare (two EE latency hazards). One-frame-stale angle (line 583 after) imperceptible.
             // ===== CAMERA PULL-IN / CLIMB TUNABLES — edit these; they are injected into the template below =====
             // Behaviour: horizontal target = wall_hit - MARGIN, floored at HFLOOR (pulls fully in, no clip).
-            // HEIGHT is GROUND-RELATIVE: each frame it casts a DOWNWARD ray at the camera's spot (ref+dist·dir) against the
-            // camera _c collision buffer and rests BASE_H above the ground it hits, not above the player — so the camera
+            // HEIGHT is GROUND-RELATIVE: each frame it casts a DOWNWARD ray at the camera's spot (ref+dist·dir) starting at
+            // the camera's EYE height (so an overhead bridge is never mistaken for ground) against the camera _c collision
+            // buffer and rests BASE_H above the ground it hits, not above the player — so the camera
             // rises relative to the player when he walks downhill in front of it and drops when he walks uphill. (A ray, not
             // CEditGround::GetAlt, because GetAlt only covers the editable georama areas — not the canal / non-georama ground.)
             //     baseline = groundY + BASE_H - ref.y   (no ground hit → BASE_H player-relative); capped at MAX_HEIGHT.
@@ -1123,47 +1136,60 @@ namespace Dark_Cloud_Improved_Version
             const float BASE_H      = 17f;   // resting eye height ABOVE the ground under the camera (≈ player height 12 + 5)
             const float CLIMB_EASE  = 0.3f;  // per-frame ease of height toward its target
             const float DIST_EASE   = 0.3f;  // per-frame ease of horizontal distance toward its target
-            // Assembled template (232 words) from tools/…/pullin.s. The KNOBS are the consts above, NOT the hex — they get
+            const float STICK_DEADZONE = 0.3f; // right-stick Y below this |deflection| (0..1) does nothing (rotation won't move height)
+            const float STICK_SCALE    = -25f; // manual height offset at full stick deflection (sign flipped so up=raise)
+            const float STICK_EASE     = 0.1f;// per-frame ease of the stick offset toward its target — LOW = gentle, non-abrupt onset
+            const float MIN_GROUND_CLEAR = 4f; // eye never gets closer than this to the ground under the camera (stick-down clip guard)
+            // Assembled template (286 words) from tools/…/pullin.s. The KNOBS are the consts above, NOT the hex — they get
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
             // follows every mtc1 and every FP compare.
             uint[] pullIn =
             {
                 0x27BDFF90, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
-                0x8C239678, 0x106000DC, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
+                0x8C239678, 0x10600112, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
                 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xAFA0002C, 0xC46C02D8,
                 0x0C047628, 0x00000000, 0xE7A00060, 0x8FA30058, 0xC46C02D8, 0x0C0475AC,
                 0x00000000, 0xE7A00064, 0x8FA30058, 0xC46102D0, 0xC7A20060, 0x46011082,
                 0xC7A30020, 0x46021900, 0xC7A20064, 0x46011082, 0xC7A30028, 0x46021940,
-                0xC7A60024, 0xE7A40020, 0x3C0842C8, 0x44883800, 0x00000000, 0x460731C0,
+                0xC7A60024, 0xE7A40020, 0xC46702D4, 0x460731C0, 0x00000000, 0x00000000,
                 0xE7A70024, 0xE7A50028, 0xAFA0002C, 0xE7A40030, 0x3C0843FA, 0x44883800,
                 0x00000000, 0x460731C1, 0xE7A70034, 0xE7A50038, 0xAFA0003C, 0x02A02021,
                 0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040, 0xAFA80010, 0x24090001,
                 0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000, 0x8FA30058, 0x04400005,
                 0x00000000, 0xC7A00044, 0xE7A0005C, 0x10000002, 0x00000000, 0xAFA0005C,
-                0xC46002C0, 0xE7A00020, 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028,
-                0x3C0842A0, 0x44884000, 0x00000000, 0xC7A00060, 0x46080002, 0xC7A10020,
-                0x46000800, 0xE7A00030, 0xC46002D4, 0xC7A10024, 0x46000800, 0xE7A00034,
-                0xC7A00064, 0x46080002, 0xC7A10028, 0x46000800, 0xE7A00038, 0xAFA0003C,
-                0x02A02021, 0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040, 0xAFA80010,
-                0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000, 0x8FA30058,
-                0x3C0A0014, 0x354AC000, 0x04400014, 0x00000000, 0xC7A00040, 0xC7A10020,
-                0x46010001, 0x46000002, 0xC7A20048, 0xC7A30028, 0x46031081, 0x46021082,
-                0x46020000, 0x46000004, 0xE5400008, 0xC7A30044, 0xE543000C, 0x3C084100,
-                0x44881000, 0x00000000, 0x46020001, 0x10000006, 0x00000000, 0xAD400008,
-                0xAD40000C, 0x3C0842A0, 0x44880000, 0x00000000, 0x3C084080, 0x44881000,
-                0x00000000, 0x46020034, 0x00000000, 0x45000002, 0x00000000, 0x46001006,
-                0xE5400000, 0xC7A2005C, 0xE5420010, 0x44801800, 0x00000000, 0x46021834,
-                0x00000000, 0x45000009, 0x00000000, 0x3C0840A0, 0x44881800, 0x00000000,
-                0x46031080, 0xC7A30024, 0x46031081, 0x10000004, 0x00000000, 0x3C0840A0,
-                0x44881000, 0x00000000, 0x3C084270, 0x44881800, 0x00000000, 0x46021834,
-                0x00000000, 0x45000002, 0x00000000, 0x46001886, 0x3C084270, 0x44882000,
-                0x00000000, 0x46022101, 0x3C0841F0, 0x44881800, 0x00000000, 0x46001941,
-                0x44803000, 0x00000000, 0x46062834, 0x00000000, 0x45000002, 0x00000000,
-                0x46003146, 0x3C083C6A, 0x35080EA1, 0x44881800, 0x00000000, 0x46032942,
-                0x3C083F80, 0x44883000, 0x00000000, 0x46053034, 0x00000000, 0x45000002,
-                0x00000000, 0x46003146, 0x460529C2, 0x46052980, 0x3C084040, 0x44884000,
-                0x00000000, 0x46064181, 0x46063942, 0x46042942, 0x46022940, 0xC46602D4,
+                0x0C05A68C, 0x00000000, 0x460000C6, 0x46000082, 0x3C083E23, 0x3508D70A,
+                0x44880800, 0x00000000, 0x46020834, 0x00000000, 0x45000007, 0x00000000,
+                0x3C0841C8, 0x44880800, 0x00000000, 0x46011802, 0x10000002, 0x00000000,
+                0x44800000, 0x3C0B0014, 0x356BC020, 0xC5620000, 0x46020041, 0x3C083DA3,
+                0x3508D70A, 0x44882000, 0x00000000, 0x46040842, 0x46011080, 0xE5620000,
+                0xE7A20068, 0x8FA30058, 0xC46002C0, 0xE7A00020, 0xC46002C4, 0xE7A00024,
+                0xC46002C8, 0xE7A00028, 0x3C0842A0, 0x44884000, 0x00000000, 0xC7A00060,
+                0x46080002, 0xC7A10020, 0x46000800, 0xE7A00030, 0xC46002D4, 0xC7A10024,
+                0x46000800, 0xE7A00034, 0xC7A00064, 0x46080002, 0xC7A10028, 0x46000800,
+                0xE7A00038, 0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020, 0x27A70030,
+                0x27A80040, 0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754,
+                0x00000000, 0x8FA30058, 0x3C0A0014, 0x354AC000, 0x04400014, 0x00000000,
+                0xC7A00040, 0xC7A10020, 0x46010001, 0x46000002, 0xC7A20048, 0xC7A30028,
+                0x46031081, 0x46021082, 0x46020000, 0x46000004, 0xE5400008, 0xC7A30044,
+                0xE543000C, 0x3C084100, 0x44881000, 0x00000000, 0x46020001, 0x10000006,
+                0x00000000, 0xAD400008, 0xAD40000C, 0x3C0842A0, 0x44880000, 0x00000000,
+                0x3C084080, 0x44881000, 0x00000000, 0x46020034, 0x00000000, 0x45000002,
+                0x00000000, 0x46001006, 0xE5400000, 0xC7A2005C, 0xE5420010, 0x44801800,
+                0x00000000, 0x46021834, 0x00000000, 0x45000009, 0x00000000, 0x3C0840A0,
+                0x44881800, 0x00000000, 0x46031080, 0xC7A30024, 0x46031081, 0x10000004,
+                0x00000000, 0x3C0840A0, 0x44881000, 0x00000000, 0x3C0840A0, 0x44881800,
+                0x00000000, 0x46031034, 0x00000000, 0x45000002, 0x00000000, 0x46001886,
+                0x3C084270, 0x44881800, 0x00000000, 0x46021834, 0x00000000, 0x45000002,
+                0x00000000, 0x46001886, 0x3C084270, 0x44882000, 0x00000000, 0x46022101,
+                0x3C0841F0, 0x44881800, 0x00000000, 0x46001941, 0x44803000, 0x00000000,
+                0x46062834, 0x00000000, 0x45000002, 0x00000000, 0x46003146, 0x3C083C6A,
+                0x35080EA1, 0x44881800, 0x00000000, 0x46032942, 0x3C083F80, 0x44883000,
+                0x00000000, 0x46053034, 0x00000000, 0x45000002, 0x00000000, 0x46003146,
+                0x460529C2, 0x46052980, 0x3C084040, 0x44884000, 0x00000000, 0x46064181,
+                0x46063942, 0x46042942, 0x46022940, 0xC7A80068, 0x46082940, 0xC7A6005C,
+                0xC7A70024, 0x46073181, 0x3C0840C0, 0x44883800, 0x00000000, 0x46073180,
+                0x46062834, 0x00000000, 0x45000002, 0x00000000, 0x46003146, 0xC46602D4,
                 0x460629C1, 0x3C083E99, 0x3508999A, 0x44881800, 0x00000000, 0x460339C2,
                 0x46073180, 0xE46602D4, 0xE5460004, 0xC46102D0, 0x3C083E19, 0x3508999A,
                 0x44881800, 0x00000000, 0x46010081, 0x46031082, 0x46020800, 0xE46002D0,
@@ -1191,20 +1217,27 @@ namespace Dark_Cloud_Improved_Version
             }
             float INV_RANGE = 1f / CLIMB_RANGE;   // smoothstep parameter scale: t = intrusion * INV_RANGE
             // (AMP is now dynamic in-asm: MAX_HEIGHT − ground baseline — so MAX_HEIGHT is injected directly instead.)
-            PutVal(125, MARGIN, nameof(MARGIN));
-            PutVal(78, BASE_DIST, nameof(BASE_DIST));   // wall ray-extension length
-            PutVal(133, BASE_DIST, nameof(BASE_DIST));  // no-wall resting distance
-            PutVal(136, HFLOOR, nameof(HFLOOR));
-            PutVal(176, CLIMB_START, nameof(CLIMB_START));
-            PutVal(153, BASE_H, nameof(BASE_H));        // ground-baseline offset
-            PutVal(161, BASE_H, nameof(BASE_H));        // off-map fallback
-            PutVal(164, MAX_HEIGHT, nameof(MAX_HEIGHT)); // validity cap
-            PutVal(172, MAX_HEIGHT, nameof(MAX_HEIGHT)); // dynamic-AMP top
-            PutEase(187, 188, INV_RANGE, nameof(INV_RANGE));   // 1/CLIMB_RANGE
-            PutEase(211, 212, CLIMB_EASE, nameof(CLIMB_EASE));
-            PutEase(220, 221, DIST_EASE, nameof(DIST_EASE));
+            float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone squared (compared vs stickY²)
+            PutVal(157, MARGIN, nameof(MARGIN));
+            PutVal(110, BASE_DIST, nameof(BASE_DIST));  // wall ray-extension length
+            PutVal(165, BASE_DIST, nameof(BASE_DIST));  // no-wall resting distance
+            PutVal(168, HFLOOR, nameof(HFLOOR));
+            PutVal(216, CLIMB_START, nameof(CLIMB_START));
+            PutVal(185, BASE_H, nameof(BASE_H));        // ground-baseline offset
+            PutVal(193, BASE_H, nameof(BASE_H));        // off-map fallback
+            PutVal(196, BASE_H, nameof(BASE_H));        // resting floor (rise, no dip)
+            PutVal(204, MAX_HEIGHT, nameof(MAX_HEIGHT)); // validity cap
+            PutVal(212, MAX_HEIGHT, nameof(MAX_HEIGHT)); // dynamic-AMP top
+            PutVal(84, STICK_SCALE, nameof(STICK_SCALE)); // height offset at full stick deflection
+            PutVal(254, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR)); // min eye clearance above the ground (stick-down clip guard)
+            PutEase(227, 228, INV_RANGE, nameof(INV_RANGE));   // 1/CLIMB_RANGE
+            PutEase(265, 266, CLIMB_EASE, nameof(CLIMB_EASE));
+            PutEase(274, 275, DIST_EASE, nameof(DIST_EASE));
+            PutEase(76, 77, STICK_DZ2, nameof(STICK_DZ2));     // right-stick deadzone²
+            PutEase(95, 96, STICK_EASE, nameof(STICK_EASE));   // per-frame ease of the manual stick offset (gentle onset)
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
+            WrU32(fs, ElfOff(0x0014C020), 0x00000000);     // zero-init the persistent smoothed-stick-offset scratch @0x14C020
             WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
         }
 
