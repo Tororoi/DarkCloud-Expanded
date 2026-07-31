@@ -1042,6 +1042,16 @@ namespace Dark_Cloud_Improved_Version
             // so our pull-in owns +0x2D0. (Far-clamp 0x16B994 left as a safety; we already clamp target ≤ BASE 80.)
             const uint NCLAMP_VA = 0x0016B9E8;  // AddDistance(+(70-dist)/10) near-clamp → fights pull-in
             const uint SDST_VA   = 0x0016BBCC;  // if(bVar6) SetDistance(70) → hard-resets distance
+            // The "too close" reset block (fires when dist < near*0.5 = 35, CONSTANT in the canal) snapped 4 things;
+            // we NOPped its SetDistance/SetHeight/AddAngle (RSTD/RSTH/RSTA) but MISSED the SetAngleSoon @0x16B754 —
+            // which sets rendered-angle(+0x2DC)=target(+0x2D8), KILLING the angle easing every frame we're pulled in.
+            // That snap (size = the easing lag, so bigger the faster you rotate) was the reproducible slide jump. NOP it.
+            const uint SANGLE_VA  = 0x0016B754;  // reset-block SetAngleSoon → kills angle easing (the slide jump)
+            const uint SANGLE2_VA = 0x0016B7A8;  // sibling SetAngleSoon (MapNo 0x23 only; NOP for consistency)
+            // The reset block's LAST effect: a vtable call (**(cam+0x2B8)+8)(cam,-1) = Step(cam,-1), whose param_2<0
+            // path does +0x2DC=+0x2D8 — ANOTHER hard angle snap. Fires when dist<35 (constant while pulled in). CSV
+            // proved it: rendered angle catches up ~2.4° the frame dist crosses 35. NOP the jalr → block fully inert.
+            const uint RSTVT_VA   = 0x0016B7C0;  // reset-block jalr t9 = Step(cam,-1) → snaps +0x2DC (the residual jump)
 
             void Guard(uint va, uint want, string what) {
                 if (RdU32(fs, ElfOff(va)) != want)
@@ -1055,6 +1065,8 @@ namespace Dark_Cloud_Improved_Version
             Guard(RSTA_VA,  0x0C0492D4, "reset AddAngle");
             Guard(HOOK_VA,  0x0C052820, "pull-in hook (jal CheckHitVertical)");
             Guard(NCLAMP_VA, 0x0C0492E4, "distance near-clamp"); Guard(SDST_VA, 0x0C0492DC, "bVar6 SetDistance");
+            Guard(SANGLE_VA, 0x0C0492CC, "reset SetAngleSoon"); Guard(SANGLE2_VA, 0x0C0492CC, "reset SetAngleSoon(map)");
+            Guard(RSTVT_VA, 0x0320F809, "reset vtable Step(-1)");
 
             WrU32(fs, ElfOff(STUB_VA + 0), 0x03E00008);   // CheckCameraWidth → jr ra
             WrU32(fs, ElfOff(STUB_VA + 4), 0x00001021);   //   addu v0,zero,zero (return 0 → width-slide off)
@@ -1068,18 +1080,23 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(RSTA_VA), 0x00000000);       // no reset angle flip ("reset to opposite side")
             WrU32(fs, ElfOff(NCLAMP_VA), 0x00000000);     // no near-clamp ease-up (was forcing dist back to 70)
             WrU32(fs, ElfOff(SDST_VA), 0x00000000);       // no bVar6 SetDistance(70) hard-reset
+            WrU32(fs, ElfOff(SANGLE_VA), 0x00000000);     // no reset SetAngleSoon → angle easing survives (fixes slide jump)
+            WrU32(fs, ElfOff(SANGLE2_VA), 0x00000000);    // no sibling SetAngleSoon (MapNo 0x23)
+            WrU32(fs, ElfOff(RSTVT_VA), 0x00000000);      // no reset Step(cam,-1) → +0x2DC angle snap gone (block inert)
 
             // ── STAGE 2: our own smooth pull-in (hosted in the reclaimed CheckCameraWidth slack) ──
             // Wraps `jal CheckHitVertical` @0x16B5DC (s5=CCPoly buffer, s8=poly count live in callee-saved regs):
             // calls the real CheckHitVertical (transparent, returns its v0), then reads MainCamera ref(+0x2C0)/
-            // angle(+0x2D8)/height(+0x2D4), casts the TRUE 3D sightline ray from ref up to the actual camera pos
-            // (ref.y + height) toward the orbit dir at BASE=80, CheckHit(s5,s8,rayFrom→rayTo, mode=0). mode=0 is
+            // angle(+0x2D8)/height(+0x2D4), casts the 3D sightline ray from ref up to (ref.y+height) at BASE=80 in the
+            // angle(+0x2D8) direction, CheckHit(s5,s8,rayFrom→rayTo, mode=0). (Look-ahead removed: it didn't flatten the
+            // target discontinuity AND broke on the +0x2D8 wrap flip -π..π ↔ 0..2π making the lead ≈±2π garbage.) mode=0 is
             // critical: it hits ALL polys — mode=1 skipped the tall area-dividing walls (attribute bit 0) while
             // buildings (bit clear) still registered, so the camera passed through walls. AND param_6=1 (NEAREST):
             // CheckHit with param_6=0 returns the FIRST poly in buffer order, which on our 80u ray is often a far
             // one (dist≥80 → clamps to base → no pull-in); param_6=1 tracks the nearest hit. On hit, shrinks
             // distance(+0x2D0) to horiz(hit)−MARGIN(8, the space buffer) — floored at MIN 12 (target ≤72<BASE so no
-            // max-clamp needed), then eased toward it: fast-in 0.4 / slow-out 0.15 (both directions ease, no hard snap).
+            // max-clamp needed), then eased toward it at 0.15 SYMMETRIC (fast-in disabled — testing; planned: slow the
+            // camera rotation when it would clip instead of snapping in, + height-rise when MIN can't be held).
             // MIN must stay UNDER the wall distance or the floor lands the camera PAST close walls (Queens canal walls
             // ~19-34u out). Trade-off: low MIN lets the camera near the player at buildings — real fix = height-rise
             // (go OVER when forced close), TODO. ⚠ EE-ASM GOTCHAS baked in (see mips_asm.py): FP compares use c.OLT.s
@@ -1089,7 +1106,7 @@ namespace Dark_Cloud_Improved_Version
             uint[] pullIn =
             {
                 0x27BDFFA0, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
-                0x8C239678, 0x1060005F, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
+                0x8C239678, 0x10600057, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
                 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xAFA0002C, 0xC46C02D8,
                 0x0C047628, 0x00000000, 0xE7A00010, 0x8FA30058, 0xC46C02D8, 0x0C0475AC,
                 0x00000000, 0xE7A00014, 0x8FA30058, 0x3C0842A0, 0x44884000, 0x00000000,
@@ -1102,10 +1119,9 @@ namespace Dark_Cloud_Improved_Version
                 0x46021082, 0x46020000, 0x46000004, 0x3C084100, 0x44881000, 0x00000000,
                 0x46020001, 0x10000004, 0x00000000, 0x3C0842A0, 0x44880000, 0x00000000,
                 0x3C084140, 0x44881000, 0x00000000, 0x46020034, 0x00000000, 0x45000002,
-                0x00000000, 0x46001006, 0xC46102D0, 0x46010034, 0x00000000, 0x45010005,
-                0x00000000, 0x3C083E19, 0x3508999A, 0x10000003, 0x00000000, 0x3C083ECC,
-                0x3508CCCD, 0x44881800, 0x00000000, 0x46010081, 0x46031082, 0x46020800,
-                0xE46002D0, 0x8FA20054, 0x8FBF0050, 0x03E00008, 0x27BD0060,
+                0x00000000, 0x46001006, 0xC46102D0, 0x3C083E19, 0x3508999A, 0x44881800,
+                0x00000000, 0x46010081, 0x46031082, 0x46020800, 0xE46002D0, 0x8FA20054,
+                0x8FBF0050, 0x03E00008, 0x27BD0060,
             };
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
