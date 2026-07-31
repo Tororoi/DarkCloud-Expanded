@@ -73,11 +73,37 @@ namespace Dark_Cloud_Improved_Version
             float a8 = Memory.ReadFloat(cm + 0x2A8);
             float[] cf = Memory.ReadFloatBatch(cm + 0x2C0, 8);  // 2C0 ref xyz,2D0 dist,2D4 h,2D8 angT,2DC angS
             float refx = cf[0], refy = cf[1], refz = cf[2], dist = cf[4], h = cf[5], angT = cf[6], angS = cf[7];
-            // Native pull-in writes its live state to scratch 0x2014BB00.. each frame (see IsoPatcher pullin.s):
-            float nHoriz  = Memory.ReadFloat(0x2014BB00);   // horiz target the climb saw (= hitHoriz - MARGIN)
-            float nClimbH = Memory.ReadFloat(0x2014BB04);   // climb-written height (0 = no climb this frame)
-            float hitHoriz = Memory.ReadFloat(0x2014BB08);  // raw wall horizontal distance from ref (0 = no hit)
-            float hitY    = Memory.ReadFloat(0x2014BB0C);   // world height where the ray struck the wall
+            // Native pull-in writes its live state to scratch 0x2014C000.. each frame (see IsoPatcher pullin.s):
+            float nHoriz  = Memory.ReadFloat(0x2014C000);   // horiz target the climb saw (= hitHoriz - MARGIN)
+            float nClimbH = Memory.ReadFloat(0x2014C004);   // eased height target this frame
+            float hitHoriz = Memory.ReadFloat(0x2014C008);  // raw wall horizontal distance from ref (0 = no hit)
+            float hitY    = Memory.ReadFloat(0x2014C00C);   // world height where the ray struck the wall
+            float groundY = Memory.ReadFloat(0x2014C010);   // GetAlt ground under camera (0 = off-map fallback; verify != 0)
+            uint cedit = Memory.ReadUInt(0x202A28D8);        // the CEditGround* the pull-in loads (_gp-0x6f18); should be a valid EE ptr (<0x2000000)
+            int pArea = PlayerAreaCode(cedit, refx, refz);   // does the STRUCT say the player is in an area? (-2 bad ptr, -1 none, else idx)
+            if (_csvTick == 30 && cedit != 0 && cedit < Memory.EeRamSize)  // one-shot: dump ALL 4 areas + area0 raw fields
+            {
+                Log($"CEdit@{cedit:X6} player=({refx:0},{refy:0},{refz:0}) pArea={pArea}");
+                long cm2 = 0x20000000L | cedit;
+                for (int i = 0; i < 4; i++)
+                {
+                    uint ap = Memory.ReadUInt(cm2 + 4 + i * 4);
+                    if (ap == 0 || ap >= Memory.EeRamSize) { Log($"  area{i}=0x{ap:X8} (stop)"); break; }
+                    long am = 0x20000000L | ap;
+                    float xmin = Memory.ReadFloat(am + 0x10), zmin = Memory.ReadFloat(am + 0x18), tile = Memory.ReadFloat(am + 0x20);
+                    int xt = Memory.ReadInt(am + 8), zt = Memory.ReadInt(am + 0xc);
+                    Log($"  area{i}@{ap:X6} x[{xmin:0}..{xmin + tile * xt:0}] z[{zmin:0}..{zmin + tile * zt:0}] tile={tile:0} xt={xt} zt={zt}");
+                }
+                // Cross-check: villagers are placed by this same GetAlt, so villager[k] pos (@0x1D25BA0 + k*0x14A0)
+                // MUST be inside an area. If villagers ARE but the player's ref isn't, the camera ref coords are the
+                // problem (not the pointer/struct).
+                for (int k = 0; k < 3; k++)
+                {
+                    long vp = 0x201D25BA0L + k * 0x14A0;
+                    float vx = Memory.ReadFloat(vp), vy = Memory.ReadFloat(vp + 4), vz = Memory.ReadFloat(vp + 8);
+                    Log($"  villager{k}=({vx:0},{vy:0},{vz:0}) area={PlayerAreaCode(cedit, vx, vz)}");
+                }
+            }
             // Straight-line check: the eye sits at horizontal `dist` from ref; the wall is at `hitHoriz`. If the eye held
             // a constant horizontal gap to the wall it would trace a vertical line. `clr` = that gap (should ≈ MARGIN);
             // (hitHoriz,hitY) over the climb traces the wall's cross-section — hitHoriz rising with hitY ⇒ sloped wall.
@@ -85,14 +111,34 @@ namespace Dark_Cloud_Improved_Version
             _csvTick++;
             // refx/refz let the analyzer isolate STATIONARY segments (player against one wall) so the wall
             // cross-section reads cleanly instead of smearing across different walls.
-            _csv.Add($"{_csvTick},{dist:0.##},{h:0.##},{hitHoriz:0.##},{hitY:0.##},{clr:0.##},{nClimbH:0.##},{refx:0.##},{refz:0.##}");
+            _csv.Add($"{_csvTick},{dist:0.##},{h:0.##},{hitHoriz:0.##},{hitY:0.##},{clr:0.##},{nClimbH:0.##},{groundY:0.##},0x{cedit:X8},{pArea},{refy:0.##},{refx:0.##},{refz:0.##}");
             if (_csv.Count > 900) _csv.RemoveRange(0, _csv.Count - 900);
             if (++_csvFlush >= 60)
             {
                 _csvFlush = 0;
-                try { System.IO.File.WriteAllText(CsvPath, "tick,dist,h,hitHoriz,hitY,clr,nClimbH,refx,refz\n" + string.Join("\n", _csv)); }
+                try { System.IO.File.WriteAllText(CsvPath, "tick,dist,h,hitHoriz,hitY,clr,nClimbH,groundY,cedit,pArea,refy,refx,refz\n" + string.Join("\n", _csv)); }
                 catch (Exception e) { Log("csv write failed: " + e.Message); }
             }
+        }
+
+        // Replicate CEditGround::GetAreaCode in C# to check whether the DATA says (x,z) is inside an area.
+        // -2 = bad CEditGround ptr, -1 = not in any of its ≤4 areas, else the area index. CheckArea is a 2D
+        // X/Z bbox test: xmin@+0x10, zmin@+0x18, tile@+0x20, xtiles@+8, ztiles@+0xc (per CheckArea__9CEditArea).
+        private static int PlayerAreaCode(uint cg, float x, float z)
+        {
+            if (cg == 0 || cg >= Memory.EeRamSize) return -2;
+            long m = 0x20000000L | cg;
+            for (int i = 0; i < 4; i++)
+            {
+                uint ap = Memory.ReadUInt(m + 4 + i * 4);
+                if (ap == 0) break;
+                if (ap >= Memory.EeRamSize) continue;
+                long am = 0x20000000L | ap;
+                float xmin = Memory.ReadFloat(am + 0x10), zmin = Memory.ReadFloat(am + 0x18), tile = Memory.ReadFloat(am + 0x20);
+                int xt = Memory.ReadInt(am + 8), zt = Memory.ReadInt(am + 0xc);
+                if (x >= xmin && z >= zmin && x <= xmin + tile * xt && z <= zmin + tile * zt) return i;
+            }
+            return -1;
         }
 
         // nearest-hit horiz distance (-1 miss) along the pull-in ray, vs the live buffer — for the trace's target column.
