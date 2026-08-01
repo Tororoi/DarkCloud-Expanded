@@ -3,7 +3,7 @@
 # dist = pivot->resting-eye first hit − MARGIN (standard spring-arm: nearest occluder from the player). Constants
 # HARDCODED. Symmetric ease for now (asymmetric + HOLD + yaw come next). Frame -0x70. CheckHit 0x149d50 vs s5/s8.
 # R5900: c.OLT.s = .word ...0x34; nop after every mtc1 & FP compare.
-addiu $sp, $sp, -0x80
+addiu $sp, $sp, -0x90
 sw    $ra, 0x50($sp)
 jal   0x14a080
 nop
@@ -69,34 +69,8 @@ nop
 lw    $v1, 0x58($sp)
 bltz  $v0, cnohit
 nop
-# ONE-SIDED: cull backface — only duck under a roof whose normal faces DOWN toward the eye (N·rayUp < 0).
-sll   $t1, $v0, 6
-sll   $t4, $v0, 4
-addu  $t1, $t1, $t4
-addu  $t1, $s5, $t1
-lwc1  $f4, 0x30($t1)          # N.x
-lwc1  $f5, 0x34($t1)          # N.y
-lwc1  $f6, 0x38($t1)          # N.z
-lwc1  $f7, 0x30($sp)
-lwc1  $f10, 0x20($sp)
-sub.s $f7, $f7, $f10          # rayDir.x
-mul.s $f4, $f4, $f7
-lwc1  $f7, 0x34($sp)
-lwc1  $f10, 0x24($sp)
-sub.s $f7, $f7, $f10          # rayDir.y
-mul.s $f5, $f5, $f7
-add.s $f4, $f4, $f5
-lwc1  $f7, 0x38($sp)
-lwc1  $f10, 0x28($sp)
-sub.s $f7, $f7, $f10          # rayDir.z
-mul.s $f6, $f6, $f7
-add.s $f4, $f4, $f6           # dot = N·rayDir
-mtc1  $zero, $f5
-nop
-.word 0x46052034             # c.OLT.s f4,f5 : dot < 0 ? (front-facing)
-nop
-bc1f  cnohit                 # dot >= 0 -> backface -> ignore this ceiling
-nop
+# (two-sided by design: CheckHit mode-1 returns the NEAREST surface above the eye = the true ceiling
+#  regardless of winding — the old backface cull here was redundant and its 27 words fund the drift)
 lwc1  $f0, 0x44($sp)          # ceilingY = hit.y
 swc1  $f0, 0x6c($sp)
 b     cdone
@@ -141,6 +115,15 @@ nop
 gnohit:
 sw    $zero, 0x5c($sp)        # no ground -> 0 (clamp goes inert: height_min becomes very negative)
 gdone:
+# ===== RIGHT-STICK X: is the user steering? flag @sp+0x84 (1 = active) suppresses the reacquisition drift =====
+jal   0x1699f0                # GetRXf (same keylock/calibration path as GetRYf)
+nop
+mfc1  $t2, $f0
+nop
+sll   $t2, $t2, 1             # drop the sign bit: |x| compare on raw float bits
+lui   $t3, 0x7d00             # 0.25² threshold trick: 0x3E800000 (0.25) << 1
+sltu  $t2, $t3, $t2           # 1 if |x| > 0.25
+sw    $t2, 0x84($sp)
 # ===== RIGHT-STICK Y -> smoothed manual height offset @ sp+0x68 (deadzone + scale, persistent ease) =====
 jal   0x169a30                # GetRYf
 nop
@@ -572,6 +555,7 @@ mul.s $f7, $f7, $f4
 lwc1  $f8, 0x64($sp)          # cosT
 mul.s $f8, $f8, $f6
 add.s $f7, $f7, $f8           # n_d = N.x·sinT + N.z·cosT
+swc1  $f7, 0x88($sp)          # stash n_d for the reacquisition slide
 lwc1  $f8, 0x64($sp)
 mul.s $f8, $f8, $f4
 lwc1  $f9, 0x60($sp)
@@ -641,6 +625,36 @@ nop
 mul.s $f8, $f8, $f10
 add.s $f3, $f7, $f8           # angT'' = angS + keep·lead
 swc1  $f3, 0x2d8($v1)
+# ===== REACQUISITION SLIDE (contact frames, stick idle): project the restoring pull toward the RESTING DISTANCE
+# onto the wall's tangent plane and move along it — a POSITION slide; the rotation is a side effect
+# (Δθ = tangential motion / lever arm), not a turn rate. The projection of the pull can never point away from
+# rest (deviation is monotone non-increasing) and a head-on wall projects to ZERO -> no back-and-forth.
+lw    $t0, 0x84($sp)
+bne   $t0, $zero, drfx        # user steering -> no auto-slide
+nop
+lui   $t0, 0x42a0             # BASE_DIST (the resting distance)
+mtc1  $t0, $f7
+nop
+sub.s $f7, $f7, $f0           # W = BASE_DIST − d'  (restoring pull along the boom; − = stretched, + = pinned short)
+lwc1  $f9, 0x88($sp)          # n_d (wall normal's boom component)
+mul.s $f11, $f7, $f9          # dot = W·n_d  (the pull's into-wall part)
+lui   $t0, 0x3e00             # SLIDE_GAIN (PutVal; fraction of the projected pull applied per frame)
+mtc1  $t0, $f10
+nop
+mul.s $f3, $f11, $f9
+sub.s $f3, $f7, $f3           # S_d = W − dot·n_d  (tangent-plane projection, boom part)
+mul.s $f3, $f3, $f10
+add.s $f0, $f0, $f3           # d' += gain·S_d
+mul.s $f3, $f11, $f12         # dot·n_t
+neg.s $f3, $f3                # S_t = −dot·n_t  (tangent-plane projection, orbit part)
+mul.s $f3, $f3, $f10
+div.s $f3, $f3, $f0           # Δθ = gain·S_t / d  — the rotation EMERGES from the slide
+nop
+nop
+lwc1  $f9, 0x2d8($v1)
+add.s $f9, $f9, $f3
+swc1  $f9, 0x2d8($v1)
+drfx:
 # persist E1' = E1 + a·b̂ + c·ŷ + b·t̂ — the ACTUAL world displacement incl. the tangential slide — as next frame's
 # sweep origin (sits at the margin -> a target still pushed inward crosses EVERY frame -> continuous, no jitter)
 lui   $t3, 0x0014
@@ -686,4 +700,4 @@ done:
 lw    $v0, 0x54($sp)
 lw    $ra, 0x50($sp)
 jr    $ra
-addiu $sp, $sp, 0x80
+addiu $sp, $sp, 0x90
