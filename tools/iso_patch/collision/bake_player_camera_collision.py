@@ -741,6 +741,63 @@ _RESIDUE = set(_rmkey([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3
                for ln in _REMOVE_RESIDUE_E03.strip().split('\n') if ln.strip())
 
 
+# ── One-sided CAMERA collision: these baked camera-wall tris are wound so their normal faces AWAY from the play
+#    area. Under the backface-culled player→camera raycast (the mod's camera reads `_c` one-sided now) that lets the
+#    ray pass straight through them instead of being blocked. Flip their winding so the normal faces the play area.
+#    Applied to the CAMERA path + viewer sets only; player `_a` collision is two-sided (CheckHit) so it's unchanged.
+_BACKFACE_E03 = """
+-400,70,-100, 900,70,-50, -400,70,-50
+-400,70,-100, 900,70,-100, 900,70,-50
+-400,70,-50, -200,70,-50, -200,70,50
+-400,70,-50, -200,70,50, -400,70,50
+-400,70,50, 900,70,200, -400,70,200
+-400,70,50, 900,70,50, 900,70,200
+-200,0,-50, 1300,0,50, -200,0,50
+-200,0,-50, 1300,0,-50, 1300,0,50
+-200,0,50, 900,70,50, -200,70,50
+-200,0,50, 900,0,50, 900,70,50
+-500,270,50, -400,270,50, -400,270,500
+-500,270,50, -400,270,500, -500,270,500
+-500,270,600, -400,270,600, -400,270,1300
+-500,270,600, -400,270,1300, -500,270,1300
+-500,270,1300, 100,270,1400, -500,270,1400
+-500,270,1300, 100,270,1300, 100,270,1400
+600,370,1300, 1600,370,1400, 600,370,1400
+600,370,1300, 1600,370,1300, 1600,370,1400
+1500,370,100, 1600,370,1300, 1500,370,1300
+1500,370,100, 1600,370,100, 1600,370,1300
+-400,0,1300, 600,270,1300, -400,270,1300
+-400,0,1300, 600,0,1300, 600,270,1300
+650,170,1300, 1500,370,1300, 650,370,1300
+650,170,1300, 1500,170,1300, 1500,370,1300
+-300,0,300, 600,0,300, 600,0,1300
+-300,0,300, 600,0,1300, -300,0,1300
+650,170,250, 1500,170,1300, 650,170,1300
+650,170,250, 1500,170,250, 1500,170,1300
+-400,70,-1000, 900,70,-1000, 900,70,-150
+-400,70,-1000, 900,70,-150, -400,70,-150
+-400,0,1000, -300,0,1300, -400,0,1300
+-400,0,1000, -300,0,1000, -300,0,1300
+"""
+
+
+def _wkey(t):
+    """Winding-PRESERVING key: min cyclic rotation of the 3 rounded vertices. Reversing a tri's winding yields a
+    DIFFERENT key, so a flip touches only tris matching the known-backwards winding — never their correct twin."""
+    v = [tuple(round(c) for c in p) for p in t]
+    return min((v[0], v[1], v[2]), (v[1], v[2], v[0]), (v[2], v[0], v[1]))
+
+
+_BACKFACE_KEYS = {_wkey([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3, 6)])
+                  for ln in _BACKFACE_E03.strip().split('\n') if ln.strip()}
+
+
+def fix_camera_winding(tris):
+    """Reverse the winding of any tri whose winding matches a known-backwards camera wall (normal faces the play
+    area afterward). Returns a new list; non-matching tris pass through unchanged."""
+    return [[t[0], t[2], t[1]] if _wkey(t) in _BACKFACE_KEYS else t for t in tris]
+
+
 def _in_flat_region(t):
     """True if every vertex of t sits inside a both_walls._FLAT_REGIONS rectangle at that region's y (a flat
     ground patch that's been collapsed to one quad). Walls/slopes in the footprint span other y and are kept."""
@@ -812,12 +869,15 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
         trigs = [(_fit(tn, used, 15), tt, te) for tn, tt, te in triggers.get(sub, [])]
         player[sub] = (named, trigs)
 
-    # ---- CAMERA `_c`: consolidated structure + both-walls + perimeter (NO canal/railings/triggers = player-only)
-    cam_pool = [t for sub in subs for t in bysub[sub]] + perim + bw
+    # ---- CAMERA `_c`: consolidated structure + both-walls + perimeter (NO canal/railings/triggers = player-only).
+    #      One-sided: flip known-backwards windings so every camera wall's normal faces the play area (fix_camera_
+    #      winding). Player `_a` above keeps the raw (two-sided) winding.
+    cstruct = fix_camera_winding([t for sub in subs for t in bysub[sub]])
+    cbw, cperim = fix_camera_winding(bw), fix_camera_winding(perim)
+    cam_pool = cstruct + cperim + cbw
     camera = _pool_split(cam_pool, 'ccol', set(), max_tris)
 
-    sets = {'structure': [t for sub in subs for t in bysub[sub]], 'bwalls': bw,
-            'perimeter': perim, 'invisible': inv + pw}
+    sets = {'structure': cstruct, 'bwalls': cbw, 'perimeter': cperim, 'invisible': inv + pw}
     return {'subs': subs, 'player': player, 'camera': camera, 'sets': sets}
 
 
