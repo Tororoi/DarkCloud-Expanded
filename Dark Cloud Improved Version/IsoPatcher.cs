@@ -1114,137 +1114,136 @@ namespace Dark_Cloud_Improved_Version
             // (go OVER when forced close), TODO. ⚠ EE-ASM GOTCHAS baked in (see mips_asm.py): FP compares use c.OLT.s
             // (.word 0x46..0034) NOT keystone c.lt.s (0x3C — the R5900 doesn't set cc for it); a nop follows every
             // mtc1 and every FP compare (two EE latency hazards). One-frame-stale angle (line 583 after) imperceptible.
-            // ===== CAMERA PULL-IN / CLIMB TUNABLES — edit these; they are injected into the template below =====
-            // Behaviour: horizontal target = wall_hit - MARGIN, floored at HFLOOR (pulls fully in, no clip).
-            // HEIGHT is GROUND-RELATIVE: each frame it casts a DOWNWARD ray at the camera's spot (ref+dist·dir) starting at
-            // the camera's EYE height (so an overhead bridge is never mistaken for ground) against the camera _c collision
-            // buffer and rests BASE_H above the ground it hits, not above the player — so the camera
-            // rises relative to the player when he walks downhill in front of it and drops when he walks uphill. (A ray, not
-            // CEditGround::GetAlt, because GetAlt only covers the editable georama areas — not the canal / non-georama ground.)
-            //     baseline = groundY + BASE_H - ref.y   (no ground hit → BASE_H player-relative); capped at MAX_HEIGHT.
-            // The wall climb layers on top, smoothstepping baseline→MAX_HEIGHT as it pulls into a wall (bell-shaped rate,
-            //     t = clamp((CLIMB_START - horiz)/CLIMB_RANGE, 0, 1); height = baseline + (MAX_HEIGHT - baseline)·(3t²-2t³)).
-            // CLIMB_RANGE = intrusion span of the climb (bell peak at CLIMB_RANGE/2). MAX_HEIGHT = both the climb top and
-            // the ground-baseline validity cap. TODO: when the ground baseline is capped (terrain behind too high) also
-            // pull horizontal in — not yet implemented; today it just caps the height. [[native-camera-functions]]
-            const float MARGIN      = 8f;   // horizontal clearance kept in front of a wall
-            const float HFLOOR      = 1f;    // closest horizontal distance the camera may reach
-            const float BASE_DIST   = 80f;   // default orbit distance when nothing blocks
-            const float CLIMB_START = 60f;   // horizontal distance at which climbing engages
-            const float CLIMB_RANGE = 70f;   // intrusion span over which height climbs BASE_H→MAX_HEIGHT (the bell's width)
-            const float MAX_HEIGHT  = 60f;   // height the climb approaches at full pull-in
-            const float BASE_H      = 17f;   // resting eye height ABOVE the ground under the camera (≈ player height 12 + 5)
-            const float CLIMB_EASE  = 0.3f;  // per-frame ease of height toward its target
-            const float DIST_EASE   = 0.3f;  // per-frame ease of horizontal distance toward its target
-            const float STICK_DEADZONE = 0.3f; // right-stick Y below this |deflection| (0..1) does nothing (rotation won't move height)
-            const float STICK_SCALE    = -25f; // manual height offset at full stick deflection (sign flipped so up=raise)
-            const float STICK_EASE     = 0.1f;// per-frame ease of the stick offset toward its target — LOW = gentle, non-abrupt onset
-            const float MIN_GROUND_CLEAR = 4f; // eye never gets closer than this to the ground under the camera (stick-down clip guard)
-            const float MIN_CEIL_CLEAR   = 2f;// eye never gets closer than this to a ceiling above it (pushed down in a tight tunnel)
-            // Assembled template (331 words) from tools/…/pullin.s. The KNOBS are the consts above, NOT the hex — they get
+            // ===== CAMERA PULL-IN / CLIMB / DUCK TUNABLES (tools/pullin2.s) — edit these; they inject into the template's
+            //       constant slots below, so tweaking a value re-tunes on the next patch (no asm regen).
+            //       PutVal = single `lui` (integer / .25 step, low16==0); PutEase = `lui`+`ori` (any float). =====
+            // HORIZONTAL: target = wall_hit − MARGIN (nearest FRONT-facing _c hit from the pivot), floored at HFLOOR.
+            // HEIGHT: FLAT baseline = REST_H (slope-rise removed — the ground-relative version fought sloped boardwalk pieces
+            //   near the Brownboo tunnel). The wall CLIMB smoothsteps REST_H→MAX_HEIGHT as the pull-in intrudes
+            //   (t = clamp((CLIMB_START − horiz)/CLIMB_RANGE, 0,1); + (MAX_HEIGHT − REST_H)·(3t²−2t³)). Then a ceiling probe
+            //   DUCKS it (down to ceilingY − MIN_CEIL_CLEAR) and the down-probe GUARDS the floor (up to groundY +
+            //   MIN_GROUND_CLEAR, its only remaining use); plus the right-stick manual offset. One-sided _c on the wall +
+            //   ceiling casts; the down-probe (floor guard) is two-sided. ⚠ EE gotchas (see mips_asm.py): FP compares use
+            //   c.OLT.s (.word 0x46..0034) NOT keystone c.lt.s; a nop follows every mtc1 and every FP compare. [[native-camera-functions]]
+            const float MARGIN      = 8f;    // horizontal clearance kept in front of a wall (pull-in stops this short of it)
+            const float HFLOOR      = 4f;    // closest horizontal distance the camera may reach the player
+            const float BASE_DIST   = 80f;   // resting orbit distance when nothing blocks
+            const float REST_H      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
+            const float CEIL_DIST   = 80f;  // how far UP the ceiling probe looks for a tunnel roof to duck under
+            const float MIN_CEIL_CLEAR = 4f;// eye stays this far BELOW a detected ceiling (tunnel duck depth)
+            const float STICK_DEADZONE = 0.3f; // right-stick Y below this |deflection| (0..1) does nothing
+            const float STICK_SCALE    = -25f; // manual height offset at full stick deflection (up = raise)
+            const float STICK_EASE     = 0.1f; // per-frame ease of the stick offset (LOW = gentle onset)
+            const float HEIGHT_EASE = 0.3f;  // per-frame ease of height toward its target
+            const float DIST_EASE   = 0.3f; // per-frame ease of horizontal distance toward its target
+            const float MAX_HEIGHT  = 80f;   // height the climb rises toward at full pull-in (flat baseline REST_H)
+            const float CLIMB_START = 60f;   // horiz distance at which the climb begins (below this, height rises)
+            const float CLIMB_RANGE = 70f;   // intrusion span over which height climbs REST_H→MAX_HEIGHT (bell width)
+            const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
+            // Assembled template (378 words) from tools/pullin2.s — pull-in + ceiling-duck + stick, one-sided _c, no climb. The KNOBS are the consts above, NOT the hex — they get
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
             // follows every mtc1 and every FP compare.
             uint[] pullIn =
             {
                 0x27BDFF90, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
-                0x8C239678, 0x1060013F, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
-                0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xAFA0002C, 0xC46C02D8,
-                0x0C047628, 0x00000000, 0xE7A00060, 0x8FA30058, 0xC46C02D8, 0x0C0475AC,
-                0x00000000, 0xE7A00064, 0x8FA30058, 0xC46102D0, 0xC7A20060, 0x46011082,
-                0xC7A30020, 0x46021900, 0xC7A20064, 0x46011082, 0xC7A30028, 0x46021940,
-                0xC7A60024, 0xE7A40020, 0xC46702D4, 0x460731C0, 0x00000000, 0x00000000,
-                0xE7A70024, 0xE7A50028, 0xAFA0002C, 0xE7A40030, 0x3C0843FA, 0x44883800,
-                0x00000000, 0x460731C1, 0xE7A70034, 0xE7A50038, 0xAFA0003C, 0x02A02021,
-                0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040, 0xAFA80010, 0x24090001,
-                0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000, 0x8FA30058, 0x04400005,
-                0x00000000, 0xC7A00044, 0xE7A0005C, 0x10000002, 0x00000000, 0xAFA0005C,
-                0xC7A00020, 0xE7A00030, 0xC7A00024, 0x3C0842C8, 0x44880800, 0x00000000,
-                0x46010000, 0xE7A00034, 0xC7A00028, 0xE7A00038, 0xAFA0003C, 0x02A02021,
-                0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040, 0xAFA80010, 0x24090001,
-                0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000, 0x8FA30058, 0x04400005,
+                0x8C239678, 0x1060014B, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
+                0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xC46C02D8, 0x0C047628,
+                0x00000000, 0xE7A00060, 0x8FA30058, 0xC46C02D8, 0x0C0475AC, 0x00000000,
+                0xE7A00064, 0x8FA30058, 0xC46102D0, 0xC7A20060, 0x46011082, 0xC7A30020,
+                0x46021900, 0xC7A20064, 0x46011082, 0xC7A30028, 0x46021940, 0xC7A60024,
+                0xC46702D4, 0x460731C0, 0xE7A40020, 0xE7A70024, 0xE7A50028, 0xAFA0002C,
+                0xE7A40030, 0x3C0842C8, 0x44880800, 0x00000000, 0x46013800, 0xE7A00034,
+                0xE7A50038, 0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020, 0x27A70030,
+                0x27A80040, 0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754,
+                0x00000000, 0x8FA30058, 0x04400020, 0x00000000, 0x00024980, 0x00026100,
+                0x012C4821, 0x02A94821, 0xC5240030, 0xC5250034, 0xC5260038, 0xC7A70030,
+                0xC7AA0020, 0x460A39C1, 0x46072102, 0xC7A70034, 0xC7AA0024, 0x460A39C1,
+                0x46072942, 0x46052100, 0xC7A70038, 0xC7AA0028, 0x460A39C1, 0x46073182,
+                0x46062100, 0x44802800, 0x00000000, 0x46052034, 0x00000000, 0x45000005,
                 0x00000000, 0xC7A00044, 0xE7A0006C, 0x10000005, 0x00000000, 0x3C084800,
-                0x44880000, 0x00000000, 0xE7A0006C, 0x0C05A68C, 0x00000000, 0x460000C6,
+                0x44880000, 0x00000000, 0xE7A0006C, 0xC7A00020, 0xE7A00030, 0xC7A00024,
+                0x3C0843FA, 0x44880800, 0x00000000, 0x46010001, 0xE7A00034, 0xC7A00028,
+                0xE7A00038, 0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020, 0x27A70030,
+                0x27A80040, 0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754,
+                0x00000000, 0x8FA30058, 0x04400005, 0x00000000, 0xC7A00044, 0xE7A0005C,
+                0x10000002, 0x00000000, 0xAFA0005C, 0x0C05A68C, 0x00000000, 0x460000C6,
                 0x46000082, 0x3C083E23, 0x3508D70A, 0x44880800, 0x00000000, 0x46020834,
-                0x00000000, 0x45000007, 0x00000000, 0x3C0841C8, 0x44880800, 0x00000000,
+                0x00000000, 0x45000007, 0x00000000, 0x3C08C1C8, 0x44880800, 0x00000000,
                 0x46011802, 0x10000002, 0x00000000, 0x44800000, 0x3C0B0014, 0x356BC020,
                 0xC5620000, 0x46020041, 0x3C083DA3, 0x3508D70A, 0x44882000, 0x00000000,
                 0x46040842, 0x46011080, 0xE5620000, 0xE7A20068, 0x8FA30058, 0xC46002C0,
                 0xE7A00020, 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0x3C0842A0,
                 0x44884000, 0x00000000, 0xC7A00060, 0x46080002, 0xC7A10020, 0x46000800,
-                0xE7A00030, 0xC46002D4, 0xC7A10024, 0x46000800, 0xE7A00034, 0xC7A00064,
-                0x46080002, 0xC7A10028, 0x46000800, 0xE7A00038, 0xAFA0003C, 0x02A02021,
-                0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040, 0xAFA80010, 0x24090001,
-                0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000, 0x8FA30058, 0x3C0A0014,
-                0x354AC000, 0x04400014, 0x00000000, 0xC7A00040, 0xC7A10020, 0x46010001,
-                0x46000002, 0xC7A20048, 0xC7A30028, 0x46031081, 0x46021082, 0x46020000,
-                0x46000004, 0xE5400008, 0xC7A30044, 0xE543000C, 0x3C084100, 0x44881000,
-                0x00000000, 0x46020001, 0x10000006, 0x00000000, 0xAD400008, 0xAD40000C,
-                0x3C0842A0, 0x44880000, 0x00000000, 0x3C084080, 0x44881000, 0x00000000,
-                0x46020034, 0x00000000, 0x45000002, 0x00000000, 0x46001006, 0xE5400000,
-                0xC7A2005C, 0xE5420010, 0x44801800, 0x00000000, 0x46021834, 0x00000000,
-                0x45000009, 0x00000000, 0x3C0840A0, 0x44881800, 0x00000000, 0x46031080,
-                0xC7A30024, 0x46031081, 0x10000004, 0x00000000, 0x3C0840A0, 0x44881000,
-                0x00000000, 0x3C0840A0, 0x44881800, 0x00000000, 0x46031034, 0x00000000,
-                0x45000002, 0x00000000, 0x46001886, 0x3C084270, 0x44881800, 0x00000000,
-                0x46021834, 0x00000000, 0x45000002, 0x00000000, 0x46001886, 0x3C084270,
-                0x44882000, 0x00000000, 0x46022101, 0x3C0841F0, 0x44881800, 0x00000000,
-                0x46001941, 0x44803000, 0x00000000, 0x46062834, 0x00000000, 0x45000002,
-                0x00000000, 0x46003146, 0x3C083C6A, 0x35080EA1, 0x44881800, 0x00000000,
-                0x46032942, 0x3C083F80, 0x44883000, 0x00000000, 0x46053034, 0x00000000,
-                0x45000002, 0x00000000, 0x46003146, 0x460529C2, 0x46052980, 0x3C084040,
-                0x44884000, 0x00000000, 0x46064181, 0x46063942, 0x46042942, 0x46022940,
-                0xC7A80068, 0x46082940, 0xC7A6006C, 0xC7A70024, 0x46073181, 0x3C084160,
-                0x44883800, 0x00000000, 0x46073181, 0x46053034, 0x00000000, 0x45000002,
-                0x00000000, 0x46003146, 0xC7A6005C, 0xC7A70024, 0x46073181, 0x3C0840C0,
-                0x44883800, 0x00000000, 0x46073180, 0x46062834, 0x00000000, 0x45000002,
-                0x00000000, 0x46003146, 0xC46602D4, 0x460629C1, 0x3C083E99, 0x3508999A,
-                0x44881800, 0x00000000, 0x460339C2, 0x46073180, 0xE46602D4, 0xE5460004,
+                0xE7A00030, 0x3C084188, 0x44880800, 0x00000000, 0xC7A20024, 0x46011040,
+                0xE7A10034, 0xC7A00064, 0x46080002, 0xC7A10028, 0x46000800, 0xE7A00038,
+                0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040,
+                0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000,
+                0x8FA30058, 0x0440002C, 0x00000000, 0x00024980, 0x00026100, 0x012C4821,
+                0x02A94821, 0xC5240030, 0xC5250034, 0xC5260038, 0xC7A70030, 0xC7AA0020,
+                0x460A39C1, 0x46072102, 0xC7A70034, 0xC7AA0024, 0x460A39C1, 0x46072942,
+                0x46052100, 0xC7A70038, 0xC7AA0028, 0x460A39C1, 0x46073182, 0x46062100,
+                0x44802800, 0x00000000, 0x46052034, 0x00000000, 0x45000011, 0x00000000,
+                0xC7A00040, 0xC7A10020, 0x46010001, 0x46000002, 0xC7A20048, 0xC7A30028,
+                0x46031081, 0x46021082, 0x46020000, 0x46000004, 0x3C084100, 0x44881000,
+                0x00000000, 0x46020001, 0x10000004, 0x00000000, 0x3C0842A0, 0x44880000,
+                0x00000000, 0x3C084080, 0x44881000, 0x00000000, 0x46020034, 0x00000000,
+                0x45000002, 0x00000000, 0x46001006, 0x3C084188, 0x44881000, 0x00000000,
+                0x3C084270, 0x44882000, 0x00000000, 0x46022101, 0x3C0841F0, 0x44881800,
+                0x00000000, 0x46001941, 0x44803000, 0x00000000, 0x46062834, 0x00000000,
+                0x45000002, 0x00000000, 0x46003146, 0x3C083C6A, 0x35080EA1, 0x44881800,
+                0x00000000, 0x46032942, 0x3C083F80, 0x44883000, 0x00000000, 0x46053034,
+                0x00000000, 0x45000002, 0x00000000, 0x46003146, 0x460529C2, 0x46052980,
+                0x3C084040, 0x44884000, 0x00000000, 0x46064181, 0x46063942, 0x46042942,
+                0x46022940, 0xC7A80068, 0x46082940, 0xC7A6006C, 0xC7A70024, 0x46073181,
+                0x3C084160, 0x44883800, 0x00000000, 0x46073181, 0x46053034, 0x00000000,
+                0x45000002, 0x00000000, 0x46003146, 0xC7A6005C, 0xC7A70024, 0x46073181,
+                0x3C0840C0, 0x44883800, 0x00000000, 0x46073180, 0x46062834, 0x00000000,
+                0x45000002, 0x00000000, 0x46003146, 0xC46602D4, 0x460629C1, 0x3C083E99,
+                0x3508999A, 0x44881800, 0x00000000, 0x460339C2, 0x46073180, 0xE46602D4,
                 0xC46102D0, 0x3C083E19, 0x3508999A, 0x44881800, 0x00000000, 0x46010081,
                 0x46031082, 0x46020800, 0xE46002D0, 0x8FA20054, 0x8FBF0050, 0x03E00008,
                 0x27BD0070,
             };
-            // Inject the named tunables above into the template's constant-load slots. Each value is loaded by a
-            // `lui $t0, hi16` (float low-16 must be 0 — integers and /4 steps like 0.25/0.5/1.5 qualify); the two eases
-            // by `lui $t0, hi16` + `ori $t0,$t0, lo16`. Slot indices are guarded so a stale array trips the patch loudly.
+            // Inject the tunables above into the template's constant-load slots (indices auto-located from
+            // tools/pullin2.s; guards trip loudly if the array drifts). PutVal = single `lui $t0` (float low16 must
+            // be 0 — integers / .25 steps); PutEase = `lui $t0` + `ori $t0`.
             void PutVal(int idx, float f, string nm)
             {
                 uint b = BitConverter.SingleToUInt32Bits(f);
                 if ((b & 0xFFFF) != 0)
-                    throw new Exception($"Camera tunable {nm}={f} isn't a single-lui float (low16!=0, got 0x{b:X8}); use an integer or a /4 step.");
+                    throw new Exception($"Camera tunable {nm}={f} isn't a single-lui float (low16!=0, got 0x{b:X8}); use an integer or a .25 step.");
                 if ((pullIn[idx] & 0xFFFF0000u) != 0x3C080000u)
-                    throw new Exception($"Camera tunable {nm} slot {idx} is not a `lui $t0` — regenerate pullIn from pullin.s and refresh indices.");
+                    throw new Exception($"Camera tunable {nm} slot {idx} is not a `lui $t0` — regenerate pullIn from pullin2.s and refresh indices.");
                 pullIn[idx] = 0x3C080000u | (b >> 16);
             }
             void PutEase(int luiIdx, int oriIdx, float f, string nm)
             {
                 uint b = BitConverter.SingleToUInt32Bits(f);
                 if ((pullIn[luiIdx] & 0xFFFF0000u) != 0x3C080000u || (pullIn[oriIdx] & 0xFFFF0000u) != 0x35080000u)
-                    throw new Exception($"Camera tunable {nm} slots ({luiIdx},{oriIdx}) moved — regenerate pullIn from pullin.s and refresh indices.");
+                    throw new Exception($"Camera tunable {nm} slots ({luiIdx},{oriIdx}) moved — regenerate pullIn from pullin2.s and refresh indices.");
                 pullIn[luiIdx] = 0x3C080000u | (b >> 16);
                 pullIn[oriIdx] = 0x35080000u | (b & 0xFFFF);
             }
-            float INV_RANGE = 1f / CLIMB_RANGE;   // smoothstep parameter scale: t = intrusion * INV_RANGE
-            // (AMP is now dynamic in-asm: MAX_HEIGHT − ground baseline — so MAX_HEIGHT is injected directly instead.)
-            float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone squared (compared vs stickY²)
-            PutVal(190, MARGIN, nameof(MARGIN));
-            PutVal(143, BASE_DIST, nameof(BASE_DIST));  // wall ray-extension length
-            PutVal(198, BASE_DIST, nameof(BASE_DIST));  // no-wall resting distance
-            PutVal(201, HFLOOR, nameof(HFLOOR));
-            PutVal(249, CLIMB_START, nameof(CLIMB_START));
-            PutVal(218, BASE_H, nameof(BASE_H));        // ground-baseline offset
-            PutVal(226, BASE_H, nameof(BASE_H));        // off-map fallback
-            PutVal(229, BASE_H, nameof(BASE_H));        // resting floor (rise, no dip)
-            PutVal(237, MAX_HEIGHT, nameof(MAX_HEIGHT)); // validity cap
-            PutVal(245, MAX_HEIGHT, nameof(MAX_HEIGHT)); // dynamic-AMP top
-            PutVal(117, STICK_SCALE, nameof(STICK_SCALE)); // height offset at full stick deflection
-            PutVal(299, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR)); // min eye clearance ABOVE the ground (stick-down clip guard)
-            PutVal(287, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));     // min eye clearance BELOW the ceiling (tunnel push-down)
-            PutEase(260, 261, INV_RANGE, nameof(INV_RANGE));   // 1/CLIMB_RANGE
-            PutEase(310, 311, CLIMB_EASE, nameof(CLIMB_EASE));
-            PutEase(319, 320, DIST_EASE, nameof(DIST_EASE));
-            PutEase(109, 110, STICK_DZ2, nameof(STICK_DZ2));   // right-stick deadzone²
-            PutEase(128, 129, STICK_EASE, nameof(STICK_EASE)); // per-frame ease of the manual stick offset (gentle onset)
+            float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
+            float INV_RANGE = 1f / CLIMB_RANGE;                  // smoothstep scale: t = intrusion * INV_RANGE
+            PutVal(238, MARGIN, nameof(MARGIN));
+            PutVal(167, BASE_DIST, nameof(BASE_DIST));    // wall-ray extension length
+            PutVal(244, BASE_DIST, nameof(BASE_DIST));    // no-wall resting distance
+            PutVal(247, HFLOOR, nameof(HFLOOR));
+            PutVal(175, REST_H, nameof(REST_H));          // wall-ray cast height
+            PutVal(255, REST_H, nameof(REST_H));          // flat baseline
+            PutVal(43,  CEIL_DIST, nameof(CEIL_DIST));
+            PutVal(300, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));
+            PutVal(258, MAX_HEIGHT, nameof(MAX_HEIGHT));   // climb (AMP) top
+            PutVal(262, CLIMB_START, nameof(CLIMB_START));
+            PutVal(312, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
+            PutVal(141, STICK_SCALE, nameof(STICK_SCALE));
+            PutEase(133, 134, STICK_DZ2, nameof(STICK_DZ2));
+            PutEase(152, 153, STICK_EASE, nameof(STICK_EASE));
+            PutEase(273, 274, INV_RANGE, nameof(INV_RANGE));
+            PutEase(323, 324, HEIGHT_EASE, nameof(HEIGHT_EASE));
+            PutEase(331, 332, DIST_EASE, nameof(DIST_EASE));
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
             WrU32(fs, ElfOff(0x0014C020), 0x00000000);     // zero-init the persistent smoothed-stick-offset scratch @0x14C020

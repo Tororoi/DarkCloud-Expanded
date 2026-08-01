@@ -48,9 +48,9 @@ namespace Dark_Cloud_Improved_Version
             if (!Enabled) return;
             uint eg = Memory.ReadUInt(EditGroundPtr) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(eg)) { _lastEg = 0xFFFFFFFF; return; }
-            Monitor();   // per-frame jump watcher
             if (eg != _lastEg) { _lastEg = eg; _settle = 90; _retries = 8; return; }   // ~1.5s after area change
             if (_settle > 0 && --_settle == 0) Dump();   // one dump per area (periodic spam disabled post-diagnosis)
+            MonitorFan();   // per-frame: replicate the scored pitch-fan on the live buffer, log target vs actual
         }
 
         // Per-frame watcher for the reproducible camera JUMP. Computes the ACTUAL camera eye position the way Step
@@ -119,6 +119,111 @@ namespace Dark_Cloud_Improved_Version
                 try { System.IO.File.WriteAllText(CsvPath, "tick,dist,h,hitHoriz,hitY,clr,nClimbH,groundY,cedit,pArea,refy,refx,refz\n" + string.Join("\n", _csv)); }
                 catch (Exception e) { Log("csv write failed: " + e.Message); }
             }
+        }
+
+        // ── FAN REPLICA: run the mod's scored pitch-fan (IsoPatcher pullin_fan2.s) in C# on the SAME live camera
+        //    CCPoly buffer, so we see what it computes vs what the camera actually does — no ISO/asm hooks needed.
+        //    Per frame logs: ref, both angles, the ACTUAL dist/height in the struct, the fan's TARGET (bestD/bestH),
+        //    which candidate won, and every candidate's (d,h,status). status: 0=clear(no hit) 1=front-hit(pull-in)
+        //    2=backface-culled. Diagnosis: actual dist not tracking bestD ⇒ our write is overridden; bestD itself
+        //    bogus (through/below) ⇒ our math; all candidates status 0 while you FACE a wall ⇒ the wall isn't hit.
+        private const float LMAX = 82f, BASED = 80f, RESTH = 17f, MARG = 8f, LMIN = 12f;
+        private static readonly float[] PITCH = { 12f, -4f, -20f };
+
+        private static void MonitorFan()
+        {
+            uint camRaw = Memory.ReadUInt(MainCameraPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(camRaw)) return;
+            long cm = Memory.ToMmu(camRaw);
+            float[] cf = Memory.ReadFloatBatch(cm + 0x2C0, 8);
+            float refx = cf[0], refy = cf[1], refz = cf[2], dist = cf[4], height = cf[5], angT = cf[6], angS = cf[7];
+
+            uint structRaw = Memory.ReadUInt(WorkBufferPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(structRaw)) return;
+            long structMmu = Memory.ToMmu(structRaw);
+            uint baseRaw = Memory.ReadUInt(structMmu) & Memory.PhysAddrMask;
+            int used = Memory.ReadInt(structMmu + 8);
+            if (!Memory.IsValidGuest(baseRaw)) return;
+            long b = Memory.ToMmu(baseRaw);
+            int lim = Math.Min(MaxPolys, Math.Max(1, used / 5 + 4));
+
+            // pre-read the valid polys once (the fan casts 4 booms against them)
+            var polys = new List<float[]>(lim);
+            for (int k = 0; k < lim; k++)
+            {
+                float[] p = Memory.ReadFloatBatch(b + (long)k * 0x50, 15);
+                float nl = (float)Math.Sqrt(p[12] * p[12] + p[13] * p[13] + p[14] * p[14]);
+                if (IsFinite(p[0]) && Math.Abs(p[0]) < 1e5f && nl > 1e-4f && (p[0] != p[4] || p[2] != p[6]))
+                    polys.Add(p);
+            }
+
+            float sin = (float)Math.Sin(angS), cos = (float)Math.Cos(angS);   // fan casts at the RENDERED angle (+0x2DC)
+            float[] rf = { refx, refy, refz };
+            float bestScore = 1e30f, bestD = BASED, bestH = RESTH; int bestI = -1;
+            var per = new float[PITCH.Length, 3];   // d, h, status
+            for (int i = 0; i < PITCH.Length; i++)
+            {
+                double th = PITCH[i] * Math.PI / 180.0;
+                float CH = (float)Math.Cos(th), SH = (float)Math.Sin(th);
+                float[] rt = { refx + LMAX * CH * sin, refy + LMAX * SH, refz + LMAX * CH * cos };
+                // nearest hit (two-sided, like CheckHit mode=1)
+                float bestHitD2 = -1; float[] hn = null;
+                foreach (var p in polys)
+                    if (RayHitsTriPt(rf, rt, p, out float ix, out float iy, out float iz))
+                    {
+                        float dx = ix - refx, dy = iy - refy, dz = iz - refz, d2 = dx * dx + dy * dy + dz * dz;
+                        if (bestHitD2 < 0 || d2 < bestHitD2) { bestHitD2 = d2; hn = p; }
+                    }
+                float L; int status;
+                if (bestHitD2 < 0) { L = LMAX; status = 0; }
+                else
+                {
+                    float dot = hn[12] * (rt[0] - refx) + hn[13] * (rt[1] - refy) + hn[14] * (rt[2] - refz);
+                    if (dot >= 0) { L = LMAX; status = 2; }                       // backface → treat as clear
+                    else { L = (float)Math.Sqrt(bestHitD2) - MARG; if (L < LMIN) L = LMIN; if (L > LMAX) L = LMAX; status = 1; }
+                }
+                float d = L * CH, h = L * SH;
+                per[i, 0] = d; per[i, 1] = h; per[i, 2] = status;
+                float sc = (d - BASED) * (d - BASED) + (h - RESTH) * (h - RESTH);
+                if (sc < bestScore) { bestScore = sc; bestD = d; bestH = h; bestI = i; }
+            }
+
+            // what the ASM fan actually computed (published to scratch by pullin_fan2.s) — vs the struct dist/height.
+            float asmBestD = Memory.ReadFloat(0x2014C200), asmBestH = Memory.ReadFloat(0x2014C204);
+            _csvTick++;
+            var sb = new StringBuilder();
+            sb.Append($"{_csvTick},{refx:0},{refy:0},{refz:0},{angT * 180 / Math.PI:0},{angS * 180 / Math.PI:0},");
+            sb.Append($"{dist:0.#},{height:0.#},{asmBestD:0.#},{asmBestH:0.#},{bestD:0.#},{bestH:0.#},{bestI},{polys.Count}");
+            for (int i = 0; i < PITCH.Length; i++) sb.Append($",{per[i, 0]:0.#};{per[i, 1]:0.#};{(int)per[i, 2]}");
+            _csv.Add(sb.ToString());
+            if (_csv.Count > 900) _csv.RemoveRange(0, _csv.Count - 900);
+            if (++_csvFlush >= 60)
+            {
+                _csvFlush = 0;
+                try
+                {
+                    System.IO.File.WriteAllText(CsvPath,
+                        "tick,refx,refy,refz,angT,angS,dist,height,asmBestD,asmBestH,bestD,bestH,bestI,npoly,c0,c1,c2\n" + string.Join("\n", _csv));
+                }
+                catch (Exception e) { Log("csv write failed: " + e.Message); }
+            }
+        }
+
+        // RayHitsTri but returns the intersection point (for nearest-by-distance selection, matching CheckHit mode 1).
+        private static bool RayHitsTriPt(float[] rf, float[] rt, float[] p, out float ix, out float iy, out float iz)
+        {
+            ix = iy = iz = 0;
+            float nx = p[12], ny = p[13], nz = p[14];
+            float d0 = nx * (rf[0] - p[0]) + ny * (rf[1] - p[1]) + nz * (rf[2] - p[2]);
+            float d1 = nx * (rt[0] - p[0]) + ny * (rt[1] - p[1]) + nz * (rt[2] - p[2]);
+            if (!(((d0 <= 0) || (d1 <= 0)) && ((d0 >= 0) || (d1 >= 0)))) return false;
+            float denom = d0 - d1;
+            if (Math.Abs(denom) < 1e-9f) return false;
+            float t = d0 / denom;
+            if (t < 0f || t > 1f) return false;
+            ix = rf[0] + t * (rt[0] - rf[0]); iy = rf[1] + t * (rt[1] - rf[1]); iz = rf[2] + t * (rt[2] - rf[2]);
+            return Edge(p, 0, 4, ix, iy, iz, nx, ny, nz) && Edge(p, 4, 8, ix, iy, iz, nx, ny, nz) &&
+                   Edge(p, 8, 0, ix, iy, iz, nx, ny, nz);
         }
 
         // Replicate CEditGround::GetAreaCode in C# to check whether the DATA says (x,z) is inside an area.
