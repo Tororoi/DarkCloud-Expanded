@@ -84,6 +84,51 @@ Consequences, both confirmed against the decomp:
    redraw hook or reusing `EffectWaterSpray` (already called in town MainDraw for map 1's
    waterfall) — defer until the core look works.
 
+## Brownboo comparison — why its pond never clips the player (RE'd 2026-07-31)
+
+Brownboo's pond is the third water stack, and it explains the "no obscuring + real texture" look:
+
+1. `s04w01__za01` — the textured surface mesh (水面), textures from the town's dedicated
+   `WATER_IMG` banks (`s04b02.img`, `s04w01.img`). Suffix `z` + `a01`.
+2. `s04w02__za01` — a SECOND textured layer, 波 "waves" (foam), also `z` + `a01`.
+3. `wa01__czapp` / `wa2__czapp` — ring decals inside `s04w01_0.mds`: unlit constant-colour
+   (`c`) + no-Z-write (`z`) + ADDITIVE blend (`app` → GS ALPHA `0x48`, the same blend the
+   dungeon `WaterLing` rings use).
+4. A frame-unbound `WATER_SURFACE "", 32, 32` CWater body (`WATER_SHAKE -1,-1,-0.5`) — the
+   fb-refraction ripple layer, camera-following (infinite-plane logic in
+   `DrawWaterSurface__11CEditGround` for `partIdx < 0` bodies).
+
+### The `__` suffix flags, FULLY decoded (`SetFrameAttr` `0x125ef0` → consumed in
+### `DrawVu1__9CFrameVu1` `0x129400`)
+
+| letter | CFrame field | GS effect at draw |
+|---|---|---|
+| `z` | `+0x104` = 0 | **ZBUF.ZMSK=1 — Z-write OFF** (frame leaves no depth) |
+| `a`+2 hex | `+0x100` = val | TEST.AREF = val — **alpha-test reference** (`a01` = discard alpha<1 texels) |
+| `a`+`pp` | `+0x102` = 1 | ALPHA reg `0x48` — **additive** blend |
+| `a`+`nn` | `+0x102` = -1 | ALPHA reg `0x42` — **subtractive** blend |
+| `o` | `+0x105` = 1 | TEST.ZTST = ALWAYS (draws over everything) |
+| `s` | `+0xBB` = 1 | backface cull ON (known) |
+| `c` | `+0xC4`=1, `+0xD0..DC`=128f | unlit: zeroed light matrix + constant colour 128 |
+| `n` | `+0xB8` = 0 | clears default flag at `+0xB8` (default 1) |
+| `b`+`y`/`a` | `+0x108` = 2/3 | billboard modes (Y-axis / full — rebuilds LW matrix to face camera) |
+| `v` | `+0xB0`=2, `+0x00`=2 | draw-flag variant |
+| `t` | `+0xE1` = 1 | (with `c` path) lighting-matrix variant |
+| `m` | `+0x106` = 1 | unknown minor |
+| `f` | `+0xBC` = 0 | unknown minor |
+
+### The one-byte Queens fix that falls out
+
+Queens' canal mesh frame is `mizu__a01` — alpha-test only, **no `z`** → Z-write ON → its depth
+clips Toan below the surface. Brownboo's is `s04w01__za01` — identical except `z`.
+
+So instead of hiding the canal mesh at low tide: **write CFrame byte `+0x104 = 0`** on
+`mizu__a01` (and the other `e03c*` water frames if they clip) — we already locate that CFrame by
+RAM scan for the tide. Result = exactly Brownboo's behaviour: textured, rippling water that never
+clips the wading player. Reversible at high tide by writing 1 back (though leaving it off is
+probably fine — Brownboo ships this way permanently). The full spring look (tinted submerged
+body) still additionally needs the post-character surface redraw from the plan above.
+
 ## Open items (need the machine / live testing)
 
 - Verify hiding `mizu__a01`/`e03c*` reveals the CWater surface cleanly (no other occluder).

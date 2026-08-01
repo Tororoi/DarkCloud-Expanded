@@ -157,45 +157,21 @@ namespace Dark_Cloud_Improved_Version
                     polys.Add(p);
             }
 
-            float sin = (float)Math.Sin(angS), cos = (float)Math.Cos(angS);   // fan casts at the RENDERED angle (+0x2DC)
-            float[] rf = { refx, refy, refz };
-            float bestScore = 1e30f, bestD = BASED, bestH = RESTH; int bestI = -1;
-            var per = new float[PITCH.Length, 3];   // d, h, status
-            for (int i = 0; i < PITCH.Length; i++)
+            // ── Buffer-saturation / h06 watch. Suspicion: the 400-poly camera gather buffer SATURATES in this area
+            //    (dump showed used=2000 of cap=2048 blocks = full) and h06's `_c` node is silently truncated on the
+            //    frames where the camera passes through. Log per frame: saturation, h06-ring poly count, the eye,
+            //    and the asm's persisted sweep origin E_prev (@0x14C210) so the trail across the shell is visible.
+            int nH06 = 0;
+            foreach (var p in polys)
             {
-                double th = PITCH[i] * Math.PI / 180.0;
-                float CH = (float)Math.Cos(th), SH = (float)Math.Sin(th);
-                float[] rt = { refx + LMAX * CH * sin, refy + LMAX * SH, refz + LMAX * CH * cos };
-                // nearest hit (two-sided, like CheckHit mode=1)
-                float bestHitD2 = -1; float[] hn = null;
-                foreach (var p in polys)
-                    if (RayHitsTriPt(rf, rt, p, out float ix, out float iy, out float iz))
-                    {
-                        float dx = ix - refx, dy = iy - refy, dz = iz - refz, d2 = dx * dx + dy * dy + dz * dz;
-                        if (bestHitD2 < 0 || d2 < bestHitD2) { bestHitD2 = d2; hn = p; }
-                    }
-                float L; int status;
-                if (bestHitD2 < 0) { L = LMAX; status = 0; }
-                else
-                {
-                    float dot = hn[12] * (rt[0] - refx) + hn[13] * (rt[1] - refy) + hn[14] * (rt[2] - refz);
-                    if (dot >= 0) { L = LMAX; status = 2; }                       // backface → treat as clear
-                    else { L = (float)Math.Sqrt(bestHitD2) - MARG; if (L < LMIN) L = LMIN; if (L > LMAX) L = LMAX; status = 1; }
-                }
-                float d = L * CH, h = L * SH;
-                per[i, 0] = d; per[i, 1] = h; per[i, 2] = status;
-                float sc = (d - BASED) * (d - BASED) + (h - RESTH) * (h - RESTH);
-                if (sc < bestScore) { bestScore = sc; bestD = d; bestH = h; bestI = i; }
+                float cx = (p[0] + p[4] + p[8]) / 3f, cy2 = (p[1] + p[5] + p[9]) / 3f, cz = (p[2] + p[6] + p[10]) / 3f;
+                if (cx > -290 && cx < -110 && cz > -855 && cz < -705 && cy2 > 60 && cy2 < 190) nH06++;
             }
-
-            // what the ASM fan actually computed (published to scratch by pullin_fan2.s) — vs the struct dist/height.
-            float asmBestD = Memory.ReadFloat(0x2014C200), asmBestH = Memory.ReadFloat(0x2014C204);
+            float eyex = refx + dist * (float)Math.Sin(angS), eyey = refy + height, eyez = refz + dist * (float)Math.Cos(angS);
+            float epx = Memory.ReadFloat(0x2014C210), epy = Memory.ReadFloat(0x2014C214), epz = Memory.ReadFloat(0x2014C218);
             _csvTick++;
-            var sb = new StringBuilder();
-            sb.Append($"{_csvTick},{refx:0},{refy:0},{refz:0},{angT * 180 / Math.PI:0},{angS * 180 / Math.PI:0},");
-            sb.Append($"{dist:0.#},{height:0.#},{asmBestD:0.#},{asmBestH:0.#},{bestD:0.#},{bestH:0.#},{bestI},{polys.Count}");
-            for (int i = 0; i < PITCH.Length; i++) sb.Append($",{per[i, 0]:0.#};{per[i, 1]:0.#};{(int)per[i, 2]}");
-            _csv.Add(sb.ToString());
+            _csv.Add($"{_csvTick},{refx:0},{refy:0},{refz:0},{angT * 180 / Math.PI:0},{angS * 180 / Math.PI:0}," +
+                     $"{dist:0.#},{height:0.#},{used},{polys.Count},{nH06},{eyex:0.#},{eyey:0.#},{eyez:0.#},{epx:0.#},{epy:0.#},{epz:0.#}");
             if (_csv.Count > 900) _csv.RemoveRange(0, _csv.Count - 900);
             if (++_csvFlush >= 60)
             {
@@ -203,7 +179,7 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     System.IO.File.WriteAllText(CsvPath,
-                        "tick,refx,refy,refz,angT,angS,dist,height,asmBestD,asmBestH,bestD,bestH,bestI,npoly,c0,c1,c2\n" + string.Join("\n", _csv));
+                        "tick,refx,refy,refz,angT,angS,dist,height,used,npoly,nH06,eyex,eyey,eyez,eprevx,eprevy,eprevz\n" + string.Join("\n", _csv));
                 }
                 catch (Exception e) { Log("csv write failed: " + e.Message); }
             }
@@ -316,7 +292,7 @@ namespace Dark_Cloud_Improved_Version
                 rayTo[1] = refy + camH;
                 rayTo[2] = refz + BASE * (float)Math.Cos(ang);
             }
-            var nearWalls = new List<(float dist, float dir, float cx, float cy, float cz)>();
+            var nearWalls = new List<(float dist, float dir, float cx, float cy, float cz, float face)>();
             float rayHitDist = -1; float rhcx = 0, rhcy = 0, rhcz = 0;   // nearest poly our pull-in ray actually hits
             var polys = new List<float[]>();   // keep valid polys for a second ray test toward the nearest wall
 
@@ -371,7 +347,11 @@ namespace Dark_Cloud_Improved_Version
                         float ddx = cx - refx, ddz = cz - refz;
                         float d = (float)Math.Sqrt(ddx * ddx + ddz * ddz);
                         float dir = (float)(Math.Atan2(ddx, ddz) * 180.0 / Math.PI);   // 0=+Z, 90=+X (compass around ref)
-                        nearWalls.Add((d, dir, cx, cy, cz));
+                        // facing: does the wall's runtime normal point TOWARD the player? FRONT(+) = authored-correct
+                        // (our swept-slide keeps the eye on the normal side); BACK(−) on a wall you stand before means
+                        // the runtime normal is flipped and the slide would ASSIST a pass-through there.
+                        float face = nx * (refx - cx) + ny * (refy - cy) + nz * (refz - cz);
+                        nearWalls.Add((d, dir, cx, cy, cz, face));
                     }
                 }
                 else floors++;
@@ -439,11 +419,11 @@ namespace Dark_Cloud_Improved_Version
                     else
                         Log($"   >>> ray-AT-nearest-wall MISSES (nearest wall d={w.dist:0} at y-centroid {w.cy:0}, ray y {refy:0}..{refy + camH:0}) → wall un-hittable by single ray");
                 }
-                Log($"   wall polys within 90u: {near90} | nearest:");
-                for (int k = 0; k < nearWalls.Count && k < 8; k++)
+                Log($"   wall polys within 90u: {near90} | nearest (FRONT = normal faces player, BACK = flipped):");
+                for (int k = 0; k < nearWalls.Count && k < 12; k++)
                 {
                     var w = nearWalls[k];
-                    Log($"      d={w.dist:0} dir={w.dir:0}deg  c=({w.cx:0},{w.cy:0},{w.cz:0})");
+                    Log($"      d={w.dist:0} dir={w.dir:0}deg  c=({w.cx:0},{w.cy:0},{w.cz:0})  {(w.face >= 0 ? "FRONT" : "BACK")}");
                 }
             }
 
