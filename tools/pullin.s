@@ -348,6 +348,7 @@ lui   $t0, 0x40c0             # MIN_GROUND_CLEAR = 6
 mtc1  $t0, $f7
 nop
 add.s $f6, $f6, $f7           # height_min = (groundY − ref.y) + MIN_GROUND_CLEAR
+swc1  $f6, 0x8c($sp)          # stash h_min: the sweep's post-clamp re-floor needs it (inverted-slope contact)
 .word 0x46062834             # c.OLT.s f5,f6 : height_target < height_min ?
 nop
 bc1f  gclampok
@@ -582,6 +583,8 @@ lwc1  $f0, 0x5c($sp)          # d_e
 add.s $f0, $f0, $f4           # d' = d_e + a
 lwc1  $f2, 0x68($sp)          # h_e
 add.s $f2, $f2, $f5           # h' = h_e + c
+lwc1  $f7, 0x8c($sp)          # h_min (ground + MIN_GROUND_CLEAR, from the down-probe)
+.word 0x460710A8             # max.s f2,f2,f7 — an inverted-slope contact pushes h' DOWN (n_h<0); never below the floor
 lwc1  $f9, 0x5c($sp)          # d_e = the angle's lever arm
 div.s $f1, $f6, $f9           # Δθ = b / d_e
 nop
