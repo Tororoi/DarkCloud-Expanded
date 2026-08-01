@@ -1041,7 +1041,7 @@ namespace Dark_Cloud_Improved_Version
                                                     // keeps the eye BASE_H above the ground under it, so it never clips.
             const uint STICKY1_VA = 0x0016B834; // vanilla stick-Y AddHeight (accumulative, height<30 branch) — replaced by
             const uint STICKY2_VA = 0x0016B84C; //   our deadzoned absolute stick offset in the pull-in. NOP both.
-            const uint PULLIN_VA = 0x0014B838;  // our pull-in fn, hosted in reclaimed CheckCameraWidth slack (2544B)
+            const uint PULLIN_VA = 0x0014B838;
             const uint HOOK_VA  = 0x0016B5DC;   // jal CheckHitVertical → retarget to our pull-in (s5=buf,s8=count live)
             // Town camera clamps distance to [near=70, far=80] AFTER our hook, easing our pull-in back UP to 70 every
             // frame (line 618-621) — so the pull-in "mostly passes through". NOP the near-clamp + the bVar6 SetDistance
@@ -1125,7 +1125,7 @@ namespace Dark_Cloud_Improved_Version
             //   MIN_GROUND_CLEAR, its only remaining use); plus the right-stick manual offset. One-sided _c on the wall +
             //   ceiling casts; the down-probe (floor guard) is two-sided. ⚠ EE gotchas (see mips_asm.py): FP compares use
             //   c.OLT.s (.word 0x46..0034) NOT keystone c.lt.s; a nop follows every mtc1 and every FP compare. [[native-camera-functions]]
-            const float MARGIN      = 8f;    // horizontal clearance kept in front of a wall (pull-in stops this short of it)
+            const float MARGIN      = 12f;   // pull-in standoff from an occluding wall — THE "obscured" padding (camera-to-wall gap while blocked)
             const float HFLOOR      = 4f;    // closest horizontal distance the camera may reach the player
             const float BASE_DIST   = 80f;   // resting orbit distance when nothing blocks
             const float REST_H      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
@@ -1139,6 +1139,10 @@ namespace Dark_Cloud_Improved_Version
             const float MAX_HEIGHT  = 80f;   // height the climb rises toward at full pull-in (flat baseline REST_H)
             const float CLIMB_START = 60f;   // horiz distance at which the climb begins (below this, height rises)
             const float CLIMB_RANGE = 70f;   // intrusion span over which height climbs REST_H→MAX_HEIGHT (bell width)
+            const float SLIDE_MARGIN = 8f;   // swept-slide standoff + proximity-extension reach. KEEP <= MARGIN (else the two setpoints oscillate)
+            const float SLIDE_BIAS = 0.03125f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
+            const float SLIDE_FRICTION = 0.6f; // contact drag: keep-factor of the target angle's lead while touching a wall (1 = frictionless, lower = slower slide)
+            const float WALL_MAX_NY2 = 0.36f; // wall classifier: pull-in/climb only for polys with N̂.y² below this (0.36 → steeper than ~53°); flatter = slope/floor, no climb
             const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
             // Assembled template (378 words) from tools/pullin2.s — pull-in + ceiling-duck + stick, one-sided _c, no climb. The KNOBS are the consts above, NOT the hex — they get
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
@@ -1146,8 +1150,8 @@ namespace Dark_Cloud_Improved_Version
             // follows every mtc1 and every FP compare.
             uint[] pullIn =
             {
-                0x27BDFF90, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
-                0x8C239678, 0x1060014B, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
+                0x27BDFF80, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
+                0x8C239678, 0x1060025C, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
                 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xC46C02D8, 0x0C047628,
                 0x00000000, 0xE7A00060, 0x8FA30058, 0xC46C02D8, 0x0C0475AC, 0x00000000,
                 0xE7A00064, 0x8FA30058, 0xC46102D0, 0xC7A20060, 0x46011082, 0xC7A30020,
@@ -1170,7 +1174,7 @@ namespace Dark_Cloud_Improved_Version
                 0x10000002, 0x00000000, 0xAFA0005C, 0x0C05A68C, 0x00000000, 0x460000C6,
                 0x46000082, 0x3C083E23, 0x3508D70A, 0x44880800, 0x00000000, 0x46020834,
                 0x00000000, 0x45000007, 0x00000000, 0x3C08C1C8, 0x44880800, 0x00000000,
-                0x46011802, 0x10000002, 0x00000000, 0x44800000, 0x3C0B0014, 0x356BC020,
+                0x46011802, 0x10000002, 0x00000000, 0x44800000, 0x3C0B0014, 0x356BC200,
                 0xC5620000, 0x46020041, 0x3C083DA3, 0x3508D70A, 0x44882000, 0x00000000,
                 0x46040842, 0x46011080, 0xE5620000, 0xE7A20068, 0x8FA30058, 0xC46002C0,
                 0xE7A00020, 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0x3C0842A0,
@@ -1179,31 +1183,76 @@ namespace Dark_Cloud_Improved_Version
                 0xE7A10034, 0xC7A00064, 0x46080002, 0xC7A10028, 0x46000800, 0xE7A00038,
                 0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020, 0x27A70030, 0x27A80040,
                 0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754, 0x00000000,
-                0x8FA30058, 0x0440002C, 0x00000000, 0x00024980, 0x00026100, 0x012C4821,
+                0x8FA30058, 0x0440003D, 0x00000000, 0x00024980, 0x00026100, 0x012C4821,
                 0x02A94821, 0xC5240030, 0xC5250034, 0xC5260038, 0xC7A70030, 0xC7AA0020,
                 0x460A39C1, 0x46072102, 0xC7A70034, 0xC7AA0024, 0x460A39C1, 0x46072942,
                 0x46052100, 0xC7A70038, 0xC7AA0028, 0x460A39C1, 0x46073182, 0x46062100,
-                0x44802800, 0x00000000, 0x46052034, 0x00000000, 0x45000011, 0x00000000,
-                0xC7A00040, 0xC7A10020, 0x46010001, 0x46000002, 0xC7A20048, 0xC7A30028,
-                0x46031081, 0x46021082, 0x46020000, 0x46000004, 0x3C084100, 0x44881000,
-                0x00000000, 0x46020001, 0x10000004, 0x00000000, 0x3C0842A0, 0x44880000,
-                0x00000000, 0x3C084080, 0x44881000, 0x00000000, 0x46020034, 0x00000000,
-                0x45000002, 0x00000000, 0x46001006, 0x3C084188, 0x44881000, 0x00000000,
-                0x3C084270, 0x44882000, 0x00000000, 0x46022101, 0x3C0841F0, 0x44881800,
-                0x00000000, 0x46001941, 0x44803000, 0x00000000, 0x46062834, 0x00000000,
-                0x45000002, 0x00000000, 0x46003146, 0x3C083C6A, 0x35080EA1, 0x44881800,
-                0x00000000, 0x46032942, 0x3C083F80, 0x44883000, 0x00000000, 0x46053034,
-                0x00000000, 0x45000002, 0x00000000, 0x46003146, 0x460529C2, 0x46052980,
-                0x3C084040, 0x44884000, 0x00000000, 0x46064181, 0x46063942, 0x46042942,
-                0x46022940, 0xC7A80068, 0x46082940, 0xC7A6006C, 0xC7A70024, 0x46073181,
-                0x3C084160, 0x44883800, 0x00000000, 0x46073181, 0x46053034, 0x00000000,
-                0x45000002, 0x00000000, 0x46003146, 0xC7A6005C, 0xC7A70024, 0x46073181,
-                0x3C0840C0, 0x44883800, 0x00000000, 0x46073180, 0x46062834, 0x00000000,
-                0x45000002, 0x00000000, 0x46003146, 0xC46602D4, 0x460629C1, 0x3C083E99,
-                0x3508999A, 0x44881800, 0x00000000, 0x460339C2, 0x46073180, 0xE46602D4,
-                0xC46102D0, 0x3C083E19, 0x3508999A, 0x44881800, 0x00000000, 0x46010081,
-                0x46031082, 0x46020800, 0xE46002D0, 0x8FA20054, 0x8FBF0050, 0x03E00008,
-                0x27BD0070,
+                0x44802800, 0x00000000, 0x46052034, 0x00000000, 0x45000022, 0x00000000,
+                0xC5240030, 0xC5250034, 0xC5260038, 0x46042102, 0x460529C2, 0x46072100,
+                0x46063182, 0x46062100, 0x3C083EB8, 0x350851EC, 0x44884000, 0x00000000,
+                0x46082102, 0x46043834, 0x00000000, 0x45000011, 0x00000000, 0xC7A00040,
+                0xC7A10020, 0x46010001, 0x46000002, 0xC7A20048, 0xC7A30028, 0x46031081,
+                0x46021082, 0x46020000, 0x46000004, 0x3C084100, 0x44881000, 0x00000000,
+                0x46020001, 0x10000004, 0x00000000, 0x3C0842A0, 0x44880000, 0x00000000,
+                0x3C084080, 0x44881000, 0x00000000, 0x46020034, 0x00000000, 0x45000002,
+                0x00000000, 0x46001006, 0x3C084188, 0x44881000, 0x00000000, 0x3C084270,
+                0x44882000, 0x00000000, 0x46022101, 0x3C0841F0, 0x44881800, 0x00000000,
+                0x46001941, 0x44803000, 0x00000000, 0x46062834, 0x00000000, 0x45000002,
+                0x00000000, 0x46003146, 0x3C083C6A, 0x35080EA1, 0x44881800, 0x00000000,
+                0x46032942, 0x3C083F80, 0x44883000, 0x00000000, 0x46053034, 0x00000000,
+                0x45000002, 0x00000000, 0x46003146, 0x460529C2, 0x46052980, 0x3C084040,
+                0x44884000, 0x00000000, 0x46064181, 0x46063942, 0x46042942, 0x46022940,
+                0xC7A80068, 0x46082940, 0xC7A6006C, 0xC7A70024, 0x46073181, 0x3C084160,
+                0x44883800, 0x00000000, 0x46073181, 0x46053034, 0x00000000, 0x45000002,
+                0x00000000, 0x46003146, 0xC7A6005C, 0xC7A70024, 0x46073181, 0x3C0840C0,
+                0x44883800, 0x00000000, 0x46073180, 0x46062834, 0x00000000, 0x45000002,
+                0x00000000, 0x46003146, 0xC46602D4, 0x460629C1, 0x3C083E99, 0x3508999A,
+                0x44881800, 0x00000000, 0x460339C2, 0x46073180, 0xE7A60068, 0xC46102D0,
+                0x3C083E19, 0x3508999A, 0x44881800, 0x00000000, 0x46010081, 0x46031082,
+                0x46020800, 0xE7A0005C, 0xC7A1005C, 0xC7A20060, 0x46011082, 0xC46302C0,
+                0x46021880, 0xE7A20030, 0xC46202C4, 0xC7A30068, 0x46031080, 0xE7A20034,
+                0xC7A20064, 0x46011082, 0xC46302C8, 0x46021880, 0xE7A20038, 0xAFA0003C,
+                0x3C0B0014, 0x356BC210, 0x8D680000, 0x8D690004, 0x8D6A0008, 0x01094025,
+                0x010A4025, 0x110000DB, 0x00000000, 0xC5670000, 0xC7A80030, 0x460839C1,
+                0x46073A42, 0xC5670004, 0xC7A80034, 0x460839C1, 0x460739C2, 0x46074A40,
+                0xC5670008, 0xC7A80038, 0x460839C1, 0x460739C2, 0x46074A40, 0x3C084680,
+                0x44884000, 0x00000000, 0x46094034, 0x00000000, 0x450100C6, 0x00000000,
+                0x3C083F80, 0x44884000, 0x00000000, 0x46084834, 0x00000000, 0x4501001F,
+                0x00000000, 0x46090244, 0x00000000, 0x3C0840E0, 0x44884000, 0x00000000,
+                0x46084A00, 0x46094203, 0x00000000, 0x00000000, 0xC7A70030, 0xC5610000,
+                0x460139C1, 0x460839C2, 0x460709C0, 0xE7A70070, 0xC7A70034, 0xC5610004,
+                0x460139C1, 0x460839C2, 0x460709C0, 0xE7A70074, 0xC7A70038, 0xC5610008,
+                0x460139C1, 0x460839C2, 0x460709C0, 0xE7A70078, 0xAFA0007C, 0x10000008,
+                0x00000000, 0xC7A70030, 0xE7A70070, 0xC7A70034, 0xE7A70074, 0xC7A70038,
+                0xE7A70078, 0xAFA0007C, 0x02A02021, 0x03C02821, 0x01603021, 0x27A70070,
+                0x27A80040, 0xAFA80010, 0x24090001, 0xAFA90014, 0xAFA00018, 0x0C052754,
+                0x00000000, 0x8FA30058, 0x0440008C, 0x00000000, 0x00024980, 0x00025100,
+                0x012A4821, 0x02A94821, 0xC5240030, 0xC5250034, 0xC5260038, 0x460421C2,
+                0x46052A02, 0x460839C0, 0x46063202, 0x460839C0, 0x460701C4, 0x00000000,
+                0x3C083F80, 0x44884000, 0x00000000, 0x46074203, 0x00000000, 0x00000000,
+                0x46082102, 0x46082942, 0x46083182, 0xC7A70030, 0xC7A80040, 0x460839C1,
+                0x46043A82, 0xC7A70034, 0xC7A80044, 0x460839C1, 0x460539C2, 0x46075280,
+                0xC7A70038, 0xC7A80048, 0x460839C1, 0x460639C2, 0x46075280, 0x3C0840E0,
+                0x44885800, 0x00000000, 0x460A5AC1, 0x44805000, 0x00000000, 0x460B5034,
+                0x00000000, 0x4500005D, 0x00000000, 0xC7A70060, 0x460439C2, 0xC7A80064,
+                0x46064202, 0x460839C0, 0xC7A80064, 0x46044202, 0xC7A90060, 0x46064A42,
+                0x46094301, 0x46073A02, 0x46052A42, 0x46094200, 0x460C6242, 0x3C083D80,
+                0x35080000, 0x44885000, 0x00000000, 0x460A4A42, 0x46094200, 0x46085AC3,
+                0x00000000, 0x00000000, 0x46075902, 0x46055942, 0x460C5982, 0x460A3182,
+                0xC7A0005C, 0x46040000, 0xC7A20068, 0x46051080, 0xC7A9005C, 0x46093043,
+                0x00000000, 0x00000000, 0xC46302D8, 0x460118C0, 0xE46302D8, 0xC46702DC,
+                0x46071A01, 0x3C084049, 0x35080FDB, 0x44884800, 0x00000000, 0x46084834,
+                0x00000000, 0x45000006, 0x00000000, 0x3C0840C9, 0x35080FDB, 0x44885000,
+                0x00000000, 0x460A4201, 0x46004A87, 0x460A4034, 0x00000000, 0x45000006,
+                0x00000000, 0x3C0840C9, 0x35080FDB, 0x44885000, 0x00000000, 0x460A4200,
+                0x3C083F19, 0x3508999A, 0x44885000, 0x00000000, 0x460A4202, 0x460838C0,
+                0xE46302D8, 0x3C0B0014, 0x356BC210, 0xC7A70060, 0xC7A80064, 0x46072042,
+                0x460830C2, 0x46030840, 0xC7A30030, 0x46011840, 0xE5610000, 0xC7A30034,
+                0x460518C0, 0xE5630004, 0x46082042, 0x460730C2, 0x46030841, 0xC7A30038,
+                0x46011840, 0xE5610008, 0xAD60000C, 0x1000000C, 0x00000000, 0x3C0B0014,
+                0x356BC210, 0xC7A70030, 0xE5670000, 0xC7A70034, 0xE5670004, 0xC7A70038,
+                0xE5670008, 0xAD60000C, 0xC7A0005C, 0xC7A20068, 0xE46002D0, 0xE46202D4,
+                0x8FA20054, 0x8FBF0050, 0x03E00008, 0x27BD0080,
             };
             // Inject the tunables above into the template's constant-load slots (indices auto-located from
             // tools/pullin2.s; guards trip loudly if the array drifts). PutVal = single `lui $t0` (float low16 must
@@ -1227,26 +1276,34 @@ namespace Dark_Cloud_Improved_Version
             }
             float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
             float INV_RANGE = 1f / CLIMB_RANGE;                  // smoothstep scale: t = intrusion * INV_RANGE
-            PutVal(238, MARGIN, nameof(MARGIN));
+            PutVal(255, MARGIN, nameof(MARGIN));
             PutVal(167, BASE_DIST, nameof(BASE_DIST));    // wall-ray extension length
-            PutVal(244, BASE_DIST, nameof(BASE_DIST));    // no-wall resting distance
-            PutVal(247, HFLOOR, nameof(HFLOOR));
+            PutVal(261, BASE_DIST, nameof(BASE_DIST));    // no-wall resting distance
+            PutVal(264, HFLOOR, nameof(HFLOOR));
             PutVal(175, REST_H, nameof(REST_H));          // wall-ray cast height
-            PutVal(255, REST_H, nameof(REST_H));          // flat baseline
-            PutVal(43,  CEIL_DIST, nameof(CEIL_DIST));
-            PutVal(300, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));
-            PutVal(258, MAX_HEIGHT, nameof(MAX_HEIGHT));   // climb (AMP) top
-            PutVal(262, CLIMB_START, nameof(CLIMB_START));
-            PutVal(312, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
+            PutVal(272, REST_H, nameof(REST_H));          // flat baseline
+            PutVal(43, CEIL_DIST, nameof(CEIL_DIST));
+            PutVal(317, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));
+            PutVal(275, MAX_HEIGHT, nameof(MAX_HEIGHT));   // climb (AMP) top
+            PutVal(279, CLIMB_START, nameof(CLIMB_START));
+            PutVal(329, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
+            PutVal(411, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
+            PutVal(497, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
             PutVal(141, STICK_SCALE, nameof(STICK_SCALE));
+            PutEase(236, 237, WALL_MAX_NY2, nameof(WALL_MAX_NY2));
             PutEase(133, 134, STICK_DZ2, nameof(STICK_DZ2));
             PutEase(152, 153, STICK_EASE, nameof(STICK_EASE));
-            PutEase(273, 274, INV_RANGE, nameof(INV_RANGE));
-            PutEase(323, 324, HEIGHT_EASE, nameof(HEIGHT_EASE));
-            PutEase(331, 332, DIST_EASE, nameof(DIST_EASE));
+            PutEase(290, 291, INV_RANGE, nameof(INV_RANGE));
+            PutEase(340, 341, HEIGHT_EASE, nameof(HEIGHT_EASE));
+            PutEase(348, 349, DIST_EASE, nameof(DIST_EASE));
+            PutEase(521, 522, SLIDE_BIAS, nameof(SLIDE_BIAS));
+            PutEase(570, 571, SLIDE_FRICTION, nameof(SLIDE_FRICTION));
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
-            WrU32(fs, ElfOff(0x0014C020), 0x00000000);     // zero-init the persistent smoothed-stick-offset scratch @0x14C020
+            WrU32(fs, ElfOff(0x0014C200), 0x00000000);     // zero-init the persistent smoothed-stick-offset scratch @0x14C200
+            WrU32(fs, ElfOff(0x0014C210), 0x00000000);     // zero-init E_prev (persisted sweep-origin eye) — all-zero = "not yet
+            WrU32(fs, ElfOff(0x0014C214), 0x00000000);     //   stored", so the swept-slide skips its first frame instead of
+            WrU32(fs, ElfOff(0x0014C218), 0x00000000);     //   sweeping from garbage
             WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
         }
 
