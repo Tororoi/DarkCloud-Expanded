@@ -168,10 +168,23 @@ namespace Dark_Cloud_Improved_Version
                 if (cx > -290 && cx < -110 && cz > -855 && cz < -705 && cy2 > 60 && cy2 < 190) nH06++;
             }
             float eyex = refx + dist * (float)Math.Sin(angS), eyey = refy + height, eyez = refz + dist * (float)Math.Cos(angS);
+            // nearest WALL poly (|ny|<0.5) distance from the rendered eye — if this spikes huge while the eye is
+            // visibly inside a building, that building's polys were NOT in the gather that frame (saturation drop).
+            float nearWall = 1e9f; int wallsNearEye = 0;
+            foreach (var p in polys)
+            {
+                float nl2 = p[12]*p[12] + p[13]*p[13] + p[14]*p[14];
+                if (nl2 < 1e-8f || Math.Abs(p[13]) / (float)Math.Sqrt(nl2) >= 0.5f) continue;
+                float cx = (p[0]+p[4]+p[8])/3f, cy2 = (p[1]+p[5]+p[9])/3f, cz = (p[2]+p[6]+p[10])/3f;
+                float dx = cx-eyex, dy = cy2-eyey, dz = cz-eyez;
+                float dd = (float)Math.Sqrt(dx*dx+dy*dy+dz*dz);
+                if (dd < nearWall) nearWall = dd;
+                if (dd < 120f) wallsNearEye++;   // if this COLLAPSES at the clip instant, the building's node was
+            }                                    // truncated from the saturated gather — a data bug, not camera logic
             float epx = Memory.ReadFloat(0x2014C210), epy = Memory.ReadFloat(0x2014C214), epz = Memory.ReadFloat(0x2014C218);
             _csvTick++;
             _csv.Add($"{_csvTick},{refx:0},{refy:0},{refz:0},{angT * 180 / Math.PI:0},{angS * 180 / Math.PI:0}," +
-                     $"{dist:0.#},{height:0.#},{used},{polys.Count},{nH06},{eyex:0.#},{eyey:0.#},{eyez:0.#},{epx:0.#},{epy:0.#},{epz:0.#}");
+                     $"{dist:0.#},{height:0.#},{used},{polys.Count},{nH06},{eyex:0.#},{eyey:0.#},{eyez:0.#},{epx:0.#},{epy:0.#},{epz:0.#},{nearWall:0.#},{wallsNearEye}");
             if (_csv.Count > 900) _csv.RemoveRange(0, _csv.Count - 900);
             if (++_csvFlush >= 60)
             {
@@ -179,7 +192,7 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     System.IO.File.WriteAllText(CsvPath,
-                        "tick,refx,refy,refz,angT,angS,dist,height,used,npoly,nH06,eyex,eyey,eyez,eprevx,eprevy,eprevz\n" + string.Join("\n", _csv));
+                        "tick,refx,refy,refz,angT,angS,dist,height,used,npoly,nH06,eyex,eyey,eyez,eprevx,eprevy,eprevz,nearWall,wallsNear\n" + string.Join("\n", _csv));
                 }
                 catch (Exception e) { Log("csv write failed: " + e.Message); }
             }
