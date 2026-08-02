@@ -3,7 +3,7 @@
 # dist = pivot->resting-eye first hit − MARGIN (standard spring-arm: nearest occluder from the player). Constants
 # HARDCODED. Symmetric ease for now (asymmetric + HOLD + yaw come next). Frame -0x70. CheckHit 0x149d50 vs s5/s8.
 # R5900: c.OLT.s = .word ...0x34; nop after every mtc1 & FP compare.
-addiu $sp, $sp, -0x90
+addiu $sp, $sp, -0xa0
 sw    $ra, 0x50($sp)
 jal   0x14a080
 nop
@@ -166,167 +166,28 @@ lwc1  $f0, 0x2c4($v1)
 swc1  $f0, 0x24($sp)
 lwc1  $f0, 0x2c8($v1)
 swc1  $f0, 0x28($sp)
-# ===== WALL ray: pivot -> (ref + BASE_DIST*dir, ref.y+REST_H) : first hit − MARGIN = desired horiz =====
-lui   $t0, 0x42a0             # BASE_DIST = 80
-mtc1  $t0, $f8
-nop
-lwc1  $f0, 0x60($sp)
-mul.s $f0, $f0, $f8
-lwc1  $f1, 0x20($sp)
-add.s $f0, $f1, $f0
-swc1  $f0, 0x30($sp)          # rayTo.x
-lui   $t0, 0x4188             # REST_H = 17 (cast at the RESTING eye height, not the ducked one)
-mtc1  $t0, $f1
-nop
-lwc1  $f2, 0x24($sp)
-add.s $f1, $f2, $f1
-swc1  $f1, 0x34($sp)          # rayTo.y = ref.y + REST_H
-lwc1  $f0, 0x64($sp)
-mul.s $f0, $f0, $f8
-lwc1  $f1, 0x28($sp)
-add.s $f0, $f1, $f0
-swc1  $f0, 0x38($sp)          # rayTo.z
-sw    $zero, 0x3c($sp)
-addu  $a0, $s5, $zero
-addu  $a1, $s8, $zero
-addiu $a2, $sp, 0x20          # rayFrom = ref (pivot)
-addiu $a3, $sp, 0x30
-addiu $t0, $sp, 0x40
-sw    $t0, 0x10($sp)
-addiu $t1, $zero, 1
-sw    $t1, 0x14($sp)
-sw    $zero, 0x18($sp)
-jal   0x149d50
-nop
-lw    $v1, 0x58($sp)
-bltz  $v0, nohit
-nop
-# ONE-SIDED: cull backface — hit poly @ s5+v0*0x50, normal @ +0x30. N·rayDir >= 0 (faces away) -> not a real wall.
-sll   $t1, $v0, 6
-sll   $t4, $v0, 4
-addu  $t1, $t1, $t4
-addu  $t1, $s5, $t1
-lwc1  $f4, 0x30($t1)          # N.x
-lwc1  $f5, 0x34($t1)          # N.y
-lwc1  $f6, 0x38($t1)          # N.z
-lwc1  $f7, 0x30($sp)
-lwc1  $f10, 0x20($sp)
-sub.s $f7, $f7, $f10          # rayDir.x
-mul.s $f4, $f4, $f7
-lwc1  $f7, 0x34($sp)
-lwc1  $f10, 0x24($sp)
-sub.s $f7, $f7, $f10          # rayDir.y
-mul.s $f5, $f5, $f7
-add.s $f4, $f4, $f5
-lwc1  $f7, 0x38($sp)
-lwc1  $f10, 0x28($sp)
-sub.s $f7, $f7, $f10          # rayDir.z
-mul.s $f6, $f6, $f7
-add.s $f4, $f4, $f6           # dot = N·rayDir
-mtc1  $zero, $f5
-nop
-.word 0x46052034             # c.OLT.s f4,f5 : dot < 0 ? (front-facing)
-nop
-bc1f  nohit                  # dot >= 0 -> backface -> treat as no wall
-nop
-# WALL CLASSIFIER: pull-in (and its climb) reacts only to WALL-like polys. A downhill SLOPE behind the player also
-# crosses the horizontal ray and was driving pull-in + full climb (the "slope rise"). Floor-like hits
-# (N.y² >= WALL_MAX_NY²·|N|²) fall through to nohit — the swept-slide still keeps the eye off the slope surface.
-lwc1  $f4, 0x30($t1)          # reload N (the backface cull consumed it)
-lwc1  $f5, 0x34($t1)
-lwc1  $f6, 0x38($t1)
-mul.s $f4, $f4, $f4
-mul.s $f7, $f5, $f5           # N.y²
-add.s $f4, $f4, $f7
-mul.s $f6, $f6, $f6
-add.s $f4, $f4, $f6           # |N|²
-lui   $t0, 0x3eb8             # WALL_MAX_NY² (PutEase; 0.36 → |N̂.y| < 0.6 counts as wall)
-ori   $t0, $t0, 0x51ec
-mtc1  $t0, $f8
-nop
-mul.s $f4, $f4, $f8           # thresh = WALL_MAX_NY²·|N|²
-.word 0x46043834             # c.OLT.s f7,f4 : N.y² < thresh ? (wall-like)
-nop
-bc1f  nohit                  # floor/slope-like -> no pull-in, no climb
-nop
-lwc1  $f0, 0x40($sp)          # hit.x
-lwc1  $f1, 0x20($sp)          # ref.x
-sub.s $f0, $f0, $f1
-mul.s $f0, $f0, $f0
-lwc1  $f2, 0x48($sp)          # hit.z
-lwc1  $f3, 0x28($sp)          # ref.z
-sub.s $f2, $f2, $f3
-mul.s $f2, $f2, $f2
-add.s $f0, $f0, $f2
-sqrt.s $f0, $f0              # horizontal dist ref->hit  (f0,f0 -> operand unambiguous)
-lui   $t0, 0x4100             # MARGIN = 8
-mtc1  $t0, $f2
-nop
-sub.s $f0, $f0, $f2           # desired = hit − MARGIN
-b     havetarget
-nop
-nohit:
-lui   $t0, 0x42a0             # desired = BASE_DIST (no wall)
+# ===== dist target = BASE_DIST (pull-in REMOVED by design: no snap when walking behind a wall — the sweep's
+# contact + the emergent boom slide own ALL wall response; occlusion response = a later autorotate iteration)
+lui   $t0, 0x42a0             # BASE_DIST
 mtc1  $t0, $f0
 nop
-havetarget:
-# floor desired at HFLOOR
-lui   $t0, 0x4080             # HFLOOR = 4
-mtc1  $t0, $f2
+# ===== HEIGHT target: contact frames HOLD the current height (the emergent boom slide owns the vertical while
+# touching — a flat REST_H pull would fight it and sag the climb); free frames ease back to REST_H + stick.
+lui   $t3, 0x0014
+ori   $t3, $t3, 0xc210
+lw    $t0, 0xc($t3)           # contact flag persisted by last frame's sweep
+bne   $t0, $zero, hhold
 nop
-.word 0x46020034             # c.OLT.s f0,f2 : desired < HFLOOR ?
+lui   $t0, 0x4188             # REST_H (flat resting height)
+mtc1  $t0, $f5
 nop
-bc1f  hfok
-nop
-mov.s $f0, $f2
-hfok:
-# ===== HEIGHT target = REST_H + climb(horiz) + stick, ducked by ceiling, floored by ground =====
-# baseline = REST_H (FLAT). Slope-rise removed — the ground-relative baseline fought the sloped boardwalk pieces near the
-# Brownboo tunnel and hurt the clean tunnel duck. The ground probe stays ONLY for the stick-down floor clamp below.
-lui   $t0, 0x4188             # REST_H (flat baseline)
-mtc1  $t0, $f2
-nop
-lui   $t0, 0x4270             # MAX_HEIGHT
-mtc1  $t0, $f4
-nop
-sub.s $f4, $f4, $f2           # AMP = MAX_HEIGHT − REST_H
-lui   $t0, 0x41f0             # CLIMB_START
-mtc1  $t0, $f3
-nop
-sub.s $f5, $f3, $f0           # intrusion = CLIMB_START − horiz   (f0 = desired horiz, preserved for dist ease)
-mtc1  $zero, $f6
-nop
-.word 0x46062834             # c.OLT.s f5,f6 : intrusion < 0 ?
-nop
-bc1f  iok
-nop
-mov.s $f5, $f6                # intrusion = 0
-iok:
-lui   $t0, 0x3c6a             # INV_RANGE = 1/CLIMB_RANGE
-ori   $t0, $t0, 0x0ea1
-mtc1  $t0, $f3
-nop
-mul.s $f5, $f5, $f3           # t
-lui   $t0, 0x3f80             # 1.0
-mtc1  $t0, $f6
-nop
-.word 0x46053034             # c.OLT.s f6,f5 : 1 < t ?
-nop
-bc1f  tok
-nop
-mov.s $f5, $f6                # t = 1
-tok:
-mul.s $f7, $f5, $f5           # t^2
-add.s $f6, $f5, $f5           # 2t
-lui   $t0, 0x4040             # 3.0
-mtc1  $t0, $f8
-nop
-sub.s $f6, $f8, $f6           # 3 − 2t
-mul.s $f5, $f7, $f6           # smoothstep s
-mul.s $f5, $f5, $f4           # AMP·s
-add.s $f5, $f5, $f2           # height_target = REST_H + AMP·s
 lwc1  $f8, 0x68($sp)          # stick offset
 add.s $f5, $f5, $f8           # + stick
+b     hclamp
+nop
+hhold:
+lwc1  $f5, 0x2d4($v1)         # in contact: hold current height (geometry owns it; stick ignored while touching)
+hclamp:
 lwc1  $f6, 0x6c($sp)          # ceilingY
 lwc1  $f7, 0x24($sp)          # ref.y
 sub.s $f6, $f6, $f7
@@ -334,6 +195,7 @@ lui   $t0, 0x4160             # MIN_CEIL_CLEAR = 14
 mtc1  $t0, $f7
 nop
 sub.s $f6, $f6, $f7           # height_max = (ceilingY − ref.y) − MIN_CEIL_CLEAR
+swc1  $f6, 0x90($sp)          # stash h_max: the post-slide re-ceil needs it
 .word 0x46053034             # c.OLT.s f6,f5 : height_max < height_target ?
 nop
 bc1f  cclampok
@@ -556,7 +418,7 @@ mul.s $f7, $f7, $f4
 lwc1  $f8, 0x64($sp)          # cosT
 mul.s $f8, $f8, $f6
 add.s $f7, $f7, $f8           # n_d = N.x·sinT + N.z·cosT
-swc1  $f7, 0x88($sp)          # stash n_d for the reacquisition slide
+swc1  $f7, 0x88($sp)          # stash n_d for the boom slide
 lwc1  $f8, 0x64($sp)
 mul.s $f8, $f8, $f4
 lwc1  $f9, 0x60($sp)
@@ -583,8 +445,6 @@ lwc1  $f0, 0x5c($sp)          # d_e
 add.s $f0, $f0, $f4           # d' = d_e + a
 lwc1  $f2, 0x68($sp)          # h_e
 add.s $f2, $f2, $f5           # h' = h_e + c
-lwc1  $f7, 0x8c($sp)          # h_min (ground + MIN_GROUND_CLEAR, from the down-probe)
-.word 0x460710A8             # max.s f2,f2,f7 — an inverted-slope contact pushes h' DOWN (n_h<0); never below the floor
 lwc1  $f9, 0x5c($sp)          # d_e = the angle's lever arm
 div.s $f1, $f6, $f9           # Δθ = b / d_e
 nop
@@ -600,26 +460,22 @@ lui   $t0, 0x4049
 ori   $t0, $t0, 0x0fdb
 mtc1  $t0, $f9                # π
 nop
+lui   $t0, 0x40c9
+ori   $t0, $t0, 0x0fdb
+mtc1  $t0, $f11               # 2π (hoisted; f11=need is dead here)
+nop
 .word 0x46084834             # c.OLT.s f9,f8 : π < lead ?
 nop
 bc1f  fw1
 nop
-lui   $t0, 0x40c9
-ori   $t0, $t0, 0x0fdb
-mtc1  $t0, $f10               # 2π
-nop
-sub.s $f8, $f8, $f10
+sub.s $f8, $f8, $f11
 fw1:
 neg.s $f10, $f9               # −π
 .word 0x460A4034             # c.OLT.s f8,f10 : lead < −π ?
 nop
 bc1f  fw2
 nop
-lui   $t0, 0x40c9
-ori   $t0, $t0, 0x0fdb
-mtc1  $t0, $f10
-nop
-add.s $f8, $f8, $f10
+add.s $f8, $f8, $f11
 fw2:
 lui   $t0, 0x3f19             # SLIDE_FRICTION keep-factor (PutEase; 1.0 = no friction, lower = more drag)
 ori   $t0, $t0, 0x999a
@@ -628,36 +484,181 @@ nop
 mul.s $f8, $f8, $f10
 add.s $f3, $f7, $f8           # angT'' = angS + keep·lead
 swc1  $f3, 0x2d8($v1)
-# ===== REACQUISITION SLIDE (contact frames, stick idle): project the restoring pull toward the RESTING DISTANCE
-# onto the wall's tangent plane and move along it — a POSITION slide; the rotation is a side effect
-# (Δθ = tangential motion / lever arm), not a turn rate. The projection of the pull can never point away from
-# rest (deviation is monotone non-increasing) and a head-on wall projects to ZERO -> no back-and-forth.
+# ===== θ REACQUISITION (contact, stick idle): horizontal restoring pull projected onto the wall tangent — slide
+# around toward the resting distance; the rotation emerges as displacement / lever arm.
 lw    $t0, 0x84($sp)
-bne   $t0, $zero, drfx        # user steering -> no auto-slide
+bne   $t0, $zero, hgeo        # user steering → skip only the θ reacquisition
 nop
 lui   $t0, 0x42a0             # BASE_DIST (the resting distance)
 mtc1  $t0, $f7
 nop
-sub.s $f7, $f7, $f0           # W = BASE_DIST − d'  (restoring pull along the boom; − = stretched, + = pinned short)
-lwc1  $f9, 0x88($sp)          # n_d (wall normal's boom component)
-mul.s $f11, $f7, $f9          # dot = W·n_d  (the pull's into-wall part)
-lui   $t0, 0x3e00             # SLIDE_GAIN (PutVal; fraction of the projected pull applied per frame)
-mtc1  $t0, $f10
+sub.s $f7, $f7, $f0           # W_d = BASE − d'
+lwc1  $f9, 0x88($sp)          # n_d
+mul.s $f11, $f7, $f9          # dot = W_d·n_d
+lui   $t0, 0x3e00             # SLIDE_GAIN
+mtc1  $t0, $f13
 nop
 mul.s $f3, $f11, $f9
-sub.s $f3, $f7, $f3           # S_d = W − dot·n_d  (tangent-plane projection, boom part)
-mul.s $f3, $f3, $f10
+sub.s $f3, $f7, $f3           # S_d = W_d − dot·n_d
+mul.s $f3, $f3, $f13
 add.s $f0, $f0, $f3           # d' += gain·S_d
+add.s $f4, $f4, $f3           # a += (truthful origin)
 mul.s $f3, $f11, $f12         # dot·n_t
-neg.s $f3, $f3                # S_t = −dot·n_t  (tangent-plane projection, orbit part)
-mul.s $f3, $f3, $f10
-div.s $f3, $f3, $f0           # Δθ = gain·S_t / d  — the rotation EMERGES from the slide
+neg.s $f3, $f3                # S_t
+mul.s $f3, $f3, $f13
+add.s $f6, $f6, $f3           # b += (truthful origin; tangent displacement = Δθ·d)
+div.s $f3, $f3, $f0           # Δθ = gain·S_t / d
 nop
 nop
 lwc1  $f9, 0x2d8($v1)
 add.s $f9, $f9, $f3
 swc1  $f9, 0x2d8($v1)
-drfx:
+hgeo:
+# ===== GEOMETRIC HEIGHT, gentle-onset curve (purely relative to geometry, NO time component):
+# h = REST_H + CLIMB_K·(BASE − d')² — zero slope at touch, steepening toward the pinch → a wall traversal (d dips
+# and recovers) maps to a smooth BELL, not the box the ladder circle gave (its tangent at touch is near-vertical
+# when REST_H ≪ BASE). Ground floor and ceiling duck have the last word.
+lui   $t0, 0x42a0             # BASE_DIST — intrusion reference (slot #3)
+mtc1  $t0, $f7
+nop
+sub.s $f7, $f7, $f0           # intrusion = BASE − d'
+mtc1  $zero, $f8
+nop
+.word 0x46083FE8             # max.s f7,f7,f8 — stretched (d' > BASE) → zero climb
+mul.s $f7, $f7, $f7           # intrusion²
+lui   $t0, 0x3c0c             # CLIMB_K (PutEase; (CLIMB_PEAK−REST_H)/BASE² — quadratic gain, ZERO slope at touch:
+ori   $t0, $t0, 0xcccd        #   the old circle had slope −d/h ≈ −16 at touch = the BOX edge + height-noise amp)
+mtc1  $t0, $f8
+nop
+mul.s $f7, $f7, $f8           # rise = K·intrusion²
+lui   $t0, 0x4188             # REST_H
+mtc1  $t0, $f8
+nop
+add.s $f7, $f7, $f8           # h_curve = REST_H + rise — gentle onset → a BELL over a wall traversal
+lwc1  $f8, 0x8c($sp)          # ground floor
+.word 0x46083FE8             # max.s f7,f7,f8
+lwc1  $f8, 0x90($sp)          # ceiling duck
+.word 0x46083FE9             # min.s f7,f7,f8
+lwc1  $f8, 0x68($sp)          # h_e
+sub.s $f5, $f7, $f8           # c := total vertical displacement (truthful origin)
+mov.s $f2, $f7                # h' = the curve height
+# ===== CORNER VERIFY + SECOND RESOLUTION (sequential impulse): the main pass resolves ONE plane; at a corner the
+# corrected/slid target can cross the OTHER face (same or different _c mesh — the buffer holds them all). Cast OLD
+# origin → FINAL target; on a hit, RESOLVE that plane too (pure min-norm de-penetration, no bias/slide) so both
+# corner faces are handled in the same frame and the wedge emerges at the seam. (A revert-instead was tried and
+# made it WORSE: reverting d/h/θ freezes the RELATIVE config, so pivot motion drags the eye through the seam.)
+lwc1  $f7, 0x60($sp)          # sinT
+mul.s $f7, $f7, $f0
+lwc1  $f8, 0x20($sp)          # ref.x
+add.s $f7, $f8, $f7
+swc1  $f7, 0x70($sp)          # F.x
+lwc1  $f8, 0x24($sp)          # ref.y
+add.s $f8, $f8, $f2
+swc1  $f8, 0x74($sp)          # F.y
+lwc1  $f7, 0x64($sp)          # cosT
+mul.s $f7, $f7, $f0
+lwc1  $f8, 0x28($sp)          # ref.z
+add.s $f7, $f8, $f7
+swc1  $f7, 0x78($sp)          # F.z
+sw    $zero, 0x7c($sp)
+# ⚠ SPILL across the call: f0=d', f2=h', f4/f5/f6=a/c/b are CALLER-SAVED and CheckHit tramples them — unspilled,
+# every contact frame stored garbage dist/height and persisted a garbage origin (the drastic-movement bug).
+swc1  $f0, 0x94($sp)
+swc1  $f2, 0x98($sp)
+swc1  $f4, 0x9c($sp)
+swc1  $f5, 0x80($sp)
+swc1  $f6, 0x88($sp)
+lui   $t3, 0x0014
+ori   $t3, $t3, 0xc210
+addu  $a0, $s5, $zero
+addu  $a1, $s8, $zero
+addu  $a2, $t3, $zero         # from = OLD E_prev (not yet updated)
+addiu $a3, $sp, 0x70          # to = final target
+jal   0x149d50
+nop
+lw    $v1, 0x58($sp)
+lwc1  $f0, 0x94($sp)
+lwc1  $f2, 0x98($sp)
+lwc1  $f4, 0x9c($sp)
+lwc1  $f5, 0x80($sp)
+lwc1  $f6, 0x88($sp)
+bltz  $v0, vok                # clear → commit the frame
+nop
+sll   $t1, $v0, 6
+sll   $t2, $v0, 4
+addu  $t1, $t1, $t2
+addu  $t1, $s5, $t1           # verify-hit poly
+lwc1  $f7, 0x30($t1)          # N2 (unnormalized)
+lwc1  $f8, 0x34($t1)
+lwc1  $f9, 0x38($t1)
+mul.s $f10, $f7, $f7
+mul.s $f11, $f8, $f8
+add.s $f10, $f10, $f11
+mul.s $f11, $f9, $f9
+add.s $f10, $f10, $f11        # |N2|²
+.word 0x460A0284             # sqrt.s f10,f10
+nop
+lui   $t0, 0x3f80             # 1.0
+mtc1  $t0, $f11
+nop
+div.s $f11, $f11, $f10        # 1/|N2|
+nop
+nop
+mul.s $f7, $f7, $f11
+mul.s $f8, $f8, $f11
+mul.s $f9, $f9, $f11          # N̂2
+lwc1  $f10, 0x70($sp)         # p2 = N̂2·(F − P2)
+lwc1  $f11, 0x40($sp)
+sub.s $f10, $f10, $f11
+mul.s $f10, $f10, $f7
+lwc1  $f3, 0x74($sp)
+lwc1  $f11, 0x44($sp)
+sub.s $f3, $f3, $f11
+mul.s $f3, $f3, $f8
+add.s $f10, $f10, $f3
+lwc1  $f3, 0x78($sp)
+lwc1  $f11, 0x48($sp)
+sub.s $f3, $f3, $f11
+mul.s $f3, $f3, $f9
+add.s $f10, $f10, $f3         # p2 (signed height on the authored side)
+lui   $t0, 0x40e0             # SLIDE_MARGIN (slot #3)
+mtc1  $t0, $f11
+nop
+sub.s $f11, $f11, $f10        # need2 = margin − p2
+mtc1  $zero, $f10
+nop
+.word 0x460B5034             # c.OLT.s f10,f11 : 0 < need2 ?
+nop
+bc1f  vok
+nop
+lwc1  $f10, 0x60($sp)         # n_d2 = N̂2.x·sinT + N̂2.z·cosT
+mul.s $f10, $f10, $f7
+lwc1  $f3, 0x64($sp)
+mul.s $f3, $f3, $f9
+add.s $f10, $f10, $f3
+mul.s $f3, $f11, $f10         # Δd = need2·n_d2
+add.s $f0, $f0, $f3
+add.s $f4, $f4, $f3           # a += (truthful origin)
+mul.s $f3, $f11, $f8          # Δh = need2·n_h2
+add.s $f2, $f2, $f3
+add.s $f5, $f5, $f3           # c +=
+lwc1  $f10, 0x64($sp)         # n_t2 = N̂2.x·cosT − N̂2.z·sinT
+mul.s $f10, $f10, $f7
+lwc1  $f3, 0x60($sp)
+mul.s $f3, $f3, $f9
+sub.s $f10, $f10, $f3
+mul.s $f3, $f11, $f10         # Δt = need2·n_t2
+add.s $f6, $f6, $f3           # b +=
+div.s $f3, $f3, $f0           # Δθ = Δt / d
+nop
+lwc1  $f10, 0x2d8($v1)
+add.s $f3, $f10, $f3
+swc1  $f3, 0x2d8($v1)
+lwc1  $f3, 0x8c($sp)          # re-clamp after the second push: ground floor…
+.word 0x460310A8             # max.s f2,f2,f3
+lwc1  $f3, 0x90($sp)          # …and ceiling duck
+.word 0x460310A9             # min.s f2,f2,f3
+vok:
 # persist E1' = E1 + a·b̂ + c·ŷ + b·t̂ — the ACTUAL world displacement incl. the tangential slide — as next frame's
 # sweep origin (sits at the margin -> a target still pushed inward crosses EVERY frame -> continuous, no jitter)
 lui   $t3, 0x0014
@@ -679,7 +680,8 @@ sub.s $f1, $f1, $f3
 lwc1  $f3, 0x38($sp)
 add.s $f1, $f3, $f1
 swc1  $f1, 0x8($t3)           # E1'.z
-sw    $zero, 0xc($t3)
+addiu $t0, $zero, 1
+sw    $t0, 0xc($t3)           # contact flag → next frame's height-hold
 b     sfin
 nop
 sskip:
@@ -703,4 +705,4 @@ done:
 lw    $v0, 0x54($sp)
 lw    $ra, 0x50($sp)
 jr    $ra
-addiu $sp, $sp, 0x90
+addiu $sp, $sp, 0xa0
