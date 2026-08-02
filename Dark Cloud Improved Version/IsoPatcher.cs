@@ -1114,17 +1114,19 @@ namespace Dark_Cloud_Improved_Version
             // (go OVER when forced close), TODO. ⚠ EE-ASM GOTCHAS baked in (see mips_asm.py): FP compares use c.OLT.s
             // (.word 0x46..0034) NOT keystone c.lt.s (0x3C — the R5900 doesn't set cc for it); a nop follows every
             // mtc1 and every FP compare (two EE latency hazards). One-frame-stale angle (line 583 after) imperceptible.
-            // ===== CAMERA PULL-IN / CLIMB / DUCK TUNABLES (tools/pullin2.s) — edit these; they inject into the template's
-            //       constant slots below, so tweaking a value re-tunes on the next patch (no asm regen).
-            //       PutVal = single `lui` (integer / .25 step, low16==0); PutEase = `lui`+`ori` (any float). =====
-            // HORIZONTAL: target = wall_hit − MARGIN (nearest FRONT-facing _c hit from the pivot), floored at HFLOOR.
-            // HEIGHT: FLAT baseline = REST_H (slope-rise removed — the ground-relative version fought sloped boardwalk pieces
-            //   near the Brownboo tunnel). The wall CLIMB smoothsteps REST_H→MAX_HEIGHT as the pull-in intrudes
-            //   (t = clamp((CLIMB_START − horiz)/CLIMB_RANGE, 0,1); + (MAX_HEIGHT − REST_H)·(3t²−2t³)). Then a ceiling probe
-            //   DUCKS it (down to ceilingY − MIN_CEIL_CLEAR) and the down-probe GUARDS the floor (up to groundY +
-            //   MIN_GROUND_CLEAR, its only remaining use); plus the right-stick manual offset. One-sided _c on the wall +
-            //   ceiling casts; the down-probe (floor guard) is two-sided. ⚠ EE gotchas (see mips_asm.py): FP compares use
-            //   c.OLT.s (.word 0x46..0034) NOT keystone c.lt.s; a nop follows every mtc1 and every FP compare. [[native-camera-functions]]
+            // ===== CAMERA TUNABLES (tools/pullin2.s) — edit these; they inject into the template's constant slots
+            //       below on each patch (no asm regen). PutVal = single `lui` (integer / .25 step, low16==0);
+            //       PutEase = `lui`+`ori` (any float). Indices auto-located from the source; guards trip loudly on drift.
+            // ARCHITECTURE: dist target = BASE_DIST always (no wall-ray pull-in). Height target = REST_H + stick;
+            //   ceiling probe DUCKS it (tunnel), ground probe FLOORS it. The SWEPT-SLIDE (persisted origin E_prev
+            //   @0x14C210 → eased target + SLIDE_MARGIN proximity reach) resolves wall contact on the authored-normal
+            //   side via the weighted d/h/θ decomposition (SLIDE_BIAS = angle share); |n_t|-scaled friction
+            //   (head-on undamped → SLIDE_FRICTION keep at full tangency) drags the follow on contact; θ REACQUISITION
+            //   (SLIDE_GAIN, stick-gated) slides toward rest; occlusion-gated GEOMETRIC CLIMB h = REST_H +
+            //   CLIMB_K·(BASE−d')² (LOS pivot→E_prev, 5th cast); CORNER VERIFY casts origin→final target and resolves
+            //   a second plane (min-norm) for concave seams. ⚠ EE gotchas: c.OLT.s/sqrt.s/max.s/min.s are .word-encoded;
+            //   nop after mtc1/FP-compare; CheckHit args 5-7 = REGISTERS t0/t1/t2 (hitOut/mode/skip) — set explicitly
+            //   at every cast, NEVER inherit (stale t2 = the 2026-08 mask-skipping saga). [[native-camera-functions]]
             const float BASE_DIST   = 80f;   // resting orbit distance when nothing blocks
             const float REST_H      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
             const float CEIL_DIST   = 80f;  // how far UP the ceiling probe looks for a tunnel roof to duck under
@@ -1149,7 +1151,7 @@ namespace Dark_Cloud_Improved_Version
             uint[] pullIn =
             {
                 0x27BDFF60, 0xAFBF0050, 0x0C052820, 0x00000000, 0xAFA20054, 0x3C0101D2,
-                0x8C239678, 0x10600264, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
+                0x8C239678, 0x10600260, 0x00000000, 0xAFA30058, 0xC46002C0, 0xE7A00020,
                 0xC46002C4, 0xE7A00024, 0xC46002C8, 0xE7A00028, 0xC46C02DC, 0x0C047628,
                 0x00000000, 0xE7A00060, 0x8FA30058, 0xC46C02DC, 0x0C0475AC, 0x00000000,
                 0xE7A00064, 0x8FA30058, 0xC46102D0, 0xC7A20060, 0x46011082, 0xC7A30020,
@@ -1183,75 +1185,75 @@ namespace Dark_Cloud_Improved_Version
                 0x46010081, 0x46031082, 0x46020800, 0xE7A0005C, 0xC7A1005C, 0xC7A20060,
                 0x46011082, 0xC46302C0, 0x46021880, 0xE7A20030, 0xC46202C4, 0xC7A30068,
                 0x46031080, 0xE7A20034, 0xC7A20064, 0x46011082, 0xC46302C8, 0x46021880,
-                0xE7A20038, 0x02A02021, 0x03C02821, 0x27A60020, 0x3C070014, 0x34E7C210,
-                0x27A80040, 0x24090001, 0x00005021, 0x0C052754, 0x00000000, 0xAFA20098,
-                0x8FA30058, 0xAFA0003C, 0x3C0B0014, 0x356BC210, 0x8D680000, 0x8D690004,
-                0x8D6A0008, 0x01094025, 0x010A4025, 0x11000177, 0x00000000, 0xC5670000,
-                0xC7A80030, 0x460839C1, 0x46073A42, 0xC5670004, 0xC7A80034, 0x460839C1,
-                0x460739C2, 0x46074A40, 0xC5670008, 0xC7A80038, 0x460839C1, 0x460739C2,
-                0x46074A40, 0x3C084780, 0x44884000, 0x00000000, 0x46094034, 0x00000000,
-                0x45010162, 0x00000000, 0x3C083F80, 0x44884000, 0x00000000, 0x44084800,
-                0x3C0A3F80, 0x010A402A, 0x15000020, 0x00000000, 0x46090244, 0x00000000,
-                0x3C0840E0, 0x44884000, 0x00000000, 0x46084A00, 0x46094203, 0x00000000,
-                0x00000000, 0xC7A70030, 0xC5610000, 0x460139C1, 0x460839C2, 0x460709C0,
-                0xE7A70070, 0xC7A70034, 0xC5610004, 0x460139C1, 0x460839C2, 0x460709C0,
-                0xE7A70074, 0xC7A70038, 0xC5610008, 0x460139C1, 0x460839C2, 0x460709C0,
-                0xE7A70078, 0xAFA0007C, 0x27A70070, 0x10000002, 0x00000000, 0x27A70030,
-                0x02A02021, 0x03C02821, 0x01603021, 0x27A80040, 0x24090001, 0x00005021,
-                0x0C052754, 0x00000000, 0x8FA30058, 0x0440012F, 0x00000000, 0x00024980,
-                0x00025100, 0x012A4821, 0x02A94821, 0xC5240030, 0xC5250034, 0xC5260038,
-                0x460421C2, 0x46052A02, 0x460839C0, 0x46063202, 0x460839C0, 0x460701C4,
-                0x00000000, 0x3C083F80, 0x44884000, 0x00000000, 0x46074203, 0x00000000,
-                0x00000000, 0x46082102, 0x46082942, 0x46083182, 0xC7A70030, 0xC7A80040,
-                0x460839C1, 0x46043A82, 0xC7A70034, 0xC7A80044, 0x460839C1, 0x460539C2,
-                0x46075280, 0xC7A70038, 0xC7A80048, 0x460839C1, 0x460639C2, 0x46075280,
-                0x3C0840E0, 0x44885800, 0x00000000, 0x460A5AC1, 0x44805000, 0x00000000,
-                0x460B5034, 0x00000000, 0x45000100, 0x00000000, 0xC7A70060, 0x460439C2,
-                0xC7A80064, 0x46064202, 0x460839C0, 0xE7A70088, 0xC7A80064, 0x46044202,
-                0xC7A90060, 0x46064A42, 0x46094301, 0x46073A02, 0x46052A42, 0x46094200,
-                0x460C6242, 0x3C083D80, 0x35080000, 0x44885000, 0x00000000, 0x460A4A42,
-                0x46094200, 0x46085AC3, 0x00000000, 0x00000000, 0x46075902, 0x46055942,
-                0x460C5982, 0x460A3182, 0xC7A0005C, 0x46040000, 0xC7A20068, 0x46051080,
-                0xC7A7008C, 0x460710A8, 0xC7A9005C, 0x46093043, 0x00000000, 0x00000000,
-                0xC46302D8, 0x460118C0, 0xE46302D8, 0xC46702DC, 0x46071A01, 0x3C084049,
-                0x35080FDB, 0x44884800, 0x00000000, 0x46084834, 0x00000000, 0x45000006,
-                0x00000000, 0x3C0840C9, 0x35080FDB, 0x44885000, 0x00000000, 0x460A4201,
-                0x46004A87, 0x460A4034, 0x00000000, 0x45000006, 0x00000000, 0x3C0840C9,
-                0x35080FDB, 0x44885000, 0x00000000, 0x460A4200, 0x3C083ECC, 0x3508CCCD,
-                0x44885000, 0x00000000, 0x460062C5, 0x460B5282, 0x46085282, 0x460A4201,
-                0x460838C0, 0xE46302D8, 0x8FA80084, 0x15000012, 0x00000000, 0x3C0842A0,
-                0x44883800, 0x00000000, 0x460039C1, 0xC7A90088, 0x46093AC2, 0x3C083D00,
-                0x44886800, 0x00000000, 0x460C58C2, 0x460018C7, 0x460D18C2, 0x46033180,
-                0x460018C3, 0xC46902D8, 0x46034A40, 0xE46902D8, 0x3C0842A0, 0x44883800,
-                0x00000000, 0x460039C1, 0x8FA80098, 0x05000003, 0x00000000, 0x44803800,
-                0x00000000, 0x44804000, 0x00000000, 0x46083FE8, 0x460739C2, 0x3C083C0C,
-                0x3508CCCD, 0x44884000, 0x00000000, 0x460839C2, 0x3C084188, 0x44884000,
-                0x00000000, 0x460839C0, 0xC7A8008C, 0x46083FE8, 0xC7A80090, 0x46083FE9,
-                0xC7A80068, 0x46083941, 0x46003886, 0xC7A70060, 0x460039C2, 0xC7A80020,
-                0x460741C0, 0xE7A70070, 0xC7A80024, 0x46024200, 0xE7A80074, 0xC7A70064,
-                0x460039C2, 0xC7A80028, 0x460741C0, 0xE7A70078, 0xAFA0007C, 0xE7A00094,
-                0xE7A20098, 0xE7A4009C, 0xE7A50080, 0xE7A60088, 0x3C0B0014, 0x356BC210,
-                0x02A02021, 0x03C02821, 0x01603021, 0x27A70070, 0x27A80040, 0x24090001,
-                0x00005021, 0x0C052754, 0x00000000, 0x8FA30058, 0xC7A00094, 0xC7A20098,
-                0xC7A4009C, 0xC7A50080, 0xC7A60088, 0x04400047, 0x00000000, 0x00024980,
-                0x00025100, 0x012A4821, 0x02A94821, 0xC5270030, 0xC5280034, 0xC5290038,
-                0x46073A82, 0x460842C2, 0x460B5280, 0x46094AC2, 0x460B5280, 0x460A0284,
-                0x00000000, 0x3C083F80, 0x44885800, 0x00000000, 0x460A5AC3, 0x460B39C2,
-                0x460B4202, 0x460B4A42, 0xC7AA0070, 0xC7AB0040, 0x460B5281, 0x46075282,
-                0xC7A30074, 0xC7AB0044, 0x460B18C1, 0x460818C2, 0x46035280, 0xC7A30078,
-                0xC7AB0048, 0x460B18C1, 0x460918C2, 0x46035280, 0x3C0840E0, 0x44885800,
-                0x00000000, 0x460A5AC1, 0x44085800, 0x00000000, 0x1900001C, 0x00000000,
-                0xC7AA0060, 0x46075282, 0xC7A30064, 0x460918C2, 0x46035280, 0x460A58C2,
-                0x46030000, 0x46032100, 0x460858C2, 0x46031080, 0x46032940, 0xC7AA0064,
-                0x46075282, 0xC7A30060, 0x460918C2, 0x46035281, 0x460A58C2, 0x46033180,
-                0x460018C3, 0x00000000, 0xC46A02D8, 0x460350C0, 0xE46302D8, 0xC7A3008C,
-                0x460310A8, 0xC7A30090, 0x460310A9, 0x3C0B0014, 0x356BC210, 0xC7A70060,
-                0xC7A80064, 0x46072042, 0x460830C2, 0x46030840, 0xC7A30030, 0x46011840,
-                0xE5610000, 0xC7A30034, 0x460518C0, 0xE5630004, 0x46082042, 0x460730C2,
-                0x46030841, 0xC7A30038, 0x46011840, 0xE5610008, 0xAD60000C, 0x1000000C,
-                0x00000000, 0x3C0B0014, 0x356BC210, 0xC7A70030, 0xE5670000, 0xC7A70034,
-                0xE5670004, 0xC7A70038, 0xE5670008, 0xAD60000C, 0xC7A0005C, 0xC7A20068,
-                0xE46002D0, 0xE46202D4, 0x8FA20054, 0x8FBF0050, 0x03E00008, 0x27BD00A0,
+                0xE7A20038, 0xAFA0003C, 0x02A02021, 0x03C02821, 0x27A60020, 0x3C070014,
+                0x34E7C210, 0x27A80040, 0x24090001, 0x00005021, 0x0C052754, 0x00000000,
+                0xAFA20098, 0x8FA30058, 0xAFA0003C, 0x3C0B0014, 0x356BC210, 0x8D680000,
+                0x8D690004, 0x8D6A0008, 0x01094025, 0x010A4025, 0x11000172, 0x00000000,
+                0xC5670000, 0xC7A80030, 0x460839C1, 0x46073A42, 0xC5670004, 0xC7A80034,
+                0x460839C1, 0x460739C2, 0x46074A40, 0xC5670008, 0xC7A80038, 0x460839C1,
+                0x460739C2, 0x46074A40, 0x3C084780, 0x44884000, 0x00000000, 0x46094034,
+                0x00000000, 0x4501015D, 0x00000000, 0x44084800, 0x3C0A3F80, 0x010A402A,
+                0x15000020, 0x00000000, 0x46090244, 0x00000000, 0x3C0840E0, 0x44884000,
+                0x00000000, 0x46084A00, 0x46094203, 0x00000000, 0x00000000, 0xC7A70030,
+                0xC5610000, 0x460139C1, 0x460839C2, 0x460709C0, 0xE7A70070, 0xC7A70034,
+                0xC5610004, 0x460139C1, 0x460839C2, 0x460709C0, 0xE7A70074, 0xC7A70038,
+                0xC5610008, 0x460139C1, 0x460839C2, 0x460709C0, 0xE7A70078, 0xAFA0007C,
+                0x27A70070, 0x10000002, 0x00000000, 0x27A70030, 0x02A02021, 0x03C02821,
+                0x01603021, 0x27A80040, 0x24090001, 0x00005021, 0x0C052754, 0x00000000,
+                0x8FA30058, 0x0440012D, 0x00000000, 0x00024980, 0x00025100, 0x012A4821,
+                0x02A94821, 0xC5240030, 0xC5250034, 0xC5260038, 0x460421C2, 0x46052A02,
+                0x460839C0, 0x46063202, 0x460839C0, 0x460701C4, 0x00000000, 0x3C083F80,
+                0x44884000, 0x00000000, 0x46074203, 0x00000000, 0x00000000, 0x46082102,
+                0x46082942, 0x46083182, 0xC7A70030, 0xC7A80040, 0x460839C1, 0x46043A82,
+                0xC7A70034, 0xC7A80044, 0x460839C1, 0x460539C2, 0x46075280, 0xC7A70038,
+                0xC7A80048, 0x460839C1, 0x460639C2, 0x46075280, 0x3C0840E0, 0x44885800,
+                0x00000000, 0x460A5AC1, 0x44805000, 0x00000000, 0x460B5034, 0x00000000,
+                0x450000FE, 0x00000000, 0xC7A70060, 0x460439C2, 0xC7A80064, 0x46064202,
+                0x460839C0, 0xE7A70088, 0xC7A80064, 0x46044202, 0xC7A90060, 0x46064A42,
+                0x46094301, 0x46073A02, 0x46052A42, 0x46094200, 0x460C6242, 0x3C083D80,
+                0x35080000, 0x44885000, 0x00000000, 0x460A4A42, 0x46094200, 0x46085AC3,
+                0x00000000, 0x00000000, 0x46075902, 0x46055942, 0x460C5982, 0x460A3182,
+                0xC7A0005C, 0x46040000, 0xC7A20068, 0x46051080, 0xC7A9005C, 0x46093043,
+                0x00000000, 0x00000000, 0xC46302D8, 0x460118C0, 0xE46302D8, 0xC46702DC,
+                0x46071A01, 0x3C084049, 0x35080FDB, 0x44884800, 0x00000000, 0x46084834,
+                0x00000000, 0x45000006, 0x00000000, 0x3C0840C9, 0x35080FDB, 0x44885000,
+                0x00000000, 0x460A4201, 0x46004A87, 0x460A4034, 0x00000000, 0x45000006,
+                0x00000000, 0x3C0840C9, 0x35080FDB, 0x44885000, 0x00000000, 0x460A4200,
+                0x3C083ECC, 0x3508CCCD, 0x44885000, 0x00000000, 0x460062C5, 0x460B5282,
+                0x46085282, 0x460A4201, 0x460838C0, 0xE46302D8, 0x8FA80084, 0x15000012,
+                0x00000000, 0x3C0842A0, 0x44883800, 0x00000000, 0x460039C1, 0xC7A90088,
+                0x46093AC2, 0x3C083D00, 0x44886800, 0x00000000, 0x460C58C2, 0x460018C7,
+                0x460D18C2, 0x46033180, 0x460018C3, 0xC46902D8, 0x46034A40, 0xE46902D8,
+                0x3C0842A0, 0x44883800, 0x00000000, 0x460039C1, 0x8FA80098, 0x05000003,
+                0x00000000, 0x44803800, 0x00000000, 0x44804000, 0x00000000, 0x46083FE8,
+                0x460739C2, 0x3C083C0C, 0x3508CCCD, 0x44884000, 0x00000000, 0x460839C2,
+                0x3C084188, 0x44884000, 0x00000000, 0x460839C0, 0xC7A8008C, 0x46083FE8,
+                0xC7A80090, 0x46083FE9, 0xC7A80068, 0x46083941, 0x46003886, 0xC7A70060,
+                0x460039C2, 0xC7A80020, 0x460741C0, 0xE7A70070, 0xC7A80024, 0x46024200,
+                0xE7A80074, 0xC7A70064, 0x460039C2, 0xC7A80028, 0x460741C0, 0xE7A70078,
+                0xAFA0007C, 0xE7A00094, 0xE7A20098, 0xE7A4009C, 0xE7A50080, 0xE7A60088,
+                0x3C0B0014, 0x356BC210, 0x02A02021, 0x03C02821, 0x01603021, 0x27A70070,
+                0x27A80040, 0x24090001, 0x00005021, 0x0C052754, 0x00000000, 0x8FA30058,
+                0xC7A00094, 0xC7A20098, 0xC7A4009C, 0xC7A50080, 0xC7A60088, 0x04400047,
+                0x00000000, 0x00024980, 0x00025100, 0x012A4821, 0x02A94821, 0xC5270030,
+                0xC5280034, 0xC5290038, 0x46073A82, 0x460842C2, 0x460B5280, 0x46094AC2,
+                0x460B5280, 0x460A0284, 0x00000000, 0x3C083F80, 0x44885800, 0x00000000,
+                0x460A5AC3, 0x460B39C2, 0x460B4202, 0x460B4A42, 0xC7AA0070, 0xC7AB0040,
+                0x460B5281, 0x46075282, 0xC7A30074, 0xC7AB0044, 0x460B18C1, 0x460818C2,
+                0x46035280, 0xC7A30078, 0xC7AB0048, 0x460B18C1, 0x460918C2, 0x46035280,
+                0x3C0840E0, 0x44885800, 0x00000000, 0x460A5AC1, 0x44085800, 0x00000000,
+                0x1900001C, 0x00000000, 0xC7AA0060, 0x46075282, 0xC7A30064, 0x460918C2,
+                0x46035280, 0x460A58C2, 0x46030000, 0x46032100, 0x460858C2, 0x46031080,
+                0x46032940, 0xC7AA0064, 0x46075282, 0xC7A30060, 0x460918C2, 0x46035281,
+                0x460A58C2, 0x46033180, 0x460018C3, 0x00000000, 0xC46A02D8, 0x460350C0,
+                0xE46302D8, 0xC7A3008C, 0x460310A8, 0xC7A30090, 0x460310A9, 0x3C0B0014,
+                0x356BC210, 0xC7A70060, 0xC7A80064, 0x46072042, 0x460830C2, 0x46030840,
+                0xC7A30030, 0x46011840, 0xE5610000, 0xC7A30034, 0x460518C0, 0xE5630004,
+                0x46082042, 0x460730C2, 0x46030841, 0xC7A30038, 0x46011840, 0xE5610008,
+                0xAD60000C, 0x1000000C, 0x00000000, 0x3C0B0014, 0x356BC210, 0xC7A70030,
+                0xE5670000, 0xC7A70034, 0xE5670004, 0xC7A70038, 0xE5670008, 0xAD60000C,
+                0xC7A0005C, 0xC7A20068, 0xE46002D0, 0xE46202D4, 0x8FA20054, 0x8FBF0050,
+                0x03E00008, 0x27BD00A0,
             };
             // Inject the tunables above into the template's constant-load slots (indices auto-located from
             // tools/pullin2.s; guards trip loudly if the array drifts). PutVal = single `lui $t0` (float low16 must
@@ -1274,26 +1276,26 @@ namespace Dark_Cloud_Improved_Version
                 pullIn[oriIdx] = 0x35080000u | (b & 0xFFFF);
             }
             float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
-            PutVal(144, BASE_DIST, nameof(BASE_DIST));
-            PutVal(431, BASE_DIST, nameof(BASE_DIST));
-            PutVal(448, BASE_DIST, nameof(BASE_DIST));
-            PutVal(147, REST_H, nameof(REST_H));
-            PutVal(466, REST_H, nameof(REST_H));
+            PutVal(144, BASE_DIST, nameof(BASE_DIST));   // resting dist target
+            PutVal(427, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
+            PutVal(444, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
+            PutVal(147, REST_H, nameof(REST_H));   // height target base
+            PutVal(462, REST_H, nameof(REST_H));   // climb-curve base
             PutVal(43, CEIL_DIST, nameof(CEIL_DIST));
-            PutVal(155, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));
+            PutVal(155, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
             PutVal(168, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
-            PutVal(264, SLIDE_MARGIN, nameof(SLIDE_MARGIN));
-            PutVal(342, SLIDE_MARGIN, nameof(SLIDE_MARGIN));
-            PutVal(550, SLIDE_MARGIN, nameof(SLIDE_MARGIN));
-            PutVal(437, SLIDE_GAIN, nameof(SLIDE_GAIN));
+            PutVal(262, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
+            PutVal(340, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
+            PutVal(546, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
+            PutVal(433, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
             PutVal(118, STICK_SCALE, nameof(STICK_SCALE));
             PutEase(110, 111, STICK_DZ2, nameof(STICK_DZ2));
             PutEase(129, 130, STICK_EASE, nameof(STICK_EASE));
             PutEase(180, 181, HEIGHT_EASE, nameof(HEIGHT_EASE));
             PutEase(188, 189, DIST_EASE, nameof(DIST_EASE));
-            PutEase(367, 368, SLIDE_BIAS, nameof(SLIDE_BIAS));
-            PutEase(418, 419, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
-            PutEase(461, 462, CLIMB_K, nameof(CLIMB_K));
+            PutEase(365, 366, SLIDE_BIAS, nameof(SLIDE_BIAS));
+            PutEase(414, 415, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
+            PutEase(457, 458, CLIMB_K, nameof(CLIMB_K));
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
             WrU32(fs, ElfOff(0x0014C20C), 0x00000000);     // zero-init the persistent smoothed-stick-offset scratch @0x14C20C (moved: code may now grow to 0x14C20C)

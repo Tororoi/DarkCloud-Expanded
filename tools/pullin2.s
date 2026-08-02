@@ -1,9 +1,16 @@
-# REWORK v1 @0x14b838 — pull-in + ceiling-duck + right-stick height. NO ground-relative baseline / wall climb
-# (those were the false-rise-under-bridges bug). Height = REST_H + stick, clamped DOWN by a ceiling probe (tunnel duck).
-# dist = pivot->resting-eye first hit − MARGIN (standard spring-arm: nearest occluder from the player). Constants
-# HARDCODED. Symmetric ease for now (asymmetric + HOLD + yaw come next). Frame -0x70. CheckHit 0x149d50 vs s5/s8.
-# R5900: c.OLT.s = .word ...0x34; nop after every mtc1 & FP compare.
-addiu $sp, $sp, -0xa0         # G1 bisect: era frame size (0x90 leaves the 0x90-0x9C stash/spills OUT of frame)
+# Town-camera collision function @0x14B838 (reclaimed CheckCameraWidth slack; code may grow to 0x14C20C).
+# Hooked by retargeting EdMoveChara's `jal CheckHitVertical` @0x16B5DC; we run the vanilla CheckHitVertical
+# ourselves (args still live at entry) and return its verdict. Per frame: ceiling probe (tunnel duck), ground
+# probe (floor guard), right-stick height, dist target = BASE_DIST (no pull-in), SWEPT-SLIDE from the persisted
+# origin E_prev @0x14C210 (weighted d/h/θ resolution + |n_t|-scaled friction + θ reacquisition), occlusion-gated
+# geometric climb h = REST_H + CLIMB_K·(BASE−d')², corner-verify second resolution. Tunables injected by
+# IsoPatcher (PutVal/PutEase, auto-located slots).
+# ⚠ R5900/EE rules (hard-won): c.OLT.s/sqrt.s/max.s/min.s are .word-encoded; nop after every mtc1 and FP compare;
+# NEVER hold an FP reg across a jal (CheckHit tramples f0-f20); every branch path must set a0-a3 before its jal;
+# ⚠⚠ args 5-8 of any call go in REGISTERS t0-t3 (EE ABI) — set t0/t1/t2 explicitly before EVERY CheckHit cast
+# (stack stores at 0x10+(sp) are NOT read; stale t2 = the mask-skipping saga, see native-camera-functions memory).
+addiu $sp, $sp, -0xa0         # frame 0xA0: keeps the 0x90-0x9C stash/spill slots INSIDE our own frame
+
 sw    $ra, 0x50($sp)
 jal   0x14a080
 nop
@@ -245,6 +252,8 @@ mul.s $f2, $f2, $f1
 lwc1  $f3, 0x2c8($v1)
 add.s $f2, $f3, $f2
 swc1  $f2, 0x38($sp)          # E1.z
+sw    $zero, 0x3c($sp)        # E1.w := 0 — the stationary path casts this quad directly; CheckHit's tests are
+                              #   scalar x/y/z (w unread today), this is insurance against future w consumers
 # ===== OCCLUSION TEST (bisect step 7a, 5th cast): true LOS pivot → E_prev. The CLIMB runs only when the player is
 # VISIBLE — rising while occluded (sliding around a building corner) just crests open-topped shells; occlusion is
 # the reacquisition's job (slide around), not the climb's. Endpoint = E_prev, the CONSTRAINED eye — NOT the raw
@@ -300,10 +309,7 @@ nop
 # the margin BAND (small continuous corrections) instead of only on a plane crossing — the binary hit/miss was the
 # shimmer against head-on walls. Tip @sp+0x70 (16-aligned quad); E1 @0x30 stays the point p/persist measure.
 # Skip when nearly stationary (|Δ|² < 1 — direction too noisy, and a static eye needs no proximity push).
-lui   $t0, 0x3f80             # V1 isolate: HEAD's f8 := 1.0 side-load restored (dead by analysis — nothing
-mtc1  $t0, $f8                #   should read f8 before it is rewritten) on top of the era compare form
-nop
-mfc1  $t0, $f9                # era compare: raw float bits compare monotonically (non-negative |Δ|²)
+mfc1  $t0, $f9                # |Δ|² is non-negative -> raw float bits compare monotonically (int domain,
 lui   $t2, 0x3f80             # 1.0 bits
 slt   $t0, $t0, $t2
 bne   $t0, $zero, snoext      # nearly stationary -> skip the extension
@@ -444,8 +450,6 @@ lwc1  $f0, 0x5c($sp)          # d_e
 add.s $f0, $f0, $f4           # d' = d_e + a
 lwc1  $f2, 0x68($sp)          # h_e
 add.s $f2, $f2, $f5           # h' = h_e + c
-lwc1  $f7, 0x8c($sp)          # h_min (ground + MIN_GROUND_CLEAR, from the down-probe)
-.word 0x460710A8             # max.s f2,f2,f7 — an inverted-slope contact pushes h' DOWN (n_h<0); never below the floor
 lwc1  $f9, 0x5c($sp)          # d_e = the angle's lever arm
 div.s $f1, $f6, $f9           # Δθ = b / d_e
 nop
