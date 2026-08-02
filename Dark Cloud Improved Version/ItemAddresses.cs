@@ -188,7 +188,11 @@ namespace Dark_Cloud_Improved_Version
         // PieroItemList0..13  @0x00276410..  (Pierre/shop daily lists)
         // ItemShopList2       @0x00292020
         // ItemTemplete        @0x002943C0    (8 model-template string pointers)
-        // ITEM_LIST           @0x0027D0A0    (zeroed BSS runtime work buffer — NOT static data)
+        // ITEM_LIST           @0x0027D0A0    (STATIC ELF data — per-item use-effect records, stride 0x14,
+        //                                     index = id-81; only the head is zero (effectless items).
+        //                                     +0x0A s16 base, +0x0C s16 rand-range: ItemUseFunc rolls
+        //                                     base + rand()%range (defense items 136-141: 5+rand%3).
+        //                                     Full RE: game_data/docs/defense-items-re.md)
 
         /// <summary>
         /// Static per-item attribute table in the ELF — NOT FOUND. The research session confirmed

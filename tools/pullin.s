@@ -149,7 +149,7 @@ skzero:
 mtc1  $zero, $f0
 skdone:
 lui   $t3, 0x0014
-ori   $t3, $t3, 0xc200        # persistent smoothed-stick scratch @0x14C200 (past func slack; freed 0x14C020 for code growth)
+ori   $t3, $t3, 0xc20c        # persistent smoothed-stick scratch @0x14C20C (moved: code may now grow to 0x14C20C)
 lwc1  $f2, 0x0($t3)
 sub.s $f1, $f0, $f2
 lui   $t0, 0x3da3             # STICK_EASE
@@ -490,11 +490,14 @@ mtc1  $t0, $f10
 nop
 add.s $f8, $f8, $f10
 fw2:
-lui   $t0, 0x3f19             # SLIDE_FRICTION keep-factor (PutEase; 1.0 = no friction, lower = more drag)
-ori   $t0, $t0, 0x999a
+lui   $t0, 0x3ecc             # SLIDE_FRICTION_INV = 1−F (PutEase, derived in C#; 0 = frictionless)
+ori   $t0, $t0, 0xcccd
 mtc1  $t0, $f10
 nop
-mul.s $f8, $f8, $f10
+abs.s $f11, $f12              # |n_t| — how tangential the contact is
+mul.s $f10, $f10, $f11        # (1−F)·|n_t|
+mul.s $f10, $f10, $f8         # · lead
+sub.s $f8, $f8, $f10          # damped lead = (1 − (1−F)·|n_t|)·lead: head-on ≈ undamped, slide-along = full drag
 add.s $f3, $f7, $f8           # angT'' = angS + keep·lead
 swc1  $f3, 0x2d8($v1)
 # ===== θ REACQUISITION (bisect step 8, reworked: contact frames, stick idle): horizontal restoring pull toward
