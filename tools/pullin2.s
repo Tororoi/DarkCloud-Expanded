@@ -5,9 +5,7 @@
 # R5900: c.OLT.s = .word ...0x34; nop after every mtc1 & FP compare.
 addiu $sp, $sp, -0xa0
 sw    $ra, 0x50($sp)
-jal   0x14a080
-nop
-sw    $v0, 0x54($sp)
+sw    $s0, 0x54($sp)          # s0 = sticky-corner carrier (0x54 freed by the passthrough removal)
 lui   $at, 0x1d2
 lw    $v1, -0x6988($at)
 beq   $v1, $zero, done
@@ -93,7 +91,6 @@ sub.s $f0, $f0, $f1           # eye.y - 500
 swc1  $f0, 0x34($sp)
 lwc1  $f0, 0x28($sp)          # eye.z
 swc1  $f0, 0x38($sp)
-sw    $zero, 0x3c($sp)
 addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addiu $a2, $sp, 0x20
@@ -127,8 +124,7 @@ sw    $t2, 0x84($sp)
 # ===== RIGHT-STICK Y -> smoothed manual height offset @ sp+0x68 (deadzone + scale, persistent ease) =====
 jal   0x169a30                # GetRYf
 nop
-mov.s $f3, $f0
-mul.s $f2, $f0, $f0           # stickY^2
+mul.s $f2, $f0, $f0           # stickY^2 (raw stays in f0)
 lui   $t0, 0x3e23             # STICK_DZ2 (deadzone^2)
 ori   $t0, $t0, 0xd70a
 mtc1  $t0, $f1
@@ -140,14 +136,14 @@ nop
 lui   $t0, 0xc1c8             # STICK_SCALE = -25 (flipped) at full deflection
 mtc1  $t0, $f1
 nop
-mul.s $f0, $f3, $f1
+mul.s $f0, $f0, $f1
 b     skdone
 nop
 skzero:
 mtc1  $zero, $f0
 skdone:
 lui   $t3, 0x0014
-ori   $t3, $t3, 0xc200        # persistent smoothed-stick scratch @0x14C200 (past func slack; freed 0x14C020 for code growth)
+ori   $t3, $t3, 0xc20c        # persistent smoothed-stick scratch @0x14C20C (code may now grow to 0x14C20C)
 lwc1  $f2, 0x0($t3)
 sub.s $f1, $f0, $f2
 lui   $t0, 0x3da3             # STICK_EASE
@@ -171,23 +167,12 @@ swc1  $f0, 0x28($sp)
 lui   $t0, 0x42a0             # BASE_DIST
 mtc1  $t0, $f0
 nop
-# ===== HEIGHT target: contact frames HOLD the current height (the emergent boom slide owns the vertical while
-# touching — a flat REST_H pull would fight it and sag the climb); free frames ease back to REST_H + stick.
-lui   $t3, 0x0014
-ori   $t3, $t3, 0xc210
-lw    $t0, 0xc($t3)           # contact flag persisted by last frame's sweep
-bne   $t0, $zero, hhold
-nop
-lui   $t0, 0x4188             # REST_H (flat resting height)
+# ===== HEIGHT target = REST_H + stick (on contact frames the geometric climb overrides h anyway) =====
+lui   $t0, 0x4188             # REST_H (resting height)
 mtc1  $t0, $f5
 nop
 lwc1  $f8, 0x68($sp)          # stick offset
 add.s $f5, $f5, $f8           # + stick
-b     hclamp
-nop
-hhold:
-lwc1  $f5, 0x2d4($v1)         # in contact: hold current height (geometry owns it; stick ignored while touching)
-hclamp:
 lwc1  $f6, 0x6c($sp)          # ceilingY
 lwc1  $f7, 0x24($sp)          # ref.y
 sub.s $f6, $f6, $f7
@@ -256,8 +241,17 @@ lwc1  $f2, 0x64($sp)          # cosT
 mul.s $f2, $f2, $f1
 lwc1  $f3, 0x2c8($v1)
 add.s $f2, $f3, $f2
-swc1  $f2, 0x38($sp)          # E1.z
-sw    $zero, 0x3c($sp)
+swc1  $f2, 0x38($sp)          # E1.z  (w @0x3c stays 0 from the ceiling cast)
+# ===== OCCLUSION TEST (5th cast): true LOS pivot → target. The CLIMB runs only when the player is VISIBLE —
+# rising while occluded (sliding around a building corner) just crests open-topped shells; occlusion is the
+# reacquisition's job (slide around), not the climb's. Raw hit index stashed: >= 0 means OCCLUDED.
+addu  $a0, $s5, $zero
+addu  $a1, $s8, $zero
+addiu $a2, $sp, 0x20          # from = pivot (ref)
+addiu $a3, $sp, 0x30          # to = E1 (raw target eye)
+jal   0x149d50
+nop
+sw    $v0, 0x98($sp)          # occlusion flag (raw; hitOut @0x40 is scribbled but the sweep rewrites it)
 # E_prev @0x14C210 (16-aligned quad, w @+0xC). All-zero triple = never stored (patch zero-inits) -> skip.
 # |E1 − E_prev|² > 16384 (128u jump) = teleport/area change -> skip (don't drag the camera across the map).
 lui   $t3, 0x0014
@@ -294,12 +288,11 @@ nop
 # the margin BAND (small continuous corrections) instead of only on a plane crossing — the binary hit/miss was the
 # shimmer against head-on walls. Tip @sp+0x70 (16-aligned quad); E1 @0x30 stays the point p/persist measure.
 # Skip when nearly stationary (|Δ|² < 1 — direction too noisy, and a static eye needs no proximity push).
-lui   $t0, 0x3f80             # 1.0
-mtc1  $t0, $f8
+mfc1  $t0, $f9                # |Δ|² is non-negative -> raw float bits compare monotonically
 nop
-.word 0x46084834             # c.OLT.s f9,f8 : |Δ|² < 1 ?
-nop
-bc1t  snoext
+lui   $t2, 0x3f80             # 1.0 bits
+slt   $t0, $t0, $t2
+bne   $t0, $zero, snoext      # nearly stationary -> skip the extension
 nop
 .word 0x46090244             # sqrt.s f9,f9 : L = |E1 − E_prev|
 nop
@@ -308,7 +301,6 @@ mtc1  $t0, $f8
 nop
 add.s $f8, $f9, $f8           # L + M
 div.s $f8, $f8, $f9           # s = (L+M)/L
-nop
 nop
 lwc1  $f7, 0x30($sp)
 lwc1  $f1, 0x0($t3)
@@ -329,21 +321,17 @@ mul.s $f7, $f7, $f8
 add.s $f7, $f1, $f7
 swc1  $f7, 0x78($sp)          # tip.z
 sw    $zero, 0x7c($sp)
-b     sext
+addiu $a3, $sp, 0x70          # to = extended tip (E1 + margin reach)
+b     sext2
 nop
 snoext:
-lwc1  $f7, 0x30($sp)
-swc1  $f7, 0x70($sp)
-lwc1  $f7, 0x34($sp)
-swc1  $f7, 0x74($sp)
-lwc1  $f7, 0x38($sp)
-swc1  $f7, 0x78($sp)
-sw    $zero, 0x7c($sp)
-sext:
+addiu $a3, $sp, 0x30          # stationary: cast to E1 directly (its w @0x3c is already zeroed)
+sext2:
+# ⚠ a0/a1/a2 AFTER the join — the snoext branch used to skip them → CheckHit called with garbage regs from the
+# stick-input calls → wild read → PCSX2 fatal. Fired exactly on save-load because you SPAWN STANDING STILL.
 addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addu  $a2, $t3, $zero         # from = E_prev (persisted; the aligned scratch quad)
-addiu $a3, $sp, 0x70          # to = extended tip (E1 + margin reach)
 addiu $t0, $sp, 0x40
 sw    $t0, 0x10($sp)
 addiu $t1, $zero, 1
@@ -374,7 +362,6 @@ mtc1  $t0, $f8
 nop
 div.s $f8, $f8, $f7           # 1/|N|
 nop
-nop
 mul.s $f4, $f4, $f8
 mul.s $f5, $f5, $f8
 mul.s $f6, $f6, $f8
@@ -400,11 +387,9 @@ lui   $t0, 0x40e0             # SLIDE_MARGIN (need standoff; PutVal slot #2 — 
 mtc1  $t0, $f11
 nop
 sub.s $f11, $f11, $f10        # need = SLIDE_MARGIN − p
-mtc1  $zero, $f10
+mfc1  $t0, $f11               # float sign/int test: need <= 0 (incl. −0) -> no correction
 nop
-.word 0x460B5034             # c.OLT.s f10,f11 : 0 < need ?
-nop
-bc1f  nocorr
+blez  $t0, nocorr
 nop
 # WEIGHTED control-space slide (free glide): decompose N̂ on the orthonormal basis boom/vertical/orbit-tangent, but
 # DOWN-WEIGHT the angle axis by SLIDE_BIAS=B2 so dist/height do the resolving and the user's/follow's rotation is
@@ -481,35 +466,42 @@ lui   $t0, 0x3f19             # SLIDE_FRICTION keep-factor (PutEase; 1.0 = no fr
 ori   $t0, $t0, 0x999a
 mtc1  $t0, $f10
 nop
+lui   $t0, 0x3f80             # 1.0 (π in f9 is dead past the wrap)
+mtc1  $t0, $f9
+nop
+sub.s $f10, $f9, $f10         # 1 − F
+abs.s $f11, $f12              # |n_t| — how tangential the contact is
+mul.s $f10, $f10, $f11
+sub.s $f10, $f9, $f10         # keep = 1 − (1−F)·|n_t|: head-on ≈ undamped, sliding-along = full drag
 mul.s $f8, $f8, $f10
 add.s $f3, $f7, $f8           # angT'' = angS + keep·lead
 swc1  $f3, 0x2d8($v1)
 # ===== θ REACQUISITION (contact, stick idle): horizontal restoring pull projected onto the wall tangent — slide
 # around toward the resting distance; the rotation emerges as displacement / lever arm.
+lui   $t3, 0x0014
+ori   $t3, $t3, 0xc210
+lw    $t1, 0xc($t3)           # last frame's contact flag
+addu  $s0, $t1, $zero         # carry it (callee-saved survives the casts) to the persist: STICKY cornering
 lw    $t0, 0x84($sp)
 bne   $t0, $zero, hgeo        # user steering → skip only the θ reacquisition
+nop
+addiu $t2, $zero, 2
+beq   $t1, $t2, hgeo          # 2 = CORNERED: the reacquisition was shoving into the second plane = the jitter
 nop
 lui   $t0, 0x42a0             # BASE_DIST (the resting distance)
 mtc1  $t0, $f7
 nop
-sub.s $f7, $f7, $f0           # W_d = BASE − d'
+sub.s $f7, $f7, $f0           # W_d = BASE − d'   (dist recovery itself is the ease's job — S_d dropped)
 lwc1  $f9, 0x88($sp)          # n_d
 mul.s $f11, $f7, $f9          # dot = W_d·n_d
 lui   $t0, 0x3e00             # SLIDE_GAIN
 mtc1  $t0, $f13
 nop
-mul.s $f3, $f11, $f9
-sub.s $f3, $f7, $f3           # S_d = W_d − dot·n_d
-mul.s $f3, $f3, $f13
-add.s $f0, $f0, $f3           # d' += gain·S_d
-add.s $f4, $f4, $f3           # a += (truthful origin)
 mul.s $f3, $f11, $f12         # dot·n_t
 neg.s $f3, $f3                # S_t
 mul.s $f3, $f3, $f13
 add.s $f6, $f6, $f3           # b += (truthful origin; tangent displacement = Δθ·d)
 div.s $f3, $f3, $f0           # Δθ = gain·S_t / d
-nop
-nop
 lwc1  $f9, 0x2d8($v1)
 add.s $f9, $f9, $f3
 swc1  $f9, 0x2d8($v1)
@@ -518,10 +510,20 @@ hgeo:
 # h = REST_H + CLIMB_K·(BASE − d')² — zero slope at touch, steepening toward the pinch → a wall traversal (d dips
 # and recovers) maps to a smooth BELL, not the box the ladder circle gave (its tangent at touch is near-vertical
 # when REST_H ≪ BASE). Ground floor and ceiling duck have the last word.
+lw    $t0, 0x98($sp)          # occlusion (raw LOS hit index)
+bltz  $t0, hclr               # player VISIBLE → real climb
+nop
+lui   $t0, 0xbf80             # OCCLUDED → intrusion := −1 → clamps to 0 → no rise (climb only when clear)
+mtc1  $t0, $f7
+nop
+b     hclamp0
+nop
+hclr:
 lui   $t0, 0x42a0             # BASE_DIST — intrusion reference (slot #3)
 mtc1  $t0, $f7
 nop
 sub.s $f7, $f7, $f0           # intrusion = BASE − d'
+hclamp0:
 mtc1  $zero, $f8
 nop
 .word 0x46083FE8             # max.s f7,f7,f8 — stretched (d' > BASE) → zero climb
@@ -582,8 +584,10 @@ lwc1  $f2, 0x98($sp)
 lwc1  $f4, 0x9c($sp)
 lwc1  $f5, 0x80($sp)
 lwc1  $f6, 0x88($sp)
+addu  $t4, $zero, $zero       # cornered marker: 0 = plain contact
 bltz  $v0, vok                # clear → commit the frame
 nop
+addiu $t4, $zero, 1           # verify fired → CORNERED (flag becomes 2)
 sll   $t1, $v0, 6
 sll   $t2, $v0, 4
 addu  $t1, $t1, $t2
@@ -602,8 +606,6 @@ lui   $t0, 0x3f80             # 1.0
 mtc1  $t0, $f11
 nop
 div.s $f11, $f11, $f10        # 1/|N2|
-nop
-nop
 mul.s $f7, $f7, $f11
 mul.s $f8, $f8, $f11
 mul.s $f9, $f9, $f11          # N̂2
@@ -625,11 +627,9 @@ lui   $t0, 0x40e0             # SLIDE_MARGIN (slot #3)
 mtc1  $t0, $f11
 nop
 sub.s $f11, $f11, $f10        # need2 = margin − p2
-mtc1  $zero, $f10
+mfc1  $t0, $f11               # float sign/int test
 nop
-.word 0x460B5034             # c.OLT.s f10,f11 : 0 < need2 ?
-nop
-bc1f  vok
+blez  $t0, vok
 nop
 lwc1  $f10, 0x60($sp)         # n_d2 = N̂2.x·sinT + N̂2.z·cosT
 mul.s $f10, $f10, $f7
@@ -680,8 +680,13 @@ sub.s $f1, $f1, $f3
 lwc1  $f3, 0x38($sp)
 add.s $f1, $f3, $f1
 swc1  $f1, 0x8($t3)           # E1'.z
-addiu $t0, $zero, 1
-sw    $t0, 0xc($t3)           # contact flag → next frame's height-hold
+addiu $t2, $zero, 2
+bne   $s0, $t2, stk1          # STICKY: was cornered last frame and still in contact → STAY cornered (the 2-frame
+nop                           #   fire/skip alternation of the plain flag was the residual corner jitter)
+addiu $t4, $zero, 1
+stk1:
+addiu $t0, $t4, 1
+sw    $t0, 0xc($t3)           # contact flag: 1 = contact, 2 = CORNERED → damps next frame's reacquisition
 b     sfin
 nop
 sskip:
@@ -702,7 +707,8 @@ sfin:
 swc1  $f0, 0x2d0($v1)
 swc1  $f2, 0x2d4($v1)
 done:
-lw    $v0, 0x54($sp)
+addiu $v0, $zero, -1          # passthrough removed: report no-hit to the (NOP'd-anyway) VADJ branch
+lw    $s0, 0x54($sp)
 lw    $ra, 0x50($sp)
 jr    $ra
 addiu $sp, $sp, 0xa0
