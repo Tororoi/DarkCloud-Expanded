@@ -19,13 +19,15 @@ lwc1  $f0, 0x2c4($v1)
 swc1  $f0, 0x24($sp)          # ref.y
 lwc1  $f0, 0x2c8($v1)
 swc1  $f0, 0x28($sp)          # ref.z
-lwc1  $f12, 0x2d8($v1)
-jal   0x11d8a0                # sin(angT)
+lwc1  $f12, 0x2dc($v1)        # RENDERED angle (angS) — the pipeline basis (bisect step 3). Was angT (0x2d8):
+                              #   the sweep then protected the TARGET's path while the rendered eye lagged on an
+                              #   arc through corners. Δθ writes still land on angT — only the basis reads switch.
+jal   0x11d8a0                # sin(angS)
 nop
 swc1  $f0, 0x60($sp)
 lw    $v1, 0x58($sp)
-lwc1  $f12, 0x2d8($v1)
-jal   0x11d6b0                # cos(angT)
+lwc1  $f12, 0x2dc($v1)        # angS again for cos
+jal   0x11d6b0                # cos(angS)
 nop
 swc1  $f0, 0x64($sp)
 lw    $v1, 0x58($sp)
@@ -247,6 +249,20 @@ mul.s $f2, $f2, $f1
 lwc1  $f3, 0x2c8($v1)
 add.s $f2, $f3, $f2
 swc1  $f2, 0x38($sp)          # E1.z
+# ===== OCCLUSION TEST (bisect step 7a, 5th cast): true LOS pivot → E_prev. The CLIMB runs only when the player is
+# VISIBLE — rising while occluded (sliding around a building corner) just crests open-topped shells; occlusion is
+# the reacquisition's job (slide around), not the climb's. Endpoint = E_prev, the CONSTRAINED eye — NOT the raw
+# target E1: the ease overshoots the wall by >margin when pinned deep, false-flagging "occluded" and collapsing
+# the climb. Raw hit index stashed @0x98: >= 0 means OCCLUDED. (args @0x10/0x14/0x18 persist from the ground cast)
+addu  $a0, $s5, $zero
+addu  $a1, $s8, $zero
+addiu $a2, $sp, 0x20          # from = pivot (ref)
+lui   $a3, 0x0014
+ori   $a3, $a3, 0xc210        # to = E_prev
+jal   0x149d50
+nop
+sw    $v0, 0x98($sp)          # occlusion flag (raw; hitOut @0x40 is scribbled but the sweep rewrites it)
+lw    $v1, 0x58($sp)          # reload camera ptr (CheckHit tramples v1)
 sw    $zero, 0x3c($sp)
 # E_prev @0x14C210 (16-aligned quad, w @+0xC). All-zero triple = never stored (patch zero-inits) -> skip.
 # |E1 − E_prev|² > 16384 (128u jump) = teleport/area change -> skip (don't drag the camera across the map).
@@ -505,6 +521,40 @@ lwc1  $f9, 0x2d8($v1)
 add.s $f9, $f9, $f3
 swc1  $f9, 0x2d8($v1)
 drfx:
+# ===== GEOMETRIC HEIGHT (bisect step 7b: the proven bell curve, now OCCLUSION-GATED; NO rim backstop), gentle-onset
+# curve, purely relative to geometry: h = REST_H + CLIMB_K·(BASE − d')² — zero slope at touch, steepening toward
+# the pinch. Occluded (LOS hit) → no rise: intrusion forced negative so the zero-clamp kills the climb.
+# Ground floor and ceiling duck have the last word. Contact frames only (this is the corr path).
+lui   $t0, 0x42a0             # BASE_DIST — intrusion reference
+mtc1  $t0, $f7
+nop
+sub.s $f7, $f7, $f0           # intrusion = BASE − d'
+lw    $t0, 0x98($sp)          # occlusion (raw LOS hit index; read before the verify spill reuses 0x98)
+bltz  $t0, hclamp0            # player VISIBLE → keep the real intrusion
+nop
+mtc1  $zero, $f7              # OCCLUDED → intrusion := 0 → no rise (climb only when clear)
+nop
+hclamp0:
+mtc1  $zero, $f8
+nop
+.word 0x46083FE8             # max.s f7,f7,f8 — stretched (d' > BASE) or occluded → zero climb
+mul.s $f7, $f7, $f7           # intrusion²
+lui   $t0, 0x3c0c             # CLIMB_K (PutEase; (CLIMB_PEAK−REST_H)/BASE² — quadratic gain, zero slope at touch)
+ori   $t0, $t0, 0xcccd
+mtc1  $t0, $f8
+nop
+mul.s $f7, $f7, $f8           # rise = K·intrusion²
+lui   $t0, 0x4188             # REST_H (climb-curve base)
+mtc1  $t0, $f8
+nop
+add.s $f7, $f7, $f8           # h_curve = REST_H + rise — gentle onset → a BELL over a wall traversal
+lwc1  $f8, 0x8c($sp)          # ground floor
+.word 0x46083FE8             # max.s f7,f7,f8
+lwc1  $f8, 0x90($sp)          # ceiling duck
+.word 0x46083FE9             # min.s f7,f7,f8
+lwc1  $f8, 0x68($sp)          # h_e
+sub.s $f5, $f7, $f8           # c := total vertical displacement (truthful origin — persist uses c)
+mov.s $f2, $f7                # h' = the curve height
 # ===== CORNER VERIFY + SECOND RESOLUTION (sequential impulse): the main pass resolves ONE plane; at a corner the
 # corrected/slid target can cross the OTHER face (same or different _c mesh — the buffer holds them all). Cast OLD
 # origin → FINAL target; on a hit, RESOLVE that plane too (pure min-norm de-penetration, no bias/slide) so both
