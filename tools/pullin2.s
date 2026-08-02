@@ -289,7 +289,8 @@ lwc1  $f8, 0x38($sp)
 sub.s $f7, $f7, $f8
 mul.s $f7, $f7, $f7
 add.s $f9, $f9, $f7           # |E1 − E_prev|²
-lui   $t0, 0x4680             # TELEPORT² = 16384 (= 128²)
+lui   $t0, 0x4780             # TELEPORT² = 65536 (= 256²) — bisect step 4: must exceed max legit stretch,
+                              #   not just motion, or strained contacts vent the constraint at maximum strain
 mtc1  $t0, $f8
 nop
 .word 0x46094034             # c.OLT.s f8,f9 : TELEPORT² < |Δ|² ?
