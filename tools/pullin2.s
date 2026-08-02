@@ -480,32 +480,27 @@ nop
 mul.s $f8, $f8, $f10
 add.s $f3, $f7, $f8           # angT'' = angS + keep·lead
 swc1  $f3, 0x2d8($v1)
-# ===== REACQUISITION SLIDE (contact frames, stick idle): project the restoring pull toward the RESTING DISTANCE
-# onto the wall's tangent plane and move along it — a POSITION slide; the rotation is a side effect
-# (Δθ = tangential motion / lever arm), not a turn rate. The projection of the pull can never point away from
-# rest (deviation is monotone non-increasing) and a head-on wall projects to ZERO -> no back-and-forth.
+# ===== θ REACQUISITION (bisect step 8, reworked: contact frames, stick idle): horizontal restoring pull toward
+# the RESTING DISTANCE projected onto the wall tangent — slide around toward rest; the rotation EMERGES as
+# displacement / lever arm (Δθ = tangential motion / d). No direct d' slide (the old S_d boom component is gone);
+# the tangential displacement is accumulated into b so the persisted origin stays TRUTHFUL.
 lw    $t0, 0x84($sp)
 bne   $t0, $zero, drfx        # user steering -> no auto-slide
 nop
 lui   $t0, 0x42a0             # BASE_DIST (the resting distance)
 mtc1  $t0, $f7
 nop
-sub.s $f7, $f7, $f0           # W = BASE_DIST − d'  (restoring pull along the boom; − = stretched, + = pinned short)
+sub.s $f7, $f7, $f0           # W_d = BASE − d'
 lwc1  $f9, 0x88($sp)          # n_d (wall normal's boom component)
-mul.s $f11, $f7, $f9          # dot = W·n_d  (the pull's into-wall part)
-lui   $t0, 0x3e00             # SLIDE_GAIN (PutVal; fraction of the projected pull applied per frame)
-mtc1  $t0, $f10
+mul.s $f11, $f7, $f9          # dot = W_d·n_d  (the pull's into-wall part)
+lui   $t0, 0x3d00             # SLIDE_GAIN (PutVal; fraction of the projected pull applied per frame)
+mtc1  $t0, $f13
 nop
-mul.s $f3, $f11, $f9
-sub.s $f3, $f7, $f3           # S_d = W − dot·n_d  (tangent-plane projection, boom part)
-mul.s $f3, $f3, $f10
-add.s $f0, $f0, $f3           # d' += gain·S_d
 mul.s $f3, $f11, $f12         # dot·n_t
-neg.s $f3, $f3                # S_t = −dot·n_t  (tangent-plane projection, orbit part)
-mul.s $f3, $f3, $f10
-div.s $f3, $f3, $f0           # Δθ = gain·S_t / d  — the rotation EMERGES from the slide
-nop
-nop
+neg.s $f3, $f3                # S_t = −dot·n_t (tangent-plane projection, orbit part)
+mul.s $f3, $f3, $f13
+add.s $f6, $f6, $f3           # b += (truthful origin; tangent displacement = Δθ·d)
+div.s $f3, $f3, $f0           # Δθ = gain·S_t / d — the rotation emerges from the slide
 lwc1  $f9, 0x2d8($v1)
 add.s $f9, $f9, $f3
 swc1  $f9, 0x2d8($v1)
