@@ -61,11 +61,9 @@ addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addiu $a2, $sp, 0x20
 addiu $a3, $sp, 0x30
-addiu $t0, $sp, 0x40
-sw    $t0, 0x10($sp)
-addiu $t1, $zero, 1
-sw    $t1, 0x14($sp)
-sw    $zero, 0x18($sp)
+addiu $t0, $sp, 0x40          # hitOut  — EE ABI: CheckHit args 5-7 are REGISTERS t0/t1/t2 (the old
+addiu $t1, $zero, 1           # mode=1  —   sw stores to 0x10/0x14/0x18 were NEVER read: cargo cult)
+addu  $t2, $zero, $zero       # skip=0  — NEVER inherit: stale t2 bit0 skipped every mask-1 `_c` poly (h06!)
 jal   0x149d50
 nop
 lw    $v1, 0x58($sp)
@@ -100,11 +98,9 @@ addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addiu $a2, $sp, 0x20
 addiu $a3, $sp, 0x30
-addiu $t0, $sp, 0x40
-sw    $t0, 0x10($sp)
-addiu $t1, $zero, 1
-sw    $t1, 0x14($sp)
-sw    $zero, 0x18($sp)
+addiu $t0, $sp, 0x40          # hitOut  — EE ABI: CheckHit args 5-7 are REGISTERS t0/t1/t2 (the old
+addiu $t1, $zero, 1           # mode=1  —   sw stores to 0x10/0x14/0x18 were NEVER read: cargo cult)
+addu  $t2, $zero, $zero       # skip=0  — NEVER inherit: stale t2 bit0 skipped every mask-1 `_c` poly (h06!)
 jal   0x149d50
 nop
 lw    $v1, 0x58($sp)
@@ -259,6 +255,9 @@ addu  $a1, $s8, $zero
 addiu $a2, $sp, 0x20          # from = pivot (ref)
 lui   $a3, 0x0014
 ori   $a3, $a3, 0xc210        # to = E_prev
+addiu $t0, $sp, 0x40          # hitOut — REAL scratch (the era t0=E_prev clobber made CheckHit WRITE the LOS hit
+addiu $t1, $zero, 1           #   point INTO the persisted sweep origin every occluded frame = the h11 clip)
+addu  $t2, $zero, $zero       # skip=0
 jal   0x149d50
 nop
 sw    $v0, 0x98($sp)          # occlusion flag (raw; hitOut @0x40 is scribbled but the sweep rewrites it)
@@ -301,7 +300,10 @@ nop
 # the margin BAND (small continuous corrections) instead of only on a plane crossing — the binary hit/miss was the
 # shimmer against head-on walls. Tip @sp+0x70 (16-aligned quad); E1 @0x30 stays the point p/persist measure.
 # Skip when nearly stationary (|Δ|² < 1 — direction too noisy, and a static eye needs no proximity push).
-mfc1  $t0, $f9                # |Δ|² is non-negative -> raw float bits compare monotonically (era form, G2-1)
+lui   $t0, 0x3f80             # V1 isolate: HEAD's f8 := 1.0 side-load restored (dead by analysis — nothing
+mtc1  $t0, $f8                #   should read f8 before it is rewritten) on top of the era compare form
+nop
+mfc1  $t0, $f9                # era compare: raw float bits compare monotonically (non-negative |Δ|²)
 lui   $t2, 0x3f80             # 1.0 bits
 slt   $t0, $t0, $t2
 bne   $t0, $zero, snoext      # nearly stationary -> skip the extension
@@ -343,11 +345,9 @@ sext2:
 addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addu  $a2, $t3, $zero         # from = E_prev (persisted; the aligned scratch quad)
-addiu $t0, $sp, 0x40
-sw    $t0, 0x10($sp)
-addiu $t1, $zero, 1
-sw    $t1, 0x14($sp)
-sw    $zero, 0x18($sp)
+addiu $t0, $sp, 0x40          # hitOut  — EE ABI: CheckHit args 5-7 are REGISTERS t0/t1/t2 (the old
+addiu $t1, $zero, 1           # mode=1  —   sw stores to 0x10/0x14/0x18 were NEVER read: cargo cult)
+addu  $t2, $zero, $zero       # skip=0  — NEVER inherit: stale t2 bit0 skipped every mask-1 `_c` poly (h06!)
 jal   0x149d50               # CheckHit E_prev->E1 (TWO-SIDED — no winding cull here by design)
 nop
 lw    $v1, 0x58($sp)
@@ -583,6 +583,9 @@ addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addu  $a2, $t3, $zero         # from = OLD E_prev (not yet updated)
 addiu $a3, $sp, 0x70          # to = final target
+addiu $t0, $sp, 0x40          # hitOut
+addiu $t1, $zero, 1           # mode=1
+addu  $t2, $zero, $zero       # skip=0
 jal   0x149d50
 nop
 lw    $v1, 0x58($sp)
