@@ -3,7 +3,7 @@
 # dist = pivot->resting-eye first hit − MARGIN (standard spring-arm: nearest occluder from the player). Constants
 # HARDCODED. Symmetric ease for now (asymmetric + HOLD + yaw come next). Frame -0x70. CheckHit 0x149d50 vs s5/s8.
 # R5900: c.OLT.s = .word ...0x34; nop after every mtc1 & FP compare.
-addiu $sp, $sp, -0x90
+addiu $sp, $sp, -0xa0         # G1 bisect: era frame size (0x90 leaves the 0x90-0x9C stash/spills OUT of frame)
 sw    $ra, 0x50($sp)
 jal   0x14a080
 nop
@@ -301,12 +301,10 @@ nop
 # the margin BAND (small continuous corrections) instead of only on a plane crossing — the binary hit/miss was the
 # shimmer against head-on walls. Tip @sp+0x70 (16-aligned quad); E1 @0x30 stays the point p/persist measure.
 # Skip when nearly stationary (|Δ|² < 1 — direction too noisy, and a static eye needs no proximity push).
-lui   $t0, 0x3f80             # 1.0
-mtc1  $t0, $f8
-nop
-.word 0x46084834             # c.OLT.s f9,f8 : |Δ|² < 1 ?
-nop
-bc1t  snoext
+mfc1  $t0, $f9                # |Δ|² is non-negative -> raw float bits compare monotonically (era form, G2-1)
+lui   $t2, 0x3f80             # 1.0 bits
+slt   $t0, $t0, $t2
+bne   $t0, $zero, snoext      # nearly stationary -> skip the extension
 nop
 .word 0x46090244             # sqrt.s f9,f9 : L = |E1 − E_prev|
 nop
@@ -336,21 +334,15 @@ mul.s $f7, $f7, $f8
 add.s $f7, $f1, $f7
 swc1  $f7, 0x78($sp)          # tip.z
 sw    $zero, 0x7c($sp)
-b     sext
+addiu $a3, $sp, 0x70          # to = extended tip (E1 + margin reach)
+b     sext2
 nop
 snoext:
-lwc1  $f7, 0x30($sp)
-swc1  $f7, 0x70($sp)
-lwc1  $f7, 0x34($sp)
-swc1  $f7, 0x74($sp)
-lwc1  $f7, 0x38($sp)
-swc1  $f7, 0x78($sp)
-sw    $zero, 0x7c($sp)
-sext:
+addiu $a3, $sp, 0x30          # stationary: cast to E1 directly (its w @0x3c is already zeroed)
+sext2:
 addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addu  $a2, $t3, $zero         # from = E_prev (persisted; the aligned scratch quad)
-addiu $a3, $sp, 0x70          # to = extended tip (E1 + margin reach)
 addiu $t0, $sp, 0x40
 sw    $t0, 0x10($sp)
 addiu $t1, $zero, 1
@@ -717,4 +709,4 @@ done:
 lw    $v0, 0x54($sp)
 lw    $ra, 0x50($sp)
 jr    $ra
-addiu $sp, $sp, 0x90
+addiu $sp, $sp, 0xa0
