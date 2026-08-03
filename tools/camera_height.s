@@ -1,0 +1,67 @@
+# WORLD-SPACE HEIGHT subroutine @0x27D090 (free cave, ISO-baked). Called by the camera function after the
+# height ease. The eye's DESCENT is bounded in WORLD Y (not the ref-relative offset): a falling player drops
+# at fall speed while the camera descends at most H_FALL_RATE/frame — they no longer "fall together" (the
+# offset-based limit tracked ref.y straight down into terrain = the ground clip).
+# While ground-PINNED and the player OCCLUDED, the pull toward the PLAYER — diagonal, not perpendicular to
+# the flat top — projects onto the ground as a horizontal glide: the dist target shrinks by GROUND_GLIDE_K x
+# the current boom length per frame, sliding the eye toward/over the lip (the building slide, ground axis).
+# Visible-but-pinned = no glide. Stack contract (caller sp in a1): 0x70 h_e in/out (ref-relative offset),
+# 0x74 dist target in/out, 0x24 ref.y, 0x8c h_min (offset), 0x98 last-frame LOS flag.
+# Clobbers v1/at/t-regs/f2-f8 — the CALLER reloads v1.
+addiu $sp, $sp, -0x20
+sw    $ra, 0x18($sp)
+addu  $t9, $a1, $zero
+lwc1  $f6, 0x70($t9)          # h_e (offset)
+lwc1  $f2, 0x24($t9)          # ref.y
+add.s $f6, $f6, $f2           # desired eye WORLD y
+lui   $t3, 0x01f1
+ori   $t3, $t3, 0x0050
+lwc1  $f3, 0x4($t3)           # E_prev.y (last frame's constrained eye, world)
+# warp-continuity: only bound the descent when last frame's eye is plausibly continuous with this one
+sub.s $f4, $f3, $f6
+abs.s $f4, $f4
+lui   $t0, 0x43c8             # WARP_BREAK (PutValC; 400 — bigger jumps = area change/warp, no bound)
+mtc1  $t0, $f7
+nop
+.word 0x46072034             # c.OLT.s f4,f7 : |E_prev.y − desired| < break ?
+nop
+bc1f  hnobound
+nop
+lui   $t0, 0x4040             # H_FALL_RATE (PutValC; max WORLD-space height drop per frame)
+mtc1  $t0, $f7
+nop
+sub.s $f3, $f3, $f7           # lowest world y allowed this frame
+.word 0x460331a8             # max.s f6,f6,f3 — the ABSOLUTE descent bound (upward stays instant)
+hnobound:
+# hard ground floor in world space (supreme), with the pinned test taken BEFORE the clamp
+lwc1  $f4, 0x8c($t9)          # h_min (offset form)
+add.s $f4, $f4, $f2           # -> world floor = groundY + MIN_GROUND_CLEAR
+.word 0x46043034             # c.OLT.s f6,f4 : below the floor ? (= pinned)
+nop
+.word 0x460431a8             # max.s f6,f6,f4 — apply the floor (does not touch the compare flag)
+bc1f  hnoglide
+nop
+# pinned: glide toward the player if OCCLUDED (last frame's LOS flag @0x98)
+lw    $t0, 0x98($t9)
+bltz  $t0, hnoglide
+nop
+lwc1  $f5, 0x74($t9)          # dist target
+lui   $at, 0x1d2
+lw    $v1, -0x6988($at)
+lwc1  $f7, 0x2d0($v1)         # current boom length
+lui   $t0, 0x3d00             # GROUND_GLIDE_K (PutValC; boom fraction glided toward the player per frame)
+mtc1  $t0, $f8
+nop
+mul.s $f7, $f7, $f8
+sub.s $f5, $f5, $f7           # dist target -= glide (horizontal projection of the pull toward the player)
+lui   $t0, 0x4140             # GLIDE_MIN_DIST (PutValC; the glide never pulls closer than this)
+mtc1  $t0, $f8
+nop
+.word 0x46082968             # max.s f5,f5,f8
+swc1  $f5, 0x74($t9)
+hnoglide:
+sub.s $f6, $f6, $f2           # back to ref-relative offset
+swc1  $f6, 0x70($t9)
+lw    $ra, 0x18($sp)
+jr    $ra
+addiu $sp, $sp, 0x20
