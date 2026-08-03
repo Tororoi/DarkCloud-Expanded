@@ -985,7 +985,6 @@ namespace Dark_Cloud_Improved_Version
             // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
             // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
             Enemies.LogEnemySpawns();
-            Enemies.LogFloorDataForTileMapSearch();
             SpawnRoster.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
 
             if (numEligibleEnemies > 3)

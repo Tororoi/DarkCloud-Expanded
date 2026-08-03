@@ -26,6 +26,7 @@ lwc1  $f0, 0x2c4($v1)
 swc1  $f0, 0x24($sp)          # ref.y
 lwc1  $f0, 0x2c8($v1)
 swc1  $f0, 0x28($sp)          # ref.z
+sw    $zero, 0x2c($sp)        # ref.w := 0 — the quad is the LOS cast's `from` endpoint
 lwc1  $f12, 0x2dc($v1)        # RENDERED angle (angS) — the pipeline basis (bisect step 3). Was angT (0x2d8):
                               #   the sweep then protected the TARGET's path while the rendered eye lagged on an
                               #   arc through corners. Δθ writes still land on angT — only the basis reads switch.
@@ -270,7 +271,7 @@ addu  $t2, $zero, $zero       # skip=0
 jal   0x149d50
 nop
 sw    $v0, 0x98($sp)          # occlusion flag (raw; hitOut @0x40 is scribbled but the sweep rewrites it)
-lw    $v1, 0x58($sp)          # reload camera ptr (CheckHit tramples v1)
+lw    $v1, 0x58($sp)          # reload camera ptr (CheckHit tramples v1 — the sskip path needs it fresh)
 sw    $zero, 0x3c($sp)
 # E_prev @0x14C210 (16-aligned quad, w @+0xC). All-zero triple = never stored (patch zero-inits) -> skip.
 # |E1 − E_prev|² > 16384 (128u jump) = teleport/area change -> skip (don't drag the camera across the map).
@@ -691,8 +692,9 @@ mul.s $f3, $f6, $f7           # b·sinT
 sub.s $f1, $f1, $f3
 lwc1  $f3, 0x38($sp)
 add.s $f1, $f3, $f1
-swc1  $f1, 0x8($t3)           # E1'.z
-sw    $zero, 0xc($t3)
+swc1  $f1, 0x8($t3)           # E1'.z (E_prev.w @0xc is left untouched — zero-inited once, never written:
+                              #   fewer per-frame writes on this recompiled-code page, and CheckHit's endpoint
+                              #   tests are scalar x/y/z)
 b     sfin
 nop
 sskip:
@@ -706,7 +708,6 @@ lwc1  $f7, 0x34($sp)
 swc1  $f7, 0x4($t3)
 lwc1  $f7, 0x38($sp)
 swc1  $f7, 0x8($t3)
-sw    $zero, 0xc($t3)
 lwc1  $f0, 0x5c($sp)
 lwc1  $f2, 0x68($sp)
 sfin:
