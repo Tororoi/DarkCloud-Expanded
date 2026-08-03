@@ -73,7 +73,7 @@ namespace Dark_Cloud_Improved_Version
             float a8 = Memory.ReadFloat(cm + 0x2A8);
             float[] cf = Memory.ReadFloatBatch(cm + 0x2C0, 8);  // 2C0 ref xyz,2D0 dist,2D4 h,2D8 angT,2DC angS
             float refx = cf[0], refy = cf[1], refz = cf[2], dist = cf[4], h = cf[5], angT = cf[6], angS = cf[7];
-            // Native pull-in writes its live state to scratch 0x2014C000.. each frame (see IsoPatcher pullin.s):
+            // Native camera scratch (see tools/town_camera_collision.s): E_prev quad @0x2014C210, stick ease @0x2014C20C:
             float nHoriz  = Memory.ReadFloat(0x2014C000);   // horiz target the climb saw (= hitHoriz - MARGIN)
             float nClimbH = Memory.ReadFloat(0x2014C004);   // eased height target this frame
             float hitHoriz = Memory.ReadFloat(0x2014C008);  // raw wall horizontal distance from ref (0 = no hit)
