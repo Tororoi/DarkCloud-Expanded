@@ -1123,15 +1123,24 @@ namespace Dark_Cloud_Improved_Version
             //       below on each patch (no asm regen). PutVal = single `lui` (integer / .25 step, low16==0);
             //       PutEase = `lui`+`ori` (any float). Indices auto-located from the source; guards trip loudly on drift.
             // ARCHITECTURE: dist target = BASE_DIST always (no wall-ray pull-in). Height target = REST_H + stick;
-            //   ceiling probe DUCKS it (tunnel), ground probe FLOORS it. The SWEPT-SLIDE (persisted origin E_prev
-            //   @0x14C210 → eased target + SLIDE_MARGIN proximity reach) resolves wall contact on the authored-normal
-            //   side via the weighted d/h/θ decomposition (SLIDE_BIAS = angle share); |n_t|-scaled friction
-            //   (head-on undamped → SLIDE_FRICTION keep at full tangency) drags the follow on contact; θ REACQUISITION
-            //   (SLIDE_GAIN, stick-gated) slides toward rest; occlusion-gated GEOMETRIC CLIMB h = REST_H +
-            //   CLIMB_K·(BASE−d')² (LOS pivot→E_prev, 5th cast); CORNER VERIFY casts origin→final target and resolves
-            //   a second plane (min-norm) for concave seams. ⚠ EE gotchas: c.OLT.s/sqrt.s/max.s/min.s are .word-encoded;
-            //   nop after mtc1/FP-compare; CheckHit args 5-7 = REGISTERS t0/t1/t2 (hitOut/mode/skip) — set explicitly
-            //   at every cast, NEVER inherit (stale t2 = the 2026-08 mask-skipping saga). [[native-camera-functions]]
+            //   ceiling probe DUCKS it (tunnel), ground probe FLOORS it (hard, world-space). ALL height motion is
+            //   RATE-LIMITED: falls ≤ H_FALL_RATE/frame in WORLD Y (cameraHeight.bin cave sub @0x27D090 — a falling
+            //   player outruns the camera; WARP_BREAK skips the bound across true warps), climb rises ≤ CLIMB_RISE/
+            //   frame (anchored to last APPLIED height, not the eased value — the ease decay otherwise eats the rise).
+            //   The height sub also owns the CLIFF logic: pinned+occluded → the boom glides toward the player at
+            //   GROUND_GLIDE_K·current/frame (progressive ratchet over the lip; floor GLIDE_MIN_DIST), and while
+            //   descending (excess > DESCENT_HOLD) the boom may shorten but never extend (kills the lip-crossover
+            //   bounce). The SWEPT-SLIDE (persisted origin E_prev @0x01F10050, mailbox data page — off the code page
+            //   so PCSX2 doesn't re-JIT per frame) resolves wall contact on the authored-normal side via the weighted
+            //   d/h/θ decomposition (SLIDE_BIAS = angle share); |n_t|-scaled friction (head-on undamped →
+            //   SLIDE_FRICTION keep at full tangency); θ REACQUISITION (SLIDE_GAIN, stick-gated) slides toward rest;
+            //   occlusion-gated GEOMETRIC CLIMB h = REST_H + CLIMB_K·(BASE−d')² (LOS pivot→E_prev, 5th cast, flag
+            //   @0x54(sp) — NOT 0x98, the corner-verify spill slot); CORNER VERIFY resolves a second plane (min-norm)
+            //   for concave seams. Vanilla height clamps NOP'd BOTH ways (floor snap 0x16BC54 + ceiling snap 0x16BC0C
+            //   — the 60-unit ceiling silently capped every tall-cliff mechanism until found). ⚠ EE gotchas:
+            //   c.OLT.s/sqrt.s/max.s/min.s are .word-encoded — DERIVE from the formula, fd is bits 10:6 (the fd=31
+            //   no-op bug); nop after mtc1/FP-compare; CheckHit args 5-7 = REGISTERS t0/t1/t2 (hitOut/mode/skip) —
+            //   set explicitly at every cast, NEVER inherit (stale t2 = the mask-skipping saga). [[native-camera-functions]]
             const float BASE_DIST   = 80f;   // resting orbit distance when nothing blocks
             const float REST_H      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
             const float CEIL_DIST   = 80f;  // how far UP the ceiling probe looks for a tunnel roof to duck under
