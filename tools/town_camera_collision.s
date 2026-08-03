@@ -566,6 +566,11 @@ lwc1  $f8, 0x8c($sp)          # ground floor
 lwc1  $f8, 0x90($sp)          # ceiling duck
 .word 0x460839E9             # min.s f7,f7,f8
 lwc1  $f8, 0x68($sp)          # h_e
+lui   $t0, 0x4000             # CLIMB_RISE (PutVal; max climb rise per frame — the instant snap-up made the
+mtc1  $t0, $f9                #   height SAWTOOTH when a grazing LOS flickered the gate near walls: snap up
+nop                           #   on visible frames, ease down on occluded ones)
+add.s $f9, $f8, $f9           # highest h the climb may reach this frame
+.word 0x460939e9             # min.s f7,f7,f9 — rate-limit the rise
 .word 0x460839E8             # max.s f7,f7,f8 — the climb may only RAISE the eye: on a tall-cliff descent the
                               #   curve (<=CLIMB_PEAK) sat far BELOW the eased height and the old unconditional
                               #   override snapped the eye 100+ units down through the cliff face in one frame;
