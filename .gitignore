@@ -358,3 +358,4 @@ game_data
 
 # Local env values for dev tools/diagnostics (copy of .env.sample); never commit
 .env
+tools/town_camera_collision.bin

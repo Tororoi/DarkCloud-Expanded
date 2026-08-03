@@ -1,4 +1,5 @@
-# Town-camera collision function @0x14B838 (reclaimed CheckCameraWidth slack; code may grow to 0x14C20C).
+# Town-camera collision function @0x14B838 (SOURCE OF TRUTH — assembles via tools/mips_asm.py to
+# Resources/isoPatch/townCameraCollision.bin, embedded in the app; formerly pullin2.s) (reclaimed CheckCameraWidth slack; code may grow to 0x14C20C).
 # Hooked by retargeting EdMoveChara's `jal CheckHitVertical` @0x16B5DC; we run the vanilla CheckHitVertical
 # ourselves (args still live at entry) and return its verdict. Per frame: ceiling probe (tunnel duck), ground
 # probe (floor guard), right-stick height, dist target = BASE_DIST (no pull-in), SWEPT-SLIDE from the persisted
