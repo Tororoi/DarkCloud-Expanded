@@ -42,24 +42,49 @@ nop
 bc1f  hnoglide
 nop
 # pinned: glide toward the player if OCCLUDED (last frame's LOS flag @0x98)
-lw    $t0, 0x98($t9)
+lw    $t0, 0x54($t9)          # last-frame LOS flag (0x54 — NOT 0x98, which the corner verify spills over)
 bltz  $t0, hnoglide
 nop
-lwc1  $f5, 0x74($t9)          # dist target
 lui   $at, 0x1d2
 lw    $v1, -0x6988($at)
 lwc1  $f7, 0x2d0($v1)         # current boom length
 lui   $t0, 0x3d00             # GROUND_GLIDE_K (PutValC; boom fraction glided toward the player per frame)
 mtc1  $t0, $f8
 nop
-mul.s $f7, $f7, $f8
-sub.s $f5, $f5, $f7           # dist target -= glide (horizontal projection of the pull toward the player)
+mul.s $f8, $f7, $f8           # glide = K·current
+sub.s $f5, $f7, $f8           # dist target := CURRENT − glide — a PROGRESSIVE ratchet toward the player
+                              #   (subtracting from the constant BASE target made the glide a fixed 2.5-unit
+                              #   offset that converged and PARKED — the "missing reacquisition")
 lui   $t0, 0x4140             # GLIDE_MIN_DIST (PutValC; the glide never pulls closer than this)
 mtc1  $t0, $f8
 nop
 .word 0x46082968             # max.s f5,f5,f8
 swc1  $f5, 0x74($t9)
 hnoglide:
+# DESCENT HOLD: while the eye is still descending (world height above rest by more than DESCENT_HOLD), the
+# boom may shorten but never EXTEND — the outward dist recovery at the lip pushed the eye back over the
+# cliff top, re-pinning it = the crossover bounce (a pinned/unpinned limit cycle). Recovery to BASE resumes
+# once the height has arrived near rest.
+lwc1  $f4, 0x94($t9)          # rest target offset (REST_H + stick, pre-clamp)
+add.s $f4, $f4, $f2           # rest world y
+sub.s $f4, $f6, $f4           # descent excess
+lui   $t0, 0x4170             # DESCENT_HOLD (PutValC; excess above rest that freezes outward recovery)
+mtc1  $t0, $f7
+nop
+.word 0x46072034             # c.OLT.s f4,f7 : excess < hold ? -> normal recovery
+nop
+bc1t  hnohold
+nop
+lwc1  $f5, 0x74($t9)          # pending dist target
+lui   $at, 0x1d2
+lw    $v1, -0x6988($at)
+lwc1  $f7, 0x2d0($v1)         # current boom length
+.word 0x46053834             # c.OLT.s f7,f5 : current < target ? (target would extend the boom)
+nop
+bc1f  hnohold
+nop
+swc1  $f7, 0x74($t9)          # hold: target := current — never extend mid-descent
+hnohold:
 sub.s $f6, $f6, $f2           # back to ref-relative offset
 swc1  $f6, 0x70($t9)
 lw    $ra, 0x18($sp)
