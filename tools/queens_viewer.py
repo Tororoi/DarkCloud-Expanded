@@ -174,9 +174,9 @@ def kanban_mesh(pos, ry):
     th = math.radians(ry); c = math.cos(th); s = math.sin(th)
     def P(v):
         x, y, z = v[0], v[1], v[2]
-        return [x*c - z*s + pos[0], y + pos[1], x*s + z*c + pos[2]]
+        return [x*c + z*s + pos[0], y + pos[1], -x*s + z*c + pos[2]]
     return [[P(_KB_VERTS[i]) for i in (a, b, c)] for a, b, c in _KB_TRIS]
-CANAL_SIGN_POS, CANAL_SIGN_RY = (800.0, 0.0, 0.0), 180   # DIAGNOSTIC: ry 180 = NORTH like QSIGN (IsoPatcher CANAL_SIGN_*)
+CANAL_SIGN_POS, CANAL_SIGN_RY = (800.0, 0.0, 0.0), -90   # under eastern bridge, facing WEST (IsoPatcher CANAL_SIGN_*)
 
 # ---- LOW-TIDE FISHING proposals (canal-lowtide-fishing-plan.md): carved Factory ladder on the
 #      south canal wall centred at x=705, + the canal-floor fishing sign under the bridge facing west.
@@ -328,7 +328,7 @@ layers.append({'key': 'sign', 'label': 'fishing sign (faces N)',
 def _ps(v):
     th = math.radians(SIGN_RY); c = math.cos(th); s = math.sin(th)
     x, y, z = v[0], v[1], v[2]
-    return [x*c - z*s + SIGN_POS[0], y + SIGN_POS[1], x*s + z*c + SIGN_POS[2]]
+    return [x*c + z*s + SIGN_POS[0], y + SIGN_POS[1], -x*s + z*c + SIGN_POS[2]]
 def _box_tris(x0, x1, y0, y1, z0, z1):
     v = [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1],[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]]
     faces = [(0,1,2),(0,2,3),(4,6,5),(4,7,6),(0,4,5),(0,5,1),(3,2,6),(3,6,7),(0,3,7),(0,7,4),(1,5,6),(1,6,2)]

@@ -58,12 +58,16 @@ def _measure_yaw(m):
 
 def carved_mdt():
     m = copy.deepcopy(donor_mdt())
-    # 1) de-yaw so the rail plane runs parallel to X (rotate normals with the verts)
+    # 1) de-yaw so the rail plane runs parallel to X (rotate normals with the verts).
+    #    ⚠ Block roles are reversed vs their header labels for this mesh: m.uv (hw[6]) holds the per-vertex
+    #    NORMALS (unit 3-vectors); m.norm (hw[12]) holds the TRUE flat texture coords (V tracks height; maps
+    #    100% onto e05t06's gray). Rotate positions + real normals only — texture coords are rotation-invariant
+    #    and MUST stay put, else facets sample random atlas cells (the in-game gray/gold/brown garble).
     th = _measure_yaw(m); c, s = math.cos(th), math.sin(th)
     roty = lambda v: (v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c) + tuple(v[3:])
     m.pos = [roty(v) for v in m.pos]
-    if m.norm:
-        m.norm = [roty(v) for v in m.norm]
+    if m.uv:
+        m.uv = [roty(v) for v in m.uv]
     # 2) clip everything below CUT_Y, interpolating new verts on the cut edges
     first_new = len(m.pos)
     cache = {}
