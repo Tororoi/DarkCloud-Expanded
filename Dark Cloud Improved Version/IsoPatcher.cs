@@ -37,10 +37,10 @@ namespace Dark_Cloud_Improved_Version
         const int    QSIGN_X = 250, QSIGN_Y = 70, QSIGN_Z = -64, QSIGN_RY = 180;   // 6 units south (+Z) of the trigger
 
         // Low-tide canal fishing (canal-lowtide-fishing-plan.md): the canal-FLOOR sign under the eastern
-        // bridge (x≈800), on the authored floor Y=0. DIAGNOSTIC: ry −90. sceVu0RotMatrixY folds the angle
-        // (|sin|) so +90 and +270 both face EAST and −X/west seems unreachable by positive ry; but the
-        // function branches on the angle SIGN, so test a negative value. If −90 stays east, west truly needs
-        // a mesh pre-flip (front +Z→−Z) with all three signs' ry retuned (Brownboo/QSIGN/canal).
+        // bridge (x≈800), on the authored floor Y=0, facing WEST. CONFIRMED in-game: ry −90. sceVu0RotMatrixY
+        // folds the angle (|sin|) so +90 and +270 both face EAST and −X is unreachable by any POSITIVE ry;
+        // the function branches on the angle sign, so a NEGATIVE angle (−90) reaches west. (0=south, 180=north
+        // work either way since those are Z-facing.)
         const int    CANAL_SIGN_X = 800, CANAL_SIGN_Y = 0, CANAL_SIGN_Z = 0, CANAL_SIGN_RY = -90;
         // The ladder donor is carved from the user's OWN ISO (Factory scene, node e05a01/hasigo1) at patch
         // time — same principle as the sign (CarveKanban); nothing is extracted into the codebase.
@@ -268,10 +268,13 @@ namespace Dark_Cloud_Improved_Version
             //
             // Low-tide canal fishing (canal-lowtide-fishing-plan.md): ALSO inject
             //   (a) the carved Factory ladder ("hasigo") on the south canal wall (verts world-baked → mapinfo
-            //       places it at origin; bakeIdentity:false keeps the baked translation). Optional: only when
-            //       the bundled ladder.mds is available (ISO-carve+trim C# port is a follow-on). Its texture
-            //       bank e05t06 still needs its own boot-cave registration (see note below) — until then the
-            //       ladder renders with wrong textures but correct geometry/placement.
+            //       places it at origin; bakeIdentity:false keeps the baked translation). CarveLadder ports the
+            //       full ISO carve/de-yaw/trim in pure C# (no bundled asset). Its texture e05t06 rides in the
+            //       same 2-entry fishsign.img bank as e01b24 (LoadSignAssets), which the boot cave already
+            //       registers wholesale — EnterIMGFile(-1) loops every bank entry, so no cave change is needed.
+            //       The ladder is reflection/matcap-mapped metal (UVs encode facet direction, not position), so
+            //       the donor's texture coordinates and the full 256×256 e05t06 are preserved verbatim; the
+            //       ladder renders in e03 exactly as it does in the Moon Factory.
             //   (b) a SECOND kanban placement on the canal floor under the eastern bridge, facing west, so the
             //       low-tide spot has its own sign (reuses the already-injected kanban part + e01b24 texture).
             progress("Carving + injecting the canal ladder …");
@@ -1515,7 +1518,12 @@ namespace Dark_Cloud_Improved_Version
             foreach (var v in m.pos) if (v[1] < 85 && v[2] < -40) { num += (v[0] - mx) * (v[2] - mz); den += (v[0] - mx) * (v[0] - mx); }
             double th = Math.Atan2(num, den); float c = (float)Math.Cos(th), s = (float)Math.Sin(th);
             void RotY(List<float[]> vs) { foreach (var v in vs) { float x = v[0], z = v[2]; v[0] = x * c + z * s; v[2] = -x * s + z * c; } }
-            RotY(m.pos); if (m.norm.Count > 0) RotY(m.norm);
+            // ⚠ For this mesh the block roles are the reverse of their header labels: hw[6] (m.uv) holds the
+            // per-vertex NORMALS (unit 3-vectors) and hw[12] (m.norm) holds the TRUE flat texture coords
+            // (V tracks height; maps 100% onto e05t06's gray metal region). Rotate positions + real normals;
+            // the texture coords are rotation-invariant and MUST stay untouched, or the ladder samples random
+            // atlas cells in-game (the gray/gold/brown garble). Only spatial data (pos, normals) de-yaws.
+            RotY(m.pos); if (m.uv.Count > 0) RotY(m.uv);
 
             // 2) clip everything below LAD_CUT_Y, interpolating a new vert on each crossing edge
             int firstNew = m.pos.Count, stride = m.hasCol ? 4 : 3;
