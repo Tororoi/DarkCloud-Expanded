@@ -21,7 +21,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CameraCPolyProbe
     {
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;   // forensic diagnostic (heavy: full poly buffer over PINE per tick) — enable only when investigating
 
         private const long WorkBufferPtr = 0x202A2388;   // gp-0x7468: pointer to the WorkBuffer CDataAlloc2 struct
         private const long EditGroundPtr = 0x21D1968C;   // to trigger one dump per area

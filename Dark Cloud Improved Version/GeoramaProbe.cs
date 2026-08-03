@@ -33,7 +33,7 @@ namespace Dark_Cloud_Improved_Version
     {
         /// <summary>Master switch. Read-only: this class writes nothing to the game.
         /// The overhead camera lives in <see cref="TownEditMode"/>.</summary>
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;   // dev diagnostic (per-town cpoly dump when DC_DUMP_DIR set) — enable only when investigating
 
         // ── ALLOCATOR-CHAIN WATCH ───────────────────────────────────────────────────────────────────
         //
