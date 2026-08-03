@@ -13,9 +13,6 @@
 addiu $sp, $sp, -0xa0         # frame 0xA0: keeps the 0x90-0x9C stash/spill slots INSIDE our own frame
 
 sw    $ra, 0x50($sp)
-jal   0x14a080
-nop
-sw    $v0, 0x54($sp)
 lui   $at, 0x1d2
 lw    $v1, -0x6988($at)
 beq   $v1, $zero, done
@@ -153,8 +150,9 @@ nop
 skzero:
 mtc1  $zero, $f0
 skdone:
-lui   $t3, 0x0014
-ori   $t3, $t3, 0xc20c        # persistent smoothed-stick scratch @0x14C20C (moved: code may now grow to 0x14C20C)
+lui   $t3, 0x01f1
+ori   $t3, $t3, 0x0040        # smoothed-stick scratch @0x01F10040 (mailbox DATA page: scratch writes on the
+                              #   old code page forced PCSX2 to re-JIT it every frame; boot-zeroed heap)
 lwc1  $f2, 0x0($t3)
 sub.s $f1, $f0, $f2
 lui   $t0, 0x3da3             # STICK_EASE
@@ -223,6 +221,17 @@ mtc1  $t0, $f3
 nop
 mul.s $f7, $f7, $f3
 add.s $f6, $f6, $f7
+# WORLD-SPACE HEIGHT (cave subroutine @0x27D090): absolute descent bound (the eye's WORLD y drops at most
+# H_FALL_RATE/frame — a falling player outruns the camera), hard ground floor, and the pinned+occluded
+# ground glide toward the player (adjusts the dist target @0x74). See tools/camera_height.s.
+swc1  $f6, 0x70($sp)          # h_e in/out
+swc1  $f0, 0x74($sp)          # dist target in/out
+addu  $a1, $sp, $zero
+jal   0x27d090
+nop
+lw    $v1, 0x58($sp)          # the sub clobbers v1
+lwc1  $f6, 0x70($sp)
+lwc1  $f0, 0x74($sp)
 swc1  $f6, 0x68($sp)          # h_e (eased height target; slot free after stick was consumed)
 lwc1  $f1, 0x2d0($v1)
 lui   $t0, 0x3e19            # DIST_EASE
@@ -264,8 +273,8 @@ sw    $zero, 0x3c($sp)        # E1.w := 0 — the stationary path casts this qua
 addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addiu $a2, $sp, 0x20          # from = pivot (ref)
-lui   $a3, 0x0014
-ori   $a3, $a3, 0xc210        # to = E_prev
+lui   $a3, 0x01f1
+ori   $a3, $a3, 0x0050        # to = E_prev @0x01F10050 (mailbox data page)
 addiu $t0, $sp, 0x40          # hitOut — REAL scratch (the era t0=E_prev clobber made CheckHit WRITE the LOS hit
 addiu $t1, $zero, 1           #   point INTO the persisted sweep origin every occluded frame = the h11 clip)
 addu  $t2, $zero, $zero       # skip=0
@@ -276,8 +285,8 @@ lw    $v1, 0x58($sp)          # reload camera ptr (CheckHit tramples v1 — the 
 sw    $zero, 0x3c($sp)
 # E_prev @0x14C210 (16-aligned quad, w @+0xC). All-zero triple = never stored (patch zero-inits) -> skip.
 # |E1 − E_prev|² > 16384 (128u jump) = teleport/area change -> skip (don't drag the camera across the map).
-lui   $t3, 0x0014
-ori   $t3, $t3, 0xc210
+lui   $t3, 0x01f1
+ori   $t3, $t3, 0x0050
 lw    $t0, 0x0($t3)
 lw    $t1, 0x4($t3)
 lw    $t2, 0x8($t3)
@@ -539,7 +548,7 @@ nop
 hclamp0:
 mtc1  $zero, $f8
 nop
-.word 0x46083FE8             # max.s f7,f7,f8 — stretched (d' > BASE) or occluded → zero climb
+.word 0x460839E8             # max.s f7,f7,f8 — stretched (d' > BASE) or occluded → zero climb
 mul.s $f7, $f7, $f7           # intrusion²
 lui   $t0, 0x3c0c             # CLIMB_K (PutEase; (CLIMB_PEAK−REST_H)/BASE² — quadratic gain, zero slope at touch)
 ori   $t0, $t0, 0xcccd
@@ -551,12 +560,16 @@ mtc1  $t0, $f8
 nop
 add.s $f7, $f7, $f8           # h_curve = REST_H + rise — gentle onset → a BELL over a wall traversal
 lwc1  $f8, 0x8c($sp)          # ground floor
-.word 0x46083FE8             # max.s f7,f7,f8
+.word 0x460839E8             # max.s f7,f7,f8
 lwc1  $f8, 0x90($sp)          # ceiling duck
-.word 0x46083FE9             # min.s f7,f7,f8
+.word 0x460839E9             # min.s f7,f7,f8
 lwc1  $f8, 0x68($sp)          # h_e
+.word 0x460839E8             # max.s f7,f7,f8 — the climb may only RAISE the eye: on a tall-cliff descent the
+                              #   curve (<=CLIMB_PEAK) sat far BELOW the eased height and the old unconditional
+                              #   override snapped the eye 100+ units down through the cliff face in one frame;
+                              #   descents now always go through the height ease
 sub.s $f5, $f7, $f8           # c := total vertical displacement (truthful origin — persist uses c)
-mov.s $f2, $f7                # h' = the curve height
+mov.s $f2, $f7                # h' = the curve height, floored at h_e
 # ===== CORNER VERIFY + SECOND RESOLUTION (sequential impulse): the main pass resolves ONE plane; at a corner the
 # corrected/slid target can cross the OTHER face (same or different _c mesh — the buffer holds them all). Cast OLD
 # origin → FINAL target; on a hit, RESOLVE that plane too (pure min-norm de-penetration, no bias/slide) so both
@@ -583,8 +596,8 @@ swc1  $f2, 0x98($sp)
 swc1  $f4, 0x9c($sp)
 swc1  $f5, 0x80($sp)
 swc1  $f6, 0x88($sp)
-lui   $t3, 0x0014
-ori   $t3, $t3, 0xc210
+lui   $t3, 0x01f1
+ori   $t3, $t3, 0x0050
 addu  $a0, $s5, $zero
 addu  $a1, $s8, $zero
 addu  $a2, $t3, $zero         # from = OLD E_prev (not yet updated)
@@ -675,8 +688,8 @@ lwc1  $f3, 0x90($sp)          # …and ceiling duck
 vok:
 # persist E1' = E1 + a·b̂ + c·ŷ + b·t̂ — the ACTUAL world displacement incl. the tangential slide — as next frame's
 # sweep origin (sits at the margin -> a target still pushed inward crosses EVERY frame -> continuous, no jitter)
-lui   $t3, 0x0014
-ori   $t3, $t3, 0xc210
+lui   $t3, 0x01f1
+ori   $t3, $t3, 0x0050
 lwc1  $f7, 0x60($sp)          # sinT
 lwc1  $f8, 0x64($sp)          # cosT
 mul.s $f1, $f4, $f7           # a·sinT
@@ -701,8 +714,8 @@ nop
 sskip:
 nocorr:
 # no constraint this frame: persist raw E1 as the next sweep origin, targets unchanged
-lui   $t3, 0x0014
-ori   $t3, $t3, 0xc210
+lui   $t3, 0x01f1
+ori   $t3, $t3, 0x0050
 lwc1  $f7, 0x30($sp)
 swc1  $f7, 0x0($t3)
 lwc1  $f7, 0x34($sp)
@@ -715,7 +728,8 @@ sfin:
 swc1  $f0, 0x2d0($v1)
 swc1  $f2, 0x2d4($v1)
 done:
-lw    $v0, 0x54($sp)
+addiu $v0, $zero, -1          # report no-hit to the (NOP'd) vertical-adjust branch — the vanilla
+                              #   CheckHitVertical passthrough was removed (its branch body is fully dead)
 lw    $ra, 0x50($sp)
 jr    $ra
 addiu $sp, $sp, 0xa0

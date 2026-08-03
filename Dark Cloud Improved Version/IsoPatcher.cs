@@ -1069,6 +1069,9 @@ namespace Dark_Cloud_Improved_Version
             Guard(VADJ_VA,  0x0C0492EC, "vertical SetHeight");
             Guard(RSTD_VA,  0x0C0492DC, "reset SetDistance"); Guard(RSTH_VA, 0x0C0492EC, "reset SetHeight");
             Guard(RSTA_VA,  0x0C0492D4, "reset AddAngle");
+            // Camera scratch (stick ease @0x01F10040, E_prev quad @0x01F10050) lives on the MAILBOX DATA page —
+            // boot-zeroed heap, no ELF init needed/possible; moved off the code page so per-frame writes stop
+            // forcing PCSX2 to re-JIT the camera function (see CodeCaveAddresses cave map).
             Guard(HOOK_VA,  0x0C052820, "pull-in hook (jal CheckHitVertical)");
             Guard(NCLAMP_VA, 0x0C0492E4, "distance near-clamp"); Guard(SDST_VA, 0x0C0492DC, "bVar6 SetDistance");
             Guard(SANGLE_VA, 0x0C0492CC, "reset SetAngleSoon"); Guard(SANGLE2_VA, 0x0C0492CC, "reset SetAngleSoon(map)");
@@ -1090,6 +1093,8 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(SANGLE2_VA), 0x00000000);    // no sibling SetAngleSoon (MapNo 0x23)
             WrU32(fs, ElfOff(RSTVT_VA), 0x00000000);      // no reset Step(cam,-1) → +0x2DC angle snap gone (block inert)
             Guard(HFLOOR_SNAP_VA, 0x0C0492EC, "height floor-snap SetHeight");
+            Guard(0x0016BC0C, 0x0C0492EC, "height CEILING snap SetHeight(60)");   // vanilla snaps +0x2D4 down to 60 every frame it
+            WrU32(fs, ElfOff(0x0016BC0C), 0x00000000);                            //   exceeds 60 — capped EVERY tall-cliff mechanism
             WrU32(fs, ElfOff(HFLOOR_SNAP_VA), 0x00000000); // no floor-snap → height can drop below 5 (camera below player)
             Guard(STICKY1_VA, 0x0C0492F4, "vanilla stick-Y AddHeight #1");
             Guard(STICKY2_VA, 0x0C0492F4, "vanilla stick-Y AddHeight #2");
@@ -1144,30 +1149,44 @@ namespace Dark_Cloud_Improved_Version
             float CLIMB_K = (CLIMB_PEAK - REST_H) / (BASE_DIST * BASE_DIST);   // quadratic climb gain - zero slope at touch
             const float SLIDE_GAIN = 0.03125f; // reacquisition slide: fraction of the tangent-projected restoring pull applied per frame (0 = off; PutVal steps 0.0625/0.125/0.25)
             const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
+            const float H_FALL_RATE    = 2f;    // max WORLD-space height drop per frame (absolute descent bound — a falling player outruns the camera)
+            const float WARP_BREAK     = 4000f; // world-y discontinuity beyond which the descent bound is skipped (true warps only —
+            // the eased desired-height drops ~30% of the offset per frame, so a LONG fall legitimately opens a
+            // gap of hundreds of units; 400 misread that as a warp and released the bound mid-fall)
+            const float GROUND_GLIDE_K = 0.03125f; // pinned+occluded ground glide: boom fraction pulled toward the player per frame
+            const float GLIDE_MIN_DIST = 12f;   // the ground glide never pulls the boom closer than this
             // Assembled template (378 words) from tools/town_camera_collision.s — pull-in + ceiling-duck + stick, one-sided _c, no climb. The KNOBS are the consts above, NOT the hex — they get
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
             // follows every mtc1 and every FP compare.
-            uint[] pullIn = LoadCamFunctionWords();   // Resources/isoPatch/townCameraCollision.bin (embedded) —
+            uint[] pullIn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.townCameraCollision.bin", 0x27BDFF60);   // Resources/isoPatch/townCameraCollision.bin (embedded) —
                                                       // assembled from tools/town_camera_collision.s @0x14B838
             // Inject the tunables above into the template's constant-load slots (indices auto-located from
             // tools/town_camera_collision.s; guards trip loudly if the array drifts). PutVal = single `lui $t0` (float low16 must
             // be 0 — integers / .25 steps); PutEase = `lui $t0` + `ori $t0`.
-            static uint[] LoadCamFunctionWords()
+            static uint[] LoadWordsResource(string res, uint expectedFirstWord)
             {
-                const string res = "Dark_Cloud_Improved_Version.Resources.isoPatch.townCameraCollision.bin";
                 using var s = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(res)
-                    ?? throw new IOException($"Embedded camera function missing: {res} (reassemble tools/town_camera_collision.s and rebuild)");
+                    ?? throw new IOException($"Embedded EE function missing: {res} (reassemble its .s in tools/ and rebuild)");
                 using var ms = new MemoryStream();
                 s.CopyTo(ms);
                 byte[] b = ms.ToArray();
                 if (b.Length == 0 || (b.Length & 3) != 0)
-                    throw new IOException($"Camera function resource is malformed ({b.Length} bytes).");
+                    throw new IOException($"EE function resource {res} is malformed ({b.Length} bytes).");
                 uint[] w = new uint[b.Length / 4];
                 Buffer.BlockCopy(b, 0, w, 0, b.Length);
-                if (w[0] != 0x27BDFF60u)
-                    throw new IOException($"Camera function resource doesn't start with the expected prologue (got 0x{w[0]:X8}) — stale or mis-assembled townCameraCollision.bin.");
+                if (w[0] != expectedFirstWord)
+                    throw new IOException($"{res} doesn't start with the expected prologue (got 0x{w[0]:X8}) — stale or mis-assembled.");
                 return w;
+            }
+            static void PutValIn(uint[] arr, int idx, float f, string nm)
+            {
+                uint b = BitConverter.SingleToUInt32Bits(f);
+                if ((b & 0xFFFF) != 0)
+                    throw new Exception($"Tunable {nm}={f} isn't a single-lui float (low16!=0).");
+                if ((arr[idx] & 0xFFFF0000u) != 0x3C080000u)
+                    throw new Exception($"Tunable {nm} slot {idx} moved — refresh indices from the .s.");
+                arr[idx] = 0x3C080000u | (b >> 16);
             }
             void PutVal(int idx, float f, string nm)
             {
@@ -1187,33 +1206,36 @@ namespace Dark_Cloud_Improved_Version
                 pullIn[oriIdx] = 0x35080000u | (b & 0xFFFF);
             }
             float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
-            PutVal(145, BASE_DIST, nameof(BASE_DIST));   // resting dist target
-            PutVal(428, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
-            PutVal(445, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
-            PutVal(148, REST_H, nameof(REST_H));   // height target base
-            PutVal(463, REST_H, nameof(REST_H));   // climb-curve base
-            PutVal(44, CEIL_DIST, nameof(CEIL_DIST));
-            PutVal(156, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
-            PutVal(169, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
-            PutVal(263, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
-            PutVal(341, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
-            PutVal(547, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
-            PutVal(434, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
-            PutVal(119, STICK_SCALE, nameof(STICK_SCALE));
-            PutEase(111, 112, STICK_DZ2, nameof(STICK_DZ2));
-            PutEase(130, 131, STICK_EASE, nameof(STICK_EASE));
-            PutEase(181, 182, HEIGHT_EASE, nameof(HEIGHT_EASE));
-            PutEase(189, 190, DIST_EASE, nameof(DIST_EASE));
-            PutEase(366, 367, SLIDE_BIAS, nameof(SLIDE_BIAS));
-            PutEase(415, 416, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
-            PutEase(458, 459, CLIMB_K, nameof(CLIMB_K));
+            PutVal(142, BASE_DIST, nameof(BASE_DIST));   // resting dist target
+            PutVal(433, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
+            PutVal(450, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
+            PutVal(145, REST_H, nameof(REST_H));   // height target base
+            PutVal(468, REST_H, nameof(REST_H));   // climb-curve base
+            PutVal(41, CEIL_DIST, nameof(CEIL_DIST));
+            PutVal(153, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
+            PutVal(166, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
+            PutVal(268, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
+            PutVal(346, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
+            PutVal(553, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
+            PutVal(439, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
+            PutVal(116, STICK_SCALE, nameof(STICK_SCALE));
+            PutEase(108, 109, STICK_DZ2, nameof(STICK_DZ2));
+            PutEase(127, 128, STICK_EASE, nameof(STICK_EASE));
+            PutEase(178, 179, HEIGHT_EASE, nameof(HEIGHT_EASE));
+            PutEase(194, 195, DIST_EASE, nameof(DIST_EASE));
+            PutEase(371, 372, SLIDE_BIAS, nameof(SLIDE_BIAS));
+            PutEase(420, 421, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
+            PutEase(463, 464, CLIMB_K, nameof(CLIMB_K));
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
-            WrU32(fs, ElfOff(0x0014C20C), 0x00000000);     // zero-init the persistent smoothed-stick-offset scratch @0x14C20C (moved: code may now grow to 0x14C20C)
-            WrU32(fs, ElfOff(0x0014C210), 0x00000000);     // zero-init E_prev (persisted sweep-origin eye) — all-zero = "not yet
-            WrU32(fs, ElfOff(0x0014C214), 0x00000000);     //   stored", so the swept-slide skips its first frame instead of
-            WrU32(fs, ElfOff(0x0014C218), 0x00000000);     //   sweeping from garbage
-            WrU32(fs, ElfOff(0x0014C21C), 0x00000000);     // zero-init E_prev.w — never written at runtime now; the quad is a CheckHit endpoint
+            Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
+            uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
+            PutValIn(heightFn, 11, WARP_BREAK, nameof(WARP_BREAK));
+            PutValIn(heightFn, 18, H_FALL_RATE, nameof(H_FALL_RATE));
+            PutValIn(heightFn, 37, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
+            PutValIn(heightFn, 42, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
+            for (int i = 0; i < heightFn.Length; i++)
+                WrU32(fs, ElfOff(0x0027D090 + (uint)(i * 4)), heightFn[i]);
             WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
         }
 

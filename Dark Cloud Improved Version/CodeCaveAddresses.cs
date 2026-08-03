@@ -24,6 +24,8 @@ namespace Dark_Cloud_Improved_Version
     /// 128→96 bones (Osmond's 84 is the real max), and packing the decoy tables out of a 0x10000 hole.
     ///
     ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (0x3C is the next free)
+    ///   0x01F10040  Town-camera scratch: stick ease @+0x00, E_prev quad @+0x10 (16B) — written per frame
+    ///               by the ISO-baked camera function (boot-zeroed; moved here off its code page, 2026-08)
     ///   0x01F10100  AI stubs      32 × 0x400                       → ends 0x01F18100
     ///
     ///   Mirage — decoy aggro redirect:
