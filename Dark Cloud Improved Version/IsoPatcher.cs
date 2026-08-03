@@ -1147,6 +1147,7 @@ namespace Dark_Cloud_Improved_Version
             float SLIDE_FRICTION_INV = 1f - SLIDE_FRICTION;   // injected form (asm folds 1−F to save the 1.0 load)
             const float CLIMB_PEAK = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
             float CLIMB_K = (CLIMB_PEAK - REST_H) / (BASE_DIST * BASE_DIST);   // quadratic climb gain - zero slope at touch
+            const float CLIMB_RISE = 2f;     // max climb rise per frame (matches the fall bound — all height motion is rate-limited)
             const float SLIDE_GAIN = 0.03125f; // reacquisition slide: fraction of the tangent-projected restoring pull applied per frame (0 = off; PutVal steps 0.0625/0.125/0.25)
             const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
             const float H_FALL_RATE    = 2f;    // max WORLD-space height drop per frame (absolute descent bound — a falling player outruns the camera)
@@ -1215,9 +1216,10 @@ namespace Dark_Cloud_Improved_Version
             PutVal(41, CEIL_DIST, nameof(CEIL_DIST));
             PutVal(153, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
             PutVal(166, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
+            PutVal(478, CLIMB_RISE, nameof(CLIMB_RISE));   // climb rise rate cap
             PutVal(269, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
             PutVal(347, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
-            PutVal(554, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
+            PutVal(559, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
             PutVal(440, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
             PutVal(116, STICK_SCALE, nameof(STICK_SCALE));
             PutEase(108, 109, STICK_DZ2, nameof(STICK_DZ2));
