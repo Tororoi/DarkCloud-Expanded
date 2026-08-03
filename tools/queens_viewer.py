@@ -144,15 +144,50 @@ for idx, p in enumerate(WATER_PLANES):
                    'alpha': 0.45, 'border': '#6de' if is_canal else '#c9e',
                    'on': not is_canal})   # canal plane hidden by default; the tide layers below stand in for it
 
-# ---- time-of-day canal tide levels (raise CANAL water Y) — bridge arch crown underside is Y=60 ----
-# afternoon = current/low (y=31); morning & dusk slightly higher; night highest but barely under the arch.
-TIDES = [('afternoon', 31.0, [70,150,175], '#6cf', True),
-         ('morning/dusk', 45.0, [90,180,180], '#7dd', True),
-         ('night (high)', 55.0, [90,120,210], '#89f', True)]
+# ---- time-of-day canal tide levels (2026-08 low-tide-fishing chart) — arch crown underside Y=60 ----
+# LOW = morning (6, canal floor walkable/fishable), MEDIUM = afternoon + night (31), HIGH = dusk (52).
+# Each tide layer is a COPY of the real canal water mesh (mizu__a01, world baseline Y=30 — the same
+# mesh CanalTide moves via its CFrame) shifted to that tide's level, so extent matches the game.
+MIZU_BASE_Y = 30.0
+MIZU_TRIS = []
+for pm in PLACED:
+    if pm['name'] == 'mizu__a01':
+        _v = pm['verts']
+        MIZU_TRIS = [[list(_v[a]), list(_v[b]), list(_v[c])] for a, b, c in pm['tris']]
+TIDES = [('morning (LOW)', 6.0, [70,170,150], '#6fc', True),
+         ('afternoon+night', 31.0, [70,150,175], '#6cf', True),
+         ('dusk (HIGH)', 52.0, [90,120,210], '#89f', True)]
 for tname, ty, col, bd, on in TIDES:
-    layers.append({'key': f'tide_{tname.split("/")[0].split(" ")[0]}',
-                   'label': f'tide: {tname} y={ty:.0f}', 'tris': plane_quads(CANAL, ty),
+    _dy = ty - MIZU_BASE_Y
+    layers.append({'key': 'tide_' + re.sub(r'[^a-z0-9]+', '_', tname.lower()).strip('_'),
+                   'label': f'tide: {tname} y={ty:.0f} (mizu__a01 copy)',
+                   'tris': [[[p[0], p[1] + _dy, p[2]] for p in t] for t in MIZU_TRIS],
                    'color': col, 'alpha': 0.55, 'border': bd, 'on': on})
+
+# ---- fishing-sign (kanban) mesh loader, shared by the existing Queens sign AND the new canal-floor
+#      sign. Same real mesh the ISO patcher injects (game_data/fishsign/kanban.mds). Matches the GAME's
+#      mapinfo Y-rotation (CONFIRMED in-game once the format bug was fixed; the angle is negated vs the raw
+#      matrix): ry 0=south / 90=WEST / 180=north / 270=east.
+_KB = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "game_data", "fishsign", "kanban.mds"), "rb").read()
+_KB_VERTS, _KB_TRIS = read_verts(_KB, 0x80), read_tris(_KB, 0x80)
+def kanban_mesh(pos, ry):
+    th = math.radians(ry); c = math.cos(th); s = math.sin(th)
+    def P(v):
+        x, y, z = v[0], v[1], v[2]
+        return [x*c - z*s + pos[0], y + pos[1], x*s + z*c + pos[2]]
+    return [[P(_KB_VERTS[i]) for i in (a, b, c)] for a, b, c in _KB_TRIS]
+CANAL_SIGN_POS, CANAL_SIGN_RY = (800.0, 0.0, 0.0), 180   # DIAGNOSTIC: ry 180 = NORTH like QSIGN (IsoPatcher CANAL_SIGN_*)
+
+# ---- LOW-TIDE FISHING proposals (canal-lowtide-fishing-plan.md): carved Factory ladder on the
+#      south canal wall centred at x=705, + the canal-floor fishing sign under the bridge facing west.
+#      Ladder from tools/carve_ladder.py (donor e05a01 'hasigo1'); sign = the real kanban mesh.
+import carve_ladder
+layers.append({'key': 'ladder', 'label': "PROPOSED ladder (e05 'hasigo1' trimmed to 70)",
+               'tris': carve_ladder.placed_ladder_tris(),
+               'color': [220,220,230], 'alpha': 1.0, 'border': '#fff', 'on': True})
+layers.append({'key': 'newsign', 'label': 'PROPOSED canal-floor sign (real kanban, faces west)',
+               'tris': kanban_mesh(CANAL_SIGN_POS, CANAL_SIGN_RY),
+               'color': [230,180,90], 'alpha': 1.0, 'border': '#fc6', 'on': True})
 
 # ---- CUSTOM COLLISION BAKE — regrouped into the EXACT nodes the ISO bake writes (bscc.grouped_collision):
 #      all non-trigger tris of a frame are pooled and kd_split into <=100-poly nodes, so nearby polys share a
@@ -281,15 +316,7 @@ layers.append({'key': 'trigger', 'label': f'trigger ! (r{TRIG_R:.0f})', 'tris': 
                'color': [255,110,180], 'alpha': 0.9, 'border': '#f7c', 'on': False})
 
 # ---- fishing SIGN: the real kanban.mds mesh at its baked position, ry 180 (facing north) ----
-# Same source the ISO patcher injects (carved from the user's ISO into game_data/fishsign/; untracked).
-# Verts are LOCAL (origin-centred); the mapinfo places + rotates them, so we do the same here.
-_kb = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "game_data", "fishsign", "kanban.mds"), "rb").read()
-_sv = read_verts(_kb, 0x80)                  # kanban MDT is at 0x80
-def _place_sign(v):
-    th = math.radians(SIGN_RY); c = math.cos(th); s = math.sin(th)
-    x, y, z = v[0], v[1], v[2]
-    return [x*c + z*s + SIGN_POS[0], y + SIGN_POS[1], -x*s + z*c + SIGN_POS[2]]
-sign_mesh = [[_place_sign(_sv[i]) for i in (a, b, c)] for a, b, c in read_tris(_kb, 0x80)]
+sign_mesh = kanban_mesh(SIGN_POS, SIGN_RY)
 print(f"sign mesh: {len(sign_mesh)} tris at {SIGN_POS} ry{SIGN_RY}")
 
 layers.append({'key': 'sign', 'label': 'fishing sign (faces N)',
@@ -298,10 +325,14 @@ layers.append({'key': 'sign', 'label': 'fishing sign (faces N)',
 
 # ---- fishing-sign COLLISION: the single solid panel the ISO patcher bakes (BuildKanbanCollision).
 # Must match IsoPatcher.BuildKanbanCollision Box(-6.5, 6.5, 0, 16, -1, 2), placed like the sign (ry 180).
+def _ps(v):
+    th = math.radians(SIGN_RY); c = math.cos(th); s = math.sin(th)
+    x, y, z = v[0], v[1], v[2]
+    return [x*c - z*s + SIGN_POS[0], y + SIGN_POS[1], x*s + z*c + SIGN_POS[2]]
 def _box_tris(x0, x1, y0, y1, z0, z1):
     v = [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1],[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]]
     faces = [(0,1,2),(0,2,3),(4,6,5),(4,7,6),(0,4,5),(0,5,1),(3,2,6),(3,6,7),(0,3,7),(0,7,4),(1,5,6),(1,6,2)]
-    return [[_place_sign(v[a]), _place_sign(v[b]), _place_sign(v[c])] for a, b, c in faces]
+    return [[_ps(v[a]), _ps(v[b]), _ps(v[c])] for a, b, c in faces]
 sign_coll = _box_tris(-6.5, 6.5, 0, 16, -1, 2)
 print(f"sign collision: {len(sign_coll)} tris (single panel)")
 layers.append({'key': 'signcol', 'label': 'sign collision (kanban_a)',
@@ -448,6 +479,31 @@ for _bn in [n for n in _DIR if re.match(r'e03h\d\d$', n)]:
     _part['camtris'] = [[[q[0] - _cxm, q[1] - _my, q[2] - _czm] for q in t] for t in _t]
     _vgeo += len(_t)
 print(f"vanilla camera coll (_c): {len(_vcam_static)} static tris + {_vgeo} georama tris")
+
+# ---- LOD comparison layers (shared helper): buildings h01-h12 ship _0/_1/_2 (full/medium/low),
+#      trees t01/t02 ship _0/_2. One toggle per level, world-placed at the default-layout position;
+#      assets not in the default layout (h01, t02) line up in a showroom row outside the SW corner.
+from georama_parts import lod_layers
+_inst_of = {}
+for _o in GDEFAULT:
+    _inst_of.setdefault(_o['name'], []).append(_o)
+_lod = lod_layers('gedit/e03/scene.scn', r'e03[ht]\d', _inst_of)
+layers += _lod
+print(f"LOD compare: {len(_lod)} layers")
+
+# ---- toggle-panel folders (scene_viewer_html folder UI): folder master checkbox = whole-group
+#      grey-out without touching individual toggle states
+def _group_of(key):
+    if key in ('camcol', 'plycol', 'perimeter', 'invwalls', 'loadzones'): return 'Custom collision bake'
+    if key.startswith('van') or key == 'vcam_static': return 'Vanilla collision'
+    if key.startswith(('ws', 'tide_')) or key == 'water': return 'Water & tides'
+    if key in ('ladder', 'newsign'): return 'Low-tide fishing proposal'
+    if key.startswith('fc_') or key in ('trigger', 'sign', 'signcol'): return 'Fishing spot'
+    if key.startswith('cam'): return 'Camera debug'
+    if key.startswith('lod_'): return 'LOD compare (full/medium/low)'
+    return 'Scene meshes'
+for _lyr in layers:
+    _lyr.setdefault('group', _group_of(_lyr['key']))
 
 for _lyr in layers:               # start with everything toggled OFF
     _lyr['on'] = False

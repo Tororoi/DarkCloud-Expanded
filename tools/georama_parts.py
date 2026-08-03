@@ -4,11 +4,101 @@ editor. Buildings e03h*, roads e03r* (Queens); generalizes to any town's h*/r* s
 
 part_models(scene_rel, name_re) -> {part_name: {'tris':[[[x,y,z]*3]...], 'bbox':[minx..maxz]}}
   tris are LOCAL (sub-file origin), parent-chain accumulated + strict mdt_codec decode.
+
+lod_models(scene_rel, name_re) -> {part_name: {'0': tris, '1': tris, '2': tris}} for parts that ship
+  LOD variant meshes (<sub>_0=full, _1=medium, _2=low; Queens buildings have all three, trees _0/_2).
+  The sub-file's PTS directory lists `<sub>_X.mds` names in the same order as its MDS blocks
+  (verified against the inline off/size record of `_a` across all Queens subs), so variant k = k-th
+  MDS block. Parts with fewer than two LOD levels are omitted.
 """
 import re, struct
 import mdt_codec
 from extract_scene_mesh import load_scene, xform
 import scene_placed
+
+
+def _mds_tris(scn, mds):
+    nodes, wm = scene_placed._accum(scn, mds)
+    tris = []
+    for i, (nn, mo, par, mat) in enumerate(nodes):
+        if mo == 0:
+            continue
+        fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c+3] == b'MDT'), None)
+        if not fo:
+            continue
+        try:
+            m = mdt_codec.parse_mdt(scn, fo)
+        except Exception:
+            continue
+        M = wm(i)
+        wv = [xform(M, (p[0], p[1], p[2])) for p in m.pos]
+        for a, b, c in scene_placed._flatten(m):
+            tris.append([list(wv[a]), list(wv[b]), list(wv[c])])
+    return tris
+
+
+def lod_models(scene_rel, name_re):
+    scn = load_scene(scene_rel)
+    DIR = scene_placed._scndir(scn)
+    rx = re.compile(name_re)
+    out = {}
+    for sub in sorted(DIR):
+        if not rx.match(sub):
+            continue
+        off, size = DIR[sub]
+        head = scn[off:off + 0x200]
+        names = [m.group(1).decode() for m in
+                 re.finditer(re.escape(sub).encode() + rb'_([0-9a-z])\.mds\x00', head)]
+        blocks = [m.start() for m in re.finditer(rb'MDS\x00', scn[off:off + size])]
+        if len(names) != len(blocks):        # directory shape not understood -> don't guess
+            continue
+        lods = {}
+        for suf, bo in zip(names, blocks):
+            if suf in ('0', '1', '2'):
+                t = _mds_tris(scn, off + bo)
+                if t:
+                    lods[suf] = t
+        if len(lods) >= 2:                   # a lone _0 is just the normal mesh, not an LOD chain
+            out[sub] = lods
+    return out
+
+
+def lod_layers(scene_rel, name_re, instances=None, group='LOD compare (full/medium/low)',
+               showroom=(-500.0, -1000.0, -150.0)):
+    """Viewer layer dicts (scene_viewer_html schema) for every asset with LOD variant meshes:
+    one toggle per level (full/medium/low), world-placed at the given default-layout instances
+    ({sub: [{'x','y','z','rot'}]}). Assets without an instance line up in a showroom row at
+    (x0, z, step-x). Returns [] for towns whose data ships no LOD chains (all s-scenes; only the
+    five e-towns carry _1/_2) — callers can wire this unconditionally."""
+    import math
+    META = {'0': ('full', [200, 170, 120], '#db8'), '1': ('medium', [110, 200, 160], '#7da'),
+            '2': ('low', [230, 130, 120], '#e87')}
+    instances = instances or {}
+    sx, sz, step = showroom
+    out = []
+    lods = lod_models(scene_rel, name_re)
+    for sub in sorted(lods):
+        full = lods[sub].get('0') or next(iter(lods[sub].values()))
+        xs = [p[0] for t in full for p in t]; ys = [p[1] for t in full for p in t]
+        zs = [p[2] for t in full for p in t]
+        cxm = (min(xs) + max(xs)) / 2; czm = (min(zs) + max(zs)) / 2; my = min(ys)
+        insts, show = instances.get(sub), False
+        if not insts:
+            insts = [{'x': sx, 'y': 0.0, 'z': sz, 'rot': 0}]; sx += step; show = True
+        for lv in sorted(lods[sub]):
+            nm, col, bd = META[lv]
+            wt = []
+            for o in insts:
+                a = o['rot'] * math.pi / 2; ca = math.cos(a); sa = math.sin(a)
+                for t in lods[sub][lv]:
+                    wt.append([[(p[0]-cxm)*ca - (p[2]-czm)*sa + o['x'],
+                                p[1]-my + o['y'],
+                                (p[0]-cxm)*sa + (p[2]-czm)*ca + o['z']] for p in t])
+            out.append({'key': f'lod_{sub}_{lv}',
+                        'label': f'{sub} {nm} (_{lv})' + (' [showroom]' if show else ''),
+                        'tris': wt, 'color': col, 'alpha': 1.0, 'border': bd, 'on': False,
+                        'group': group})
+    return out
 
 
 def part_models(scene_rel, name_re):
