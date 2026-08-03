@@ -569,7 +569,9 @@ lwc1  $f8, 0x68($sp)          # h_e
 lui   $t0, 0x4000             # CLIMB_RISE (PutVal; max climb rise per frame — the instant snap-up made the
 mtc1  $t0, $f9                #   height SAWTOOTH when a grazing LOS flickered the gate near walls: snap up
 nop                           #   on visible frames, ease down on occluded ones)
-add.s $f9, $f8, $f9           # highest h the climb may reach this frame
+lwc1  $f3, 0x2d4($v1)         # LAST frame's APPLIED height — anchoring the cap to the eased h_e made the
+add.s $f9, $f3, $f9           #   ease-decay eat the rise (equilibrium ~12 units); anchored here the climb
+                              #   compounds CLIMB_RISE/frame to the full curve
 .word 0x460939e9             # min.s f7,f7,f9 — rate-limit the rise
 .word 0x460839E8             # max.s f7,f7,f8 — the climb may only RAISE the eye: on a tall-cliff descent the
                               #   curve (<=CLIMB_PEAK) sat far BELOW the eased height and the old unconditional
