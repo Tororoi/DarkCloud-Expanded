@@ -1219,7 +1219,7 @@ namespace Dark_Cloud_Improved_Version
             PutVal(478, CLIMB_RISE, nameof(CLIMB_RISE));   // climb rise rate cap
             PutVal(269, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
             PutVal(347, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
-            PutVal(559, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
+            PutVal(560, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
             PutVal(440, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
             PutVal(116, STICK_SCALE, nameof(STICK_SCALE));
             PutEase(108, 109, STICK_DZ2, nameof(STICK_DZ2));
