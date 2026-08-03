@@ -57,8 +57,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Log(string m) { if (Diagnostics) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[CanalTide] " + m); }
 
-        /// <summary>Queens fishing water level for the current time of day (afternoon 31 / morning+dusk 40 /
-        /// night 49). Pushed into the injected _LOAD_FISHING_DATA water arg at session setup.</summary>
+        /// <summary>Queens fishing water level for the current time of day (LOW = morning 6, MEDIUM =
+        /// afternoon + night 31, HIGH = dusk 52). Pushed into the injected _LOAD_FISHING_DATA water arg
+        /// at session setup.</summary>
         internal static float QueensWaterLevel() => TargetY(Fishing.GetCurrentTimeOfDay());
 
         internal static void Tick()
@@ -184,10 +185,12 @@ namespace Dark_Cloud_Improved_Version
 
         private static float TargetY(TimeOfDay tod) => tod switch
         {
-            TimeOfDay.Night   => 52f,
-            TimeOfDay.Morning => 40f,
-            TimeOfDay.Dusk    => 40f,
-            _                 => 31f,   // Afternoon (and any fallback): vanilla low
+            // 2026-08 low-tide-fishing chart: LOW = morning (canal floor walkable/fishable),
+            // MEDIUM = afternoon + night (vanilla 31), HIGH = dusk (arch crown underside is Y=60).
+            TimeOfDay.Night   => 31f,
+            TimeOfDay.Morning => 6f,
+            TimeOfDay.Dusk    => 52f,
+            _                 => 31f,   // Afternoon (and any fallback): vanilla
         };
     }
 }

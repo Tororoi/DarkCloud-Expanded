@@ -691,6 +691,18 @@ def _resolve(ref):
 layers = [{'key': key, 'label': lb, 'tris': _resolve(src),
            'color': json.loads(c) if isinstance(c, str) else c, 'alpha': a, 'border': lc,
            'on': key in _on} for key, lb, src, c, a, lc in LAY]
+# toggle-panel folders (scene_viewer_html folder UI)
+_GROUP = {**{k: 'Water & foam' for k in ('foamouter', 'foamobj', 'watersurf')},
+          **{k: 'Custom collision drafts' for k in ('crock', 'cstilt', 'cplant', 'cbuild', 'cperim')},
+          **{k: 'Vanilla collision' for k in ('vfloor', 'vwall', 'vmid', 'vcut')},
+          **{k: 'Ground grid dump' for k in ('gridbot', 'gridland')},
+          **{k: 'Fishing spot' for k in ('sign', 'fishpoint')}}
+for L in layers:
+    L['group'] = _GROUP.get(L['key'], 'Scene meshes')
+# LOD comparison toggles (shared helper). Scanned: s04 ships NO _1/_2 variant meshes (only the five
+# e-towns carry LOD chains), so this is empty today — the folder auto-appears if the data ever has them.
+from georama_parts import lod_layers
+layers += lod_layers('gedit/s04/scene.scn', r's04[a-z]\d')
 html = build_html(
     title="Brownboo COMPLETE",
     layers=layers, node_labels=nodelabels, points=fishbox, point_labels=fishlabels,

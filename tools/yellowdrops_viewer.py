@@ -123,6 +123,16 @@ point_labels = [
     [[0, WATER_Y, 0], "0,0"],
 ]
 
+# toggle-panel folders (scene_viewer_html folder UI)
+for L in layers:
+    L['group'] = ('Water' if L['key'] in ('watersurf', 'liquidbottom')
+                  else 'Fishing spot' if L['key'] == 'trigger' else 'Scene meshes')
+
+# LOD comparison toggles (shared helper). Scanned: s13 ships NO _1/_2 variant meshes (only the five
+# e-towns carry LOD chains), so this is empty today — the folder auto-appears if the data ever has them.
+from georama_parts import lod_layers
+layers += lod_layers('gedit/s13/scene.scn', r's13\d\d')
+
 html = build_html(
     title="Yellow Drops (s13) — fishing placement + collision",
     layers=layers, node_labels=nodelabels, points=points, point_labels=point_labels,
