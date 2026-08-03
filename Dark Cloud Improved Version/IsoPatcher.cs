@@ -1150,11 +1150,12 @@ namespace Dark_Cloud_Improved_Version
             const float SLIDE_GAIN = 0.03125f; // reacquisition slide: fraction of the tangent-projected restoring pull applied per frame (0 = off; PutVal steps 0.0625/0.125/0.25)
             const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
             const float H_FALL_RATE    = 2f;    // max WORLD-space height drop per frame (absolute descent bound — a falling player outruns the camera)
-            const float WARP_BREAK     = 4000f; // world-y discontinuity beyond which the descent bound is skipped (true warps only —
+            const float WARP_BREAK     = 400f; // world-y discontinuity beyond which the descent bound is skipped (true warps only —
             // the eased desired-height drops ~30% of the offset per frame, so a LONG fall legitimately opens a
             // gap of hundreds of units; 400 misread that as a warp and released the bound mid-fall)
             const float GROUND_GLIDE_K = 0.03125f; // pinned+occluded ground glide: boom fraction pulled toward the player per frame
             const float GLIDE_MIN_DIST = 12f;   // the ground glide never pulls the boom closer than this
+            const float DESCENT_HOLD   = 15f;   // height excess above rest that freezes OUTWARD dist recovery (kills the lip-crossover bounce)
             // Assembled template (378 words) from tools/town_camera_collision.s — pull-in + ceiling-duck + stick, one-sided _c, no climb. The KNOBS are the consts above, NOT the hex — they get
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
@@ -1207,33 +1208,34 @@ namespace Dark_Cloud_Improved_Version
             }
             float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
             PutVal(142, BASE_DIST, nameof(BASE_DIST));   // resting dist target
-            PutVal(433, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
-            PutVal(450, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
+            PutVal(434, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
+            PutVal(451, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
             PutVal(145, REST_H, nameof(REST_H));   // height target base
-            PutVal(468, REST_H, nameof(REST_H));   // climb-curve base
+            PutVal(469, REST_H, nameof(REST_H));   // climb-curve base
             PutVal(41, CEIL_DIST, nameof(CEIL_DIST));
             PutVal(153, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
             PutVal(166, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
-            PutVal(268, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
-            PutVal(346, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
-            PutVal(553, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
-            PutVal(439, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
+            PutVal(269, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
+            PutVal(347, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
+            PutVal(554, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
+            PutVal(440, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
             PutVal(116, STICK_SCALE, nameof(STICK_SCALE));
             PutEase(108, 109, STICK_DZ2, nameof(STICK_DZ2));
             PutEase(127, 128, STICK_EASE, nameof(STICK_EASE));
-            PutEase(178, 179, HEIGHT_EASE, nameof(HEIGHT_EASE));
-            PutEase(194, 195, DIST_EASE, nameof(DIST_EASE));
-            PutEase(371, 372, SLIDE_BIAS, nameof(SLIDE_BIAS));
-            PutEase(420, 421, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
-            PutEase(463, 464, CLIMB_K, nameof(CLIMB_K));
+            PutEase(179, 180, HEIGHT_EASE, nameof(HEIGHT_EASE));
+            PutEase(195, 196, DIST_EASE, nameof(DIST_EASE));
+            PutEase(372, 373, SLIDE_BIAS, nameof(SLIDE_BIAS));
+            PutEase(421, 422, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
+            PutEase(464, 465, CLIMB_K, nameof(CLIMB_K));
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
             Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
             uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
             PutValIn(heightFn, 11, WARP_BREAK, nameof(WARP_BREAK));
             PutValIn(heightFn, 18, H_FALL_RATE, nameof(H_FALL_RATE));
-            PutValIn(heightFn, 37, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
-            PutValIn(heightFn, 42, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
+            PutValIn(heightFn, 36, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
+            PutValIn(heightFn, 41, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
+            PutValIn(heightFn, 49, DESCENT_HOLD, nameof(DESCENT_HOLD));
             for (int i = 0; i < heightFn.Length; i++)
                 WrU32(fs, ElfOff(0x0027D090 + (uint)(i * 4)), heightFn[i]);
             WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838

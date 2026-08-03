@@ -206,6 +206,7 @@ mtc1  $t0, $f7
 nop
 add.s $f6, $f6, $f7           # height_min = (groundY − ref.y) + MIN_GROUND_CLEAR
 swc1  $f6, 0x8c($sp)          # stash h_min: the sweep's post-clamp re-floor needs it (inverted-slope contact)
+swc1  $f5, 0x94($sp)          # stash the pre-clamp rest target (REST_H + stick) for the height sub's descent hold
 .word 0x46062834             # c.OLT.s f5,f6 : height_target < height_min ?
 nop
 bc1f  gclampok
@@ -280,7 +281,8 @@ addiu $t1, $zero, 1           #   point INTO the persisted sweep origin every oc
 addu  $t2, $zero, $zero       # skip=0
 jal   0x149d50
 nop
-sw    $v0, 0x98($sp)          # occlusion flag (raw; hitOut @0x40 is scribbled but the sweep rewrites it)
+sw    $v0, 0x54($sp)          # occlusion flag (raw hit idx; 0x54 free since the CHV passthrough left —
+                              #   the old 0x98 slot is REUSED by the corner-verify spill = garbage flag)
 lw    $v1, 0x58($sp)          # reload camera ptr (CheckHit tramples v1 — the sskip path needs it fresh)
 sw    $zero, 0x3c($sp)
 # E_prev @0x14C210 (16-aligned quad, w @+0xC). All-zero triple = never stored (patch zero-inits) -> skip.
@@ -540,7 +542,7 @@ lui   $t0, 0x42a0             # BASE_DIST — intrusion reference
 mtc1  $t0, $f7
 nop
 sub.s $f7, $f7, $f0           # intrusion = BASE − d'
-lw    $t0, 0x98($sp)          # occlusion (raw LOS hit index; read before the verify spill reuses 0x98)
+lw    $t0, 0x54($sp)          # occlusion (raw LOS hit index)
 bltz  $t0, hclamp0            # player VISIBLE → keep the real intrusion
 nop
 mtc1  $zero, $f7              # OCCLUDED → intrusion := 0 → no rise (climb only when clear)
