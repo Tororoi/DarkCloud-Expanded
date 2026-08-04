@@ -322,6 +322,24 @@ namespace Dark_Cloud_Improved_Version
         /// read exactly 0.000 through a whole session of the player visibly turning.
         /// </summary>
         internal const int CharaRotation = 0x60;
+
+        /// <summary>The player's TOWN world position (x, y, z), via <see cref="CharaPtr"/> — the
+        /// pointer-chase GeoramaProbe already validated live. Pattern moved here so every feature that
+        /// needs the town player's world position (CustomFishingSpot, CanalTide, …) shares ONE correct
+        /// read instead of re-deriving it (or worse, reaching for <c>Player.positionX/Y/Z</c> —
+        /// GeoramaProbe's own doc comment on <see cref="CharaPosition"/> explains why those mislead: a
+        /// live reading showed the triple tracking EDITAREA base heights, not the player).
+        /// ⚠ This is TOWN-ONLY. Do not reuse in a dungeon context (see <c>Addresses.dunPositionX/Y/Z</c>
+        /// for that — a DIFFERENT global, named for exactly this reason).</summary>
+        internal static bool TryReadPlayerPos(out float x, out float y, out float z)
+        {
+            x = y = z = 0f;
+            uint p = Memory.ReadUInt(CharaPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return false;
+            long c = Memory.ToMmu(p) + CharaPosition;
+            x = Memory.ReadFloat(c); y = Memory.ReadFloat(c + 4); z = Memory.ReadFloat(c + 8);
+            return true;
+        }
     }
 
     /// <summary>
@@ -558,7 +576,7 @@ namespace Dark_Cloud_Improved_Version
     ///  (1) ONCE, in the COLD window (ApplyNewChanges, before any fishing), rewrite the six sites in place to
     ///      `lui $reg,0x01FB; lw $reg,0x4000($reg)` — i.e. LOAD the bobber's point address from a mod global
     ///      at game-addr 0x01FB4000 instead of computing point[18]. Rewriting cold code is safe.
-    ///  (2) Per town, a pure DATA write to that global selects the anchor: point[18] (vanilla) or point[21]
+    ///  (2) Per town, a pure DATA write to that global selects the anchor: point[18] (vanilla) or point[20]
     ///      (shallow). No further code writes, so no recompiler hazard.
     ///
     /// $2 is throwaway at every site (recomputed per address), so clobbering it is safe. See
@@ -567,8 +585,17 @@ namespace Dark_Cloud_Improved_Version
     internal static class FishLineShallow
     {
         internal const long BobberPtr    = 0x21FB4000;   // mod view of the global; game reads game-addr 0x01FB4000
+        // Anchor address for point index i = PointVanilla + (i-18)*0x10 (the line's points are 16B vec4s).
+        // ⚠ Prose around the codebase used to call the shallow anchor "point 21" — 0x5F70 is point **20**
+        // (0x5F80 would be 21). These addresses are authoritative.
         internal const uint PointVanilla = 0x001D55F50;  // point[18] — the vanilla bobber anchor
-        internal const uint PointShallow = 0x001D55F70;  // point[20] — shallow anchor
+        internal const uint PointShallow = 0x001D55F70;  // point[20] — shallow anchor (Brownboo)
+        internal const uint PointStride  = 0x10;         // per-point stride, for picking another index
+
+        /// <summary>Address of main-line point[<paramref name="index"/>], for anchoring the bobber anywhere
+        /// along the line. Valid range is 18..22 — the HOOK lives at point 23, so the anchor must stay above
+        /// it (fewer points between anchor and hook = shallower resting hook).</summary>
+        internal static uint PointAt(int index) => PointVanilla + (uint)((index - 18) * (int)PointStride);
 
         // Line LENGTH lever (separate from the bobber anchor): distp = the per-segment rest length of the
         // 24-point Verlet line, a plain .data float read every frame by FishLineInit/FishLineStep — a pure

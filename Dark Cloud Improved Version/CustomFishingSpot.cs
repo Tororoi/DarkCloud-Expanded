@@ -107,6 +107,13 @@ namespace Dark_Cloud_Improved_Version
             /// stances. Defaults to the primary fishing label 400.</summary>
             internal readonly int LabelId;
 
+            /// <summary>Camera height while fishing here. Vanilla hard-codes 40 — a raised, look-down-into-the-
+            /// water angle that suits casting from a bank. A spot where the player stands IN the water (the
+            /// Queens canal floor at low tide) wants the ordinary town height (5) instead, because the downward
+            /// view is counterproductive there. Fed to the patched SetHeight site via
+            /// <see cref="CodeCaves.Mailbox.FishCamHeight"/> (IsoPatcher.PatchFishingCameraHeight).</summary>
+            internal readonly float CameraHeight;
+
             internal Spot(int mapNo, string name, int areaId,
                           float x1, float z1, float x2, float z2, float water, float ground,
                           float tx, float ty, float tz, float radius,
@@ -114,8 +121,10 @@ namespace Dark_Cloud_Improved_Version
                           float facing = float.NaN, bool diagSkipModel = false,
                           float fx1 = float.NaN, float fz1 = float.NaN, float fx2 = float.NaN,
                           float fz2 = float.NaN, float fishDepth = float.NaN,
-                          float lineScale = float.NaN, bool shallowBobber = false, int labelId = FishingLabelId)
+                          float lineScale = float.NaN, bool shallowBobber = false, int labelId = FishingLabelId,
+                          float cameraHeight = VanillaFishCamHeight)
             {
+                CameraHeight = cameraHeight;
                 MapNo = mapNo; Name = name; AreaId = areaId;
                 X1 = x1; Z1 = z1; X2 = x2; Z2 = z2; Water = water; Ground = ground;
                 TrigX = tx; TrigY = ty; TrigZ = tz; Radius = radius;
@@ -148,22 +157,32 @@ namespace Dark_Cloud_Improved_Version
                      -240f, -100f, 900f, 150f, water: 31f, ground: 10f,
                      tx: 250f, ty: 70f, tz: -70f, radius: 10f,
                      sx: 250f, sy: 70f, sz: -70f, facing: 0f,            // stance: face +Z (south) toward the water
-                     // The canal tide sits low under the rod (afternoon 31), so STRETCH the line 1.25x (distp
-                     // 1.667->2.083) to reach the surface — keeps the vanilla bobber anchor (no ShallowBobber).
-                     // That drops the hook from ~WaterLevel-8.3 to ~-10.4 and the bait (hook-3) to ~-13.4, so
-                     // lower the fish to match: WaterLevel-14.08 keeps the vanilla fish-to-bait gap (~0.67) → bites.
+                     // ⚠ lineScale here is SUPERSEDED for Queens — LineConfig resolves length AND anchor from
+                     // the TIDE (medium/high = anchor 20 @1.5x, low = anchor 21 @1x). Kept as the historical
+                     // value: 1.25x with the vanilla anchor 18 gave hook ~WaterLevel-10.4, bait -13.4, and
+                     // fishDepth 14.08 held the vanilla fish-to-bait gap (~0.67) → bites. The new anchor/length
+                     // move the hook, so fishDepth is PENDING a logged hook-depth capture (fishDepth = hang + 3.68).
                      lineScale: 1.25f, fishDepth: 14.08f),
 
-            // Queens canal FLOOR (low tide) — the canal-floor sign under the eastern bridge (its own baked
-            // sign part `kanbanc` + label 401). SAME fish area (6) as the north-bank spot, but the player
-            // fishes standing on the exposed canal floor (y=0) instead of teleporting up to the bank. The
-            // canal is only reachable at low tide (via the ladder), so this spot is inherently shallow.
-            // ⚠ stance/water/depth/facing are initial guesses — tune in-game against the exposed low-tide floor.
+            // Queens canal FLOOR (low tide) — the canal-floor sign (its own baked part `kanbanc` + label 401).
+            // Its OWN per-sign script from the shared BuildFishingBytecode builder: same fish area (6) and same
+            // tide-driven water as the north-bank spot, but with the canal-floor STANCE baked in, so triggering
+            // it fishes from the floor instead of teleporting to the bank. Both re-bake together on a tide change.
+            // ⚠ stance/depth/facing are initial guesses — tune in-game against the exposed low-tide floor.
             new Spot(2, "Queens canal floor", 6,
-                     -240f, -100f, 900f, 150f, water: 6f, ground: 0f,
+                     -240f, -100f, 900f, 150f, water: 8f, ground: 0f,
                      tx: 794f, ty: 0f, tz: 0f, radius: 10f,
-                     sx: 794f, sy: 0f, sz: 0f, facing: 0f,             // stand on the canal floor by the sign
-                     shallowBobber: true, fishDepth: 4f, labelId: 401),
+                     // stand on the canal floor and FACE EAST (yaw pi/2 -> forward (sin,cos)=(1,0)=+X) toward
+                     // the canal sign at x=800. Water tracks the tide like the north spot (both in sync), and at
+                     // low tide it is low (8), so fish sit just above the floor, not up
+                     // at the flooded-tide surface.
+                     sx: 794f, sy: 0f, sz: 0f, facing: 1.5708f,
+                     // ⚠ shallowBobber is SUPERSEDED for Queens (LineConfig picks the anchor by tide — this spot
+                     // is only reachable at LOW tide, so it gets anchor 21 @1x). fishDepth PENDING the capture.
+                     shallowBobber: true, fishDepth: 4f, labelId: 401,   // its own label -> deterministic canal stance
+                     // standing IN the canal: drop the raised fishing angle (40) — full town height (5) felt
+                     // too cramped by eye, 20 is the tuned balance.
+                     cameraHeight: CanalWadingCamHeight),
 
             // Brownboo: the pond (static WATER s04w01). WATER_SURFACE centred on the origin, ±120, HEIGHT 0.
             // Stance at the +X edge facing the water: (74, 10, -20), yaw -1.639 — forward (-1.00, -0.07).
@@ -200,9 +219,9 @@ namespace Dark_Cloud_Improved_Version
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
                      sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
-                     shallowBobber: true, // Brownboo raises the hook via the bobber-anchor toggle (point 21), NOT a line stretch
+                     shallowBobber: true, // Brownboo raises the hook via the bobber-anchor toggle (point 20), NOT a line stretch
                      fishDepth: 7.6f      // shallow pond: fish at WaterLevel-7.6 (write the CFrame translation Y @ fish+0x1264, the authoritative depth). And the bobber anchor
-                                          // is toggled to point 21 (data write over the cold FishLineStep patch) so
+                                          // is toggled to point 20 (data write over the cold FishLineStep patch) so
                                           // the hook rises to ~-3 / bait ~-6 to reach them. All data-only —
                                           // patching hot fishing code crashes PCSX2 (recompiler). Line length
                                           // (cast reach) unchanged.
@@ -250,6 +269,14 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private const float InteractRadius = 10f;
 
+        /// <summary>The vanilla fishing camera height (the literal <c>SetHeight(40.0)</c> in EdMoveChara that
+        /// IsoPatcher redirects to a data word). Default for every spot that casts from a bank.</summary>
+        internal const float VanillaFishCamHeight = 40f;
+        /// <summary>Canal-floor fishing camera height. The full town walking height (5) was tried and felt
+        /// too low/cramped while wading; 20 struck the right balance — still much lower than the vanilla
+        /// look-down angle (40), but with enough height to see around while standing in the water.</summary>
+        internal const float CanalWadingCamHeight = 20f;
+
         /// <summary>
         /// Labels that must NOT be hijacked.
         ///
@@ -282,22 +309,27 @@ namespace Dark_Cloud_Improved_Version
 
         private static int _installedMap = -1;
 
-        // Location of the installed fishing bytecode, so CanalTide can re-bake just its water arg on a tide
-        // change (see RebuildFishingScript). 0 = not installed.
+        // Location of the installed fishing bytecode, so it can be re-baked in place on a tide change. 0 = not
+        // installed. _fishStb also guards the re-bake (stb-moved check).
         private static long _fishStb;
         private static int _fishCodeOff, _fishEnd, _fishMenuCbRel;
+        // EVERY installed fishing script for the current town — Queens has TWO (north-bank label 400 +
+        // canal-floor label 401), each its OWN per-sign script from the shared BuildFishingBytecode builder,
+        // differing only in stance. Re-baked together on a tide change so both track the same tide.
+        private static readonly System.Collections.Generic.List<(Spot spot, int codeOff, int end)> _tideScripts = new();
 
-        /// <summary>Re-write ONLY the fishing bytecode in place so its baked water level picks up the current
-        /// tide (BuildFishingBytecode re-reads <see cref="CanalTide.QueensWaterLevel"/>). Skips itself during a
-        /// live session (never rewrite a running script) and if the town's stb has moved (a rebuild — the
-        /// install path handles that). Queens only; no labels or event points are touched.</summary>
+        /// <summary>Re-write the fishing bytecode of EVERY installed spot in place so its baked water level picks
+        /// up the current tide (BuildFishingBytecode re-reads <see cref="CanalTide.QueensWaterLevel"/>). Skips
+        /// itself during a live session (never rewrite a running script) and if the town's stb has moved (a
+        /// rebuild — the install path handles that). Queens only; no labels or event points are touched.</summary>
         internal static void RebuildFishingScript()
         {
             if (_installedMap != CanalTide.QueensMapNo || _fishStb == 0 || InFishingWindow) return;
             long stb = TownScript.Base();
             if (stb == 0 || stb != _fishStb) return;
-            WriteScript(stb, _fishCodeOff, _fishEnd, BuildFishingBytecode(_spot, _fishMenuCbRel),
-                        "re-bake fishing water level for the current tide");
+            foreach (var (spot, codeOff, end) in _tideScripts)
+                WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, _fishMenuCbRel),
+                            $"re-bake '{spot.Name}' water level for the current tide");
         }
         private static int _lastSeenMap = int.MinValue;
         private static int _settleTicks;
@@ -360,13 +392,44 @@ namespace Dark_Cloud_Improved_Version
             Log("shallow-line: FishLineStep bobber anchor now reads the data global (cold patch installed)");
         }
 
-        /// <summary>Per-town data toggle: bobber at point 21 (shallow) or point 18 (vanilla). Safe any time —
+        /// <summary>Per-town data toggle: bobber at point 20 (shallow) or point 18 (vanilla). Safe any time —
         /// the cold patch already made FishLineStep read this global every frame.</summary>
         private static void SetShallowLine(bool shallow)
         {
             if (!_shallowLineInstalled) return;
             Memory.WriteUInt(FishLineShallow.BobberPtr,
                              shallow ? FishLineShallow.PointShallow : FishLineShallow.PointVanilla);
+        }
+
+        /// <summary>Anchor the bobber at an explicit main-line point index (18..22). Same data global and the
+        /// same recompiler safety as <see cref="SetShallowLine"/>; used where the anchor is chosen per TIDE
+        /// rather than per town.</summary>
+        private static void SetBobberAnchor(int pointIndex)
+        {
+            if (!_shallowLineInstalled) return;
+            Memory.WriteUInt(FishLineShallow.BobberPtr, FishLineShallow.PointAt(pointIndex));
+        }
+
+        // ── Queens: line length + bobber anchor vary by TIDE ─────────────────────────────────────────────
+        // The canal is ONE body of water fished two ways, and the geometry differs hugely between tides: at
+        // medium/high you cast DOWN from the north bank onto a deep column; at low tide you stand ON the
+        // exposed floor in ~8 units of water. So both line levers are resolved from the TIDE, not the spot.
+        //
+        // Resting hook depth = how much line hangs below the bobber — set by the anchor point (fewer points
+        // between anchor and hook 23 = shallower) and scaled by the per-segment rest length (lineScale).
+        // ⚠ CAPTURE THESE: log the resting hook depth in each tide, then set the matching fish depths via
+        // fishDepth = hangDepth + 3.68. Fish depths are deliberately LEFT ALONE until that capture.
+        private const int   QueensAnchorNormal = 20,   QueensAnchorLow = 21;
+        private const float QueensLineNormal   = 1.35f, QueensLineLow   = 1.0f;   // 1.5x measured too long in-game
+
+        /// <summary>Fishing-line config for a spot: Queens resolves by tide, every other town keeps using the
+        /// spot's own fields (Brownboo stays anchor 20 @1x, Yellow Drops vanilla).</summary>
+        private static (float lineScale, int anchor) LineConfig(Spot s)
+        {
+            if (s.MapNo != CanalTide.QueensMapNo)
+                return (s.HasLineScale ? s.LineScale : 1f, s.ShallowBobber ? 20 : 18);
+            return CanalTide.QueensLowTide() ? (QueensLineLow, QueensAnchorLow)
+                                             : (QueensLineNormal, QueensAnchorNormal);
         }
 
         /// <summary>Move the spawned fish to WaterLevel-FishDepth by writing their depth directly (data only) —
@@ -407,6 +470,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!Enabled) return;
+
+            PinFishCamHeight();   // keep the patched SetHeight site fed (per-spot fishing camera height)
 
             InstallShallowLinePatch();   // idempotent retry: lands the cold FishLineStep patch once the game's
                                          // code is present (ApplyNewChanges may fire before it is), before fishing
@@ -533,9 +598,46 @@ namespace Dark_Cloud_Improved_Version
         // triggered, so the nearest StandX identifies it. Drives the per-spot depth / line / bobber below so
         // the canal fishes shallow while the north bank keeps its stretched line. Single-spot towns → _spot.
         private static Spot _active;
+        private static float _lastCamH = float.NaN;
+
+        /// <summary>Feed the patched fishing-camera SetHeight site (IsoPatcher.PatchFishingCameraHeight turned
+        /// its hard-coded 40 into a read of <see cref="CodeCaves.Mailbox.FishCamHeight"/>).
+        ///
+        /// The patched instruction runs every frame of every fishing session in EVERY town — including the
+        /// vanilla ones this class never installs into — so this must ALWAYS hold a sane value, never 0. Away
+        /// from a custom spot it is the vanilla 40; at a custom spot it is that spot's height, chosen by
+        /// proximity BEFORE the session starts (so there is no first-frame pop) and pinned to the spot actually
+        /// being fished once one is live. Only written on change.</summary>
+        /// <summary>Seed the fishing camera-height word to the vanilla 40 at mod start. The ISO patch makes the
+        /// engine READ this word every frame of every fishing session — including vanilla towns and even when
+        /// <see cref="Enabled"/> is off — so it must be valid before anything can fish, not just once a custom
+        /// spot installs.</summary>
+        internal static void SeedFishCamHeight()
+        {
+            Memory.WriteFloat(CodeCaves.Mailbox.FishCamHeight, VanillaFishCamHeight);
+            _lastCamH = VanillaFishCamHeight;
+        }
+
+        private static void PinFishCamHeight()
+        {
+            float h = VanillaFishCamHeight;
+            if (_installedMap >= 0 && _spot.MapNo == _installedMap)
+                h = (InFishingWindow ? _active : ActiveSpot()).CameraHeight;
+            if (float.IsNaN(h) || h <= 0f) h = VanillaFishCamHeight;   // never let a bad spot value blank the camera
+            if (!float.IsNaN(_lastCamH) && Math.Abs(_lastCamH - h) < 0.01f) return;
+            Memory.WriteFloat(CodeCaves.Mailbox.FishCamHeight, h);
+            _lastCamH = h;
+        }
+
         private static Spot ActiveSpot()
         {
-            float px = Memory.ReadFloat(0x21EA1D30);   // active-character CCharacter (0x21EA1D20) world X (+0x10)
+            // ⚠ FIXED 2026-08: this used to read guest 0x21EA1D30 — Addresses.dunPositionX, the DUNGEON
+            // player-position global (its own name says so). In town that address is unrelated data, so
+            // every proximity pick here silently always won by whichever spot happened to sort first —
+            // which is exactly why the canal sign kept resolving to the north-bank spot's name/stance no
+            // matter where the player actually stood. EditLoop.TryReadPlayerPos is the TOWN-correct read
+            // (GeoramaProbe-verified, via the CCharacter CFrame pointer, not a loose position global).
+            if (!EditLoop.TryReadPlayerPos(out float px, out _, out _)) return _spot;
             Spot best = _spot; float bestD = float.MaxValue; int hits = 0;
             foreach (var s in Spots)
             {
@@ -611,16 +713,18 @@ namespace Dark_Cloud_Improved_Version
             // its water arg (BuildFishingBytecode re-reads CanalTide.QueensWaterLevel) without touching the
             // labels or the event point.
             _fishStb = stb; _fishCodeOff = codeOff; _fishEnd = end; _fishMenuCbRel = menuCbRel;
+            _tideScripts.Clear();
+            _tideScripts.Add((spot, codeOff, end));   // primary; secondaries (Queens canal) added in the loop below
 
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingExitLabel, BuildExitBytecode(spot, menuCbRel),
                                $"restore {NormalModel} + re-place player + _EXIT_FISHING   [Circle = leave]");
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingBaitLabel, BuildBaitBytecode(),
                                $"_GOTO_CHANGE_ESA + load the chosen bait   [Square = bait menu]");
 
-            // SECONDARY spots on the same map: a town can host several baked fishing signs, each on its own
-            // label + stance (Queens: north-bank 400 + canal-floor 401). They share this town's menu/exit/bait
-            // (just installed) and differ only in their fishing script (stance/water/depth). Install each one's
-            // script into its own baked spare label. (The primary spot above is the town's first Spots entry.)
+            // SECONDARY spots on the same map (Queens canal floor, label 401): each is its OWN per-sign script
+            // from the SAME BuildFishingBytecode builder — same fishing logic, just its own stance/depth. They
+            // share this town's menu/exit/bait (just installed) and go into their own baked spare label, so
+            // triggering either sign runs a script with the correct stance baked in — no runtime re-position.
             foreach (var extra in Spots)
             {
                 if (extra.MapNo != spot.MapNo || extra.LabelId == spot.LabelId) continue;
@@ -628,7 +732,8 @@ namespace Dark_Cloud_Improved_Version
                 if (el == null) { Log($"   secondary spot '{extra.Name}': no spare label {extra.LabelId} — skipped"); continue; }
                 Memory.WriteInt(stb + el.Entry, extra.LabelId);
                 WriteScript(stb, el.Off, eEnd, BuildFishingBytecode(extra, menuCbRel),
-                            $"secondary fishing spot '{extra.Name}' (area={extra.AreaId}, water={extra.Water}, stance)");
+                            $"secondary fishing spot '{extra.Name}' (area={extra.AreaId}, stance {extra.StandX},{extra.StandY},{extra.StandZ})");
+                _tideScripts.Add((extra, el.Off, eEnd));   // re-baked with the primary on every tide change
                 Log($"   secondary spot '{extra.Name}' installed at label {extra.LabelId} (code @+0x{el.Off:X})");
             }
 
@@ -643,10 +748,11 @@ namespace Dark_Cloud_Improved_Version
             _spot = spot;
             _active = spot;   // default until a session pins the actually-fished spot (ActiveSpot)
 
-            // Shallow hook (data-only): point the cold-patched bobber anchor at point 21 for spots that ask
-            // for it (Brownboo). Queens lowers its fish + stretches its line instead, keeping the vanilla anchor.
-            // The fish are moved to match on the fishing-window open (ApplyShallowFishDepth), once they've spawned.
-            SetShallowLine(spot.ShallowBobber);
+            // Bobber anchor (data-only): set it up front from the same resolver the session start uses, so the
+            // line is already right if a session begins before the next tick. Brownboo asks for point 20;
+            // Queens resolves by TIDE (LineConfig). Fish are moved to match on the fishing-window open
+            // (ApplyShallowFishDepth) once they've spawned.
+            SetBobberAnchor(LineConfig(spot).anchor);
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
@@ -1448,9 +1554,11 @@ namespace Dark_Cloud_Improved_Version
             w.PushFloat(s.Z1);
             w.PushFloat(s.X2);
             w.PushFloat(s.Z2);
-            // Queens: the canal water level follows the day/night clock (CanalTide); everywhere else it is the
-            // spot's fixed height. Fish seed at WaterLevel-depth and the bobber rides it, so this shifts the
-            // whole session up/down with the tide.
+            // Queens (both the north-bank AND canal-floor spots): the water level follows the day/night clock
+            // (CanalTide) so the two stay in sync — the SAME canal surface, just fished from the bank (casting
+            // down) or from the exposed floor at low tide. RebuildFishingScript re-bakes EVERY installed script
+            // on a tide change, so the canal script tracks the tide too (not frozen at its install-time level).
+            // Everywhere else: the spot's fixed height.
             float water = s.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : s.Water;
             w.PushFloat(water);
             w.PushFloat(s.Ground);
@@ -1840,10 +1948,15 @@ namespace Dark_Cloud_Improved_Version
 
             if (live && !_fishingWasLive)
             {
-                // Which sign did the player trigger? Pin it for this session and set its bobber anchor (the
-                // canal spot fishes shallow, the north bank keeps the vanilla anchor + stretched line).
+                // Which sign did the player trigger? Pin it for this session, then set the line config. Queens
+                // resolves BOTH levers from the tide (LineConfig): medium/high = anchor 20 @1.5x, low = anchor
+                // 21 @1x. Other towns keep their per-spot values. The tide cannot change mid-session, so this
+                // one resolution holds for the whole session.
                 _active = ActiveSpot();
-                SetShallowLine(_active.ShallowBobber);
+                var (lineScale, anchor) = LineConfig(_active);
+                SetBobberAnchor(anchor);
+                Log($"line config for '{_active.Name}': anchor point {anchor}, line {lineScale:0.##}x " +
+                    $"(tide level {(_active.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : _active.Water):0.#})");
 
                 // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
                 // raycast honours: player movement (its own collision system) still keeps you on the boardwalk,
@@ -1883,9 +1996,11 @@ namespace Dark_Cloud_Improved_Version
             // Line LENGTH (Queens): stretch the shared Verlet rest-length while this spot is live so the line
             // reaches the low canal, and restore vanilla the moment the session ends. distp is read every frame
             // (data-only, recompiler-safe), so pin it here rather than as a one-shot.
-            bool wantStretch = live && _active.HasLineScale;
+            // Length comes from the same tide-resolved config as the anchor (Queens) or the spot (elsewhere).
+            float liveScale = live ? LineConfig(_active).lineScale : 1f;
+            bool wantStretch = live && Math.Abs(liveScale - 1f) > 0.001f;
             if (wantStretch)
-                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * _active.LineScale);
+                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * liveScale);
             else if (_distpScaled)
                 Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp);
             _distpScaled = wantStretch;
