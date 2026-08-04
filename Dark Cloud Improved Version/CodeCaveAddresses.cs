@@ -98,8 +98,17 @@ namespace Dark_Cloud_Improved_Version
             /// Also gates the fire-raster tuning patches (sprite size / dist gate / distortion amplitude).</summary>
             internal const long MirageSceneGate = Base + 0x38;
 
+            /// <summary>FISHING CAMERA HEIGHT (float). <c>EdMoveChara</c> hard-codes <c>SetHeight(40.0)</c> for
+            /// fishing (`lui $2,0x4220` @0x16C2DC); <see cref="IsoPatcher"/>'s PatchFishingCameraHeight rewrites
+            /// those two instructions to load this word instead, so the height becomes per-spot data. 40 = the
+            /// vanilla fishing angle (looking down into the water); the Queens CANAL spot uses the standard town
+            /// height 5 because there you stand IN the water and the downward view is counterproductive.
+            /// ⚠ The patched code reads this EVERY FRAME while fishing, in EVERY town — it must never be 0 or
+            /// the camera drops to height 0. Seeded at mod start (MainMenuThread) and re-asserted per tick.</summary>
+            internal const long FishCamHeight = Base + 0x3C;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x3C;
+            internal const long NextFree = Base + 0x40;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -208,7 +217,7 @@ namespace Dark_Cloud_Improved_Version
         // ── 0x21FB4000 .. 0x21FB4300 (guest 0x01FB4000, 0x300 B, top of the MeshCave margin) ─────────────
         // +0x00 (4 B) NOW HOLDS the shallow-fishing bobber-anchor global (TownAddresses.FishLineShallow.BobberPtr):
         //   the cold-patched FishLineStep reads game-addr 0x01FB4000 for the bobber's point address, and a data
-        //   write here toggles vanilla point[18] vs shallow point[21]. The rest of the block is spare. (It once
+        //   write here toggles vanilla point[18] vs shallow point[20]. The rest of the block is spare. (It once
         //   held the old ClsMes catch/menu scratch, now baked into each town's mes by IsoPatcher.) Inside the
         //   CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so the sweeper still shows it clean.
 

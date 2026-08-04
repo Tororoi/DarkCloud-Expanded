@@ -34,6 +34,7 @@ namespace Dark_Cloud_Improved_Version
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             CustomFishingSpot.InstallShallowLinePatch();   // COLD: rewrite FishLineStep's bobber anchor to read a data global (before any fishing JITs it)
+            CustomFishingSpot.SeedFishCamHeight();   // the ISO-patched fishing SetHeight reads a data word EVERY town — seed it to vanilla 40 before any session
         }
 
         public static void CheckEmulatorAndGame()

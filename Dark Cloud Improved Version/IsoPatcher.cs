@@ -311,12 +311,12 @@ namespace Dark_Cloud_Improved_Version
             //       low-tide spot has its own sign (reuses the already-injected kanban part + e01b24 texture).
             progress("Carving + injecting the canal ladder …");
             byte[] ladderMds = CarveLadder(ReadArchive(LADDER_SCENE));   // from the user's ISO (Factory e05a01/hasigo1)
-            // Queens north-bank kanban carries the baked fishing trigger for the primary spot (label 400).
+            // Queens north-bank kanban carries the label-400 fishing trigger (QUEENS_TRIG local offset).
             byte[] e03scene = BuildInjectedScene(ReadArchive(E03_SCENE), kanbanMds, tmplHdr, BuildKanbanCollision(),
                                                  funcData: BuildFishingFunc(QUEENS_TRIG));
-            // The canal-floor sign is its OWN part `kanbanc` (a small duplicate of the kanban mesh) so it can
-            // carry a DIFFERENT trigger (label 401) → a canal-floor stance, instead of teleporting the player up
-            // to the north bank. Same local trigger offset; its own mapinfo placement points to `kanbanc`.
+            // The canal-floor sign is its OWN part `kanbanc` (small duplicate of the kanban mesh) carrying a
+            // DIFFERENT trigger (label 401 -> its own per-sign script with the canal-floor stance), so triggering
+            // it fishes from the canal floor instead of teleporting to the north bank. Same local trigger offset.
             e03scene = BuildInjectedScene(e03scene, kanbanMds, tmplHdr, BuildKanbanCollision("kanbanc_a"), partName: "kanbanc",
                                           funcData: BuildFishingFunc(QUEENS_TRIG, FISH_LABEL_CANAL));
             // The ladder part carries its two baked climb points (type-4 bottom / type-5 top).
@@ -389,8 +389,8 @@ namespace Dark_Cloud_Improved_Version
         // custom fishing towns have no native 133/134/400/9600, so these ids are collision-free.
         // ⚠ FishSpareIds MUST match CustomFishingSpot.{MenuSubLabelId=9600, FishingLabelId=400} and
         // EventPoints.{FishingExitLabel=133, FishingBaitLabel=134}. Sizes measured 2026-07-24:
-        // menu 1780, enter 1994, quit 892, bait 436. Label 401 = a SECOND full fishing script (Queens
-        // canal-floor spot, its own stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
+        // menu 1780, enter 1994, quit 892, bait 436. Label 401 = the Queens canal-floor per-sign script (its own
+        // stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
         internal const int FishTermId = 9500;
         static readonly int[] FishSpareIds   = { 9600, 400, 401, 133, 134 };            // menu, enter, canal-enter, quit, bait
         static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300 };   // one size per id, same order
@@ -1016,6 +1016,7 @@ namespace Dark_Cloud_Improved_Version
             else
                 PatchDecoupleCamera(fs, ElfOff);         // NOP FollowOn → MainCamera stays follow-OFF → C# owns it
             PatchFishingCameraTarget(fs, ElfOff);        // center the fishing shot on the bobber (kept)
+            PatchFishingCameraHeight(fs, ElfOff);        // fishing camera height 40 -> per-spot data word (canal wades at 5)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -1421,6 +1422,41 @@ namespace Dark_Cloud_Improved_Version
                     throw new IOException($"Fishing-camera site 0x{s.va:X} ({s.what}) is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
             foreach (var s in sites)
                 WrU32(fs, ElfOff(s.va), 0x00000000);   // nop -> keep the bobber position as the camera target
+        }
+
+        /// <summary>Make the FISHING CAMERA HEIGHT data-driven instead of a hard-coded 40.
+        ///
+        /// <c>EdMoveChara</c> forces the fishing camera angle with a literal <c>SetHeight(40.0)</c>:
+        /// <code>
+        ///   0x16C2DC  lui  $2,0x4220     ; 40.0f
+        ///   0x16C2E0  mtc1 $2,$f12
+        ///   0x16C2E8  jal  SetHeight
+        /// </code>
+        /// It re-runs EVERY FRAME of a session, so a runtime write to the camera loses the race. Instead we
+        /// rewrite those two instructions to LOAD the height from a mod-owned word
+        /// (<see cref="CodeCaves.Mailbox.FishCamHeight"/>), turning a code constant into per-spot data:
+        /// <code>
+        ///   lui  $2,HI(FishCamHeight)
+        ///   lwc1 $f12,LO(FishCamHeight)($2)
+        /// </code>
+        /// 40 keeps the vanilla look-down-into-the-water angle; the Queens canal spot writes 5 (the standard
+        /// town height) because there the player stands IN the water and the high angle fights the view.
+        /// ⚠ The word is read every frame in EVERY town, so the mod seeds it to 40 at startup and re-asserts it
+        /// per tick — a 0 there would drop the camera to height 0.</summary>
+        static void PatchFishingCameraHeight(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint LUI_VA = 0x0016C2DC, MTC1_VA = 0x0016C2E0;
+            const uint VAN_LUI = 0x3C024220, VAN_MTC1 = 0x44826000;   // lui $2,0x4220 (40.0f) ; mtc1 $2,$f12
+            uint gotLui = RdU32(fs, ElfOff(LUI_VA)), gotMtc1 = RdU32(fs, ElfOff(MTC1_VA));
+            if (gotLui != VAN_LUI || gotMtc1 != VAN_MTC1)
+                throw new IOException($"Fishing camera-height site 0x{LUI_VA:X} is not vanilla " +
+                                      $"(got 0x{gotLui:X8}/0x{gotMtc1:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
+
+            const uint SLOT = (uint)(CodeCaves.Mailbox.FishCamHeight & 0x1FFFFFFF);   // guest (PINE addr minus the 0x20000000 view)
+            uint hi = SLOT >> 16, lo = SLOT & 0xFFFF;
+            if (lo >= 0x8000) hi += 1;                       // lwc1's offset is SIGNED — compensate like the assembler
+            WrU32(fs, ElfOff(LUI_VA),  0x3C020000u | hi);                      // lui  $2,hi
+            WrU32(fs, ElfOff(MTC1_VA), 0xC4000000u | (2u << 21) | (12u << 16) | lo);  // lwc1 $f12,lo($2)
         }
 
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──
