@@ -423,6 +423,21 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal const int ItemOrLabel = 0x1C;
 
+        /// <summary>
+        /// <b>Time-of-day activity window (float game-time). This is what silently killed the trigger at
+        /// night.</b> <c>CheckEventPoint</c> — run for EVERY point by both <c>EdGetEvent</c> (the type-3
+        /// walk-in dispatch) and <c>EdEventPointCpPoly</c> — gates on
+        /// <c>EdCheckTime(NowTime, point[0x40], point[0x44])</c> and drops the point when it returns 0.
+        ///
+        /// <c>EdCheckTime(now, start, end)</c> is a wrap-aware window test that returns 1 for ALL <c>now</c>
+        /// <b>iff <c>start == end</c></b> (the "always on" encoding native always-active points use); a real
+        /// window (<c>start &lt; end</c>, e.g. a shop door open by day) returns 0 outside it. A hand-made
+        /// point that CLONES a donor door inherits that door's window unless these are overwritten, so the
+        /// fishing trigger vanished during the donor's closed hours. Force <c>start == end == 0</c>.
+        /// </summary>
+        internal const int TimeStart = 0x40;
+        internal const int TimeEnd   = 0x44;
+
         // Decoded from a live dump, then confirmed by catching a real fishing spot loading in Norune.
         // NOTE: type-3 points are NOT in the door list — the dump at town load shows only type-1 interior
         // doors. The fishing point's position (40, 0, 96) is PART-LOCAL: it is attached to the lake part.

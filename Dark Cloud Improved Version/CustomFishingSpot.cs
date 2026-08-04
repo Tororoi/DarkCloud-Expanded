@@ -101,6 +101,12 @@ namespace Dark_Cloud_Improved_Version
             /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
             internal readonly bool DiagSkipModel;
 
+            /// <summary>The stb script label this spot's BAKED trigger names (IsoPatcher.BuildFishingFunc). A
+            /// town can have several spots, each on its own label + baked sign part — e.g. Queens has the
+            /// north-bank sign (400) and the canal-floor sign (401), which fish the same area from different
+            /// stances. Defaults to the primary fishing label 400.</summary>
+            internal readonly int LabelId;
+
             internal Spot(int mapNo, string name, int areaId,
                           float x1, float z1, float x2, float z2, float water, float ground,
                           float tx, float ty, float tz, float radius,
@@ -108,13 +114,13 @@ namespace Dark_Cloud_Improved_Version
                           float facing = float.NaN, bool diagSkipModel = false,
                           float fx1 = float.NaN, float fz1 = float.NaN, float fx2 = float.NaN,
                           float fz2 = float.NaN, float fishDepth = float.NaN,
-                          float lineScale = float.NaN, bool shallowBobber = false)
+                          float lineScale = float.NaN, bool shallowBobber = false, int labelId = FishingLabelId)
             {
                 MapNo = mapNo; Name = name; AreaId = areaId;
                 X1 = x1; Z1 = z1; X2 = x2; Z2 = z2; Water = water; Ground = ground;
                 TrigX = tx; TrigY = ty; TrigZ = tz; Radius = radius;
                 StandX = sx; StandY = sy; StandZ = sz; Facing = facing;
-                DiagSkipModel = diagSkipModel;
+                DiagSkipModel = diagSkipModel; LabelId = labelId;
                 FishX1 = fx1; FishZ1 = fz1; FishX2 = fx2; FishZ2 = fz2; FishDepth = fishDepth;
                 LineScale = lineScale; ShallowBobber = shallowBobber;
             }
@@ -147,6 +153,17 @@ namespace Dark_Cloud_Improved_Version
                      // That drops the hook from ~WaterLevel-8.3 to ~-10.4 and the bait (hook-3) to ~-13.4, so
                      // lower the fish to match: WaterLevel-14.08 keeps the vanilla fish-to-bait gap (~0.67) → bites.
                      lineScale: 1.25f, fishDepth: 14.08f),
+
+            // Queens canal FLOOR (low tide) — the canal-floor sign under the eastern bridge (its own baked
+            // sign part `kanbanc` + label 401). SAME fish area (6) as the north-bank spot, but the player
+            // fishes standing on the exposed canal floor (y=0) instead of teleporting up to the bank. The
+            // canal is only reachable at low tide (via the ladder), so this spot is inherently shallow.
+            // ⚠ stance/water/depth/facing are initial guesses — tune in-game against the exposed low-tide floor.
+            new Spot(2, "Queens canal floor", 6,
+                     -240f, -100f, 900f, 150f, water: 6f, ground: 0f,
+                     tx: 794f, ty: 0f, tz: 0f, radius: 10f,
+                     sx: 794f, sy: 0f, sz: 0f, facing: 0f,             // stand on the canal floor by the sign
+                     shallowBobber: true, fishDepth: 4f, labelId: 401),
 
             // Brownboo: the pond (static WATER s04w01). WATER_SURFACE centred on the origin, ±120, HEIGHT 0.
             // Stance at the +X edge facing the water: (74, 10, -20), yaw -1.639 — forward (-1.00, -0.07).
@@ -485,20 +502,22 @@ namespace Dark_Cloud_Improved_Version
         /// appears (the bug on first load into Yellow Drops). Checking the event point too forces a retry.</summary>
         private static bool FishingInstallPresent()
         {
-            // (1) our event point must exist and still be a live script trigger
-            if (_slot < 0 || _slotAddr == 0) return false;
-            if (Memory.ReadInt(_slotAddr + EventPoints.Type) != EventPoints.TypeScript) return false;
-            if (Memory.ReadInt(_slotAddr + EventPoints.ItemOrLabel) != FishingLabelId) return false;
-
-            // (2) our fishing label must still be in the stb label table
+            // The trigger is baked (native ISO event point) — it can't be wiped at runtime, so we no longer
+            // check for it. Only our runtime SCRIPT can be lost: a same-map town rebuild re-reads the stb from
+            // disc, restoring label 400 to its EMPTY baked spare. Detect that by checking label 400's code
+            // still holds our fishing bytecode (compare the first word to a freshly-built script). Anything we
+            // can't yet read (mid-rebuild) returns true so we don't thrash a needless reinstall.
             long stb = TownScript.Base();
-            if (stb == 0) return true;                       // can't tell yet — don't trigger a reinstall
+            if (stb == 0) return true;
             int n = Memory.ReadInt(stb + TownScript.LabelCount);
             int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
-            if (n <= 0 || n >= 4000 || tbl <= 0) return true;   // mid-rebuild / not ready — wait, don't thrash
-            for (int i = 0; i < n; i++)
-                if (Memory.ReadInt(stb + tbl + (long)i * TownScript.LabelStride) == FishingLabelId) return true;
-            return false;
+            if (n <= 0 || n >= 4000 || tbl <= 0) return true;
+            Lab lab = FindLabelById(stb, n, tbl, FishingLabelId);
+            if (lab == null) return true;                        // label table mid-rebuild — wait
+            byte[] want = BuildFishingBytecode(_spot, _fishMenuCbRel).ToArray();
+            if (want.Length < 4) return true;
+            int firstWord = Memory.ReadInt((int)stb + lab.Off + TownScript.LabelCodeSkip);
+            return firstWord == BitConverter.ToInt32(want, 0);   // matches -> our script is live; differs -> wiped
         }
 
         private static bool TryGetSpot(int map, out Spot spot)
@@ -507,6 +526,25 @@ namespace Dark_Cloud_Improved_Version
                 if (s.MapNo == map) { spot = s; return true; }
             spot = default;
             return false;
+        }
+
+        // The spot the player is actually FISHING. A town can have several baked signs (Queens: north-bank +
+        // canal-floor), each with its own stance — the fishing script snapped the player to whichever they
+        // triggered, so the nearest StandX identifies it. Drives the per-spot depth / line / bobber below so
+        // the canal fishes shallow while the north bank keeps its stretched line. Single-spot towns → _spot.
+        private static Spot _active;
+        private static Spot ActiveSpot()
+        {
+            float px = Memory.ReadFloat(0x21EA1D30);   // active-character CCharacter (0x21EA1D20) world X (+0x10)
+            Spot best = _spot; float bestD = float.MaxValue; int hits = 0;
+            foreach (var s in Spots)
+            {
+                if (s.MapNo != _installedMap) continue;
+                hits++;
+                float d = Math.Abs(s.StandX - px);
+                if (d < bestD) { bestD = d; best = s; }
+            }
+            return hits > 1 ? best : _spot;
         }
 
         private static bool ScriptReady()
@@ -550,18 +588,18 @@ namespace Dark_Cloud_Improved_Version
             }
             else Log("   no spare label for the shared menu subroutine — entry/quit menus fall back to inline");
 
-            Lab lab = ClaimLabel(stb, labelCount, tbl, FishingLabelId, Need(BuildFishingBytecode(spot, menuCbRel)), out int end);
+            Lab lab = ClaimLabel(stb, labelCount, tbl, spot.LabelId, Need(BuildFishingBytecode(spot, menuCbRel)), out int end);
             if (lab == null)
             {
                 Log("   the spare labels cannot hold the fishing script — skipping");
                 return;
             }
 
-            // The entry label answers to an id nothing else dispatches (400): only OUR event point names it,
-            // so no town event of its own can reach the fishing script.
+            // The entry label answers to an id nothing else dispatches (400/401): only OUR baked event point
+            // names it, so no town event of its own can reach the fishing script.
             int codeOff = lab.Off;
-            Memory.WriteInt(stb + lab.Entry, FishingLabelId);   // no-op for a baked label; renames a fallback orphan
-            int labelId = FishingLabelId;
+            Memory.WriteInt(stb + lab.Entry, spot.LabelId);   // no-op for a baked label; renames a fallback orphan
+            int labelId = spot.LabelId;
 
             Log($"   entry script @0x{stb:X}  labels={labelCount}  label {labelId} " +
                 $"(code @+0x{codeOff:X}, {end - codeOff}B region)");
@@ -579,14 +617,31 @@ namespace Dark_Cloud_Improved_Version
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingBaitLabel, BuildBaitBytecode(),
                                $"_GOTO_CHANGE_ESA + load the chosen bait   [Square = bait menu]");
 
-            if (!TryCreateEventPoint(spot, labelId, out int slot))
+            // SECONDARY spots on the same map: a town can host several baked fishing signs, each on its own
+            // label + stance (Queens: north-bank 400 + canal-floor 401). They share this town's menu/exit/bait
+            // (just installed) and differ only in their fishing script (stance/water/depth). Install each one's
+            // script into its own baked spare label. (The primary spot above is the town's first Spots entry.)
+            foreach (var extra in Spots)
             {
-                Log("   NO FREE EVENT POINT SLOT — the trigger could not be created");
-                return;
+                if (extra.MapNo != spot.MapNo || extra.LabelId == spot.LabelId) continue;
+                Lab el = ClaimLabel(stb, labelCount, tbl, extra.LabelId, Need(BuildFishingBytecode(extra, menuCbRel)), out int eEnd);
+                if (el == null) { Log($"   secondary spot '{extra.Name}': no spare label {extra.LabelId} — skipped"); continue; }
+                Memory.WriteInt(stb + el.Entry, extra.LabelId);
+                WriteScript(stb, el.Off, eEnd, BuildFishingBytecode(extra, menuCbRel),
+                            $"secondary fishing spot '{extra.Name}' (area={extra.AreaId}, water={extra.Water}, stance)");
+                Log($"   secondary spot '{extra.Name}' installed at label {extra.LabelId} (code @+0x{el.Off:X})");
             }
-            _slot = slot;
-            _slotAddr = EventPoints.Slot(EventPoints.Base(), slot);
+
+            // The trigger is now BAKED into the ISO — a native type-3 event point in the town's own scene.scn
+            // (IsoPatcher.BuildFishingFunc), created by the engine at town load. So we no longer create a
+            // runtime event point; we only install the fishing SCRIPT here, and the baked point names label
+            // 400. The baked point survives day/night AND town rebuilds; only the runtime script can be lost
+            // (a same-map rebuild re-reads the stb), which FishingInstallPresent now detects by script content.
+            _ = labelId;
+            _slot = -1;
+            _slotAddr = 0;
             _spot = spot;
+            _active = spot;   // default until a session pins the actually-fished spot (ActiveSpot)
 
             // Shallow hook (data-only): point the cold-patched bobber anchor at point 21 for spots that ask
             // for it (Brownboo). Queens lowers its fish + stretches its line instead, keeping the vanilla anchor.
@@ -595,16 +650,11 @@ namespace Dark_Cloud_Improved_Version
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
-            Log($"   event point [{slot}] type=3 label={labelId} " +
-                $"pos=({spot.TrigX},{spot.TrigY},{spot.TrigZ}) radius={spot.Radius} partIndex=-1 (world)");
+            Log($"   fishing script installed for label {FishingLabelId} " +
+                $"(trigger is BAKED into the ISO at ~({spot.TrigX},{spot.TrigY},{spot.TrigZ}))");
             if (spot.HasFishRect)
                 Log($"   fish rect ({spot.FishX1},{spot.FishZ1})-({spot.FishX2},{spot.FishZ2}) " +
                     $"(cast rect is separate)");
-
-            // Read it back. Three attempts have now "succeeded" and done nothing, so verify what the engine
-            // will actually see rather than trusting that the writes landed as intended.
-            DumpSlot("   readback:", _slotAddr);
-            Log("   walk toward the point; the watcher below reports every event match the engine makes");
         }
 
         // Toan has TWO models. The ordinary one has no fishing rod and no fishing motions — which is why the
@@ -1673,6 +1723,13 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(e + EventPoints.ObjectPtr, 0);          // no CMapObject to inherit a position from
             Memory.WriteInt(e + EventPoints.FramePtr, 0);           // no visibility gate
 
+            // THE ONE THAT SILENTLY KILLED THE TRIGGER AT NIGHT. CheckEventPoint gates every point on
+            // EdCheckTime(NowTime, point+0x40, point+0x44); a cloned donor door carries a day-only window, so
+            // our trigger went dead outside it (the inconsistent "disappears mid-night" bug). start==end==0
+            // is the always-on encoding — EdCheckTime then returns 1 for every time of day. (§time-window)
+            Memory.WriteInt(e + EventPoints.TimeStart, 0);
+            Memory.WriteInt(e + EventPoints.TimeEnd, 0);
+
             Memory.WriteInt(e + EventPoints.ItemOrLabel, labelId);  // type 3 -> the SCRIPT LABEL
 
             // Suppress the sparkle. The engine draws an animated 3D "shiny marker" at a type-3 point when the
@@ -1783,6 +1840,11 @@ namespace Dark_Cloud_Improved_Version
 
             if (live && !_fishingWasLive)
             {
+                // Which sign did the player trigger? Pin it for this session and set its bobber anchor (the
+                // canal spot fishes shallow, the north bank keeps the vanilla anchor + stretched line).
+                _active = ActiveSpot();
+                SetShallowLine(_active.ShallowBobber);
+
                 // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
                 // raycast honours: player movement (its own collision system) still keeps you on the boardwalk,
                 // and dropping the walls frees the poly budget for the rocks below.
@@ -1807,8 +1869,8 @@ namespace Dark_Cloud_Improved_Version
                 uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
                 bool fishPlaced = Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0;
 
-                if (fishPlaced && !_shallowFishApplied && _spot.HasFishDepth)
-                { ApplyShallowFishDepth(_spot); _shallowFishApplied = true; }
+                if (fishPlaced && !_shallowFishApplied && _active.HasFishDepth)
+                { ApplyShallowFishDepth(_active); _shallowFishApplied = true; }
 
                 // Fish freeze their cpoly COUNT at _INIT_FISH — BEFORE our one-shot append grew the buffer, so
                 // the appended containment walls fall past that count and fish swim through them. The moment the
@@ -1821,9 +1883,9 @@ namespace Dark_Cloud_Improved_Version
             // Line LENGTH (Queens): stretch the shared Verlet rest-length while this spot is live so the line
             // reaches the low canal, and restore vanilla the moment the session ends. distp is read every frame
             // (data-only, recompiler-safe), so pin it here rather than as a one-shot.
-            bool wantStretch = live && _spot.HasLineScale;
+            bool wantStretch = live && _active.HasLineScale;
             if (wantStretch)
-                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * _spot.LineScale);
+                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * _active.LineScale);
             else if (_distpScaled)
                 Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp);
             _distpScaled = wantStretch;

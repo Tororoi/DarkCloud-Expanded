@@ -47,6 +47,36 @@ namespace Dark_Cloud_Improved_Version
         const string LADDER_SCENE = "gedit/e05/scene.scn";
         const string LADDER_PART = "e05a01", LADDER_NODE = "hasigo1";
 
+        // ── NATIVE EVENT-POINT (trigger) BAKING ──────────────────────────────────────────────────────────
+        // Triggers are baked as EPARTS_FUNC_DATA entries (0xC0 each) inside a part's PTS blob; at town load
+        // EdInitEventPoint (0x183D50) turns each into a live ED_EVENT_POINT — no runtime creation needed.
+        // Layout + field map: memory town-event-points.md. Func type: 0x12 -> type-3 SCRIPT, 0x13/0x14 ->
+        // type-4/5 ladder BOTTOM/TOP. Time [0,24] -> ConvertTime start==end==7 == always-on.
+        const int FUNC_STRIDE = 0xC0;
+        const int FISH_LABEL = 400;        // == CustomFishingSpot.FishingLabelId; north-bank / primary spot
+        const int FISH_LABEL_CANAL = 401;  // Queens canal-floor spot — its own label + stance (kanbanc sign)
+
+        // Per-town fishing-trigger position, PART-LOCAL to the sign (the mapinfo placement rotates+translates
+        // it to world). Chosen so the native trigger lands exactly where the runtime one did (spot tx,ty,tz).
+        static readonly float[] BROWNBOO_TRIG = { 0f, 3f, 8f };   // sign(212,9,-61) ry0  -> world (212,12,-53)
+        static readonly float[] QUEENS_TRIG   = { 0f, 0f, 6f };   // sign(250,70,-64) ry180 -> (250,70,-70); canal placement -> (794,0,0)
+        static readonly float[] YDROPS_TRIG   = { 0f, 0f, 0f };   // new sign placed AT the spot
+
+        // Yellow Drops (s13): no injected sign yet — inject one at the fishing spot like the other towns.
+        const string S13_SCENE = "gedit/s13/scene.scn", S13_MAPINFO = "gedit/s13/mapinfo.cfg";
+        const string S13_ANCHOR = "s1301";                                   // an existing s13 GROUND block
+        const int YSIGN_X = -575, YSIGN_Y = 9, YSIGN_Z = -286, YSIGN_RY = 0; // at the spot (tx,ty,tz); RY tune in-game
+
+        // Carved ladder climb points, WORLD space (the ladder verts are world-baked so its part sits at origin
+        // identity). Derived by running the vanilla Moon-Factory hasigo1 climb points — bottom (9.9,0,-48.4),
+        // top (7.6,90,-34.6) — through the SAME de-yaw + placement transform as the mesh (tools/carve_ladder),
+        // so the climb-path geometry (stand-off from the rail + lean) matches the Factory exactly. Bottom sits
+        // ~6.5u out in front of the ladder's canal edge (z≈47.4); top is on the walkway side.
+        static readonly float[] LAD_BOTTOM = { LAD_X, 0f, 40.9f };
+        static readonly float[] LAD_TOP    = { LAD_X, 70f, 54.9f };
+        const int LAD_RUNGS_BOT = 12, LAD_RUNGS_TOP = 2, LAD_LINK = 0;   // mirror native hasigo1 (+0x74)
+        static readonly float[] LAD_FACE = { 0f, 0f, 0f };               // rot written to the rec; tune the Y gate in-game
+
         // ELF boot-cave (register fishsign.img's e01b24 into 0x1c75870 at boot)
         const uint GetPackFile = 0x0013F720, EnterIMGFile = 0x00132BA0, LoadFile = 0x0013F360;
         const uint SysTexMgr = 0x01C75870, DETOUR_VA = 0x00180D7C, REJOIN_VA = 0x00180D84;
@@ -258,8 +288,10 @@ namespace Dark_Cloud_Improved_Version
             progress("Injecting the fishing-sign mesh …");
             byte[] s04scene = ReadArchive(SCENE_SCN);
             byte[] tmplHdr  = PartHeader(s04scene, "s04a01");   // the kanban PTS header, reused for e03 too
+            // The sign part also carries the BAKED fishing trigger (native type-3 event point at the spot) —
+            // replaces the old runtime-installed trigger, so it survives day/night with no self-heal needed.
             Redirect(SCENE_SCN, CullBuildings(CullUpperCraterWalls(RemoveRingCornerTris(
-                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr)))));
+                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr, funcData: BuildFishingFunc(BROWNBOO_TRIG))))));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY, "s04a01"));
 
             // Queens (e03): same kanban mesh + globally-registered e01b24 texture; no crater cleanup (that is
@@ -279,14 +311,30 @@ namespace Dark_Cloud_Improved_Version
             //       low-tide spot has its own sign (reuses the already-injected kanban part + e01b24 texture).
             progress("Carving + injecting the canal ladder …");
             byte[] ladderMds = CarveLadder(ReadArchive(LADDER_SCENE));   // from the user's ISO (Factory e05a01/hasigo1)
-            byte[] e03scene = BuildInjectedScene(ReadArchive(E03_SCENE), kanbanMds, tmplHdr, BuildKanbanCollision());
-            e03scene = BuildInjectedScene(e03scene, ladderMds, tmplHdr, null, "hasigo", bakeIdentity: false);
+            // Queens north-bank kanban carries the baked fishing trigger for the primary spot (label 400).
+            byte[] e03scene = BuildInjectedScene(ReadArchive(E03_SCENE), kanbanMds, tmplHdr, BuildKanbanCollision(),
+                                                 funcData: BuildFishingFunc(QUEENS_TRIG));
+            // The canal-floor sign is its OWN part `kanbanc` (a small duplicate of the kanban mesh) so it can
+            // carry a DIFFERENT trigger (label 401) → a canal-floor stance, instead of teleporting the player up
+            // to the north bank. Same local trigger offset; its own mapinfo placement points to `kanbanc`.
+            e03scene = BuildInjectedScene(e03scene, kanbanMds, tmplHdr, BuildKanbanCollision("kanbanc_a"), partName: "kanbanc",
+                                          funcData: BuildFishingFunc(QUEENS_TRIG, FISH_LABEL_CANAL));
+            // The ladder part carries its two baked climb points (type-4 bottom / type-5 top).
+            e03scene = BuildInjectedScene(e03scene, ladderMds, tmplHdr, null, "hasigo", bakeIdentity: false,
+                                          funcData: BuildLadderFunc());
             Redirect(E03_SCENE, e03scene);
 
             byte[] e03map = BuildInjectedMapinfo(ReadArchive(E03_MAPINFO), QSIGN_X, QSIGN_Y, QSIGN_Z, QSIGN_RY, E03_ANCHOR, "kanban_a.mds");
-            e03map = BuildInjectedMapinfo(e03map, CANAL_SIGN_X, CANAL_SIGN_Y, CANAL_SIGN_Z, CANAL_SIGN_RY, E03_ANCHOR, "kanban_a.mds");
+            e03map = BuildInjectedMapinfo(e03map, CANAL_SIGN_X, CANAL_SIGN_Y, CANAL_SIGN_Z, CANAL_SIGN_RY, E03_ANCHOR, "kanbanc_a.mds", "kanbanc");
             e03map = BuildInjectedMapinfo(e03map, 0, 0, 0, 0, E03_ANCHOR, "", "hasigo");   // ladder verts are world-baked
             Redirect(E03_MAPINFO, e03map);
+
+            // Yellow Drops (s13): no native/injected sign, so inject the same kanban sign at its fishing spot,
+            // carrying the baked fishing trigger — makes all three custom towns uniform (sign + native trigger).
+            progress("Injecting the Yellow Drops sign …");
+            Redirect(S13_SCENE, BuildInjectedScene(ReadArchive(S13_SCENE), kanbanMds, tmplHdr,
+                                                   funcData: BuildFishingFunc(YDROPS_TRIG)));
+            Redirect(S13_MAPINFO, BuildInjectedMapinfo(ReadArchive(S13_MAPINFO), YSIGN_X, YSIGN_Y, YSIGN_Z, YSIGN_RY, S13_ANCHOR));
 
             // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
             //    installer always has dedicated room and never runs out on the town's tiny native spare pool
@@ -341,10 +389,11 @@ namespace Dark_Cloud_Improved_Version
         // custom fishing towns have no native 133/134/400/9600, so these ids are collision-free.
         // ⚠ FishSpareIds MUST match CustomFishingSpot.{MenuSubLabelId=9600, FishingLabelId=400} and
         // EventPoints.{FishingExitLabel=133, FishingBaitLabel=134}. Sizes measured 2026-07-24:
-        // menu 1780, enter 1994, quit 892, bait 436.
+        // menu 1780, enter 1994, quit 892, bait 436. Label 401 = a SECOND full fishing script (Queens
+        // canal-floor spot, its own stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
         internal const int FishTermId = 9500;
-        static readonly int[] FishSpareIds   = { 9600, 400, 133, 134 };         // menu, enter, quit, bait
-        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0x500, 0x300 };  // one size per id, same order
+        static readonly int[] FishSpareIds   = { 9600, 400, 401, 133, 134 };            // menu, enter, canal-enter, quit, bait
+        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300 };   // one size per id, same order
 
         static byte[] ExtendStb(byte[] stb)
         {
@@ -518,6 +567,7 @@ namespace Dark_Cloud_Improved_Version
         // LoadPTS (0x19f6f0) reads the `_a` collision variant's OFFSET at part+0x78 and its SIZE (gate) at
         // part+0x7c; if size>0 it feeds part+offset to LoadCollisionFile -> CreateCollisionMDT.
         const int COLL_OFF_FIELD = 0x78, COLL_SIZE_FIELD = 0x7C;
+        const int MDS_OFF_FIELD  = 0x48;   // part+0x48 = MDS data offset (LoadPTS); shifts when func-data precedes the MDS
 
         /// <summary>The kanban's collision: a single solid PANEL hugging the sign, as an MDS-wrapped COLLISION
         /// MDT. This mirrors how Muska Lacka's native sign is collided (e04m01_a @ the kanban): one flat box
@@ -527,7 +577,7 @@ namespace Dark_Cloud_Improved_Version
         /// (0x127250) + LoadCollisionFile (0x126f70): MDT needs magic, +0x08 total size, +0x0C vert count,
         /// +0x10 POS offset, +0x28 display-list offset, +0x38 colour block (0 = none); the DL has the triangle
         /// count at +0x14 and 5-int32 records (v0,v1,v2,colour,pad) at +0x18; POS verts are x,y,z,1 at 0x10.</summary>
-        static byte[] BuildKanbanCollision()
+        static byte[] BuildKanbanCollision(string node = "kanban_a")
         {
             var verts = new List<float[]>();
             var tris  = new List<int[]>();
@@ -574,7 +624,7 @@ namespace Dark_Cloud_Improved_Version
             var mds = new byte[mdtStart + mdt.Length];
             U32(mds, 0x00, 0x0053444Du); U32(mds, 0x04, 1); U32(mds, 0x08, 1); U32(mds, 0x0C, 0x10);   // MDS,ver,nodeCount,tblOff
             U32(mds, nodeOff + 0x04, 0x70);
-            byte[] nn = Encoding.Latin1.GetBytes("kanban_a");
+            byte[] nn = Encoding.Latin1.GetBytes(node);
             Array.Copy(nn, 0, mds, nodeOff + 0x08, nn.Length);
             U32(mds, nodeOff + 0x28, mdtStart);            // meshOff (MDS-relative) -> the collision MDT
             U32(mds, nodeOff + 0x2C, 0xFFFFFFFFu);         // parent = -1
@@ -587,7 +637,7 @@ namespace Dark_Cloud_Improved_Version
         /// PTS part header (carved from s04a01 with <see cref="PartHeader"/>) — self-contained, so the same one
         /// is reused for Brownboo AND Queens.</summary>
         static byte[] BuildInjectedScene(byte[] scene, byte[] kanbanMds, byte[] templateHeader, byte[] collisionMds = null,
-                                         string partName = "kanban", bool bakeIdentity = true)
+                                         string partName = "kanban", bool bakeIdentity = true, byte[] funcData = null)
         {
             var scn = new List<byte>(scene);
             int n = (int)U32(scene, 4);
@@ -605,6 +655,11 @@ namespace Dark_Cloud_Improved_Version
             part.AddRange(templateHeader);                                      // the reusable 0x160 PTS header
             byte[] pname = Encoding.Latin1.GetBytes(partName + "_0.mds");
             for (int i = 0; i < 0x10; i++) part[0x08 + i] = i < pname.Length ? pname[i] : (byte)0;
+            // NATIVE EVENT POINTS: the func-data block sits BETWEEN the 0x160 header and the MDS (native layout,
+            // so the event-loader's memcpy of __src stays small). It pushes the MDS/collision down by its length.
+            int funcLen = funcData?.Length ?? 0;
+            if (funcData != null) part.AddRange(funcData);
+            int mdsOff = part.Count;                                            // 0x160 + funcLen
             part.AddRange(kb);
             int collOff = 0, collLen = 0;
             if (collisionMds != null)
@@ -617,6 +672,14 @@ namespace Dark_Cloud_Improved_Version
             byte[] pa = part.ToArray();
             foreach (int o in SIZE_FIELDS) U32(pa, o, (uint)psize);
             U32(pa, MDSSIZE_FIELD, (uint)kb.Length);
+            if (funcData != null)
+            {
+                int src = (int)U32(pa, 4);                             // __src sub-block offset within the part (0xe0)
+                U32(pa, MDS_OFF_FIELD, (uint)mdsOff);                  // part+0x48: MDS data offset, now past the func block
+                U32(pa, src + 0x70, 0x80);                            // __src+0x70: func-data offset (= part 0x160, right after hdr)
+                U32(pa, src + 0x74, (uint)(funcLen / FUNC_STRIDE));   // __src+0x74: entry count -> EdInitEventPoint loop bound
+                U32(pa, src + 0x04, (uint)(0x80 + funcLen));          // __src+0x04: memcpy size must cover the func block
+            }
             if (collisionMds != null)
             {
                 U32(pa, COLL_OFF_FIELD,  (uint)collOff);              // part+0x78: `_a` collision offset (overrides the SIZE_FIELDS write)
@@ -633,6 +696,49 @@ namespace Dark_Cloud_Improved_Version
             U32(outp, ent + 0x10, (uint)blob); U32(outp, ent + 0x14, (uint)psize);
             U32(outp, 4, (uint)(n + 1));
             return outp;
+        }
+
+        // ── EPARTS_FUNC_DATA builders (one 0xC0 entry per event point) ──────────────────────────────────
+        // Field map (RE'd; town-event-points.md): +0x10 func type, +0x18/+0x1c time window (HOURS 0-24,
+        // ConvertTime'd -> rec TimeStart/End; [0,24] == always-on), +0x20 link id, +0x24 map flag, +0x30
+        // anchor frame name (SearchFrame -> rec FramePtr gate), +0x40 pos (PART-LOCAL), +0x50 rot, +0x60
+        // radius(3f, type-3 only), +0x70/+0x74 type-specific params.
+        static byte[] BuildFuncEntry(int type, float t0, float t1, int link, int mapflag, string name,
+                                     float[] pos, float[] rot, float[] radius, float p70, float p74)
+        {
+            var e = new byte[FUNC_STRIDE];
+            void F(int o, float v) => Array.Copy(BitConverter.GetBytes(v), 0, e, o, 4);
+            U32(e, 0x10, (uint)type);
+            F(0x18, t0); F(0x1C, t1);
+            U32(e, 0x20, (uint)link); U32(e, 0x24, (uint)mapflag);
+            if (!string.IsNullOrEmpty(name))
+            {
+                byte[] nb = Encoding.Latin1.GetBytes(name);
+                Array.Copy(nb, 0, e, 0x30, Math.Min(nb.Length, 0x1F));
+            }
+            F(0x40, pos[0]); F(0x44, pos[1]); F(0x48, pos[2]);
+            F(0x50, rot[0]); F(0x54, rot[1]); F(0x58, rot[2]);
+            if (radius != null) { F(0x60, radius[0]); F(0x64, radius[1]); F(0x68, radius[2]); }
+            F(0x70, p70); F(0x74, p74);
+            return e;
+        }
+
+        // Type-3 fishing trigger (func type 0x12): +0x70 = the SCRIPT LABEL id (fptosi'd, must be > 0),
+        // +0x60 = trigger radius. Always-on ([0,24]); no frame gate.
+        static byte[] BuildFishingFunc(float[] localPos, int label = FISH_LABEL)
+            => BuildFuncEntry(0x12, 0f, 24f, 0, 0, "", localPos, new[] { 0f, 0f, 0f },
+                              new[] { 10f, 10f, 10f }, label, 0f);
+
+        // Ladder climb pair: func 0x13 -> rec type-4 BOTTOM (climb-up), func 0x14 -> rec type-5 TOP
+        // (climb-down), paired by link id. Radius is engine-fixed 6.0 for ladders. +0x74 = rung count
+        // (mirrors native hasigo1: 12 bottom / 2 top). Gated to the ladder frame ("hasigo").
+        static byte[] BuildLadderFunc()
+        {
+            var b = BuildFuncEntry(0x13, 0f, 24f, LAD_LINK, 0, "hasigo", LAD_BOTTOM, LAD_FACE, null, 0f, LAD_RUNGS_BOT);
+            var t = BuildFuncEntry(0x14, 0f, 24f, LAD_LINK, 0, "hasigo", LAD_TOP,    LAD_FACE, null, 0f, LAD_RUNGS_TOP);
+            var outb = new byte[b.Length + t.Length];
+            Array.Copy(b, 0, outb, 0, b.Length); Array.Copy(t, 0, outb, b.Length, t.Length);
+            return outb;
         }
 
         // ── scene.scn: enable backface culling on Brownboo's upper crater walls (edit-mode view fix) ──
