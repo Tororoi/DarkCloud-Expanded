@@ -38,24 +38,46 @@ namespace Dark_Cloud_Improved_Version
         private const long  FrameWorldDirty = 0x240;       // 0 => world matrix recomputed from local next update
         private static readonly byte[] MizuName = Encoding.ASCII.GetBytes("mizu__a01");
 
-        // ── WADING: the LOW-TIDE canal floor gets the healing-spring look, not Brownboo's Z-flag trick ──────
-        // FIRST TRY (REVERTED): disable the mesh's Z-write only (frame+0x104=0, the 'z' node-suffix flag —
-        // Brownboo's `s04w01__za01` has it natively, which is why its pond never clips the player). That
-        // stopped the player-clipping, but frame+0x104 is the SAME field that correctly hides every OTHER
-        // submerged model behind the surface — with it permanently off, the waterfall pipes' underwater
-        // portions stopped being occluded too, "flowing" fully visible below the water at every tide (a
-        // regression vs vanilla, worst at medium/high where the canal should look 100% unmodified).
+        // ── WADING: at LOW TIDE, mizu is REORDERED to draw AFTER the player (hide + native redraw) ───────
+        // The natural underwater look = the mesh's own semi-transparent vanilla texture alpha-blending
+        // over the submerged body, exactly as it blends over the canal floor. GS transparency only reveals
+        // what is ALREADY in the framebuffer, and vanilla draws mizu in the scene pass BEFORE the player —
+        // so the body could never sit "under" it (and mizu's Z-write clipped the submerged half outright).
+        // The reorder: at low tide this class (1) HIDES mizu from the scene pass via the frame draw-flag
+        // (+0xB0 = 0, the same gate CheckEventPoint/VillagerPlacement use), and (2) arms two mailbox words
+        // that the ISO-baked MIZU_STUB (IsoPatcher.PatchWaterRedraw, hosted in the compacted GameMode gate)
+        // reads at the post-character hook: it rebinds the part's texture group (ReloadTexture) and calls
+        // the engine's own MGDraw__FP6CFrame on the frame pointer we provide — drawing mizu after the
+        // player, before the capture. Earlier approaches (permanent Z-off: broke waterfall occlusion;
+        // low-tide Z-off: body visible but untinted; whole-quad colour tint: tinted rectangle) are
+        // superseded — this also restores correct waterfall occlusion at ALL tides (their submerged parts
+        // now sit under the late-drawn water texture at low tide).
         //
-        // REAL FIX: dungeon healing springs have no separate opaque water MESH at all — just the
-        // alpha-blended CWater ripple/refraction plane (PinRipple/PlayerRipple below), which is already
-        // Z-off by nature and never clips anyone. So instead of touching the mesh's Z behaviour, HIDE the
-        // mesh ENTIRELY (frame draw-flag +0xB0, the same gate CheckEventPoint/VillagerPlacement already use
-        // to hide objects — 0 = not drawn) whenever the DISPLAYED tide is LOW. The CWater plane is the only
-        // "water" visible at that point, exactly like a spring. Medium/high tide never touches the mesh at
-        // all — 100% vanilla Z-write and occlusion, so the waterfalls are fine there again. Toggled at the
-        // same moment the surface height snaps, so both are hidden behind the same time-change fade.
-        private const long FrameDrawFlag = 0xB0;      // same generic CFrame gate as TownAddresses.Villagers.DrawFlag
-        private const float LowTideMeshHideThreshold = 10f;   // matches QueensLowTide's own threshold
+        // ⚠ If +0xB0=0 turns out to also suppress our direct MGDraw call (untested whether the flag gate
+        // sits above or inside the visual draw), the fallback is C#-ONLY: hide the whole part by flipping
+        // its layer id (+0xE4) to an unused value and write the PART's LOD frame (+0xB0 on the PART) into
+        // the mailbox instead — the baked stub draws whatever pointer it is given.
+        private const long FrameDrawFlag = 0xB0;              // CFrame draw gate: 0 = not drawn by the scene pass
+        private const float LowTideThreshold = 10f;           // matches QueensLowTide's own threshold
+
+        // Part-table offsets for discovering the canal part's texture group (from GetPartsObject__11CEditGround
+        // + Draw__11CEditGround: 128 parts @ ground+0x30, stride 0x2A0; valid if +0xE8 >= 0; id @ +0xF0 matches
+        // CWater body+0x34; layer/texture-group @ +0xE4 — the scene pass binds ReloadTexture(layer) per pass).
+        private const long PartsArrOff = 0x30, PartStride = 0x2A0;
+        private const int  PartCount = 128;
+        private const long PartValid = 0xE8, PartId = 0xF0, PartLayer = 0xE4;
+        private const long BodyPartId = 0x34;                 // CWater body -> its part id
+
+        // ── LOW-TIDE TINT: the CWater plane draws capturedTexture × vertexColor; Queens' canal colour is
+        // authored near-clear (LoadGroundData: SetColor(body, cfg.R,G,B, 0x80) straight from mapinfo —
+        // springs look blue purely because their per-room colour is authored blue). With the capture now
+        // containing the wading body, overriding the canal body's colour bytes to a blue-green tints the
+        // submerged half exactly like a spring. Same low-tide gating as the Z-write toggle; native colour
+        // captured once and restored at medium/high so those stay 100% vanilla. Absolute bytes =
+        // body+0x120..0x123 (SetColor writes THIS-relative +0x90..93 and THIS is body+0x90 — do not
+        // confuse with the CWater struct's OWN base at body+0x90).
+        private const long ColorOff = 0x120;
+        private const byte TintR = 40, TintG = 140, TintB = 170, TintA = 0x80;
 
         // ── PLAYER RIPPLES (pure data — no EE patch) ─────────────────────────────────────────────────────
         // CWater lives at waterBody+0x90. Layout RE'd from Shake/SetSize/SetVertex/CheckClip:
@@ -69,18 +91,6 @@ namespace Dark_Cloud_Improved_Version
         private const long WaterOff = 0x90;                     // CWater within the CEditGround water body
         private const long CwW = 0x00, CwH = 0x04, CwBuf = 0x08;
 
-        // ── LOW-TIDE COLOUR: without the opaque mesh, the CWater plane's OWN authored colour is all that's
-        // left — and Queens' canal reads near-clear/pale (decompiled the loader: SetColor's RGB comes straight
-        // from the mapinfo WATER_SURFACE cfg's own colour bytes, alpha is a hardcoded 0x80 — LoadGroundData
-        // +0xCF8..+0xD08 calls `SetColor(body, cfg.R, cfg.G, cfg.B, 0x80)`). Springs get their visible tint the
-        // same way (DrawWater__11CDungeonMapFPfi does the identical SetColor call from a per-room colour field)
-        // — there's no single hardcoded "spring blue" to copy, each body is just authored with a colour. So:
-        // override the canal body's own colour bytes to a blue-green while low tide is the DISPLAYED level,
-        // restore its native (captured-once) colour otherwise — same gating as the mesh hide, so medium/high
-        // tide's look is untouched. Absolute bytes = body+0x120..0x123 (SetColor writes THIS-relative +0x90..93,
-        // and THIS is already body+0x90 — do not confuse with the CWater struct's OWN base at body+0x90).
-        private const long ColorOff = 0x120;
-        private const byte TintR = 40, TintG = 140, TintB = 170, TintA = 0x80;
         // Corners are ABSOLUTE WORLD x/z (see the fix note on PlayerRipple below) — no frame translation
         // needed to interpret them, so CWater's own frame (+0xB0) plays no part in this math.
         private const long CwCorner = 0x20, CwCornerStride = 0x10;
@@ -89,9 +99,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static int _rippleSlot = -1;                    // cached canal CWater body index (see CanalBody)
         private static float _lastPx, _lastPz;
-        private static int  _meshDrawFlagSaved = -1;   // mizu__a01's OWN draw-flag value, captured before we touch it
-        private static bool _meshHiddenNow;             // current hidden state, so we only write on a CHANGE
-        private static int  _colorSaved = -1;           // canal body's OWN colour bytes, captured before we touch them
+        private static int  _meshDrawFlagSaved = -1;   // mizu__a01's OWN +0xB0 value, captured before we touch it
+        private static bool _meshHiddenNow;            // current hidden state, so we only write on a CHANGE
+        private static int  _partGroup = -1;           // canal part's texture group (+0xE4), cached per session
+        private static int  _colorSaved = -1;          // canal body's OWN colour bytes, captured before we touch them
 
         internal static bool Diagnostics = true;      // log frame-find + writes while we validate the lever
         private const  long  FadeAlpha    = 0x21D3D1CC;  // Ed time-change fade box alpha: 0 clear .. 128 black
@@ -133,7 +144,9 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(EditLoop.MapNo) != QueensMapNo)
             {
                 _frame = 0; _shownLvl = float.NaN; _lastMizu = float.NaN; _rebakeLvl = int.MinValue;
-                _rippleSlot = -1; _meshDrawFlagSaved = -1; _meshHiddenNow = false; _colorSaved = -1;   // Queens-only state
+                _rippleSlot = -1; _meshDrawFlagSaved = -1; _meshHiddenNow = false;
+                _partGroup = -1; _colorSaved = -1;                                        // Queens-only state
+                Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
                 return;
             }
             _tick++;
@@ -146,6 +159,7 @@ namespace Dark_Cloud_Improved_Version
             bool freshFrame = false;
             if (!FrameStillMizu(_frame) && _tick >= _nextScan)
             {
+                Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);   // disarm while the frame is unknown/stale
                 _frame = FindMizuFrame();
                 if (_frame == 0)
                 {
@@ -182,25 +196,37 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteIntFast(_frame + FrameWorldDirty, 0);   // force world-matrix recompute from local
                 _lastMizu = _shownLvl;
             }
-            // HIDE the mesh entirely at LOW tide (healing-spring look — see the WADING note above), restore it
-            // otherwise. Capture the frame's own draw-flag value ONCE (before we ever touch it) so "restore"
-            // means "whatever it natively was", not a hardcoded guess. Gated on the DISPLAYED level (_shownLvl,
-            // already fade-hidden), not the raw target, so this pops at the exact same moment the surface
-            // height does — behind the same black screen.
+            // LOW-TIDE REORDER (see the WADING note above): hide mizu from the scene pass and arm the baked
+            // MIZU_STUB to redraw it after the player. Capture the frame's own flag ONCE so "restore" means
+            // "whatever it natively was". Gated on the DISPLAYED level (_shownLvl, already fade-hidden), so
+            // both flips happen at the exact moment the surface height snaps — behind the fade.
             if (_frame != 0)
             {
                 if (_meshDrawFlagSaved < 0) _meshDrawFlagSaved = Memory.ReadInt(_frame + FrameDrawFlag);
-                bool wantHidden = _shownLvl <= LowTideMeshHideThreshold;
+                bool wantHidden = _shownLvl <= LowTideThreshold;
                 if (wantHidden != _meshHiddenNow)
                 {
                     Memory.WriteInt(_frame + FrameDrawFlag, wantHidden ? 0 : _meshDrawFlagSaved);
                     _meshHiddenNow = wantHidden;
-                    Log($"mizu__a01 mesh {(wantHidden ? "hidden (low tide, springs-style wading)" : "restored (vanilla)")}");
+                    Log($"mizu__a01 {(wantHidden ? "hidden from scene pass (low tide — redrawn post-player by MIZU_STUB)" : "restored to scene pass (vanilla)")}");
                 }
+                // Mailbox arming, re-asserted every tick while hidden (cheap, and survives anything that
+                // zeroes BSS). GROUP is written before the FRAME pointer — the pointer is the stub's gate,
+                // so the group must never be observable as stale/zero while the pointer is live.
+                if (wantHidden)
+                {
+                    int grp = CanalPartGroup();
+                    Memory.WriteInt(CodeCaves.MizuRedrawTexGroup, grp);
+                    Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, (int)(_frame & Memory.PhysAddrMask));
+                }
+                else Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);
             }
 
             PinRipple(_shownLvl);
-            ApplyLowTideColor(_shownLvl <= LowTideMeshHideThreshold);
+            ApplyLowTideColor(false);   // tint REJECTED in testing: colour multiplies the whole refraction
+                                        // quad — a canal-wide tinted rectangle, not an underwater body. Kept
+                                        // calling with false so any previously-applied tint self-restores;
+                                        // the natural look comes from the mizu-after-player reorder instead.
             PlayerRipple(_shownLvl);
 
             // Re-bake the FISHING water (baked into the injected script at install) once the shown level has
@@ -222,8 +248,11 @@ namespace Dark_Cloud_Improved_Version
             if (Math.Abs(y - level) > 0.01f) Memory.WriteFloat(b + 0x44, level);
         }
 
-        /// <summary>Tint the canal's own colour bytes blue-green while <paramref name="active"/> (low tide),
-        /// restore its native mapinfo-authored colour otherwise. See the LOW-TIDE COLOUR note above.</summary>
+        /// <summary>Tint the canal body's colour bytes blue-green while <paramref name="active"/> (low tide),
+        /// restore its native mapinfo-authored colour otherwise. The colour multiplies the captured refraction
+        /// texture, so with the capture containing the wading body this tints the submerged half spring-style —
+        /// see the LOW-TIDE TINT note above. Re-asserted every tick because an area transition rebuilds the
+        /// CWater array (same reason PinRipple pins every frame).</summary>
         private static void ApplyLowTideColor(bool active)
         {
             long b = CanalBody();
@@ -262,6 +291,33 @@ namespace Dark_Cloud_Improved_Version
                 return b;
             }
             return 0;
+        }
+
+        /// <summary>The canal part's texture group (its layer id, +0xE4) — what the baked MIZU_STUB must
+        /// ReloadTexture before redrawing mizu, since the scene pass binds ReloadTexture(layer) per layer
+        /// pass and the character draws will have paged other groups in by hook time. Found by replicating
+        /// GetPartsObject: scan the 128 parts for the id the canal CWater body names (+0x34). Cached per
+        /// session; falls back to group 1 (the first scene pass) if the scan misses.</summary>
+        private static int CanalPartGroup()
+        {
+            if (_partGroup >= 0) return _partGroup;
+            long body = CanalBody();
+            if (body == 0) return 1;
+            uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(egGuest)) return 1;
+            long parts = Memory.ToMmu(egGuest) + PartsArrOff;
+            int id = Memory.ReadInt(body + BodyPartId);
+            for (int i = 0; i < PartCount; i++)
+            {
+                long p = parts + i * PartStride;
+                if (Memory.ReadInt(p + PartValid) < 0 || Memory.ReadInt(p + PartId) != id) continue;
+                _partGroup = Memory.ReadInt(p + PartLayer);
+                Log($"canal part = slot {i} (id {id}), texture group {_partGroup}");
+                return _partGroup;
+            }
+            Log($"canal part id {id} not found in parts table — defaulting texture group 1");
+            _partGroup = 1;
+            return _partGroup;
         }
 
         /// <summary>Ripple the canal where the player wades through it — the town half of the healing-spring
