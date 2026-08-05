@@ -1541,7 +1541,7 @@ namespace Dark_Cloud_Improved_Version
                 0x10000062, 0x00000000,                                     // b 0x1A3890 (guards the stub)
                 0x8F848BD4, 0x0C048320, 0x70002E28,                         // FLUSH_STUB: PkCnt(Vif1Packet, 0)
                 0x8F848BD4, 0x0C048404, 0x3C051100,                         // PkAddCode(Vif1Packet, FLUSH)
-                0x0805EEE9, 0x00000000,                                     // j MIZU_STUB (0x17BBA4) -> then payload
+                0x0805EF03, 0x00000000,                                     // j payload capture-half (0x17BC0C) -> mizu -> zbuf/quad
             };
 
             for (int i = 0; i < vanillaSpan.Length; i++)
@@ -1615,18 +1615,23 @@ namespace Dark_Cloud_Improved_Version
             uint[] patchedPayload =
             {
                 0x3C0101FB, 0x0805EF31, 0xAC21E600,                         // STUB: set flag, skip to 0x17BCC4
+                // ── capture-half @0x17BC0C: runs FIRST so water_buff holds the player's UNOBSCURED body
+                //    (mizu is authored OPAQUE — the vanilla "transparency" is entirely the refraction quad,
+                //    so the underwater look must be COMPOSITED: body captured before mizu, quad blends the
+                //    captured body back over the opaque texture at CWater SetColor alpha — springs-style) ──
                 0x3C0201C7, 0x24445870, 0x8F858BD4, 0x0C04CC1C, 0x24060015, // ReloadTexture(mgr, Vif1Packet, 0x15)
                 0x0C04BC4C, 0x27A40410,                                     // MGGetFBuffTex(&tex0)
-                0xAFA00110, 0xAFA00114, 0x24020280, 0xAFA20118, 0x240200E0, 0xAFA2011C,   // rect {0,0,640,224}
+                0xFFA00110, 0x24020280, 0xAFA20118, 0x240200E0, 0xAFA2011C, // rect: sd zero zeroes x|y, then 640/224
                 0x3C0201C7, 0x24445870, 0x3C02002A, 0x2445AB88, 0x0C04C4B4, 0x2406FFFF,   // GetTexture(mgr,"water_buff",-1)
-                0x27A60418, 0xDC420028, 0xFCC20000,                         // handle = *(tex+0x28) -> sp+0x418
-                0x27A40410, 0x27A50110, 0x70003E28, 0x70004628, 0x0C04BC84, 0x70004E28,   // MGMoveImage(...)
+                0xDC420028, 0xFFA20418,                                     // handle: ld v0,0x28(v0); sd v0,0x418(sp)
+                0x27A40410, 0x27A50110, 0x27A60418, 0x70003E28, 0x70004628, 0x0C04BC84, 0x70004E28,  // MGMoveImage(...)
+                0x0805EF20, 0x00000000,                                     // j zbuf-half (mizu now draws EARLY, not here)
+                // ── zbuf-half @0x17BC80 (MIZU_STUB jumps back here): Z-mask + quad + restore ──
                 0x27A40420, 0xDF828BF0, 0xFC820000, 0x93A50424, 0x64030001, 0x2402FFFE,
                 0x00A21024, 0x00431025, 0x0C04BBB0, 0xA3A20424,             // ZMSK on: MGSetGsZBUF(&copy)
                 0x8F8490E8, 0x0C068CD8, 0x8F859100,                         // DrawWaterSurface(pEditGround, NowCamera)
                 0x0C04BBB0, 0x27848BF0,                                     // Z restore: MGSetGsZBUF(&mgZBuffer)
                 0x08068E1C, 0x00000000,                                     // j 0x1A3870 (constant return, NO $ra)
-                0x00000000,
             };
             // Two hard-won rules baked into this array:
             //  1. It ends `j 0x1A3870` (hard jump to the hook cave's continuation), NOT `jr ra`: the payload
@@ -1668,11 +1673,23 @@ namespace Dark_Cloud_Improved_Version
             {
                 0x8F838760, 0x2C620020, 0x10400007, 0x24020001, 0x00621004, 0x3C010001,
                 0x342146BF, 0x00411024, 0x1440001A, 0x00000000, 0x10000049, 0x00000000,
-                0x3C0101FB, 0x8C24E608, 0x10800011, 0x00000000, 0x3C0201C7, 0x24445870,
-                0x8F858BD4, 0x3C0101FB, 0x0C04CC1C, 0x8C26E60C, 0x3C0101FB, 0x8C24E608,
-                0x0C04BB60, 0x00000000, 0x8F848BD4, 0x0C048320, 0x70002E28, 0x8F848BD4,
-                0x0C048404, 0x3C051100, 0x0805EF03, 0x00000000, 0x00000000,
+                0x3C0101FB, 0x8C24E608, 0x1080000E, 0x8C26E60C, 0x3C0201C7, 0x24445870,
+                0x0C04CC1C, 0x8F858BD4, 0x3C0101FB, 0x8C24E608, 0x0C04BB60, 0x00000000,
+                0x3C0201C7, 0x24445870, 0x8F858BD4, 0x0C04CC1C, 0x24060015, 0x8F8490E8,
+                0x24050015, 0x0C068D88, 0x00000000, 0x0805EEDD, 0x00000000,
             };
+            // ^ the pocket now hosts EARLY_STUB (0x17BBA4, jal'd from the displaced DrawWater call site at
+            //   0x17BB6C): if the C#-armed mailbox FramePtr (0x01FAE608, now the PLAYER's model root) is
+            //   nonzero: ReloadTexture(mailbox TexGroup 0x01FAE60C = the player's OWN group, read by C# from
+            //   chara+0x148C — the same per-character field EdDrawCharacter binds from) then MGDraw it —
+            //   drawing the player EARLY with resident textures, so the water part's own NATIVE pass (with
+            //   its native blend state) draws mizu over the submerged half; the normal EdDrawCharacter later
+            //   redraws the player and is Z-clipped at the waterline, leaving a crisp dry top half. The stub
+            //   then RE-binds group 0x15 (vanilla had just bound it at 0x17BB48 for the water pass this hook
+            //   displaced), replays the displaced DrawWater(pEditGround, 0x15) call, and constant-jumps back
+            //   to 0x17BB74 (single caller — no $ra). This replaced the MIZU_STUB redraw approach: mizu drawn
+            //   via MGDraw at the hook rendered OPAQUE over the body (either authored-opaque or missing the
+            //   native pass's blend state), burying the player.
 
             uint gotLw = RdU32(fs, ElfOff(HOOK_VA)), gotBne = RdU32(fs, ElfOff(HOOK_DELAY_VA));
             if (gotLw != VAN_HOOK_LW || gotBne != VAN_HOOK_BNE)
@@ -1685,10 +1702,22 @@ namespace Dark_Cloud_Improved_Version
                 if (RdU32(fs, ElfOff(GATE_VA + (uint)i * 4)) != vanillaGate[i])
                     throw new IOException($"Water-redraw gate site 0x{GATE_VA + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
 
+            // ── EARLY-PLAYER hook: the `jal DrawWater(ground, 0x15)` at 0x17BB6C (immediately before the
+            //    gate) is retargeted to EARLY_STUB, which draws the mailbox frame (the player) BEFORE the
+            //    water part's native pass, then replays the displaced call. Delay slot at 0x17BB70 is a
+            //    vanilla nop, untouched.
+            const uint HOOK2_VA = 0x0017BB6C;
+            const uint VAN_HOOK2 = 0x0C068D88;   // jal DrawWater__11CEditGroundFi (0x1A3620)
+            uint gotHook2 = RdU32(fs, ElfOff(HOOK2_VA));
+            if (gotHook2 != VAN_HOOK2)
+                throw new IOException($"Early-player hook site 0x{HOOK2_VA:X} is not vanilla " +
+                                      $"(got 0x{gotHook2:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
+
             for (int i = 0; i < patchedPayload.Length; i++)
                 WrU32(fs, ElfOff(PAY_START + (uint)i * 4), patchedPayload[i]);
             for (int i = 0; i < patchedGate.Length; i++)
                 WrU32(fs, ElfOff(GATE_VA + (uint)i * 4), patchedGate[i]);
+            WrU32(fs, ElfOff(HOOK2_VA), 0x0C05EEE9);   // jal EARLY_STUB (0x17BBA4)
             WrU32(fs, ElfOff(HOOK_VA), J(HOOK_CAVE_VA));
             WrU32(fs, ElfOff(HOOK_DELAY_VA), 0);   // nop — HOOK_CAVE replicates the displaced check itself
         }
