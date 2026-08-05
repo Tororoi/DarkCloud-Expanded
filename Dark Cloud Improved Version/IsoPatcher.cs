@@ -1673,10 +1673,10 @@ namespace Dark_Cloud_Improved_Version
             {
                 0x8F838760, 0x2C620020, 0x10400007, 0x24020001, 0x00621004, 0x3C010001,
                 0x342146BF, 0x00411024, 0x1440001A, 0x00000000, 0x10000049, 0x00000000,
-                0x3C0101FB, 0x8C24E608, 0x1080000E, 0x8C26E60C, 0x3C0201C7, 0x24445870,
-                0x0C04CC1C, 0x8F858BD4, 0x3C0101FB, 0x8C24E608, 0x0C04BB60, 0x00000000,
-                0x3C0201C7, 0x24445870, 0x8F858BD4, 0x0C04CC1C, 0x24060015, 0x8F8490E8,
-                0x24050015, 0x0C068D88, 0x00000000, 0x0805EEDD, 0x00000000,
+                0x3C0101FB, 0x8C23E608, 0x1060000E, 0x00000000, 0x3C0201C7, 0x24445870,
+                0x8F858BD4, 0x0C04CC1C, 0x24060008, 0x3C0101FB, 0x8C24E608, 0x0C04BB60,
+                0x00000000, 0x3C0201C7, 0x24445870, 0x8F858BD4, 0x24060015, 0x0C04CC1C,
+                0x00000000, 0x0805EED4, 0x00000000, 0x00000000, 0x00000000,
             };
             // ^ the pocket now hosts EARLY_STUB (0x17BBA4, jal'd from the displaced DrawWater call site at
             //   0x17BB6C): if the C#-armed mailbox FramePtr (0x01FAE608, now the PLAYER's model root) is
@@ -1702,12 +1702,15 @@ namespace Dark_Cloud_Improved_Version
                 if (RdU32(fs, ElfOff(GATE_VA + (uint)i * 4)) != vanillaGate[i])
                     throw new IOException($"Water-redraw gate site 0x{GATE_VA + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
 
-            // ── EARLY-PLAYER hook: the `jal DrawWater(ground, 0x15)` at 0x17BB6C (immediately before the
-            //    gate) is retargeted to EARLY_STUB, which draws the mailbox frame (the player) BEFORE the
-            //    water part's native pass, then replays the displaced call. Delay slot at 0x17BB70 is a
-            //    vanilla nop, untouched.
-            const uint HOOK2_VA = 0x0017BB6C;
-            const uint VAN_HOOK2 = 0x0C068D88;   // jal DrawWater__11CEditGroundFi (0x1A3620)
+            // ── EARLY-PLAYER hook: the `jal ReloadTexture(mgr, pkt, 0x15)` at 0x17BB48 is retargeted to
+            //    EARLY_STUB, which (when armed) binds the player's group 8, MGDraws the player, then replays
+            //    the displaced 0x15 bind — so the vanilla anime-step (0x17BB50-60) → DrawWater (0x17BB6C)
+            //    sequence runs UNTOUCHED after it. Hooking the later DrawWater call instead (previous
+            //    version) required re-binding 0x15 AFTER the anime-step, which clobbered the texture
+            //    manager's staleness bookkeeping and froze all water texture animation. Delay slot at
+            //    0x17BB4C is a vanilla nop, untouched; 0x17BB6C stays fully vanilla.
+            const uint HOOK2_VA = 0x0017BB48;
+            const uint VAN_HOOK2 = 0x0C04CC1C;   // jal ReloadTexture__15CTextureManagerFP13sceVif1Packeti
             uint gotHook2 = RdU32(fs, ElfOff(HOOK2_VA));
             if (gotHook2 != VAN_HOOK2)
                 throw new IOException($"Early-player hook site 0x{HOOK2_VA:X} is not vanilla " +
