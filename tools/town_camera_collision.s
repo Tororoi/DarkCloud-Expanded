@@ -183,6 +183,11 @@ mtc1  $t0, $f5
 nop
 lwc1  $f8, 0x68($sp)          # stick offset
 add.s $f5, $f5, $f8           # + stick
+# (The reacquisition gate — freeze h/d targets unless the camera is FARTHER than rest — lives in the
+#  HEIGHT CAVE SUB (tools/camera_height.s @0x27D090), NOT here: this function is wedged against
+#  set2DSprite_Start @0x14C220 with only 8 bytes of slack, while the cave has ~750 free. The sub
+#  overwrites the eased h_e @0x70 and the dist target @0x74 with the CURRENT values when at/inside
+#  rest, which turns this function's downstream eases into no-ops.)
 lwc1  $f6, 0x6c($sp)          # ceilingY
 lwc1  $f7, 0x24($sp)          # ref.y
 sub.s $f6, $f6, $f7

@@ -115,6 +115,12 @@ def main():
             cam_tris = sum(s[4] for s in stats); inv_tris = sum(s[5] for s in stats)
             print(f"{code}: {cam_nodes} camera nodes ({cam_tris} tris) + {inv_nodes} player-only ({inv_tris} tris), "
                   f"scene {len(scene0):,} -> {len(baked):,} B")
+            if code == "e03":
+                # VISUAL-only canal west-end cap (2 tris @ y=50 closing the look-up gap from the low-tide
+                # canal floor). Applied AFTER the collision bake, deliberately: the cap must never enter
+                # the camera/player collision (it would be an invisible ceiling over the canal).
+                from canal_visual_cap import add_canal_cap
+                baked, _cap = add_canal_cap(baked)
             redirect_file(scene_rel, baked, b"SCN\x00")
 
         print(f"\nDONE (in place) -> {iso}\nBoot with the mod (CameraWallCollision.TerrainOnly=true).")

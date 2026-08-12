@@ -1304,14 +1304,20 @@ namespace Dark_Cloud_Improved_Version
             float SLIDE_FRICTION_INV = 1f - SLIDE_FRICTION;   // injected form (asm folds 1−F to save the 1.0 load)
             const float CLIMB_PEAK = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
             float CLIMB_K = (CLIMB_PEAK - REST_H) / (BASE_DIST * BASE_DIST);   // quadratic climb gain - zero slope at touch
-            const float CLIMB_RISE = 2f;     // max climb rise per frame (matches the fall bound — all height motion is rate-limited)
-            const float SLIDE_GAIN = 0.03125f; // reacquisition slide: fraction of the tangent-projected restoring pull applied per frame (0 = off; PutVal steps 0.0625/0.125/0.25)
+            const float CLIMB_RISE = 0f;     // 0 = climb DISABLED (user rule: at/inside rest distance the camera makes
+                                             // NO automatic movements — collision only. The climb's final clamp is
+                                             // max(min(curve, last+RISE), h_e), so RISE=0 pins it to the frozen h_e;
+                                             // its intrusion term only fires when pinched, i.e. exactly the banned regime)
+            const float SLIDE_GAIN = 0f;     // 0 = θ auto-slide DISABLED (same user rule — no automatic motion at/inside
+                                             // rest; it only ever acted on contact frames. PutVal steps 0.0625/0.125/0.25)
             const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
             const float H_FALL_RATE    = 2f;    // max WORLD-space height drop per frame (absolute descent bound — a falling player outruns the camera)
             const float WARP_BREAK     = 400f; // world-y discontinuity beyond which the descent bound is skipped (true warps only —
             // the eased desired-height drops ~30% of the offset per frame, so a LONG fall legitimately opens a
             // gap of hundreds of units; 400 misread that as a warp and released the bound mid-fall)
-            const float GROUND_GLIDE_K = 0.03125f; // pinned+occluded ground glide: boom fraction pulled toward the player per frame
+            const float GROUND_GLIDE_K = 0f; // 0 = glide DISABLED (same user rule — the pinned+occluded pull-in was the
+                                             // camera "trying to clear the occlusion" on its own; occlusion no longer
+                                             // drives any automatic movement)
             const float GLIDE_MIN_DIST = 12f;   // the ground glide never pulls the boom closer than this
             const float DESCENT_HOLD   = 15f;   // height excess above rest that freezes OUTWARD dist recovery (kills the lip-crossover bounce)
             // Assembled template (378 words) from tools/town_camera_collision.s — pull-in + ceiling-duck + stick, one-sided _c, no climb. The KNOBS are the consts above, NOT the hex — they get
@@ -1390,11 +1396,19 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
             Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
             uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
-            PutValIn(heightFn, 11, WARP_BREAK, nameof(WARP_BREAK));
-            PutValIn(heightFn, 18, H_FALL_RATE, nameof(H_FALL_RATE));
-            PutValIn(heightFn, 36, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
-            PutValIn(heightFn, 41, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
-            PutValIn(heightFn, 49, DESCENT_HOLD, nameof(DESCENT_HOLD));
+            // REACQUISITION GATE (word 3 of the sub, 2026-08, HEIGHT-ONLY since the recovery fix): when
+            // wall-pinched strictly inside rest the sub freezes only the HEIGHT target at current — the
+            // DIST target always seeks BASE_DIST so a wall-pinned camera recovers back out to resting
+            // distance once unconstrained (the swept-slide caps it against walls meanwhile); height
+            // unfreezes as soon as distance recovers past the gate. Slot 4 = the gate threshold, BASE−1:
+            // STRICT so open-field rest (d eases asymptotically to BASE) never freezes — the right-stick
+            // height control must keep working at rest.
+            PutValIn(heightFn, 4, BASE_DIST - 1f, "REACQ_GATE");
+            PutValIn(heightFn, 21, WARP_BREAK, nameof(WARP_BREAK));
+            PutValIn(heightFn, 28, H_FALL_RATE, nameof(H_FALL_RATE));
+            PutValIn(heightFn, 46, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
+            PutValIn(heightFn, 51, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
+            PutValIn(heightFn, 59, DESCENT_HOLD, nameof(DESCENT_HOLD));
             for (int i = 0; i < heightFn.Length; i++)
                 WrU32(fs, ElfOff(0x0027D090 + (uint)(i * 4)), heightFn[i]);
             WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
