@@ -1304,10 +1304,12 @@ namespace Dark_Cloud_Improved_Version
             float SLIDE_FRICTION_INV = 1f - SLIDE_FRICTION;   // injected form (asm folds 1−F to save the 1.0 load)
             const float CLIMB_PEAK = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
             float CLIMB_K = (CLIMB_PEAK - REST_H) / (BASE_DIST * BASE_DIST);   // quadratic climb gain - zero slope at touch
-            const float CLIMB_RISE = 0f;     // 0 = climb DISABLED (user rule: at/inside rest distance the camera makes
-                                             // NO automatic movements — collision only. The climb's final clamp is
-                                             // max(min(curve, last+RISE), h_e), so RISE=0 pins it to the frozen h_e;
-                                             // its intrusion term only fires when pinched, i.e. exactly the banned regime)
+            const float CLIMB_RISE = 2f;     // climb RE-ENABLED for pull-in only (its intrusion term max(BASE−d', 0)
+                                             // is zero at/beyond rest, so it natively fires only when pinched in), at
+                                             // the original rate cap. Composes with the height freeze: the clamp chain
+                                             // max(min(curve, last+RISE), h_e) ratchets the eye UP over the wall while
+                                             // pinned; descent back to rest goes through the ease once d recovers past
+                                             // the gate. Occlusion-gated (visible only) — occlusion still moves nothing.
             const float SLIDE_GAIN = 0f;     // 0 = θ auto-slide DISABLED (same user rule — no automatic motion at/inside
                                              // rest; it only ever acted on contact frames. PutVal steps 0.0625/0.125/0.25)
             const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
