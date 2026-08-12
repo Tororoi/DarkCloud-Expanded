@@ -11,6 +11,25 @@
 addiu $sp, $sp, -0x20
 sw    $ra, 0x18($sp)
 addu  $t9, $a1, $zero
+# ===== REACQUISITION GATE (HEIGHT only): when wall-pinched strictly inside rest, freeze the eased
+# height target h_e @0x70 at the CURRENT height — no automatic vertical motion while pinned (the
+# zeroed glide/climb/θ-slide tunables kill the other auto-movers). The DIST target @0x74 is left
+# ALONE deliberately: distance always seeks BASE_DIST, so a camera pulled in by a wall recovers back
+# out to resting distance once the wall stops constraining it (the swept-slide caps it meanwhile).
+# Once d recovers past the gate, height unfreezes and eases back to rest too. Runs FIRST so the
+# fall-bound below still acts on the frozen value. Lives HERE not in the main fn: that one is wedged
+# against set2DSprite_Start with 8 bytes of slack.
+lwc1  $f4, 0x2d0($v1)         # current dist
+lui   $t0, 0x429e             # REACQ_GATE = BASE_DIST - 1 (PutValIn). STRICT inside-rest threshold: at open
+mtc1  $t0, $f5                #   rest d eases asymptotically to BASE (can sit at 79.99), and freezing there
+nop                           #   would kill the right-stick height control — only truly pinched freezes.
+.word 0x46052034              # c.OLT.s f4,f5 : d_cur < GATE ? (pinched inside rest -> freeze height)
+nop
+bc1f  rqgok
+nop
+lwc1  $f4, 0x2d4($v1)         # freeze height target at current (offset space, same as h_e)
+swc1  $f4, 0x70($t9)
+rqgok:
 lwc1  $f6, 0x70($t9)          # h_e (offset)
 lwc1  $f2, 0x24($t9)          # ref.y
 add.s $f6, $f6, $f2           # desired eye WORLD y

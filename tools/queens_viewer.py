@@ -189,6 +189,16 @@ layers.append({'key': 'newsign', 'label': 'PROPOSED canal-floor sign (real kanba
                'tris': kanban_mesh(CANAL_SIGN_POS, CANAL_SIGN_RY),
                'color': [230,180,90], 'alpha': 1.0, 'border': '#fc6', 'on': True})
 
+# ---- SHIPPED canal west-end visual cap (tools/iso_patch/canal_visual_cap.py): 2 tris @ y=50 closing the
+#      look-up gap from the low-tide canal floor. Drawn EXACTLY as authored (host node grid1__n; NW/NE
+#      corners reused from its slant-wall records, SE/SW appended copying the x-twin's UV/normal), so the
+#      added geometry can be inspected against the surrounding walls.
+sys.path.insert(0, os.path.join(HERE, 'iso_patch'))
+import canal_visual_cap as _cap
+layers.append({'key': 'canalcap', 'label': 'SHIPPED canal west-end cap (2 tris, grid1__n @ y=50)',
+               'tris': [[list(p) for p in t] for t in _cap.CAP_TRIS],
+               'color': [240, 120, 200], 'alpha': 0.85, 'border': '#f6c', 'on': True})
+
 # ---- CUSTOM COLLISION BAKE — regrouped into the EXACT nodes the ISO bake writes (bscc.grouped_collision):
 #      all non-trigger tris of a frame are pooled and kd_split into <=100-poly nodes, so nearby polys share a
 #      node (tight per-node bbox = free runtime gather culling). Four toggles: custom CAMERA collision (_c),

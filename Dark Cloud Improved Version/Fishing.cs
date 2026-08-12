@@ -74,7 +74,7 @@ namespace Dark_Cloud_Improved_Version
                     SmoothFishSizes(areaData.SlotBase, areaData.SlotCount);
                 FishPhaseLogger.OnSessionStart(areaData.SlotBase, areaData.SlotCount);
             }
-            UpdateFishRecordsAndAriseBonus();
+            UpdateFishRecordsAndAriseBonus("session-start");
             FishDataFarmer.OnSessionDetected();
         }
 
@@ -104,7 +104,7 @@ namespace Dark_Cloud_Improved_Version
             _fishingAreaId = -1;
             // Flush any deferred record update from a catch just before quitting the session.
             _pendingRecordUpdate = DateTime.MinValue;
-            UpdateFishRecordsAndAriseBonus();
+            UpdateFishRecordsAndAriseBonus("session-end");
             FishDataFarmer.OnSessionEnded();
             FishPhaseLogger.OnSessionEnd();
         }
@@ -253,7 +253,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_pendingRecordUpdate == DateTime.MinValue || DateTime.UtcNow < _pendingRecordUpdate) return;
             _pendingRecordUpdate = DateTime.MinValue;
-            UpdateFishRecordsAndAriseBonus();
+            UpdateFishRecordsAndAriseBonus("post-catch (3s after SetFishingRank)");
         }
 
         /// <summary>
@@ -266,7 +266,7 @@ namespace Dark_Cloud_Improved_Version
             if (_ariseBonusInitialized) return;
             if (Memory.ReadInt(FishingRankList.SaveDataPtr) == 0) return; // no save loaded yet
             _ariseBonusInitialized = true;
-            UpdateFishRecordsAndAriseBonus();
+            UpdateFishRecordsAndAriseBonus("save-load-init (EnsureAriseBonusInitialized, town main loop)");
         }
 
         /// <summary>
@@ -276,7 +276,7 @@ namespace Dark_Cloud_Improved_Version
         /// Keeping the list deduped also means the native insert always finds a free slot, so
         /// every new catch enters the list before we fold it in.
         /// </summary>
-        internal static void UpdateFishRecordsAndAriseBonus()
+        internal static void UpdateFishRecordsAndAriseBonus(string trigger = "unspecified")
         {
             int saveDataNative = Memory.ReadInt(FishingRankList.SaveDataPtr);
             if (saveDataNative == 0) return;
@@ -284,6 +284,9 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] raw = Memory.ReadBytesBatch(listBase, FishingRankList.Count * FishingRankList.Stride);
             if (raw == null || raw.Length < FishingRankList.Count * FishingRankList.Stride) return;
+
+            var diag = new System.Text.StringBuilder();
+            diag.AppendLine($"[AriseDiag] update trigger={trigger} saveData=0x{saveDataNative:X} rankList=0x{listBase:X}");
 
             // Index of each species' largest entry. Entries carry 8 trailing bytes we don't
             // understand; tracking indexes lets us preserve them verbatim when compacting.
@@ -293,6 +296,15 @@ namespace Dark_Cloud_Improved_Version
                 int off = i * FishingRankList.Stride;
                 int fishId = BitConverter.ToInt32(raw, off + FishingRankList.EntryFishId);
                 float size = BitConverter.ToSingle(raw, off + FishingRankList.EntrySize);
+                // Diagnostic: show every slot that isn't a clean empty (-1 id / zero size),
+                // including malformed ones the dedupe skips — those are prime bug suspects.
+                if (fishId != -1 || size != 0f)
+                {
+                    string skip = size <= 0f ? " SKIP(size<=0)"
+                        : fishId < 0 || fishId >= FishModelTable.Count ? $" SKIP(id out of range 0..{FishModelTable.Count - 1})"
+                        : "";
+                    diag.AppendLine($"[AriseDiag]   raw[{i:D2}] fishId={fishId} size={size:F3} (~{(int)Math.Floor(size * 10f)}cm){skip}");
+                }
                 if (size <= 0f || fishId < 0 || fishId >= FishModelTable.Count) continue;
                 if (!bestEntry.TryGetValue(fishId, out int bestIdx) ||
                     size > BitConverter.ToSingle(raw, bestIdx * FishingRankList.Stride + FishingRankList.EntrySize))
@@ -330,11 +342,19 @@ namespace Dark_Cloud_Improved_Version
             foreach (KeyValuePair<int, int> kv in bestEntry)
             {
                 float size = BitConverter.ToSingle(raw, kv.Value * FishingRankList.Stride + FishingRankList.EntrySize);
-                totalBonus += RecordMagicBonus((byte)kv.Key, size);
+                int bonus = RecordMagicBonusExplain((byte)kv.Key, size, out string why);
+                totalBonus += bonus;
+                diag.AppendLine($"[AriseDiag]   best  {why}");
             }
             int newMaxMagic = Math.Min(999, AriseBaseMaxMagic + totalBonus);
             int fieldAddr = WeaponList.FieldAddr(Items.arisemardan, WeaponList.MaxMagic);
             int oldMaxMagic = Memory.ReadShort(fieldAddr);
+            diag.AppendLine($"[AriseDiag]   species={bestEntry.Count} totalBonus=+{totalBonus} base={AriseBaseMaxMagic} " +
+                $"-> MaxMagic {newMaxMagic} (WeaponList field 0x{fieldAddr:X} currently {oldMaxMagic}, " +
+                (oldMaxMagic != newMaxMagic ? "WRITING" : "no write needed") + ")");
+            diag.Append("[AriseDiag]   note: the STATIC WeaponList[Arise Mardan] entry is pre-written whether or not " +
+                "the weapon is owned — it only takes effect if the weapon exists; ownership is not checked here BY DESIGN.");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + diag.ToString());
             if (oldMaxMagic != newMaxMagic)
             {
                 Memory.WriteUShort(fieldAddr, (ushort)newMaxMagic);
@@ -348,19 +368,35 @@ namespace Dark_Cloud_Improved_Version
         /// full species cap at the Arise 2x cap, hyperbolic in between (see curve constants).
         /// </summary>
         internal static int RecordMagicBonus(byte fishId, float recordSize)
+            => RecordMagicBonusExplain(fishId, recordSize, out _);
+
+        /// <summary>
+        /// Same calculation as <see cref="RecordMagicBonus"/> (which delegates here), additionally
+        /// returning a human-readable trace of the branch taken. The [AriseDiag] log prints this,
+        /// so the diagnostic can never diverge from the real math.
+        /// </summary>
+        internal static int RecordMagicBonusExplain(byte fishId, float recordSize, out string why)
         {
-            if (!Fish.TryGetValue(fishId, out FishData fishData) || !fishData.MaxSize.HasValue) return 0;
+            if (!Fish.TryGetValue(fishId, out FishData fishData))
+            { why = $"fishId {fishId}: unknown species -> +0"; return 0; }
+            if (!fishData.MaxSize.HasValue)
+            { why = $"{fishData.Name} (id {fishId}): no MaxSize defined -> +0"; return 0; }
             int vanillaMaxCm = (int)Math.Floor(fishData.MaxSize.Value * 10f);
-            if (vanillaMaxCm <= 0) return 0;   // MissingFish has MaxSize 0
+            if (vanillaMaxCm <= 0)   // MissingFish has MaxSize 0
+            { why = $"{fishData.Name} (id {fishId}): vanillaMaxCm {vanillaMaxCm} -> +0"; return 0; }
             int cap = fishId == Fish.MardanGarayan.Id || fishId == Fish.BaronGarayan.Id
                 ? GarayanRecordCap : NormalRecordCap;
             int capCm = vanillaMaxCm * 2;
             int recordCm = (int)Math.Floor(recordSize * 10f);
-            if (recordCm < vanillaMaxCm) return 0;
-            if (recordCm >= capCm) return cap;
+            if (recordCm < vanillaMaxCm)
+            { why = $"{fishData.Name} (id {fishId}): record {recordCm}cm (raw {recordSize:F3}) < vanilla max {vanillaMaxCm}cm -> +0"; return 0; }
+            if (recordCm >= capCm)
+            { why = $"{fishData.Name} (id {fishId}): record {recordCm}cm >= 2x cap {capCm}cm -> full +{cap}"; return cap; }
             double d = (capCm - recordCm) / (double)vanillaMaxCm;
             double f = 1.0 / (1.0 + RecordCurveCoeff * Math.Pow(d, RecordCurveGamma));
-            return Math.Max(1, (int)Math.Round(cap * f, MidpointRounding.AwayFromZero));
+            int bonus = Math.Max(1, (int)Math.Round(cap * f, MidpointRounding.AwayFromZero));
+            why = $"{fishData.Name} (id {fishId}): record {recordCm}cm (raw {recordSize:F3}) in [{vanillaMaxCm}..{capCm}]cm, d={d:F3} -> +{bonus} (species cap {cap})";
+            return bonus;
         }
 
         // ---- Slot initialization ----

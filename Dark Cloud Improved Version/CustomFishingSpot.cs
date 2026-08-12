@@ -178,8 +178,9 @@ namespace Dark_Cloud_Improved_Version
                      // at the flooded-tide surface.
                      sx: 794f, sy: 0f, sz: 0f, facing: 1.5708f,
                      // ⚠ shallowBobber is SUPERSEDED for Queens (LineConfig picks the anchor by tide — this spot
-                     // is only reachable at LOW tide, so it gets anchor 21 @1x). fishDepth PENDING the capture.
-                     shallowBobber: true, fishDepth: 4f, labelId: 401,   // its own label -> deterministic canal stance
+                     // is only reachable at LOW tide, so it gets anchor 21 @1x). fishDepth 6.8: the logged hook
+                     // target at low tide (water 8) is Y=1.2, so 8 − 6.8 puts the fish exactly at the hook.
+                     shallowBobber: true, fishDepth: 6.8f, labelId: 401,  // its own label -> deterministic canal stance
                      // standing IN the canal: drop the raised fishing angle (40) — full town height (5) felt
                      // too cramped by eye, 20 is the tuned balance.
                      cameraHeight: CanalWadingCamHeight),
