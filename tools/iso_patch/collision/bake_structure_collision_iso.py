@@ -121,6 +121,13 @@ def main():
                 # the camera/player collision (it would be an invisible ceiling over the canal).
                 from canal_visual_cap import add_canal_cap
                 baked, _cap = add_canal_cap(baked)
+                # Wading ripple TEXTURE (v7: the decal itself is a static part injected by IsoPatcher;
+                # CanalTide flips its layer to 0x15 so it draws in the water pass): swap the animated
+                # ripple texture's PIXELS (e01b22 + e01b23 strip in e03's own img.pak, byte-size-identical)
+                # for the cast-bobber ripple sprite (`hamon`, already in this same pak's effect.img).
+                from canal_ripple_node import retexture_ripple_bank
+                redirect_file("gedit/e03/img.pak",
+                              retexture_ripple_bank(read_archive("gedit/e03/img.pak")))
             redirect_file(scene_rel, baked, b"SCN\x00")
 
         print(f"\nDONE (in place) -> {iso}\nBoot with the mod (CameraWallCollision.TerrainOnly=true).")

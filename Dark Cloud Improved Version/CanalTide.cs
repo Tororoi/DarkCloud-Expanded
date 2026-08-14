@@ -105,6 +105,34 @@ namespace Dark_Cloud_Improved_Version
         private const long RippleEditGroundPtr = 0x202A28D8;
         private const long RippleArrOff = 0x15040, RippleStride = 0x3B0;
         private const int  RippleSlots  = 4;
+
+        // ── WADING RIPPLE (v7 — static part drawn IN THE WATER PASS via its LAYER; full RE:
+        // game_data/docs/water-rendering-re.md §TEXANIME). The look = the plant/stilt ring look: a
+        // persistent mesh (Norune's hamon splat, ±39, part "wripple") whose e01b22 texture the town
+        // TEX_ANIME animates (ring art baked in by the ISO post-step). DrawWater's static-part loop draws
+        // every part whose LAYER field (+0xE4) == the pass arg (0x15) with the water texture group
+        // resident — so this class flips the injected part's layer to 0x15 (its normal-layer draw showed
+        // garbage: water-group texture, wrong pass) and drives its position (+0x10). The v6 attempt hung
+        // the mesh as a CHILD NODE of mizu inside e03c08 — the frame loaded and was driven, but the water
+        // part's draw never visited it (parts draw their REGISTERED frame, not the node table); levers and
+        // failures catalogued in memory/water-surface-and-timeofday.md.
+        private const long StaticPartsOff = 0x15F40, PartStride = 0x2A0;   // static CMapParts array
+        private const int  StaticPartCount = 0x40;
+        private const long PartPos = 0x10, PartLayer = 0xE4;
+        private const int  WaterLayer = 0x15;
+        private const float DecalLift = 0.6f;              // above the surface — coplanar with the mesh = z-fight
+        private const float DecalParkY = -3000f;
+        private const float DecalStillThresh = 0.5f;       // per-tick x+z movement below this = "standing still"
+        private const int   DecalStillHold = 3;            // ticks of stillness before the calm ripple appears
+        // PROBE: ignore the wading gate and show the ripple everywhere in Queens (still-gated), any tide —
+        // visual-confirmation mode. Turn OFF once confirmed.
+        internal static bool DecalProbe = true;
+        private static long _decalPart;                    // cached part (mmu); 0 = unknown
+        private static int  _decalNextScan;
+        private static float _decalLastY = DecalParkY;
+        private static float _decalLastPx, _decalLastPz;   // last player x/z (standing-still detection)
+        private static int  _decalStillTicks;              // consecutive ticks below the movement threshold
+        private static bool _decalShown, _loggedDecal;
         private static long  _frame;                   // cached mizu__a01 CFrame (mmu); 0 = unknown
         private static float _shownLvl = float.NaN;    // water level currently displayed (lags target while hidden)
         private static float _lastMizu = float.NaN;    // last level written to the mesh (set-once while stable)
@@ -130,6 +158,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 _frame = 0; _shownLvl = float.NaN; _lastMizu = float.NaN; _rebakeLvl = int.MinValue;
                 _rippleSlot = -1; _colorSaved = -1; _loggedArm = false;                   // Queens-only state
+                _decalPart = 0; _decalShown = false; _loggedDecal = false; _decalStillTicks = 0;
                 Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
                 return;
             }
@@ -211,6 +240,8 @@ namespace Dark_Cloud_Improved_Version
             ApplyLowTideColor(false);   // quad stays NATIVE colour — the underwater blend now comes from
                                         // mizu's own native pass over the early-drawn player, not the quad
             PlayerRipple(_shownLvl);
+
+            RippleDecal(_shownLvl, low);
 
             // Re-bake the FISHING water (baked into the injected script at install) once the shown level has
             // settled on a new level — re-writes only the fishing bytecode, skipped mid-session.
@@ -343,6 +374,125 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(cell, Memory.ReadFloat(cell) + amp);
         }
 
+
+        /// <summary>Drive the wading ripple part (see the WADING RIPPLE note above): keep its layer on
+        /// the WATER pass and, while wading the canal at LOW tide, hold it just above the waterline under
+        /// the player; park it otherwise. The texture animates natively (TEX_ANIME) — position is the only
+        /// thing driven. Rings while merely STANDING in the water — no movement gate.</summary>
+        private static void RippleDecal(float level, bool low)
+        {
+            long part = DecalPart();
+            if (part == 0) return;
+            if (Memory.ReadInt(part + PartLayer) != WaterLayer)
+                Memory.WriteInt(part + PartLayer, WaterLayer);      // draw with the water pass (+ its tex group)
+
+            if (!EditLoop.TryReadPlayerPos(out float px, out float py, out float pz)) return;
+
+            // STANDING-STILL gate: this is the CALM ripple — the ring animates in place, so while the
+            // player walks the expanding texture smears a trail of rings along the path. Only show it
+            // when stationary. (Movement-driven surface disturbance is a separate feature.) Instant hide
+            // on motion; a short still-debounce before re-showing so a brief pause mid-stride doesn't
+            // flash it.
+            float moved = Math.Abs(px - _decalLastPx) + Math.Abs(pz - _decalLastPz);
+            _decalLastPx = px; _decalLastPz = pz;
+            if (moved >= DecalStillThresh) _decalStillTicks = 0;
+            else if (_decalStillTicks < DecalStillHold) _decalStillTicks++;
+            bool still = _decalStillTicks >= DecalStillHold;
+
+            bool here;
+            if (DecalProbe)
+                here = still;                                        // probe: anywhere in Queens, when still
+            else
+            {
+                bool inWater = false;
+                if (low && py <= level)
+                {
+                    long body = CanalBody();
+                    if (body != 0)
+                    {
+                        long cw = body + WaterOff;
+                        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+                        for (int i = 0; i < 4; i++)
+                        {
+                            float cxv = Memory.ReadFloat(cw + CwCorner + i * CwCornerStride);
+                            float czv = Memory.ReadFloat(cw + CwCorner + i * CwCornerStride + 8);
+                            minX = Math.Min(minX, cxv); maxX = Math.Max(maxX, cxv);
+                            minZ = Math.Min(minZ, czv); maxZ = Math.Max(maxZ, czv);
+                        }
+                        inWater = px >= minX && px <= maxX && pz >= minZ && pz <= maxZ;
+                    }
+                }
+                here = still && inWater;
+            }
+
+            if (here)
+            {
+                MoveDecal(part, px, level + DecalLift, pz);
+                if (!_decalShown) { Log("ripple part shown (player standing still)"); _decalShown = true; }
+            }
+            else if (_decalShown)
+            {
+                MoveDecal(part, 0f, DecalParkY, 0f);                 // park while moving / out of water
+                _decalShown = false;
+            }
+        }
+
+        private static void MoveDecal(long part, float x, float y, float z)
+        {
+            Memory.WriteFloat(part + PartPos, x);
+            Memory.WriteFloat(part + PartPos + 4, y);
+            Memory.WriteFloat(part + PartPos + 8, z);
+            _decalLastY = y;
+        }
+
+        /// <summary>The injected "wripple" part: the static CMapParts slot whose position is the parked
+        /// mapinfo y (the one value we control that is unique). Cache re-validated by y being either our
+        /// own last write or the park height; an area transition rebuilds the array back to the mapinfo
+        /// placement, so a stale cache self-heals through the same scan.</summary>
+        private static long DecalPart()
+        {
+            if (_decalPart != 0)
+            {
+                float y = Memory.ReadFloat(_decalPart + PartPos + 4);
+                if (Math.Abs(y - DecalParkY) < 1f || Math.Abs(y - _decalLastY) < 1f) return _decalPart;
+                _decalPart = 0; _decalShown = false;
+            }
+            if (_tick < _decalNextScan) return 0;
+            uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(egGuest)) return 0;
+            long arr = Memory.ToMmu(egGuest) + StaticPartsOff;
+            for (int i = 0; i < StaticPartCount; i++)
+            {
+                long pt = arr + i * PartStride;
+                if (Memory.ReadInt(pt + 0xE8) < 0) continue;                  // unplaced slot
+                if (Math.Abs(Memory.ReadFloat(pt + PartPos + 4) - DecalParkY) > 1f) continue;
+                _decalPart = pt; _decalLastY = DecalParkY;
+                if (!_loggedDecal)
+                {
+                    Log($"ripple part = static slot {i} (layer +0xE4={Memory.ReadInt(pt + PartLayer)} -> {WaterLayer}, " +
+                        $"act +0xC4={Memory.ReadInt(pt + 0xC4)}, +0xE8={Memory.ReadInt(pt + 0xE8)})");
+                    _loggedDecal = true;
+                    // one-shot survey: every placed static part's layer/type/vtable + the fn at vtbl+0x94
+                    // (the method DrawWater's layer loop invokes) — tells us how the real water part draws.
+                    var sb = new StringBuilder("static parts: ");
+                    for (int j = 0; j < StaticPartCount; j++)
+                    {
+                        long q = arr + j * PartStride;
+                        if (Memory.ReadInt(q + 0xE8) < 0) continue;
+                        uint vt = Memory.ReadUInt(q + 0xA0) & Memory.PhysAddrMask;
+                        uint fn94 = 0;
+                        if (Memory.IsValidGuest(vt)) fn94 = Memory.ReadUInt(Memory.ToMmu(vt) + 0x94);
+                        sb.Append($"[{j}: L={Memory.ReadInt(q + PartLayer)} T={Memory.ReadInt(q + 0x118)} " +
+                                  $"vt=0x{vt:X} f94=0x{fn94:X}] ");
+                    }
+                    Log(sb.ToString());
+                }
+                return pt;
+            }
+            _decalNextScan = _tick + 100;   // ~5 s back-off — the part appears once the scene is loaded
+            return 0;
+        }
+
         private static bool FrameStillMizu(long f)
         {
             if (f == 0) return false;
@@ -378,9 +528,9 @@ namespace Dark_Cloud_Improved_Version
             return 0;
         }
 
-        private static int IndexOf(byte[] hay, byte[] needle)
+        private static int IndexOf(byte[] hay, byte[] needle, int from = 0)
         {
-            for (int i = 0; i <= hay.Length - needle.Length; i++)
+            for (int i = Math.Max(0, from); i <= hay.Length - needle.Length; i++)
             {
                 int j = 0;
                 while (j < needle.Length && hay[i + j] == needle[j]) j++;
