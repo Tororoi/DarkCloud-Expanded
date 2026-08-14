@@ -322,11 +322,18 @@ namespace Dark_Cloud_Improved_Version
             // The ladder part carries its two baked climb points (type-4 bottom / type-5 top).
             e03scene = BuildInjectedScene(e03scene, ladderMds, tmplHdr, null, "hasigo", bakeIdentity: false,
                                           funcData: BuildLadderFunc());
+            // Wading ripple decal (v7): a static part whose LAYER CanalTide flips to 0x15 so DrawWater's
+            // static-part loop draws it in the WATER pass (water textures resident + TEX_ANIME animating
+            // its e01b22 material, ring-retextured by the bake post-step). Parked at y=-3000 via mapinfo.
+            progress("Carving + injecting the wading ripple decal …");
+            e03scene = BuildInjectedScene(e03scene, CarveRippleDecal(ReadArchive("gedit/e01/scene.scn")),
+                                          tmplHdr, null, "wripple");
             Redirect(E03_SCENE, e03scene);
 
             byte[] e03map = BuildInjectedMapinfo(ReadArchive(E03_MAPINFO), QSIGN_X, QSIGN_Y, QSIGN_Z, QSIGN_RY, E03_ANCHOR, "kanban_a.mds");
             e03map = BuildInjectedMapinfo(e03map, CANAL_SIGN_X, CANAL_SIGN_Y, CANAL_SIGN_Z, CANAL_SIGN_RY, E03_ANCHOR, "kanbanc_a.mds", "kanbanc");
             e03map = BuildInjectedMapinfo(e03map, 0, 0, 0, 0, E03_ANCHOR, "", "hasigo");   // ladder verts are world-baked
+            e03map = BuildInjectedMapinfo(e03map, 0, -3000, 0, 0, E03_ANCHOR, "", "wripple");   // parked; CanalTide drives it
             Redirect(E03_MAPINFO, e03map);
 
             // Yellow Drops (s13): no native/injected sign, so inject the same kanban sign at its fishing spot,
@@ -1794,7 +1801,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 uint dataOff = U32(pak, p + 0x40), size = U32(pak, p + 0x44), stride = U32(pak, p + 0x48);
                 int b = p + (int)dataOff;
-                if (size >= 8 && pak[b] == 'I' && pak[b + 1] == 'M' && pak[b + 2] == '2' && pak[b + 3] == 0)
+                if (size >= 8 && pak[b] == 'I' && pak[b + 1] == 'M' && (pak[b + 2] == '2' || pak[b + 2] == 'G') && pak[b + 3] == 0)
                 {
                     int count = (int)U32(pak, b + 4);
                     for (int i = 0; i < count; i++)
@@ -1859,6 +1866,83 @@ namespace Dark_Cloud_Improved_Version
             Array.Copy(scene, mdt, outb, 0x10 + 0x70, mdtTotal);
             return outb;
         }
+
+        // Build the wading ripple decal as a SINGLE flat quad mapping the ring texture ONCE. The donor
+        // `hamon__A01z` (Norune waterwheel) is 56 tris that EACH map the full 0→1 texture — in-game that
+        // tiled the ring ~28× across a big patch ("wrong texture, too big"). Here we carve only hamon's
+        // MATERIAL (`e01b22`, Queens' TEX_ANIME ripple texture, ring-retextured by the bake post-step) and
+        // emit a fresh 4-vert / 2-tri quad at ±DECAL_HALF with UV 0→1, so the ring shows once. Node keeps
+        // the `__za01` suffix attrs (z=no-Z-write, a01=alpha-test). Injected as static part "wripple";
+        // CanalTide flips the part LAYER (+0xE4) to 0x15 so DrawWater's per-layer loop draws it in the
+        // WATER pass (water texture group resident — a normal-layer part sampling it renders garbage).
+        const float DECAL_HALF = 5.5f;  // ring half-extent (11 units across, tight around the player's feet)
+        static byte[] CarveRippleDecal(byte[] scene)
+        {
+            const string NODE_NAME = "hamon__A01z";
+            int ki = IndexOf(scene, Encoding.ASCII.GetBytes(NODE_NAME + "\0"), 0);
+            if (ki < 0) throw new IOException("Could not find the ripple decal (hamon__A01z) in the ISO.");
+            int mds = LastIndexOf(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, ki - 8);
+            int tbl = (int)U32(scene, mds + 0xC), count = (int)U32(scene, mds + 8);
+            int ndOff = -1;
+            for (int i = 0; i < count; i++) { int no = mds + tbl + i * 0x70; if (NameAt(scene, no + 8, 0x20) == NODE_NAME) { ndOff = no; break; } }
+            if (ndOff < 0) throw new IOException("hamon__A01z node index not found.");
+            int mdt = mds + (int)U32(scene, ndOff + 0x28);
+            // carve the material descriptor verbatim (hw[14] = MAT offset; stride 0x60, name "e01b22" @+0x34)
+            int matOff = mdt + (int)U32(scene, mdt + 0x38);
+            byte[] mat = new byte[0x60]; Array.Copy(scene, matOff, mat, 0, 0x60);
+            if (NameAt(mat, 0x34, 0x20) != "e01b22") throw new IOException("hamon material is not e01b22.");
+
+            // ── build the quad MDT. Blocks in the vanilla order POS/DL/UV/NORM/MAT, each 16-aligned.
+            //    Codec semantics (RE'd, canal_visual_cap): a record is (posIdx, hw6Idx, hw12Idx); the hw6
+            //    block ("UV" in the header) holds NORMALS, the hw12 block ("NORM") holds TEXCOORDS.
+            float H = DECAL_HALF;
+            float[][] posv = { new[] { -H, 0f, -H }, new[] { H, 0f, -H }, new[] { H, 0f, H }, new[] { -H, 0f, H } };
+            float[][] tcv  = { new[] { 0f, 0f }, new[] { 1f, 0f }, new[] { 1f, 1f }, new[] { 0f, 1f } };   // u,v corners
+            int[][] recs   = { new[] { 0, 0, 0 }, new[] { 1, 0, 1 }, new[] { 2, 0, 2 },                    // tri 0
+                               new[] { 0, 0, 0 }, new[] { 2, 0, 2 }, new[] { 3, 0, 3 } };                  // tri 1
+            int POS = 0x40, POSsz = 4 * 16;
+            int DL = POS + POSsz;                                             // 0x80 (aligned)
+            int DLsz = 16 + 12 + recs.Length * 3 * 4;                         // preamble + submesh hdr + records = 0x64
+            int UV = Align16(DL + DLsz);                                      // normals block (1 entry)
+            int NORM = UV + 1 * 16;                                           // texcoords block (4 entries)
+            int MAT = NORM + 4 * 16;
+            int total = MAT + 0x60;
+            var mm = new byte[total];
+            mm[0] = (byte)'M'; mm[1] = (byte)'D'; mm[2] = (byte)'T'; mm[3] = 0;
+            U32(mm, 0x04, 0x40); U32(mm, 0x08, (uint)total); U32(mm, 0x0C, 4);          // hdr[1] flag, total, pos count
+            U32(mm, 0x10, (uint)POS); U32(mm, 0x14, 1); U32(mm, 0x18, (uint)UV); U32(mm, 0x1C, 0);
+            U32(mm, 0x20, 0xFFFFFFFF); U32(mm, 0x24, (uint)DLsz); U32(mm, 0x28, (uint)DL); U32(mm, 0x2C, 4);
+            U32(mm, 0x30, (uint)NORM); U32(mm, 0x34, 1); U32(mm, 0x38, (uint)MAT); U32(mm, 0x3C, 0xCDCDCDCD);
+            for (int v = 0; v < 4; v++)                                       // positions (w = 1)
+            {
+                int o = POS + v * 16;
+                WrF(mm, o, posv[v][0]); WrF(mm, o + 4, posv[v][1]); WrF(mm, o + 8, posv[v][2]); WrF(mm, o + 12, 1f);
+            }
+            U32(mm, DL + 0, 0xCDCDCDCD); U32(mm, DL + 4, 0x10); U32(mm, DL + 8, 1); U32(mm, DL + 12, 0xCDCDCDCD);  // preamble (submesh count = 1)
+            U32(mm, DL + 16, 3); U32(mm, DL + 20, (uint)recs.Length); U32(mm, DL + 24, 0);                        // submesh: prim 3, record count (6), matIdx 0
+            for (int r = 0; r < recs.Length; r++)
+                for (int k = 0; k < 3; k++) U32(mm, DL + 28 + (r * 3 + k) * 4, (uint)recs[r][k]);
+            WrF(mm, UV, 0f); WrF(mm, UV + 4, 1f); WrF(mm, UV + 8, 0f); WrF(mm, UV + 12, 1f);                       // 1 up-normal (0,1,0)
+            for (int t = 0; t < 4; t++)                                       // 4 texcoords (u, v)
+            {
+                int o = NORM + t * 16;
+                WrF(mm, o, tcv[t][0]); WrF(mm, o + 4, tcv[t][1]); WrF(mm, o + 8, 1f); WrF(mm, o + 12, 0f);
+            }
+            Array.Copy(mat, 0, mm, MAT, 0x60);
+
+            // wrap as a kanban-style 1-node MDS (clone hamon's node record for its attr/name fields)
+            var outb = new byte[0x10 + 0x70 + total];
+            outb[0] = (byte)'M'; outb[1] = (byte)'D'; outb[2] = (byte)'S'; outb[3] = 0;
+            U32(outb, 4, U32(scene, mds + 4)); U32(outb, 8, 1); U32(outb, 0xC, 0x10);
+            Array.Copy(scene, ndOff, outb, 0x10, 0x70);
+            U32(outb, 0x10 + 0x28, 0x80);                                     // meshOff = 0x80 (block-relative)
+            U32(outb, 0x10 + 0x2C, 0xFFFFFFFF);                               // parent = -1 (detached root)
+            Array.Copy(mm, 0, outb, 0x10 + 0x70, total);
+            return outb;
+        }
+
+        static int Align16(int x) => (x + 0xF) & ~0xF;
+        static void WrF(byte[] b, int o, float f) => Array.Copy(BitConverter.GetBytes(f), 0, b, o, 4);
 
         // ── canal ladder: carve the Factory metal ladder (e05a01/hasigo1) from the user's ISO and reshape it
         //    for the Queens canal wall. Faithful C# port of tools/carve_ladder.py (the reference the viewer

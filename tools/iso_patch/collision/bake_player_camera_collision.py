@@ -187,6 +187,22 @@ _MANUAL_TRIS = {
 }
 
 
+# CAMERA-only authored tris (`_c` frame only; never enter the player `_a`). Wind so (b-a)x(c-a) faces the
+# play area — the one-sided camera raycast passes through backfaces. e03: the x=-200 face of the canal
+# west-end pocket (y 0..50, z +-50, under the visual cap) — keeps the camera from backing west into the
+# capped pocket void when the player wades near the canal's west end. Normal faces +X (the canal).
+_CAMERA_TRIS = {
+    'e03': [
+        [[-200, 0.0, -50], [-200, 50.0, 50], [-200, 0.0, 50]],
+        [[-200, 0.0, -50], [-200, 50.0, -50], [-200, 50.0, 50]],
+    ],
+}
+
+
+def camera_tris(town='e03'):
+    return [[list(p) for p in t] for t in _CAMERA_TRIS.get(town, [])]
+
+
 # Flat GROUND rectangles (both frames): each (x0,x1,z0,z1,y) REPLACES every flat terrain tri whose footprint
 # falls inside it at that y (a corner-set + the ground connecting the corners) with ONE quad. The matching
 # removal lives in simplify_terrain (below, via _in_flat_region reading _FLAT_REGIONS). Non-flat tris
@@ -874,10 +890,11 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     #      winding). Player `_a` above keeps the raw (two-sided) winding.
     cstruct = fix_camera_winding([t for sub in subs for t in bysub[sub]])
     cbw, cperim = fix_camera_winding(bw), fix_camera_winding(perim)
-    cam_pool = cstruct + cperim + cbw
+    cext = camera_tris(town)                                       # authored camera-only (already play-area wound)
+    cam_pool = cstruct + cperim + cbw + cext
     camera = _pool_split(cam_pool, 'ccol', set(), max_tris)
 
-    sets = {'structure': cstruct, 'bwalls': cbw, 'perimeter': cperim, 'invisible': inv + pw}
+    sets = {'structure': cstruct, 'bwalls': cbw + cext, 'perimeter': cperim, 'invisible': inv + pw}
     return {'subs': subs, 'player': player, 'camera': camera, 'sets': sets}
 
 
