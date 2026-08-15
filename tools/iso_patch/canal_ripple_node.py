@@ -110,6 +110,17 @@ def _unswizzle8(data, w, h):
     return out
 
 
+def _bilerp(px, w, h, fx, fy):
+    """Bilinearly sample a flat row-major RGBA list `px` (w*h) at fractional (fx, fy); returns int RGBA."""
+    fx = 0.0 if fx < 0 else (w - 1.0 if fx > w - 1 else fx)
+    fy = 0.0 if fy < 0 else (h - 1.0 if fy > h - 1 else fy)
+    x0 = int(fx); y0 = int(fy); x1 = min(x0 + 1, w - 1); y1 = min(y0 + 1, h - 1)
+    dx = fx - x0; dy = fy - y0
+    c00 = px[y0 * w + x0]; c10 = px[y0 * w + x1]; c01 = px[y1 * w + x0]; c11 = px[y1 * w + x1]
+    return tuple(int(c00[i] * (1 - dx) * (1 - dy) + c10[i] * dx * (1 - dy)
+                     + c01[i] * (1 - dx) * dy + c11[i] * dx * dy + 0.5) for i in range(4))
+
+
 def _hamon_ring_rgba(pak: bytes):
     """The bobber/hook ripple sprite `hamon` (e03 effect.img, 64x64 8bpp+CLUT, GS-swizzled) as
     [(r,g,b,a)] with PS2 alpha (0x80 = opaque) — the EXACT texture EffectHamon draws for the cast
@@ -149,8 +160,12 @@ def _hamon_ring_rgba(pak: bytes):
     # double ring maps centred and full-size onto the quad — the actual cast-bobber look.
     # RING_GAIN lifts BOTH colour (brightness) and alpha (toward opaque) past plain normalization so
     # the ring reads clearly over the water instead of a subtle wash. Tune here — 1.0 = plain normalize.
-    RING_GAIN = 2.2
-    quad = [pal[de[(y // 2) * 64 + (x // 2)]] for y in range(64) for x in range(64)]   # TL 32x32, 2x up
+    RING_GAIN = 2.5
+    # 32x32 TL quadrant as RGBA, then BILINEARLY upscaled to 64x64 (was nearest-neighbour "// 2", which
+    # left the ring visibly blocky). Bilinear can't add detail past the 32x32 source but smooths the edges
+    # so the ring reads as a soft ring rather than stair-stepped pixels.
+    tl = [pal[de[sy * 64 + sx]] for sy in range(32) for sx in range(32)]
+    quad = [_bilerp(tl, 32, 32, x / 2.0, y / 2.0) for y in range(64) for x in range(64)]
     peak = max(max(r, g, b) for r, g, b, _a in quad) or 1
     out = []
     for r, g, b, _a in quad:
@@ -171,10 +186,10 @@ def _ring_frames(pak: bytes):
         out = []
         for y in range(64):
             for x in range(64):
-                sx = int(32 + (x - 32) / s + 0.5)
-                sy = int(32 + (y - 32) / s + 0.5)
-                if 0 <= sx < 64 and 0 <= sy < 64:
-                    r, g, b, a = src[sy * 64 + sx]
+                sx = 32 + (x - 32) / s
+                sy = 32 + (y - 32) / s
+                if 0 <= sx <= 63 and 0 <= sy <= 63:                # bilinear zoom (was nearest) = smooth edges
+                    r, g, b, a = _bilerp(src, 64, 64, sx, sy)
                 else:
                     r, g, b, a = 0, 0, 0, 0
                 out.append((r, g, b, int(a * env)))

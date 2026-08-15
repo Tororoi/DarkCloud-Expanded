@@ -738,6 +738,23 @@ namespace Dark_Cloud_Improved_Version
                 Log($"   secondary spot '{extra.Name}' installed at label {extra.LabelId} (code @+0x{el.Off:X})");
             }
 
+            // Queens canal ladder "tide too high" message (label 402, Queens only). CanalTide enables this
+            // baked type-3 point (IsoPatcher) instead of the native climb-down at HIGH tide; the script is the
+            // same prompt-don't-pounce shape as the fishing entry — draws "!", and only on X-press shows the
+            // line. Rides the fishing install/self-heal (same stb), so no separate presence check.
+            if (spot.MapNo == QueensMapNo)
+            {
+                Lab ml = ClaimLabel(stb, labelCount, tbl, LadderMsgLabelId, Need(BuildLadderMessageBytecode()), out int mlEnd);
+                if (ml == null) Log($"   ladder message: no spare label {LadderMsgLabelId} — skipped");
+                else
+                {
+                    Memory.WriteInt(stb + ml.Entry, LadderMsgLabelId);
+                    WriteScript(stb, ml.Off, mlEnd, BuildLadderMessageBytecode(),
+                                $"canal ladder 'tide too high' message (event-mes {LadderMsgId}, prompt-don't-pounce)");
+                    Log($"   ladder message installed at label {LadderMsgLabelId} (code @+0x{ml.Off:X})");
+                }
+            }
+
             // The trigger is now BAKED into the ISO — a native type-3 event point in the town's own scene.scn
             // (IsoPatcher.BuildFishingFunc), created by the engine at town load. So we no longer create a
             // runtime event point; we only install the fishing SCRIPT here, and the baked point names label
@@ -863,6 +880,15 @@ namespace Dark_Cloud_Improved_Version
         /// only ever reached by CALL_FUNC (vanilla parks the same routine as an anonymous funcdata) — so this
         /// just needs to be an id no town uses and clear of the <see cref="RetiredLabelId"/> range.</summary>
         private const int MenuSubLabelId = 9600;
+
+        /// <summary>Queens map number (Brownboo = 14 by the PriscleenFish gate; Queens spots are MapNo 2).
+        /// Gates the canal-ladder message install to Queens only.</summary>
+        private const int QueensMapNo = 2;
+
+        /// <summary>The canal-ladder "tide too high" message label + its event-mes id — both baked into the
+        /// ISO by IsoPatcher (spare label 402, event-mes 23). Must match <see cref="IsoPatcher.LADDER_MSG_LABEL"/>.</summary>
+        internal const int LadderMsgLabelId = IsoPatcher.LADDER_MSG_LABEL;
+        private const int LadderMsgId = 23;
 
         /// <summary>
         /// Claim a run of adjacent unused labels totalling at least <paramref name="need"/> bytes, and return
@@ -1369,6 +1395,42 @@ namespace Dark_Cloud_Improved_Version
         {
             if (menuCbRel >= 0) EmitMenuCall(w, msgId, count, destVar, menuCbRel);
             else EmitSelectMenu(w, msgId, count, destVar, vPad, vLy, vHeld, vScratch);
+        }
+
+        /// <summary>The canal-ladder "tide too high" script (label 402). Same prompt-don't-pounce shape as the
+        /// fishing entry: it runs every frame while the player is in the point's radius as a SIMPLE EVENT
+        /// (returns without yielding → the player keeps walking), draws the "!" prompt and watches the pad, and
+        /// only COMMITS — yields — when X is pressed. On X it snaps the player to idle and shows event-mes 23
+        /// (EmitShowMessage waits for X, then closes). CanalTide enables this point only at high tide, so it
+        /// never competes with the native climb-down (which it enables at low tide instead).</summary>
+        private static StbWriter BuildLadderMessageBytecode()
+        {
+            var w = new StbWriter();
+            w.UseLocals(2);                               // var0 = pad bits, var1 = EmitShowMessage's wait-loop pad var
+
+            w.PushInt(StbCommands.DrawExclamationMark);   // 10 — per-frame; re-asserted on every pass
+            w.Ext(1);
+
+            w.PushInt(StbCommands.GetPadDown);            // 1
+            w.PushVarRef(0);                              // out: var0 = buttons pressed this frame
+            w.Ext(2);
+            w.PushVar(0);
+            w.PushInt(StbCommands.PadCross);
+            w.And();
+            int idle = w.MarkForward();
+            w.BrFalse(idle);                              // no X -> fall out WITHOUT yielding: a simple event
+
+            // X pressed: snap the player to idle (Norune's label 11 does this before opening a window), then
+            // show the line — everything past the branch yields, so the message only fires on a real press.
+            w.PushInt(StbCommands.SetNpcMotion);          // 133
+            w.PushInt(-1);                                // charaId -1 = the player
+            w.PushInt(0);                                 // motion 0 = idle/stand
+            w.Ext(3);
+            EmitShowMessage(w, LadderMsgId, /*padVar*/1);
+
+            w.PlaceMark(idle);
+            w.Ret();
+            return w;
         }
 
         /// <summary>Show event-mes <paramref name="msgId"/> in window 1 (no cursor), wait for X, then close.
