@@ -55,6 +55,10 @@ namespace Dark_Cloud_Improved_Version
         const int FUNC_STRIDE = 0xC0;
         const int FISH_LABEL = 400;        // == CustomFishingSpot.FishingLabelId; north-bank / primary spot
         const int FISH_LABEL_CANAL = 401;  // Queens canal-floor spot — its own label + stance (kanbanc sign)
+        // Queens canal ladder "tide too high" message: a type-3 script point (label 402) co-located with the
+        // climb-down; CanalTide gates the native ladder OR this point by tide. Event-mes id 23 = the line.
+        internal const int LADDER_MSG_LABEL = 402;   // == CustomFishingSpot.LadderMsgLabelId
+        const int LADDER_MSG_ID = 23;                // event-mes id the label-402 script shows
 
         // Per-town fishing-trigger position, PART-LOCAL to the sign (the mapinfo placement rotates+translates
         // it to world). Chosen so the native trigger lands exactly where the runtime one did (spot tx,ty,tz).
@@ -326,14 +330,23 @@ namespace Dark_Cloud_Improved_Version
             // static-part loop draws it in the WATER pass (water textures resident + TEX_ANIME animating
             // its e01b22 material, ring-retextured by the bake post-step). Parked at y=-3000 via mapinfo.
             progress("Carving + injecting the wading ripple decal …");
-            e03scene = BuildInjectedScene(e03scene, CarveRippleDecal(ReadArchive("gedit/e01/scene.scn")),
-                                          tmplHdr, null, "wripple");
+            byte[] e01scn = ReadArchive("gedit/e01/scene.scn");
+            e03scene = BuildInjectedScene(e03scene, CarveRippleDecal(e01scn), tmplHdr, null, "wripple");
+            // Two HALF-size ripple decals, one on each vertical rail of the ladder (world rails ≈ x701/x711
+            // at z48, RE'd from the carved hasigo mesh). Placed at the pole XZ; CanalTide.PoleRipples flips
+            // their layer to the water pass and pins Y to the tide (see there).
+            byte[] poleDecal = CarveRippleDecal(e01scn, DECAL_HALF / 2f);
+            e03scene = BuildInjectedScene(e03scene, poleDecal, tmplHdr, null, "wriplL");
+            e03scene = BuildInjectedScene(e03scene, poleDecal, tmplHdr, null, "wriplR");
             Redirect(E03_SCENE, e03scene);
 
             byte[] e03map = BuildInjectedMapinfo(ReadArchive(E03_MAPINFO), QSIGN_X, QSIGN_Y, QSIGN_Z, QSIGN_RY, E03_ANCHOR, "kanban_a.mds");
             e03map = BuildInjectedMapinfo(e03map, CANAL_SIGN_X, CANAL_SIGN_Y, CANAL_SIGN_Z, CANAL_SIGN_RY, E03_ANCHOR, "kanbanc_a.mds", "kanbanc");
             e03map = BuildInjectedMapinfo(e03map, 0, 0, 0, 0, E03_ANCHOR, "", "hasigo");   // ladder verts are world-baked
             e03map = BuildInjectedMapinfo(e03map, 0, -3000, 0, 0, E03_ANCHOR, "", "wripple");   // parked; CanalTide drives it
+            e03map = BuildInjectedMapinfo(e03map, 701, 8, 48, 0, E03_ANCHOR, "", "wriplL");     // west ladder rail
+            e03map = BuildInjectedMapinfo(e03map, 711, 8, 48, 0, E03_ANCHOR, "", "wriplR");     // east ladder rail
+            e03map = TuneCanalWater(e03map);                                               // camera-follow, square 64x14 grid, p4=1.0
             Redirect(E03_MAPINFO, e03map);
 
             // Yellow Drops (s13): no native/injected sign, so inject the same kanban sign at its fishing spot,
@@ -359,6 +372,10 @@ namespace Dark_Cloud_Improved_Version
             ushort[] catchMsg = MesExtract(ReadArchive("gedit/e01/e01talk_1.mes"), 2000);
             byte[] noruneEvent = ReadArchive("gedit/e01/e01_1.mes");
             ushort[] menu20 = MesExtract(noruneEvent, 20), menu21 = MesExtract(noruneEvent, 21), menu22 = MesExtract(noruneEvent, 22);
+            // Queens canal-ladder "tide too high" line (event-mes id 23). Encoded from ASCII (meswin glyph
+            // plane, == the menu text's) + the 0xFF01 terminator MesExtract's blobs carry. Baked into every
+            // fishing town (unused outside Queens); label 402's script (CustomFishingSpot) shows it.
+            ushort[] ladderMsg = AppendTerminator(WeaponDescriptions.Encode("The tide is too high to climb down."));
             foreach (string code in new[] { "e03", "s13", "s04" })
             {
                 // Talk mes: repurpose a spare sentinel entry (no COUNT growth) so no existing message shifts —
@@ -369,7 +386,8 @@ namespace Dark_Cloud_Improved_Version
                 // Event mes: plain append is fine — nothing addresses these three towns' event messages by
                 // offset (the menu reads 20/21/22 by id), so the small shift is harmless.
                 Redirect($"gedit/{code}/{code}_1.mes",
-                         AppendMes(ReadArchive($"gedit/{code}/{code}_1.mes"), (20, menu20), (21, menu21), (22, menu22)));
+                         AppendMes(ReadArchive($"gedit/{code}/{code}_1.mes"),
+                                   (20, menu20), (21, menu21), (22, menu22), (LADDER_MSG_ID, ladderMsg)));
             }
 
             // 6) ELF boot-cave + CRC
@@ -399,8 +417,10 @@ namespace Dark_Cloud_Improved_Version
         // menu 1780, enter 1994, quit 892, bait 436. Label 401 = the Queens canal-floor per-sign script (its own
         // stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
         internal const int FishTermId = 9500;
-        static readonly int[] FishSpareIds   = { 9600, 400, 401, 133, 134 };            // menu, enter, canal-enter, quit, bait
-        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300 };   // one size per id, same order
+        static readonly int[] FishSpareIds   = { 9600, 400, 401, 133, 134, LADDER_MSG_LABEL };  // menu, enter, canal-enter, quit, bait, ladder-msg
+        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300 };    // one size per id, same order
+        // ↑ label 402 (ladder tide-message) baked into every fishing town's stb (unused outside Queens,
+        //   harmless — like 401); CustomFishingSpot installs it in Queens only. 0x300 covers the small script.
 
         static byte[] ExtendStb(byte[] stb)
         {
@@ -444,6 +464,16 @@ namespace Dark_Cloud_Improved_Version
         // wordOff}, then the text. A message's text starts at byte 2*(count + wordOff + 1) and ends at 0xFF01;
         // files are zero-padded. AppendMes TRIMS that trailing padding before appending so the injected text
         // stays inside the engine's ~48 KB talk-mes buffer even for the largest town (Queens) — see AppendMes.
+
+        /// <summary>Append the 0xFF01 meswin terminator so an Encode()'d string matches MesExtract's blob
+        /// shape (its words run through the terminator, inclusive), which is what AppendMes writes verbatim.</summary>
+        static ushort[] AppendTerminator(ushort[] words)
+        {
+            var w = new ushort[words.Length + 1];
+            Array.Copy(words, w, words.Length);
+            w[words.Length] = 0xFF01;
+            return w;
+        }
 
         /// <summary>The glyph words of message <paramref name="id"/> (from its text start to the 0xFF01
         /// terminator, inclusive). Throws if the id is absent.</summary>
@@ -743,8 +773,14 @@ namespace Dark_Cloud_Improved_Version
         {
             var b = BuildFuncEntry(0x13, 0f, 24f, LAD_LINK, 0, "hasigo", LAD_BOTTOM, LAD_FACE, null, 0f, LAD_RUNGS_BOT);
             var t = BuildFuncEntry(0x14, 0f, 24f, LAD_LINK, 0, "hasigo", LAD_TOP,    LAD_FACE, null, 0f, LAD_RUNGS_TOP);
-            var outb = new byte[b.Length + t.Length];
+            // Tide-message trigger co-located with the climb-down (TOP) end: a type-3 script point naming
+            // label 402. CanalTide enables EITHER the ladder pair (low tide → climb) OR this point (high tide
+            // → "tide too high" on X-press), never both. Radius 8 ≈ the ladder's fixed 6 so it fires where the
+            // climb would. Mirrors the climb-down's "hasigo" frame + LAD_TOP so it resolves to the same spot.
+            var m = BuildFuncEntry(0x12, 0f, 24f, 0, 0, "hasigo", LAD_TOP, LAD_FACE, new[] { 8f, 8f, 8f }, LADDER_MSG_LABEL, 0f);
+            var outb = new byte[b.Length + t.Length + m.Length];
             Array.Copy(b, 0, outb, 0, b.Length); Array.Copy(t, 0, outb, b.Length, t.Length);
+            Array.Copy(m, 0, outb, b.Length + t.Length, m.Length);
             return outb;
         }
 
@@ -913,6 +949,45 @@ namespace Dark_Cloud_Improved_Version
                 if (cand > 0 && cand < scene.Length - 3 && scene[cand] == 'M' && scene[cand + 1] == 'D' && scene[cand + 2] == 'T')
                     return cand;
             throw new IOException($"MDT for '{node}' not resolved");
+        }
+
+        // Tune the canal water refraction via the e03 mapinfo (pure data). Kept CAMERA-FOLLOWING (last-3
+        // params `1, 0, 0` = per-axis follow flags → body+0x24/28/2c; `1` on X keeps the plane small and
+        // centred on the view along the canal). World-anchoring was tried and REVERTED: a fixed plane over
+        // the whole 2100-unit canal gave unacceptable directional refraction STRETCH (elongated cells +
+        // grazing angles). Camera-following keeps the covered area small (±320/±70), making a square grid
+        // possible. Changes from vanilla:
+        //   • Grid 48x16 → 64x14. X is HARD-CAPPED at 64 by CreateVUData (indexes its scratch by column*256
+        //     floats into a 16384-float buffer = exactly 64 columns; more overflows/crashes). Over the
+        //     ±320/±70 window that's 640/64 = 10 u/cell in X and 140/14 = 10 u/cell in Z → SQUARE 10x10
+        //     cells = the finest no-stretch grid at this coverage (finer would need a smaller window).
+        //   • p4 (4th param) kept at vanilla 2.0. p4 = the REFRACTION-OFFSET SCALE (fbCoord = base + p4*wobble,
+        //     CreateVUData @0x160b38). It scales the refraction strength AND the above-water edge-pull (Toan's
+        //     head) — screen-space refraction can't be depth-masked on PS2, so p4 is the only lever (lower =
+        //     subtler distortion + less edge-pull; 1.0 = fountain parity). Now that the jitter is handled by
+        //     the Y offset, kept at the full vanilla 2.0 for the strongest look; lower here to taste.
+        //   • No poke sources — fixed-cell WATER_SHAKE reads as nothing on a camera-relative grid; removed.
+        //     Just the vanilla gentle ambient wander.
+        // The Z-fight jitter (mizu mesh vs refraction at the same tide Y) is handled by CanalTide.Refraction
+        // YOffset. Corners/pos/colour/follow-flags otherwise unchanged from vanilla. Guarded: one match.
+        static byte[] TuneCanalWater(byte[] cfg)
+        {
+            string t = Encoding.Latin1.GetString(cfg);
+            const string OLD =
+                "WATER_SURFACE \"\",48, 16,\r\n" +
+                "\t\t\t-320, 0, -70,\r\n\t\t\t320, 0, 70,\r\n\t\t\t0, 31, 0,\r\n" +
+                "\t\t\t0.1, 0.015, 0.0, 2.0,\r\n\t\t\t128, 128, 128,\r\n\t\t\t1, 0, 0\r\n" +
+                "\tWATER_SHAKE\t-1, -1, -0.5, 0.0";
+            const string NEW =
+                "WATER_SURFACE \"\",64, 14,\r\n" +                         // finest no-stretch grid (X cap = 64)
+                "\t\t\t-320, 0, -70,\r\n\t\t\t320, 0, 70,\r\n\t\t\t0, 31, 0,\r\n" +
+                "\t\t\t0.1, 0.015, 0.0, 2.0,\r\n\t\t\t128, 128, 128,\r\n\t\t\t1, 0, 0\r\n" +
+                "\tWATER_SHAKE\t-1, -1, -0.5, 0.0";
+            int n = 0, idx = 0;
+            while ((idx = t.IndexOf(OLD, idx, StringComparison.Ordinal)) >= 0) { n++; idx += OLD.Length; }
+            if (n != 1)
+                throw new IOException($"Canal WATER_SURFACE block found {n} times in e03 mapinfo (expected 1).");
+            return Encoding.Latin1.GetBytes(t.Replace(OLD, NEW));
         }
 
         static byte[] BuildInjectedMapinfo(byte[] cfg, int x, int y, int z, int ry, string anchorPart, string atari = "",
@@ -1876,7 +1951,7 @@ namespace Dark_Cloud_Improved_Version
         // CanalTide flips the part LAYER (+0xE4) to 0x15 so DrawWater's per-layer loop draws it in the
         // WATER pass (water texture group resident — a normal-layer part sampling it renders garbage).
         const float DECAL_HALF = 5.5f;  // ring half-extent (11 units across, tight around the player's feet)
-        static byte[] CarveRippleDecal(byte[] scene)
+        static byte[] CarveRippleDecal(byte[] scene, float half = DECAL_HALF)
         {
             const string NODE_NAME = "hamon__A01z";
             int ki = IndexOf(scene, Encoding.ASCII.GetBytes(NODE_NAME + "\0"), 0);
@@ -1895,7 +1970,7 @@ namespace Dark_Cloud_Improved_Version
             // ── build the quad MDT. Blocks in the vanilla order POS/DL/UV/NORM/MAT, each 16-aligned.
             //    Codec semantics (RE'd, canal_visual_cap): a record is (posIdx, hw6Idx, hw12Idx); the hw6
             //    block ("UV" in the header) holds NORMALS, the hw12 block ("NORM") holds TEXCOORDS.
-            float H = DECAL_HALF;
+            float H = half;
             float[][] posv = { new[] { -H, 0f, -H }, new[] { H, 0f, -H }, new[] { H, 0f, H }, new[] { -H, 0f, H } };
             float[][] tcv  = { new[] { 0f, 0f }, new[] { 1f, 0f }, new[] { 1f, 1f }, new[] { 0f, 1f } };   // u,v corners
             int[][] recs   = { new[] { 0, 0, 0 }, new[] { 1, 0, 1 }, new[] { 2, 0, 2 },                    // tri 0
