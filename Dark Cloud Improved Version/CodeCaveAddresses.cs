@@ -107,8 +107,14 @@ namespace Dark_Cloud_Improved_Version
             /// the camera drops to height 0. Seeded at mod start (MainMenuThread) and re-asserted per tick.</summary>
             internal const long FishCamHeight = Base + 0x3C;
 
+            /// <summary>Canal tide-evict flag. CanalTide writes 1 the instant the tide turns while the player is
+            /// caught in the drained Queens canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook,
+            /// stub @0x228BB0) reads it on the exact fully-black frame and requests the _MAP_JUMP to the East
+            /// Harbor dock, then clears it. So the mod only maintains the flag — native code owns the timing.</summary>
+            internal const long CanalEvict = Base + 0x40;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x40;
+            internal const long NextFree = Base + 0x44;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

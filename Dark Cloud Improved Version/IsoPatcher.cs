@@ -59,6 +59,18 @@ namespace Dark_Cloud_Improved_Version
         // climb-down; CanalTide gates the native ladder OR this point by tide. Event-mes id 23 = the line.
         internal const int LADDER_MSG_LABEL = 402;   // == CustomFishingSpot.LadderMsgLabelId
         const int LADDER_MSG_ID = 23;                // event-mes id the label-402 script shows
+        // Queens canal tide-evict: label 403 = a tiny _MAP_JUMP(East Harbor) script CanalTide fires as an
+        // event when the tide rises on a player caught in the drained canal (== CustomFishingSpot.CanalWarpLabelId).
+        internal const int CANAL_WARP_LABEL = 403;
+        // Dock-spawn event baked into East Harbor (s09): the canal warp's _MAP_JUMP(20, this) makes the engine
+        // run it as the arrival event, placing the player at the Shipwreck dock instead of the Queens-side entry.
+        internal const int DOCK_SPAWN_LABEL = 404;   // == CustomFishingSpot.DockSpawnEvent
+        // The Shipwreck (Sunken Ship, s25) exit spot in East Harbor — captured live from a CameraDiag ref after
+        // leaving the ship: world (−1311, ~7, 875.7). (Event 128's (1311,7,875.7) was PART-LOCAL — X mirrored →
+        // +1311 was off-map. NOT func_mapj00 (−1088,20,1001) = Rando's shop.) Y=7 = feet; the ref's 21 is the
+        // camera look-at ~14 above.
+        static readonly float[] DOCK_POS = { -1311f, 7f, 875.7f };
+        const float DOCK_FACING = 0f;                                // ry — tune in-game if he faces wrong here
 
         // Per-town fishing-trigger position, PART-LOCAL to the sign (the mapinfo placement rotates+translates
         // it to world). Chosen so the native trigger lands exactly where the runtime one did (spot tx,ty,tz).
@@ -365,6 +377,10 @@ namespace Dark_Cloud_Improved_Version
             foreach (string stbName in FishingStbs)
                 Redirect(stbName, ExtendStb(ReadArchive(stbName)));
 
+            // Tide-evict destination: bake the dock-spawn event into East Harbor (s09) so the canal warp's
+            // _MAP_JUMP(20, DOCK_SPAWN_LABEL) lands the player at the Shipwreck dock natively (no runtime pin).
+            Redirect("gedit/s09/event.stb", BakeStbLabel(ReadArchive("gedit/s09/event.stb"), DOCK_SPAWN_LABEL, BuildDockSpawnCode()));
+
             // 5) fishing text: carve the catch bubble (talk mes 2000) + entry/quit menu (event mes 20/21/22)
             //    from the user's OWN Norune mes and append them to each custom fishing town's talk + event mes,
             //    so the engine draws them natively — no runtime ClsMes buffer swap.
@@ -417,10 +433,10 @@ namespace Dark_Cloud_Improved_Version
         // menu 1780, enter 1994, quit 892, bait 436. Label 401 = the Queens canal-floor per-sign script (its own
         // stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
         internal const int FishTermId = 9500;
-        static readonly int[] FishSpareIds   = { 9600, 400, 401, 133, 134, LADDER_MSG_LABEL };  // menu, enter, canal-enter, quit, bait, ladder-msg
-        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300 };    // one size per id, same order
-        // ↑ label 402 (ladder tide-message) baked into every fishing town's stb (unused outside Queens,
-        //   harmless — like 401); CustomFishingSpot installs it in Queens only. 0x300 covers the small script.
+        static readonly int[] FishSpareIds   = { 9600, 400, 401, 133, 134, LADDER_MSG_LABEL, CANAL_WARP_LABEL };  // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict
+        static readonly int[] FishSpareSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300, 0x100 };               // one size per id, same order
+        // ↑ labels 402 (ladder tide-message) + 403 (tide-evict _MAP_JUMP) baked into every fishing town's stb
+        //   (unused outside Queens, harmless — like 401); CustomFishingSpot installs them in Queens only.
 
         static byte[] ExtendStb(byte[] stb)
         {
@@ -450,6 +466,46 @@ namespace Dark_Cloud_Improved_Version
             U32(outb, p + 4, (uint)codeOff);                          // == newTblOff (end of the last spare's code)
             U32(outb, 0x0C, (uint)newTblOff);                         // header now points at the relocated table
             U32(outb, 0x10, cnt + (uint)spares + 1);
+            return outb;
+        }
+
+        // The dock-spawn event body (baked into s09 as DOCK_SPAWN_LABEL): reset the world coord to identity so
+        // the coords are plain world, snap the player (charaId -1) to the Shipwreck dock, face DOCK_FACING, RET.
+        // Same shape CustomFishingSpot uses for the fishing stance (_SET_WORLD_COORD + _SET_NPC_POS/_ROT).
+        static byte[] BuildDockSpawnCode()
+        {
+            const int ResetCamera = 433, ResetCameraAngle = 436;   // VM cmds — same ones East Harbor's entry event 128 issues
+            var w = new StbWriter();
+            w.PushInt(StbCommands.SetWorldCoord); w.Ext(1);                          // no args = identity
+            w.PushInt(StbCommands.SetNpcPos); w.PushInt(-1);
+            w.PushFloat(DOCK_POS[0]); w.PushFloat(DOCK_POS[1]); w.PushFloat(DOCK_POS[2]); w.Ext(5);
+            w.PushInt(StbCommands.SetNpcRot); w.PushInt(-1);
+            w.PushFloat(0f); w.PushFloat(DOCK_FACING); w.PushFloat(0f); w.Ext(5);
+            w.PushInt(ResetCamera); w.PushInt(1); w.Ext(2);                          // snap the follow camera behind the player
+            w.PushInt(ResetCameraAngle); w.PushInt(0); w.Ext(2);                     // and reset its angle
+            w.Ret();
+            return w.ToArray();
+        }
+
+        // Bake ONE label carrying real bytecode into an event.stb (vs ExtendStb's empty spares) — for towns the
+        // runtime installer never visits (East Harbor). Appends [0x38 header + code], then a relocated label
+        // table = originals + the new label + a terminator; header @0x0C/0x10 repointed. fd[0] = entry PC
+        // (codeOff+0x38 codeBase-relative), exactly as ExtendStb sets for its spares.
+        static byte[] BakeStbLabel(byte[] stb, int labelId, byte[] code)
+        {
+            uint cbase = U32(stb, 0x08); uint tbl = U32(stb, 0x0C), cnt = U32(stb, 0x10);
+            int codeOff = stb.Length;
+            int codeSpace = Align16(0x38 + code.Length);
+            int newTblOff = codeOff + codeSpace;
+            var outb = new byte[newTblOff + (int)(cnt + 2) * 8];       // +1 new label, +1 terminator
+            Array.Copy(stb, outb, codeOff);                            // original stb verbatim
+            Array.Copy(stb, (int)tbl, outb, newTblOff, (int)cnt * 8);  // original label table
+            U32(outb, codeOff, (uint)(codeOff + 0x38 - (int)cbase));   // fd[0] entry PC
+            Array.Copy(code, 0, outb, codeOff + 0x38, code.Length);    // the bytecode
+            int p = newTblOff + (int)cnt * 8;
+            U32(outb, p, (uint)labelId); U32(outb, p + 4, (uint)codeOff); p += 8;    // new label -> its code
+            U32(outb, p, FishTermId);    U32(outb, p + 4, (uint)newTblOff);          // terminator (size sentinel)
+            U32(outb, 0x0C, (uint)newTblOff); U32(outb, 0x10, cnt + 2);
             return outb;
         }
 
@@ -1101,11 +1157,37 @@ namespace Dark_Cloud_Improved_Version
             PatchFishingCameraHeight(fs, ElfOff);        // fishing camera height 40 -> per-spot data word (canal wades at 5)
             PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
             PatchWaterRedraw(fs, ElfOff);                 // moves (not duplicates) the water draw to after the character
+            PatchCanalEvictFadeHook(fs, ElfOff);          // fully-black fade frame → canal tide-evict map-jump (native, flag-gated)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
             for (int i = 0; i < pelf.Length / 4; i++) crc ^= U32(pelf, i * 4);
             return crc;
+        }
+
+        // ── Canal tide-evict: hook the fully-black fade frame natively ───────────────────────────────
+        // EdFadeInOut sets fade_end=1 (`sw $v1,-0x6df4($gp)` @0x189970) the instant a fade-OUT reaches full
+        // black. Retarget that store to our stub in the dead CharaChange region (reclaimable ELF code — a jal
+        // there is legal; heap caves crash the recompiler): the stub does the store, then if CanalTide raised
+        // the evict flag (mailbox 0x01F10040) it requests the _MAP_JUMP to the East Harbor dock (NextMapNo=19,
+        // arrival StartEventNo=404, return code 8) and clears the flag. Frame-perfect — the mod no longer polls
+        // the fade; it only sets the flag when the player is caught in the draining canal.
+        // (Stub = tools/canal_evict_fade_hook.s → Resources/isoPatch/canalEvictFadeHook.bin.)
+        static void PatchCanalEvictFadeHook(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint STUB_VA = 0x00228BB0;   // dead CharaChangeLoop (reclaimable; jal-legal ELF code)
+            const uint HOOK_VA = 0x00189970;   // EdFadeInOut fade-out `fade_end = 1` store
+            if (RdU32(fs, ElfOff(HOOK_VA)) != 0xAF83920C)
+                throw new IOException($"Canal-evict hook site 0x{HOOK_VA:X} is not vanilla `sw $v1,-0x6df4($gp)` — unmodified Dark Cloud (USA) ISO expected.");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.canalEvictFadeHook.bin")
+                ?? throw new IOException("Embedded EE function missing: canalEvictFadeHook.bin (reassemble tools/canal_evict_fade_hook.s and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0xAF83920C)
+                throw new IOException($"canalEvictFadeHook.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
         }
 
         // ── FishingLoadFish species-selection rewrite (baked, race-free) ─────────────────────────────
