@@ -753,6 +753,18 @@ namespace Dark_Cloud_Improved_Version
                                 $"canal ladder 'tide too high' message (event-mes {LadderMsgId}, prompt-don't-pounce)");
                     Log($"   ladder message installed at label {LadderMsgLabelId} (code @+0x{ml.Off:X})");
                 }
+
+                // Canal tide-evict warp (label 403): CanalTide fires it as an event to warp a player caught in
+                // the drained canal to the East Harbor dock when the tide rises. Just the _MAP_JUMP script.
+                Lab wl = ClaimLabel(stb, labelCount, tbl, CanalWarpLabelId, Need(BuildCanalWarpBytecode()), out int wlEnd);
+                if (wl == null) Log($"   canal tide-evict: no spare label {CanalWarpLabelId} — skipped");
+                else
+                {
+                    Memory.WriteInt(stb + wl.Entry, CanalWarpLabelId);
+                    WriteScript(stb, wl.Off, wlEnd, BuildCanalWarpBytecode(),
+                                $"canal tide-evict _MAP_JUMP(mapArg {EastHarborMapArg} → East Harbor)");
+                    Log($"   canal tide-evict installed at label {CanalWarpLabelId} (code @+0x{wl.Off:X})");
+                }
             }
 
             // The trigger is now BAKED into the ISO — a native type-3 event point in the town's own scene.scn
@@ -889,6 +901,14 @@ namespace Dark_Cloud_Improved_Version
         /// ISO by IsoPatcher (spare label 402, event-mes 23). Must match <see cref="IsoPatcher.LADDER_MSG_LABEL"/>.</summary>
         internal const int LadderMsgLabelId = IsoPatcher.LADDER_MSG_LABEL;
         private const int LadderMsgId = 23;
+
+        /// <summary>Canal tide-evict warp: label 403 holds a <c>_MAP_JUMP(EastHarborMapArg)</c> script that
+        /// CanalTide fires as an event when the tide rises on a player stuck in the drained canal. The map arg
+        /// is 1-BASED (VM does MapJump(arg-1)), so 20 → MapNo 19 = East Harbor. Must match
+        /// <see cref="IsoPatcher.CANAL_WARP_LABEL"/>.</summary>
+        internal const int CanalWarpLabelId = IsoPatcher.CANAL_WARP_LABEL;
+        private const int EastHarborMapArg = 20;   // MapNo 19 + 1 (the _MAP_JUMP arg is 1-based)
+        private const int DockSpawnEvent   = IsoPatcher.DOCK_SPAWN_LABEL;   // baked s09 event that places the player at the dock
 
         /// <summary>
         /// Claim a run of adjacent unused labels totalling at least <paramref name="need"/> bytes, and return
@@ -1429,6 +1449,22 @@ namespace Dark_Cloud_Improved_Version
             EmitShowMessage(w, LadderMsgId, /*padVar*/1);
 
             w.PlaceMark(idle);
+            w.Ret();
+            return w;
+        }
+
+        /// <summary>The canal tide-evict script (label 403): a single <c>_MAP_JUMP(EastHarborMapArg)</c> then
+        /// RET. CanalTide fires this as an EVENT (writes 403 to start_event_no under the time-change black fade)
+        /// when the tide rises on a player caught in the drained canal — the VM runs it, _MAP_JUMP sets the
+        /// transition flag, and when the script RETs the event-mode state machine performs the full load to the
+        /// East Harbor dock. This is the game's own scripted-warp path (no state-machine poking).</summary>
+        private static StbWriter BuildCanalWarpBytecode()
+        {
+            var w = new StbWriter();
+            w.PushInt(StbCommands.MapJump);   // cmd 15
+            w.PushInt(EastHarborMapArg);      // arg0 = mapNo (1-based) → MapNo 19 East Harbor
+            w.PushInt(DockSpawnEvent);        // arg1 = StartEventNo → baked s09 label 404 spawns at the dock
+            w.Ext(3);                         // 3 stack entries = cmd + 2 args → argCount 2
             w.Ret();
             return w;
         }

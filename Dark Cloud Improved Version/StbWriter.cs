@@ -14,6 +14,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int SetFishingEsa   = 994;   // ()
 
         internal const int LoadMainChara  = 999;    // (chrPath, cfgName, flag) — swaps the player's model
+        // _MAP_JUMP(mapNo[, eventNo]) — VM cmd 15 (verified: handler 0x18bfe0 in the dispatch table).
+        // mapNo is 1-BASED (the handler does MapJump(mapNo-1, eventNo)); eventNo defaults -1 = default entry.
+        // Sets the transition flag the event-mode state machine consumes when the script ends → full map load.
+        internal const int MapJump       = 15;      // (mapNo1Based[, eventNo])
         internal const int FadeIn        = 500;     // (frames) — 500 is FADE_IN, not FADE_OUT
         internal const int SetWorldCoord = 7;       // (x, y, z, rx, ry, rz)
         internal const int SetNpcMotion  = 133;     // (charaId, motionIdx) — charaId -1 = the player; motion 0 = idle

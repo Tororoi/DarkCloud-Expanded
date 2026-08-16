@@ -162,7 +162,7 @@ namespace Dark_Cloud_Improved_Version
         private const int   DecalStillHold = 3;            // ticks of stillness before the calm ripple appears
         // PROBE: ignore the wading gate and show the ripple everywhere in Queens (still-gated), any tide —
         // visual-confirmation mode. Turn OFF once confirmed.
-        internal static bool DecalProbe = true;
+        internal static bool DecalProbe = false;   // true = diagnostic (ring anywhere when still); false = the real water gate
         private static long _decalPart;                    // cached part (mmu); 0 = unknown
         private static int  _decalNextScan;
         private static float _decalLastY = DecalParkY;
@@ -190,6 +190,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!Enabled) return;
+            DockCamera();   // post-warp: set the dock camera in East Harbor — runs in ANY map, so BEFORE the Queens bail
             if (Memory.ReadInt(EditLoop.MapNo) != QueensMapNo)
             {
                 _frame = 0; _shownLvl = float.NaN; _lastMizu = float.NaN; _rebakeLvl = int.MinValue;
@@ -197,6 +198,8 @@ namespace Dark_Cloud_Improved_Version
                 _dampOrig = float.NaN; _mizuDrawSaved = int.MinValue;                     // ripple sim + diag state
                 _poleL = 0; _poleR = 0; _loggedPoles = false;                             // ladder-rail ripples
                 _loggedLadderGate = false;                                                // ladder tide-gate log
+                _evictArm = 0; _flagTtl = 0; _prevTarget = float.NaN;                     // re-arm the tide-evict; drop the flag so it can't linger into another town
+                Memory.WriteInt(CanalEvictFlag, 0);
                 _decalPart = 0; _decalShown = false; _loggedDecal = false; _decalStillTicks = 0;
                 Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
                 return;
@@ -205,6 +208,45 @@ namespace Dark_Cloud_Improved_Version
 
             float target = QueensWaterLevel();
             if (float.IsNaN(_shownLvl)) _shownLvl = target;    // first frame in town — start at the current level
+
+            // TIDE-EVICT — the timing is owned by NATIVE code now (IsoPatcher.PatchCanalEvictFadeHook hooks
+            // EdFadeInOut's fully-black store @0x189970). This side only maintains the flag: ARM while the player
+            // wades the drained low-tide canal, and at the period boundary (tide turns low→non-low) raise the
+            // native evict flag if they were caught. The fade-hook reads it on the exact fully-black frame and
+            // does the _MAP_JUMP to the East Harbor dock (+ clears the flag) — frame-perfect, no fade polling.
+            if (_shownLvl <= LowTideThreshold && PlayerInCanal()) _evictArm = EvictArmHold;
+            else if (_evictArm > 0) _evictArm--;
+
+            if (!float.IsNaN(_prevTarget) && _prevTarget <= LowTideThreshold && target > LowTideThreshold && _evictArm > 0)
+            {
+                Memory.WriteInt(CanalEvictFlag, 1);
+                _flagTtl = FlagTtl;
+                _camActive = true; _camAge = 0; _camHeld = 0;   // set the dock camera once East Harbor loads
+                Log($"tide-evict: caught in draining canal ({_prevTarget:0.#}→{target:0.#}) → raised native evict flag");
+            }
+            _prevTarget = target;
+            // Safety: if the fade-hook never consumed the flag (no fully-black), drop it so it can't fire a later
+            // fade. Normally the hook clears it within the transition, well before this expires.
+            if (_flagTtl > 0 && --_flagTtl == 0) Memory.WriteInt(CanalEvictFlag, 0);
+
+            // Kill the arrival camera-SWING at its SOURCE. MainCamera is a persistent object whose orbit angle
+            // carries THROUGH the warp, so East Harbor inherits Queens' angle and its smoothed value (+0x2DC)
+            // eases to the dock angle = the visible swing (the post-arrival DockCamera write lands too late, after
+            // the ease has begun). Instead, while the evict is armed and the screen is dark in the Queens fade-out,
+            // zero BOTH orbit-angle fields HERE: hidden by the black (and the time-change camera is panned up, so
+            // yaw barely shows), and East Harbor then inherits angle 0 — nothing to ease from. One zero suffices
+            // (nothing re-writes the orbit before the warp), and the dark window spans many frames, so a coarse
+            // tick reliably catches it — unlike the one-frame fully-black warp trigger, which is why THAT is native.
+            if (_camActive && Memory.ReadFloat(FadeAlpha) >= FadeSnapAlpha)
+            {
+                uint cp = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;
+                if (Memory.IsValidGuest(cp))
+                {
+                    long cam = Memory.ToMmu(cp);
+                    Memory.WriteFloat(cam + CamOffAngle, 0f);
+                    Memory.WriteFloat(cam + CamOffAngleSmooth, 0f);
+                }
+            }
 
             // (re)locate the mesh CFrame. A fresh find means the town just (re)loaded — safe to snap under the
             // load's own black screen.
@@ -583,25 +625,17 @@ namespace Dark_Cloud_Improved_Version
                 here = still;                                        // probe: anywhere in Queens, when still
             else
             {
-                bool inWater = false;
-                if (low && py <= level)
-                {
-                    long body = CanalBody();
-                    if (body != 0)
-                    {
-                        long cw = body + WaterOff;
-                        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-                        for (int i = 0; i < 4; i++)
-                        {
-                            float cxv = Memory.ReadFloat(cw + CwCorner + i * CwCornerStride);
-                            float czv = Memory.ReadFloat(cw + CwCorner + i * CwCornerStride + 8);
-                            minX = Math.Min(minX, cxv); maxX = Math.Max(maxX, cxv);
-                            minZ = Math.Min(minZ, czv); maxZ = Math.Max(maxZ, czv);
-                        }
-                        inWater = px >= minX && px <= maxX && pz >= minZ && pz <= maxZ;
-                    }
-                }
+                // In the canal water = LOW tide + feet at/below the low surface (on the ladder the feet ride the
+                // rungs ABOVE it → py > level → no ring) + inside the canal's Z channel. NOTE: the canal water
+                // FOLLOWS THE CAMERA IN X, so its X corners are camera-LOCAL (useless for a world test) — the
+                // channel runs the length of X. Only Z is world (Z isn't followed), so gate on the Z band.
+                bool inWater = low && py <= level && InCanalZ(pz);
                 here = still && inWater;
+                if (Diagnostics && still && low && _tick - _rippleLogTick >= 40)
+                {
+                    _rippleLogTick = _tick;
+                    Log($"ripple gate: py {py:0.#} level {level:0.#} pz {pz:0.#} inWater={inWater}");
+                }
             }
 
             if (here)
@@ -701,6 +735,114 @@ namespace Dark_Cloud_Improved_Version
         {
             int want = on ? 1 : 0;
             if (Memory.ReadInt(rec + EvEnabled) != want) Memory.WriteInt(rec + EvEnabled, want);
+        }
+
+        // Tide-evict: a player caught in the drained canal when the tide rises (morning→afternoon) is warped
+        // to the East Harbor dock under the same black fade. Fired by writing the label-403 event id to the
+        // engine's start_event_no — EditLoop runs it, the script's _MAP_JUMP does the full load (see
+        // CustomFishingSpot.BuildCanalWarpBytecode). One-shot per Queens visit (the load leaves Queens anyway).
+        // Direct _MAP_JUMP: the Queens time-change is script EVENT 132 (RunEvent 0x84, GameMode 0xe). Rather
+        // than queue a new event via start_event_no (which would run only AFTER 132 ends), we set the map-jump
+        // on the CURRENTLY running event — NextMapNo + arrival StartEventNo + the return code EdEventMode reads.
+        private const long  CanalEvictFlag = CodeCaves.Mailbox.CanalEvict; // native fade-hook reads this on the fully-black frame
+        private const float CanalBankY     = 40f;                        // below this + inside the canal Z channel = down in the basin (bank ≈ 70, floor ≈ 0)
+        private const int   EvictArmHold = 150;         // ticks the "in drained canal" arm survives (covers a brief step-out)
+        private const int   FlagTtl      = 300;         // safety: drop the native flag if no fully-black consumed it within ~15s
+        private static int  _evictArm, _flagTtl;
+        private static float _prevTarget = float.NaN;   // previous tide target — for the low→non-low boundary edge
+
+        // Post-warp dock camera. The mod's town camera MAINTAINS the current dist/angle/height (which is why it
+        // keeps the Queens-relative offset on the warp), so once East Harbor loads we set them to the Sunken-Ship
+        // dock values (from the CameraDiag leaving the ship: dist 79.7, angle 0, height 5). ref (the look-at)
+        // follows the player automatically. Armed when the evict flag is raised; self-clears (hold/timeout).
+        // Field map (CCameraFollow / MainCamera): +0x2D0 dist, +0x2D4 height, +0x2D8 TARGET angle, +0x2DC SMOOTHED
+        // angle (the one Step actually renders from; eases toward target). We write BOTH angle fields so the camera
+        // SNAPS to the dock angle rather than swinging from the Queens angle over ~1s. Nothing overwrites dist/angle
+        // in town (the mod stubs CameraAutoMove → no auto-rotate; the pull-in only touches dist near walls), so a
+        // brief hold is enough for it to stick. NOTE: a pure-STB native set isn't possible here — the direct-set VM
+        // commands (_SET_FOLLOW_CAMERA etc.) run on the battle-only DAT_01d3d210 camera (null in town), and the town
+        // _RESET_CAMERA path defers to EventMode, which the arrival event never routes through. So we set it here.
+        private const int   EastHarborMapNo = 19;
+        private const long  CamOffDist = 0x2D0, CamOffHeight = 0x2D4, CamOffAngle = 0x2D8, CamOffAngleSmooth = 0x2DC;
+        private const long  CamOffRefX = 0x2C0, CamOffRefY = 0x2C4, CamOffRefZ = 0x2C8;   // ref (look-at) xyz used by Step
+        private const long  CamCurPos = 0x260, CamCurRef = 0x270, CamNextPos = 0x280, CamNextRef = 0x290; // base CCamera ease pair
+        private const float DockCamDist = 79.7f, DockCamHeight = 5.0f, DockCamAngle = 0.0f;
+        private const float DockRefLoadedX = -1000f;         // ref.x below this ⇒ the dock ref is loaded (dock = -1311)
+        private const int   CamHold = 45, CamTimeout = 600;
+        private static bool _camActive;
+        private static int  _camAge, _camHeld;
+
+        private static void DockCamera()
+        {
+            if (!_camActive) return;
+            if (++_camAge > CamTimeout) { _camActive = false; return; }               // never arrived — give up
+            if (Memory.ReadInt(EditLoop.MapNo) != EastHarborMapNo) return;            // still loading / not there yet
+            uint p = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return;
+            long cam = Memory.ToMmu(p);
+            // ⚠ The map load REBUILDS the camera a beat after MapNo flips to 19, and the rebuild restores the
+            // carried-over Queens angle (5.05) — so an early write (while ref is still (0,0,0)/transient) gets
+            // wiped. Wait until the DOCK ref is loaded (ref.x ≈ -1311), THEN force everything: by that point the
+            // rebuild is done and nothing rewrites it, so it sticks.
+            if (Memory.ReadFloat(cam + CamOffRefX) > DockRefLoadedX) return;          // dock ref not loaded yet — keep waiting
+            Memory.WriteFloat(cam + CamOffDist, DockCamDist);
+            Memory.WriteFloat(cam + CamOffHeight, DockCamHeight);
+            Memory.WriteFloat(cam + CamOffAngle, DockCamAngle);         // target
+            Memory.WriteFloat(cam + CamOffAngleSmooth, DockCamAngle);   // smoothed = target → snap, no swing
+
+            // The camera EASES into position: base Step__7CCamera interpolates CURRENT pos/ref (+0x260/+0x270)
+            // toward NEXT (+0x280/+0x290) each frame — a normal arrival calls Step(-1) to snap them equal, but our
+            // warp never does, so the eye glides in from the old spot. Replicate the snap: compute the dock eye
+            // (eye = ref + dist·{sin,cos}(angle) + height, matching Step's own formula) and slam BOTH current and
+            // next pos/ref to it. Frame-order-independent (we write the values, not copy a maybe-stale "next").
+            float refx = Memory.ReadFloat(cam + CamOffRefX);
+            float refy = Memory.ReadFloat(cam + CamOffRefY);
+            float refz = Memory.ReadFloat(cam + CamOffRefZ);
+            float eyeX = refx + DockCamDist * (float)Math.Sin(DockCamAngle);
+            float eyeY = refy + DockCamHeight;
+            float eyeZ = refz + DockCamDist * (float)Math.Cos(DockCamAngle);
+            foreach (long posOff in new[] { CamCurPos, CamNextPos })
+            {
+                Memory.WriteFloat(cam + posOff + 0, eyeX);
+                Memory.WriteFloat(cam + posOff + 4, eyeY);
+                Memory.WriteFloat(cam + posOff + 8, eyeZ);
+            }
+            foreach (long refOff in new[] { CamCurRef, CamNextRef })
+            {
+                Memory.WriteFloat(cam + refOff + 0, refx);
+                Memory.WriteFloat(cam + refOff + 4, refy);
+                Memory.WriteFloat(cam + refOff + 8, refz);
+            }
+            if (_camHeld == 0) Log($"dock camera: dist {DockCamDist}, angle {DockCamAngle}, height {DockCamHeight}, eye=({eyeX:0.#},{eyeY:0.#},{eyeZ:0.#}) @ East Harbor (snap)");
+            if (++_camHeld >= CamHold) _camActive = false;
+        }
+
+        /// <summary>Is the player down in the canal basin — below the bank (Y &lt; <see cref="CanalBankY"/>) and
+        /// inside the canal's Z channel? Uses <see cref="InCanalZ"/> (X is camera-followed and can't be tested
+        /// against the stored corners); the Y gate clears the bank (≈70) so the bank or a bridge above doesn't
+        /// count.</summary>
+        private static bool PlayerInCanal()
+        {
+            if (!EditLoop.TryReadPlayerPos(out float px, out float py, out float pz)) return false;
+            if (py > CanalBankY) return false;                           // on the bank / above the basin
+            return InCanalZ(pz);
+        }
+
+        /// <summary>Is world-Z <paramref name="pz"/> inside the canal water's Z span? The canal CWater FOLLOWS
+        /// THE CAMERA IN X (follow flags 1,0,0), so its stored X corners are camera-LOCAL and meaningless for a
+        /// world test — the channel runs the length of X. Z isn't followed, so the Z corners are world.</summary>
+        private static bool InCanalZ(float pz)
+        {
+            long body = CanalBody();
+            if (body == 0) return false;
+            long cw = body + WaterOff;
+            float minZ = float.MaxValue, maxZ = float.MinValue;
+            for (int i = 0; i < 4; i++)
+            {
+                float cz = Memory.ReadFloat(cw + CwCorner + i * CwCornerStride + 8);
+                minZ = Math.Min(minZ, cz); maxZ = Math.Max(maxZ, cz);
+            }
+            return pz >= minZ && pz <= maxZ;
         }
 
         /// <summary>The injected "wripple" part: the static CMapParts slot whose position is the parked
