@@ -936,6 +936,33 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     return {'subs': subs, 'player': player, 'camera': camera, 'sets': sets}
 
 
+def drop_obj48_zwrite(scn):
+    """Turn the waterfall render frames' Z-WRITE back ON so they occlude the player's BODY. The obj48 falls
+    (`obj48__a01z[N]`) and the taki fall's back layer (`taki2__a01z`) carry the `z` per-frame flag (SetFrameAttr
+    → CFrame+0x104=0 = ZBUF.ZMSK, no depth write), so a player behind a fall draws on top of it. Replace that
+    `z` with `x` (an unhandled = no-op flag letter) in each — keeps the alpha-test (`a01`) and any instance
+    digit, just drops the Z-write-off. (taki1__a01a already writes Z.) NOTE: this makes the BODY occlude but
+    depth-clips Toan's CLOTH cape, which draws with a different depth state — a known smaller artifact; the
+    correct full fix is drawing the falls after the character, blocked by the DrawWater/refraction entanglement.
+    Returns (scn_bytes, count)."""
+    if not isinstance(scn, (bytes, bytearray)):
+        return scn, 0
+    b = bytearray(scn)
+    n = 0
+    for pat in (b'obj48__a01z', b'taki2__a01z'):
+        zpos = len(pat) - 1
+        i = 0
+        while True:
+            j = b.find(pat, i)
+            if j < 0:
+                break
+            if b[j + zpos] == 0x7a:      # 'z' -> 'x' (0x78): unknown letter, SetFrameAttr skips it, Z-write stays ON
+                b[j + zpos] = 0x78
+                n += 1
+            i = j + 1
+    return bytes(b), n
+
+
 def bake_structures(scene_rel, town='e03', max_tris=100, buildings=False, wall_max_ny=None, building_lod=2):
     scn = load_scene(scene_rel)
     P = placed_meshes(scene_rel, scene_rel.replace('scene.scn', 'mapinfo.cfg'))
@@ -985,6 +1012,12 @@ def bake_structures(scene_rel, town='e03', max_tris=100, buildings=False, wall_m
             scn, delta = _replace_a_block(scn, sub, mds)
             tris_ct = sum(len(bk) for _, bk in named)
             stats.append((sub, 1, len(named), 0, tris_ct, 0, delta))
+
+    # Waterfalls Z-write ON so the player's BODY occludes behind them. This depth-clips Toan's CLOTH cape (a
+    # known smaller artifact); the full fix (draw falls after the character) is blocked by the DrawWater/
+    # refraction entanglement — see drop_obj48_zwrite. To revert: comment the two lines below.
+    if town == 'e03':
+        scn, _z = drop_obj48_zwrite(scn)
     return scn, stats, manifest
 
 
