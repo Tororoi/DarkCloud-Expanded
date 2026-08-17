@@ -1161,6 +1161,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCanalEvictFadeHook(fs, ElfOff);          // fully-black fade frame → canal tide-evict map-jump (native, flag-gated)
             PatchQueensSprayHook(fs, ElfOff);             // MainDraw effect step → spray emitters at the Queens canal waterfalls (table-driven)
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
+            PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -1975,6 +1976,35 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal MGDraw → jal capeEarlyDraw (which re-does MGDraw + the cloth loop)
+        }
+
+        // ── Fishing rope split rest length ───────────────────────────────────────────────────────────
+        // The Verlet rope uses ONE rest length `distp` @0x202A1FA4 for all 23 segments (loaded `lwc1 f,-0x784c(gp)`
+        // in both FishLineInit's layout loop and FishLineStep's constraint solve). Split it at the bobber anchor
+        // (index 18) into distpAbove (= the existing distp; rod→bobber = cast reach, LineScale still tunes it) and
+        // distpBelow (mailbox @0x01F10048; bobber→hook = hook depth, mod-tuned). Each `lwc1` → `j <cave>` and its
+        // following `sub.S` → nop; the cave (fishlineSplitCaves.bin, init@0x228DC0 / step@0x228DEC) selects the
+        // rest length on the loop index s0 (<=18 above, else below), does the displaced sub.S, and jumps back.
+        // Baked into the ELF (safe: on disc before FishLineStep is ever JIT'd, unlike the runtime FishLineShallow
+        // cold-patch which touches the DIFFERENT anchor-load instructions). See the feasibility doc.
+        static void PatchFishLineSplit(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint STUB_VA = 0x00228DC0, STEP_CAVE = 0x00228DEC;   // init_cave / step_cave (one bin)
+            const uint INIT_LWC1 = 0x001A9CAC, INIT_SUB = 0x001A9CB0;  // FishLineInit: lwc1 f0,distp ; sub.S f0,f1,f0
+            const uint STEP_LWC1 = 0x001AA7C8, STEP_SUB = 0x001AA7CC;  // FishLineStep: lwc1 f1,distp ; sub.S f2,f0,f1
+            if (RdU32(fs, ElfOff(INIT_LWC1)) != 0xC78087B4 || RdU32(fs, ElfOff(INIT_SUB)) != 0x46000801 ||
+                RdU32(fs, ElfOff(STEP_LWC1)) != 0xC78187B4 || RdU32(fs, ElfOff(STEP_SUB)) != 0x46010081)
+                throw new IOException("FishLine-split sites are not vanilla `lwc1 distp`/`sub.S` — unmodified Dark Cloud (USA) ISO expected.");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineSplitCaves.bin")
+                ?? throw new IOException("Embedded EE function missing: fishlineSplitCaves.bin (reassemble tools/fishline_split_caves.s and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x2A080013)   // first insn = slti $t0,$s0,0x13
+                throw new IOException($"fishlineSplitCaves.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(INIT_LWC1), J(STUB_VA));    WrU32(fs, ElfOff(INIT_SUB), 0);   // j init_cave ; nop
+            WrU32(fs, ElfOff(STEP_LWC1), J(STEP_CAVE));  WrU32(fs, ElfOff(STEP_SUB), 0);   // j step_cave ; nop
         }
 
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──

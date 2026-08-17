@@ -307,42 +307,6 @@ def player_wall_tris(town='e03'):
     return out
 
 
-def obj48_wall_tris(placed, town='e03', y_bottom=0.0, y_top=45.0, base_band=12.0):
-    """D-shaped player walls at each obj48 waterfall base so the player can't walk through the falls.
-    The obj48 nodes are pure render meshes (no `_a` collision). For each, take its BOTTOM ring (verts within
-    base_band of the mesh's min-Y), order it by angle around the centroid — which closes the mesh's open 'C'
-    bottom edge into a convex 'D' from above — and raise a vertical wall [y_bottom, y_top] along the closed
-    loop (2 tris per segment, same convention as player_wall_tris). Player-only (like the canal railings)."""
-    if town != 'e03':
-        return []
-    import math
-    out = []
-    for pm in placed:
-        if not pm['name'].startswith('obj48'):
-            continue
-        V = pm['verts']
-        ymin = min(v[1] for v in V)
-        pts = []                                                  # merge near-coincident base verts (tol 3) so the
-        for v in V:                                               # loop is the ~5 real D corners, not doubled verts
-            if v[1] < ymin + base_band:
-                p = (v[0], v[2])
-                if not any((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 < 9.0 for q in pts):
-                    pts.append(p)
-        if len(pts) < 3:
-            continue
-        cx = sum(p[0] for p in pts) / len(pts)
-        cz = sum(p[1] for p in pts) / len(pts)
-        pts.sort(key=lambda p: math.atan2(p[1] - cz, p[0] - cx))   # angle order → closed convex D
-        n = len(pts)
-        for i in range(n):
-            ax, az = pts[i]
-            bx, bz = pts[(i + 1) % n]
-            a0 = [ax, y_bottom, az]; b0 = [bx, y_bottom, bz]
-            a1 = [ax, y_top, az];    b1 = [bx, y_top, bz]
-            out.append([a0, b0, b1])
-            out.append([a0, b1, a1])
-    return out
-
 # ==========================================================================
 # Player-only invisible walls: canal containment (former invisible_walls.py)
 # ==========================================================================
@@ -909,7 +873,6 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     subs = sorted(bysub)
     perim, bw = perimeter_wall_tris(town), both_wall_tris(town)
     inv, pw = invisible_tris(town), player_wall_tris(town)
-    o48 = obj48_wall_tris(placed, town)                        # D-shaped walls at the waterfall bases (player-only)
     triggers = trigger_nodes(scn)
 
     # ---- PLAYER `_a`: per sub, pool everything (structure + town-wide walls on sub 0), split; triggers stay tagged
@@ -918,7 +881,7 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
         used = set()
         pool = list(bysub[sub])
         if i == 0:                                                 # first ground anchors the town-wide walls
-            pool += perim + bw + inv + pw + o48
+            pool += perim + bw + inv + pw
         named = _pool_split(pool, 'pcol', used, max_tris)
         trigs = [(_fit(tn, used, 15), tt, te) for tn, tt, te in triggers.get(sub, [])]
         player[sub] = (named, trigs)
