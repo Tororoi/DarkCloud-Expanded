@@ -6,7 +6,7 @@
 # On entry $v1=1 (li @0x18996c), $gp=global ptr, $ra=0x189978. Uses only $t0-$t3 (caller-saved); preserves gp/s*/ra.
 sw    $v1, -0x6df4($gp)        # displaced: fade_end = 1
 lui   $t0, 0x1f1
-lw    $t1, 0x40($t0)          # t1 = canal-evict flag @0x01F10040
+lw    $t1, 0x60($t0)          # t1 = canal-evict flag @0x01F10060 (moved off 0x40: that's the town-camera stick scratch)
 beq   $t1, $zero, done
 nop
 lui   $t2, 0x2a
@@ -17,7 +17,7 @@ sw    $t3, 0x2524($t2)        # StartEventNo (arrival event) = 404
 lui   $t2, 0x1d4
 ori   $t3, $zero, 8
 sw    $t3, -0x29e8($t2)       # DAT_01d3d618 = 8  (_MAP_JUMP)
-sw    $zero, 0x40($t0)        # clear the flag (one-shot)
+sw    $zero, 0x60($t0)        # clear the flag (one-shot)
 done:
 jr    $ra
 nop

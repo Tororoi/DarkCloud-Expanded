@@ -111,7 +111,16 @@ namespace Dark_Cloud_Improved_Version
             /// caught in the drained Queens canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook,
             /// stub @0x228BB0) reads it on the exact fully-black frame and requests the _MAP_JUMP to the East
             /// Harbor dock, then clears it. So the mod only maintains the flag — native code owns the timing.</summary>
-            internal const long CanalEvict = Base + 0x40;
+            /// <summary>⚠ RESERVED — NOT a mailbox slot. The ISO-baked town-camera collision function
+            /// (tools/town_camera_collision.s, hooked into EdMoveChara) uses guest 0x01F10040 as its
+            /// smoothed right-stick scratch (one float, rewritten every camera frame) and 0x01F10050–5F
+            /// as its persisted swept-slide origin E_prev. Those functions grabbed the page directly,
+            /// bypassing this allocator, so these bytes are OFF-LIMITS: the mailbox must never hand them
+            /// out. CanalEvict USED to live at 0x40 and collided — a non-zero stick value read as a set
+            /// evict flag false-warped the player to the dock (and the mod's per-tick flag writes stomped
+            /// the camera's stick). CanalEvict now lives at 0x60, past E_prev.</summary>
+            internal const long CameraStick = Base + 0x40;   // external (town_camera_collision.s) — do not reuse
+            internal const long CameraEprev = Base + 0x50;   // external, 16 bytes (0x50-0x5F) — do not reuse
 
             /// <summary>Player CCharacter ptr for the low-tide cape early-draw. CanalTide arms this alongside the
             /// body's model root (MizuRedrawFramePtr); the capeEarlyDraw cave (IsoPatcher.PatchCapeEarlyDraw,
@@ -127,8 +136,15 @@ namespace Dark_Cloud_Improved_Version
             /// game_data/docs/fishing-line-split-and-cast-feasibility.md.</summary>
             internal const long LineDistpBelow = Base + 0x48;
 
+            /// <summary>Canal tide-evict flag (relocated from 0x40 — see <see cref="CameraStick"/> for why).
+            /// CanalTide writes 1 the instant the tide turns while the player is caught in the drained Queens
+            /// canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook, stub @0x228BB0) reads it
+            /// on the exact fully-black frame, requests the _MAP_JUMP to the East Harbor dock, then clears it.
+            /// The fade-hook bakes the guest form 0x01F10060 (tools/canal_evict_fade_hook.s) — keep in sync.</summary>
+            internal const long CanalEvict = Base + 0x60;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x4C;
+            internal const long NextFree = Base + 0x64;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

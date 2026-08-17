@@ -2115,7 +2115,123 @@ namespace Dark_Cloud_Improved_Version
                 _distpScaled = false;
             }
 
+            // CAST MOMENTUM. With distpAbove tripled the aerial line is 3x longer, but the throw ANIMATION
+            // flings the bobber only a vanilla distance (during the throw the hook is bone-pinned, not
+            // rope-governed). When the rope takes over — Phase 4 (Casting) -> 5 (HookInWater) — the extra
+            // slack would droop straight DOWN instead of carrying the bobber forward. So on that edge, give
+            // the whole rope a short forward-velocity boost in the cast direction (bobber - rod-tip, flattened
+            // to horizontal), scaled by the line-length ratio so a 3x line throws ~3x further. Verlet impulse:
+            // FishLineStep re-derives velo = (point - old_p) each step, so an added velo carries forward via
+            // old_p — pure data writes, recompiler-safe. Auto-adapts: at vanilla distp the ratio is 1 (mild).
+            if (live)
+            {
+                int phase = Memory.ReadInt(FishingAddresses.Phase);
+                if (phase != _castPrevPhase)
+                {
+                    // ARM only on a FRESH cast: standing/idle -> Casting. The UNCAST animation also passes
+                    // through Casting (reeling in), and arming there is what let the boost fire backward as the
+                    // bobber came home — so require the previous phase to be Walking/Idle, not the rod-out states.
+                    if (phase == FishingState.Phase_Casting &&
+                        (_castPrevPhase == FishingState.Phase_Walking || _castPrevPhase == FishingState.Phase_Idle))
+                        _castPrimed = true;
+
+                    // FIRE when the rope takes over — HookInWater (5) is a <1-frame transient, the settled
+                    // rod-out state is (7), so fire on whichever we hit first while primed. Only if the bobber
+                    // is genuinely cast OUT in front (horizontal rod->bobber distance past a floor); a reel-in
+                    // has the bobber near/behind the rod, so this rejects the backward case outright.
+                    if ((phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting) && _castPrimed)
+                    {
+                        _castPrimed = false;
+                        _castDir = ComputeCastDir(out float outDist);
+                        _castBoostFrames = (outDist >= CastMinOutDist && (_castDir.x != 0f || _castDir.z != 0f)) ? CastBoostFrames : 0;
+                        Log($"[cast-boost] {(_castBoostFrames > 0 ? "armed" : "SKIP")} outDist={outDist:0.#} dir=({_castDir.x:0.##},{_castDir.z:0.##})");
+                    }
+
+                    // Leaving the cast/rod-out states drops a primed cast and kills any running boost.
+                    if (phase != FishingState.Phase_Casting && phase != FishingState.Phase_HookInWater
+                        && phase != FishingState.Phase_Uncasting)
+                    { _castPrimed = false; _castBoostFrames = 0; }
+                    Log($"[cast-boost] phase {_castPrevPhase} -> {phase}");   // TEMP diagnostic — remove once the flow is confirmed
+                    _castPrevPhase = phase;
+                }
+                if (_castBoostFrames > 0 &&
+                    (phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting))
+                {
+                    float ratio = FishLineShallow.VanillaDistp > 0f
+                        ? Memory.ReadFloat(FishLineShallow.DistpAddr) / FishLineShallow.VanillaDistp : 1f;
+                    float decay = (float)_castBoostFrames / CastBoostFrames;   // taper: ease the bobber forward, no overshoot snap-back
+                    ApplyCastImpulse(_castDir, CastBoostMag * ratio * decay);
+                    ComputeCastDir(out float dNow);
+                    Log($"[cast-boost] push f={_castBoostFrames} outDist={dNow:0.#}");   // TEMP — trajectory trace to tune
+                    _castBoostFrames--;
+                }
+
+                // TEMP diagnostic: trace the camera dist/height while the rod is out — to see if the town-camera
+                // pull-in is sticking the fishing camera in close and never easing back to resting (~1s throttle).
+                if ((phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting)
+                    && (++_camLogTick % 40 == 0))
+                {
+                    uint cp = Memory.ReadUInt(FishCamPtrVar) & Memory.PhysAddrMask;
+                    if (Memory.IsValidGuest(cp))
+                    {
+                        long cam = Memory.ToMmu(cp);
+                        Log($"[fish-cam] dist={Memory.ReadFloat(cam + 0x2D0):0.#} height={Memory.ReadFloat(cam + 0x2D4):0.#}");
+                    }
+                }
+            }
+            else { _castPrimed = false; _castBoostFrames = 0; _castPrevPhase = -1; }
+
             _fishingWasLive = live;
+        }
+
+        // ── Cast momentum (see the CAST MOMENTUM block in Tick) ──────────────────────────────────────────
+        // Rope arrays (mod-access form = ELF addr + 0x20000000): main line `point`/`velo`, bobber `ukiv`,
+        // hook `hookv`. Resolved from the SCUS_971.11 symtab; layout confirmed in FishLineStep decomp.
+        private const long RopePoint = 0x21D55E30;   // point[0] = rod tip; 24 x 0x10 (vec4)
+        private const long RopeVelo  = 0x21D56130;   // velo[0];  24 x 0x10
+        private const long RopeUkip  = 0x21D56350;   // ukip[0] = bobber; 4 x 0x10
+        private const long RopeUkiv  = 0x21D563D0;   // ukiv[0];  4 x 0x10
+        private const long RopeHookv = 0x21D56310;   // hookv[0]; 3 x 0x10
+        private const int   CastBoostFrames = 12;    // frames of forward push after the rope takes over (decays over this span)
+        private const float CastBoostMag    = 1.0f;  // per-frame forward velocity added (x line-length ratio x decay) — tune to taste
+        private const float CastUpFrac      = 0.25f; // small up component so the bobber arcs out instead of sinking
+        private const float CastMinOutDist  = 10f;   // bobber must be this far out front (horiz.) to count as a real cast — rejects reel-in
+
+        private const  long FishCamPtrVar = 0x21D19678;   // follow-camera ptr (dist @cam+0x2D0, height +0x2D4)
+        private static bool _castPrimed;             // saw a fresh Casting; fire the boost on the next HookInWater
+        private static int  _castBoostFrames;        // remaining boost frames
+        private static int  _castPrevPhase = -1;     // last Phase value (edge detection)
+        private static int  _camLogTick;             // TEMP: throttle the fishing camera-dist trace
+        private static (float x, float y, float z) _castDir;   // horizontal cast direction, captured at takeover
+
+        /// <summary>Horizontal cast direction = normalize(bobber - rod-tip) in XZ (the throw already aimed it);
+        /// <paramref name="outDist"/> = the un-normalized horizontal distance (how far the bobber is cast out front).</summary>
+        private static (float x, float y, float z) ComputeCastDir(out float outDist)
+        {
+            float dx = Memory.ReadFloat(RopeUkip + 0) - Memory.ReadFloat(RopePoint + 0);
+            float dz = Memory.ReadFloat(RopeUkip + 8) - Memory.ReadFloat(RopePoint + 8);
+            outDist = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (outDist < 0.01f) return (0f, 0f, 0f);
+            return (dx / outDist, 0f, dz / outDist);
+        }
+
+        /// <summary>Add a forward+up velocity to the BOBBER and HOOK only. Deliberately NOT the main line:
+        /// pushing the aerial points while the rod tip (point[0]) stays pinned stretches the near-rod segment,
+        /// and the constraint solver snaps it back → the bounce. Driving just the bobber slides it forward and
+        /// drags the anchor (point[18]) via the bobber constraint; the aerial SLACK (90u of line for ~60u of
+        /// reach at 3x) follows freely, so the bobber ends up forward with nothing to rebound against.</summary>
+        private static void ApplyCastImpulse((float x, float y, float z) d, float mag)
+        {
+            float ix = d.x * mag, iy = CastUpFrac * mag, iz = d.z * mag;
+            for (int i = 0; i < 4; i++) AddVelo(RopeUkiv  + i * 0x10, ix, iy, iz);  // bobber
+            for (int i = 0; i < 3; i++) AddVelo(RopeHookv + i * 0x10, ix, iy, iz);  // hook
+        }
+
+        private static void AddVelo(long addr, float ix, float iy, float iz)
+        {
+            Memory.WriteFloat(addr + 0, Memory.ReadFloat(addr + 0) + ix);
+            Memory.WriteFloat(addr + 4, Memory.ReadFloat(addr + 4) + iy);
+            Memory.WriteFloat(addr + 8, Memory.ReadFloat(addr + 8) + iz);
         }
 
         private static bool _fishingWasLive;
