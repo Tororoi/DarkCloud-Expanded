@@ -310,16 +310,18 @@ namespace Dark_Cloud_Improved_Version
                     uint root = Memory.ReadUInt(charaMmu + CharModelOff) & Memory.PhysAddrMask;
                     if (Memory.IsValidGuest(root))
                     {
-                        // GROUP before FRAME pointer — the pointer is the stub's gate, so the group must
-                        // never be observable as stale while the pointer is live.
+                        // GROUP + cape char ptr before the FRAME pointer — the pointer is the stub's gate, so
+                        // neither must be observable as stale while the pointer is live. CapeCharPtr lets the
+                        // early-draw cave walk char+0xC74 and draw the cape early too (survives the falls).
                         Memory.WriteInt(CodeCaves.MizuRedrawTexGroup, PlayerTexGroup);
+                        Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, (int)chara);
                         Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, (int)root);
                         armed = true;
                         if (!_loggedArm) { Log($"early-player draw armed (model root 0x{root:X}, tex group {PlayerTexGroup})"); _loggedArm = true; }
                     }
                 }
             }
-            if (!armed) { Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0); if (!low) _loggedArm = false; }
+            if (!armed) { Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0); Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, 0); if (!low) _loggedArm = false; }
 
             PinRipple(_shownLvl);
             if (WaterDiag)

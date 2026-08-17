@@ -113,8 +113,15 @@ namespace Dark_Cloud_Improved_Version
             /// Harbor dock, then clears it. So the mod only maintains the flag — native code owns the timing.</summary>
             internal const long CanalEvict = Base + 0x40;
 
+            /// <summary>Player CCharacter ptr for the low-tide cape early-draw. CanalTide arms this alongside the
+            /// body's model root (MizuRedrawFramePtr); the capeEarlyDraw cave (IsoPatcher.PatchCapeEarlyDraw,
+            /// reached by redirecting the refraction EARLY_STUB's `jal MGDraw`) reads it to walk char+0xC74 and
+            /// Draw__6CCloth each cloth piece EARLY — so the cape survives the falls' Z-write like the body.
+            /// The cave bakes the guest form 0x01F10044.</summary>
+            internal const long CapeCharPtr = Base + 0x44;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x44;
+            internal const long NextFree = Base + 0x48;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

@@ -1157,6 +1157,7 @@ namespace Dark_Cloud_Improved_Version
             PatchFishingCameraHeight(fs, ElfOff);        // fishing camera height 40 -> per-spot data word (canal wades at 5)
             PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
             PatchWaterRedraw(fs, ElfOff);                 // moves (not duplicates) the water draw to after the character
+            PatchCapeEarlyDraw(fs, ElfOff);               // AFTER PatchWaterRedraw: EARLY_STUB also draws the cape early (survives falls)
             PatchCanalEvictFadeHook(fs, ElfOff);          // fully-black fade frame → canal tide-evict map-jump (native, flag-gated)
             PatchQueensSprayHook(fs, ElfOff);             // MainDraw effect step → spray emitters at the Queens canal waterfalls (table-driven)
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
@@ -1950,6 +1951,30 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(HOOK2_VA), 0x0C05EEE9);   // jal EARLY_STUB (0x17BBA4)
             WrU32(fs, ElfOff(HOOK_VA), J(HOOK_CAVE_VA));
             WrU32(fs, ElfOff(HOOK_DELAY_VA), 0);   // nop — HOOK_CAVE replicates the displaced check itself
+        }
+
+        // ── Cape early-draw (waterfall occlusion, low tide) ──────────────────────────────────────────
+        // The low-tide refraction EARLY_STUB (written by PatchWaterRedraw into patchedGate) MGDraws the player's
+        // BODY (model root) before the water/waterfall pass, so the body survives the falls' Z-write — but the
+        // CAPE (separate CCloth) isn't in the model root, so it's only drawn late and the falls clip it. Redirect
+        // the EARLY_STUB's `jal MGDraw` @0x17BBD0 to the capeEarlyDraw cave, which re-does that MGDraw(body) then
+        // walks the player's cloth list (char+0xC74, via mailbox CapeCharPtr) and Draw__6CCloths each piece early
+        // too. MUST run AFTER PatchWaterRedraw (which writes the `jal MGDraw` this replaces).
+        static void PatchCapeEarlyDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint STUB_VA = 0x00228D40;   // dead CharaChange space, past the spray-bias shim (0x228D00, 60 B)
+            const uint HOOK_VA = 0x0017BBD0;   // EARLY_STUB `jal MGDraw` (patchedGate[23], set by PatchWaterRedraw)
+            if (RdU32(fs, ElfOff(HOOK_VA)) != 0x0C04BB60)   // = jal MGDraw (0x0012ED80)
+                throw new IOException($"Cape early-draw hook site 0x{HOOK_VA:X} is not `jal MGDraw` — PatchWaterRedraw must run first / unmodified ISO expected.");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.capeEarlyDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: capeEarlyDraw.bin (reassemble tools/cape_early_draw.s and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFE0)   // first insn = addiu $sp,$sp,-0x20
+                throw new IOException($"capeEarlyDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal MGDraw → jal capeEarlyDraw (which re-does MGDraw + the cloth loop)
         }
 
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──
