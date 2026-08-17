@@ -133,6 +133,21 @@ namespace Dark_Cloud_Improved_Version
         // put in it" is how you get a silent overrun, and this band has already produced two: HarderEnemyAI's
         // stubs growing unbounded toward PtrTable, and the clone's per-bone buffers (sized for Ungaga's 67
         // bones) being overrun by Xiao's 79 — which scribbled over the grafted weapon's root CFrame.
+        // ── Queens waterfall spray table ─────────────────────────────────────────────────────────────
+        // Populated by CanalTide each Queens tick, read every frame by the queensSprayCave (hooked into MainDraw
+        // @0x17c5a0). Layout: word[0] = emitter count, then `count` × 32-byte entries { pos x,y,z,w; spread x,y,z,w }.
+        // Sits in the free gap between the AiStub band (ends 0x21F18100) and PtrTable (0x21F19000). ~16 entries max
+        // (0x10 + 16×0x20 = 0x210 → ends 0x21F18610, clear of PtrTable). Town-only, so no clash with the AI stubs
+        // (dungeon) even though both live on the mailbox page. The cave bakes the physical form 0x01F18400.
+        internal const long QueensSprayTable      = 0x21F18400;
+        internal const uint QueensSprayTableGuest = 0x01F18400;
+        internal const int  QueensSprayMaxEmitters = 40;              // 40 × 0x30 + 0x10 = 0x790 → ends 0x21F18B90, clear of PtrTable
+        internal const int  QueensSprayEntryStride = 0x30;            // pos(16) + spread(16) + bias(16); matches queens_spray_cave.s
+        // Transient velocity-bias vector the spray-bias shim (sprayBiasShim.bin, hooked into EffectWaterSpray) adds
+        // to each particle's initial velocity. The spray cave sets it per emitter from the table's bias field and
+        // re-zeros it after the loop, so Matataki's own spray (same EffectWaterSpray) stays unbiased. 3 floats.
+        internal const long QueensSprayBias       = 0x21F18300;       // cave bakes physical 0x01F18300
+
         internal const long PtrTable      = 0x21F19000;   // per-slot target POINTER table (entry = an address to read a position from)
         internal const uint PtrTableGuest = 0x01F19000;   // baked into the cave stubs as `lui a1, PtrTable>>16`
         internal const int  PtrStride     = 4;            // one pointer per enemy slot

@@ -52,6 +52,12 @@
     <EmbeddedResource Include="Resources\isoPatch\canalEvictFadeHook.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.canalEvictFadeHook.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\queensSprayCave.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.queensSprayCave.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\sprayBiasShim.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.sprayBiasShim.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
