@@ -53,6 +53,9 @@ namespace Dark_Cloud_Improved_Version
         // the native pass's blend state).
         private const float LowTideThreshold = 10f;           // matches QueensLowTide's own threshold
         private const long  CharModelOff = 0xBC;              // CCharacter +0xBC -> model root CFrame
+        private const long  ClothListOff = 0xC74;             // CCharacter +0xC74 -> cloth-piece list (cape early-draw)
+        private const int   ClothMaxPieces = 4;               // Draw__CCharacter walks 4 cloth slots
+        private const int   CapeStableTicks = 4;              // cloth chain must be valid+unchanged this many ticks before the cape is drawn early
         // The town PLAYER's texture group is HARDCODED 8 in EdDrawCharacter (0x172980: `li a2,8` →
         // ReloadTexture → TextureAnime(player, 8)). The +0x148C per-character group field only exists on
         // the VILLAGER array records (stride 0x14A0 off EdDrawCharacter's a3) — on the player object it
@@ -113,6 +116,10 @@ namespace Dark_Cloud_Improved_Version
         private static int  _rippleLogTick;                     // throttle for the PlayerRipple diagnostic
         private static float _lastPx, _lastPz;
         private static bool _loggedArm;                // one log line per low-tide arming
+        private static uint _lastClothSig;             // signature of the player cloth chain last tick (stability gate for the cape early-draw)
+        private static int  _capeStableTicks;          // consecutive ticks the cloth chain has been valid+unchanged
+        private static bool _loggedCapeGate;           // one log line when the cape is gated off mid-swap
+        private static bool _loggedStaleFlag;          // one log line when a stale evict flag is proactively cleared
         private static int  _colorSaved = -1;          // canal body's OWN colour bytes, captured before we touch them
 
         internal static bool Diagnostics = true;      // log frame-find + writes while we validate the lever
@@ -195,6 +202,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 _frame = 0; _shownLvl = float.NaN; _lastMizu = float.NaN; _rebakeLvl = int.MinValue;
                 _rippleSlot = -1; _colorSaved = -1; _loggedArm = false;                   // Queens-only state
+                _capeStableTicks = 0; _lastClothSig = 0; _loggedCapeGate = false;          // cape early-draw stability gate
+                _loggedStaleFlag = false;                                                 // stale-flag clear log
                 _dampOrig = float.NaN; _mizuDrawSaved = int.MinValue;                     // ripple sim + diag state
                 _poleL = 0; _poleR = 0; _loggedPoles = false;                             // ladder-rail ripples
                 _loggedLadderGate = false;                                                // ladder tide-gate log
@@ -218,7 +227,11 @@ namespace Dark_Cloud_Improved_Version
             if (_shownLvl <= LowTideThreshold && PlayerInCanal()) _evictArm = EvictArmHold;
             else if (_evictArm > 0) _evictArm--;
 
-            if (!float.IsNaN(_prevTarget) && _prevTarget <= LowTideThreshold && target > LowTideThreshold && _evictArm > 0)
+            // Don't fire while a fishing session is entering/active: _LOAD_FISHING_DATA perturbs the scene's
+            // time/water, which can read as a low→non-low tide jump — a FALSE boundary. A player who chose to
+            // fish is not being caught by the rising tide.
+            if (!float.IsNaN(_prevTarget) && _prevTarget <= LowTideThreshold && target > LowTideThreshold
+                && _evictArm > 0 && !CustomFishingSpot.InFishingWindow)
             {
                 Memory.WriteInt(CanalEvictFlag, 1);
                 _flagTtl = FlagTtl;
@@ -226,9 +239,17 @@ namespace Dark_Cloud_Improved_Version
                 Log($"tide-evict: caught in draining canal ({_prevTarget:0.#}→{target:0.#}) → raised native evict flag");
             }
             _prevTarget = target;
-            // Safety: if the fade-hook never consumed the flag (no fully-black), drop it so it can't fire a later
-            // fade. Normally the hook clears it within the transition, well before this expires.
-            if (_flagTtl > 0 && --_flagTtl == 0) Memory.WriteInt(CanalEvictFlag, 0);
+            // Keep the flag CLEAN between evictions. It's a one-shot the native fade-hook consumes on the next
+            // fully-black frame — so a stale/garbage 1 (e.g. left in RAM on a DIRECT boot/state-load into Queens,
+            // where the non-Queens reset at the top never ran) would be eaten by the next UNRELATED fade — a
+            // fishing-entry fade — and false-warp the player to the dock. While no genuine eviction is pending
+            // (TTL==0), pin it to 0; only the boundary above raises it, with a TTL that spans the tide fade.
+            if (_flagTtl > 0) { if (--_flagTtl == 0) Memory.WriteInt(CanalEvictFlag, 0); }
+            else if (Memory.ReadInt(CanalEvictFlag) != 0)
+            {
+                Memory.WriteInt(CanalEvictFlag, 0);
+                if (!_loggedStaleFlag) { Log("canal-evict flag was set with no eviction pending → cleared (would have false-warped the next fade)"); _loggedStaleFlag = true; }
+            }
 
             // Kill the arrival camera-SWING at its SOURCE. MainCamera is a persistent object whose orbit angle
             // carries THROUGH the warp, so East Harbor inherits Queens' angle and its smoothed value (+0x2DC)
@@ -310,14 +331,45 @@ namespace Dark_Cloud_Improved_Version
                     uint root = Memory.ReadUInt(charaMmu + CharModelOff) & Memory.PhysAddrMask;
                     if (Memory.IsValidGuest(root))
                     {
+                        // The BODY early-draw (root -> MGDraw) is safe: root swaps atomically. The CAPE
+                        // early-draw is NOT: the cave walks char+0xC74 -> a 4-entry CCloth pointer array.
+                        // During a model swap (fishing enter/quit swaps c01d<->c01d_turi) that chain is
+                        // transiently STALE — non-zero garbage the cave's null-guard can't catch, so
+                        // Draw__6CCloth feeds the GS a bad packet and the screen hangs. So arm the cape
+                        // ONLY when the whole cloth chain is valid AND has been UNCHANGED for a few ticks
+                        // (the model has settled); until then leave CapeCharPtr=0 so the cave skips the
+                        // cloth loop (its own null-guard) and just draws the body.
+                        uint sig = 0; bool clothOk = true;
+                        uint clothList = Memory.ReadUInt(charaMmu + ClothListOff) & Memory.PhysAddrMask;
+                        if (clothList != 0)
+                        {
+                            if (Memory.IsValidGuest(clothList))
+                            {
+                                sig = clothList;
+                                long listMmu = Memory.ToMmu(clothList);
+                                for (int i = 0; i < ClothMaxPieces; i++)
+                                {
+                                    uint piece = Memory.ReadUInt(listMmu + i * 4) & Memory.PhysAddrMask;
+                                    if (piece != 0 && !Memory.IsValidGuest(piece)) { clothOk = false; break; }
+                                    sig = (sig << 3 | sig >> 29) ^ piece;   // order-sensitive fold
+                                }
+                            }
+                            else clothOk = false;
+                        }
+                        if (clothOk && sig == _lastClothSig && _capeStableTicks < CapeStableTicks) _capeStableTicks++;
+                        else if (!clothOk || sig != _lastClothSig) _capeStableTicks = 0;
+                        _lastClothSig = sig;
+                        bool capeReady = clothOk && _capeStableTicks >= CapeStableTicks;
+
                         // GROUP + cape char ptr before the FRAME pointer — the pointer is the stub's gate, so
-                        // neither must be observable as stale while the pointer is live. CapeCharPtr lets the
-                        // early-draw cave walk char+0xC74 and draw the cape early too (survives the falls).
+                        // neither must be observable as stale while the pointer is live.
                         Memory.WriteInt(CodeCaves.MizuRedrawTexGroup, PlayerTexGroup);
-                        Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, (int)chara);
+                        Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, capeReady ? (int)chara : 0);
                         Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, (int)root);
                         armed = true;
                         if (!_loggedArm) { Log($"early-player draw armed (model root 0x{root:X}, tex group {PlayerTexGroup})"); _loggedArm = true; }
+                        if (!capeReady && !_loggedCapeGate) { Log($"cape early-draw gated (cloth chain unsettled: list 0x{clothList:X}, ok={clothOk}, stable={_capeStableTicks})"); _loggedCapeGate = true; }
+                        else if (capeReady) _loggedCapeGate = false;
                     }
                 }
             }

@@ -390,6 +390,9 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(ld,  FishLineShallow.NewLw(reg));    // lw  $reg, 0x4000($reg)
             }
             _shallowLineInstalled = true;
+            // Seed the split's BELOW-bobber rest length (IsoPatcher.PatchFishLineSplit reads it @0x01F10048) to
+            // vanilla, so it's never 0 (0 collapses the hang) before the per-tick mirror takes over.
+            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);
             Log("shallow-line: FishLineStep bobber anchor now reads the data global (cold patch installed)");
         }
 
@@ -2096,13 +2099,21 @@ namespace Dark_Cloud_Improved_Version
             // reaches the low canal, and restore vanilla the moment the session ends. distp is read every frame
             // (data-only, recompiler-safe), so pin it here rather than as a one-shot.
             // Length comes from the same tide-resolved config as the anchor (Queens) or the spot (elsewhere).
-            float liveScale = live ? LineConfig(_active).lineScale : 1f;
-            bool wantStretch = live && Math.Abs(liveScale - 1f) > 0.001f;
-            if (wantStretch)
-                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * liveScale);
+            // SPLIT TEST: force distpABOVE (rod→bobber = aerial reach) to 3× vanilla while distpBELOW (bobber→hook =
+            // hang) stays vanilla. If the split is working, the aerial line should TRIPLE while the hang below the
+            // bobber is UNCHANGED. (Temporarily supersedes the per-spot LineScale + the no-op mirror — revert once
+            // validated, then wire distpBelow to real per-spot depth.)
+            if (live)
+            {
+                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * 3f);   // above ×3
+                Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp); // below unchanged
+                _distpScaled = true;
+            }
             else if (_distpScaled)
+            {
                 Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp);
-            _distpScaled = wantStretch;
+                _distpScaled = false;
+            }
 
             _fishingWasLive = live;
         }

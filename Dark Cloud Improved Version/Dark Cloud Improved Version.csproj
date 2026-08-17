@@ -61,6 +61,9 @@
     <EmbeddedResource Include="Resources\isoPatch\capeEarlyDraw.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.capeEarlyDraw.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\fishlineSplitCaves.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineSplitCaves.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>

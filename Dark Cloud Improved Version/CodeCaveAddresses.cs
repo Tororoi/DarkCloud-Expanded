@@ -120,8 +120,15 @@ namespace Dark_Cloud_Improved_Version
             /// The cave bakes the guest form 0x01F10044.</summary>
             internal const long CapeCharPtr = Base + 0x44;
 
+            /// <summary>Fishing rope BELOW-bobber rest length (float). The split caves (IsoPatcher.PatchFishLineSplit)
+            /// select this vs the existing distp @0x202A1FA4 (=above) per segment at anchor 18, so hook depth
+            /// (bobber→hook) is tuned independently of cast reach (rod→bobber). The cave bakes the guest form
+            /// 0x01F10048. Mod seeds/tunes it while fishing; MUST be > 0 (0 collapses the hang). See
+            /// game_data/docs/fishing-line-split-and-cast-feasibility.md.</summary>
+            internal const long LineDistpBelow = Base + 0x48;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x48;
+            internal const long NextFree = Base + 0x4C;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
