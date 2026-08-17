@@ -1158,6 +1158,8 @@ namespace Dark_Cloud_Improved_Version
             PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
             PatchWaterRedraw(fs, ElfOff);                 // moves (not duplicates) the water draw to after the character
             PatchCanalEvictFadeHook(fs, ElfOff);          // fully-black fade frame → canal tide-evict map-jump (native, flag-gated)
+            PatchQueensSprayHook(fs, ElfOff);             // MainDraw effect step → spray emitters at the Queens canal waterfalls (table-driven)
+            PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -1188,6 +1190,51 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
+        }
+
+        // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
+        // MainDraw @0x17c5a0 is `jal EditEffectStep2` (0x166de0) — the point where the Matataki-spray branch and
+        // the non-Matataki path converge, right before DrawEffect. Redirect it to the queensSprayCave (in the dead
+        // CharaChange region, after the fade hook), which spawns EffectWaterSpray emitters from CanalTide's table
+        // then tail-calls EditEffectStep2. Its delay slot is a nop (nothing displaced), so the redirect is a clean
+        // one-word swap. (Stub = tools/queens_spray_cave.s → Resources/isoPatch/queensSprayCave.bin.)
+        static void PatchQueensSprayHook(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint STUB_VA = 0x00228C00;   // dead CharaChange space, past the fade hook (0x228BB0, ~64 B)
+            const uint HOOK_VA = 0x0017C5A0;   // MainDraw `jal EditEffectStep2` (convergence point before DrawEffect)
+            if (RdU32(fs, ElfOff(HOOK_VA)) != 0x0C059B78)   // = jal 0x00166de0
+                throw new IOException($"Queens-spray hook site 0x{HOOK_VA:X} is not vanilla `jal EditEffectStep2` — unmodified Dark Cloud (USA) ISO expected.");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.queensSprayCave.bin")
+                ?? throw new IOException("Embedded EE function missing: queensSprayCave.bin (reassemble tools/queens_spray_cave.s and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFE0)   // first insn = addiu $sp,$sp,-0x20
+                throw new IOException($"queensSprayCave.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal EditEffectStep2 → jal queensSprayCave (which re-does that call)
+        }
+
+        // ── Spray velocity-bias shim ─────────────────────────────────────────────────────────────────
+        // EffectWaterSpray @0x165184 ends with `jal EnterEffect` (spawn the just-built particle). Redirect it to
+        // the sprayBiasShim, which adds the global bias vec (0x01F18300, set per-emitter by the spray cave) to the
+        // particle's initial velocity, then tail-jumps to EnterEffect. The bias is 0 for Matataki's own spray, so
+        // this is transparent there. (Stub = tools/spray_bias_shim.s → Resources/isoPatch/sprayBiasShim.bin.)
+        static void PatchSprayBiasShim(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint STUB_VA = 0x00228D00;   // dead CharaChange space, past the spray cave (0x228C00, 180 B)
+            const uint HOOK_VA = 0x00165184;   // EffectWaterSpray `jal EnterEffect`
+            if (RdU32(fs, ElfOff(HOOK_VA)) != 0x0C059260)   // = jal 0x00164980 (EnterEffect)
+                throw new IOException($"Spray-bias hook site 0x{HOOK_VA:X} is not vanilla `jal EnterEffect` — unmodified Dark Cloud (USA) ISO expected.");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.sprayBiasShim.bin")
+                ?? throw new IOException("Embedded EE function missing: sprayBiasShim.bin (reassemble tools/spray_bias_shim.s and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0801F2)   // first insn = lui $t0,0x1f2
+                throw new IOException($"sprayBiasShim.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal EnterEffect → jal sprayBiasShim (which re-does that call)
         }
 
         // ── FishingLoadFish species-selection rewrite (baked, race-free) ─────────────────────────────
