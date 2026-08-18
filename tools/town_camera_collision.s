@@ -178,7 +178,12 @@ mtc1  $t0, $f0
 nop
 # ===== HEIGHT target = REST_H + stick (bisect step 5: the smoothstep climb went with the pull-in — its input
 # was the pull-in intrusion), ducked by ceiling, floored by ground =====
-lui   $t0, 0x4188             # REST_H (flat baseline)
+lw    $t0, 0x24($t3)          # REST_H (flat baseline) = CameraRestH @0x01F10064 ($t3 still 0x01F10040 from the
+                              #   stick block). DATA-DRIVEN: the mod writes town-rest (5) normally, the SPOT's
+                              #   fishing height while a session is live — so the camera EASES to the fishing
+                              #   rest instead of EdMoveChara hard-clamping it every frame (which desynced the
+                              #   swept-slide origin and pinned the distance in with no recovery). Was `lui $t0,
+                              #   REST_H` (PutVal 145 — now removed; the value comes from the mailbox).
 mtc1  $t0, $f5
 nop
 lwc1  $f8, 0x68($sp)          # stick offset

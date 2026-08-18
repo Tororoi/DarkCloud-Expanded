@@ -1589,8 +1589,11 @@ namespace Dark_Cloud_Improved_Version
             PutVal(142, BASE_DIST, nameof(BASE_DIST));   // resting dist target
             PutVal(434, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
             PutVal(451, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
-            PutVal(145, REST_H, nameof(REST_H));   // height target base
-            PutVal(469, REST_H, nameof(REST_H));   // climb-curve base
+            // NOTE: word 145 (the height-target REST_H) is now a `lw $t0,0x28($t3)` that reads REST_H from the
+            // CameraRestH mailbox (data-driven — see town_camera_collision.s). The mod writes town-rest (5) there
+            // normally and the spot's fishing height while a session is live, so the fishing rest height is a
+            // TARGET the camera eases to, not a per-frame hard clamp. So NO PutVal(145) here anymore.
+            PutVal(469, REST_H, nameof(REST_H));   // climb-curve base (still baked at town rest — climb only RAISES, so it's inert while the fishing rest is higher)
             PutVal(41, CEIL_DIST, nameof(CEIL_DIST));
             PutVal(153, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
             PutVal(166, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));

@@ -620,7 +620,14 @@ namespace Dark_Cloud_Improved_Version
         {
             Memory.WriteFloat(CodeCaves.Mailbox.FishCamHeight, VanillaFishCamHeight);
             _lastCamH = VanillaFishCamHeight;
+            Memory.WriteFloat(CodeCaves.Mailbox.CameraRestH, TownRestH);   // town-camera REST_H default (must be valid before any camera frame)
+            _lastRestH = TownRestH;
         }
+
+        /// <summary>Town-camera resting eye height (== IsoPatcher's REST_H, still baked into the climb-curve base
+        /// at word 469). The height-TARGET REST_H (word 145) now reads <see cref="CodeCaves.Mailbox.CameraRestH"/>
+        /// instead, which we drive below.</summary>
+        internal const float TownRestH = 5f;
 
         private static void PinFishCamHeight()
         {
@@ -628,10 +635,20 @@ namespace Dark_Cloud_Improved_Version
             if (_installedMap >= 0 && _spot.MapNo == _installedMap)
                 h = (InFishingWindow ? _active : ActiveSpot()).CameraHeight;
             if (float.IsNaN(h) || h <= 0f) h = VanillaFishCamHeight;   // never let a bad spot value blank the camera
+
+            // Drive the camera's data-driven REST_H: the SPOT's fishing height while a session is live (so the
+            // camera EASES to it as its rest), the town rest otherwise. This replaces the fight between our
+            // swept-slide (easing toward REST_H) and EdMoveChara's per-frame SetHeight clamp — now the rest
+            // TARGET equals the clamp value, so there's no desync and the distance recovers like it does in town.
+            float restH = InFishingWindow ? h : TownRestH;
+            if (float.IsNaN(_lastRestH) || Math.Abs(_lastRestH - restH) >= 0.01f)
+            { Memory.WriteFloat(CodeCaves.Mailbox.CameraRestH, restH); _lastRestH = restH; }
+
             if (!float.IsNaN(_lastCamH) && Math.Abs(_lastCamH - h) < 0.01f) return;
             Memory.WriteFloat(CodeCaves.Mailbox.FishCamHeight, h);
             _lastCamH = h;
         }
+        private static float _lastRestH = float.NaN;
 
         private static Spot ActiveSpot()
         {
@@ -2105,7 +2122,8 @@ namespace Dark_Cloud_Improved_Version
             // validated, then wire distpBelow to real per-spot depth.)
             if (live)
             {
-                Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp * 3f);   // above ×3
+                float above = BisectFlags.LineSplit3x ? FishLineShallow.VanillaDistp * 3f : FishLineShallow.VanillaDistp;
+                Memory.WriteFloat(FishLineShallow.DistpAddr, above);                                // above (×3 test, or vanilla when bisecting off)
                 Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp); // below unchanged
                 _distpScaled = true;
             }
@@ -2116,36 +2134,25 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // CAST MOMENTUM. With distpAbove tripled the aerial line is 3x longer, but the throw ANIMATION
-            // flings the bobber only a vanilla distance (during the throw the hook is bone-pinned, not
-            // rope-governed). When the rope takes over — Phase 4 (Casting) -> 5 (HookInWater) — the extra
-            // slack would droop straight DOWN instead of carrying the bobber forward. So on that edge, give
-            // the whole rope a short forward-velocity boost in the cast direction (bobber - rod-tip, flattened
-            // to horizontal), scaled by the line-length ratio so a 3x line throws ~3x further. Verlet impulse:
-            // FishLineStep re-derives velo = (point - old_p) each step, so an added velo carries forward via
-            // old_p — pure data writes, recompiler-safe. Auto-adapts: at vanilla distp the ratio is 1 (mild).
+            // flings the bobber only a vanilla distance — the extra slack droops instead of carrying forward.
+            // Fire DURING the cast (phase 4), at the WHIP MOMENT: when the animation flings the bobber, its
+            // velocity (ukiv) spikes OUTWARD (away from the rod). Detect that spike and boost in the bobber's
+            // own velocity direction — mid-flight, so the boost is part of the throw arc, not a push after
+            // landing. The outward-motion check is the safety: the wind-up and any reel-in move the bobber
+            // TOWARD the rod and never trigger. Scaled by the line-length ratio (3x line ≈ 3x throw) and
+            // decayed. Verlet: FishLineStep re-derives velo = point − old_p, so added velo carries via old_p —
+            // pure data writes, recompiler-safe.
             if (live)
             {
                 int phase = Memory.ReadInt(FishingAddresses.Phase);
                 if (phase != _castPrevPhase)
                 {
-                    // ARM only on a FRESH cast: standing/idle -> Casting. The UNCAST animation also passes
-                    // through Casting (reeling in), and arming there is what let the boost fire backward as the
-                    // bobber came home — so require the previous phase to be Walking/Idle, not the rod-out states.
-                    if (phase == FishingState.Phase_Casting &&
+                    // ARM only on a FRESH cast: standing/idle -> Casting. (The uncast path also passes through
+                    // these states; the outward-velocity trigger below is what actually rejects it, but the
+                    // fresh-cast arm keeps the whip detector from even looking during a reel-in.)
+                    if (BisectFlags.CastBoost && phase == FishingState.Phase_Casting &&
                         (_castPrevPhase == FishingState.Phase_Walking || _castPrevPhase == FishingState.Phase_Idle))
                         _castPrimed = true;
-
-                    // FIRE when the rope takes over — HookInWater (5) is a <1-frame transient, the settled
-                    // rod-out state is (7), so fire on whichever we hit first while primed. Only if the bobber
-                    // is genuinely cast OUT in front (horizontal rod->bobber distance past a floor); a reel-in
-                    // has the bobber near/behind the rod, so this rejects the backward case outright.
-                    if ((phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting) && _castPrimed)
-                    {
-                        _castPrimed = false;
-                        _castDir = ComputeCastDir(out float outDist);
-                        _castBoostFrames = (outDist >= CastMinOutDist && (_castDir.x != 0f || _castDir.z != 0f)) ? CastBoostFrames : 0;
-                        Log($"[cast-boost] {(_castBoostFrames > 0 ? "armed" : "SKIP")} outDist={outDist:0.#} dir=({_castDir.x:0.##},{_castDir.z:0.##})");
-                    }
 
                     // Leaving the cast/rod-out states drops a primed cast and kills any running boost.
                     if (phase != FishingState.Phase_Casting && phase != FishingState.Phase_HookInWater
@@ -2154,8 +2161,32 @@ namespace Dark_Cloud_Improved_Version
                     Log($"[cast-boost] phase {_castPrevPhase} -> {phase}");   // TEMP diagnostic — remove once the flow is confirmed
                     _castPrevPhase = phase;
                 }
+
+                // WHIP DETECTOR (primed, during the cast animation): trigger the moment the bobber's horizontal
+                // speed spikes outward. Direction = the bobber's own velocity (the animation already aimed it).
+                if (_castPrimed && phase == FishingState.Phase_Casting)
+                {
+                    float vx = Memory.ReadFloat(RopeUkiv + 0), vz = Memory.ReadFloat(RopeUkiv + 8);
+                    float speed = (float)Math.Sqrt(vx * vx + vz * vz);
+                    if (speed >= CastWhipMinSpeed)
+                    {
+                        // outward = velocity points away from the rod (dot(bobber−rod, v) > 0)
+                        float bx = Memory.ReadFloat(RopeUkip + 0) - Memory.ReadFloat(RopePoint + 0);
+                        float bz = Memory.ReadFloat(RopeUkip + 8) - Memory.ReadFloat(RopePoint + 8);
+                        if (bx * vx + bz * vz > 0f)
+                        {
+                            _castPrimed = false;
+                            _castDir = (vx / speed, 0f, vz / speed);
+                            _castBoostFrames = CastBoostFrames;
+                            Log($"[cast-boost] WHIP speed={speed:0.##} dir=({_castDir.x:0.##},{_castDir.z:0.##})");
+                        }
+                    }
+                }
+
+                // Push: starts mid-cast (phase 4) and may run on into 5/7 as the bobber lands.
                 if (_castBoostFrames > 0 &&
-                    (phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting))
+                    (phase == FishingState.Phase_Casting || phase == FishingState.Phase_HookInWater
+                     || phase == FishingState.Phase_Uncasting))
                 {
                     float ratio = FishLineShallow.VanillaDistp > 0f
                         ? Memory.ReadFloat(FishLineShallow.DistpAddr) / FishLineShallow.VanillaDistp : 1f;
@@ -2192,10 +2223,10 @@ namespace Dark_Cloud_Improved_Version
         private const long RopeUkip  = 0x21D56350;   // ukip[0] = bobber; 4 x 0x10
         private const long RopeUkiv  = 0x21D563D0;   // ukiv[0];  4 x 0x10
         private const long RopeHookv = 0x21D56310;   // hookv[0]; 3 x 0x10
-        private const int   CastBoostFrames = 12;    // frames of forward push after the rope takes over (decays over this span)
-        private const float CastBoostMag    = 1.0f;  // per-frame forward velocity added (x line-length ratio x decay) — tune to taste
-        private const float CastUpFrac      = 0.25f; // small up component so the bobber arcs out instead of sinking
-        private const float CastMinOutDist  = 10f;   // bobber must be this far out front (horiz.) to count as a real cast — rejects reel-in
+        private const int   CastBoostFrames  = 12;    // frames of forward push from the whip (decays over this span)
+        private const float CastBoostMag     = 1.0f;  // per-frame forward velocity added (x line-length ratio x decay) — tune to taste
+        private const float CastUpFrac       = 0.25f; // small up component so the bobber arcs out instead of sinking
+        private const float CastWhipMinSpeed = 0.5f;  // horizontal bobber speed (ukiv) that counts as the throw whip — tune from the WHIP log line
 
         private const  long FishCamPtrVar = 0x21D19678;   // follow-camera ptr (dist @cam+0x2D0, height +0x2D4)
         private static bool _castPrimed;             // saw a fresh Casting; fire the boost on the next HookInWater
