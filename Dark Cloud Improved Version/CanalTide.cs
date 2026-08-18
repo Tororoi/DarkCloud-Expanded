@@ -245,7 +245,7 @@ namespace Dark_Cloud_Improved_Version
             // fishing-entry fade — and false-warp the player to the dock. While no genuine eviction is pending
             // (TTL==0), pin it to 0; only the boundary above raises it, with a TTL that spans the tide fade.
             if (_flagTtl > 0) { if (--_flagTtl == 0) Memory.WriteInt(CanalEvictFlag, 0); }
-            else if (Memory.ReadInt(CanalEvictFlag) != 0)
+            else if (BisectFlags.EvictFlagPin && Memory.ReadInt(CanalEvictFlag) != 0)
             {
                 Memory.WriteInt(CanalEvictFlag, 0);
                 if (!_loggedStaleFlag) { Log("canal-evict flag was set with no eviction pending → cleared (would have false-warped the next fade)"); _loggedStaleFlag = true; }
@@ -320,7 +320,7 @@ namespace Dark_Cloud_Improved_Version
             // redraw is Z-clipped at the waterline into a crisp dry top half. mizu itself is left entirely
             // alone (native layer, native pass — no hide, no redraw). Re-armed every tick; disarmed at
             // medium/high tide and whenever the player pointer is unreadable.
-            bool low = _shownLvl <= LowTideThreshold;
+            bool low = _shownLvl <= LowTideThreshold && BisectFlags.CapeEarlyDraw;
             bool armed = false;
             if (low)
             {

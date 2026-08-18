@@ -143,8 +143,17 @@ namespace Dark_Cloud_Improved_Version
             /// The fade-hook bakes the guest form 0x01F10060 (tools/canal_evict_fade_hook.s) — keep in sync.</summary>
             internal const long CanalEvict = Base + 0x60;
 
+            /// <summary>Town-camera RESTING eye height (float), read EVERY frame by the town-camera collision fn
+            /// (town_camera_collision.s: `lw $t0,0x24($t3)` where $t3=0x01F10040 → this word @0x01F10064) as its
+            /// REST_H height target. Data-driven so the fishing rest height is a TARGET the camera eases to, not
+            /// EdMoveChara's per-frame SetHeight clamp (which desynced the swept-slide and pinned the distance in
+            /// with no recovery). The mod (CustomFishingSpot.PinFishCamHeight) writes the town rest (5) normally
+            /// and the active spot's fishing height while a session is live. ⚠ Read every frame in EVERY town —
+            /// seeded at startup and re-asserted per tick; a 0 here would drop the camera to the pivot.</summary>
+            internal const long CameraRestH = Base + 0x64;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x64;
+            internal const long NextFree = Base + 0x68;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
