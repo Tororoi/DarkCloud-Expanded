@@ -2010,6 +2010,13 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(STEP_LWC1), J(STEP_CAVE));  WrU32(fs, ElfOff(STEP_SUB), 0);   // j step_cave ; nop
         }
 
+        // (A "cast-trajectory scale" cave hooked into the FishLineSetUki/SetHook tails was tried here and
+        // REMOVED 2026-08: the throw state (chara_fishing==3) passes the -1 sentinel weight, so the bobber is
+        // NOT bone-pinned during the cast — the vanilla throw is ROPE TRANSMISSION (the short taut line slings
+        // the bobber; cast reach ≈ line length), and a pin-target scale never executes. The cast boost is the
+        // C#-side LINE PAY-OUT in CustomFishingSpot instead: sling at vanilla length, then ramp distpAbove out
+        // during the flight — see game_data/docs/fishing-line-split-and-cast-feasibility.md.)
+
         // ── pnach: copy the mod's own A5C05C78.pnach into the PCSX2 cheats folder as <CRC>.pnach ──
         static void ReshipPnach(uint crc)
         {

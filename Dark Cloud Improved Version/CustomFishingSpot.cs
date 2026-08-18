@@ -2122,9 +2122,31 @@ namespace Dark_Cloud_Improved_Version
             // validated, then wire distpBelow to real per-spot depth.)
             if (live)
             {
-                float above = BisectFlags.LineSplit3x ? FishLineShallow.VanillaDistp * 3f : FishLineShallow.VanillaDistp;
-                Memory.WriteFloat(FishLineShallow.DistpAddr, above);                                // above (×3 test, or vanilla when bisecting off)
-                Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp); // below unchanged
+                Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp); // below (hang) unchanged
+                // LINE PAY-OUT (the cast boost). The vanilla throw is ROPE TRANSMISSION: the rod whips, the
+                // SHORT taut line slings the bobber out — cast reach ≈ line length (the throw state is NOT
+                // bone-pinned; FishLineSetUki gets the -1 sentinel there). A line held long from session start
+                // therefore never slings (all slack, bobber gets zero velocity). So stage it like a real cast:
+                //   reeled (chara_fishing <= 2): distpAbove = VANILLA — the sling works exactly like vanilla;
+                //   thrown (state >= 3) + bobber slung outward: RAMP distpAbove toward the target — line pays
+                //   out under the flying bobber, whose slung momentum + gravity (bank -> low canal) carry it
+                //   out instead of a short taut line pendulum-yanking it back. Instant snap-back on reel-in.
+                // A ramp over ~40 ticks is timing-tolerant (unlike the 1-2 frame whip) — per-tick C# is fine.
+                float target = BisectFlags.LineSplit3x ? FishLineShallow.VanillaDistp * 3f : FishLineShallow.VanillaDistp;
+                float cur = Memory.ReadFloat(FishLineShallow.DistpAddr);
+                int cf = Memory.ReadInt(FishingAddresses.FishCatchConfirm);   // chara_fishing @0x202A26E8 (1=walk, 2=cast trigger, 3=throw, 4=waiting…)
+                if (cf < 3 || cur > target)
+                    cur = cf < 3 ? FishLineShallow.VanillaDistp : target;     // reeled in (or target shrank): snap
+                // Trigger on the bobber being IN FRONT of the player (camera-forward axis), not merely far from
+                // the rod: the BACKSWING also slings it >trigger distance — but BEHIND — and paying out there
+                // slackened the line before the forward whip (no throw). The bobber only crosses in front once
+                // the whip has flung it, with its momentum already imparted at vanilla length — the real release.
+                else if (cur < target && (BobberFrontDist() > CastPayoutTrigger || cur > FishLineShallow.VanillaDistp + 0.01f))
+                    cur = Math.Min(cur + CastPayoutRate, target);             // flung forward: pay out (and keep paying once started)
+                bool paying = cur > FishLineShallow.VanillaDistp + 0.01f && cur < target;
+                if (paying != _payingOut)
+                { Log($"[payout] {(paying ? $"START (front {BobberFrontDist():0.#}, out {BobberOutDist():0.#})" : $"end (distp {cur:0.##}, out {BobberOutDist():0.#})")}"); _payingOut = paying; }
+                Memory.WriteFloat(FishLineShallow.DistpAddr, cur);
                 _distpScaled = true;
             }
             else if (_distpScaled)
@@ -2227,6 +2249,24 @@ namespace Dark_Cloud_Improved_Version
         private const float CastBoostMag     = 1.0f;  // per-frame forward velocity added (x line-length ratio x decay) — tune to taste
         private const float CastUpFrac       = 0.25f; // small up component so the bobber arcs out instead of sinking
         private const float CastWhipMinSpeed = 0.5f;  // horizontal bobber speed (ukiv) that counts as the throw whip — tune from the WHIP log line
+        private const float CastPayoutTrigger = 8f;   // rod->bobber horizontal distance that counts as "slung" — starts the line pay-out
+        private const float CastPayoutRate    = 0.1f; // distpAbove growth per tick while paying out (1.667->5.0 in ~35 ticks ≈ the flight)
+
+        /// <summary>Horizontal rod-tip -> bobber distance (diagnostic; direction-blind).</summary>
+        private static float BobberOutDist() { ComputeCastDir(out float d); return d; }
+        private static bool _payingOut;   // TEMP: payout start/end log edge
+
+        /// <summary>Signed distance of the bobber IN FRONT of the player along the camera-forward axis
+        /// (negative = behind, e.g. during the backswing). The follow camera sits behind the player at
+        /// eye = ref + dist·(sin,cos)(angS), so player-forward = −(sin,cos)(angS).</summary>
+        private static float BobberFrontDist()
+        {
+            uint cp = Memory.ReadUInt(FishCamPtrVar) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(cp) || !EditLoop.TryReadPlayerPos(out float px, out _, out float pz)) return 0f;
+            float ang = Memory.ReadFloat(Memory.ToMmu(cp) + 0x2DC);   // rendered follow angle (angS)
+            float bx = Memory.ReadFloat(RopeUkip + 0) - px, bz = Memory.ReadFloat(RopeUkip + 8) - pz;
+            return bx * -(float)Math.Sin(ang) + bz * -(float)Math.Cos(ang);
+        }
 
         private const  long FishCamPtrVar = 0x21D19678;   // follow-camera ptr (dist @cam+0x2D0, height +0x2D4)
         private static bool _castPrimed;             // saw a fresh Casting; fire the boost on the next HookInWater
