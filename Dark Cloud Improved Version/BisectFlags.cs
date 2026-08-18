@@ -13,7 +13,9 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class BisectFlags
     {
-        internal static bool CastBoost     = true;   // forward velocity impulse on the cast (CustomFishingSpot)
+        internal static bool CastBoost     = false;  // C# whip-detector impulse — SUPERSEDED by the native cast-trajectory
+                                                     // scale (IsoPatcher.PatchFishLineCastScale + Mailbox.CastScale); keep
+                                                     // off. Delete the C# path once the native boost is confirmed in-game.
         internal static bool LineSplit3x   = true;   // distpAbove ×3 aerial-line test (CustomFishingSpot)
         internal static bool EvictFlagPin  = true;   // per-tick canal-evict flag clear (CanalTide)
         internal static bool CapeEarlyDraw = true;   // low-tide cape/body early-draw + stability gate (CanalTide)
