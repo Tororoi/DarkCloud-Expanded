@@ -16,7 +16,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool CastBoost     = false;  // C# whip-detector impulse — SUPERSEDED by the native cast-trajectory
                                                      // scale (IsoPatcher.PatchFishLineCastScale + Mailbox.CastScale); keep
                                                      // off. Delete the C# path once the native boost is confirmed in-game.
-        internal static bool LineSplit3x   = true;   // distpAbove ×3 aerial-line test (CustomFishingSpot)
+        // (LineSplit3x removed — the ×3 test graduated into the per-spot LineConfigSplit aerial scale.)
         internal static bool EvictFlagPin  = true;   // per-tick canal-evict flag clear (CanalTide)
         internal static bool CapeEarlyDraw = true;   // low-tide cape/body early-draw + stability gate (CanalTide)
     }

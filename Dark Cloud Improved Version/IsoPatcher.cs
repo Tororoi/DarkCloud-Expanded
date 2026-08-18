@@ -1155,6 +1155,9 @@ namespace Dark_Cloud_Improved_Version
                 PatchDecoupleCamera(fs, ElfOff);         // NOP FollowOn → MainCamera stays follow-OFF → C# owns it
             PatchFishingCameraTarget(fs, ElfOff);        // center the fishing shot on the bobber (kept)
             PatchFishingCameraHeight(fs, ElfOff);        // fishing camera height 40 -> per-spot data word (canal wades at 5)
+            PatchFishingCameraGather(fs, ElfOff);        // fishing camera-collision gather: mask 1 -> 0xffff (see ALL camera walls while fishing)
+            PatchFishLineSlopeGate(fs, ElfOff);          // bobber/hook ground probes: accept steep slopes (|ny| threshold 0.2 -> 0.05)
+            PatchFishingUncastGate(fs, ElfOff);          // invalid-cast auto-uncast: 31-frame delay -> 4, height check gated on a SETTLED bobber
             PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
             PatchWaterRedraw(fs, ElfOff);                 // moves (not duplicates) the water draw to after the character
             PatchCapeEarlyDraw(fs, ElfOff);               // AFTER PatchWaterRedraw: EARLY_STUB also draws the cape early (survives falls)
@@ -1691,6 +1694,76 @@ namespace Dark_Cloud_Improved_Version
             if (lo >= 0x8000) hi += 1;                       // lwc1's offset is SIGNED — compensate like the assembler
             WrU32(fs, ElfOff(LUI_VA),  0x3C020000u | hi);                      // lui  $2,hi
             WrU32(fs, ElfOff(MTC1_VA), 0xC4000000u | (2u << 21) | (12u << 16) | lo);  // lwc1 $f12,lo($2)
+        }
+
+        // ── Fishing bobber/hook vs STEEP SLOPES ──────────────────────────────────────────────────────
+        // FishLineStep's ground probes cast a vertical ray through the hook (@0x1AA3E4) and the bobber
+        // (@0x1AA4C8) and set Hook/UkiGroundLevel from the hit — but only when the hit poly's normalized
+        // |normal.y| exceeds DAT_002a1a64 (0.2): slopes steeper than ~78° are REJECTED, so the bobber sinks
+        // straight through the canal banks (vanilla behavior). Both compare sites load the threshold with
+        // `lwc1 f,-0x7D8C(gp)`; repoint them at a neighboring engine constant 0.05 (@0x2A1A5C = gp-0x7D94) so
+        // slopes up to ~87° count as ground. (The hook site reuses the same reg as its rest offset — the hook
+        // then rests hit.y+0.05 instead of +0.2, negligible.) DAT_002a1a64 itself is untouched — it feeds the
+        // uki-anchor constraint too. ISO-baked, so patching this hot function is safe (same as the split caves).
+        static void PatchFishLineSlopeGate(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint HOOK_VA = 0x001AA440, UKI_VA = 0x001AA524;
+            uint gotH = RdU32(fs, ElfOff(HOOK_VA)), gotU = RdU32(fs, ElfOff(UKI_VA));
+            if (gotH == 0xC781826C && gotU == 0xC780826C) return;   // already patched (idempotent re-run)
+            if (gotH != 0xC7818274 || gotU != 0xC7808274)
+                throw new IOException($"FishLine slope-gate sites (0x{HOOK_VA:X}/0x{UKI_VA:X}) are not vanilla `lwc1 f,-0x7D8C(gp)` (got 0x{gotH:X8}/0x{gotU:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(HOOK_VA), 0xC781826C);   // lwc1 f1,-0x7D94(gp) — threshold 0.05 (hook probe)
+            WrU32(fs, ElfOff(UKI_VA),  0xC780826C);   // lwc1 f0,-0x7D94(gp) — threshold 0.05 (bobber probe)
+        }
+
+        // ── Fishing invalid-cast auto-uncast: fire fast, but only on a SETTLED bobber ────────────────
+        // The engine already rejects bad casts: in the waiting state EdMoveChara calls FishingCheckUkiHook
+        // (bobber/hook outside the fishing rect, or RESTING above water+5 — e.g. deposited on the canal rim
+        // by the vertical probe's ground-lift) and a nonzero verdict auto-uncasts (chara_fishing=5). But it
+        // waits 31 frames (`slti at,st_cnt,0x1f` @0x16C6D0) before consulting it — the bobber sits on land
+        // for a beat. Two-part fix:
+        //   (1) gate 0x1F -> 4: the check runs ~4 frames into the waiting state;
+        //   (2) cave over the function's height-check tail (fishlineUncastGate.bin @0x228E20, entered by a
+        //       `j` over the `lui v0,0x40a0` 5.0-load @0x1AA2D4): the height violation only counts when the
+        //       bobber's Verlet velocity is ~0 (settled). Without this, the early check would uncast LEGIT
+        //       long casts still airborne above water+5 when the waiting state begins.
+        // (Cave = tools/fishline_uncast_gate.s. ISO-baked, so patching hot fishing code is safe.)
+        static void PatchFishingUncastGate(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CAVE_VA = 0x00228E20;                       // dead CharaChange region (ex cast-scale slot)
+            const uint GATE_VA = 0x0016C6D0;                       // EdMoveChara: slti at,st_cnt,0x1f (check delay)
+            const uint LUI_VA = 0x001AA2D4, MTC_VA = 0x001AA2D8;   // CheckUkiHook tail: lui v0,0x40a0 ; mtc1 v0,f1
+            uint gotG = RdU32(fs, ElfOff(GATE_VA)), gotL = RdU32(fs, ElfOff(LUI_VA)), gotM = RdU32(fs, ElfOff(MTC_VA));
+            if (gotG != 0x2841001F || gotL != 0x3C0240A0 || gotM != 0x44820800)
+                throw new IOException($"Fishing uncast-gate sites are not vanilla (got 0x{gotG:X8}/0x{gotL:X8}/0x{gotM:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineUncastGate.bin")
+                ?? throw new IOException("Embedded EE function missing: fishlineUncastGate.bin (reassemble tools/fishline_uncast_gate.s and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0840A0)   // first insn = lui $t0,0x40a0
+                throw new IOException($"fishlineUncastGate.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CAVE_VA + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(GATE_VA), 0x28410004);   // slti at,st_cnt,4 — consult the check almost immediately
+            WrU32(fs, ElfOff(LUI_VA), J(CAVE_VA));    // height tail -> settled-gated cave
+            WrU32(fs, ElfOff(MTC_VA), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
+        }
+
+        // ── Fishing camera-collision gather: see ALL camera walls while fishing ──────────────────────
+        // EdMoveChara's camera block gathers _c polys for every probe/sweep via PickUpCameraPoly — but with
+        // attribute mask 1 while FISHING (DAT_01d19714 != 0) vs 0xffff normally (branch @0x16AF38). With
+        // mask 1 almost no walls are gathered, so the bobber-pinned fishing camera (and the mod's swept-slide,
+        // which constrains against this same gather) can sail straight through buildings — vanilla shipped it
+        // this way because its fishing camera barely moved; the bobber-centred view + extended cast expose it.
+        // Fix: one word — the fishing path's `li a3,1` becomes `ori a3,zero,0xffff`, same mask as walking.
+        static void PatchFishingCameraGather(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint MASK_VA = 0x0016AF4C;   // fishing-path `li a3,0x1` feeding jal PickUpCameraPoly @0x16AF50
+            uint got = RdU32(fs, ElfOff(MASK_VA));
+            if (got == 0x3407FFFF) return;     // already patched (idempotent re-run)
+            if (got != 0x24070001)
+                throw new IOException($"Fishing camera-gather mask site 0x{MASK_VA:X} is not vanilla `li a3,1` (got 0x{got:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(MASK_VA), 0x3407FFFF);   // ori a3,zero,0xffff — full camera-poly mask while fishing
         }
 
         // ── DrawWater compaction — frees the cave the water-redraw hook (below) lives in ────────────────

@@ -13,10 +13,12 @@ namespace Dark_Cloud_Improved_Version
         private static void Log(string s) =>
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishingCollision] " + s);
 
-        /// <summary>The floor-ness cutoff: the engine's own raycast (FishLineStep, DAT_2a1a64) counts a poly as
-        /// ground when |normal.Y| &gt; 0.2 on the normalised normal. Keeping exactly that set preserves every
-        /// poly the hook/bobber can land on and discards only true walls.</summary>
-        private const float FloorNormalYMin = 0.2f;
+        /// <summary>The floor-ness cutoff, ALIGNED with the engine's slope gate: the bobber/hook raycast counts
+        /// a poly as ground when |normal.Y| &gt; the FishLineStep threshold — vanilla 0.2, lowered to 0.05 by
+        /// IsoPatcher.PatchFishLineSlopeGate so steep slopes stop the bobber (the 87° canal banks lean at
+        /// ny = 0.052 for exactly this). Keep everything the engine gate can use (0.045 &lt; 0.05 for margin);
+        /// only true walls — parallel to the vertical ray, useless to it by geometry — are dropped.</summary>
+        private const float FloorNormalYMin = 0.045f;
 
         /// <summary>
         /// Rewrite the native cpoly to keep ONLY near-horizontal polys (floors + slopes), dropping every
@@ -53,7 +55,7 @@ namespace Dark_Cloud_Improved_Version
                 float ny = Memory.ReadFloat(poly + 0x30 + 4);
                 float nz = Memory.ReadFloat(poly + 0x30 + 8);
                 float nl = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
-                if (nl <= 0f || Math.Abs(ny) / nl <= FloorNormalYMin) { walls++; continue; }   // a wall — drop it
+                if (nl <= 0f || Math.Abs(ny) / nl <= FloorNormalYMin) { walls++; continue; }   // a true wall — drop it
 
                 // Also drop floor polys sitting on TOP of the in-water ladders (platforms above the water,
                 // not pond floor) — the bobber/hook have no business catching on them. Gated on the poly's

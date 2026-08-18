@@ -56,6 +56,7 @@ namespace Dark_Cloud_Improved_Version
         private const long  ClothListOff = 0xC74;             // CCharacter +0xC74 -> cloth-piece list (cape early-draw)
         private const int   ClothMaxPieces = 4;               // Draw__CCharacter walks 4 cloth slots
         private const int   CapeStableTicks = 4;              // cloth chain must be valid+unchanged this many ticks before the cape is drawn early
+        private const float CapeFadeDisarm  = 16f;            // fade alpha (0..128) past which the cape disarms — the fishing model swaps run under the black
         // The town PLAYER's texture group is HARDCODED 8 in EdDrawCharacter (0x172980: `li a2,8` →
         // ReloadTexture → TextureAnime(player, 8)). The +0x148C per-character group field only exists on
         // the VILLAGER array records (stride 0x14A0 off EdDrawCharacter's a3) — on the player object it
@@ -359,6 +360,17 @@ namespace Dark_Cloud_Improved_Version
                         if (clothOk && sig == _lastClothSig && _capeStableTicks < CapeStableTicks) _capeStableTicks++;
                         else if (!clothOk || sig != _lastClothSig) _capeStableTicks = 0;
                         _lastClothSig = sig;
+                        // FADE GATE for the fishing model swaps: the session swaps the player model
+                        // (c01d <-> c01d_turi) inside the enter/exit scripts, which run UNDER THE BLACK FADE —
+                        // and between two mod ticks the cloth chain can go stale-but-non-null the SAME FRAME
+                        // the cave draws it, a race no stability counter can close from C# (the intermittent
+                        // black-screen hang). So disarm the cape the moment the screen starts darkening
+                        // (alpha > gate, far below full black 128): the swap lands many frames later, well
+                        // after the disarm, and a dark screen needs no cape anyway. Unlike the earlier hard
+                        // InFishingWindow gate, this KEEPS the cape during actual low-tide fishing — the
+                        // player wades the canal mid-session and the early draw is exactly what clips them
+                        // at the waterline there.
+                        if (Memory.ReadFloat(FadeAlpha) > CapeFadeDisarm) _capeStableTicks = 0;
                         bool capeReady = clothOk && _capeStableTicks >= CapeStableTicks;
 
                         // GROUP + cape char ptr before the FRAME pointer — the pointer is the stub's gate, so

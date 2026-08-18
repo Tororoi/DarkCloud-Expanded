@@ -137,6 +137,10 @@ _BOTH_WALLS = {
         # south wall plane z=1300 (x -400..600) simplified from 60 terrain tris to one quad; y0 up +270 -> y270
         ((-400.0, 0.0, 1300.0), (600.0, 0.0, 1300.0), 270.0),
         # canal side walls (x -200..900), simplified to one quad each; y0 up +70 -> y70:
+        # (an 87-degree lean was TRIED here (2026-08) so the bobber's vertical probe would see them, and
+        #  REVERTED: the probe's ground-lift semantics just deposited the bobber on the rim. The bobber-vs-wall
+        #  fix is native now — IsoPatcher.PatchFishingUncastGate makes the game auto-uncast an out-of-water
+        #  bobber quickly instead. These stay plain 90-degree walls.)
         ((-200.0, 0.0, -50.0), (900.0, 0.0, -50.0), 70.0),   # south canal wall z=-50
         ((-200.0, 0.0, 50.0), (900.0, 0.0, 50.0), 70.0),     # north canal wall z=50
         # east wall plane x=600 (z 200..1300) simplified from 66 terrain tris to one quad; y0 up +270 -> y270

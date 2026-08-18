@@ -154,14 +154,22 @@ namespace Dark_Cloud_Improved_Version
             // "FISHING SPOT LOADED" cpoly count (flip Diagnostics on); if it nears 1024, decouple — keep a
             // small cast/gather rect here and move the big roam box to the FishX1..FishZ2 params.
             new Spot(2, "Queens canal", 6,      // area 6 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — 100% Bobo
+                     // ⚠ This rect is ALSO the fishing-session poly GATHER (PickUpPoly) — the player walks the
+                     // canal/bridges on that gathered cpoly during a Queens session, so it must span the bank
+                     // and bridge approaches (z -100..150), NOT just the water. A cast that slips past a 90°
+                     // wall is retracted by the native height auto-uncast (PatchFishingUncastGate), not by
+                     // shrinking this rect — an earlier z±49 tightening deleted the bridge floors and blocked
+                     // crossing them in fishing mode.
                      -240f, -100f, 900f, 150f, water: 31f, ground: 10f,
                      tx: 250f, ty: 70f, tz: -70f, radius: 10f,
                      sx: 250f, sy: 70f, sz: -70f, facing: 0f,            // stance: face +Z (south) toward the water
-                     // ⚠ lineScale here is SUPERSEDED for Queens — LineConfig resolves length AND anchor from
-                     // the TIDE (medium/high = anchor 20 @1.5x, low = anchor 21 @1x). Kept as the historical
-                     // value: 1.25x with the vanilla anchor 18 gave hook ~WaterLevel-10.4, bait -13.4, and
-                     // fishDepth 14.08 held the vanilla fish-to-bait gap (~0.67) → bites. The new anchor/length
-                     // move the hook, so fishDepth is PENDING a logged hook-depth capture (fishDepth = hang + 3.68).
+                     // ⚠ lineScale here is SUPERSEDED for Queens — LineConfigSplit resolves the SPLIT line from
+                     // the TIDE: medium/high = above x1.35 aerial + distpBelow 1.35 (the hang the retired
+                     // point-20 anchor @1.35x used to produce); low tide = the canal-floor spot below. The
+                     // bobber anchor is FIXED at point[18] (A=18 baked into the ISO split caves). Historical
+                     // note: 1.25x whole-line with anchor 18 gave hook ~WaterLevel-10.4, bait -13.4, and
+                     // fishDepth 14.08 held the vanilla fish-to-bait gap (~0.67) → bites. fishDepth remains
+                     // PENDING a logged hook-depth capture at this bank spot (fishDepth ≈ hang + HookBodyDrop).
                      lineScale: 1.25f, fishDepth: 14.08f),
 
             // Queens canal FLOOR (low tide) — the canal-floor sign (its own baked part `kanbanc` + label 401).
@@ -170,17 +178,18 @@ namespace Dark_Cloud_Improved_Version
             // it fishes from the floor instead of teleporting to the bank. Both re-bake together on a tide change.
             // ⚠ stance/depth/facing are initial guesses — tune in-game against the exposed low-tide floor.
             new Spot(2, "Queens canal floor", 6,
-                     -240f, -100f, 900f, 150f, water: 8f, ground: 0f,
+                     -240f, -100f, 900f, 150f, water: 8f, ground: 0f,   // full gather rect (footing) — see the bank spot's rect note
                      tx: 794f, ty: 0f, tz: 0f, radius: 10f,
                      // stand on the canal floor and FACE EAST (yaw pi/2 -> forward (sin,cos)=(1,0)=+X) toward
                      // the canal sign at x=800. Water tracks the tide like the north spot (both in sync), and at
                      // low tide it is low (8), so fish sit just above the floor, not up
                      // at the flooded-tide surface.
                      sx: 794f, sy: 0f, sz: 0f, facing: 1.5708f,
-                     // ⚠ shallowBobber is SUPERSEDED for Queens (LineConfig picks the anchor by tide — this spot
-                     // is only reachable at LOW tide, so it gets anchor 21 @1x). fishDepth 6.8: the logged hook
-                     // target at low tide (water 8) is Y=1.2, so 8 − 6.8 puts the fish exactly at the hook.
-                     shallowBobber: true, fishDepth: 6.8f, labelId: 401,  // its own label -> deterministic canal stance
+                     // ⚠ shallowBobber is SUPERSEDED for Queens (LineConfigSplit resolves by tide — this spot
+                     // is only reachable at LOW tide, where the hook rests at QueensFishDepthLow below the
+                     // surface). fishDepth matches it so the fish sit exactly at the hook (this spot's
+                     // empirically confirmed bite geometry; keep the two in lockstep when retuning).
+                     shallowBobber: true, fishDepth: QueensFishDepthLow, labelId: 401,  // its own label -> deterministic canal stance
                      // standing IN the canal: drop the raised fishing angle (40) — full town height (5) felt
                      // too cramped by eye, 20 is the tuned balance.
                      cameraHeight: CanalWadingCamHeight),
@@ -220,19 +229,22 @@ namespace Dark_Cloud_Improved_Version
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
                      sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
-                     shallowBobber: true, // Brownboo raises the hook via the bobber-anchor toggle (point 20), NOT a line stretch
-                     fishDepth: 7.6f      // shallow pond: fish at WaterLevel-7.6 (write the CFrame translation Y @ fish+0x1264, the authoritative depth). And the bobber anchor
-                                          // is toggled to point 20 (data write over the cold FishLineStep patch) so
-                                          // the hook rises to ~-3 / bait ~-6 to reach them. All data-only —
-                                          // patching hot fishing code crashes PCSX2 (recompiler). Line length
-                                          // (cast reach) unchanged.
+                     shallowBobber: true, // LEGACY flag — inert here: fishDepth below makes this spot DEPTH-DRIVEN
+                                          // (LineConfigSplit only consults shallowBobber for spots with NO fishDepth).
+                                          // The bobber anchor is FIXED at point[18] (A=18 baked into the ISO split
+                                          // caves) — hook depth is pure distpBelow data, no anchor moves.
+                     fishDepth: 6f        // ONE KNOB: fish at WaterLevel-6 (CFrame translation Y @ fish+0x1264, the
+                                          // authoritative depth) AND the hook rests there too — LineConfigSplit
+                                          // derives distpBelow = (6−HookBodyDrop)/5 (fish-at-hook bite geometry).
+                                          // All data-only — patching hot fishing code crashes PCSX2 (recompiler).
+                                          // Aerial line (cast reach) = distpAbove, independent since the split.
                      // BISECT RESULT (2026-07-23): stilts garbage is NOT the model load and NOT the buffer
                      // clears (both skipped -> still garbage). Clobber is intrinsic to entering fishing mode
                      // (fishing-init / HUD texture setup evicting the stilts' GS block).
                      // Shallow fishing: the RESTING hook follows the fishing-line physics, NOT the rod animation
-                     // (in the waiting state it is not pinned to the rod bone). Moving the bobber's anchor toward
-                     // the hook shortens the below-water run so it rises; done via the cold-patch data toggle
-                     // (InstallShallowLinePatch / SetShallowLine). See game_data/docs/fishing-engine-re.md §fishing-line.
+                     // (in the waiting state it is not pinned to the rod bone). Its depth = the below-bobber rest
+                     // length distpBelow (mailbox @0x01F10048, read by the ISO split caves at fixed anchor A=18;
+                     // IsoPatcher.PatchFishLineSplit). See game_data/docs/fishing-line-split-and-cast-feasibility.md.
                      ),
 
             // Yellow Drops: the yellow liquid.
@@ -257,7 +269,9 @@ namespace Dark_Cloud_Improved_Version
             new Spot(23, "Yellow Drops liquid", 7,  // area 7 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — Tarton/Nonky/Negie/Bon
                      -609f, -444f, -409f, -244f, water: 1f, ground: -15f,
                      tx: -575f, ty: 9f, tz: -286f, radius: InteractRadius,
-                     sx: -582.9f, sy: 9.6f, sz: -276.8f, facing: 2.31f),
+                     sx: -582.9f, sy: 9.6f, sz: -276.8f, facing: 2.31f,
+                     fishDepth: 8f),   // ONE KNOB: fish at WaterLevel-8 (was vanilla 12) AND the hook rests there —
+                                       // LineConfigSplit derives distpBelow = (8−HookBodyDrop)/5 ≈ 0.906 (fish-at-hook)
         };
 
         /// <summary>
@@ -368,50 +382,21 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
 
-            // Poll: only patch once the game's FishLineStep code is actually present (all six sites read vanilla).
-            // Before the game finishes loading, or mid-transition, the read is garbage — so we RETRY (called from
-            // ApplyNewChanges AND every Tick) rather than give up. This still lands well before any fishing JITs
-            // the function. (Fishing hot-JITs it in the recompiler but leaves the EE memory bytes vanilla, so the
-            // read can't tell "hot" from "cold" — the early timing is what keeps the write safe.)
-            bool allVanilla = true, allPatched = true;
+            // RETIRED (2026-08): the anchor toggle is gone — the ISO split caves bake the above/below cutover
+            // at A=18, hook depth is distpBelow, and the VANILLA anchor instructions already load point[18].
+            // So this no longer patches anything. The one case left to handle: a MOD RELAUNCH against a game
+            // this boot ALREADY cold-patched (the six loads read BobberPtr @0x01FB4000, and un-patching code
+            // that fishing may have JIT'd is exactly the hot-write crash) — detect it and pin the DATA global
+            // to point[18], which makes the patched code behave identically to vanilla.
+            bool anyPatched = false;
             foreach (var (lui, ld, reg) in FishLineShallow.Sites)
+                if (Memory.ReadUInt(lui) == FishLineShallow.NewLui(reg)) { anyPatched = true; break; }
+            if (anyPatched)
             {
-                uint gotLui = Memory.ReadUInt(lui);
-                if (gotLui != FishLineShallow.OrigLui)     allVanilla = false;
-                if (gotLui != FishLineShallow.NewLui(reg)) allPatched = false;
+                Memory.WriteUInt(FishLineShallow.BobberPtr, FishLineShallow.PointVanilla);   // A=18, data-side
+                Log("shallow-line: leftover cold patch from a previous mod run — BobberPtr pinned to point[18] (anchor toggle is retired)");
             }
-            if (allPatched) { _shallowLineInstalled = true; return; }   // already patched this boot (mod relaunch)
-            if (!allVanilla) return;                                    // not loaded yet — retry next tick
-
-            Memory.WriteUInt(FishLineShallow.BobberPtr, FishLineShallow.PointVanilla);   // default anchor = point[18]
-            foreach (var (lui, ld, reg) in FishLineShallow.Sites)
-            {
-                Memory.WriteUInt(lui, FishLineShallow.NewLui(reg));   // lui $reg, 0x01FB
-                Memory.WriteUInt(ld,  FishLineShallow.NewLw(reg));    // lw  $reg, 0x4000($reg)
-            }
-            _shallowLineInstalled = true;
-            // Seed the split's BELOW-bobber rest length (IsoPatcher.PatchFishLineSplit reads it @0x01F10048) to
-            // vanilla, so it's never 0 (0 collapses the hang) before the per-tick mirror takes over.
-            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);
-            Log("shallow-line: FishLineStep bobber anchor now reads the data global (cold patch installed)");
-        }
-
-        /// <summary>Per-town data toggle: bobber at point 20 (shallow) or point 18 (vanilla). Safe any time —
-        /// the cold patch already made FishLineStep read this global every frame.</summary>
-        private static void SetShallowLine(bool shallow)
-        {
-            if (!_shallowLineInstalled) return;
-            Memory.WriteUInt(FishLineShallow.BobberPtr,
-                             shallow ? FishLineShallow.PointShallow : FishLineShallow.PointVanilla);
-        }
-
-        /// <summary>Anchor the bobber at an explicit main-line point index (18..22). Same data global and the
-        /// same recompiler safety as <see cref="SetShallowLine"/>; used where the anchor is chosen per TIDE
-        /// rather than per town.</summary>
-        private static void SetBobberAnchor(int pointIndex)
-        {
-            if (!_shallowLineInstalled) return;
-            Memory.WriteUInt(FishLineShallow.BobberPtr, FishLineShallow.PointAt(pointIndex));
+            _shallowLineInstalled = true;   // nothing (more) to install this boot
         }
 
         // ── Queens: line length + bobber anchor vary by TIDE ─────────────────────────────────────────────
@@ -423,18 +408,53 @@ namespace Dark_Cloud_Improved_Version
         // between anchor and hook 23 = shallower) and scaled by the per-segment rest length (lineScale).
         // ⚠ CAPTURE THESE: log the resting hook depth in each tide, then set the matching fish depths via
         // fishDepth = hangDepth + 3.68. Fish depths are deliberately LEFT ALONE until that capture.
-        private const int   QueensAnchorNormal = 20,   QueensAnchorLow = 21;
-        private const float QueensLineNormal   = 1.35f, QueensLineLow   = 1.0f;   // 1.5x measured too long in-game
+        private const int   QueensAnchorNormal  = 20;     // legacy anchor — feeds the Below() mapping only
+        private const float QueensLineNormal    = 1.35f;  // legacy hang-mapping lineScale for the bank spot (1.5x measured too long in-game)
+        private const float ExtendedCastAbove   = 2.0f;   // EXTENDED aerial cast TARGET (pays out on the throw) — Queens
+                                                          // non-low (casting DOWN from the north bank) AND Yellow Drops.
+        private const float ShortLineStart      = 0.9f;   // reeled/pre-cast distpAbove scale (Queens + Yellow Drops): a slightly
+                                                          // tauter line at the whip → cleaner sling; the payout ramps from here.
+        private const int   YellowDropsMapNo    = 23;
+        private const float QueensFishDepthLow  = 7.0f;   // low tide: FISH depth below the surface (user-tuned); hook rests there too (fish-at-hook bite geometry)
+        private const float HookBodyDrop       = 3.47f;  // measured: realized hook depth − 5·distpBelow (hook sub-body/rig
+                                                         // geometry below point[23]; from the logged hang 3.33 ↔ depth 6.8 pair)
 
-        /// <summary>Fishing-line config for a spot: Queens resolves by tide, every other town keeps using the
-        /// spot's own fields (Brownboo stays anchor 20 @1x, Yellow Drops vanilla).</summary>
-        private static (float lineScale, int anchor) LineConfig(Spot s)
+        /// <summary>Fishing-line config for the SPLIT rope (ISO caves bake the above/below cutover at A=18,
+        /// so the bobber ALWAYS anchors at the vanilla point[18] — the 18↔20/21 anchor toggle is RETIRED).
+        /// <c>aboveStart</c> scales the reeled/pre-cast aerial rest length (the whip slings at this);
+        /// <c>above</c> is the aerial TARGET the cast pay-out ramps to;
+        /// <c>below</c> is the absolute below-bobber rest length (bobber→hook = hook depth).
+        /// Below() maps each OLD anchor/lineScale combo to the distpBelow that yields the IDENTICAL realized
+        /// hang — (23−anchor) old hang segments at (vanilla×ls) spread over the 5 fixed segments — so the
+        /// tuned fish depths and the bite chain are unchanged by the retirement.</summary>
+        private static (float aboveStart, float above, float below) LineConfigSplit(Spot s)
         {
+            // Depth-driven hang: distpBelow such that the hook RESTS at the given depth (hook rest =
+            // 5·distpBelow + HookBodyDrop). Floored so distpBelow can never collapse (0 kills the hang).
+            static float BelowForDepth(float depth) => Math.Max((depth - HookBodyDrop) / 5f, 0.2f);
+            static float Below(int oldAnchor, float ls) => (23 - oldAnchor) * FishLineShallow.VanillaDistp * ls / 5f;
             if (s.MapNo != CanalTide.QueensMapNo)
-                return (s.HasLineScale ? s.LineScale : 1f, s.ShallowBobber ? 20 : 18);
-            return CanalTide.QueensLowTide() ? (QueensLineLow, QueensAnchorLow)
-                                             : (QueensLineNormal, QueensAnchorNormal);
+            {
+                float ls = s.HasLineScale ? s.LineScale : 1f;
+                // GENERAL RULE: a spot that pins its fish depth gets the hook resting AT the fish (the bite
+                // geometry confirmed at Queens low tide) — one knob (fishDepth) drives both. Spots without
+                // a fish depth keep the legacy anchor-equivalence mapping (vanilla or shallowBobber).
+                float below = s.HasFishDepth ? BelowForDepth(s.FishDepth)
+                                             : Below(s.ShallowBobber ? 20 : 18, ls);
+                if (s.MapNo == YellowDropsMapNo)
+                    return (ShortLineStart, ExtendedCastAbove, below);   // Yellow Drops: same extended pay-out cast as Queens
+                return (1f, ls, below);
+            }
+            // Low tide: you stand ON the canal floor at the water's edge — a near-VANILLA cast reaches fine.
+            // Every other tide: you cast DOWN from the north bank onto the deep column — that's where the
+            // extended pay-out cast is needed.
+            return CanalTide.QueensLowTide()
+                ? (ShortLineStart, 1f,                BelowForDepth(QueensFishDepthLow))
+                : (ShortLineStart, ExtendedCastAbove, Below(QueensAnchorNormal, QueensLineNormal));
         }
+        private static float _lineAboveStart = 1f;                             // session-resolved reeled/pre-cast aerial scale
+        private static float _lineAbove = 1f;                                  // session-resolved aerial TARGET scale
+        private static float _lineBelow = FishLineShallow.VanillaDistp;        // session-resolved hang rest length
 
         /// <summary>Move the spawned fish to WaterLevel-FishDepth by writing their depth directly (data only) —
         /// replaces the crash-prone FishingInitFish code patch.
@@ -558,8 +578,10 @@ namespace Dark_Cloud_Improved_Version
             _verifyTicks = 0;
             _lastParam = int.MinValue;
             _lastMode = int.MinValue;
-            SetShallowLine(false);  // data-only: bobber anchor back to vanilla point[18] for the next town
+            // (anchor toggle retired — the bobber is always at point[18]; nothing to reset there)
             if (_distpScaled) { Memory.WriteFloat(FishLineShallow.DistpAddr, FishLineShallow.VanillaDistp); _distpScaled = false; }
+            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);   // hang back to vanilla for the next town
+            _lineAboveStart = 1f; _lineAbove = 1f; _lineBelow = FishLineShallow.VanillaDistp;
             PriscleenFish.Uninstall();
             VillagerPlacement.Uninstall();
         }
@@ -622,6 +644,9 @@ namespace Dark_Cloud_Improved_Version
             _lastCamH = VanillaFishCamHeight;
             Memory.WriteFloat(CodeCaves.Mailbox.CameraRestH, TownRestH);   // town-camera REST_H default (must be valid before any camera frame)
             _lastRestH = TownRestH;
+            // Seed the split's BELOW-bobber rest length (the ISO caves read it @0x01F10048 every frame) so it's
+            // never 0 (0 collapses the hang) before a session resolves the real per-spot value.
+            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);
         }
 
         /// <summary>Town-camera resting eye height (== IsoPatcher's REST_H, still baked into the climb-curve base
@@ -798,11 +823,13 @@ namespace Dark_Cloud_Improved_Version
             _spot = spot;
             _active = spot;   // default until a session pins the actually-fished spot (ActiveSpot)
 
-            // Bobber anchor (data-only): set it up front from the same resolver the session start uses, so the
-            // line is already right if a session begins before the next tick. Brownboo asks for point 20;
-            // Queens resolves by TIDE (LineConfig). Fish are moved to match on the fishing-window open
-            // (ApplyShallowFishDepth) once they've spawned.
-            SetBobberAnchor(LineConfig(spot).anchor);
+            // Line config (data-only): resolve up front from the same resolver the session start uses, so the
+            // split's distpBelow is already right if a session begins before the next tick. The bobber anchor
+            // is FIXED at the vanilla point[18] now (the ISO split caves bake A=18; the 18↔20/21 anchor
+            // toggle is retired — hook depth comes from distpBelow instead). Fish are moved to match on the
+            // fishing-window open (ApplyShallowFishDepth) once they've spawned.
+            (_lineAboveStart, _lineAbove, _lineBelow) = LineConfigSplit(spot);
+            Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, _lineBelow);
 
             if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
@@ -2067,14 +2094,13 @@ namespace Dark_Cloud_Improved_Version
 
             if (live && !_fishingWasLive)
             {
-                // Which sign did the player trigger? Pin it for this session, then set the line config. Queens
-                // resolves BOTH levers from the tide (LineConfig): medium/high = anchor 20 @1.5x, low = anchor
-                // 21 @1x. Other towns keep their per-spot values. The tide cannot change mid-session, so this
-                // one resolution holds for the whole session.
+                // Which sign did the player trigger? Pin it for this session, then resolve the SPLIT line
+                // config (Queens by tide, others per-spot). Anchor is FIXED at point[18] (A=18 baked in the
+                // ISO caves); hook depth = distpBelow, aerial reach = distpAbove (paid out on the cast). The
+                // tide cannot change mid-session, so this one resolution holds for the whole session.
                 _active = ActiveSpot();
-                var (lineScale, anchor) = LineConfig(_active);
-                SetBobberAnchor(anchor);
-                Log($"line config for '{_active.Name}': anchor point {anchor}, line {lineScale:0.##}x " +
+                (_lineAboveStart, _lineAbove, _lineBelow) = LineConfigSplit(_active);
+                Log($"line config for '{_active.Name}': above x{_lineAboveStart:0.##}→x{_lineAbove:0.##}, below {_lineBelow:0.##} " +
                     $"(tide level {(_active.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : _active.Water):0.#})");
 
                 // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
@@ -2115,37 +2141,62 @@ namespace Dark_Cloud_Improved_Version
             // Line LENGTH (Queens): stretch the shared Verlet rest-length while this spot is live so the line
             // reaches the low canal, and restore vanilla the moment the session ends. distp is read every frame
             // (data-only, recompiler-safe), so pin it here rather than as a one-shot.
-            // Length comes from the same tide-resolved config as the anchor (Queens) or the spot (elsewhere).
-            // SPLIT TEST: force distpABOVE (rod→bobber = aerial reach) to 3× vanilla while distpBELOW (bobber→hook =
-            // hang) stays vanilla. If the split is working, the aerial line should TRIPLE while the hang below the
-            // bobber is UNCHANGED. (Temporarily supersedes the per-spot LineScale + the no-op mirror — revert once
-            // validated, then wire distpBelow to real per-spot depth.)
+            // Length comes from the session-resolved SPLIT config (LineConfigSplit: Queens by tide, others
+            // per-spot): distpBELOW = the spot's hook depth (bobber→hook hang), distpABOVE = aerial reach,
+            // ramped out by the cast pay-out below. Anchor is FIXED at point[18] (A=18 baked in the ISO caves).
             if (live)
             {
-                Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp); // below (hang) unchanged
+                Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, _lineBelow);   // hang = the spot's hook depth
                 // LINE PAY-OUT (the cast boost). The vanilla throw is ROPE TRANSMISSION: the rod whips, the
                 // SHORT taut line slings the bobber out — cast reach ≈ line length (the throw state is NOT
                 // bone-pinned; FishLineSetUki gets the -1 sentinel there). A line held long from session start
                 // therefore never slings (all slack, bobber gets zero velocity). So stage it like a real cast:
-                //   reeled (chara_fishing <= 2): distpAbove = VANILLA — the sling works exactly like vanilla;
+                //   reeled (chara_fishing <= 2): distpAbove = START scale (vanilla, or 0.9x where a tauter
+                //     whip is wanted) — the sling works like vanilla;
                 //   thrown (state >= 3) + bobber slung outward: RAMP distpAbove toward the target — line pays
                 //   out under the flying bobber, whose slung momentum + gravity (bank -> low canal) carry it
                 //   out instead of a short taut line pendulum-yanking it back. Instant snap-back on reel-in.
                 // A ramp over ~40 ticks is timing-tolerant (unlike the 1-2 frame whip) — per-tick C# is fine.
-                float target = BisectFlags.LineSplit3x ? FishLineShallow.VanillaDistp * 3f : FishLineShallow.VanillaDistp;
+                float start  = FishLineShallow.VanillaDistp * _lineAboveStart;
+                float target = FishLineShallow.VanillaDistp * _lineAbove;
                 float cur = Memory.ReadFloat(FishLineShallow.DistpAddr);
                 int cf = Memory.ReadInt(FishingAddresses.FishCatchConfirm);   // chara_fishing @0x202A26E8 (1=walk, 2=cast trigger, 3=throw, 4=waiting…)
+                // The rod tip is held out in front the WHOLE time, so its absolute front-distance is > 2 even at
+                // rest. Baseline it: while not casting (cf < 3) the rod is at rest, so keep _rodRestFront = the
+                // current rod-tip front-distance. During the cast, how far the tip has swung FORWARD OF REST is
+                // the real signal (negative during the wind-up pull-back, positive on the forward fling).
+                if (cf < 3) { _rodRestFront = RodTipFrontDist(); _castWoundUp = false; }
+                float rodFwd = RodTipFrontDist() - _rodRestFront;
+                // The cast has a tiny forward BLIP (fwd ~0->3) at the very start, BEFORE the wind-up pull-back —
+                // that blip was false-triggering the payout. So require the wind-up FIRST: only arm once the rod
+                // tip has swung strongly BEHIND rest (fwd < CastWindupThresh). The real forward fling only comes
+                // after that, so it's the reliable precursor (the "pull back" you described). Blip: max ~3, no
+                // wind-up yet -> not armed. Real casts wind up to -9..-21, well past the -5 gate.
+                if (cf >= 3 && rodFwd < CastWindupThresh) _castWoundUp = true;
+                if (cf == 3) Log($"[cast-rod] fwd={rodFwd:0.##} wound={_castWoundUp} cur={cur:0.##}");   // TEMP trace
                 if (cf < 3 || cur > target)
-                    cur = cf < 3 ? FishLineShallow.VanillaDistp : target;     // reeled in (or target shrank): snap
-                // Trigger on the bobber being IN FRONT of the player (camera-forward axis), not merely far from
-                // the rod: the BACKSWING also slings it >trigger distance — but BEHIND — and paying out there
-                // slackened the line before the forward whip (no throw). The bobber only crosses in front once
-                // the whip has flung it, with its momentum already imparted at vanilla length — the real release.
-                else if (cur < target && (BobberFrontDist() > CastPayoutTrigger || cur > FishLineShallow.VanillaDistp + 0.01f))
+                    cur = cf < 3 ? start : target;                            // reeled in (or target shrank): snap
+                // RETRACT on the uncast pull-in: chara_fishing stays >= 3 through the whole uncast animation,
+                // so the state test alone left the line at full length until the animation finished (and
+                // sometimes a re-cast beat it there). The bobber coming back NEAR the rod is the reliable
+                // signal — when it's within CastRetractDist with the line still paid out, snap back to start.
+                // A fresh cast is unaffected: pre-whip the bobber is near the rod but cur == start already.
+                else if (cur > start + 0.01f && BobberSlungDist() < CastRetractDist)
+                    cur = start;
+                // Trigger on the rod tip swinging forward of rest by CastRodTipFront, but ONLY after the
+                // wind-up armed it (_castWoundUp) — that rejects the pre-wind-up blip. Once started, keep paying.
+                else if (cur < target && ((_castWoundUp && rodFwd > CastRodTipFront) || cur > start + 0.01f))
+                {
                     cur = Math.Min(cur + CastPayoutRate, target);             // flung forward: pay out (and keep paying once started)
-                bool paying = cur > FishLineShallow.VanillaDistp + 0.01f && cur < target;
+                    // IN-FLIGHT CARRY: the payout only stops the line BRAKING the bobber — release velocity is
+                    // still vanilla, so range would be ~vanilla too. While paying out (= the flight window),
+                    // amplify the bobber/hook horizontal velocity multiplicatively: it follows its own arc (no
+                    // direction guessing), compounds to a genuinely longer throw, and ends with the payout.
+                    AmplifyFlight(CastCarryFactor);
+                }
+                bool paying = cur > start + 0.01f && cur < target;
                 if (paying != _payingOut)
-                { Log($"[payout] {(paying ? $"START (front {BobberFrontDist():0.#}, out {BobberOutDist():0.#})" : $"end (distp {cur:0.##}, out {BobberOutDist():0.#})")}"); _payingOut = paying; }
+                { Log($"[payout] {(paying ? $"START (rodtip {RodTipFrontDist():0.#}, out {BobberOutDist():0.#})" : $"end (distp {cur:0.##}, out {BobberOutDist():0.#})")}"); _payingOut = paying; }
                 Memory.WriteFloat(FishLineShallow.DistpAddr, cur);
                 _distpScaled = true;
             }
@@ -2249,23 +2300,68 @@ namespace Dark_Cloud_Improved_Version
         private const float CastBoostMag     = 1.0f;  // per-frame forward velocity added (x line-length ratio x decay) — tune to taste
         private const float CastUpFrac       = 0.25f; // small up component so the bobber arcs out instead of sinking
         private const float CastWhipMinSpeed = 0.5f;  // horizontal bobber speed (ukiv) that counts as the throw whip — tune from the WHIP log line
-        private const float CastPayoutTrigger = 8f;   // rod->bobber horizontal distance that counts as "slung" — starts the line pay-out
-        private const float CastPayoutRate    = 0.1f; // distpAbove growth per tick while paying out (1.667->5.0 in ~35 ticks ≈ the flight)
+        private const float CastRodTipFront   = 2f;    // rod tip this far FORWARD OF ITS REST position (post-wind-up) -> start the pay-out
+        private const float CastWindupThresh  = -5f;   // rod tip must swing this far BEHIND rest first (the wind-up) to arm the trigger
+        private static float _rodRestFront;            // rod-tip front-distance at rest (baselined while not casting)
+        private static bool  _castWoundUp;             // the wind-up pull-back has happened this cast -> forward-fling trigger is armed
+        private const float CastRetractDist   = 6f;    // bobber back within this of the rod (uncast pull-in) -> snap the paid-out line to start
+        private const float CastPayoutRate    = 0.25f; // distpAbove growth per tick while paying out (1.667->5.0 in ~13 ticks — ahead of the flight)
+        private const float CastCarryFactor   = 1.16f; // per-tick horizontal velocity multiplier during the pay-out window (~2.7x over the ramp)
+
+        /// <summary>In-flight carry: multiply the bobber + hook HORIZONTAL velocities (Y untouched — gravity
+        /// owns the arc). Runs only inside the pay-out window, so it can never touch settled/reeled states.</summary>
+        private static void AmplifyFlight(float f)
+        {
+            for (int i = 0; i < 4; i++) ScaleVeloXZ(RopeUkiv  + i * 0x10, f);
+            for (int i = 0; i < 3; i++) ScaleVeloXZ(RopeHookv + i * 0x10, f);
+        }
+        private static void ScaleVeloXZ(long addr, float f)
+        {
+            Memory.WriteFloat(addr + 0, Memory.ReadFloat(addr + 0) * f);
+            Memory.WriteFloat(addr + 8, Memory.ReadFloat(addr + 8) * f);
+        }
 
         /// <summary>Horizontal rod-tip -> bobber distance (diagnostic; direction-blind).</summary>
         private static float BobberOutDist() { ComputeCastDir(out float d); return d; }
+
+        /// <summary>Full 3D rod-tip → bobber distance — the pay-out's "slung" magnitude. 3D on purpose:
+        /// a high-bank cast throws steeply DOWN (large drop, small horizontal), and the horizontal-only
+        /// version never saw it as slung.</summary>
+        private static float BobberSlungDist()
+        {
+            float dx = Memory.ReadFloat(RopeUkip + 0) - Memory.ReadFloat(RopePoint + 0);
+            float dy = Memory.ReadFloat(RopeUkip + 4) - Memory.ReadFloat(RopePoint + 4);
+            float dz = Memory.ReadFloat(RopeUkip + 8) - Memory.ReadFloat(RopePoint + 8);
+            return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        // (A per-tick C# lateral wall clamp for the bobber lived here briefly and was REMOVED: tick-rate
+        // sweeps are unreliable against a 60Hz rope. The fix is DATA instead — the Queens canal walls are
+        // baked as 87° slopes (bake_player_camera_collision.py, top edge unchanged, bottom edge 3.67 in),
+        // which puts them just inside the ISO slope gate (0.05, PatchFishLineSlopeGate) so the NATIVE
+        // per-frame vertical probe stops the bobber itself. FishingCollision.FloorNormalYMin was aligned
+        // to 0.045 so the compaction keeps those polys in the session cpoly.)
+
+        // (A C# "bobber landed on the bank → drop it back in" recovery lived here briefly and was REMOVED
+        // along with the 87° wall experiment: the fix is NATIVE now — IsoPatcher.PatchFishingUncastGate makes
+        // the game's own invalid-cast auto-uncast (FishingCheckUkiHook: bobber/hook resting above water+5)
+        // fire almost immediately, gated on the bobber being SETTLED so in-flight casts are untouched.)
         private static bool _payingOut;   // TEMP: payout start/end log edge
 
-        /// <summary>Signed distance of the bobber IN FRONT of the player along the camera-forward axis
-        /// (negative = behind, e.g. during the backswing). The follow camera sits behind the player at
-        /// eye = ref + dist·(sin,cos)(angS), so player-forward = −(sin,cos)(angS).</summary>
-        private static float BobberFrontDist()
+        /// <summary>Signed distance of the ROD TIP (point[0], where the line connects) in front of the player.
+        /// The rod tip is animation-driven and swings forward MONOTONICALLY on the cast — unlike the bobber,
+        /// which whips wildly and can read as "flung" the instant the cast starts — so it's the reliable
+        /// pay-out trigger.</summary>
+        private static float RodTipFrontDist() => PointFrontDist(RopePoint);
+
+        /// <summary>Signed distance of a rope point in front of the player along the camera-forward axis.</summary>
+        private static float PointFrontDist(long ropePoint)
         {
             uint cp = Memory.ReadUInt(FishCamPtrVar) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(cp) || !EditLoop.TryReadPlayerPos(out float px, out _, out float pz)) return 0f;
             float ang = Memory.ReadFloat(Memory.ToMmu(cp) + 0x2DC);   // rendered follow angle (angS)
-            float bx = Memory.ReadFloat(RopeUkip + 0) - px, bz = Memory.ReadFloat(RopeUkip + 8) - pz;
-            return bx * -(float)Math.Sin(ang) + bz * -(float)Math.Cos(ang);
+            float dx = Memory.ReadFloat(ropePoint + 0) - px, dz = Memory.ReadFloat(ropePoint + 8) - pz;
+            return dx * -(float)Math.Sin(ang) + dz * -(float)Math.Cos(ang);
         }
 
         private const  long FishCamPtrVar = 0x21D19678;   // follow-camera ptr (dist @cam+0x2D0, height +0x2D4)
