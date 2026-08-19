@@ -218,10 +218,24 @@ def _add_nodes(named, layerkey, prefix=''):
         nodelabels.append([cen, f'{prefix}{mn}', bb, layerkey])
     return tris
 
-# custom CAMERA collision (_c): structure/terrain + both-walls + perimeter, pooled + spatially split
-_cam_tris = _add_nodes(_G['camera'], 'camcol')
-layers.append({'key': 'camcol', 'label': f'custom camera collision _c ({len(_G["camera"])} nodes, {len(_cam_tris)} tris)',
-               'tris': _cam_tris, 'color': [80, 200, 255], 'alpha': 0.5, 'border': '#5bf', 'on': True})
+# custom CAMERA collision (_c): ONE TOGGLE PER NODE, in a "Camera _c nodes" folder, each a distinct colour and
+# with its own gated node-label — so specific parts can be isolated, identified by node name, and pointed at for
+# directed merging. The folder master checkbox toggles the whole set; individual checkboxes isolate one node.
+import colorsys as _colorsys
+def _node_color(i):
+    r, g, b = _colorsys.hsv_to_rgb((0.61803399 * i) % 1.0, 0.62, 1.0)   # golden-ratio hue hop = well-separated
+    return [int(r * 255), int(g * 255), int(b * 255)]
+_cam_tris = []
+for _i, (_mn, _bk) in enumerate(_G['camera']):
+    _cam_tris += _bk
+    _vs = [p for t in _bk for p in t]
+    _cen = [sum(v[k] for v in _vs) / len(_vs) for k in range(3)]
+    _bb = [min(v[0] for v in _vs), min(v[1] for v in _vs), min(v[2] for v in _vs),
+           max(v[0] for v in _vs), max(v[1] for v in _vs), max(v[2] for v in _vs)]
+    _nk = f'cam_{_mn}'
+    nodelabels.append([_cen, _mn, _bb, _nk])
+    layers.append({'key': _nk, 'label': f'{_mn} ({len(_bk)} tris)', 'tris': _bk, 'color': _node_color(_i),
+                   'alpha': 0.6, 'border': '#5bf', 'on': False, 'group': 'Camera _c nodes'})
 
 # custom PLAYER collision (_a): per ground sub, pooled + split (= the camera set + canal invisible walls +
 # railings; the loading-zone triggers below are also part of `_a` but kept on their own toggle).
@@ -243,6 +257,47 @@ layers.append({'key': 'invwalls', 'label': f'invisible walls ({len(_INV)})', 'tr
 print(f"camera _c: {len(_G['camera'])} nodes / {len(_cam_tris)} tris; "
       f"player _a: {_ply_nodes} nodes / {len(_ply_tris)} tris (+3 trigger nodes)")
 print(f"perimeter {len(_PERIM)} + invisible {len(_INV)} tris (broken out)")
+
+# ---- FISHING-RECT camera polys: the CAMERA `_c` tris whose footprint is inside the cast/gather RECT. This is
+#      the set that feeds the runtime camera-collision gather, which caps at ~409 polys and SATURATES here — so
+#      the native swept-slide silently drops walls (incl. the canal walls) and the camera passes through. This
+#      toggle isolates them so we can see which GROUPS to simplify/remove to get back under budget. Each source
+#      kd-node that has polys in the rect gets a label "<node> (<in-rect count>)" gated on this layer, so turning
+#      on node-labels names every group and its poly count — point at the dense ones and I'll simplify them.
+_rx1, _rz1, _rx2, _rz2 = RECT
+def _tri_in_rect(t):
+    cx = (t[0][0] + t[1][0] + t[2][0]) / 3.0
+    cz = (t[0][2] + t[1][2] + t[2][2]) / 3.0
+    return _rx1 <= cx <= _rx2 and _rz1 <= cz <= _rz2
+_fr_tris = []
+for _mn, _bk in _G['camera']:
+    _inb = [t for t in _bk if _tri_in_rect(t)]
+    if not _inb:
+        continue
+    _fr_tris += _inb
+    _vs = [p for t in _inb for p in t]
+    _cen = [sum(v[i] for v in _vs) / len(_vs) for i in range(3)]
+    _bb = [min(v[0] for v in _vs), min(v[1] for v in _vs), min(v[2] for v in _vs),
+           max(v[0] for v in _vs), max(v[1] for v in _vs), max(v[2] for v in _vs)]
+    nodelabels.append([_cen, f'{_mn} ({len(_inb)})', _bb, 'fishrect'])
+# Worst-case runtime gather: the engine gathers `_c` within ~±160 of the eye, into a buffer that caps ~409 and
+# saturates -> drops walls. Scan candidate box centres over the fishing area for the densest ±160 box: THAT number
+# (not the whole-rect count) is what must stay under ~409 for the swept-slide to keep holding the canal walls.
+def _worst_gather_box(tris, half=160):
+    cen = [[(t[0][i]+t[1][i]+t[2][i])/3.0 for i in (0, 2)] for t in tris]
+    best, at = 0, None
+    for cx in range(-200, 901, 40):
+        for cz in range(-100, 151, 40):
+            c = sum(1 for p in cen if abs(p[0]-cx) < half and abs(p[1]-cz) < half)
+            if c > best:
+                best, at = c, (cx, cz)
+    return best, at
+_wbox, _wat = _worst_gather_box(_fr_tris)
+layers.append({'key': 'fishrect',
+               'label': f'CAM _c in fish rect ({len(_fr_tris)} tris; worst ±160 box {_wbox}/~409)',
+               'tris': _fr_tris, 'color': [255, 210, 60], 'alpha': 0.8, 'border': '#fc0', 'on': False})
+print(f"CAM _c inside fish rect: {len(_fr_tris)} tris; worst ±160 gather box = {_wbox} tris at {_wat} "
+      f"(cap ~409 — THIS is the number that must stay under, not the rect total)")
 
 # ---- LOADING-ZONE trigger quads (the town exits): attribute-tagged collision polys in the vanilla ground
 #      `_a`. EdEventPointCpPoly gathers these around each event point; GetEventPoly reads the destination from
