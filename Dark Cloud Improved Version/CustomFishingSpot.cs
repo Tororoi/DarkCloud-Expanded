@@ -2270,16 +2270,31 @@ namespace Dark_Cloud_Improved_Version
                     _castBoostFrames--;
                 }
 
-                // TEMP diagnostic: trace the camera dist/height while the rod is out — to see if the town-camera
-                // pull-in is sticking the fishing camera in close and never easing back to resting (~1s throttle).
-                if ((phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting)
-                    && (++_camLogTick % 40 == 0))
+                // TEMP diagnostic: catch the PASS-THROUGH directly. Log ONLY the frames where the eye is past a
+                // canal wall (|eye.z| > 52) while the bobber is inside the canal (|bob.z| < 48) — i.e. a canal
+                // wall is between camera and bobber. If dist is still ~80 there, the collision NEVER stopped the
+                // eye crossing z=+-50 (walls not in the gather / crossing missed). If dist is low, it tried but
+                // the eye still got past. eyeStepZ = how far the eye's z moved since last sample (a big jump = a
+                // fast/teleport step that could skip the swept crossing test).
+                if (phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting)
                 {
                     uint cp = Memory.ReadUInt(FishCamPtrVar) & Memory.PhysAddrMask;
                     if (Memory.IsValidGuest(cp))
                     {
                         long cam = Memory.ToMmu(cp);
-                        Log($"[fish-cam] dist={Memory.ReadFloat(cam + 0x2D0):0.#} height={Memory.ReadFloat(cam + 0x2D4):0.#}");
+                        float rx = Memory.ReadFloat(cam + 0x2C0), ry = Memory.ReadFloat(cam + 0x2C4), rz = Memory.ReadFloat(cam + 0x2C8);
+                        float dist = Memory.ReadFloat(cam + 0x2D0), h = Memory.ReadFloat(cam + 0x2D4), ang = Memory.ReadFloat(cam + 0x2DC);
+                        float ex = rx + dist * (float)Math.Sin(ang), ey = ry + h, ez = rz + dist * (float)Math.Cos(ang);
+                        float bz = Memory.ReadFloat(RopeUkip + 8);
+                        bool pastWall = Math.Abs(ez) > 52f && Math.Abs(bz) < 48f && ey < 78f;   // eye over a bank, bobber in canal, eye at wall height
+                        if (pastWall)
+                        {
+                            var (tot, zw, canal) = ScanCameraGather(ex);   // is a canal wall (z-facing, z~+-50) even in the gathered buffer?
+                            Log($"[fish-cam THROUGH] dist={dist:0.#} eye=({ex:0.#},{ey:0.#},{ez:0.#}) bobZ={bz:0.#} step={ez - _lastEyeZ:0.#} | gather: total={tot} zWalls={zw} canalWalls={canal}");
+                        }
+                        else if (++_camLogTick % 12 == 0)
+                            Log($"[fish-cam] dist={dist:0.#} eye=({ex:0.#},{ey:0.#},{ez:0.#}) bobZ={bz:0.#} ang={ang:0.##}");
+                        _lastEyeZ = ez;
                     }
                 }
             }
@@ -2369,6 +2384,38 @@ namespace Dark_Cloud_Improved_Version
         private static int  _castBoostFrames;        // remaining boost frames
         private static int  _castPrevPhase = -1;     // last Phase value (edge detection)
         private static int  _camLogTick;             // TEMP: throttle the fishing camera-dist trace
+        private static float _lastEyeZ;              // TEMP: previous eye.z for the pass-through step trace
+
+        /// <summary>TEMP: scan the live CAMERA gather buffer (WorkBuffer, exactly as CameraCPolyProbe reads it —
+        /// the camera gather is its last use each frame) and count total polys, z-facing walls, and canal-wall
+        /// polys (z-facing with a vertex at z≈±50 within ~200 of the eye's x). canalWalls==0 ⇒ the canal walls
+        /// aren't in the buffer the collision checks — a GATHER problem, not height/winding.</summary>
+        private static (int total, int zWalls, int canalWalls) ScanCameraGather(float eyeX)
+        {
+            const long WorkBufferPtr = 0x202A2388;
+            uint structRaw = Memory.ReadUInt(WorkBufferPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(structRaw)) return (0, 0, 0);
+            long structMmu = Memory.ToMmu(structRaw);
+            uint baseRaw = Memory.ReadUInt(structMmu) & Memory.PhysAddrMask;
+            int used = Memory.ReadInt(structMmu + 8);
+            if (!Memory.IsValidGuest(baseRaw)) return (0, 0, 0);
+            long b = Memory.ToMmu(baseRaw);
+            int lim = Math.Min(512, Math.Max(1, used / 5 + 4));
+            int total = 0, zWalls = 0, canal = 0;
+            for (int k = 0; k < lim; k++)
+            {
+                float[] p = Memory.ReadFloatBatch(b + (long)k * 0x50, 15);   // v0(0-2) v1(4-6) v2(8-10) normal(12-14)
+                float nl = (float)Math.Sqrt(p[12] * p[12] + p[13] * p[13] + p[14] * p[14]);
+                if (!(nl > 1e-4f) || float.IsNaN(p[0]) || float.IsInfinity(p[0]) || Math.Abs(p[0]) > 1e5f) continue;
+                total++;
+                float ny = p[13] / nl, nz = p[14] / nl;
+                if (Math.Abs(nz) < 0.8f || Math.Abs(ny) > 0.4f) continue;   // not a z-facing wall
+                zWalls++;
+                bool atCanalZ = Math.Abs(Math.Abs(p[2]) - 50) < 3 || Math.Abs(Math.Abs(p[6]) - 50) < 3 || Math.Abs(Math.Abs(p[10]) - 50) < 3;
+                if (atCanalZ && Math.Abs(p[0] - eyeX) < 200f) canal++;
+            }
+            return (total, zWalls, canal);
+        }
         private static (float x, float y, float z) _castDir;   // horizontal cast direction, captured at takeover
 
         /// <summary>Horizontal cast direction = normalize(bobber - rod-tip) in XZ (the throw already aimed it);

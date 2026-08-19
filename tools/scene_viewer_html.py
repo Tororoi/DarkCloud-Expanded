@@ -183,13 +183,14 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
     if georama_fold:
         checks += _fold_html('georama', 'Georama editor', georama_fold)
     render_rows = ('<label><input type=checkbox id=t_steep> <span style="color:#ff2db4">steep &amp; above-water (highlight)</span></label><br>'
+                   '<label><input type=checkbox id=t_vonly> <span style="color:#5bf">vertical tris only</span></label><br>'
                    '<label><input type=checkbox id=r_fill checked> fill</label> '
                    '<label><input type=checkbox id=r_wire> wireframe</label><br>'
                    '<label><input type=checkbox id=r_cull> backface cull</label><br>'
                    '<label><input type=checkbox id=r_labels> node labels + borders</label><br>'
                    '<button id="clipreset" style="margin-top:3px;font-size:10px;cursor:pointer">'
                    'show whole town (reset clip rect)</button>')
-    for rid in ('t_steep', 'r_fill', 'r_wire', 'r_cull', 'r_labels'):
+    for rid in ('t_steep', 't_vonly', 'r_fill', 'r_wire', 'r_cull', 'r_labels'):
         grp_map[rid] = 'render'
     checks += _fold_html('render', 'Render settings', render_rows, open_=True)
     checks += '<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">selected: <b id="tot" style="color:#fff">0</b> polys</div>'
@@ -203,13 +204,14 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
     html = '''<div style="margin:0;background:#0d1117;color:#ddd;font-family:monospace;overflow:hidden">
 <canvas id="c" style="display:block;cursor:grab;touch-action:none"></canvas>
 <div style="position:fixed;top:8px;left:8px;font-size:11px;line-height:1.5;background:rgba(13,17,23,.85);padding:8px 10px;border-radius:6px;user-select:none;max-height:96vh;overflow:auto">
-<b>TITLE</b><br><span style="color:#888">drag=rotate scroll=zoom &middot; space+drag=pan &middot; cmd+drag=clip rect &middot; compass: N=-Z E=+X</span><br>
+<b>TITLE</b><br><span style="color:#888">drag=rotate scroll=zoom &middot; space+drag=pan &middot; shift+drag=box select &middot; cmd+drag=clip rect &middot; compass: N=-Z E=+X</span><br>
 CHECKS<div id="err" style="color:#f66"></div></div></div>
 <div id="coord" style="position:fixed;bottom:10px;left:10px;font-size:16px;font-weight:bold;background:rgba(13,17,23,.92);padding:7px 14px;border-radius:6px;color:#6ee7b7;user-select:none">move cursor over the surface for coordinates</div>
 <div style="position:fixed;bottom:10px;right:10px;width:300px;font-size:11px;background:rgba(13,17,23,.94);padding:8px 10px;border-radius:6px">
 <b>Selected polys: <span id="selcount" style="color:#f44">0</span></b>
-<button id="selclear" style="float:right;font-size:10px">clear</button><br>
-<span style="color:#888">click a poly to select (red) &middot; shift+click to add/remove</span>
+<button id="selclear" style="float:right;font-size:10px">clear</button>
+<button id="selundo" style="float:right;font-size:10px;margin-right:4px">undo</button><br>
+<span style="color:#888">click=nearest poly &middot; shift+click=add/remove &middot; shift+drag=box add &middot; Ctrl/Cmd+Z=undo</span>
 <textarea id="sellist" readonly spellcheck="false" placeholder="clicked polys appear here: x0,y0,z0, x1,y1,z1, x2,y2,z2 (one triangle per line)" style="width:100%;height:130px;margin-top:5px;background:#0d1117;color:#6ee7b7;border:1px solid #333;border-radius:4px;font-family:monospace;font-size:10px;box-sizing:border-box"></textarea>
 </div>
 <script>try{
@@ -220,7 +222,7 @@ function updateTotal(){let s=0;for(const k in CNT){if(on(k))s+=CNT[k];}const t=d
 const cv=document.getElementById('c'),cx=cv.getContext('2d');
 let W,H;function resize(){W=cv.width=innerWidth||900;H=cv.height=innerHeight||700;}resize();addEventListener('resize',()=>{resize();draw();});
 let yaw=0.6,pitch=0.55,zoom=1.5;   // +pitch = camera ABOVE the model, looking down
-const WATER=COORDY, STEEP_NY=0.2;   // bobber lands on |normal.Y|>0.2; <=0.2 is too steep to collide
+const WATER=COORDY, STEEP_NY=0.2, VONLY_NY=0.35;   // bobber lands on |normal.Y|>0.2; vertical face = |ny|<0.35
 const foldOn=gid=>{const m=document.getElementById('g_'+gid);return !m||m.checked;};
 const on=id=>{const e=document.getElementById(id);if(!e||!e.checked)return false;const g=GRP[id];return !g||foldOn(g);};
 const GEOON=()=>foldOn('georama');   // georama folder master gates parts/overlay/placement
@@ -259,23 +261,25 @@ function clipTriXZ(t,R){
 function draw(){
  cx.fillStyle='#0d1117';cx.fillRect(0,0,W,H);
  const f=Math.min(W,H)*0.5*zoom/300, all=[];
- const steep=on('t_steep');
+ const steep=on('t_steep'), vonly=on('t_vonly');
  for(const L of layers()){ if(!L.t) continue; for(const tri0 of L.t){
   const parts=CLIP?clipTriXZ(tri0,CLIP):[tri0];   // mask: cut at the rect boundary
   for(const tri of parts){
+   let wny=0, wl=1;                                // world normal Y (for steep highlight / vertical-only filter)
+   if(steep||vonly){
+     const wnx=(tri[1][1]-tri[0][1])*(tri[2][2]-tri[0][2])-(tri[1][2]-tri[0][2])*(tri[2][1]-tri[0][1]);
+     wny=(tri[1][2]-tri[0][2])*(tri[2][0]-tri[0][0])-(tri[1][0]-tri[0][0])*(tri[2][2]-tri[0][2]);
+     const wnz=(tri[1][0]-tri[0][0])*(tri[2][1]-tri[0][1])-(tri[1][1]-tri[0][1])*(tri[2][0]-tri[0][0]);
+     wl=Math.hypot(wnx,wny,wnz)||1;
+   }
+   if(vonly && Math.abs(wny)/wl>=VONLY_NY) continue;   // "vertical only": drop near-horizontal faces from view+pick
    const r=[rot(tri[0]),rot(tri[1]),rot(tri[2])];
    const nz=(r[1][0]-r[0][0])*(r[2][1]-r[0][1])-(r[1][1]-r[0][1])*(r[2][0]-r[0][0]);
    const nx=(r[1][1]-r[0][1])*(r[2][2]-r[0][2])-(r[1][2]-r[0][2])*(r[2][1]-r[0][1]);
    const ny=(r[1][2]-r[0][2])*(r[2][0]-r[0][0])-(r[1][0]-r[0][0])*(r[2][2]-r[0][2]);
    const nlen=Math.hypot(nx,ny,nz)||1;
    let c=L.c,a=1;   // layer alphas (L.a) forced fully opaque for detail work
-   if(steep){
-     const wnx=(tri[1][1]-tri[0][1])*(tri[2][2]-tri[0][2])-(tri[1][2]-tri[0][2])*(tri[2][1]-tri[0][1]);
-     const wny=(tri[1][2]-tri[0][2])*(tri[2][0]-tri[0][0])-(tri[1][0]-tri[0][0])*(tri[2][2]-tri[0][2]);
-     const wnz=(tri[1][0]-tri[0][0])*(tri[2][1]-tri[0][1])-(tri[1][1]-tri[0][1])*(tri[2][0]-tri[0][0]);
-     const wl=Math.hypot(wnx,wny,wnz)||1, cy=(tri[0][1]+tri[1][1]+tri[2][1])/3;
-     if(Math.abs(wny)/wl<=STEEP_NY && cy>WATER){ c=[255,45,180]; a=1; }
-   }
+   if(steep && Math.abs(wny)/wl<=STEEP_NY && (tri[0][1]+tri[1][1]+tri[2][1])/3>WATER){ c=[255,45,180]; a=1; }
    all.push({k:'t',r,c,a,w:tri0,depth:(r[0][2]+r[1][2]+r[2][2])/3,sh:0.4+0.6*Math.abs(nz/nlen)});
  }}}
  if(on('t_points')) for(const p of D.points){if(CLIP&&!inClip(p[0],p[2]))continue;const r=rot(p);all.push({k:'p',r,depth:r[2]});}
@@ -291,7 +295,7 @@ function draw(){
   const pts=o.r.map(p=>[W/2+p[0]*f,H/2-p[1]*f]);
   const area=(pts[1][0]-pts[0][0])*(pts[2][1]-pts[0][1])-(pts[1][1]-pts[0][1])*(pts[2][0]-pts[0][0]);
   if(rcull && area>=0) continue;
-  if(!o.g) PICK.push({pts,depth:o.depth,w:o.w});   // georama parts (g) are not collision-pickable
+  if(!o.g) PICK.push({pts,zs:[o.r[0][2],o.r[1][2],o.r[2][2]],w:o.w});   // georama parts (g) are not collision-pickable
   if(rwire){ cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);cx.lineTo(pts[1][0],pts[1][1]);cx.lineTo(pts[2][0],pts[2][1]);cx.closePath();
    cx.strokeStyle='rgba('+o.c[0]+','+o.c[1]+','+o.c[2]+',0.9)';cx.lineWidth=0.6;cx.stroke(); }
  }
@@ -301,6 +305,7 @@ function draw(){
  if(GEO&&GEOON())gOverlay(f);
  drawClipRect(f);
  drawCompass();
+ drawBoxSel();
 }
 function drawClipRect(f){
  const R=RSEL?[Math.min(RSEL.x0,RSEL.x1),Math.max(RSEL.x0,RSEL.x1),Math.min(RSEL.z0,RSEL.z1),Math.max(RSEL.z0,RSEL.z1)]:CLIP;
@@ -355,8 +360,10 @@ function raster(o,f,d,zb,rcull,wd,sw,sh,scale){
  }
 }
 let FASTDRAW=false;   // true while dragging -> use the cheap painter fill; false -> z-buffer
-let PICK=[], SELECTED=[];
+let PICK=[], SELECTED=[], SELUNDO=[], BSEL=null;
 function triKey(t){ return t.map(p=>p.map(v=>Math.round(v*10)/10).join(',')).join('|'); }
+function pushUndo(){ SELUNDO.push(SELECTED.slice()); if(SELUNDO.length>80) SELUNDO.shift(); }
+function undoSel(){ if(SELUNDO.length){ SELECTED=SELUNDO.pop(); updateSel(); draw(); } }
 function drawSelected(f){
  for(const t of SELECTED){
   const p=t.map(v=>{const r=rot(v);return [W/2+r[0]*f,H/2-r[1]*f];});
@@ -370,14 +377,44 @@ function ptInTri(px,py,a,b,c){
  const d1=s(a[0],a[1],b[0],b[1]),d2=s(b[0],b[1],c[0],c[1]),d3=s(c[0],c[1],a[0],a[1]);
  return !(((d1<0)||(d2<0)||(d3<0))&&((d1>0)||(d2>0)||(d3>0)));
 }
+// depth of a tri AT the click point via barycentric interp of its screen verts (nearer = LARGER depth), so a big
+// angled tri no longer wins on centroid depth — the surface actually under the cursor does.
+function depthAt(o,px,py){
+ const a=o.pts[0],b=o.pts[1],c=o.pts[2];
+ const den=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+ if(Math.abs(den)<1e-6) return (o.zs[0]+o.zs[1]+o.zs[2])/3;
+ const wA=((b[0]-px)*(c[1]-py)-(b[1]-py)*(c[0]-px))/den;
+ const wB=((c[0]-px)*(a[1]-py)-(c[1]-py)*(a[0]-px))/den;
+ return wA*o.zs[0]+wB*o.zs[1]+(1-wA-wB)*o.zs[2];
+}
 function pickAt(mx,my,add){
- let best=null;
- for(const o of PICK){ if(ptInTri(mx,my,o.pts[0],o.pts[1],o.pts[2])){ if(!best||o.depth>best.depth) best=o; } }
- if(!best){ if(!add){SELECTED=[];updateSel();draw();} return; }
+ let best=null,bestz=-Infinity;
+ for(const o of PICK){ if(ptInTri(mx,my,o.pts[0],o.pts[1],o.pts[2])){ const z=depthAt(o,mx,my); if(z>bestz){bestz=z;best=o;} } }
+ if(!best){ if(!add){ pushUndo(); SELECTED=[]; updateSel(); draw(); } return; }
  const k=triKey(best.w);
+ pushUndo();
  if(add){ const i=SELECTED.findIndex(t=>triKey(t)===k); if(i>=0) SELECTED.splice(i,1); else SELECTED.push(best.w); }
  else { SELECTED=[best.w]; }
  updateSel(); draw();
+}
+// shift+drag rubber-band: add every FRONT-FACING tri whose screen centroid falls in the box to the selection.
+function boxSelect(b){
+ const x0=Math.min(b.x0,b.x1),x1=Math.max(b.x0,b.x1),y0=Math.min(b.y0,b.y1),y1=Math.max(b.y0,b.y1);
+ pushUndo();
+ const seen=new Set(SELECTED.map(triKey));
+ for(const o of PICK){
+  const ar=(o.pts[1][0]-o.pts[0][0])*(o.pts[2][1]-o.pts[0][1])-(o.pts[1][1]-o.pts[0][1])*(o.pts[2][0]-o.pts[0][0]);
+  if(ar>=0) continue;                              // front-facing only (skip backfaces)
+  const cxp=(o.pts[0][0]+o.pts[1][0]+o.pts[2][0])/3, cyp=(o.pts[0][1]+o.pts[1][1]+o.pts[2][1])/3;
+  if(cxp<x0||cxp>x1||cyp<y0||cyp>y1) continue;
+  const k=triKey(o.w); if(seen.has(k)) continue; seen.add(k); SELECTED.push(o.w);
+ }
+ updateSel();
+}
+function drawBoxSel(){ if(!BSEL) return;
+ const x=Math.min(BSEL.x0,BSEL.x1),y=Math.min(BSEL.y0,BSEL.y1),w=Math.abs(BSEL.x1-BSEL.x0),h=Math.abs(BSEL.y1-BSEL.y0);
+ cx.save();cx.strokeStyle='#6ee7b7';cx.setLineDash([5,3]);cx.lineWidth=1.5;cx.strokeRect(x,y,w,h);
+ cx.fillStyle='rgba(110,231,183,0.12)';cx.fillRect(x,y,w,h);cx.restore();
 }
 function updateSel(){
  const el=document.getElementById('sellist'), n=document.getElementById('selcount');
@@ -429,6 +466,7 @@ let drag=false,px,py,downX,downY,downShift,moved=false;
 let SPACE=false,panning=false;
 addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)){SPACE=true;e.preventDefault();if(!drag)cv.style.cursor='move';}});
 addEventListener('keyup',e=>{if(e.code==='Space'){SPACE=false;if(!panning)cv.style.cursor='grab';}});
+addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.code==='KeyZ'&&!/INPUT|TEXTAREA/.test(e.target.tagName)){e.preventDefault();undoSel();}});
 // screen -> world (x,z) on the y=WATER plane (same inversion as the coordinate readout); null when too flat
 function groundPt(mx,my){const f=Math.min(W,H)*0.5*zoom/300,rx=(mx-W/2)/f,ry=-(my-H/2)/f;
  const cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch);
@@ -439,21 +477,30 @@ cv.addEventListener('pointerdown',e=>{
  const rr=cv.getBoundingClientRect();
  if(e.metaKey||e.ctrlKey){moved=true;const g=groundPt(e.clientX-rr.left,e.clientY-rr.top);
    if(g){RSEL={x0:g[0],z0:g[1],x1:g[0],z1:g[1]};FASTDRAW=true;draw();}return;}   // start clip-rect drag
+ if(e.shiftKey){const mx=e.clientX-rr.left,my=e.clientY-rr.top;   // shift+drag = rubber-band select
+   BSEL={x0:mx,y0:my,x1:mx,y1:my};downX=e.clientX;downY=e.clientY;moved=false;FASTDRAW=true;return;}
  if(SPACE){moved=true;panning=true;FASTDRAW=true;px=e.clientX;py=e.clientY;cv.style.cursor='move';return;}
  if(GEO&&GEOON()&&!gHeld){const gm=gPickPart(e.clientX-rr.left,e.clientY-rr.top);
    if(gm>=0){gMove=gm;gSel=gm;FASTDRAW=true;draw();return;}}   // grab a placed part to move it
  drag=true;FASTDRAW=true;px=e.clientX;py=e.clientY;downX=e.clientX;downY=e.clientY;downShift=e.shiftKey;moved=false;cv.style.cursor='grabbing';});
 addEventListener('pointerup',e=>{
+ if(BSEL){ const r=cv.getBoundingClientRect();
+   if(moved) boxSelect(BSEL); else pickAt(e.clientX-r.left,e.clientY-r.top,true);   // no drag = shift+click add/remove
+   BSEL=null;FASTDRAW=false;draw();return;}
  if(RSEL){const w=Math.abs(RSEL.x1-RSEL.x0),h=Math.abs(RSEL.z1-RSEL.z0);
   CLIP=(w>2&&h>2)?[Math.min(RSEL.x0,RSEL.x1),Math.max(RSEL.x0,RSEL.x1),Math.min(RSEL.z0,RSEL.z1),Math.max(RSEL.z0,RSEL.z1)]:CLIP;
   RSEL=null;FASTDRAW=false;draw();return;}
  if(panning){panning=false;FASTDRAW=false;cv.style.cursor=SPACE?'move':'grab';draw();return;}
  if(GEO&&gMove>=0){gMove=-1;FASTDRAW=false;draw();return;}
  if(GEO&&GEOON()&&gHeld){const rr=cv.getBoundingClientRect();gPlace(e.clientX-rr.left,e.clientY-rr.top);return;}
- drag=false;FASTDRAW=false;cv.style.cursor='grab';
+ const wasDrag=drag; drag=false;FASTDRAW=false;
+ if(!wasDrag) return;   // pointerup NOT from a canvas press (e.g. a checkbox click) — leave the selection alone
+ cv.style.cursor='grab';
  if(!moved){const r=cv.getBoundingClientRect();pickAt(e.clientX-r.left,e.clientY-r.top,downShift);}
  else draw();});   // re-render the settled view with the z-buffer after a drag
 addEventListener('pointermove',e=>{
+ if(BSEL){const rr=cv.getBoundingClientRect();BSEL.x1=e.clientX-rr.left;BSEL.y1=e.clientY-rr.top;
+  if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;draw();return;}
  if(RSEL){const rr=cv.getBoundingClientRect(),g=groundPt(e.clientX-rr.left,e.clientY-rr.top);
   if(g){RSEL.x1=g[0];RSEL.z1=g[1];draw();}return;}
  if(panning){const f=Math.min(W,H)*0.5*zoom/300,dx=(e.clientX-px)/f,dy=(e.clientY-py)/f;
@@ -466,7 +513,8 @@ addEventListener('pointermove',e=>{
  if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;
  yaw+=(e.clientX-px)*.01;pitch+=(e.clientY-py)*.01;px=e.clientX;py=e.clientY;draw();});
 document.getElementById('clipreset').onclick=()=>{CLIP=null;RSEL=null;draw();};
-document.getElementById('selclear').onclick=()=>{SELECTED=[];updateSel();draw();};
+document.getElementById('selclear').onclick=()=>{pushUndo();SELECTED=[];updateSel();draw();};
+document.getElementById('selundo').onclick=undoSel;
 let zoomTimer=null;
 cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.1:0.9;FASTDRAW=true;draw();
  if(zoomTimer)clearTimeout(zoomTimer);
@@ -483,13 +531,26 @@ cv.addEventListener('pointermove',e=>{
        wx=Math.round(rx*cyw+z1*syw+CTR[0]), wz=Math.round(-rx*syw+z1*cyw+CTR[2]);
  coordEl.textContent='x = '+wx+'    z = '+wz+'    (COORDNOTE)';
 });
-for(const cb of document.querySelectorAll('input')) cb.addEventListener('change',()=>{draw();updateTotal();});
-updateTotal();
+// ---- persist toggle state (checkboxes + folder open/closed) across refreshes ----
+const LSKEY=STORAGEKEY;
+function saveState(){ try{ const s={cb:{},fold:{}};
+  for(const cb of document.querySelectorAll('input[type=checkbox]')) if(cb.id) s.cb[cb.id]=cb.checked;
+  for(const d of document.querySelectorAll('details.fold')) if(d.id) s.fold[d.id]=d.open;
+  localStorage.setItem(LSKEY,JSON.stringify(s)); }catch(e){} }
+function loadState(){ try{ const s=JSON.parse(localStorage.getItem(LSKEY)||'null'); if(!s)return;
+  for(const id in (s.cb||{})){const e=document.getElementById(id); if(e)e.checked=s.cb[id];}
+  for(const id in (s.fold||{})){const e=document.getElementById(id); if(e&&'open'in e)e.open=s.fold[id];}
+  for(const d of document.querySelectorAll('details.fold')){const m=d.querySelector('summary input'); if(m)d.classList.toggle('off',!m.checked);}
+ }catch(e){} }
+loadState();
+for(const cb of document.querySelectorAll('input')) cb.addEventListener('change',()=>{saveState();draw();updateTotal();});
+for(const d of document.querySelectorAll('details.fold')) d.addEventListener('toggle',saveState);
+draw(); updateTotal();
 }catch(e){document.getElementById('err').textContent='ERR: '+e.message;}</script>'''
 
     return (html.replace('TITLE', title).replace('CHECKS', checks).replace('PUSHES', pushes)
             .replace('JSON_DATA', js).replace('CNT_DATA', cnt_js).replace('GRP_DATA', grp_js)
-            .replace('GEORAMA_JS', georama_js)
+            .replace('GEORAMA_JS', georama_js).replace('STORAGEKEY', json.dumps('sv:' + title))
             .replace('COORDY', repr(float(_coord_y(coord_note)))).replace('COORDNOTE', coord_note))
 
 

@@ -199,6 +199,21 @@ _CAMERA_TRIS = {
     'e03': [
         [[-200, 0.0, -50], [-200, 50.0, 50], [-200, 0.0, 50]],
         [[-200, 0.0, -50], [-200, 50.0, -50], [-200, 50.0, 50]],
+        # CANAL SIDE WALLS, INWARD-FACING (camera-only) — the INSIDE face of the canal walls. The BOTH-frame
+        # canal walls (y0..70, above) are wound to face the BANKS (the walking camera's play area), so a fishing
+        # camera following a bobber INSIDE the canal sits on their backface and the one-sided ray sails through
+        # (confirmed: eye orbits past z=+-50 at dist 80, never pulling in). These duplicate the walls wound the
+        # OTHER way so the camera is blocked from inside the channel too.
+        # Height = y70 (the canal rim, matching the real wall) — the real fix for the fishing camera is reducing
+        # the camera-gather poly count so the ~409-poly buffer stops saturating and the native swept-slide can
+        # actually hold these (they ARE gathered, ~24-40 of them, but the full buffer drops the one at the eye's
+        # crossing). Camera-only, so no gameplay effect.
+        # south wall z=-50, normal +Z (into canal):
+        [[-200, 0.0, -50], [900, 0.0, -50], [900, 70.0, -50]],
+        [[-200, 0.0, -50], [900, 70.0, -50], [-200, 70.0, -50]],
+        # north wall z=+50, normal -Z (into canal):
+        [[-200, 0.0, 50], [900, 70.0, 50], [900, 0.0, 50]],
+        [[-200, 0.0, 50], [-200, 70.0, 50], [900, 70.0, 50]],
     ],
 }
 
@@ -819,6 +834,414 @@ def fix_camera_winding(tris):
     return [[t[0], t[2], t[1]] if _wkey(t) in _BACKFACE_KEYS else t for t in tris]
 
 
+def _tnormal(t):
+    a, b, c = t
+    u = [b[i] - a[i] for i in range(3)]
+    v = [c[i] - a[i] for i in range(3)]
+    return [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]
+
+
+def _dot3(a, b):
+    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+
+
+def _cross3(a, b):
+    return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]
+
+
+def _unit3(a):
+    L = math.sqrt(_dot3(a, a)) or 1.0
+    return [c / L for c in a]
+
+
+def _pt_in_tri2(px, py, tt):
+    (x0, y0), (x1, y1), (x2, y2) = tt
+    d1 = (px-x1)*(y0-y1) - (x0-x1)*(py-y1)
+    d2 = (px-x2)*(y1-y2) - (x1-x2)*(py-y2)
+    d3 = (px-x0)*(y2-y0) - (x2-x0)*(py-y0)
+    return not ((d1 < 0 or d2 < 0 or d3 < 0) and (d1 > 0 or d2 > 0 or d3 > 0))
+
+
+def _greedy_rects(cov):
+    """Cover the True cells of a boolean grid with a small set of maximal rectangles (extend right, then down).
+    Preserves holes: an uncovered cell (e.g. a doorway) is never spanned. Not provably minimal but near it."""
+    nx, ny = len(cov), len(cov[0])
+    used = [[False]*ny for _ in range(nx)]
+    out = []
+    for i in range(nx):
+        for j in range(ny):
+            if not cov[i][j] or used[i][j]:
+                continue
+            i1 = i
+            while i1+1 < nx and cov[i1+1][j] and not used[i1+1][j]:
+                i1 += 1
+            j1 = j
+            while j1+1 < ny and all(cov[ii][j1+1] and not used[ii][j1+1] for ii in range(i, i1+1)):
+                j1 += 1
+            for ii in range(i, i1+1):
+                for jj in range(j, j1+1):
+                    used[ii][jj] = True
+            out.append((i, j, i1, j1))
+    return out
+
+
+def _plane_quad(u, v, nn, d, a0, b0, a1, b1):
+    """Reconstruct a rectangle [a0,a1]x[b0,b1] of the plane {p : p.nn == d} back to 3D via the orthonormal
+    in-plane basis (u,v): p = a*u + b*v + d*nn. Two tris, wound so the face normal matches nn."""
+    def P(a, b):
+        return [a*u[i] + b*v[i] + d*nn[i] for i in range(3)]
+    A, B, C, D = P(a0, b0), P(a1, b0), P(a1, b1), P(a0, b1)
+    t1, t2 = [A, B, C], [A, C, D]
+    if _dot3(_tnormal(t1), nn) < 0:                 # keep the group's one-sided facing
+        t1, t2 = [A, C, B], [A, D, C]
+    return [t1, t2]
+
+
+def simplify_coplanar(tris, snap=5.0, outward=0.0, top=None):
+    """Merge coplanar tris (of ANY plane orientation — vertical facades, flat tops, sloped roofs/banks) into
+    minimal rectangles, preserving holes (doorways etc.). Camera-only decimation: a tessellated planar face made
+    of many small tris collapses to a few big quads, which is what keeps the runtime camera-gather buffer (~409
+    poly cap) from saturating over the canal. Each plane is worked in its own orthonormal in-plane basis (u,v);
+    2D coords snap to a `snap`-unit grid so faint tessellation slants fuse — harmless for camera collision.
+
+    For a VERTICAL facade (in-plane up-axis v ~ world-up) each occupied column is extended UP to the group's
+    tallest point, so a jagged per-structure roofline becomes one flat top — the "extend the walls to full length"
+    step. Only fills UPWARD from each column's lowest wall cell, so ground-level doorway gaps survive; columns with
+    no wall at all (true gaps between separate structures) stay open. Returns the new tri list."""
+    def sn(x):
+        return round(x / snap) * snap
+    groups, out = {}, []
+    for t in tris:
+        n = _tnormal(t)
+        if math.sqrt(_dot3(n, n)) < 1e-9:
+            out.append(t); continue                 # degenerate — leave it
+        nn = _unit3(n)
+        d = _dot3(nn, t[0])
+        # Coarse plane key (normal to 0.1, offset to the snap grid): the source facades are slightly non-planar
+        # (verts wobble ~0.5u, so per-tri normals wobble a few degrees). A tight key splits one wall into many
+        # singleton "planes" that never merge; 0.1 fuses the wobble into one plane. Reconstruction rides the
+        # group's representative plane, flattening the <1u wobble — invisible to camera collision.
+        key = (tuple(round(c, 1) + 0.0 for c in nn), round(d / snap) * snap)
+        groups.setdefault(key, (nn, d, []))[2].append(t)
+    for (nn, d, g) in groups.values():
+        if len(g) < 2:
+            out.extend(g); continue
+        # Author the merged plane OUTWARD (behind the visual mesh): nn faces the play area, so the vertex furthest
+        # opposite nn is the outermost source point. Place the plane there (minus `outward` margin) so the merged
+        # camera wall never protrudes in FRONT of the rendered wall — the camera can ride flush to the visual mesh
+        # without the collision clipping it early. Costs a hair of depth behind the wall, invisible to the camera.
+        d = min(_dot3(nn, p) for t in g for p in t) - outward
+        # In-plane basis derived from world-up: v = steepest-ascent direction (world-up projected into the plane),
+        # u = horizontal in-plane. So v is the up-axis for EVERY vertical facade (flatten works regardless of which
+        # way the wall faces), and the basis lines up with the natural horizontal-rows/up-columns tessellation of
+        # facades and sloped roofs alike. Degenerate only for a (near-)horizontal plane, where there's no up-in-
+        # plane — fall back to a world-x basis and skip flatten (floors/ceilings have no roofline).
+        vp = [-_dot3([0.0, 1.0, 0.0], nn) * nn[i] for i in range(3)]
+        vp[1] += 1.0                                  # world-up minus its out-of-plane component
+        if _dot3(vp, vp) < 1e-6:
+            u = _unit3([1.0 - nn[0]*nn[0], -nn[0]*nn[1], -nn[0]*nn[2]])
+            v = _cross3(nn, u)
+        else:
+            v = _unit3(vp)
+            u = _unit3(_cross3(v, nn))
+        tri2d = [[(sn(_dot3(p, u)), sn(_dot3(p, v))) for p in t] for t in g]
+        us = sorted({p[0] for tt in tri2d for p in tt})
+        vs = sorted({p[1] for tt in tri2d for p in tt})
+        if len(us) < 2 or len(vs) < 2:
+            out.extend(g); continue
+        cov = [[any(_pt_in_tri2((us[i]+us[i+1])/2, (vs[j]+vs[j+1])/2, tt) for tt in tri2d)
+                for j in range(len(vs)-1)] for i in range(len(us)-1)]
+        if v[1] > 0.9:                               # VERTICAL facade — flatten the roofline to the group max
+            for col in cov:
+                occ = [j for j, c in enumerate(col) if c]
+                if occ:
+                    for j in range(min(occ), len(col)):
+                        col[j] = True
+        new = []
+        for (i0, j0, i1, j1) in _greedy_rects(cov):
+            b1 = vs[j1 + 1]
+            if top is not None and v[1] > 0.9 and abs(b1 - vs[-1]) < 1e-6:
+                b1 = top                              # force a VERTICAL facade's flattened top to a shared world-y
+            new += _plane_quad(u, v, nn, d, us[i0], vs[j0], us[i1 + 1], b1)
+        out.extend(new if len(new) < len(g) else g)
+    return out
+
+
+# ── DIRECTED camera-mesh simplification ────────────────────────────────────────────────────────────────────
+# Each job selects a subset of camera `_c` tris (by axis-aligned world box + optional plane-facing test) and runs
+# simplify_coplanar over ONLY that subset, authored OUTWARD so the merged wall sits behind the visual mesh. Jobs
+# are added one at a time as they're reviewed — nothing merges until it's listed here. `sel` is a predicate on a
+# tri; `outward`/`snap` tune the merge for that group.
+def _plane_region(axis, off, x=None, y=None, z=None):
+    """Selector: tris lying on the plane {coord[axis] == off} (all verts within 2u) whose centroid falls in the
+    optional x/y/z ranges. Used to target one specific wall for a directed merge."""
+    def sel(t):
+        if not all(abs(p[axis] - off) < 2 for p in t):
+            return False
+        c = [(t[0][i] + t[1][i] + t[2][i]) / 3.0 for i in range(3)]
+        for i, rng in ((0, x), (1, y), (2, z)):
+            if rng and not (rng[0] <= c[i] <= rng[1]):
+                return False
+        return True
+    return sel
+
+
+# The 72 gatehouse tris to simplify (pylon facades z=-86.76/-165.24 + flanking posts, both sides of the passage).
+# Matched by exact key so we DON'T touch the passage lintel / bore walls / floor (kept, so the doorway hole stays).
+_E03_GATE_RAW = """194.21,102.21,-80.55,185.79,69.87,-80.55,194.21,69.87,-80.55
+194.21,102.21,-87.01,194.21,69.87,-80.55,194.21,69.87,-87.01
+194.21,102.21,-87.01,194.21,102.21,-80.55,194.21,69.87,-80.55
+194.21,102.21,-80.55,185.79,102.21,-80.55,185.79,69.87,-80.55
+185.79,102.21,-80.55,185.79,69.87,-87.01,185.79,69.87,-80.55
+185.79,102.21,-80.55,185.79,102.21,-87.01,185.79,69.87,-87.01
+185.79,102.21,-87.01,185.79,102.21,-80.55,182.83,109.13,-74.49
+185.79,102.21,-87.01,182.83,109.13,-74.49,182.83,109.13,-87.01
+185.79,102.21,-80.55,194.21,102.21,-80.55,197.17,109.13,-74.49
+185.79,102.21,-80.55,197.17,109.13,-74.49,182.83,109.13,-74.49
+194.21,102.21,-80.55,194.21,102.21,-87.01,197.17,109.13,-87.01
+194.21,102.21,-80.55,197.17,109.13,-87.01,197.17,109.13,-74.49
+314.21,102.21,-87.01,314.21,69.87,-80.55,314.21,69.87,-87.01
+314.21,102.21,-87.01,314.21,102.21,-80.55,314.21,69.87,-80.55
+314.21,102.21,-80.55,305.79,102.21,-80.55,305.79,69.87,-80.55
+305.79,102.21,-80.55,305.79,69.87,-87.01,305.79,69.87,-80.55
+314.21,102.21,-80.55,305.79,69.87,-80.55,314.21,69.87,-80.55
+305.79,102.21,-80.55,305.79,102.21,-87.01,305.79,69.87,-87.01
+314.21,102.21,-80.55,314.21,102.21,-87.01,317.17,109.13,-87.01
+314.21,102.21,-80.55,317.17,109.13,-87.01,317.17,109.13,-74.49
+305.79,102.21,-87.01,302.83,109.13,-74.49,302.83,109.13,-87.01
+305.79,102.21,-87.01,305.79,102.21,-80.55,302.83,109.13,-74.49
+305.79,102.21,-80.55,317.17,109.13,-74.49,302.83,109.13,-74.49
+305.79,102.21,-80.55,314.21,102.21,-80.55,317.17,109.13,-74.49
+350.01,170,-86.76,298,170,-86.76,298,60,-86.76
+350.01,170,-86.76,298,60,-86.76,350.01,60,-86.76
+350.01,170,-86.76,350.01,270,-86.76,298,170,-86.76
+298,170,-86.76,350.01,270,-86.76,300,270,-86.76
+201.99,170,-86.76,149.99,170,-86.76,149.99,60,-86.76
+201.99,170,-86.76,149.99,60,-86.76,201.99,60,-86.76
+199.99,270,-86.76,149.99,170,-86.76,201.99,170,-86.76
+199.99,270,-86.76,149.99,270,-86.76,149.99,170,-86.76
+350.01,170,-165.24,350.01,170,-86.76,350.01,60,-86.76
+350.01,170,-86.76,350.01,270,-165.24,350.01,270,-86.76
+350.01,170,-86.76,350.01,170,-165.24,350.01,270,-165.24
+350.01,170,-165.24,350.01,60,-86.76,350.01,60,-165.24
+298,170,-165.24,350.01,60,-165.24,298,60,-165.24
+298,170,-165.24,350.01,170,-165.24,350.01,60,-165.24
+300,270,-165.24,350.01,170,-165.24,298,170,-165.24
+300,270,-165.24,350.01,270,-165.24,350.01,170,-165.24
+149.99,170,-165.24,201.99,170,-165.24,201.99,60,-165.24
+149.99,170,-165.24,149.99,270,-165.24,201.99,170,-165.24
+201.99,170,-165.24,149.99,270,-165.24,199.99,270,-165.24
+149.99,170,-86.76,149.99,170,-165.24,149.99,60,-165.24
+149.99,170,-165.24,149.99,170,-86.76,149.99,270,-86.76
+149.99,170,-165.24,149.99,270,-86.76,149.99,270,-165.24
+149.99,170,-86.76,149.99,60,-165.24,149.99,60,-86.76
+305.79,102.21,-171.37,302.83,109.13,-164.91,302.83,109.13,-177.43
+305.79,102.21,-171.37,305.79,102.21,-164.91,302.83,109.13,-164.91
+314.21,102.21,-164.91,317.17,109.13,-177.43,317.17,109.13,-164.91
+314.21,102.21,-164.91,314.21,102.21,-171.37,317.17,109.13,-177.43
+305.79,102.21,-164.91,305.79,102.21,-171.37,305.79,69.87,-171.37
+305.79,102.21,-171.37,314.21,102.21,-171.37,314.21,69.87,-171.37
+314.21,102.21,-171.37,314.21,102.21,-164.91,314.21,69.87,-164.91
+314.21,102.21,-171.37,314.21,69.87,-164.91,314.21,69.87,-171.37
+305.79,102.21,-171.37,314.21,69.87,-171.37,305.79,69.87,-171.37
+314.21,102.21,-171.37,305.79,102.21,-171.37,302.83,109.13,-177.43
+314.21,102.21,-171.37,302.83,109.13,-177.43,317.17,109.13,-177.43
+194.21,102.21,-171.37,194.21,69.87,-164.91,194.21,69.87,-171.37
+194.21,102.21,-171.37,194.21,102.21,-164.91,194.21,69.87,-164.91
+185.79,102.21,-171.37,182.83,109.13,-164.91,182.83,109.13,-177.43
+185.79,102.21,-171.37,185.79,102.21,-164.91,182.83,109.13,-164.91
+194.21,102.21,-171.37,185.79,102.21,-171.37,182.83,109.13,-177.43
+194.21,102.21,-171.37,182.83,109.13,-177.43,197.17,109.13,-177.43
+185.79,102.21,-171.37,194.21,69.87,-171.37,185.79,69.87,-171.37
+185.79,102.21,-171.37,194.21,102.21,-171.37,194.21,69.87,-171.37
+194.21,102.21,-164.91,197.17,109.13,-177.43,197.17,109.13,-164.91
+194.21,102.21,-164.91,194.21,102.21,-171.37,197.17,109.13,-177.43
+185.79,102.21,-164.91,185.79,102.21,-171.37,185.79,69.87,-171.37
+185.79,102.21,-164.91,185.79,69.87,-171.37,185.79,69.87,-164.91
+149.99,170,-165.24,201.99,60,-165.24,149.99,60,-165.24
+305.79,102.21,-164.91,305.79,69.87,-171.37,305.79,69.87,-164.91"""
+_E03_GATE_KEYS = set(_rmkey([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
+                     for ln in _E03_GATE_RAW.strip().split('\n'))
+
+
+def _e03_gate_sel(t):
+    return _rmkey(t) in _E03_GATE_KEYS
+
+
+def _dir_quad(a, b, c, d, want):
+    """Quad (a,b,c,d) as two tris, wound so its face normal points the same way as `want`."""
+    tt = [[a, b, c], [a, c, d]]
+    return tt if _dot3(_tnormal(tt[0]), want) >= 0 else [[a, c, b], [a, d, c]]
+
+
+def _e03_gate_tris():
+    """Replacement for the gatehouse pylons: two CLOSED bumps (left x[150,201.99], right x[298,350]) flanking the
+    passage. Each covers its front/back protrusion (out to z=-73 / -179, in front of / behind every facade+post+cap)
+    with a LONG outer ramp (foot 70u along the wall at the z=-100/-150 plane -> gentle slope) up to a flat face, so
+    there are no sharp perpendicular sides = no concave corner for the camera to catch. Closed into a solid by a
+    passage-side jamb wall (coplanar with the kept bore walls x=201.99/298) and top strips at y=280 that meet the
+    cap's front/back edges. Passage (x[202,298]) itself is untouched, so the doorway hole stays."""
+    Y0, Y1, ZF, ZB, ZWF, ZWB, RAMP = 70.0, 280.0, -73.0, -179.0, -100.0, -150.0, 70.0
+
+    def vquad(x0, z0, x1, z1, want):                              # vertical quad (x0,z0)->(x1,z1), y[Y0,Y1]
+        return _dir_quad([x0, Y0, z0], [x1, Y0, z1], [x1, Y1, z1], [x0, Y1, z0], want)
+
+    def hfan(pts, want):                                         # horizontal face at y=Y1, fan-triangulated
+        out = []
+        for i in range(1, len(pts) - 1):
+            tt = [pts[0], pts[i], pts[i + 1]]
+            out.append(tt if _dot3(_tnormal(tt), want) >= 0 else [pts[0], pts[i + 1], pts[i]])
+        return out
+
+    out = []
+    for x_outer, x_pass in ((150.0, 201.99), (350.0, 298.0)):
+        xr = x_outer + (RAMP if x_outer > x_pass else -RAMP)       # ramp foot, out along the wall past the pylon
+        px = [1, 0, 0] if x_outer < x_pass else [-1, 0, 0]         # passage-side outward normal
+        out += vquad(xr, ZWF, x_outer, ZF, [0, 0, 1])             # FRONT outer ramp (wall -> bump)
+        out += vquad(x_outer, ZF, x_pass, ZF, [0, 0, 1])          # FRONT flat face
+        out += vquad(xr, ZWB, x_outer, ZB, [0, 0, -1])            # BACK outer ramp
+        out += vquad(x_outer, ZB, x_pass, ZB, [0, 0, -1])         # BACK flat face
+        out += vquad(x_pass, ZF, x_pass, ZB, px)                  # PASSAGE-side jamb (meets kept bore wall)
+        out += hfan([[xr, Y1, ZWF], [x_outer, Y1, ZF], [x_pass, Y1, ZF], [x_pass, Y1, ZWF]], [0, 1, 0])  # front top
+        out += hfan([[xr, Y1, ZWB], [x_outer, Y1, ZB], [x_pass, Y1, ZB], [x_pass, Y1, ZWB]], [0, 1, 0])  # back top
+    return out
+
+
+# The doorway pediment/gable + the now-redundant bore-wall jambs (the pylon replacement already carries jambs).
+# Matched by key; replaced by a clean gable prism moved onto the pylons' faces (front z=-73, back z=-179).
+_E03_ARCH_RAW = """201.99,170,-165.24,201.99,60,-86.76,201.99,60,-165.24
+201.99,170,-165.24,201.99,170,-86.76,201.99,60,-86.76
+298,170,-86.76,298,60,-165.24,298,60,-86.76
+298,170,-86.76,298,170,-165.24,298,60,-165.24
+201.99,170,-86.76,250,270,-86.76,199.99,270,-86.76
+250,170,-86.76,250,270,-86.76,201.99,170,-86.76
+250,170,-86.76,300,270,-86.76,250,270,-86.76
+298,170,-86.76,300,270,-86.76,250,170,-86.76
+298,170,-165.24,250,270,-165.25,300,270,-165.24
+250,170,-165.24,250,270,-165.25,298,170,-165.24
+201.99,170,-165.24,199.99,270,-165.24,250,170,-165.24
+250,170,-165.24,199.99,270,-165.24,250,270,-165.25
+149.99,270,-165.24,250,325,-165.24,250,270,-165.25
+250,270,-165.25,250,325,-165.24,350.01,270,-165.24
+250,270,-86.76,250,325,-86.76,149.99,270,-86.76
+350.01,270,-86.76,250,325,-86.76,250,270,-86.76
+250,325,-165.24,149.99,270,-86.76,250,325,-86.76
+250,325,-165.24,149.99,270,-165.24,149.99,270,-86.76
+250,325,-86.76,350.01,270,-86.76,350.01,270,-165.24
+250,325,-86.76,350.01,270,-165.24,250,325,-165.24
+250,170,-165.24,298,170,-165.24,298,170,-86.76
+250,170,-165.24,298,170,-86.76,250,170,-86.76
+250,170,-86.76,201.99,170,-165.24,250,170,-165.24
+250,170,-86.76,201.99,170,-86.76,201.99,170,-165.24"""
+_E03_ARCH_KEYS = set(_rmkey([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
+                     for ln in _E03_ARCH_RAW.strip().split('\n'))
+
+
+def _e03_arch_sel(t):
+    return _rmkey(t) in _E03_ARCH_KEYS
+
+
+def _e03_arch_tris():
+    """Doorway gable moved onto the pylon faces (front z=-73, back z=-179) and simplified to a pentagon-prism:
+    front + back gable faces, the doorway-head soffit, and two roof slopes to the peak. Its front/back are coplanar
+    with the pylon flats, so the whole gatehouse front (pylons + gable) reads as one flush surface."""
+    ZF, ZB = -73.0, -179.0
+    A, B, C, D, E = (201.99, 170.0), (298.0, 170.0), (350.01, 270.0), (250.0, 325.0), (149.99, 270.0)
+
+    def v(p, z):
+        return [p[0], p[1], z]
+
+    def wtri(a, b, c, want):
+        t = [a, b, c]
+        return [t] if _dot3(_tnormal(t), want) >= 0 else [[a, c, b]]
+
+    pent, out = [A, B, C, D, E], []
+    for i in range(1, 4):                                     # fan the pentagon: front (+z) and back (-z)
+        out += wtri(v(pent[0], ZF), v(pent[i], ZF), v(pent[i + 1], ZF), [0, 0, 1])
+        out += wtri(v(pent[0], ZB), v(pent[i], ZB), v(pent[i + 1], ZB), [0, 0, -1])
+    out += _dir_quad(v(A, ZF), v(B, ZF), v(B, ZB), v(A, ZB), [0, -1, 0])   # doorway-head soffit (faces down)
+    out += _dir_quad(v(E, ZF), v(D, ZF), v(D, ZB), v(E, ZB), [0, 1, 0])    # left roof slope (faces up)
+    out += _dir_quad(v(C, ZF), v(D, ZF), v(D, ZB), v(C, ZB), [0, 1, 0])    # right roof slope
+    return out
+
+
+def _e03_north_face(t):
+    """The whole z=-100 canal front: the x[-400,900] wall PLUS the x[900,1500] end towers, all as up-to-290
+    vertical faces. Replaced by two quads (span A x[-400,200] + span B x[300,1500], y[70,WALL_TOP]) so the towers
+    read as one flat front lined up with the cap. NB: the towers' rising base (y98..170) gets filled down to y70."""
+    return (all(abs(p[2] + 100) < 2 for p in t) and min(p[1] for p in t) >= 55
+            and max(p[1] for p in t) <= 290 and -450 <= (t[0][0] + t[1][0] + t[2][0]) / 3.0 <= 1550)
+
+
+def _e03_wall_cap(t):
+    """The bumpy top cap of the canal wall structure: up-facing tris that SPAN the z=-100..-150 gap (each has a
+    vert on each face), y>=258, x[-400,1500]. Merged (as a replace job) to one flat quad that lines up with the
+    raised wall tops so the structure is closed."""
+    zs = [p[2] for p in t]
+    return (max(zs) - min(zs) > 40 and all(-152 <= p[2] <= -98 for p in t)
+            and all(-401 <= p[0] <= 1501 for p in t) and min(p[1] for p in t) >= 258
+            and _tnormal(t)[1] > 0)
+
+
+def _quad(a, b, c, d):
+    """Two tris (a,b,c,d wound in order) for an explicit authored quad."""
+    return [[a, b, c], [a, c, d]]
+
+
+# WALL_TOP: shared top height for the whole z=-100/-150 canal wall structure. = the tallest merged wall top
+# (the z=-100 front, 280) so closing only RAISES the back wall (275->280) and the cap (max 277.61 -> 280) — never
+# lowers a wall or reduces the cap's peak, per the directive.
+_E03_WALL_TOP = 280.0
+
+_CAM_MERGE_JOBS = {
+    'e03': [
+        # Directed, one group at a time; empty list = full-detail camera `_c`. 'merge' runs simplify_coplanar on
+        # the selected tris (authored OUTWARD, optional shared `top`); 'replace' swaps them for authored `tris`.
+        # South-back canal wall z=-150, x[-400,900], flattened to the shared WALL_TOP: 48 tris -> 4 (x[200,300] gap).
+        {'kind': 'merge', 'sel': _plane_region(2, -150, x=(-400, 900), y=(55, 290)),
+         'snap': 5.0, 'outward': 0.0, 'top': _E03_WALL_TOP},
+        # North-front canal face z=-100: wall x[-400,900] + end towers x[900,1500] -> span A (x[-400,200]) +
+        # span B (x[300,1500]), both y[70,WALL_TOP]. 69 tris -> 4; x[200,300] passage gap kept, span B lined up
+        # with the cap's front edge. (Tower rising base y98..170 is filled down to y70 to make span B one quad.)
+        {'kind': 'replace', 'sel': _e03_north_face,
+         'tris': _quad([-400, 70, -100], [200, 70, -100], [200, _E03_WALL_TOP, -100], [-400, _E03_WALL_TOP, -100])
+               + _quad([300, 70, -100], [1500, 70, -100], [1500, _E03_WALL_TOP, -100], [300, _E03_WALL_TOP, -100])},
+        # Top cap connecting the two faces (36 bumpy tris) -> one flat up-facing quad at WALL_TOP spanning
+        # z[-150,-100], x[-400,1500], so it closes flush with both raised wall tops.
+        {'kind': 'replace', 'sel': _e03_wall_cap,
+         'tris': _quad([-400, _E03_WALL_TOP, -100], [1500, _E03_WALL_TOP, -100],
+                       [1500, _E03_WALL_TOP, -150], [-400, _E03_WALL_TOP, -150])},
+        # Gatehouse pylons/posts (72 tris) -> two closed ramped bumps (28 tris) that glide into the walls (no
+        # concave corners); passage lintel/bore/floor untouched so the doorway hole stays.
+        {'kind': 'replace', 'sel': _e03_gate_sel, 'tris': _e03_gate_tris()},
+        # Doorway gable + redundant bore jambs (24 tris) -> simplified gable prism (12 tris) moved onto the pylon
+        # faces (front z=-73, back z=-179), flush with the pylon flats.
+        {'kind': 'replace', 'sel': _e03_arch_sel, 'tris': _e03_arch_tris()},
+    ],
+}
+
+
+def cam_merge_selected(tris, town):
+    """Apply each listed directed job to its selected tris (merge -> simplify_coplanar authored outward; replace ->
+    authored quads); pass everything else through at full detail. Only groups explicitly vetted against the visual
+    mesh get touched."""
+    jobs = _CAM_MERGE_JOBS.get(town, [])
+    if not jobs:
+        return tris
+    remaining, out = list(tris), []
+    for job in jobs:
+        sel = job['sel']
+        picked = [t for t in remaining if sel(t)]
+        remaining = [t for t in remaining if not sel(t)]
+        if not picked:
+            continue
+        if job['kind'] == 'replace':
+            out += job['tris']
+        else:
+            out += simplify_coplanar(picked, snap=job['snap'], outward=job.get('outward', 0.0), top=job.get('top'))
+    return out + remaining
+
+
 def _in_flat_region(t):
     """True if every vertex of t sits inside a both_walls._FLAT_REGIONS rectangle at that region's y (a flat
     ground patch that's been collapsed to one quad). Walls/slopes in the footprint span other y and are kept."""
@@ -893,7 +1316,11 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     # ---- CAMERA `_c`: consolidated structure + both-walls + perimeter (NO canal/railings/triggers = player-only).
     #      One-sided: flip known-backwards windings so every camera wall's normal faces the play area (fix_camera_
     #      winding). Player `_a` above keeps the raw (two-sided) winding.
-    cstruct = fix_camera_winding([t for sub in subs for t in bysub[sub]])
+    # Camera `_c`: full-detail structure by default. Simplification is DIRECTED, not blanket — specific groups are
+    # merged by cam_merge_selected (authored OUTWARD, behind the visual mesh, so the collision never clips in front
+    # of the rendered wall). This keeps the runtime gather-buffer reduction targeted and reviewable one group at a
+    # time, instead of one sweeping pass that's hard to vet against the visual meshes.
+    cstruct = cam_merge_selected(fix_camera_winding([t for sub in subs for t in bysub[sub]]), 'e03')
     cbw, cperim = fix_camera_winding(bw), fix_camera_winding(perim)
     cext = camera_tris(town)                                       # authored camera-only (already play-area wound)
     cam_pool = cstruct + cperim + cbw + cext
