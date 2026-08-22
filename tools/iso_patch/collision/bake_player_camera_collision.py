@@ -1617,7 +1617,10 @@ def _e03_townwall_tris():
     out += _dir_quad([600, 70, 200], [1300, 70, 200], [1300, 380, 200], [600, 380, 200], [0, 0, -1])
     # drop the old x=695 return; bridge the z=150 wall's edge (x=700) straight to obj33 arch2's front pylon (x=1250,z=177)
     out = [t for t in out if not (all(abs(p[0] - 695) < 1 and 149 <= p[2] <= 201 and 69 <= p[1] <= 281 for p in t))]
-    out += _dir_quad([700, 70, 150], [700, 280, 150], [1250, 378, 177], [1250, 70, 177], [0, 0, -1])  # bridge -> arch2 front pylon (foot to floor y70)
+    out += _dir_quad([700, 70, 150], [700, 280, 150], [1250, 280, 177], [1250, 70, 177], [0, 0, -1])  # bridge (flat top y280, foot y70)
+    out += _dir_quad([700, 280, 150], [1250, 280, 177], [1250, 380, 200], [700, 380, 200], [0, 1, 0])  # cap bridge top -> SE wall top (uniform strip)
+    out += _dir_quad([600, 280, 150], [700, 280, 150], [700, 380, 200], [600, 380, 200], [0, 1, 0])  # extend cap west to the corner (x=600)
+    out.append([[600, 280, 150], [600, 280, 200], [600, 380, 200]])  # fill corner gap -> x=600 spine wall (faces -x)
     # drop the z=200/z=250 wall sections at x[1400,1500] now covered by obj33 arch2's east extensions
     out = [t for t in out if not (all(1399 <= p[0] <= 1501 and 169 <= p[1] <= 381 for p in t)
                                   and ((all(abs(p[2] - 200) < 1 for p in t) and _tnormal(t)[2] < 0)
@@ -2052,6 +2055,8 @@ def _e03_obj33b_tris():
     q([PX1, Y0, FZ], [PX1, Y0, BZ], [PX1, LY, BZ], [PX1, LY, FZ], [-1, 0, 0]) # jamb x=1398
     q([PX0, LY, FZ], [PX1, LY, FZ], [PX1, LY, BZ], [PX0, LY, BZ], [0, -1, 0]) # tunnel ceiling
     q([X0, Y0, FZ], [X0, Y0, BZ], [X0, Y1, BZ], [X0, Y1, FZ], [-1, 0, 0])       # west end cap (terminate at pylon plane x=1250)
+    q([X0, Y0, BZ], [WXL, Y0, BWZ], [WXL, Y1, BWZ], [X0, Y1, BZ], [0, 0, 1])    # west back ramp: back pylon z=271 -> z=250 wall (x=1180)
+    q([WXL, Y1, BWZ], [X0, Y1, BZ], [X0, 380.0, BWZ], [WXL, 380.0, BWZ], [0, 1, 0])  # west back ramp top cap -> SE cap (y380, z250)
     # east side: run the front/back straight at the z-running walls (arch1 front x=1483.68, x=1500 wall) so they
     # meet head-on (90 deg) instead of the old acute (56/23 deg) diagonals; a top cap closes the gap between them.
     q([X1, Y0, FZ], [A1X, Y0, FZ], [A1X, WY, FZ], [X1, Y1, FZ], [0, 0, -1])    # east front -> arch1 front (top -> y370)
