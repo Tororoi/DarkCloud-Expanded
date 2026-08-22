@@ -268,21 +268,19 @@ _PIPE_DRUMS = {
 
 
 def pipe_drum_tris(town='e03'):
+    """Each canal pipe stub simplified to its bounding BOX (formerly an 8-sided octagonal drum): the octagon's
+    bbox is x[cx-R,cx+R], y[cy-R,cy+R] extruded over z[z0,z1]. Emits 4 side faces + the free-end cap (facing the
+    canal); the embedded end (|z|=50, flush in the canal wall) is left open exactly like the drum was. 10 tris."""
     out = []
     for cx, cy, z0, z1, R, d in _PIPE_DRUMS.get(town, []):
-        oct2d = [(0, -R), (d, -d), (R, 0), (d, d), (0, R), (-d, d), (-R, 0), (-d, -d)]
-        r0 = [[cx + dx, cy + dy, z0] for dx, dy in oct2d]
-        r1 = [[cx + dx, cy + dy, z1] for dx, dy in oct2d]
-        for i in range(8):                                        # side walls
-            j = (i + 1) % 8
-            out.append([r0[i][:], r0[j][:], r1[j][:]])
-            out.append([r0[i][:], r1[j][:], r1[i][:]])
-        wall_ring = r0 if abs(z0) > abs(z1) else r1               # the end flush against the canal wall (|z|=50)
-        for ring in (r0, r1):                                     # end caps (fan from vertex 0)
-            if ring is wall_ring:                                 # no cap where the stub is embedded in the wall
-                continue
-            for i in range(1, 7):
-                out.append([ring[0][:], ring[i][:], ring[i + 1][:]])
+        x0, x1, y0, y1 = cx - R, cx + R, cy - R, cy + R
+        emb = abs(z0) > abs(z1)                                   # embedded (in-wall) end is the |z|=50 one
+        zf = z1 if emb else z0                                    # free (canal-facing) end gets the cap
+        out += _dir_quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0])    # +x side
+        out += _dir_quad([x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1], [-1, 0, 0])   # -x side
+        out += _dir_quad([x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], [0, 1, 0])    # +y side
+        out += _dir_quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0])   # -y side
+        out += _dir_quad([x0, y0, zf], [x1, y0, zf], [x1, y1, zf], [x0, y1, zf], [0, 0, 1 if emb else -1])  # free cap
     return out
 
 
@@ -2314,6 +2312,184 @@ def _pool_split(pool, prefix, used, max_tris=100):
     return [(_fit(f'{prefix}{bi}', used, 15), bk) for bi, bk in enumerate(kd_split(pool, max_tris))]
 
 
+_E03_GATE_XMIN_REF = -73.93                                    # obj44's min x; obj40 is the same mesh at +848 x
+_E03_GATE_RAIL = [                                             # inner side-railings (mid wall + corner gussets) to drop
+    [[-68.21, 76.68, 25.02], [-68.21, 84.68, 25.02], [-68.0, 70.0, 50.0]],
+    [[-68.0, 70.0, 50.0], [-68.21, 84.68, 25.02], [-68.0, 78.0, 50.0]],
+    [[-68.21, 76.68, 25.02], [-68.21, 86.9, 0.0], [-68.21, 84.68, 25.02]],
+    [[-68.21, 78.9, 0.0], [-68.21, 86.9, 0.0], [-68.21, 76.68, 25.02]],
+    [[-68.21, 78.9, 0.0], [-68.21, 84.68, -25.02], [-68.21, 86.9, 0.0]],
+    [[-68.21, 76.68, -25.02], [-68.21, 84.68, -25.02], [-68.21, 78.9, 0.0]],
+    [[-68.0, 70.0, -50.0], [-68.0, 78.0, -50.0], [-68.21, 76.68, -25.02]],
+    [[-68.21, 76.68, -25.02], [-68.0, 78.0, -50.0], [-68.21, 84.68, -25.02]],
+    [[-27.79, 76.68, -25.02], [-27.79, 84.68, -25.02], [-28.0, 70.0, -50.0]],
+    [[-28.0, 70.0, -50.0], [-27.79, 84.68, -25.02], [-28.0, 78.0, -50.0]],
+    [[-27.79, 76.68, -25.02], [-27.79, 86.9, 0.0], [-27.79, 84.68, -25.02]],
+    [[-27.79, 78.9, 0.0], [-27.79, 86.9, 0.0], [-27.79, 76.68, -25.02]],
+    [[-27.79, 78.9, 0.0], [-27.79, 84.68, 25.02], [-27.79, 86.9, 0.0]],
+    [[-27.79, 76.68, 25.02], [-27.79, 84.68, 25.02], [-27.79, 78.9, 0.0]],
+    [[-27.79, 76.68, 25.02], [-28.0, 78.0, 50.0], [-27.79, 84.68, 25.02]],
+    [[-28.0, 70.0, 50.0], [-28.0, 78.0, 50.0], [-27.79, 76.68, 25.02]],
+]
+
+
+_E03_GATE_RAISE_DY = 8.0
+_E03_GATE_RAISE = [                                            # walkway-top surface: raise +8 to meet the parapet tops
+    [[-68.21, 76.68, 25.02], [-68.0, 70.0, 50.0], [-28.0, 70.0, 50.0]],
+    [[-68.21, 76.68, 25.02], [-28.0, 70.0, 50.0], [-27.79, 76.68, 25.02]],
+    [[-27.79, 76.68, 25.02], [-68.21, 78.9, 0.0], [-68.21, 76.68, 25.02]],
+    [[-68.21, 76.68, -25.02], [-68.21, 78.9, 0.0], [-27.79, 78.9, 0.0]],
+    [[-27.79, 76.68, 25.02], [-27.79, 78.9, 0.0], [-68.21, 78.9, 0.0]],
+    [[-68.21, 76.68, -25.02], [-27.79, 78.9, 0.0], [-27.79, 76.68, -25.02]],
+    [[-27.79, 76.68, -25.02], [-68.0, 70.0, -50.0], [-68.21, 76.68, -25.02]],
+    [[-27.79, 76.68, -25.02], [-28.0, 70.0, -50.0], [-68.0, 70.0, -50.0]],
+]
+_E03_GATE_EXTEND = [                                           # outer side-face: raise its top edge (verts y>=65) +8
+    [[-73.0, 70.0, -50.0], [-73.07, 47.0, -50.0], [-73.07, 47.0, -36.0]],
+    [[-73.07, 47.0, -36.0], [-73.0, 76.68, -25.0], [-73.0, 70.0, -50.0]],
+    [[-73.07, 47.0, -36.0], [-73.07, 53.0, -26.0], [-73.0, 76.68, -25.0]],
+    [[-73.0, 78.9, 0.0], [-73.0, 76.68, -25.0], [-73.07, 53.0, -26.0]],
+    [[-73.07, 58.0, -13.0], [-73.07, 60.0, 0.0], [-73.0, 78.9, 0.0]],
+    [[-73.0, 78.9, 0.0], [-73.07, 53.0, -26.0], [-73.07, 58.0, -13.0]],
+    [[-73.0, 78.9, 0.0], [-73.07, 60.0, 0.0], [-73.07, 58.0, 13.0]],
+    [[-73.0, 78.9, 0.0], [-73.07, 58.0, 13.0], [-73.0, 76.68, 25.0]],
+    [[-73.0, 76.68, 25.0], [-73.07, 58.0, 13.0], [-73.07, 53.0, 26.0]],
+    [[-73.0, 76.68, 25.0], [-73.07, 53.0, 26.0], [-73.0, 70.0, 50.0]],
+    [[-73.0, 70.0, 50.0], [-73.07, 53.0, 26.0], [-73.07, 47.0, 35.0]],
+    [[-73.0, 70.0, 50.0], [-73.07, 47.0, 35.0], [-73.07, 47.0, 50.0]],
+    [[-22.93, 47.0, 35.0], [-23.0, 76.68, 25.0], [-23.0, 70.0, 50.0]],
+    [[-22.93, 47.0, 35.0], [-22.93, 53.0, 26.0], [-23.0, 76.68, 25.0]],
+    [[-23.0, 70.0, 50.0], [-22.93, 47.0, 50.0], [-22.93, 47.0, 35.0]],
+    [[-23.0, 78.9, 0.0], [-23.0, 76.68, 25.0], [-22.93, 53.0, 26.0]],
+    [[-23.0, 78.9, 0.0], [-22.93, 53.0, 26.0], [-22.93, 58.0, 13.0]],
+    [[-22.93, 58.0, 13.0], [-22.93, 60.0, 0.0], [-23.0, 78.9, 0.0]],
+    [[-23.0, 78.9, 0.0], [-22.93, 60.0, 0.0], [-22.93, 58.0, -13.0]],
+    [[-23.0, 78.9, 0.0], [-22.93, 58.0, -13.0], [-23.0, 76.68, -25.0]],
+    [[-23.0, 76.68, -25.0], [-22.93, 58.0, -13.0], [-22.93, 53.0, -26.0]],
+    [[-23.0, 76.68, -25.0], [-22.93, 53.0, -26.0], [-23.0, 70.0, -50.0]],
+    [[-23.0, 70.0, -50.0], [-22.93, 53.0, -26.0], [-22.93, 47.0, -36.0]],
+    [[-23.0, 70.0, -50.0], [-22.93, 47.0, -36.0], [-23.0, 47.0, -50.0]],
+]
+_E03_GATE_OUTER = [                                            # vertical filler walls (x=-73/-23, y70..86.9) now obsolete
+    [[-23.0, 78.0, -50.0], [-23.0, 76.68, -25.0], [-23.0, 70.0, -50.0]],
+    [[-23.0, 84.68, -25.02], [-23.0, 76.68, -25.0], [-23.0, 78.0, -50.0]],
+    [[-23.0, 84.68, -25.02], [-23.0, 78.9, 0.0], [-23.0, 76.68, -25.0]],
+    [[-23.0, 86.9, 0.0], [-23.0, 78.9, 0.0], [-23.0, 84.68, -25.02]],
+    [[-23.0, 86.9, 0.0], [-23.0, 76.68, 25.0], [-23.0, 78.9, 0.0]],
+    [[-23.0, 84.68, 25.02], [-23.0, 76.68, 25.0], [-23.0, 86.9, 0.0]],
+    [[-23.0, 84.68, 25.02], [-23.0, 70.0, 50.0], [-23.0, 76.68, 25.0]],
+    [[-23.0, 78.0, 50.0], [-23.0, 70.0, 50.0], [-23.0, 84.68, 25.02]],
+    [[-73.0, 84.68, -25.02], [-73.0, 70.0, -50.0], [-73.0, 76.68, -25.0]],
+    [[-73.0, 78.0, -50.0], [-73.0, 70.0, -50.0], [-73.0, 84.68, -25.02]],
+    [[-73.0, 84.68, -25.02], [-73.0, 76.68, -25.0], [-73.0, 86.9, 0.0]],
+    [[-73.0, 86.9, 0.0], [-73.0, 76.68, -25.0], [-73.0, 78.9, 0.0]],
+    [[-73.0, 86.9, 0.0], [-73.0, 78.9, 0.0], [-73.0, 84.68, 25.02]],
+    [[-73.0, 84.68, 25.02], [-73.0, 78.9, 0.0], [-73.0, 76.68, 25.0]],
+    [[-73.0, 84.68, 25.02], [-73.0, 76.68, 25.0], [-73.0, 78.0, 50.0]],
+    [[-73.0, 78.0, 50.0], [-73.0, 76.68, 25.0], [-73.0, 70.0, 50.0]],
+]
+_E03_GATE_ROOF24 = [                                           # the 24-tri domed roof (barrel vault) -> merge to 8
+    [[-27.79, 84.68, -25.02], [-28.0, 78.0, -50.0], [-68.0, 78.0, -50.0]],
+    [[-27.79, 84.68, -25.02], [-68.0, 78.0, -50.0], [-68.21, 84.68, -25.02]],
+    [[-68.21, 84.68, -25.02], [-68.0, 78.0, -50.0], [-73.0, 78.0, -50.0]],
+    [[-68.21, 84.68, -25.02], [-73.0, 78.0, -50.0], [-73.0, 84.68, -25.02]],
+    [[-73.0, 84.68, -25.02], [-68.21, 86.9, 0.0], [-68.21, 84.68, -25.02]],
+    [[-73.0, 84.68, -25.02], [-73.0, 86.9, 0.0], [-68.21, 86.9, 0.0]],
+    [[-23.0, 84.68, -25.02], [-28.0, 78.0, -50.0], [-27.79, 84.68, -25.02]],
+    [[-23.0, 84.68, -25.02], [-23.0, 78.0, -50.0], [-28.0, 78.0, -50.0]],
+    [[-27.79, 84.68, -25.02], [-23.0, 86.9, 0.0], [-23.0, 84.68, -25.02]],
+    [[-27.79, 84.68, -25.02], [-27.79, 86.9, 0.0], [-23.0, 86.9, 0.0]],
+    [[-68.21, 84.68, 25.02], [-68.21, 86.9, 0.0], [-73.0, 86.9, 0.0]],
+    [[-68.21, 84.68, 25.02], [-73.0, 86.9, 0.0], [-73.0, 84.68, 25.02]],
+    [[-73.0, 84.68, 25.02], [-68.0, 78.0, 50.0], [-68.21, 84.68, 25.02]],
+    [[-73.0, 84.68, 25.02], [-73.0, 78.0, 50.0], [-68.0, 78.0, 50.0]],
+    [[-27.79, 84.68, 25.02], [-23.0, 78.0, 50.0], [-23.0, 84.68, 25.02]],
+    [[-27.79, 84.68, 25.02], [-28.0, 78.0, 50.0], [-23.0, 78.0, 50.0]],
+    [[-23.0, 84.68, 25.02], [-27.79, 86.9, 0.0], [-27.79, 84.68, 25.02]],
+    [[-23.0, 84.68, 25.02], [-23.0, 86.9, 0.0], [-27.79, 86.9, 0.0]],
+    [[-68.21, 84.68, -25.02], [-27.79, 86.9, 0.0], [-27.79, 84.68, -25.02]],
+    [[-68.21, 84.68, -25.02], [-68.21, 86.9, 0.0], [-27.79, 86.9, 0.0]],
+    [[-27.79, 84.68, 25.02], [-27.79, 86.9, 0.0], [-68.21, 86.9, 0.0]],
+    [[-27.79, 84.68, 25.02], [-68.21, 86.9, 0.0], [-68.21, 84.68, 25.02]],
+    [[-68.21, 84.68, 25.02], [-28.0, 78.0, 50.0], [-27.79, 84.68, 25.02]],
+    [[-68.21, 84.68, 25.02], [-68.0, 78.0, 50.0], [-28.0, 78.0, 50.0]],
+]
+_E03_GATE_ROOF8 = [                                            # 4 full-width quads x[-73,-23] over the z-arch profile
+    [[-73.0, 78.0, -50.0], [-23.0, 78.0, -50.0], [-23.0, 84.68, -25.0], [-73.0, 84.68, -25.0]],
+    [[-73.0, 84.68, -25.0], [-23.0, 84.68, -25.0], [-23.0, 86.9, 0.0], [-73.0, 86.9, 0.0]],
+    [[-73.0, 86.9, 0.0], [-23.0, 86.9, 0.0], [-23.0, 84.68, 25.0], [-73.0, 84.68, 25.0]],
+    [[-73.0, 84.68, 25.0], [-23.0, 84.68, 25.0], [-23.0, 78.0, 50.0], [-73.0, 78.0, 50.0]],
+]
+
+
+def _gate_rk(t, dx=0.0):
+    return tuple(sorted((round(p[0] + dx, 1), round(p[1], 1), round(p[2], 1)) for p in t))
+
+
+def _e03_gate_torch_simplify(tris):
+    """obj40/obj44 (identical bridge-gate meshes): replace each of the 4 corner torch-posts (y>=77) with a full-
+    height corner COLUMN — bounding cube in x/z, extended DOWN to y=0 (the deck is open below the torches: no
+    solid body at mid-height, nothing inward of the centre-facing sides, so nothing gets buried). Emits top (+y)
+    + all 4 vertical sides; the bottom (-y) is dropped (it would sit in the ground at y=0). Also drops the inner
+    side-railings (_E03_GATE_RAIL). Corners/offset are read off the mesh's own bbox, so this works for obj44 and
+    its +848-x twin obj40 alike. ~104 torch tris + 16 rail tris removed -> 40 cube tris."""
+    xs = [p[0] for t in tris for p in t]
+    zs = [p[2] for t in tris for p in t]
+    xmin, xmax, zmin, zmax = min(xs), max(xs), min(zs), max(zs)
+    dx = round(xmin - _E03_GATE_XMIN_REF)
+    dropkeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_RAIL + _E03_GATE_OUTER)
+    raisekeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_RAISE)
+    extendkeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_EXTEND)
+    Y0, XW, ZW = 77.25, 7.0, 8.0                       # y>=77 gate geometry is torches only; XW/ZW capture one corner
+    regions = []
+    for sx in (0, 1):
+        for sz in (0, 1):
+            rx = (xmin - 0.5, xmin + XW) if sx == 0 else (xmax - XW, xmax + 0.5)
+            rz = (zmin - 0.5, zmin + ZW) if sz == 0 else (zmax - ZW, zmax + 0.5)
+            regions.append((rx[0], rx[1], rz[0], rz[1], sx, sz))
+    keep, cap = [], [[] for _ in regions]
+    for t in tris:
+        k = _gate_rk(t)
+        if k in dropkeys:                              # inner side-railings + obsolete outer filler walls
+            continue
+        if k in raisekeys:                             # raise the walkway top +8 to merge with the parapet tops
+            keep.append([[p[0], p[1] + _E03_GATE_RAISE_DY, p[2]] for p in t])
+            continue
+        if k in extendkeys:                            # extend outer side-face up: raise its top edge (y>=65) +8
+            keep.append([[p[0], p[1] + (_E03_GATE_RAISE_DY if p[1] >= 65 else 0.0), p[2]] for p in t])
+            continue
+        c = [sum(p[i] for p in t) / 3 for i in range(3)]
+        r = None
+        if c[1] >= Y0:
+            for ri, (x0, x1, z0, z1, sx, sz) in enumerate(regions):
+                if x0 <= c[0] <= x1 and z0 <= c[2] <= z1:
+                    r = ri
+                    break
+        (keep if r is None else cap[r]).append(t)
+    out = list(keep)
+    for (x0, x1, z0, z1, sx, sz), g in zip(regions, cap):
+        if not g:
+            continue
+        cx = [p[0] for t in g for p in t]; cy = [p[1] for t in g for p in t]; cz = [p[2] for t in g for p in t]
+        X0, X1, YT, Z0, Z1, YB = min(cx), max(cx), max(cy), min(cz), max(cz), 0.0   # YT=torch top, YB=ground
+        out += _dir_quad([X0, YT, Z0], [X1, YT, Z0], [X1, YT, Z1], [X0, YT, Z1], [0, 1, 0])   # top (+y)
+        out += _dir_quad([X0, YB, Z0], [X0, YB, Z1], [X0, YT, Z1], [X0, YT, Z0], [-1, 0, 0])  # -x side -> y0
+        out += _dir_quad([X1, YB, Z0], [X1, YB, Z1], [X1, YT, Z1], [X1, YT, Z0], [1, 0, 0])   # +x side -> y0
+        out += _dir_quad([X0, YB, Z0], [X1, YB, Z0], [X1, YT, Z0], [X0, YT, Z0], [0, 0, -1])  # -z side -> y0
+        out += _dir_quad([X0, YB, Z1], [X1, YB, Z1], [X1, YT, Z1], [X0, YT, Z1], [0, 0, 1])   # +z side -> y0
+    # merge the 24-tri domed roof (barrel vault, flat in x) into 8: 4 full-width quads over the z-arch profile
+    roofkeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_ROOF24)
+    out = [t for t in out if _gate_rk(t) not in roofkeys]
+    for q in _E03_GATE_ROOF8:
+        p = [[v[0] + dx, v[1], v[2]] for v in q]
+        out += _dir_quad(p[0], p[1], p[2], p[3], [0, 1, 0])
+    # close each z-end face's middle gap (between the corner gussets): ground y70 -> roof low edge y78
+    for zc, wn in ((-50.0, [0, 0, -1]), (50.0, [0, 0, 1])):
+        out += _dir_quad([-68.0 + dx, 70.0, zc], [-28.0 + dx, 70.0, zc],
+                         [-28.0 + dx, 78.0, zc], [-68.0 + dx, 78.0, zc], wn)
+    return out
+
+
 def grouped_collision(placed, scn, town='e03', max_tris=100):
     """Spatially REGROUP the whole custom collision, shared by the ISO bake (bake_structures) and the viewer so
     both write / show the identical node grouping.
@@ -2326,13 +2502,21 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
       lists ('structure','bwalls','perimeter','invisible') for the viewer's isolate-this-piece toggles."""
     from collections import defaultdict
     bysub = defaultdict(list)
+    cam_bysub = defaultdict(list)                                  # camera structure pool, MINUS the own-node meshes
+    cam_own = defaultdict(list)                                    # obj40/obj44: each ships as its OWN camera node
+    own_names = {'obj40', 'obj44'} if town == 'e03' else set()    # identical ~216-tri gate meshes
     for pm in placed:
         if not is_cam_node(pm['name']):
             continue
         v = pm['verts']
         t = simplify_terrain([[list(v[a]), list(v[b]), list(v[c])] for a, b, c in pm['tris']])
-        if t:
-            bysub[pm['sub']].extend(t)                             # pool structure tris by sub (names not needed)
+        if not t:
+            continue
+        bysub[pm['sub']].extend(t)                                 # player pool: everything (names not needed)
+        if pm['name'] in own_names:
+            cam_own[pm['name']].extend(t)                          # camera: this mesh gets its own node
+        else:
+            cam_bysub[pm['sub']].extend(t)                         # camera: pooled structure
     subs = sorted(bysub)
     perim, bw = perimeter_wall_tris(town), both_wall_tris(town)
     inv, pw = invisible_tris(town), player_wall_tris(town)
@@ -2356,15 +2540,25 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     # merged by cam_merge_selected (authored OUTWARD, behind the visual mesh, so the collision never clips in front
     # of the rendered wall). This keeps the runtime gather-buffer reduction targeted and reviewable one group at a
     # time, instead of one sweeping pass that's hard to vet against the visual meshes.
-    cstruct = fix_camera_winding([t for sub in subs for t in bysub[sub]])
+    cstruct = fix_camera_winding([t for sub in subs for t in cam_bysub[sub]])
     cbw, cperim = fix_camera_winding(bw), fix_camera_winding(perim)
     cext = camera_tris(town)                                       # authored camera-only (already play-area wound)
     # Directed simplification runs over the WHOLE camera pool (structure + perimeter + both-walls + authored), so a
     # job can target a wall no matter which set it happens to live in (e.g. the x=600 spine is in `perimeter`).
     cam_pool = cam_merge_selected(cstruct + cperim + cbw + cext, 'e03')
-    camera = _pool_split(cam_pool, 'ccol', set(), max_tris)
+    used = set()
+    # <=max_tris (100) spatially-compact ring nodes. DELIBERATELY kept small: camera `_c` is mostly the town
+    # PERIMETER RING, so every kd-split bucket has a map-spanning bbox and the runtime frame-gather cull is weak.
+    # The camera CCPoly gather buffer is a hard 400-poly/frame cap (no bounds check) summed across every part near
+    # the camera, and NW-Queens already SATURATES it — bigger nodes coarsen the cull and blow the cap. Keep at 100.
+    camera = _pool_split(cam_pool, 'ccol', used, max_tris)
+    if town == 'e03':                                              # obj40/obj44: 4 corner torches -> outer cube faces
+        cam_own = {nm: _e03_gate_torch_simplify(tt) for nm, tt in cam_own.items()}
+    own_named = [(f'c{nm}', fix_camera_winding(tt)) for nm, tt in sorted(cam_own.items())]
+    camera += [(_fit(nm, used, 15), tt) for nm, tt in own_named]   # obj40/obj44: own node each, unsplit
 
-    sets = {'structure': cstruct, 'bwalls': cbw + cext, 'perimeter': cperim, 'invisible': inv + pw}
+    sets = {'structure': cstruct + [t for _, tt in own_named for t in tt],
+            'bwalls': cbw + cext, 'perimeter': cperim, 'invisible': inv + pw}
     return {'subs': subs, 'player': player, 'camera': camera, 'sets': sets}
 
 
