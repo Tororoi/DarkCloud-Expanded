@@ -231,13 +231,21 @@ namespace Dark_Cloud_Improved_Version
             // Don't fire while a fishing session is entering/active: _LOAD_FISHING_DATA perturbs the scene's
             // time/water, which can read as a low→non-low tide jump — a FALSE boundary. A player who chose to
             // fish is not being caught by the rising tide.
-            if (!float.IsNaN(_prevTarget) && _prevTarget <= LowTideThreshold && target > LowTideThreshold
-                && _evictArm > 0 && !CustomFishingSpot.InFishingWindow)
+            if (!float.IsNaN(_prevTarget) && _prevTarget <= LowTideThreshold && target > LowTideThreshold)
             {
-                Memory.WriteInt(CanalEvictFlag, 1);
-                _flagTtl = FlagTtl;
-                _camActive = true; _camAge = 0; _camHeld = 0;   // set the dock camera once East Harbor loads
-                Log($"tide-evict: caught in draining canal ({_prevTarget:0.#}→{target:0.#}) → raised native evict flag");
+                if (_evictArm > 0 && !CustomFishingSpot.InFishingWindow)
+                {
+                    Memory.WriteInt(CanalEvictFlag, 1);
+                    _flagTtl = FlagTtl;
+                    _camActive = true; _camAge = 0; _camHeld = 0;   // set the dock camera once East Harbor loads
+                    Log($"tide-evict: caught in draining canal ({_prevTarget:0.#}→{target:0.#}) → raised native evict flag");
+                }
+                else
+                    // The suppressed boundary was SILENT — exactly the blind spot when diagnosing "the warp
+                    // didn't happen". One line names the gate that blocked it (player not recently in the
+                    // basin, or a live fishing window) so a future miss is diagnosable without a re-repro.
+                    Log($"tide-evict: boundary ({_prevTarget:0.#}→{target:0.#}) NOT raised " +
+                        $"(arm={_evictArm}, fishing={CustomFishingSpot.InFishingWindow}, inCanalNow={PlayerInCanal()})");
             }
             _prevTarget = target;
             // Keep the flag CLEAN between evictions. It's a one-shot the native fade-hook consumes on the next
@@ -245,7 +253,18 @@ namespace Dark_Cloud_Improved_Version
             // where the non-Queens reset at the top never ran) would be eaten by the next UNRELATED fade — a
             // fishing-entry fade — and false-warp the player to the dock. While no genuine eviction is pending
             // (TTL==0), pin it to 0; only the boundary above raises it, with a TTL that spans the tide fade.
-            if (_flagTtl > 0) { if (--_flagTtl == 0) Memory.WriteInt(CanalEvictFlag, 0); }
+            if (_flagTtl > 0)
+            {
+                if (--_flagTtl == 0)
+                {
+                    // TTL expiry with the flag STILL SET = the native fade-hook never consumed it (no
+                    // fully-black EdFadeInOut frame within ~15s of the raise) — log it: that's the
+                    // "raised but never warped" failure signature, previously silent.
+                    if (Memory.ReadInt(CanalEvictFlag) != 0)
+                        Log("tide-evict: raised flag EXPIRED unconsumed (no fully-black fade within TTL) → cleared, no warp");
+                    Memory.WriteInt(CanalEvictFlag, 0);
+                }
+            }
             else if (BisectFlags.EvictFlagPin && Memory.ReadInt(CanalEvictFlag) != 0)
             {
                 Memory.WriteInt(CanalEvictFlag, 0);
@@ -815,14 +834,13 @@ namespace Dark_Cloud_Improved_Version
         // than queue a new event via start_event_no (which would run only AFTER 132 ends), we set the map-jump
         // on the CURRENTLY running event — NextMapNo + arrival StartEventNo + the return code EdEventMode reads.
         private const long  CanalEvictFlag = CodeCaves.Mailbox.CanalEvict; // native fade-hook reads this on the fully-black frame
-        private const float CanalBankY     = 20f;                        // must be DOWN AT THE FLOOR (≈0), not on the ladder/bank
-                                                                          //   (≈70) — the evict should only catch a player standing in the basin
-        // World-X run of the canal, from the static (non-camera-followed) waterfall walls in gedit/e03/scene.scn:
-        // obj48 span X 187..1111, taki1 187..1509. The Z-band test alone isn't enough — other walkable y≈0 ground
-        // elsewhere in Queens shares the canal's Z band, so bound X to the canal too. (The mizu water can't be used:
-        // it follows the camera in X.) Tunable if a genuine wade near either end is missed.
-        private const float CanalMinX      = 150f;
-        private const float CanalMaxX      = 1550f;
+        private const float CanalBankY     = 31f;                        // afternoon (medium) tide height: caught = BELOW the
+                                                                          //   incoming waterline (banks/ladder-top are ≈70, well above)
+        private const float CanalZPad      = 60f;                        // canal wall z≈±50 + padding; the basin is the only
+                                                                          //   walkable ground below tide height in this z-band
+        // (A previous version also bounded X against the waterfall walls' span (150..1550) and read the live
+        // CWater corners for Z — the X bound silently missed the basin's west end (players at x≈-185, logged
+        // 2026-08-23) and neither was needed: y-below-tide + the z-band already identify the basin uniquely.)
         private const int   EvictArmHold = 20;          // short flicker tolerance only (~1s); NOT a lingering "was recently in" window
                                                         //   — a long hold warped players who'd already climbed out when the tide turned
         private const int   FlagTtl      = 300;         // safety: drop the native flag if no fully-black consumed it within ~15s
@@ -956,16 +974,13 @@ namespace Dark_Cloud_Improved_Version
             if (++_camHeld >= CamHold) _camActive = false;
         }
 
-        /// <summary>Is the player down in the canal basin — below the bank (Y &lt; <see cref="CanalBankY"/>) and
-        /// inside the canal's Z channel? Uses <see cref="InCanalZ"/> (X is camera-followed and can't be tested
-        /// against the stored corners); the Y gate clears the bank (≈70) so the bank or a bridge above doesn't
-        /// count.</summary>
+        /// <summary>Is the player down in the canal basin — below the incoming (afternoon) waterline
+        /// (Y &le; <see cref="CanalBankY"/>) and inside the canal's Z channel (|z| &le; <see cref="CanalZPad"/>)?
+        /// The banks/ladder-top are ≈70, well above the gate, so bank/bridge standers never count.</summary>
         private static bool PlayerInCanal()
         {
-            if (!EditLoop.TryReadPlayerPos(out float px, out float py, out float pz)) return false;
-            if (py > CanalBankY) return false;                           // on the bank / above the basin
-            if (px < CanalMinX || px > CanalMaxX) return false;          // outside the canal's X run (other low ground shares the Z band)
-            return InCanalZ(pz);
+            if (!EditLoop.TryReadPlayerPos(out _, out float py, out float pz)) return false;
+            return py <= CanalBankY && pz >= -CanalZPad && pz <= CanalZPad;
         }
 
         /// <summary>Is world-Z <paramref name="pz"/> inside the canal water's Z span? The canal CWater FOLLOWS

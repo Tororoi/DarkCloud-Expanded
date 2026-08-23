@@ -306,8 +306,10 @@ namespace Dark_Cloud_Improved_Version
             byte[] tmplHdr  = PartHeader(s04scene, "s04a01");   // the kanban PTS header, reused for e03 too
             // The sign part also carries the BAKED fishing trigger (native type-3 event point at the spot) —
             // replaces the old runtime-installed trigger, so it survives day/night with no self-heal needed.
-            Redirect(SCENE_SCN, CullBuildings(CullUpperCraterWalls(RemoveRingCornerTris(
-                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr, funcData: BuildFishingFunc(BROWNBOO_TRIG))))));
+            // (CullBuildings removed 2026-08: the see-through-houses cull was a workaround for the camera
+            //  clipping INSIDE the houses — superseded by the camera-collision work; houses render two-sided again.)
+            Redirect(SCENE_SCN, CullUpperCraterWalls(RemoveRingCornerTris(
+                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr, funcData: BuildFishingFunc(BROWNBOO_TRIG)))));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY, "s04a01"));
 
             // Queens (e03): same kanban mesh + globally-registered e01b24 texture; no crater cleanup (that is
@@ -878,13 +880,12 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
-        // ── scene.scn: make Brownboo's houses single-sided so the camera, when it ends up INSIDE a house, sees
-        //    straight through it instead of hitting the near walls (the camera already clips in; the problem is
-        //    the occlusion). Same SetFrameAttr suffix mechanism as the crater walls — the '__s' suffix turns on
-        //    backface culling, so a wall viewed from inside (its exterior face pointing away) is culled and the
-        //    whole house becomes see-through from within, while looking identical from outside. h0201/h0202 are
-        //    already '__s'; the '__n' houses flip to '__s'; the suffix-less houses get a '__s' written into the
-        //    16-byte name field's null padding (verified all-zero, so no bytes shift).
+        // ── RETIRED (2026-08, no longer in the patch chain): made Brownboo's houses single-sided so the camera,
+        //    when it ended up INSIDE a house, saw straight through it. That was a workaround for the camera
+        //    clipping in at all — superseded by the camera-collision work (the camera stays outside). Kept for
+        //    reference: same SetFrameAttr suffix mechanism as the crater walls — the '__s' suffix turns on
+        //    backface culling; h0201/h0202 are already '__s'; the '__n' houses flip to '__s'; the suffix-less
+        //    houses get '__s' written into the 16-byte name field's null padding (verified all-zero, no shift).
         static byte[] CullBuildings(byte[] scene)
         {
             foreach (string node in new[] { "h0101__n", "h0102__n", "h0103__n" })   // '__n' -> '__s'
