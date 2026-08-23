@@ -18,11 +18,16 @@ lw    $v1, -0x6988($at)
 beq   $v1, $zero, done
 nop
 sw    $v1, 0x58($sp)
-lwc1  $f0, 0x2c0($v1)
+# ⚠ ref = CURRENT rendered look-at (+0x270, what GetRef/Step use) — NOT the follow target (+0x2C0).
+# EdMoveChara writes the PLAYER-based follow to +0x2C0 BEFORE this collision block runs, and the fishing
+# state machine re-targets the BOBBER only at the END (0x16D0F8) — so +0x2C0 here is the player point
+# while the frame renders around the bobber, and the slide protected the wrong eye (fishing pass-through).
+# +0x270 is one frame stale (same as the angle basis) but always matches what's actually on screen.
+lwc1  $f0, 0x270($v1)
 swc1  $f0, 0x20($sp)          # ref.x
-lwc1  $f0, 0x2c4($v1)
+lwc1  $f0, 0x274($v1)
 swc1  $f0, 0x24($sp)          # ref.y
-lwc1  $f0, 0x2c8($v1)
+lwc1  $f0, 0x278($v1)
 swc1  $f0, 0x28($sp)          # ref.z
 sw    $zero, 0x2c($sp)        # ref.w := 0 — the quad is the LOS cast's `from` endpoint
 lwc1  $f12, 0x2dc($v1)        # RENDERED angle (angS) — the pipeline basis (bisect step 3). Was angT (0x2d8):
@@ -164,12 +169,12 @@ add.s $f2, $f2, $f1
 swc1  $f2, 0x0($t3)
 swc1  $f2, 0x68($sp)
 lw    $v1, 0x58($sp)          # reload camera (GetRYf clobbered caller-saved)
-# restore ref @ sp+0x20/24/28 (ceiling ray used the eye as rayFrom)
-lwc1  $f0, 0x2c0($v1)
+# restore ref @ sp+0x20/24/28 (ceiling ray used the eye as rayFrom) — current ref +0x270, see header note
+lwc1  $f0, 0x270($v1)
 swc1  $f0, 0x20($sp)
-lwc1  $f0, 0x2c4($v1)
+lwc1  $f0, 0x274($v1)
 swc1  $f0, 0x24($sp)
-lwc1  $f0, 0x2c8($v1)
+lwc1  $f0, 0x278($v1)
 swc1  $f0, 0x28($sp)
 # ===== dist target = BASE_DIST (bisect step 5: pull-in REMOVED — no wall ray, no classifier, no margin/floor;
 # the swept-slide owns ALL wall response) =====
@@ -262,16 +267,16 @@ swc1  $f0, 0x5c($sp)          # d_e (eased dist target; groundY slot free after 
 lwc1  $f1, 0x5c($sp)          # d_e
 lwc1  $f2, 0x60($sp)          # sinT
 mul.s $f2, $f2, $f1
-lwc1  $f3, 0x2c0($v1)
+lwc1  $f3, 0x270($v1)         # current ref (see header note — NOT the +0x2C0 follow target)
 add.s $f2, $f3, $f2
 swc1  $f2, 0x30($sp)          # E1.x
-lwc1  $f2, 0x2c4($v1)
+lwc1  $f2, 0x274($v1)
 lwc1  $f3, 0x68($sp)          # h_e
 add.s $f2, $f2, $f3
 swc1  $f2, 0x34($sp)          # E1.y
 lwc1  $f2, 0x64($sp)          # cosT
 mul.s $f2, $f2, $f1
-lwc1  $f3, 0x2c8($v1)
+lwc1  $f3, 0x278($v1)
 add.s $f2, $f3, $f2
 swc1  $f2, 0x38($sp)          # E1.z
 sw    $zero, 0x3c($sp)        # E1.w := 0 — the stationary path casts this quad directly; CheckHit's tests are

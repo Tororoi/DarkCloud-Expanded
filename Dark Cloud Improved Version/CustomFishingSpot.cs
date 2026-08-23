@@ -292,6 +292,14 @@ namespace Dark_Cloud_Improved_Version
         /// look-down angle (40), but with enough height to see around while standing in the water.</summary>
         internal const float CanalWadingCamHeight = 20f;
 
+        /// <summary>Queens fishing-camera wall clamp (see PinFishCamHeight): the canal banks/walls top out at
+        /// y70, and the fishing eye must stay BELOW that or the camera skims over the walls with nothing to
+        /// collide with. Eye target = WallTop − Clear; Min floors the height when a high tide (dusk, 52)
+        /// squeezes the clamp, so the shot never goes flat/cramped.</summary>
+        private const float QueensCamWallTopY = 70f;
+        private const float QueensCamWallClear = 4f;
+        private const float QueensFishCamMinH = 12f;
+
         /// <summary>
         /// Labels that must NOT be hijacked.
         ///
@@ -660,6 +668,20 @@ namespace Dark_Cloud_Improved_Version
             if (_installedMap >= 0 && _spot.MapNo == _installedMap)
                 h = (InFishingWindow ? _active : ActiveSpot()).CameraHeight;
             if (float.IsNaN(h) || h <= 0f) h = VanillaFishCamHeight;   // never let a bad spot value blank the camera
+
+            // Queens: keep the fishing eye BELOW the canal-wall tops (y70). The camera orbits the BOBBER
+            // (ref.y ≈ the fishing water level), so eye.y ≈ water + height: the vanilla 40 put the eye at
+            // ~71 at medium tide (31) — skimming just OVER the y70 banks, where there is no wall poly left
+            // to collide with (the "y≈70.5" pass-through). Clamp so eye.y ≤ WallTop − Clear; tide-aware via
+            // the same per-time level the bobber rides, so every tide gets the max height that still
+            // engages the walls (medium: 40→35; dusk high 52: →14; low 6: 40 unchanged). No climb-disable
+            // is needed on top: the patched SetHeight site (0x16C2DC) re-pins the height to this word every
+            // fishing frame AFTER the collision cave runs, so nothing can raise the camera during fishing.
+            if (_installedMap == CanalTide.QueensMapNo && _spot.MapNo == CanalTide.QueensMapNo)
+            {
+                float water = CanalTide.QueensWaterLevel();
+                h = Math.Max(QueensFishCamMinH, Math.Min(h, QueensCamWallTopY - QueensCamWallClear - water));
+            }
 
             // Drive the camera's data-driven REST_H: the SPOT's fishing height while a session is live (so the
             // camera EASES to it as its rest), the town rest otherwise. This replaces the fight between our
