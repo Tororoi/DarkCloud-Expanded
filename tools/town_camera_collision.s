@@ -30,6 +30,14 @@ swc1  $f0, 0x24($sp)          # ref.y
 lwc1  $f0, 0x278($v1)
 swc1  $f0, 0x28($sp)          # ref.z
 sw    $zero, 0x2c($sp)        # ref.w := 0 — the quad is the LOS cast's `from` endpoint
+# Gather-count export (tools/camera_norm_side.s entry @0x228F00): stores s8 = the TRUE per-frame CCPoly
+# count to Mailbox.CamGatherCount (the WorkBuffer `used` field is the 2000-unit Alloc reservation, not a
+# fill level — probes must read the mailbox word). The winding-agnostic normal handling is PER-CONTACT in
+# SubA/SubB (see the slide/corner sites below), NOT a buffer-wide pass — v1's ref-side buffer flip pulled
+# the camera inside closed shells' far walls. ⚠ these 2 words consume the cave's LAST free space — code
+# ends flush at 0x14C220 (set2DSprite_Start); it cannot grow again.
+jal   0x228f00                # gather-count export (cameraNormSide.bin entry)
+nop
 lwc1  $f12, 0x2dc($v1)        # RENDERED angle (angS) — the pipeline basis (bisect step 3). Was angT (0x2d8):
                               #   the sweep then protected the TARGET's path while the rendered eye lagged on an
                               #   arc through corners. Δθ writes still land on angT — only the basis reads switch.
@@ -391,29 +399,33 @@ sll   $t1, $v0, 6
 sll   $t2, $v0, 4
 addu  $t1, $t1, $t2
 addu  $t1, $s5, $t1           # hit poly base
-lwc1  $f4, 0x30($t1)          # N.x
-lwc1  $f5, 0x34($t1)          # N.y
-lwc1  $f6, 0x38($t1)          # N.z
-# normalize N (gathered CCPoly normals are NOT unit) so `need` is a true distance and the basis decomposition is exact
-mul.s $f7, $f4, $f4
-mul.s $f8, $f5, $f5
-add.s $f7, $f7, $f8
-mul.s $f8, $f6, $f6
-add.s $f7, $f7, $f8           # N·N
-.word 0x460701C4             # sqrt.s f7,f7 (R5900 ft-operand form)
-nop
-lui   $t0, 0x3f80             # 1.0
-mtc1  $t0, $f8
-nop
-div.s $f8, $f8, $f7           # 1/|N|
+# N̂ prep -> SubA @0x228F40 (cameraNormSide.bin): load+normalize the hit poly's normal AND flip it to
+# E_prev's side of the hit plane — per-contact winding-agnostic (see camera_norm_side.s v2 header; the
+# gather-time ref-side flip v1 pulled the camera INSIDE closed shells' far walls). 19 words kept as
+# jal+nops so every tunable slot index downstream is unchanged.
+jal   0x228f40                # SubA: f4/f5/f6 = N̂ on E_prev's side (t1=poly, sp+0x40=hit point)
 nop
 nop
-mul.s $f4, $f4, $f8
-mul.s $f5, $f5, $f8
-mul.s $f6, $f6, $f8
-# SIDE RULE: the eye must stay on the AUTHORED-normal side (all _c faces point into the play area). No flip — the
-# safe side is a per-poly constant, so a penetrated eye can't switch the constraint's allegiance (the old E0-derived
-# side did exactly that once the stick leaked the eye past the plane), and a wrong-side eye is pushed BACK (recovery).
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+# SIDE RULE: the eye must stay on N̂'s side, where SubA already flipped N̂ to E_prev's side of the hit plane —
+# per-contact winding-agnostic (correct on BOTH halves of a closed shell, unlike v1's ref-side buffer flip).
+# E_prev = last CONSTRAINED eye, so the side only flips allegiance after a genuine breach (rare; warp-skip
+# resets E_prev across teleports) — the practical fix for vanilla `_c`/`_v` meshes with unaudited winding.
 # p = N̂·(E1 − P): signed height of E1 on the authored side (p <= 0 means at/behind the wall)
 lwc1  $f7, 0x30($sp)
 lwc1  $f8, 0x40($sp)
@@ -643,23 +655,26 @@ sll   $t1, $v0, 6
 sll   $t2, $v0, 4
 addu  $t1, $t1, $t2
 addu  $t1, $s5, $t1           # verify-hit poly
-lwc1  $f7, 0x30($t1)          # N2 (unnormalized)
-lwc1  $f8, 0x34($t1)
-lwc1  $f9, 0x38($t1)
-mul.s $f10, $f7, $f7
-mul.s $f11, $f8, $f8
-add.s $f10, $f10, $f11
-mul.s $f11, $f9, $f9
-add.s $f10, $f10, $f11        # |N2|²
-.word 0x460A0284             # sqrt.s f10,f10
+# N̂2 prep -> SubB @0x229000 (cameraNormSide.bin): load+normalize the verify-hit normal, flipped to
+# E_prev's side (per-contact winding-agnostic, same as SubA; preserves the f0/f2/f4-f6 spills).
+# 17 words kept as jal+nops so downstream slot indices are unchanged.
+jal   0x229000                # SubB: f7/f8/f9 = N̂2 on E_prev's side
 nop
-lui   $t0, 0x3f80             # 1.0
-mtc1  $t0, $f11
 nop
-div.s $f11, $f11, $f10        # 1/|N2|
-mul.s $f7, $f7, $f11
-mul.s $f8, $f8, $f11
-mul.s $f9, $f9, $f11          # N̂2
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
 lwc1  $f10, 0x70($sp)         # p2 = N̂2·(F − P2)
 lwc1  $f11, 0x40($sp)
 sub.s $f10, $f10, $f11

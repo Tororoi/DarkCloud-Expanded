@@ -67,6 +67,11 @@
     <EmbeddedResource Include="Resources\isoPatch\fishlineUncastGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineUncastGate.bin</LogicalName>
     </EmbeddedResource>
+    <!-- Winding-agnostic camera normal-side pass (tools/camera_norm_side.s @0x228F00): called by the
+         town-camera cave at entry; flips gathered CCPoly normals to the ref's side. -->
+    <EmbeddedResource Include="Resources\isoPatch\cameraNormSide.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.cameraNormSide.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\PNACH\A5C05C78.pnach">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>

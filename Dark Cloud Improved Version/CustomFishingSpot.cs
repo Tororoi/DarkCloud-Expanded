@@ -658,7 +658,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Town-camera resting eye height (== IsoPatcher's REST_H, still baked into the climb-curve base
-        /// at word 469). The height-TARGET REST_H (word 145) now reads <see cref="CodeCaves.Mailbox.CameraRestH"/>
+        /// at word 471). The height-TARGET REST_H (word 147) now reads <see cref="CodeCaves.Mailbox.CameraRestH"/>
         /// instead, which we drive below.</summary>
         internal const float TownRestH = 5f;
 

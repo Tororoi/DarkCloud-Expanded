@@ -306,10 +306,8 @@ namespace Dark_Cloud_Improved_Version
             byte[] tmplHdr  = PartHeader(s04scene, "s04a01");   // the kanban PTS header, reused for e03 too
             // The sign part also carries the BAKED fishing trigger (native type-3 event point at the spot) —
             // replaces the old runtime-installed trigger, so it survives day/night with no self-heal needed.
-            // (CullBuildings removed 2026-08: the see-through-houses cull was a workaround for the camera
-            //  clipping INSIDE the houses — superseded by the camera-collision work; houses render two-sided again.)
-            Redirect(SCENE_SCN, CullUpperCraterWalls(RemoveRingCornerTris(
-                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr, funcData: BuildFishingFunc(BROWNBOO_TRIG)))));
+            Redirect(SCENE_SCN, CullBuildings(CullUpperCraterWalls(RemoveRingCornerTris(
+                                    BuildInjectedScene(s04scene, kanbanMds, tmplHdr, funcData: BuildFishingFunc(BROWNBOO_TRIG))))));
             Redirect(MAPINFO,   BuildInjectedMapinfo(ReadArchive(MAPINFO), SIGN_X, SIGN_Y, SIGN_Z, SIGN_RY, "s04a01"));
 
             // Queens (e03): same kanban mesh + globally-registered e01b24 texture; no crater cleanup (that is
@@ -880,12 +878,15 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
-        // ── RETIRED (2026-08, no longer in the patch chain): made Brownboo's houses single-sided so the camera,
-        //    when it ended up INSIDE a house, saw straight through it. That was a workaround for the camera
-        //    clipping in at all — superseded by the camera-collision work (the camera stays outside). Kept for
-        //    reference: same SetFrameAttr suffix mechanism as the crater walls — the '__s' suffix turns on
-        //    backface culling; h0201/h0202 are already '__s'; the '__n' houses flip to '__s'; the suffix-less
-        //    houses get '__s' written into the 16-byte name field's null padding (verified all-zero, no shift).
+        // ── scene.scn: make Brownboo's houses single-sided so the camera, when it ends up INSIDE a house, sees
+        //    straight through it instead of hitting the near walls (the camera already clips in; the problem is
+        //    the occlusion). Same SetFrameAttr suffix mechanism as the crater walls — the '__s' suffix turns on
+        //    backface culling, so a wall viewed from inside (its exterior face pointing away) is culled and the
+        //    whole house becomes see-through from within, while looking identical from outside. h0201/h0202 are
+        //    already '__s'; the '__n' houses flip to '__s'; the suffix-less houses get a '__s' written into the
+        //    16-byte name field's null padding (verified all-zero, so no bytes shift).
+        //    (Briefly retired 2026-08 for a custom s04g01_v camera-collision rebuild — that experiment was
+        //    reverted: camera clipping persisted even with per-leg collision nodes; see brownboo_camera_collision.)
         static byte[] CullBuildings(byte[] scene)
         {
             foreach (string node in new[] { "h0101__n", "h0102__n", "h0103__n" })   // '__n' -> '__s'
@@ -1590,32 +1591,45 @@ namespace Dark_Cloud_Improved_Version
                 pullIn[oriIdx] = 0x35080000u | (b & 0xFFFF);
             }
             float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
-            PutVal(142, BASE_DIST, nameof(BASE_DIST));   // resting dist target
-            PutVal(434, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
-            PutVal(451, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
-            // NOTE: word 145 (the height-target REST_H) is now a `lw $t0,0x28($t3)` that reads REST_H from the
+            // ⚠ slot indices are +2 from the 2026-08 winding-agnostic insert (jal cameraNormSide + nop at
+            //   words 14/15 of town_camera_collision.s) — every slot at/after word 14 shifted by 2.
+            PutVal(144, BASE_DIST, nameof(BASE_DIST));   // resting dist target
+            PutVal(436, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
+            PutVal(453, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
+            // NOTE: word 147 (the height-target REST_H) is now a `lw $t0,0x28($t3)` that reads REST_H from the
             // CameraRestH mailbox (data-driven — see town_camera_collision.s). The mod writes town-rest (5) there
             // normally and the spot's fishing height while a session is live, so the fishing rest height is a
-            // TARGET the camera eases to, not a per-frame hard clamp. So NO PutVal(145) here anymore.
-            PutVal(469, REST_H, nameof(REST_H));   // climb-curve base (still baked at town rest — climb only RAISES, so it's inert while the fishing rest is higher)
-            PutVal(41, CEIL_DIST, nameof(CEIL_DIST));
-            PutVal(153, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
-            PutVal(166, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
-            PutVal(478, CLIMB_RISE, nameof(CLIMB_RISE));   // climb rise rate cap
-            PutVal(269, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
-            PutVal(347, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
-            PutVal(560, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
-            PutVal(440, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
-            PutVal(116, STICK_SCALE, nameof(STICK_SCALE));
-            PutEase(108, 109, STICK_DZ2, nameof(STICK_DZ2));
-            PutEase(127, 128, STICK_EASE, nameof(STICK_EASE));
-            PutEase(179, 180, HEIGHT_EASE, nameof(HEIGHT_EASE));
-            PutEase(195, 196, DIST_EASE, nameof(DIST_EASE));
-            PutEase(372, 373, SLIDE_BIAS, nameof(SLIDE_BIAS));
-            PutEase(421, 422, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
-            PutEase(464, 465, CLIMB_K, nameof(CLIMB_K));
+            // TARGET the camera eases to, not a per-frame hard clamp. So NO PutVal(147) here anymore.
+            PutVal(471, REST_H, nameof(REST_H));   // climb-curve base (still baked at town rest — climb only RAISES, so it's inert while the fishing rest is higher)
+            PutVal(43, CEIL_DIST, nameof(CEIL_DIST));
+            PutVal(155, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
+            PutVal(168, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
+            PutVal(480, CLIMB_RISE, nameof(CLIMB_RISE));   // climb rise rate cap
+            PutVal(271, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
+            PutVal(349, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
+            PutVal(562, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
+            PutVal(442, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
+            PutVal(118, STICK_SCALE, nameof(STICK_SCALE));
+            PutEase(110, 111, STICK_DZ2, nameof(STICK_DZ2));
+            PutEase(129, 130, STICK_EASE, nameof(STICK_EASE));
+            PutEase(181, 182, HEIGHT_EASE, nameof(HEIGHT_EASE));
+            PutEase(197, 198, DIST_EASE, nameof(DIST_EASE));
+            PutEase(374, 375, SLIDE_BIAS, nameof(SLIDE_BIAS));
+            PutEase(423, 424, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
+            PutEase(466, 467, CLIMB_K, nameof(CLIMB_K));
+            if (pullIn.Length > 634)   // 0x14B838 + 634*4 == 0x14C220 == set2DSprite_Start: flush, no headroom left
+                throw new IOException($"townCameraCollision.bin is {pullIn.Length} words — overruns set2DSprite_Start @0x14C220 (max 634).");
             for (int i = 0; i < pullIn.Length; i++)
                 WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
+            // Camera-cave auxiliary bank (tools/camera_norm_side.s, dead CharaChange region past
+            // fishlineUncastGate): entry @0x228F00 = gather-count export (Mailbox.CamGatherCount; called by
+            // the cave at word 14), SubA @0x228F40 / SubB @0x229000 = per-contact WINDING-AGNOSTIC normal
+            // prep for the swept-slide / corner-verify (normalize + flip N̂ to E_prev's side of the hit
+            // plane, so vanilla `_c`/`_v` meshes work regardless of authored winding — a buffer-wide
+            // ref-side flip was tried first and pulled the camera inside closed shells' far walls).
+            uint[] normSide = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraNormSide.bin", 0x3C0A01F1);
+            for (int i = 0; i < normSide.Length; i++)
+                WrU32(fs, ElfOff(0x00228F00 + (uint)(i * 4)), normSide[i]);
             Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
             uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
             // REACQUISITION GATE (word 3 of the sub, 2026-08, HEIGHT-ONLY since the recovery fix): when

@@ -703,6 +703,74 @@ for L in layers:
 # e-towns carry LOD chains), so this is empty today — the folder auto-appears if the data ever has them.
 from georama_parts import lod_layers
 layers += lod_layers('gedit/s04/scene.scn', r's04[a-z]\d')
+
+# ---- NATIVE ground collision variants: s04g01_a = PLAYER collision, s04g01_v = CAMERA collision.
+#      Verified 2026-08 via LoadMapObject @0x19B790: the loader resolves variants by TABLE SLOT, not name —
+#      header +0x14 -> LoadCollisionFile -> frame +0xD0 (player), header +0x20 -> frame +0xDC (camera).
+#      Every other town names the +0x20 slot `_c`; Brownboo just labels it `_v`. The camera mesh (nodes
+#      v/obj56, walls to y250) is town-wide — the houses' camera hulls are baked into it, not per-part.
+#      s04g01's mapinfo placement is the origin, so local == world. One toggle per node.
+import scene_placed as _sp
+from georama_collision import parse_coll_mdt as _pcm
+def _native_coll(sub_name, suf):
+    _dir = _sp._scndir(scn)
+    off, size = _dir[sub_name]
+    sub = scn[off:off + size]
+    m = next(re.finditer((re.escape(sub_name) + suf + r'\.mds\x00').encode(), sub), None)
+    if not m: return []
+    vo = struct.unpack_from('<I', sub, m.end() + 3)[0]
+    if not (0 < vo < len(sub) and sub[vo:vo + 3] == b'MDS'): return []
+    mds = off + vo; nodes, wm = _sp._accum(scn, mds); out = []
+    for i, (nn, mo, par, mat) in enumerate(nodes):
+        if mo == 0: continue
+        fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c + 3] == b'MDT'), None)
+        if not fo: continue
+        M = wm(i)
+        tris = [[list(xform(M, a)), list(xform(M, b)), list(xform(M, c))] for a, b, c in _pcm(scn, fo)]
+        if tris: out.append((nn, tris))
+    return out
+_nc_counts = {}
+for _suf, _kind, _col, _bord in (('_a', 'player', [255, 120, 220], '#f7c'),
+                                 ('_v', 'CAMERA', [80, 200, 255], '#5bf')):
+    for _nn, _tris in _native_coll('s04g01', _suf):
+        _key = f'nc{_suf}_{_nn}'
+        layers.append({'key': _key, 'label': f's04g01{_suf} {_nn} ({len(_tris)}) [{_kind}]',
+                       'tris': _tris, 'color': _col, 'alpha': 0.6, 'border': _bord, 'on': False,
+                       'group': 'Native collision (_a player / _v camera)'})
+        xs = [p[0] for t in _tris for p in t]; ys = [p[1] for t in _tris for p in t]; zs = [p[2] for t in _tris for p in t]
+        nodelabels.append([[(min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2],
+                           f's04g01{_suf}:{_nn}',
+                           [[min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]], _key])
+        _nc_counts[f'{_suf}:{_nn}'] = len(_tris)
+print("native collision:", _nc_counts)
+
+# ---- CUSTOM camera collision: our authored version of s04g01_v obj56 (vanilla − removals + additions,
+#      tools/brownboo_camera_collision.py — the future ISO bake reads the same module). ----
+from brownboo_camera_collision import custom_obj56_tris, custom_h01_v_nodes
+_cus = custom_obj56_tris()
+layers.append({'key': 'nc_custom56', 'label': f'CUSTOM obj56 ({len(_cus)}) [CAMERA]',
+               'tris': _cus, 'color': [120, 255, 140], 'alpha': 0.7, 'border': '#6f8', 'on': False,
+               'group': 'Native collision (_a player / _v camera)'})
+print(f"custom obj56: {len(_cus)} tris")
+
+
+# ---- AUTHORED s04h01_v: the building's full visual mesh as camera collision, kd-split into <=100-tri
+#      nodes (part-LOCAL in the module; shown here world-placed at instance #0's mapinfo placement — a
+#      baked `_v` applies to every instance automatically). One toggle per node for isolate/select work. ----
+_h01_place = next(((pos, rot) for name, pos, rot in placements if name == 's04h01'), None)
+if _h01_place:
+    _pos, _rot = _h01_place
+    for _nn, _ltris in custom_h01_v_nodes():
+        _flat = [p for t in _ltris for p in t]
+        _pl = placeY(_flat, _pos, _rot[1])
+        _wtris = [_pl[k:k + 3] for k in range(0, len(_pl), 3)]
+        layers.append({'key': f'hv_{_nn}', 'label': f's04h01_v {_nn} ({len(_wtris)})',
+                       'tris': _wtris, 'color': [255, 200, 90], 'alpha': 0.7, 'border': '#fc5', 'on': False,
+                       'group': 'Custom s04h01_v (authoring, inst #0)'})
+        _cen, _bb = _bbox_centroid(_wtris)
+        nodelabels.append([_cen, _nn, _bb, f'hv_{_nn}'])
+    print(f"s04h01_v authoring: {sum(len(l['tris']) for l in layers if l['key'].startswith('hv_'))} tris "
+          f"in {sum(1 for l in layers if l['key'].startswith('hv_'))} nodes @ inst #0 {_pos}")
 html = build_html(
     title="Brownboo COMPLETE",
     layers=layers, node_labels=nodelabels, points=fishbox, point_labels=fishlabels,
