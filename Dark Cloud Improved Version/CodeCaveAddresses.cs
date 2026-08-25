@@ -152,8 +152,16 @@ namespace Dark_Cloud_Improved_Version
             /// seeded at startup and re-asserted per tick; a 0 here would drop the camera to the pivot.</summary>
             internal const long CameraRestH = Base + 0x64;
 
+            /// <summary>TRUE per-frame camera-gather CCPoly count (int), written by the cameraNormSide stub
+            /// (tools/camera_norm_side.s) from $s8 at town-camera cave entry. ⚠ The WorkBuffer struct's
+            /// `used` field is NOT a fill level — EdMoveChara resets it and Alloc(2000) re-reserves the whole
+            /// buffer every frame, so `used`==2000 merely means "the gather ran" (the old Queens
+            /// "used=2000 = saturated" dumps measured the alloc, not the count). Only updates while the town
+            /// camera cave runs (stale in menus/dungeons).</summary>
+            internal const long CamGatherCount = Base + 0x68;   // external (camera_norm_side.s) — do not reuse
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x68;
+            internal const long NextFree = Base + 0x6C;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

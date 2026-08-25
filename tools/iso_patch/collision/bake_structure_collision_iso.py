@@ -30,6 +30,8 @@ SEC = ps2iso.SECTOR
 def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
 
 TOWNS = {"e03": ("gedit/e03/scene.scn", "gedit/e03/mapinfo.cfg")}
+# s04 (Brownboo) is handled separately below: its bake REBUILDS the s04g01_v camera variant (authored
+# obj56 + s04h01 hull, tools/brownboo_camera_collision.py) instead of the e03-style ground-`_a` pipeline.
 DEFAULT_ISO = os.path.expanduser("~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso")
 
 
@@ -105,6 +107,23 @@ def main():
             f.seek(dat_iso + off); return f.read(size)
 
         for code in codes:
+            if code == "s04":
+                # SHELVED (2026-08): the Brownboo s04g01_v camera-collision rebuild (custom obj56 + per-leg
+                # s04h01 hull, bake_brownboo_camera_iso.baked_named) — camera clipping persisted even with
+                # tight per-leg nodes, so Brownboo reverted to the vanilla `_v` + IsoPatcher.CullBuildings
+                # (see-through houses). Re-add "s04" to the default codes to resume the experiment.
+                from bake_player_camera_collision import build_flat_mds, _replace_a_block
+                from bake_brownboo_camera_iso import baked_named
+                s04_scene = read_archive("gedit/s04/scene.scn")
+                try:
+                    named = baked_named()                      # extraction (authoring env)
+                except FileNotFoundError:
+                    named = baked_named(s04_scene)             # app env: fresh IsoPatcher scene = vanilla _v
+                s04_new, s04_delta = _replace_a_block(s04_scene, 's04g01', build_flat_mds(named), suffix='_v')
+                print(f"s04: s04g01_v rebuilt: {len(named)} nodes, {sum(len(t) for _, t in named)} tris, "
+                      f"scene {len(s04_scene):,} -> {len(s04_new):,} B")
+                redirect_file("gedit/s04/scene.scn", s04_new, b"SCN\x00")
+                continue
             if code not in TOWNS:
                 print(f"skip {code}"); continue
             scene_rel, mapinfo_rel = TOWNS[code]

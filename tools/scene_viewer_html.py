@@ -187,10 +187,11 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
                    '<label><input type=checkbox id=r_fill checked> fill</label> '
                    '<label><input type=checkbox id=r_wire> wireframe</label><br>'
                    '<label><input type=checkbox id=r_cull> backface cull</label><br>'
+                   '<label><input type=checkbox id=r_wind> <span style="color:#fe0">winding: backface &rarr; neon yellow</span></label><br>'
                    '<label><input type=checkbox id=r_labels> node labels + borders</label><br>'
                    '<button id="clipreset" style="margin-top:3px;font-size:10px;cursor:pointer">'
                    'show whole town (reset clip rect)</button>')
-    for rid in ('t_steep', 't_vonly', 'r_fill', 'r_wire', 'r_cull', 'r_labels'):
+    for rid in ('t_steep', 't_vonly', 'r_fill', 'r_wire', 'r_cull', 'r_wind', 'r_labels'):
         grp_map[rid] = 'render'
     checks += _fold_html('render', 'Render settings', render_rows, open_=True)
     checks += '<div style="margin-top:5px;border-top:1px solid #444;padding-top:4px">selected: <b id="tot" style="color:#fff">0</b> polys</div>'
@@ -285,11 +286,11 @@ function draw(){
  if(on('t_points')) for(const p of D.points){if(CLIP&&!inClip(p[0],p[2]))continue;const r=rot(p);all.push({k:'p',r,depth:r[2]});}
  if(GEO&&GEOON())gAddTris(all);   // georama parts render THROUGH the z-buffer with the scene
  all.sort((p,q)=>p.depth-q.depth);
- const rfill=on('r_fill'), rwire=on('r_wire'), rcull=on('r_cull'), rlabels=on('r_labels');
+ const rfill=on('r_fill'), rwire=on('r_wire'), rcull=on('r_cull'), rwind=on('r_wind'), rlabels=on('r_labels');
  PICK=[];
  // Correct per-pixel occlusion via a software z-buffer (handles interpenetrating models the painter's-order
  // fill can't). Full-res when settled; HALF-res while dragging (FASTDRAW) then scaled up, to keep it smooth.
- if(rfill) zfill(all,f,rcull, FASTDRAW?0.5:1);
+ if(rfill) zfill(all,f,rcull,rwind, FASTDRAW?0.5:1);
  for(const o of all){
   if(o.k==='p'){cx.fillStyle='#ff1493';cx.fillRect(W/2+o.r[0]*f-1.4,H/2-o.r[1]*f-1.4,2.8,2.8);continue;}
   const pts=o.r.map(p=>[W/2+p[0]*f,H/2-p[1]*f]);
@@ -320,7 +321,7 @@ function drawClipRect(f){
 // is pre-sorted ascending by view depth (far first), which is the order the painter fill used, so nearer =
 // LARGER depth -> keep the larger-depth pixel. Convention verified against the existing painter output.
 let ZIMG=null, ZBUF=null, ZCAN=null, ZCTX=null, ZW=0, ZH=0;
-function zfill(all,f,rcull,scale){
+function zfill(all,f,rcull,rwind,scale){
  const sw=Math.max(1,Math.round(W*scale)), sh=Math.max(1,Math.round(H*scale));
  if(ZW!==sw||ZH!==sh){ ZW=sw;ZH=sh; ZIMG=cx.createImageData(sw,sh); ZBUF=new Float32Array(sw*sh);
    if(!ZCAN){ZCAN=document.createElement('canvas');ZCTX=ZCAN.getContext('2d');} ZCAN.width=sw;ZCAN.height=sh; }
@@ -329,17 +330,20 @@ function zfill(all,f,rcull,scale){
  zb.fill(-Infinity);
  const op=[],tr=[];
  for(const o of all){ if(o.k!=='t') continue; (o.a>=0.95?op:tr).push(o); }
- for(const o of op) raster(o,f,d,zb,rcull,true,sw,sh,scale);   // opaque: write depth
- for(const o of tr) raster(o,f,d,zb,rcull,false,sw,sh,scale);  // transparent: test only, blend
+ for(const o of op) raster(o,f,d,zb,rcull,rwind,true,sw,sh,scale);   // opaque: write depth
+ for(const o of tr) raster(o,f,d,zb,rcull,rwind,false,sw,sh,scale);  // transparent: test only, blend
  if(scale===1){ cx.putImageData(ZIMG,0,0); }
  else { ZCTX.putImageData(ZIMG,0,0); cx.imageSmoothingEnabled=true; cx.drawImage(ZCAN,0,0,sw,sh,0,0,W,H); }
 }
-function raster(o,f,d,zb,rcull,wd,sw,sh,scale){
+function raster(o,f,d,zb,rcull,rwind,wd,sw,sh,scale){
  const ax=(W/2+o.r[0][0]*f)*scale, ay=(H/2-o.r[0][1]*f)*scale, bx=(W/2+o.r[1][0]*f)*scale, by=(H/2-o.r[1][1]*f)*scale, gx=(W/2+o.r[2][0]*f)*scale, gy=(H/2-o.r[2][1]*f)*scale;
  const area=(bx-ax)*(gy-ay)-(by-ay)*(gx-ax);
  if(area===0 || (rcull && area>=0)) return;
  const z0=o.r[0][2],z1=o.r[1][2],z2=o.r[2][2], c=o.c, a=o.a;
- const cr=Math.min(255,c[0]*o.sh)|0, cg=Math.min(255,c[1]*o.sh)|0, cb=Math.min(255,c[2]*o.sh)|0;
+ // winding overlay: a tri whose BACKFACE is toward the viewer (screen area > 0 under this projection)
+ // fills neon yellow — face-orientation check, like Blender's overlay. Cull off to see both sides.
+ let cr=Math.min(255,c[0]*o.sh)|0, cg=Math.min(255,c[1]*o.sh)|0, cb=Math.min(255,c[2]*o.sh)|0;
+ if(rwind && area>0){ cr=255; cg=238; cb=0; }
  let minx=Math.max(0,Math.floor(Math.min(ax,bx,gx))), maxx=Math.min(sw-1,Math.ceil(Math.max(ax,bx,gx)));
  let miny=Math.max(0,Math.floor(Math.min(ay,by,gy))), maxy=Math.min(sh-1,Math.ceil(Math.max(ay,by,gy)));
  const inv=1/area;

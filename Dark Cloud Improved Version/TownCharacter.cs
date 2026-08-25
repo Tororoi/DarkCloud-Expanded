@@ -1055,6 +1055,7 @@ namespace Dark_Cloud_Improved_Version
                 CameraWallCollision.Tick();  //(off) old frame-alias approach — shelved
                 CameraMeshCollision.Tick();  //(off) PROOF: hand-built CCollisionMDT box on one part
                 CameraDiag.Tick();           //TEMP: log follow-camera distance + positions
+                BrownbooCamProbe.Tick();     //Brownboo: gather load + camera state (winding-agnostic experiment)
                 CameraCPolyProbe.Tick();     //PHASE 1 (ELF port): dump the game's runtime camera CCPoly buffer once per area
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket
