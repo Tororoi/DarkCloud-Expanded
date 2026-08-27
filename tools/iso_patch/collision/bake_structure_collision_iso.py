@@ -56,7 +56,7 @@ def main():
     iso = DEFAULT_ISO
     if "--iso" in args:
         k = args.index("--iso"); iso = args[k + 1]; del args[k:k + 2]
-    codes = args or ["e03"]
+    codes = args or ["e03", "s04"]
 
     if standalone:
         src = os.environ.get("DC1_ISO")
@@ -108,10 +108,11 @@ def main():
 
         for code in codes:
             if code == "s04":
-                # SHELVED (2026-08): the Brownboo s04g01_v camera-collision rebuild (custom obj56 + per-leg
-                # s04h01 hull, bake_brownboo_camera_iso.baked_named) — camera clipping persisted even with
-                # tight per-leg nodes, so Brownboo reverted to the vanilla `_v` + IsoPatcher.CullBuildings
-                # (see-through houses). Re-add "s04" to the default codes to resume the experiment.
+                # Brownboo s04g01_v camera-collision rebuild (bake_brownboo_camera_iso.baked_named):
+                # custom obj56 = central-cylinder simplification + the iwa01 rock replaced by a CSG hull
+                # (cylinder shell minus flared tunnel cutter, tools/export_iwa01_blender.py, frozen to
+                # iwa01_hull_data.py). RE-ENABLED 2026-08 for the CSG-hull approach after the earlier
+                # per-leg-node attempt clipped; CullBuildings (see-through houses) still runs alongside.
                 from bake_player_camera_collision import build_flat_mds, _replace_a_block
                 from bake_brownboo_camera_iso import baked_named
                 s04_scene = read_archive("gedit/s04/scene.scn")

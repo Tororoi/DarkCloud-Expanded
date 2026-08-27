@@ -27,12 +27,60 @@ namespace Dark_Cloud_Improved_Version
         private const long  CamPtrVar     = 0x21D19678;   // MainCamera/CCameraFollow ptr
         private const int   ThrottleTicks = 40;           // town loop ~20 Hz -> a line every ~2 s
 
+        // ── arrival camera set (vanilla starts AT rest — EdInitCameraParam = SetDistance(near) +
+        //    SetHeight(5); the mod's height cave regressed this: at the spawn the boom hangs the eye
+        //    over the crater RIM, the world-space ground-floor guard hoists it (~152) and the descent
+        //    rate-cap grinds it down over ~6 s). One-shot DockCamera-style fix on the first non-event
+        //    tick after entering: rest height + orbit angle aimed so the EYE sits on the TOWN side of
+        //    the player (toward the crater centre) — town floor under the boom, nothing to hoist onto.
+        //    A plain height snap does NOT work here: the floor guard re-raises it every frame while
+        //    the eye hangs over the rim.
+        //    ⚠ fires on EVERY large ref jump inside the arrival window, not once: the load stages the
+        //    player at a holding position first (observed ref (301,39,9)) and TELEPORTS to the real
+        //    spawn (-312,-71) a beat later — a one-shot fired at the staging point and the spawn then
+        //    re-hoisted (inherited Queens angle pointed the boom over the WEST rim -> floor guard).
+        private const int   ArrivalWindowTicks = 240;     // ~12 s of teleport-watching after a map change
+        private const float ArrivalJump        = 60f;     // ref jump that counts as the spawn teleport
+        private static int  _arrivalLeft;
+        private static float _lastRx = float.NaN, _lastRz;
+        private static int  _prevMap = -1;
+
         private static int _tick;
 
         internal static void Tick()
         {
             if (!Enabled) return;
-            if (Memory.ReadInt(EditLoop.MapNo) != BrownbooMapNo) { _tick = 0; return; }
+            int map = Memory.ReadInt(EditLoop.MapNo);
+            if (map != _prevMap) { _prevMap = map; _arrivalLeft = ArrivalWindowTicks; _lastRx = float.NaN; }
+            if (map != BrownbooMapNo) { _tick = 0; return; }
+
+            if (_arrivalLeft > 0 && Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeEvent)
+            {
+                _arrivalLeft--;
+                uint cr = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;
+                if (Memory.IsValidGuest(cr))
+                {
+                    long c = Memory.ToMmu(cr);
+                    float curRx = Memory.ReadFloat(c + 0x270), curRz = Memory.ReadFloat(c + 0x278);
+                    bool jumped = float.IsNaN(_lastRx) ||
+                                  Math.Abs(curRx - _lastRx) > ArrivalJump || Math.Abs(curRz - _lastRz) > ArrivalJump;
+                    _lastRx = curRx; _lastRz = curRz;
+                    if (jumped)
+                    {
+                        float rest = Memory.ReadFloat(CodeCaves.Mailbox.CameraRestH);
+                        if (float.IsNaN(rest) || rest <= 0f || rest > 60f) rest = 5f;
+                        // eye = ref + dist·(sin a, cos a): aim the eye from the ref TOWARD the crater centre
+                        float a = (float)Math.Atan2(-curRx, -curRz);
+                        float oldH = Memory.ReadFloat(c + 0x2D4);
+                        Memory.WriteFloat(c + 0x2D4, rest);   // height = rest (vanilla EdInitCameraParam value)
+                        Memory.WriteFloat(c + 0x2D8, a);      // orbit angle TARGET
+                        Memory.WriteFloat(c + 0x2DC, a);      // smoothed angle (snap — no swing)
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"[BrownbooCam] arrival set @({curRx:0.0},{curRz:0.0}): h {oldH:0.0} -> {rest:0.0}, angle -> {a:0.00}");
+                    }
+                }
+            }
+
             if (++_tick % ThrottleTicks != 0) return;
 
             int polys = Memory.ReadInt(CodeCaves.Mailbox.CamGatherCount);   // exact, exported by the norm-side stub
