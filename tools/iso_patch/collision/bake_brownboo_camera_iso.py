@@ -4,11 +4,11 @@
 Rebuilds gedit/s04/scene.scn's `s04g01_v` (the town camera-collision variant — the slot every other town
 names `_c`, see LoadMapObject @0x19B790) as a flat multi-node MDS:
   • `v`         — the vanilla terrain camera hull, byte-identical tris (404) — NOT ours to change;
-  • `c56_*`     — the authored obj56 (central cylinder simplified: ring removed, fins chorded, h01 roof-cone
-                  extension + cylinder-from-y56-up), kd-split into <=100-tri nodes;
-  • `h01v*`     — the authored s04h01 camera hull (full house below the roof band), part-local mesh baked to
-                  WORLD at its single mapinfo placement (0,-10,0), <=100-tri nodes.
-The player `_a` is untouched. Same proven pipeline as the Queens e03g04_c bake (build_flat_mds +
+  • `c56_*`     — obj56 with ONLY the iwa01 rock replaced by the CSG hull (central cylinder left VANILLA),
+                  kd-split into <=100-tri nodes.
+Everything else stays vanilla: the central-cylinder simplification and the per-leg s04h01 building hull
+(the earlier "detailed collision mesh" experiment — the cylinder gap-at-bottom) are NOT applied. The
+player `_a` is untouched. Same proven pipeline as the Queens e03g04_c bake (build_flat_mds +
 _replace_a_block), just targeting suffix `_v`.
 
   DC1_DATA_DIR=... python3 tools/iso_patch/collision/bake_brownboo_camera_iso.py \
@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 os.environ.setdefault("DC1_DATA_DIR", os.path.join(HERE, "..", ".."))
 import ps2iso
 from bake_player_camera_collision import build_flat_mds, _replace_a_block, load_scene
-from brownboo_camera_collision import (vanilla_v_nodes, custom_obj56_tris, custom_h01_v_nodes, _kd_split)
+from brownboo_camera_collision import (vanilla_v_nodes, iwa01_ring_obj56, _kd_split)
 
 SEC = ps2iso.SECTOR
 def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
@@ -43,9 +43,7 @@ def baked_named(scn=None):
     if not van_v:
         raise SystemExit("vanilla s04g01_v node 'v' not found (already-baked scene?)")
     named = [('v', van_v)]
-    named += [(f'c56_{i:02d}', bk) for i, bk in enumerate(_kd_split(custom_obj56_tris(scn), 100))]
-    for nn, ltris in custom_h01_v_nodes(scn=scn):
-        named.append((nn, [[[p[0], p[1] + H01_POS_Y, p[2]] for p in t] for t in ltris]))
+    named += [(f'c56_{i:02d}', bk) for i, bk in enumerate(_kd_split(iwa01_ring_obj56(scn), 100))]
     return named
 
 
