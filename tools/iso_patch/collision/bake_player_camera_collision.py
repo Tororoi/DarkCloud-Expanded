@@ -1613,20 +1613,20 @@ def _e03_townwall_tris():
     out = [t for t in out if not (all(abs(p[2] - 200) < 1 and 599 <= p[0] <= 1301 and 69 <= p[1] <= 381 for p in t)
                                   and _tnormal(t)[2] < 0)]
     out += _dir_quad([600, 70, 200], [1300, 70, 200], [1300, 380, 200], [600, 380, 200], [0, 0, -1])
-    # drop the old x=695 return; bridge the z=150 wall's edge (x=700) straight to obj33 arch2's front pylon (x=1250,z=177)
-    out = [t for t in out if not (all(abs(p[0] - 695) < 1 and 149 <= p[2] <= 201 and 69 <= p[1] <= 281 for p in t))]
-    out += _dir_quad([700, 70, 150], [700, 280, 150], [1250, 280, 177], [1250, 70, 177], [0, 0, -1])  # bridge (flat top y280, foot y70)
-    out += _dir_quad([700, 280, 150], [1250, 280, 177], [1250, 380, 200], [700, 380, 200], [0, 1, 0])  # cap bridge top -> SE wall top (uniform strip)
-    out += _dir_quad([600, 280, 150], [700, 280, 150], [700, 380, 200], [600, 380, 200], [0, 1, 0])  # extend cap west to the corner (x=600)
-    out.append([[600, 280, 150], [600, 280, 200], [600, 380, 200]])  # fill corner gap -> x=600 spine wall (faces -x)
-    # drop the z=200/z=250 wall sections at x[1400,1500] now covered by obj33 arch2's east extensions
-    out = [t for t in out if not (all(1399 <= p[0] <= 1501 and 169 <= p[1] <= 381 for p in t)
-                                  and ((all(abs(p[2] - 200) < 1 for p in t) and _tnormal(t)[2] < 0)
-                                       or (all(abs(p[2] - 250) < 1 for p in t) and _tnormal(t)[2] > 0)))]
-    # drop the x=1500 (-x) wall sections at z[-100,200] now enclosed behind obj33 arch1's capped front
-    out = [t for t in out if not (all(abs(p[0] - 1500) < 1 for p in t) and _tnormal(t)[0] < 0
-                                  and all(-101 <= p[2] <= 201 for p in t)
-                                  and 169 <= min(p[1] for p in t) and max(p[1] for p in t) <= 371)]
+    # (REVERTED 2026-08 with the obj33 customs: the x=695 return stays, the obj33-bridge/cap quads are
+    #  gone, and the z=200/z=250 x[1400,1500] + x=1500 z[-100,200] wall sections are KEPT — they were
+    #  only droppable while obj33's custom extensions covered them.)
+    # USER-DIRECTED (2026-08): the restored x[1400,1500] wall sections came out of the forced-380
+    # simplify 10 units ABOVE the obj33 roof ledge (horizontal y=370, x[1500,1600]) — cap them at 370
+    # and close the top with a y=370 lid over the rampart section so the ledge line runs flush through.
+    def _x1400sec(t, zplane, nsign):
+        n = _tnormal(t)
+        return (all(1399 <= p[0] <= 1501 and 169 <= p[1] <= 381 and abs(p[2] - zplane) < 1 for p in t)
+                and n[2] * nsign > 0)
+    out = [t for t in out if not (_x1400sec(t, 250, +1) or _x1400sec(t, 200, -1))]
+    out += _dir_quad([1400, 170, 250], [1500, 170, 250], [1500, 370, 250], [1400, 370, 250], [0, 0, 1])
+    out += _dir_quad([1400, 170, 200], [1500, 170, 200], [1500, 370, 200], [1400, 370, 200], [0, 0, -1])
+    out += _dir_quad([1400, 370, 200], [1500, 370, 200], [1500, 370, 250], [1400, 370, 250], [0, 1, 0])
     return out
 
 
@@ -2227,30 +2227,27 @@ _CAM_MERGE_JOBS = {
         {'kind': 'replace', 'sel': _e03_wall_cap,
          'tris': _quad([-400, _E03_WALL_TOP, -100], [1500, _E03_WALL_TOP, -100],
                        [1500, _E03_WALL_TOP, -150], [-400, _E03_WALL_TOP, -150])},
-        # Gatehouse pylons/posts (72 tris) -> two closed ramped bumps (28 tris) that glide into the walls (no
-        # concave corners); passage lintel/bore/floor untouched so the doorway hole stays.
-        {'kind': 'replace', 'sel': _e03_gate_sel, 'tris': _e03_gate_tris()},
-        # Doorway gable + redundant bore jambs (24 tris) -> simplified gable prism (12 tris) moved onto the pylon
-        # faces (front z=-73, back z=-179), flush with the pylon flats.
-        {'kind': 'replace', 'sel': _e03_arch_sel, 'tris': _e03_arch_tris()},
+        # REVERTED 2026-08 (user): the ramped-arch approach didn't give the smooth camera glide hoped for;
+        # obj34 (gatehouse pylons + gable), obj43, obj45 and obj33 are back to their VANILLA `_c` (which
+        # matches the visual meshes) as the baseline for a corner-ROUNDING approach instead.
+        # {'kind': 'replace', 'sel': _e03_gate_sel, 'tris': _e03_gate_tris()},      # obj34 pylons
+        # {'kind': 'replace', 'sel': _e03_arch_sel, 'tris': _e03_arch_tris()},      # obj34 gable
         # Remaining major town walls (350 tris) -> 24 (9 vertical faces on-plane + 3 walkway tops).
         {'kind': 'replace', 'sel': _e03_townwall_sel, 'tris': _e03_townwall_tris()},
         # Arcade back-side (x[-500,-400]) hidden behind the solid wall -> removed.
         {'kind': 'replace', 'sel': _e03_arcback_sel, 'tris': []},
-        # obj43 arch simplified (torch-covering ramped fronts + gable roof; passage kept).
-        {'kind': 'replace', 'sel': _e03_obj43_sel, 'tris': _e03_obj43_tris()},
-        # obj45 two arches simplified (Arch A obj43-style + Arch B obj34-style).
-        {'kind': 'replace', 'sel': _e03_obj45_sel, 'tris': _e03_obj45_tris()},
+        # {'kind': 'replace', 'sel': _e03_obj43_sel, 'tris': _e03_obj43_tris()},   # REVERTED (see above)
+        # {'kind': 'replace', 'sel': _e03_obj45_sel, 'tris': _e03_obj45_tris()},   # REVERTED (see above)
         # obj33 arch 1 (single -x facade + torches simplified, passage kept).
         # grid3 canal-wall notch at x[695,700] z=200 -> covered by the flattened z=200 wall.
         {'kind': 'replace', 'sel': _e03_z200notch_sel, 'tris': []},
-        # obj6_4 torches on the SE town wall -> removed.
-        {'kind': 'replace', 'sel': _e03_sewalltorch_sel, 'tris': []},
-        {'kind': 'replace', 'sel': _e03_obj33a_sel, 'tris': _e03_obj33a_tris()},
-        # obj33 arch 2 (z-passage, obj34/Arch-B style).
-        {'kind': 'replace', 'sel': _e03_obj33b_sel, 'tris': _e03_obj33b_tris()},
-        # West walkway surface raised to y280 (meets obj43's right extension).
-        {'kind': 'replace', 'sel': _e03_walk_sel, 'tris': _e03_walk_tris()},
+        # obj6_4 "torches" on the SE town wall — DISABLED 2026-08: the 40 selected tris are actually the
+        # TWO PILLARS on the z=200 wall face (x 718-778 and 921-981); user wants them kept (vanilla).
+        # {'kind': 'replace', 'sel': _e03_sewalltorch_sel, 'tris': []},
+        # {'kind': 'replace', 'sel': _e03_obj33a_sel, 'tris': _e03_obj33a_tris()}, # REVERTED (see above)
+        # {'kind': 'replace', 'sel': _e03_obj33b_sel, 'tris': _e03_obj33b_tris()}, # REVERTED (see above)
+        # {'kind': 'replace', 'sel': _e03_walk_sel, 'tris': _e03_walk_tris()},     # REVERTED: the y280 raise
+        #     existed solely to meet obj43's custom extension; vanilla walkway (y270) is back with it.
     ],
 }
 
