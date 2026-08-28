@@ -215,20 +215,16 @@ def _box(xa,xb,za,zb,ylo,yhi):
     t+= [[[xa,yhi,za],[xb,yhi,za],[xb,yhi,zb]],[[xa,yhi,za],[xb,yhi,zb],[xa,yhi,zb]]]
     return t
 _wall=[]
-for z in (48.0,-48.0): _wall+=_quadz(z,-240,900,-15,60)
-layers.append({'key': 'castwall', 'label': 'CAST wall clamp z=±48 (flight, LOW TIDE, rod-inside walls only)',
+for z in (47.0,-47.0): _wall+=_quadz(z,-240,900,-15,60)
+layers.append({'key': 'castwall', 'label': 'CAST wall clamp z=±47 (flight, LOW TIDE, outward-crossing only; 1u padded)',
                'tris': _wall, 'color': [255,80,80], 'alpha': 0.35, 'border': '#f55', 'on': True})
 _drag=[]
 for z in (49.5,-49.5): _drag+=_quadz(z,-240,900,-15,60)
 layers.append({'key': 'castdrag', 'label': 'DRAG uncast planes z=±49.5 (waiting, all tides)',
                'tris': _drag, 'color': [255,170,60], 'alpha': 0.3, 'border': '#fa6', 'on': False})
-# USER-AUTHORED support boxes (verbatim from the baked table @0x2293C0): legs only, y 0..47
+# USER-AUTHORED support boxes (verbatim from the baked table, rows 0-3): legs only, y 0..47
 _BOXES=[(-73.07,-22.93,35,50,0,47),(-73.07,-22.93,-50,-36,0,47),
         (774.93,825.07,35,50,0,47),(774.93,825.07,-50,-36,0,47)]
-_bx=[]
-for b in _BOXES: _bx+=_box(*b)
-layers.append({'key': 'castboxes', 'label': 'CAST bridge-support boxes (stop-dead in flight + uncast on drag)',
-               'tris': _bx, 'color': [120,220,255], 'alpha': 0.4, 'border': '#8df', 'on': True})
 
 
 # ---- CUSTOM COLLISION BAKE — regrouped into the EXACT nodes the ISO bake writes (bscc.grouped_collision):

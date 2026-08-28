@@ -161,7 +161,11 @@ namespace Dark_Cloud_Improved_Version
             internal const long CamGatherCount = Base + 0x68;   // external (camera_norm_side.s) — do not reuse
 
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x6C;
+            /// <summary>Per-cast wall latch for the Queens FishLineClamp (camera_norm_side.s): written by
+            /// the cave while NOT casting — 1 = the bobber dangles inside the canal region (|z|&lt;60, floor-
+            /// spot stances) so the flight wall clamp arms; 0 = bank stance, walls stay off (no line snap).</summary>
+            internal const long FishWallLatch = Base + 0x6C;
+            internal const long NextFree = Base + 0x70;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
