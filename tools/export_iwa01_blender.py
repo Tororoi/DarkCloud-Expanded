@@ -337,16 +337,63 @@ def _bridge(A, B):
     return tris
 
 
+# The bore's two UPPER ANGLED wall quads (between the y~28 side-wall tops and the y~34.5-35 ceiling
+# edge): sloped planes convert lateral camera push into climb (the swept-slide resolves along the hit
+# plane, and a slanted plane's slide direction has an upward component). Corners as
+# (lower-west, upper-west, lower-east, upper-east) — these lines define the CORNER BOX below.
+_BORE_ANGLED = [
+    ([-166.39, 28.13, -23.63], [-164.94, 34.49, -29.88], [-133.43, 28.46, -19.13], [-131.68, 35.04, -26.03]),
+    ([-159.62, 28.25, -48.39], [-161.65, 34.59, -41.16], [-126.84, 28.52, -43.55], [-128.70, 35.07, -37.26]),
+]
+
+
+def _corner_box_tris(cx, cz, R, lift=0.4):
+    """SECOND cutter: a rectangular slab spanning the tunnel's upper region — vertical sides through the
+    _BORE_ANGLED lower edges, near-flat top just above the native ceiling — extended `ext` units PAST both
+    mouths along the bore axis. Differencing this after the tunnel solid squares the upper angled walls
+    of the bore AND the collars in one continuous corridor: no end walls at the mouth planes, so none of
+    the wedge pockets an in-place L-profile-with-fillers left for the camera to jam into. ⚠ each corner
+    is extended TO A TARGET RADIUS (R-1.5, just inside the wall, deep in the horn bell): a fixed-length
+    extension undershoots — the corner verts sit at r~21, so mid-throat cap fragments survive as new
+    pocket walls (shipped twice). Inside the bell the horn is wider than the box in every direction, so
+    the end caps melt entirely; the slab's protrusions along the way carve harmlessly into rock interior,
+    and its bottom face lies inside the bore/funnel voids — the sequential Boolean removes all of it."""
+    (lwA, uwA, leA, ueA), (lwB, uwB, leB, ueB) = _BORE_ANGLED
+    ax = [(lwA[0] - leA[0]) + (lwB[0] - leB[0]), 0.0, (lwA[2] - leA[2]) + (lwB[2] - leB[2])]
+    L = math.hypot(ax[0], ax[2]) or 1.0
+    ax = [ax[0] / L, 0.0, ax[2] / L]                     # unit axis pointing WEST (lw ends are west)
+    def X(p, sgn, y=None):                               # extend p along +-axis until xz-radius R-1.5
+        q = _extend_along([p[0], p[1] if y is None else y, p[2]],
+                          [sgn * ax[0], 0.0, sgn * ax[2]], cx, cz, R - 1.5)
+        return q
+    bwA, beA = X(lwA, +1), X(leA, -1)                    # bottom corners (y ~28, inside the bore void)
+    bwB, beB = X(lwB, +1), X(leB, -1)
+    twA, teA = X(lwA, +1, uwA[1] + lift), X(leA, -1, ueA[1] + lift)   # top corners: lower edges' xz at
+    twB, teB = X(lwB, +1, uwB[1] + lift), X(leB, -1, ueB[1] + lift)   # ceiling height (+lift eats slivers)
+    quads = [
+        (bwA, beA, teA, twA),                            # side A (vertical)
+        (bwB, beB, teB, twB),                            # side B (vertical)
+        (twA, teA, teB, twB),                            # top (near-flat, just above the native ceiling)
+        (bwA, beA, beB, bwB),                            # bottom (inside the bore void -> melts away)
+        (bwA, twA, twB, bwB),                            # west cap (inside the funnel void)
+        (beA, teA, teB, beB),                            # east cap (inside the funnel void)
+    ]
+    return [[list(a), list(b), list(c)] for a, b, c, d in quads for a, b, c in ((a, b, c), (a, c, d))]
+
+
 def hull_tris(round_to=2):
     """The finished iwa01 camera hull, computed headlessly (no Blender): cylinder shell MINUS the flared
-    tunnel cutter via an exact CSG difference, top/bottom caps stripped. Returns game-space triangles.
-    Requires trimesh+manifold3d; used only to (re)freeze iwa01_hull_data.py, never at bake time."""
+    tunnel cutter MINUS the anti-climb corner box (sequential exact CSG differences), top/bottom caps
+    stripped. Returns game-space triangles. Requires trimesh+manifold3d; used only to (re)freeze
+    iwa01_hull_data.py, never at bake time."""
     import trimesh
     cx, cz, R = _iwa01_visual_circle()
     cv, cf = _weld(_cylinder_tris(cx, cz, R, _IWA01_BOT, _IWA01_TOP))
     tv, tf = _weld(_tunnel_solid_tris(cx, cz, R))
     cyl = trimesh.Trimesh(vertices=cv, faces=cf, process=True); cyl.fix_normals()
     tun = trimesh.Trimesh(vertices=tv, faces=tf, process=True); tun.fix_normals()
+    # (the anti-climb corner box was tried here — cyl-tun-box sequential difference — and dropped:
+    #  squaring the bore's upper walls didn't help the camera in-game. _corner_box_tris stays shelved.)
     hull = cyl.difference(tun, engine='manifold')
     ymin, ymax = hull.vertices[:, 1].min(), hull.vertices[:, 1].max()
     out = []
@@ -355,6 +402,8 @@ def hull_tris(round_to=2):
         cy = hull.vertices[f][:, 1].mean()
         if abs(n[1]) > 0.9 and (abs(cy - ymax) < 0.6 or abs(cy - ymin) < 0.6):
             continue                                     # drop the flat top/bottom cap faces
+        if hull.area_faces[fi] < 0.05:
+            continue                                     # drop Boolean sliver/degenerate faces
         out.append([[round(float(hull.vertices[i][k]), round_to) for k in range(3)] for i in f])
     return out
 
@@ -488,8 +537,9 @@ def _make(col, name, verts, faces, rgb):
     return ob
 
 
-def _cut_hull(col, base, cutter):
-    """iwa01_hull = base (cylinder) MINUS cutter (tunnel), Boolean-applied. base/cutter left hidden."""
+def _cut_hull(col, base, cutters):
+    """iwa01_hull = base (cylinder) MINUS each cutter in turn (tunnel, then the anti-climb corner box),
+    Boolean-applied. base/cutters left hidden."""
     hull = base.copy()
     hull.data = base.data.copy()
     hull.name = 'iwa01_hull'
@@ -499,19 +549,20 @@ def _cut_hull(col, base, cutter):
     hull.show_wire = True
     col.objects.link(hull)
 
-    m = hull.modifiers.new('iwa01_cut', 'BOOLEAN')
-    m.operation = 'DIFFERENCE'
-    m.solver = 'EXACT'
-    m.object = cutter
     bpy.context.view_layer.objects.active = hull
     for ob in bpy.context.selected_objects:
         ob.select_set(False)
     hull.select_set(True)
-    bpy.ops.object.modifier_apply(modifier=m.name)
+    for i, cutter in enumerate(cutters):
+        m = hull.modifiers.new(f'iwa01_cut{i}', 'BOOLEAN')
+        m.operation = 'DIFFERENCE'
+        m.solver = 'EXACT'
+        m.object = cutter
+        bpy.ops.object.modifier_apply(modifier=m.name)
+        cutter.hide_set(True)
     _strip_caps(hull.data)                               # open the cylinder: drop top & bottom faces
 
     base.hide_set(True)
-    cutter.hide_set(True)
     return hull
 
 
@@ -537,7 +588,7 @@ def build():
     col = _ensure_collection('iwa01_ref')
     _clear(col)
     made = {name: _make(col, name, d['verts'], d['faces'], d['colour']) for name, d in OBJECTS.items()}
-    hull = _cut_hull(col, made['cylinder_solid'], made['tunnel_solid'])
+    hull = _cut_hull(col, made['cylinder_solid'], [made['tunnel_solid']])
     # shade viewport by object colour so the per-object colours show without material mode
     for area in bpy.context.screen.areas if bpy.context.screen else []:
         if area.type == 'VIEW_3D':

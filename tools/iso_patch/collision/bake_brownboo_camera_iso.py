@@ -4,12 +4,11 @@
 Rebuilds gedit/s04/scene.scn's `s04g01_v` (the town camera-collision variant — the slot every other town
 names `_c`, see LoadMapObject @0x19B790) as a flat multi-node MDS:
   • `v`         — the vanilla terrain camera hull, byte-identical tris (404) — NOT ours to change;
-  • `c56_*`     — obj56 with ONLY the iwa01 rock replaced by the CSG hull (central cylinder left VANILLA),
-                  kd-split into <=100-tri nodes.
-Everything else stays vanilla: the central-cylinder simplification and the per-leg s04h01 building hull
-(the earlier "detailed collision mesh" experiment — the cylinder gap-at-bottom) are NOT applied. The
-player `_a` is untouched. Same proven pipeline as the Queens e03g04_c bake (build_flat_mds +
-_replace_a_block), just targeting suffix `_v`.
+  • `c56_*`     — obj56 with ONLY the iwa01 rock replaced by the CSG hull (horn funnels + tunnel),
+                  kd-split into <=100-tri nodes. Building cylinders stay VANILLA (the tightened
+                  cylinders of 2026-08 clipped visibly — camera geometry needs padding; tight_obj56
+                  remains available but unwired). The player `_a` is untouched. Same proven pipeline as the
+Queens e03g04_c bake (build_flat_mds + _replace_a_block), just targeting suffix `_v`.
 
   DC1_DATA_DIR=... python3 tools/iso_patch/collision/bake_brownboo_camera_iso.py \
       [--iso "/path/Dark Cloud - Expanded.iso"]

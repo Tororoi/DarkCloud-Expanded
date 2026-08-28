@@ -755,13 +755,13 @@ print(f"custom obj56: {len(_cus)} tris")
 
 # ---- IWA01 tunnel-rock hull: REPLACES the lumpy obj56 iwa01 selection with a rock-centred circle wall +
 #      native tunnel interior + entrance collars extended along their own taper to meet the circle. ----
-from brownboo_camera_collision import iwa01_ring_tris, iwa01_ring_obj56, custom_obj56_full
+from brownboo_camera_collision import iwa01_ring_tris, iwa01_ring_obj56, custom_obj56_full, tight_obj56
 _ibuild = iwa01_ring_tris()
 _iobj56 = iwa01_ring_obj56()
 _ifull  = custom_obj56_full()
 # THE SHIPPED obj56: vanilla obj56 with ONLY the iwa01 rock replaced by the CSG hull (central cylinder
 # left VANILLA) — exactly what iwa01_ring_obj56 bakes into s04g01_v. Default ON so this is what you verify.
-layers.append({'key': 'nc_iwa01', 'label': f'BAKED obj56 ({len(_iobj56)}: vanilla cylinder + rock hull) [CAMERA]',
+layers.append({'key': 'nc_iwa01', 'label': f'BAKED obj56 ({len(_iobj56)}: vanilla cylinders + rock hull) [CAMERA]',
                'tris': _iobj56, 'color': [120, 255, 200], 'alpha': 0.7, 'border': '#6fc', 'on': True,
                'group': 'Native collision (_a player / _v camera)'})
 # reference only: obj56 with BOTH edits (adds the central-cylinder simplification — the gap-at-bottom). NOT shipped.
@@ -771,7 +771,7 @@ layers.append({'key': 'nc_obj56_full', 'label': f'obj56 both-edits ref ({len(_if
 layers.append({'key': 'nc_iwa01_build', 'label': f'IWA01 hull only ({len(_ibuild)}: CSG cylinder-tunnel)',
                'tris': _ibuild, 'color': [255, 120, 255], 'alpha': 0.8, 'border': '#f7f', 'on': False,
                'group': 'Native collision (_a player / _v camera)'})
-print(f"obj56 SHIPPED (vanilla cyl + rock hull)={len(_iobj56)}  both-edits ref={len(_ifull)}  hull build={len(_ibuild)} tris")
+print(f"obj56 SHIPPED (vanilla cyls + rock hull)={len(_iobj56)}  both-edits ref={len(_ifull)}  hull build={len(_ibuild)} tris")
 
 
 # ---- AUTHORED s04h01_v: the building's full visual mesh as camera collision, kd-split into <=100-tri

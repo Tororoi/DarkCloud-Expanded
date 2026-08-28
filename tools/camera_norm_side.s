@@ -3,8 +3,8 @@
 # IsoPatcher.PatchNativeCameraPostPass alongside the main camera cave). FIXED LAYOUT (the cave jals
 # hardcode these VAs — keep the nop padding intact):
 #   0x228F00  entry: export the true gather count, return        (cave entry `jal 0x228F00`)
-#   0x228F40  SubA: slide-site  normalize N + E_prev-side flip   (cave slide  `jal 0x228F40`)
-#   0x229000  SubB: corner-site normalize N2 + E_prev-side flip  (cave corner `jal 0x229000`)
+#   0x228F40  SubA: slide-site  normalize N (ONE-SIDED v3)        (cave slide  `jal 0x228F40`)
+#   0x229000  SubB: corner-site normalize N2 (ONE-SIDED v3)       (cave corner `jal 0x229000`)
 #
 # WINDING-AGNOSTIC, PER-CONTACT (v2 — the v1 gather-time "flip every normal to the REF's side" pass was
 # WRONG for closed shells: the eye orbits THROUGH the far half of e.g. Brownboo's 75-radius cylinder, whose
@@ -61,32 +61,35 @@ nop
 mul.s $f4, $f4, $f8
 mul.s $f5, $f5, $f8
 mul.s $f6, $f6, $f8           # N̂
-lui   $t3, 0x1f1
-ori   $t3, $t3, 0x0050        # E_prev (mailbox; not yet updated this frame = last CONSTRAINED eye)
-lwc1  $f7, 0x0($t3)
-lwc1  $f8, 0x40($sp)
-sub.s $f7, $f7, $f8
-mul.s $f10, $f7, $f4
-lwc1  $f7, 0x4($t3)
-lwc1  $f8, 0x44($sp)
-sub.s $f7, $f7, $f8
-mul.s $f7, $f7, $f5
-add.s $f10, $f10, $f7
-lwc1  $f7, 0x8($t3)
-lwc1  $f8, 0x48($sp)
-sub.s $f7, $f7, $f8
-mul.s $f7, $f7, $f6
-add.s $f10, $f10, $f7         # p_prev = N̂·(E_prev − P)
-mtc1  $zero, $f8
+# (v3 ONE-SIDED: the per-contact E_prev flip is REMOVED — 25 nops keep the fixed layout. The
+# resolution now consumes the AUTHORED normal: front faces block; a camera that ends up BEHIND
+# a wall (e.g. a fishing catch placing it inside a building cylinder) resolves to the authored
+# side on its first crossing = it ESCAPES instead of being fenced in by a two-sided wall.)
 nop
-.word 0x46085034             # c.OLT.s f10,f8 : p_prev < 0 ?  (sweep origin on the anti-normal side)
 nop
-bc1f  saret
 nop
-sub.s $f4, $f8, $f4           # flip N̂ to E_prev's side
-sub.s $f5, $f8, $f5
-sub.s $f6, $f8, $f6
-saret:
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
 jr    $ra
 nop
 nop
@@ -115,31 +118,31 @@ nop
 mul.s $f7, $f7, $f11
 mul.s $f8, $f8, $f11
 mul.s $f9, $f9, $f11          # N̂2
-lui   $t3, 0x1f1
-ori   $t3, $t3, 0x0050        # OLD E_prev (the corner cast's own `from`)
-lwc1  $f10, 0x0($t3)
-lwc1  $f11, 0x40($sp)
-sub.s $f10, $f10, $f11
-mul.s $f3, $f10, $f7
-lwc1  $f10, 0x4($t3)
-lwc1  $f11, 0x44($sp)
-sub.s $f10, $f10, $f11
-mul.s $f10, $f10, $f8
-add.s $f3, $f3, $f10
-lwc1  $f10, 0x8($t3)
-lwc1  $f11, 0x48($sp)
-sub.s $f10, $f10, $f11
-mul.s $f10, $f10, $f9
-add.s $f3, $f3, $f10          # p_prev2 = N̂2·(E_prev − P)
-mtc1  $zero, $f10
+# (v3 ONE-SIDED: flip removed — see SubA. 25 nops keep the layout.)
 nop
-.word 0x460A1834             # c.OLT.s f3,f10 : p_prev2 < 0 ?
 nop
-bc1f  sbret
 nop
-sub.s $f7, $f10, $f7          # flip N̂2 to E_prev's side
-sub.s $f8, $f10, $f8
-sub.s $f9, $f10, $f9
-sbret:
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
 jr    $ra
 nop
