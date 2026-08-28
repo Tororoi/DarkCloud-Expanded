@@ -227,6 +227,10 @@ def _tunnel_solid_tris(cx, cz, R, margin=16.0):
         # eased in as t^k. Radius grows linearly (reaches the wall regardless); only the SPREAD is eased,
         # so early cross-sections stay near mouth width while still travelling outward — the horn throat
         # passes the rock zone before the bell opens. k is solved below per mouth.
+        # UNIFORM throat direction: every meridian extends along the MOUTH AXIS. A per-vert direction
+        # field (native entrance dirs, snapped or interpolated) creases the surface along whichever
+        # meridians deviate from their neighbours — the axis field is constant, so the throat is a clean
+        # translated sweep of the mouth. Rock avoidance is the k-solver's job, not the throat paths'.
         rimP = _resample_closed(rim, _FLARE_RES)
         bc = math.degrees(math.atan2(rc[2] - cz, rc[0] - cx))
         yc = rc[1]
@@ -236,12 +240,9 @@ def _tunnel_solid_tris(cx, cz, R, margin=16.0):
             u0 = (math.degrees(math.atan2(p[2] - cz, p[0] - cx)) - bc + 180) % 360 - 180
             u_max = max(u_max, abs(u0)); y_max = max(y_max, abs(p[1] - yc))
         for p in rimP:
-            d = dirs.get(tuple(round(c, 2) for c in p), axis)  # resampled verts fall back to the axis dir
-            if math.hypot(d[0], d[2]) < 0.2:
-                d = axis
             u0 = (math.degrees(math.atan2(p[2] - cz, p[0] - cx)) - bc + 180) % 360 - 180
             phi = math.atan2((p[1] - yc) / y_max, u0 / u_max)  # direction about the mouth centre
-            pol.append([list(p), d, math.hypot(p[0] - cx, p[2] - cz), phi])
+            pol.append([list(p), axis, math.hypot(p[0] - cx, p[2] - cz), phi])
 
         def horn_pt(e, t, k):
             """Throat follows the vert's ENTRANCE-POLY direction (the proven rock-threading path); the
@@ -287,12 +288,16 @@ def _tunnel_solid_tris(cx, cz, R, margin=16.0):
     return tris                                          # so no cap chord dips back inside the wall
 
 
-def _resample_closed(ring, N):
-    """Resample a closed polygon to N points, equally spaced by arclength (point 0 preserved)."""
+def _resample_closed(ring, N, aux=None):
+    """Resample a closed polygon to N points, equally spaced by arclength (point 0 preserved). With `aux`
+    (one vector per input vert, e.g. entrance directions), each output point also gets the arclength-
+    blended, renormalised aux vector — so a per-vert direction field varies SMOOTHLY around the loop
+    instead of snapping between exact-match verts and a fallback (which creases the swept surface along
+    the lucky meridians). Returns points, or (points, aux_out) when aux is given."""
     n = len(ring)
     seg = [math.dist(ring[i], ring[(i + 1) % n]) for i in range(n)]
     total = sum(seg) or 1.0
-    out, k, acc = [], 0, 0.0
+    out, aout, k, acc = [], [], 0, 0.0
     for s in range(N):
         target = total * s / N
         while k < n - 1 and acc + seg[k] < target - 1e-9:
@@ -300,7 +305,12 @@ def _resample_closed(ring, N):
         f = (target - acc) / (seg[k] or 1.0)
         a, b = ring[k], ring[(k + 1) % n]
         out.append([a[i] + f * (b[i] - a[i]) for i in range(3)])
-    return out
+        if aux is not None:
+            da, db = aux[k], aux[(k + 1) % n]
+            v = [da[i] + f * (db[i] - da[i]) for i in range(3)]
+            L = math.sqrt(sum(c * c for c in v)) or 1.0
+            aout.append([c / L for c in v])
+    return (out, aout) if aux is not None else out
 
 
 def _bridge(A, B):
