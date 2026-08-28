@@ -127,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
         //    which candidate won, and every candidate's (d,h,status). status: 0=clear(no hit) 1=front-hit(pull-in)
         //    2=backface-culled. Diagnosis: actual dist not tracking bestD ⇒ our write is overridden; bestD itself
         //    bogus (through/below) ⇒ our math; all candidates status 0 while you FACE a wall ⇒ the wall isn't hit.
-        private const float LMAX = 82f, BASED = 80f, RESTH = 17f, MARG = 8f, LMIN = 12f;
+        private const float LMAX = 72f, BASED = 70f, RESTH = 17f, MARG = 8f, LMIN = 12f;   // BASED tracks IsoPatcher BASE_DIST (70 vanilla)
         private static readonly float[] PITCH = { 12f, -4f, -20f };
 
         private static void MonitorFan()
@@ -246,7 +246,7 @@ namespace Dark_Cloud_Improved_Version
             int used = Memory.ReadInt(structMmu + 8);
             if (!Memory.IsValidGuest(baseRaw)) return -1;
             long b = Memory.ToMmu(baseRaw);
-            const float BASE = 80f;
+            const float BASE = 70f;   // = IsoPatcher BASE_DIST
             float[] rf = { refx, refy, refz };
             float[] rt = { refx + BASE * (float)Math.Sin(ang), refy + h, refz + BASE * (float)Math.Cos(ang) };
             float best = -1;
@@ -299,7 +299,7 @@ namespace Dark_Cloud_Improved_Version
                 float[] cf = Memory.ReadFloatBatch(Memory.ToMmu(camRaw) + 0x2C0, 8);  // 2C0 refx,2C4 refy,2C8 refz,2D0 dist,2D4 h,2D8 angle
                 refx = cf[0]; refy = cf[1]; refz = cf[2]; camDist = cf[4]; camH = cf[5];
                 float ang = cf[6]; camDeg = ang * 180f / (float)Math.PI; haveRef = true;
-                const float BASE = 80f;   // same ray the native pull-in casts: ref -> ref + (BASE*sin, height, BASE*cos)
+                const float BASE = 70f;   // = IsoPatcher BASE_DIST   // same ray the native pull-in casts: ref -> ref + (BASE*sin, height, BASE*cos)
                 rayFrom[0] = refx; rayFrom[1] = refy; rayFrom[2] = refz;
                 rayTo[0] = refx + BASE * (float)Math.Sin(ang);
                 rayTo[1] = refy + camH;
@@ -418,7 +418,7 @@ namespace Dark_Cloud_Improved_Version
                     var w = nearWalls[0];
                     float dx = w.cx - refx, dz = w.cz - refz, len = (float)Math.Sqrt(dx * dx + dz * dz);
                     float[] rf = { refx, refy, refz };
-                    float[] rt = { refx + 80f * dx / len, refy + camH, refz + 80f * dz / len };
+                    float[] rt = { refx + 70f * dx / len, refy + camH, refz + 70f * dz / len };
                     float best = -1; float bcx = 0, bcy = 0, bcz = 0;
                     foreach (var q in polys)
                         if (RayHitsTri(rf, rt, q))

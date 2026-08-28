@@ -862,7 +862,7 @@ namespace Dark_Cloud_Improved_Version
         private const long  CamOffDist = 0x2D0, CamOffHeight = 0x2D4, CamOffAngle = 0x2D8, CamOffAngleSmooth = 0x2DC;
         private const long  CamOffRefX = 0x2C0, CamOffRefY = 0x2C4, CamOffRefZ = 0x2C8;   // ref (look-at) xyz used by Step
         private const long  CamCurPos = 0x260, CamCurRef = 0x270, CamNextPos = 0x280, CamNextRef = 0x290; // base CCamera ease pair
-        private const float DockCamDist = 79.7f, DockCamHeight = 5.0f, DockCamAngle = 0.0f;
+        private const float DockCamDist = 69.7f, DockCamHeight = 5.0f, DockCamAngle = 0.0f;  // just under BASE_DIST (70, vanilla rest since 2026-08; was 79.7 under the 80 rest)
         private const float DockRefLoadedX = -1000f;         // ref.x below this ⇒ the dock ref is loaded (dock = -1311)
         private const int   CamHold = 45, CamTimeout = 600;
         private static bool _camActive;
