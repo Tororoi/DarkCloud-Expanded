@@ -199,6 +199,38 @@ layers.append({'key': 'canalcap', 'label': 'SHIPPED canal west-end cap (2 tris, 
                'tris': [[list(p) for p in t] for t in _cap.CAP_TRIS],
                'color': [240, 120, 200], 'alpha': 0.85, 'border': '#f6c', 'on': True})
 
+# ---- SHIPPED cast-collision geometry (camera_norm_side.s FishLineClamp v4/v5 + QueensDragCheck):
+#      the EXACT planes/boxes the ISO-baked fishing patches enforce, for visual verification.
+#      • canal WALL clamp planes z=+-48 (LOW TIDE ONLY, and only walls the rod is inside of)
+#      • drag-uncast planes z=+-49.5 (all tides, waiting state)
+#      • 6 bridge boxes (table @0x2293C0): 2 bridges (obj40/obj44) x { legsS, legsN, arch/deck }
+def _quadz(z, x0, x1, y0, y1):
+    return [[[x0,y0,z],[x1,y0,z],[x1,y1,z]],[[x0,y0,z],[x1,y1,z],[x0,y1,z]]]
+def _box(xa,xb,za,zb,ylo,yhi):
+    t=[]
+    t+= [[[xa,ylo,za],[xb,ylo,za],[xb,yhi,za]],[[xa,ylo,za],[xb,yhi,za],[xa,yhi,za]]]
+    t+= [[[xa,ylo,zb],[xb,ylo,zb],[xb,yhi,zb]],[[xa,ylo,zb],[xb,yhi,zb],[xa,yhi,zb]]]
+    t+= [[[xa,ylo,za],[xa,ylo,zb],[xa,yhi,zb]],[[xa,ylo,za],[xa,yhi,zb],[xa,yhi,za]]]
+    t+= [[[xb,ylo,za],[xb,ylo,zb],[xb,yhi,zb]],[[xb,ylo,za],[xb,yhi,zb],[xb,yhi,za]]]
+    t+= [[[xa,yhi,za],[xb,yhi,za],[xb,yhi,zb]],[[xa,yhi,za],[xb,yhi,zb],[xa,yhi,zb]]]
+    return t
+_wall=[]
+for z in (48.0,-48.0): _wall+=_quadz(z,-240,900,-15,60)
+layers.append({'key': 'castwall', 'label': 'CAST wall clamp z=±48 (flight, LOW TIDE, rod-inside walls only)',
+               'tris': _wall, 'color': [255,80,80], 'alpha': 0.35, 'border': '#f55', 'on': True})
+_drag=[]
+for z in (49.5,-49.5): _drag+=_quadz(z,-240,900,-15,60)
+layers.append({'key': 'castdrag', 'label': 'DRAG uncast planes z=±49.5 (waiting, all tides)',
+               'tris': _drag, 'color': [255,170,60], 'alpha': 0.3, 'border': '#fa6', 'on': False})
+# USER-AUTHORED support boxes (verbatim from the baked table @0x2293C0): legs only, y 0..47
+_BOXES=[(-73.07,-22.93,35,50,0,47),(-73.07,-22.93,-50,-36,0,47),
+        (774.93,825.07,35,50,0,47),(774.93,825.07,-50,-36,0,47)]
+_bx=[]
+for b in _BOXES: _bx+=_box(*b)
+layers.append({'key': 'castboxes', 'label': 'CAST bridge-support boxes (stop-dead in flight + uncast on drag)',
+               'tris': _bx, 'color': [120,220,255], 'alpha': 0.4, 'border': '#8df', 'on': True})
+
+
 # ---- CUSTOM COLLISION BAKE — regrouped into the EXACT nodes the ISO bake writes (bscc.grouped_collision):
 #      all non-trigger tris of a frame are pooled and kd_split into <=100-poly nodes, so nearby polys share a
 #      node (tight per-node bbox = free runtime gather culling). Four toggles: custom CAMERA collision (_c),

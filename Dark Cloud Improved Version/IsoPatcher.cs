@@ -1158,7 +1158,11 @@ namespace Dark_Cloud_Improved_Version
             PatchFishingCameraTarget(fs, ElfOff);        // center the fishing shot on the bobber (kept)
             PatchFishingCameraHeight(fs, ElfOff);        // fishing camera height 40 -> per-spot data word (canal wades at 5)
             PatchFishingCameraGather(fs, ElfOff);        // fishing camera-collision gather: mask 1 -> 0xffff (see ALL camera walls while fishing)
-            PatchFishLineSlopeGate(fs, ElfOff);          // bobber/hook ground probes: accept steep slopes (|ny| threshold 0.2 -> 0.05)
+            // PatchFishLineSlopeGate RETIRED (2026-08): it made near-vertical surfaces (~87 deg) count as
+            // ground for the bobber/hook probes — an early attempt to keep casts out of the canal walls that
+            // made the bobber ground-LIFT onto steep geometry (the "bobber jumps on top of the pipes" bug).
+            // Walls/pillars are now handled properly by the FishLineClamp cave + QueensDragCheck; the probes
+            // stay vanilla (0.2, ~78 deg).
             PatchFishingUncastGate(fs, ElfOff);          // invalid-cast auto-uncast: 31-frame delay -> 4, height check gated on a SETTLED bobber
             PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
             PatchWaterRedraw(fs, ElfOff);                 // moves (not duplicates) the water draw to after the character
@@ -1775,8 +1779,26 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CAVE_VA + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(GATE_VA), 0x28410004);   // slti at,st_cnt,4 — consult the check almost immediately
-            WrU32(fs, ElfOff(LUI_VA), J(CAVE_VA));    // height tail -> settled-gated cave
+            // Route the tail through QueensDragCheck @0x229360 (camera_norm_side.s bank) FIRST: in Queens,
+            // waiting-state only, a float dragged past the canal wall (|z|>49.5) or inside a bridge-pillar
+            // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
+            // settled-height cave below, unmodified. (Wall-stopped rest positions 48 / arch face 25 stay
+            // fishable — the drag thresholds sit deliberately beyond them.)
+            WrU32(fs, ElfOff(LUI_VA), J(0x00229460)); // height tail -> drag check (v4) -> settled-gated cave
             WrU32(fs, ElfOff(MTC_VA), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
+            // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @0x229440, camera_norm_side.s) ──
+            // FishLineStep's uki ground probe lifts the bobber onto ANY floor poly at its (x,z) — bridge
+            // decks and pipe tops included (they're walkable, so they're in the fishing cpoly gather).
+            // Probe-proven teleports: y 24.5 -> 70.2 onto a bridge deck (while the pillar box held x),
+            // y 8.7 -> 77.8 onto the pipes; also "cast under the bridge -> bobber on top". The gate skips
+            // the lift in Queens when the floor sits above water+5 (deck/pipe top — the flight clamp keeps
+            // Queens casts inside the canal, so real banks are unreachable; other towns stay vanilla).
+            const uint UKI_GND_VA = 0x001AA538, UKI_GND_D = 0x001AA53C;   // lui v0,0x3f80 ; mtc1 v0,f1
+            uint gotUG = RdU32(fs, ElfOff(UKI_GND_VA)), gotUGd = RdU32(fs, ElfOff(UKI_GND_D));
+            if (gotUG != 0x3C023F80 || gotUGd != 0x44820800)
+                throw new IOException($"Uki ground-lift site not vanilla (got 0x{gotUG:X8}/0x{gotUGd:X8}).");
+            WrU32(fs, ElfOff(UKI_GND_VA), J(0x00229630));  // ground store head -> overhead-floor-gated bank sub
+            WrU32(fs, ElfOff(UKI_GND_D), 0);               // displaced mtc1 -> nop (sub redoes the store)
         }
 
         // ── Fishing camera-collision gather: see ALL camera walls while fishing ──────────────────────

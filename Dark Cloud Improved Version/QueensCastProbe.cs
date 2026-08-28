@@ -21,6 +21,8 @@ namespace Dark_Cloud_Improved_Version
         private const long Ukip0Z       = 0x21D56358;   // ukip[0].z — float visual cluster
         private const long UkiTargetZ   = 0x21D56458;   // uki_target.z — the animation-bone pin target
         private const long OldP18Z      = 0x21D560D8;   // old_p[18].z — clamp also writes this
+        private const long Point18X     = 0x21D55F50;   // point[18].x
+        private const long Point18Y     = 0x21D55F54;   // point[18].y
 
         private static int _tick, _lastState;
         private static float _maxP18, _maxUki, _maxTgt;
@@ -38,10 +40,12 @@ namespace Dark_Cloud_Improved_Version
             _lastState = st;
             _maxP18 = Math.Max(_maxP18, p18); _maxUki = Math.Max(_maxUki, uki); _maxTgt = Math.Max(_maxTgt, tgt);
 
-            if (++_tick % 10 != 0) return;                  // ~2 Hz at the town loop rate
+            if (++_tick % 5 != 0) return;                   // ~4 Hz at the town loop rate
+            // water @0x202A2B28 (gp-0x6cc8) decides the LOW-TIDE wall enable (<15); rod z (point[0].z)
+            // decides the per-wall side enables (inside +-47)
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[QCast] st={st} p18z={p18:0.0}(max {_maxP18:0.0}) ukiz={uki:0.0}(max {_maxUki:0.0}) " +
-                $"tgtz={tgt:0.0}(max {_maxTgt:0.0}) oldz={Memory.ReadFloat(OldP18Z):0.0} pin={Memory.ReadInt(SetUkiPos)}");
+                $"[QCast] st={st} p18=({Memory.ReadFloat(Point18X):0.0},{Memory.ReadFloat(Point18Y):0.0},{p18:0.0}) " +
+                $"maxz={_maxP18:0.0} water={Memory.ReadFloat(0x202A2B28):0.0} rodz={Memory.ReadFloat(0x21D55E38):0.0} pin={Memory.ReadInt(SetUkiPos)}");
         }
     }
 }
