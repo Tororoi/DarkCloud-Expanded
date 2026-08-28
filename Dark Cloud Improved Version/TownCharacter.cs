@@ -1057,6 +1057,7 @@ namespace Dark_Cloud_Improved_Version
                 CameraDiag.Tick();           //TEMP: log follow-camera distance + positions
                 CameraGatherArena.Tick();    //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)
                 BrownbooCamProbe.Tick();     //Brownboo: gather load + camera state + arrival camera set
+                QueensCastProbe.Tick();      //Queens: FishLineClamp diagnostics (logging only)
                 CameraCPolyProbe.Tick();     //PHASE 1 (ELF port): dump the game's runtime camera CCPoly buffer once per area
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket
