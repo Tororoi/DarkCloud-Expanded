@@ -225,6 +225,10 @@ layers.append({'key': 'castdrag', 'label': 'DRAG uncast planes z=±49.5 (waiting
 # USER-AUTHORED support boxes (verbatim from the baked table, rows 0-3): legs only, y 0..47
 _BOXES=[(-73.07,-22.93,35,50,0,47),(-73.07,-22.93,-50,-36,0,47),
         (774.93,825.07,35,50,0,47),(774.93,825.07,-50,-36,0,47)]
+_bx=[]
+for b in _BOXES: _bx+=_box(*b)
+layers.append({'key': 'castboxes', 'label': 'CAST bridge-support boxes (stop-dead in flight + uncast on drag)',
+               'tris': _bx, 'color': [120,220,255], 'alpha': 0.4, 'border': '#8df', 'on': True})
 
 
 # ---- CUSTOM COLLISION BAKE — regrouped into the EXACT nodes the ISO bake writes (bscc.grouped_collision):
@@ -264,6 +268,18 @@ for _i, (_mn, _bk) in enumerate(_G['camera']):
     nodelabels.append([_cen, _mn, _bb, _nk])
     layers.append({'key': _nk, 'label': f'{_mn} ({len(_bk)} tris)', 'tris': _bk, 'color': _node_color(_i),
                    'alpha': 0.6, 'border': '#5bf', 'on': False, 'group': 'Camera _c nodes'})
+
+# REVERTED-ARCH highlight (2026-08): obj34 gatehouse / obj43 / obj45 / obj33 `_c` customs were reverted
+# to vanilla (match the visual meshes) as the baseline for the corner-ROUNDING approach. This layer pulls
+# those four regions out of the live-baked camera pool so the revert is verifiable at a glance.
+_REVERT_BOXES=[(150,350,-177,-74),(-513,-374,-104,104),(-513,50,123,653),(1250,1622,-54,276)]
+def _in_revert(t):
+    cx=sum(p[0] for p in t)/3; cz=sum(p[2] for p in t)/3
+    return any(x0-5<=cx<=x1+5 and z0-5<=cz<=z1+5 for x0,x1,z0,z1 in _REVERT_BOXES)
+_camhl=[t for t in _cam_tris if _in_revert(t)]
+layers.append({'key': 'ccol_rev', 'label': f'REVERTED arches obj34/43/45/33 — now vanilla _c ({len(_camhl)} tris)',
+               'tris': _camhl, 'color': [120,255,140], 'alpha': 0.65, 'border': '#6f8', 'on': True})
+print(f"reverted-arch regions: {len(_camhl)} camera tris (vanilla again)")
 
 # custom PLAYER collision (_a): per ground sub, pooled + split (= the camera set + canal invisible walls +
 # railings; the loading-zone triggers below are also part of `_a` but kept on their own toggle).
