@@ -196,46 +196,69 @@ lw    $t1, 0x2518($t0)        # town MapNo
 addiu $t2, $zero, 2
 bne   $t1, $t2, flc_done
 nop
-lw    $t1, 0x26e8($t0)        # chara_fishing
-addiu $t2, $zero, 3
-bne   $t1, $t2, flc_done
+lw    $t1, 0x26e8($t0)        # chara_fishing: 3 (swing/flight) OR 4 (waiting — the swing anim ends on
+addiu $t2, $zero, 3           # a timer, so long casts are still ballistic at st4; slow points exempt)
+beq   $t1, $t2, flc_st3
 nop
-lui   $t3, 0x4240             # +48
+addiu $t2, $zero, 4
+beq   $t1, $t2, flc_st4
+nop
+# NOT casting (st 0/1/2/5+): refresh the PER-CAST WALL LATCH and exit. v6-v8 lesson: a crossing test
+# fails when the bobber DANGLES AT THE ROD already outside ±47 (standing near a wall) — it starts the
+# flight outside and never "crosses" = the consistent per-stance pass-through. The latch instead
+# records, pre-flight, whether the bobber hangs inside the CANAL REGION (|z| < 60): floor-spot
+# stances (even wall-adjacent, dangle ~50-55) latch ON -> flight uses the UNCONDITIONAL v3-style band
+# clamp (first frame nudges the dangle to ±47, invisible); bank stances (|z|~70) latch OFF -> no
+# line-snap when casting from the top.
+lui   $t3, 0x1d5
+lwc1  $f4, 0x5f58($t3)        # point[18].z (the resting/dangling bobber)
+abs.s $f4, $f4
+lui   $t3, 0x4270             # 60.0 — inside the canal region?
+mtc1  $t3, $f5
+nop
+addiu $t1, $zero, 1
+.word 0x46052034             # c.lt.s f4,f5
+nop
+bc1t  flc_latchw
+nop
+addu  $t1, $zero, $zero
+flc_latchw:
+lui   $t3, 0x1f1
+sw    $t1, 0x6c($t3)          # Mailbox.FishWallLatch @0x01F1006C
+b     flc_done
+nop
+flc_st3:
+addu  $t9, $zero, $zero       # t9 = 0: st3, every point collides (incl. the dangle nudge)
+b     flc_gates
+nop
+flc_st4:
+addiu $t9, $zero, 1           # t9 = 1: st4, only FAST points collide (drag/settle exempt)
+flc_gates:
+lui   $t3, 0x423c             # +47 (1u padded INTO the canal — the hit lands visibly before the face)
 mtc1  $t3, $f10
 nop
-lui   $t3, 0xc240             # -48
+lui   $t3, 0xc23c             # -47
 mtc1  $t3, $f11
 nop
-# wall enables: t8 = +48 wall active, t9 = -48 wall active
+lui   $t3, 0x3e80             # 0.25 -> f12: the ST4 flight gate — drags move ~0.02/frame, the flying
+mtc1  $t3, $f12               #   tail of a long cast far faster; only fast points collide at st4
+nop
+# walls-on flag t8: LOW TIDE ONLY. No rod-side gating any more — the old gate read the ROD TIP,
+# which swings across +-47 during the cast animation, so standing near a wall STROBED the enable and
+# leaked casts through (log-proven). The clamp itself is now a CROSSING test (see flc_pass): only a
+# point that was INSIDE last frame (old_p, the Verlet pre-step pos) and is outside now gets stopped —
+# rod-side points never get pulled in, incoming crossings are free, outgoing crossings always hit.
 addu  $t8, $zero, $zero
-addu  $t9, $zero, $zero
 lwc1  $f4, 0x2b28($t0)        # water level @0x2A2B28 (gp-0x6cc8)
 lui   $t3, 0x4170             # 15.0 — below this = low tide
 mtc1  $t3, $f5
 nop
 .word 0x46052034             # c.lt.s f4,f5 : low tide ?
 nop
-bc1f  flc_wallsset            # not low tide -> both walls stay OFF
-nop
-lui   $t1, 0x1d5
-lwc1  $f6, 0x5e38($t1)        # point[0].z — the rod side
-lui   $t3, 0x423c             # 47.0
-mtc1  $t3, $f7
-nop
-.word 0x46073034             # c.lt.s f6,f7 : rod inside the +48 wall ?
-nop
-bc1f  flc_chklo
-nop
-addiu $t8, $zero, 1
-flc_chklo:
-lui   $t3, 0xc23c             # -47.0
-mtc1  $t3, $f5
-nop
-.word 0x46062834             # c.lt.s f5,f6 : rod inside the -48 wall ?
-nop
 bc1f  flc_wallsset
 nop
-addiu $t9, $zero, 1
+lui   $t3, 0x1f1
+lw    $t8, 0x6c($t3)          # AND with the per-cast latch (bank casts keep walls off)
 flc_wallsset:
 lui   $t0, 0x1d5
 addiu $t5, $t0, 0x5f50        # point + 18*0x10  (bobber + hang-down line)
@@ -260,20 +283,32 @@ addiu $sp, $sp, 0x10
 # pass: per point (t5 pos / t6 old, t7 count, stride 0x10): gated wall clamp, then bridge boxes.
 # Uses t2 (table ptr), t3/t4 (counter/scratch) — t8/t9 wall enables preserved.
 flc_pass:
-lwc1  $f8, 0x8($t5)           # pos.z
-beq   $t8, $zero, flc_skiphi
+lwc1  $f8, 0x8($t5)           # pos.z (post-step)
+lwc1  $f9, 0x8($t6)           # old_p.z (the Verlet pre-step position)
+lwc1  $f1, 0x0($t5)           # pos.x
+lwc1  $f3, 0x0($t6)           # old_p.x
+beq   $t9, $zero, flc_hitchk  # st3: everything collides (band clamp nudges a wall-side dangle in)
 nop
-.word 0x46085034             # c.lt.s f10,f8 : +48 < z ?
+sub.s $f4, $f8, $f9
+abs.s $f4, $f4
+sub.s $f5, $f1, $f3
+abs.s $f5, $f5
+add.s $f4, $f4, $f5           # horizontal step this frame
+.word 0x46046034             # c.lt.s f12,f4 : moving at flight speed ?
+nop
+bc1f  flc_next                # st4 settled/dragged -> exempt (wall-rest + drag-to-uncast preserved)
+nop
+flc_hitchk:
+beq   $t8, $zero, flc_boxes   # walls: low tide AND latched only
+.word 0x46085034             # c.lt.s f10,f8 : +47 < pos.z ?
 nop
 bc1f  flc_skiphi
 nop
-swc1  $f10, 0x8($t5)
+swc1  $f10, 0x8($t5)          # outside -> pull to the padded face (v3 semantics: unconditional)
 swc1  $f10, 0x8($t6)
 mov.s $f8, $f10
 flc_skiphi:
-beq   $t9, $zero, flc_boxes
-nop
-.word 0x460B4034             # c.lt.s f8,f11 : z < -48 ?
+.word 0x460B4034             # c.lt.s f8,f11 : pos.z < -47 ?
 nop
 bc1f  flc_boxes
 nop
@@ -281,10 +316,9 @@ swc1  $f11, 0x8($t5)
 swc1  $f11, 0x8($t6)
 mov.s $f8, $f11
 flc_boxes:
-lwc1  $f1, 0x0($t5)           # pos.x
-lwc1  $f2, 0x4($t5)           # pos.y
+lwc1  $f2, 0x4($t5)           # pos.y (f1 = pos.x already loaded by the speed gate)
 lui   $t2, 0x22
-ori   $t2, $t2, 0x93c0        # box table @0x2293C0
+ori   $t2, $t2, 0x96a0        # box table @0x2296A0 (bank end)
 addiu $t4, $zero, 4
 flc_bx:
 lwc1  $f5, 0x0($t2)           # xa
@@ -381,34 +415,12 @@ nop
 jr    $ra
 nop
 
-# ---- bridge box table @0x2293C0 (flc code ends @0x2293BC): (xa,xb,za,zb,ylo,yhi) x4 ----
-# USER-AUTHORED bridge-support boxes (2026-08): legs only, no arch/deck slab — the under/over-arch
-# space stays open. Inner faces at z +35 / -36 hug the walls behind them; y 0..47.
-.word 0xC29223D7              # W south xa -73.07
-.word 0xC1B770A4              #         xb -22.93
-.word 0x420C0000              #         za  35
-.word 0x42480000              #         zb  50
-.word 0x00000000              #         ylo 0
-.word 0x423C0000              #         yhi 47
-.word 0xC29223D7              # W north xa -73.07
-.word 0xC1B770A4              #         xb -22.93
-.word 0xC2480000              #         za -50
-.word 0xC2100000              #         zb -36
-.word 0x00000000              #         ylo 0
-.word 0x423C0000              #         yhi 47
-.word 0x4441BB85              # E south xa 774.93
-.word 0x444E447B              #         xb 825.07
-.word 0x420C0000              #         za  35
-.word 0x42480000              #         zb  50
-.word 0x00000000              #         ylo 0
-.word 0x423C0000              #         yhi 47
-.word 0x4441BB85              # E north xa 774.93
-.word 0x444E447B              #         xb 825.07
-.word 0xC2480000              #         za -50
-.word 0xC2100000              #         zb -36
-.word 0x00000000              #         ylo 0
-.word 0x423C0000              #         yhi 47
-
+# ---- pad: keep QueensDragCheck fixed @0x229460 ----
+nop
+nop
+nop
+nop
+nop
 # ===== QueensDragCheck @0x229460 (v4): waiting-state drag into wall/bridge -> UNCAST ==========
 # Entered via the CheckUkiHook tail `j` @0x1AA2D4 (IsoPatcher routes it here); falls through into
 # the settled-height cave @0x228E20 unmodified. Gates: chara_fishing == 4 and Queens. Fires when the
@@ -458,7 +470,7 @@ lui   $t3, 0x3fc0             # 1.5 inset
 mtc1  $t3, $f4
 nop
 lui   $t0, 0x22
-ori   $t0, $t0, 0x93c0        # box table
+ori   $t0, $t0, 0x96a0        # box table @0x2296A0
 addiu $t3, $zero, 4
 qdc_bx:
 lwc1  $f5, 0x0($t0)           # xa
@@ -514,7 +526,7 @@ nop
 bc1f  qdc_pass
 nop
 lui   $t0, 0x22
-ori   $t0, $t0, 0x93c0
+ori   $t0, $t0, 0x96a0
 addiu $t3, $zero, 2           # bridge bands from leg rows: W @+0x00, E @+0x30 (xa,xb)
 qdc_lp:
 lwc1  $f5, 0x0($t0)           # xa
@@ -592,3 +604,36 @@ swc1  $f0, -0x6cc0($gp)
 ug_skip:
 j     0x001aa54c
 nop
+
+nop
+nop
+nop
+nop
+# ---- box table @0x2296A0 (bank end; 4 rows of xa,xb,za,zb,ylo,yhi) ----
+# rows 0-3: USER-AUTHORED bridge-support legs (obj44 W / obj40 E) — also the line-pierce band rows
+#           (that loop reads rows 0 and 2 for the two bridges' x-bands, stride 0x30).
+# (the v7 waterfall-gate rows were removed — those "pillars" are WATERFALLS, fine to cast through)
+.word 0xC29223D7              # W bridge legs S
+.word 0xC1B770A4
+.word 0x420C0000
+.word 0x42480000
+.word 0x00000000
+.word 0x423C0000
+.word 0xC29223D7              # W bridge legs N
+.word 0xC1B770A4
+.word 0xC2480000
+.word 0xC2100000
+.word 0x00000000
+.word 0x423C0000
+.word 0x4441BB85              # E bridge legs S
+.word 0x444E447B
+.word 0x420C0000
+.word 0x42480000
+.word 0x00000000
+.word 0x423C0000
+.word 0x4441BB85              # E bridge legs N
+.word 0x444E447B
+.word 0xC2480000
+.word 0xC2100000
+.word 0x00000000
+.word 0x423C0000
