@@ -617,6 +617,25 @@ def _norm(a):
     return [c / L for c in a]
 
 
+def _iwa01_rock_sil2d(nb=60, ny=18, ylo=-16.0, yhi=92.0, rmin=42.0):
+    """2D (bearing x height) silhouette of the visual rock's OUTER face about the hull-circle centre:
+    grid[b][j] = max r of rock verts in that (360/nb-degree, (yhi-ylo)/ny-unit) cell, above water (y>0)
+    and outside r>=rmin (excluding the tunnel-interior walls, which would wrongly wall off the mouth).
+    0.0 where empty. Lets the funnel hug the actual rock face height-aware instead of the global bulge."""
+    from extract_scene_mesh import extract_mesh
+    v, _ = extract_mesh(load_scene('gedit/s04/scene.scn'))['iwa01__s']
+    cx = (min(p[0] for p in v) + max(p[0] for p in v)) / 2
+    cz = (min(p[2] for p in v) + max(p[2] for p in v)) / 2
+    grid = [[0.0] * ny for _ in range(nb)]
+    for p in v:
+        r = math.hypot(p[0] - cx, p[2] - cz)
+        if p[1] > 0 and r >= rmin:
+            b = int((math.degrees(math.atan2(p[2] - cz, p[0] - cx)) % 360) // (360 / nb))
+            j = min(ny - 1, max(0, int((p[1] - ylo) / ((yhi - ylo) / ny))))
+            grid[b][j] = max(grid[b][j], r)
+    return cx, cz, grid, (nb, ny, ylo, yhi)
+
+
 def _iwa01_visual_circle():
     """(cx, cz, R): circle centred on the VISUAL rock (iwa01__s), radius enclosing its ABOVE-WATER xz
     silhouette + pad. The rock's widest spread (r~61) is all submerged base — clipping that is fine (the
