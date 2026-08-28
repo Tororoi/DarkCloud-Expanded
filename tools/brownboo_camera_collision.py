@@ -714,6 +714,64 @@ def iwa01_ring_obj56(scn=None):
     return [list(map(list, t)) for t in keep] + _iwa01_build()
 
 
+# ---- tighter building cylinders: the vanilla obj56 rings around the mushroom houses sit 13-21 units
+#      wider than the visual bodies (hull r 63-80 vs body r95 46-61). Replacing them with 16-seg
+#      cylinders at body-radius + 4 gives the camera that much more room to navigate between houses.
+#      Platforms/ladders poking past the body are deliberately ignored (user call). Per house:
+#      (label, cx, cz, newR, y0, y1) — centres from the placed visual bbox, y-ranges from the vanilla
+#      rings (h01's ring starts at its deck, the outer houses' at -30 in the water).
+_HOUSE_TIGHT = [
+    ('s04h01#0',   -2.0,    1.0, 65.0,   5.0, 205.0),
+    ('s04h02#0',  128.0,  109.0, 50.5, -30.0, 200.0),
+    ('s04h03#0', -136.0,  110.0, 53.7, -30.0, 200.0),
+    ('s04h03#1',   90.0, -175.0, 54.4, -30.0, 200.0),
+    ('s04h03#2',  -80.0, -165.0, 54.9, -30.0, 200.0),
+]
+_HOUSE_SEL_R = 90.0      # tall tris with centroid within this of a house centre are the vanilla ring...
+_HOUSE_KEEP_R = 100.0    # ...unless ANY vert reaches past this (bridge/connector geometry - kept)
+
+
+def _house_ring_sel(tris):
+    """The vanilla building-ring tris: TALL (a vert above y=100) and near a house centre, excluding
+    far-reaching connector tris."""
+    cen = lambda t: [sum(p[i] for p in t) / 3 for i in range(3)]
+    sel = []
+    for t in tris:
+        if max(p[1] for p in t) <= 100:
+            continue
+        c = cen(t)
+        for _nm, hx, hz, _r, _y0, _y1 in _HOUSE_TIGHT:
+            if (math.hypot(c[0] - hx, c[2] - hz) < _HOUSE_SEL_R
+                    and all(math.hypot(p[0] - hx, p[2] - hz) < _HOUSE_KEEP_R for p in t)):
+                sel.append(t)
+                break
+    return sel
+
+
+def _house_cylinders(nseg=16):
+    """Replacement rings: one 16-seg open-ended cylinder wall per house at the tightened radius."""
+    out = []
+    for _nm, hx, hz, R, y0, y1 in _HOUSE_TIGHT:
+        for k in range(nseg):
+            a0, a1 = 2 * math.pi * k / nseg, 2 * math.pi * (k + 1) / nseg
+            ax_, az = hx + R * math.cos(a0), hz + R * math.sin(a0)
+            bx, bz = hx + R * math.cos(a1), hz + R * math.sin(a1)
+            mx, mz = (ax_ + bx) / 2 - hx, (az + bz) / 2 - hz
+            out += _q([ax_, y0, az], [bx, y0, bz], [bx, y1, bz], [ax_, y1, az], [mx, 0, mz])
+    return out
+
+
+def tight_obj56(scn=None):
+    """iwa01_ring_obj56 (rock hull) + the tighter building cylinders — the full shipped obj56."""
+    base = iwa01_ring_obj56(scn)
+    selk = set(_rmkey(t) for t in _house_ring_sel(base))
+    out = [t for t in base if _rmkey(t) not in selk]
+    removed = len(base) - len(out)
+    if not 150 <= removed <= 230:                        # ~208 expected (5 rings; h01's is denser)
+        raise SystemExit(f'house-ring removal drift: removed {removed}, expected ~208')
+    return out + _house_cylinders()
+
+
 def custom_obj56_tris(scn=None):
     """Vanilla obj56 minus _RM plus _ADD. Raises if any _RM entry fails to match (drift guard)."""
     van = next((tris for nn, tris in vanilla_v_nodes(scn) if nn == 'obj56'), [])

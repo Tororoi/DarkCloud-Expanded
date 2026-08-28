@@ -72,11 +72,17 @@ namespace Dark_Cloud_Improved_Version
                         // eye = ref + dist·(sin a, cos a): aim the eye from the ref TOWARD the crater centre
                         float a = (float)Math.Atan2(-curRx, -curRz);
                         float oldH = Memory.ReadFloat(c + 0x2D4);
+                        // v3: ALSO snap the boom SHORT — vanilla EdInitCameraParam is SetDistance(near) +
+                        // SetHeight(5). Height+angle alone kept failing: at BASE(80) the eye still hangs
+                        // over the crater rim at some spawns and the world-floor guard re-hoists it every
+                        // frame. Short boom = eye at the player's own ground; it then extends outward over
+                        // the LOW crater-side terrain along the snapped angle, exactly like a vanilla load.
+                        Memory.WriteFloat(c + 0x2D0, 12f);    // distance = near (extends back out naturally)
                         Memory.WriteFloat(c + 0x2D4, rest);   // height = rest (vanilla EdInitCameraParam value)
                         Memory.WriteFloat(c + 0x2D8, a);      // orbit angle TARGET
                         Memory.WriteFloat(c + 0x2DC, a);      // smoothed angle (snap — no swing)
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[BrownbooCam] arrival set @({curRx:0.0},{curRz:0.0}): h {oldH:0.0} -> {rest:0.0}, angle -> {a:0.00}");
+                            $"[BrownbooCam] arrival set @({curRx:0.0},{curRz:0.0}): h {oldH:0.0} -> {rest:0.0}, dist -> 12, angle -> {a:0.00}");
                     }
                 }
             }
