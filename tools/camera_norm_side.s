@@ -172,3 +172,84 @@ nop
 scret:
 jr    $ra
 nop
+
+# ===== FishLineClamp @0x229100 (v3): stop the bobber dead at the Queens canal walls =============
+# Wraps the single FishLineStep call site (EdMoveChara @0x16D314: `jal 0x1AA340` -> `jal 0x229100`,
+# args pass through). After the real Verlet step, in QUEENS (MapNo == 2) DURING THE CAST FLIGHT ONLY
+# (chara_fishing == 3, the swing/flight state): rope-tail z is clamped to the canal channel |z|<=48
+# (walls ~-50/+52, canal runs along x) — pos AND old_p so the z-velocity zeroes = horizontal motion
+# stops dead and the bobber drops at the wall base. BOTH walls clamp (probe-proven: north-wall casts
+# crossed at z -64..-82); reel-in (state 5) and settled floating (state 4) are untouched, so the
+# bobber always returns to the rod over the near bank. Flight is FREE VERLET (probe: set_uki_pos==0
+# the whole cast — no animation-bone pin to fight).
+# v2 lesson (probe-proven dead clamp): the Queens gate read MapNo via the UNCACHED mirror
+# 0x202A2518 and never matched — game globals must be read at their CACHED 0x00xxxxxx addresses
+# (MapNo 0x002A2518, chara_fishing 0x002A26E8), like every other piece of game code does.
+# R5900: c.lt.s .word-encoded; nop after mtc1/compares; delay slots explicit.
+# 1 pad nop: SubC ends @0x2290F8; this cave must start exactly @0x229100.
+nop
+addiu $sp, $sp, -0x10
+sw    $ra, 0x8($sp)
+jal   0x1aa340                # the real FishLineStep(a0, a1)
+nop
+lui   $t0, 0x2a               # cached globals page 0x002A0000
+lw    $t1, 0x2518($t0)        # town MapNo
+addiu $t2, $zero, 2
+bne   $t1, $t2, flc_done      # Queens only
+nop
+lw    $t1, 0x26e8($t0)        # chara_fishing
+addiu $t2, $zero, 3
+bne   $t1, $t2, flc_done      # cast-flight state only
+nop
+lui   $t3, 0x4240             # +48.0
+mtc1  $t3, $f10
+nop
+lui   $t3, 0xc240             # -48.0
+mtc1  $t3, $f11
+nop
+lui   $t0, 0x1d5
+addiu $t5, $t0, 0x5f50        # point + 18*0x10  (bobber + hang-down line)
+addiu $t6, $t0, 0x60d0        # old_p + 18*0x10
+jal   flc_pass
+addiu $t7, $zero, 6
+lui   $t0, 0x1d5
+addiu $t5, $t0, 0x6350        # ukip  (float cluster)
+addiu $t6, $t0, 0x6390        # ukiop
+jal   flc_pass
+addiu $t7, $zero, 4
+lui   $t0, 0x1d5
+addiu $t5, $t0, 0x62b0        # hookp (hook cluster)
+addiu $t6, $t0, 0x62e0        # hookop
+jal   flc_pass
+addiu $t7, $zero, 3
+flc_done:
+lw    $ra, 0x8($sp)
+jr    $ra
+addiu $sp, $sp, 0x10
+
+# pass: clamp t7 points' z (stride 0x10) at t5 (pos) / t6 (old) into [-48,+48] (f11/f10)
+flc_pass:
+lwc1  $f8, 0x8($t5)           # pos.z
+.word 0x46085034             # c.lt.s f10,f8 : +48 < z ?
+nop
+bc1t  flc_hi
+nop
+.word 0x460B4034             # c.lt.s f8,f11 : z < -48 ?
+nop
+bc1f  flc_next
+nop
+swc1  $f11, 0x8($t5)          # pos.z = -48
+swc1  $f11, 0x8($t6)          # old.z = -48 (z-velocity zeroed)
+b     flc_next
+nop
+flc_hi:
+swc1  $f10, 0x8($t5)          # pos.z = +48
+swc1  $f10, 0x8($t6)
+flc_next:
+addiu $t5, $t5, 0x10
+addiu $t6, $t6, 0x10
+addiu $t7, $t7, -1
+bne   $t7, $zero, flc_pass
+nop
+jr    $ra
+nop
