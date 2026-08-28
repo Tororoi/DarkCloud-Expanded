@@ -54,7 +54,12 @@ namespace Dark_Cloud_Improved_Version
             if (map != _prevMap) { _prevMap = map; _arrivalLeft = ArrivalWindowTicks; _lastRx = float.NaN; }
             if (map != BrownbooMapNo) { _tick = 0; return; }
 
-            if (_arrivalLeft > 0 && Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeEvent)
+            // ── RETIRED (2026-08): the runtime arrival writes below never took — the ELF-side camera cave
+            //    re-derived the height every frame, so anything poked from C# was overwritten within a tick.
+            //    The REAL fix is in the cave itself: the eye-floor guard is now GATED (SubC @0x2290C0,
+            //    camera_norm_side.s) so a rim towering >40 above the ref no longer hoists the camera on
+            //    arrival — vanilla has no eye-floor hoist at all. Kept compiled-out for reference.
+            if (false && _arrivalLeft > 0 && Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeEvent)
             {
                 _arrivalLeft--;
                 uint cr = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;

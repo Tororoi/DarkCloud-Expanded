@@ -1639,12 +1639,16 @@ namespace Dark_Cloud_Improved_Version
             // unfreezes as soon as distance recovers past the gate. Slot 4 = the gate threshold, BASE−1:
             // STRICT so open-field rest (d eases asymptotically to BASE) never freezes — the right-stick
             // height control must keep working at rest.
+            // ⚠ indices +22 from the 2026-08 XZ warp-skip insert (camera_height.s: a cross-map warp can
+            //   land at nearly the same world y — Queens→Brownboo Δy≈110, under the 400 y-break — so the
+            //   y-only test left the descent bound grinding the eye down from the SOURCE map's height =
+            //   the warp-arrival pan. E_prev >128u from the ref in X or Z now skips the bound.)
             PutValIn(heightFn, 4, BASE_DIST - 1f, "REACQ_GATE");
-            PutValIn(heightFn, 21, WARP_BREAK, nameof(WARP_BREAK));
-            PutValIn(heightFn, 28, H_FALL_RATE, nameof(H_FALL_RATE));
-            PutValIn(heightFn, 46, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
-            PutValIn(heightFn, 51, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
-            PutValIn(heightFn, 59, DESCENT_HOLD, nameof(DESCENT_HOLD));
+            PutValIn(heightFn, 43, WARP_BREAK, nameof(WARP_BREAK));
+            PutValIn(heightFn, 50, H_FALL_RATE, nameof(H_FALL_RATE));
+            PutValIn(heightFn, 68, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
+            PutValIn(heightFn, 73, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
+            PutValIn(heightFn, 81, DESCENT_HOLD, nameof(DESCENT_HOLD));
             for (int i = 0; i < heightFn.Length; i++)
                 WrU32(fs, ElfOff(0x0027D090 + (uint)(i * 4)), heightFn[i]);
             WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838

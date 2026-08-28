@@ -36,6 +36,34 @@ add.s $f6, $f6, $f2           # desired eye WORLD y
 lui   $t3, 0x01f1
 ori   $t3, $t3, 0x0050
 lwc1  $f3, 0x4($t3)           # E_prev.y (last frame's constrained eye, world)
+# XZ warp-skip (2026-08): a cross-map warp can land at nearly the SAME world y (Queens→Brownboo Δy≈110,
+# under the 400 y-break), leaving the y-only test blind — the bound then grinds the eye down from the
+# SOURCE map's height at H_FALL_RATE for seconds (the warp-arrival pan; it self-perpetuates because
+# E_prev re-inherits the bounded eye each frame). E_prev further than 128u from the REF in X or Z =
+# teleport → skip the bound THIS frame; the eye snaps to rest, E_prev catches up, and from the next
+# frame the bound is naturally inert. 128 = the swept-slide's own warp-skip radius.
+lwc1  $f4, 0x0($t3)           # E_prev.x
+lwc1  $f7, 0x20($t9)          # ref.x
+sub.s $f4, $f4, $f7
+abs.s $f4, $f4
+lui   $t0, 0x4300             # XZ_BREAK = 128
+mtc1  $t0, $f7
+nop
+.word 0x46043834             # c.OLT.s f7,f4 : XZ_BREAK < |E_prev.x − ref.x| ?
+nop
+bc1t  hnobound
+nop
+lwc1  $f4, 0x8($t3)           # E_prev.z
+lwc1  $f7, 0x28($t9)          # ref.z
+sub.s $f4, $f4, $f7
+abs.s $f4, $f4
+lui   $t0, 0x4300             # XZ_BREAK = 128
+mtc1  $t0, $f7
+nop
+.word 0x46043834             # c.OLT.s f7,f4 : XZ_BREAK < |E_prev.z − ref.z| ?
+nop
+bc1t  hnobound
+nop
 # warp-continuity: only bound the descent when last frame's eye is plausibly continuous with this one
 sub.s $f4, $f3, $f6
 abs.s $f4, $f4
