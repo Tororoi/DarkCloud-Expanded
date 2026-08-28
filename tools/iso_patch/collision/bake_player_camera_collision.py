@@ -1627,6 +1627,15 @@ def _e03_townwall_tris():
     out += _dir_quad([1400, 170, 250], [1500, 170, 250], [1500, 370, 250], [1400, 370, 250], [0, 0, 1])
     out += _dir_quad([1400, 170, 200], [1500, 170, 200], [1500, 370, 200], [1400, 370, 200], [0, 0, -1])
     out += _dir_quad([1400, 370, 200], [1500, 370, 200], [1500, 370, 250], [1400, 370, 250], [0, 1, 0])
+    # USER-DIRECTED (2026-08): the vanilla x=695 return sits 5 units shy of its neighbours (the SW top
+    # cap and the z=150 wall both reach x=700) -> move the return face to x=700 so the corner is flush.
+    out = [t for t in out if not all(abs(p[0] - 695) < 1 and 149 <= p[2] <= 201 and 69 <= p[1] <= 281 for p in t)]
+    out += _dir_quad([700, 70, 150], [700, 70, 200], [700, 280, 200], [700, 280, 150], [1, 0, 0])
+    # USER-DIRECTED (2026-08): with obj43 back to vanilla, the corner at the z=150 wall's west end was
+    # open (obj43's retired custom extension used to cover it; a diagonal seal made a new gap). The
+    # VISUAL mesh has a flat x=-400 return face there (grid3_4_1_1_1_1_: z 50->150, y 70->270, +x) —
+    # add exactly that; the z[45,104] portion overlaps obj43's interior harmlessly.
+    out += _dir_quad([-400, 70, 50], [-400, 70, 150], [-400, 270, 150], [-400, 270, 50], [1, 0, 0])
     return out
 
 
