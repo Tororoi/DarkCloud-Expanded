@@ -146,3 +146,29 @@ nop
 nop
 jr    $ra
 nop
+
+# ===== SubC @0x2290C0: GATED ground-clamp difference (called by the cave's height section) ====
+# in:  sp+0x5c = groundY (eye-down ray hit; 0 = miss), sp+0x24 = ref.y
+# out: f6 = groundY − ref.y, or -1000.0 (guard inert) when the "floor" is more than GUARD_MAX
+#      above the ref's plane — that's a rim/mesa towering over the player, not a floor. Vanilla
+#      has no eye-floor hoist at all; hoisting onto Brownboo's crater rim was the warp-arrival
+#      pan (see town_camera_collision.s ground clamp). Scratch: f7, $t0 (the call site's own).
+# 2 pad nops first: SubB's jr ends @0x2290B4; SubC must start exactly @0x2290C0.
+nop
+nop
+lwc1  $f6, 0x5c($sp)          # groundY
+lwc1  $f7, 0x24($sp)          # ref.y
+sub.s $f6, $f6, $f7           # groundY − ref.y
+lui   $t0, 0x4220             # GUARD_MAX = 40.0 (floors within 40 of the ref plane behave as before)
+mtc1  $t0, $f7
+nop
+.word 0x46063834             # c.OLT.s f7,f6 : GUARD_MAX < (groundY − ref.y) ?
+nop
+bc1f  scret
+nop
+lui   $t0, 0xc47a             # -1000.0 -> guard inert (matches the ray-miss path's intent)
+mtc1  $t0, $f6
+nop
+scret:
+jr    $ra
+nop

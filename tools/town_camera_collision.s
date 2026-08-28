@@ -220,14 +220,19 @@ bc1f  cclampok
 nop
 mov.s $f5, $f6                # duck: clamp height down under the ceiling
 cclampok:
-# ground clamp: eye stays MIN_GROUND_CLEAR above the ground under the camera (stick-down floor guard)
-lwc1  $f6, 0x5c($sp)          # groundY
-lwc1  $f7, 0x24($sp)          # ref.y
-sub.s $f6, $f6, $f7           # groundY − ref.y
+# ground clamp: eye stays MIN_GROUND_CLEAR above the ground under the camera (stick-down floor guard).
+# GATED (SubC @0x2290C0, camera_norm_side.s bank): a "floor" more than GUARD_MAX above the REF's plane is
+# a rim/mesa towering over the player, not a floor — vanilla has NO eye-floor hoist at all, and hoisting
+# there was the warp-arrival pan (inherited angle hangs the eye over Brownboo's crater rim -> hoist ~150 ->
+# descent rate-cap grinds it down for seconds). SubC returns f6 = (groundY − ref.y), or -1000 (inert) when
+# the floor is beyond GUARD_MAX. 3-word-for-3-word swap: the MIN_GROUND_CLEAR lui below is tunable slot 168.
+jal   0x2290c0                # SubC: f6 = gated (groundY − ref.y)   (reads sp+0x5c / sp+0x24)
+nop
+nop
 lui   $t0, 0x40c0             # MIN_GROUND_CLEAR = 6
 mtc1  $t0, $f7
 nop
-add.s $f6, $f6, $f7           # height_min = (groundY − ref.y) + MIN_GROUND_CLEAR
+add.s $f6, $f6, $f7           # height_min = gated(groundY − ref.y) + MIN_GROUND_CLEAR
 swc1  $f6, 0x8c($sp)          # stash h_min: the sweep's post-clamp re-floor needs it (inverted-slope contact)
 swc1  $f5, 0x94($sp)          # stash the pre-clamp rest target (REST_H + stick) for the height sub's descent hold
 .word 0x46062834             # c.OLT.s f5,f6 : height_target < height_min ?
