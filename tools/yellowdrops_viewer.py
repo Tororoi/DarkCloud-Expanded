@@ -133,6 +133,33 @@ for L in layers:
 from georama_parts import lod_layers
 layers += lod_layers('gedit/s13/scene.scn', r's13\d\d')
 
+# ---- CRESCENT POND PROPOSAL (tools/yellowdrops_pond.py; knobs there) vs the current grid8 strip ----
+import yellowdrops_pond as _pond
+_curstrip=[]
+for _m in PLACED:
+    if _m['name']=='grid8':
+        _v=_m.get('verts'); 
+        for _t in (_m.get('tris') or []):
+            _p=[_v[i] for i in _t] if isinstance(_t[0],int) else _t
+            _c=[( _p[0][k]+_p[1][k]+_p[2][k])/3 for k in range(3)]
+            if 360<=_c[0]<=840 and 320<=_c[2]<=770:
+                _curstrip.append([list(q) for q in _p])
+layers.append({'key':'pond_cur','label':f'CURRENT grid8 strip ({len(_curstrip)} tris) — to be reshaped',
+               'tris':_curstrip,'color':[255,120,120],'alpha':0.55,'border':'#f77','on':True,
+               'group':'Crescent pond proposal'})
+layers.append({'key':'pond_bent','label':f'STEP 1: existing strip bent outward (+{int(_pond.BULGE_ADD)} mid-bulge)',
+               'tris':_pond.bent_strip_tris(),
+               'color':[120,255,140],'alpha':0.6,'border':'#6f8','on':False,'group':'Crescent pond proposal'})
+layers.append({'key':'pond_low','label':f'STEP 2: pond floor lowered ({int(_pond.LOWER_DELTA)}) — seam tris become ramps',
+               'tris':_pond.lowered_tris(),
+               'color':[80,200,255],'alpha':0.6,'border':'#5cf','on':False,'group':'Crescent pond proposal'})
+layers.append({'key':'pond_arc','label':'STEP 3: convex edge on arc, equal segment lengths (5 x 95.4)',
+               'tris':_pond.arc_tris(),
+               'color':[255,200,80],'alpha':0.6,'border':'#fc5','on':False,'group':'Crescent pond proposal'})
+_p4 = _pond.pond_tris()
+layers.append({'key':'pond_sub','label':f'STEP 4: spline-ladder rebuild ({len(_p4)} tris), step 3 as cage',
+               'tris':_p4,
+               'color':[220,120,255],'alpha':0.6,'border':'#d7f','on':True,'group':'Crescent pond proposal'})
 html = build_html(
     title="Yellow Drops (s13) — fishing placement + collision",
     layers=layers, node_labels=nodelabels, points=points, point_labels=point_labels,
