@@ -1784,7 +1784,7 @@ namespace Dark_Cloud_Improved_Version
             // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
             // settled-height cave below, unmodified. (Wall-stopped rest positions 48 / arch face 25 stay
             // fishable — the drag thresholds sit deliberately beyond them.)
-            WrU32(fs, ElfOff(LUI_VA), J(0x00229460)); // height tail -> drag check (v4) -> settled-gated cave
+            WrU32(fs, ElfOff(LUI_VA), J(0x002294C0)); // height tail -> drag check -> settled-gated cave (v10 addr)
             WrU32(fs, ElfOff(MTC_VA), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
             // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @0x229440, camera_norm_side.s) ──
             // FishLineStep's uki ground probe lifts the bobber onto ANY floor poly at its (x,z) — bridge
@@ -1797,7 +1797,7 @@ namespace Dark_Cloud_Improved_Version
             uint gotUG = RdU32(fs, ElfOff(UKI_GND_VA)), gotUGd = RdU32(fs, ElfOff(UKI_GND_D));
             if (gotUG != 0x3C023F80 || gotUGd != 0x44820800)
                 throw new IOException($"Uki ground-lift site not vanilla (got 0x{gotUG:X8}/0x{gotUGd:X8}).");
-            WrU32(fs, ElfOff(UKI_GND_VA), J(0x00229630));  // ground store head -> overhead-floor-gated bank sub
+            WrU32(fs, ElfOff(UKI_GND_VA), J(0x00229690));  // ground store head -> overhead-floor-gated bank sub (v10 addr)
             WrU32(fs, ElfOff(UKI_GND_D), 0);               // displaced mtc1 -> nop (sub redoes the store)
         }
 

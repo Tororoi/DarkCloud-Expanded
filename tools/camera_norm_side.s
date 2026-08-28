@@ -206,10 +206,11 @@ nop
 # NOT casting (st 0/1/2/5+): refresh the PER-CAST WALL LATCH and exit. v6-v8 lesson: a crossing test
 # fails when the bobber DANGLES AT THE ROD already outside ±47 (standing near a wall) — it starts the
 # flight outside and never "crosses" = the consistent per-stance pass-through. The latch instead
-# records, pre-flight, whether the bobber hangs inside the CANAL REGION (|z| < 60): floor-spot
-# stances (even wall-adjacent, dangle ~50-55) latch ON -> flight uses the UNCONDITIONAL v3-style band
-# clamp (first frame nudges the dangle to ±47, invisible); bank stances (|z|~70) latch OFF -> no
-# line-snap when casting from the top.
+# records the PRE-FLIGHT stance: walls arm only when the dangle is inside the canal region (|z| < 60)
+# AND LOW (y < 45 — floor stances dangle ~8-20; top-of-canal/bridge stances ~60+). The height check
+# replaces the old tide gate: casting DOWN from the top never wall-hits at ANY tide, and at high tide
+# no low stance exists, so behavior at height is unchanged. Floor stances (even wall-adjacent) latch
+# ON -> flight uses the UNCONDITIONAL v3-style band clamp (first frame nudges the dangle to ±47).
 lui   $t3, 0x1d5
 lwc1  $f4, 0x5f58($t3)        # point[18].z (the resting/dangling bobber)
 abs.s $f4, $f4
@@ -219,8 +220,18 @@ nop
 addiu $t1, $zero, 1
 .word 0x46052034             # c.lt.s f4,f5
 nop
+bc1f  flc_latch0
+nop
+lui   $t3, 0x1d5
+lwc1  $f4, 0x5f54($t3)        # point[18].y — the stance height
+lui   $t3, 0x4234             # 45.0
+mtc1  $t3, $f5
+nop
+.word 0x46052034             # c.lt.s f4,f5 : dangling LOW (in/over the water)?
+nop
 bc1t  flc_latchw
 nop
+flc_latch0:
 addu  $t1, $zero, $zero
 flc_latchw:
 lui   $t3, 0x1f1
@@ -248,18 +259,9 @@ nop
 # leaked casts through (log-proven). The clamp itself is now a CROSSING test (see flc_pass): only a
 # point that was INSIDE last frame (old_p, the Verlet pre-step pos) and is outside now gets stopped —
 # rod-side points never get pulled in, incoming crossings are free, outgoing crossings always hit.
-addu  $t8, $zero, $zero
-lwc1  $f4, 0x2b28($t0)        # water level @0x2A2B28 (gp-0x6cc8)
-lui   $t3, 0x4170             # 15.0 — below this = low tide
-mtc1  $t3, $f5
-nop
-.word 0x46052034             # c.lt.s f4,f5 : low tide ?
-nop
-bc1f  flc_wallsset
-nop
 lui   $t3, 0x1f1
-lw    $t8, 0x6c($t3)          # AND with the per-cast latch (bank casts keep walls off)
-flc_wallsset:
+lw    $t8, 0x6c($t3)          # walls armed by the stance latch alone (low + inside the canal region;
+                              # the latch's height check subsumes the old tide gate)
 lui   $t0, 0x1d5
 addiu $t5, $t0, 0x5f50        # point + 18*0x10  (bobber + hang-down line)
 addiu $t6, $t0, 0x60d0        # old_p + 18*0x10
@@ -318,7 +320,7 @@ mov.s $f8, $f11
 flc_boxes:
 lwc1  $f2, 0x4($t5)           # pos.y (f1 = pos.x already loaded by the speed gate)
 lui   $t2, 0x22
-ori   $t2, $t2, 0x96a0        # box table @0x2296A0 (bank end)
+ori   $t2, $t2, 0x96f0        # box table @0x2296A0 (bank end)
 addiu $t4, $zero, 4
 flc_bx:
 lwc1  $f5, 0x0($t2)           # xa
@@ -351,7 +353,30 @@ lwc1  $f6, 0x14($t2)          # yhi
 nop
 bc1t  flc_bxnext
 nop
-# inside: px = min(x-xa, xb-x), pz = min(z-za, zb-z); resolve the smaller axis
+# inside a box: resolve by ENTRY SIDE first (old_p says which face the point came through —
+# least-penetration alone TUNNELS: one fast step past the thin z-midline ejected the point out the
+# FAR face, the "passed through the support from the thin side" bug). f9 = old.z, f3 = old.x.
+lwc1  $f5, 0x8($t2)           # za
+.word 0x46054834             # c.lt.s f9,f5 : old.z < za -> entered through the za face
+nop
+bc1t  flc_z_a
+nop
+lwc1  $f6, 0xc($t2)           # zb
+.word 0x46093034             # c.lt.s f6,f9 : zb < old.z -> entered through the zb face
+nop
+bc1t  flc_z_b
+nop
+lwc1  $f5, 0x0($t2)           # xa
+.word 0x46051834             # c.lt.s f3,f5 : old.x < xa -> entered through the xa face
+nop
+bc1t  flc_x_a
+nop
+lwc1  $f6, 0x4($t2)           # xb
+.word 0x46033034             # c.lt.s f6,f3 : xb < old.x -> entered through the xb face
+nop
+bc1t  flc_x_b
+nop
+# old was inside too (dangle spawn) -> least-penetration fallback
 lwc1  $f5, 0x0($t2)
 sub.s $f7, $f1, $f5           # x - xa
 lwc1  $f6, 0x4($t2)
@@ -374,11 +399,14 @@ sub.s $f3, $f6, $f8           # zb - z
 nop
 bc1t  flc_z_a
 nop
+flc_z_b:
+lwc1  $f6, 0xc($t2)
 swc1  $f6, 0x8($t5)           # pos.z = zb
 swc1  $f6, 0x8($t6)
 b     flc_next
 nop
 flc_z_a:
+lwc1  $f5, 0x8($t2)
 swc1  $f5, 0x8($t5)           # pos.z = za
 swc1  $f5, 0x8($t6)
 b     flc_next
@@ -392,11 +420,14 @@ sub.s $f3, $f6, $f1           # xb - x
 nop
 bc1t  flc_x_a
 nop
+flc_x_b:
+lwc1  $f6, 0x4($t2)
 swc1  $f6, 0x0($t5)           # pos.x = xb
 swc1  $f6, 0x0($t6)
 b     flc_next
 nop
 flc_x_a:
+lwc1  $f5, 0x0($t2)
 swc1  $f5, 0x0($t5)           # pos.x = xa
 swc1  $f5, 0x0($t6)
 b     flc_next
@@ -415,13 +446,13 @@ nop
 jr    $ra
 nop
 
-# ---- pad: keep QueensDragCheck fixed @0x229460 ----
+# ---- pad: QueensDragCheck fixed @0x2294C0 (moved from 0x229460 — flc v10 grew) ----
 nop
 nop
 nop
 nop
 nop
-# ===== QueensDragCheck @0x229460 (v4): waiting-state drag into wall/bridge -> UNCAST ==========
+# ===== QueensDragCheck @0x2294C0 (v4 logic; relocated): waiting-state drag -> UNCAST ==========
 # Entered via the CheckUkiHook tail `j` @0x1AA2D4 (IsoPatcher routes it here); falls through into
 # the settled-height cave @0x228E20 unmodified. Gates: chara_fishing == 4 and Queens. Fires when the
 # floating uki is dragged past the canal wall (|z| > 49.5 — a wall-rest at 48 stays fishable), into
@@ -470,7 +501,7 @@ lui   $t3, 0x3fc0             # 1.5 inset
 mtc1  $t3, $f4
 nop
 lui   $t0, 0x22
-ori   $t0, $t0, 0x96a0        # box table @0x2296A0
+ori   $t0, $t0, 0x96f0        # box table @0x2296A0
 addiu $t3, $zero, 4
 qdc_bx:
 lwc1  $f5, 0x0($t0)           # xa
@@ -526,7 +557,7 @@ nop
 bc1f  qdc_pass
 nop
 lui   $t0, 0x22
-ori   $t0, $t0, 0x96a0
+ori   $t0, $t0, 0x96f0
 addiu $t3, $zero, 2           # bridge bands from leg rows: W @+0x00, E @+0x30 (xa,xb)
 qdc_lp:
 lwc1  $f5, 0x0($t0)           # xa
@@ -605,11 +636,7 @@ ug_skip:
 j     0x001aa54c
 nop
 
-nop
-nop
-nop
-nop
-# ---- box table @0x2296A0 (bank end; 4 rows of xa,xb,za,zb,ylo,yhi) ----
+# ---- box table @0x2296F0 (bank end; 4 rows of xa,xb,za,zb,ylo,yhi) ----
 # rows 0-3: USER-AUTHORED bridge-support legs (obj44 W / obj40 E) — also the line-pierce band rows
 #           (that loop reads rows 0 and 2 for the two bridges' x-bands, stride 0x30).
 # (the v7 waterfall-gate rows were removed — those "pillars" are WATERFALLS, fine to cast through)
