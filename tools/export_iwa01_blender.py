@@ -56,7 +56,7 @@ def _cyl_center(v):  # xz centroid
     return [sum(p[0] for p in v) / len(v), 0.0, sum(p[2] for p in v) / len(v)]
 
 
-def _cylinder_tris(cx, cz, R, ybot, ytop, n=48):
+def _cylinder_tris(cx, cz, R, ybot, ytop, n=16):   # 16 segs ~= the vanilla building-cylinder coarseness
     """Closed, capped vertical cylinder (radius R about (cx,cz), ybot..ytop), outward/upward winding."""
     ring = [(cx + R * math.cos(2 * math.pi * k / n), cz + R * math.sin(2 * math.pi * k / n)) for k in range(n)]
     cbot, ctop = [cx, ybot, cz], [cx, ytop, cz]
@@ -133,29 +133,71 @@ def _entrance_dirs():
     return dirs
 
 
-_FLARE_WIDEN = 2.0   # cross-section scale at the wall (>1 widens the opening so it funnels in gradually).
-                     # Free to exceed the shell's y[-15,92]: the Boolean clamps the hole to the cylinder,
-                     # so an over-tall mouth just yields a full-height opening. The wall ring stays past R
-                     # regardless (the along-axis extension reaches the wall before widening spreads it).
-_FLARE_LEAD = 18.0   # straight, UNWIDENED lead-in (game units): each entrance poly is extended along its
-                     # own angle by this much as ONE band (no subdivision — the angle isn't changing), so
-                     # the widening starts out past the rock instead of bulging into it. Tune to taste.
-_FLARE_WIDEN_RINGS = 2  # how many rings the widening funnel (neck -> wall) is split into. Only this part
-                        # is subdivided; the straight lead-in stays a single band.
+_FLARE_ARC = 55.0     # arc HALF-width (degrees) of the funnel mouth at the wall — the horizontal guide
+                      # width. The mouths sit ~169° apart, so 55° per side leaves ~30° of wall between.
+_FLARE_HALFH = 30.0   # vertical HALF-height of the wall opening (the Boolean clamps overshoot anyway).
+_FLARE_RES = 16       # verts per funnel ring.
+_FLARE_SWEEP = 5      # bands the rim->wall sweep is split into (more = smoother horn).
 
 
-def _tunnel_solid_tris(cx, cz, R, margin=8.0):
+def _tnormal_local(t):
+    e1 = [t[1][i] - t[0][i] for i in range(3)]
+    e2 = [t[2][i] - t[0][i] for i in range(3)]
+    return [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+# The funnel is a clean analytic HORN: each rim vert maps to a point on a smooth ellipse (half-extents
+# _FLARE_ARC x _FLARE_HALFH) on the wall band, and cross-sections sweep rim -> ellipse with the widening
+# eased in as t^k. The exponent k is SOLVED at build time: smallest k whose whole surface clears the
+# rock-face field — gentle taper early (through the rock zone at near-mouth width), rapid flare at the
+# wall. No per-vert clamping, so the surface stays a smooth trumpet with no dents or ripples.
+
+
+def _tunnel_solid_tris(cx, cz, R, margin=16.0):
     """Bore + both collars closed into a watertight CUTTER. Weld the passage surface, find its real open
-    boundary loops (the two mouths), and flare each mouth out through the cylinder wall (radius R+margin)
-    along ITS OWN entrance poly's angle, WIDENING the cross-section as it goes so the wall opening is
-    bigger than the bore and funnels in gradually. Each extension is subdivided into _FLARE_SEGS rings
-    for a smooth funnel, then capped. A Boolean Difference of the cylinder minus this cutter drills the
-    tunnel: the cavity walls ARE this bore/collar/flare surface, the exit holes the widened mouths."""
+    boundary loops (the two mouths), and flare each mouth out through the cylinder wall, WIDENING the
+    cross-section (H/V split) and pinning the widened ring onto the wall band so the hole is cut at full
+    width. ⚠ every face of the cutter that lies INSIDE the cylinder becomes a hull wall — so all closing
+    geometry (outer prism, cap) must stay strictly OUTSIDE the wall, chords included: an arc-shaped ring's
+    naive cap-fan centroid pulls INSIDE the wall (mean of a 130° arc sits ~20% inward) and its fan slices
+    straight across the mouth (this exact bug shipped once — the tunnel read as fully closed). Hence the
+    large margin and the centroid re-projection below. A Boolean Difference of the cylinder minus this
+    cutter drills the tunnel: cavity walls = bore/collar/flare surface, exit holes = the widened mouths."""
     surf = ([list(map(list, t)) for t in _IWA01_INTERIOR]
             + [list(map(list, t)) for t in _IWA01_WEST]
             + [list(map(list, t)) for t in _IWA01_EAST])
     verts, faces = _weld(surf)
     tris = [[verts[i] for i in f] for f in faces]        # passage surface (welded, re-exploded to tris)
+
+    try:                                                 # the visual rock mesh, for the exact k-solve below
+        from extract_scene_mesh import extract_mesh, load_scene
+        _rv, _rf = extract_mesh(load_scene('gedit/s04/scene.scn'))['iwa01__s']
+        _rock = [[_rv[i] for i in f] for f in _rf]
+    except Exception:
+        _rock = []                                       # no extraction env -> no rock check
+
+    def _in_rock(p):
+        """Exact point-in-mesh parity test (+x ray) against the visual rock. Below-water points pass
+        (clipping the submerged base is fine). Cell/silhouette approximations over-flagged by units and
+        drove the widening exponent to its cap — this is the authoritative check."""
+        if not _rock or p[1] < 0.5:
+            return False
+        cnt = 0
+        for t in _rock:
+            n = _tnormal_local(t)
+            if abs(n[0]) < 1e-9:
+                continue
+            s = sum(n[i] * (t[0][i] - p[i]) for i in range(3)) / n[0]
+            if s <= 0:
+                continue
+            q = [p[0] + s, p[1], p[2]]
+            x0, y0 = t[0][1], t[0][2]; x1, y1 = t[1][1], t[1][2]; x2, y2 = t[2][1], t[2][2]
+            det = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+            if abs(det) < 1e-12:
+                continue
+            a = ((q[1] - x0) * (y2 - y0) - (q[2] - y0) * (x2 - x0)) / det
+            b = ((x1 - x0) * (q[2] - y0) - (y1 - y0) * (q[1] - x0)) / det
+            if a >= 0 and b >= 0 and a + b <= 1:
+                cnt += 1
+        return cnt % 2 == 1
 
     dirs = _entrance_dirs()
     loops = _boundary_loops(verts, faces)
@@ -167,44 +209,121 @@ def _tunnel_solid_tris(cx, cz, R, margin=8.0):
         axis = [c / Lf for c in fb]                      # mouth axis, for the widening decomposition
         rc = cents[li]                                   # mouth centreline anchor
         rim = [verts[i] for i in loop]
-        neck, endpt = [], []                             # per-vert straight-extension point and wall landing
-        for v in rim:
-            d = dirs.get(tuple(round(c, 2) for c in v), axis)
-            if math.hypot(d[0], d[2]) < 0.2:             # near-vertical poly -> can't reach radius; use axis
+
+        def _widen(p, wh, wv):
+            """Scale p's offset from the mouth centreline: horizontal (xz) component by wh, vertical by wv."""
+            along = sum((p[i] - rc[i]) * axis[i] for i in range(3))
+            cpt = [rc[i] + along * axis[i] for i in range(3)]
+            px, py, pz = p[0] - cpt[0], p[1] - cpt[1], p[2] - cpt[2]
+            return [cpt[0] + wh * px, cpt[1] + wv * py, cpt[2] + wh * pz]
+
+        def _proj_r(p, target):
+            """Re-project p's xz radially (about the circle centre) to `target` radius, keeping y."""
+            d = math.hypot(p[0] - cx, p[2] - cz) or 1.0
+            return [cx + (p[0] - cx) * target / d, p[1], cz + (p[2] - cz) * target / d]
+
+        # THE HORN (see the constants block): mouth-polar frame about the rim centroid, each rim vert
+        # assigned an ellipse target at its own angular direction, cross-sections swept with widening
+        # eased in as t^k. Radius grows linearly (reaches the wall regardless); only the SPREAD is eased,
+        # so early cross-sections stay near mouth width while still travelling outward — the horn throat
+        # passes the rock zone before the bell opens. k is solved below per mouth.
+        rimP = _resample_closed(rim, _FLARE_RES)
+        bc = math.degrees(math.atan2(rc[2] - cz, rc[0] - cx))
+        yc = rc[1]
+        pol = []                                         # per-vert [rim pt, dir, r0, phi]
+        u_max = y_max = 1e-9
+        for p in rimP:
+            u0 = (math.degrees(math.atan2(p[2] - cz, p[0] - cx)) - bc + 180) % 360 - 180
+            u_max = max(u_max, abs(u0)); y_max = max(y_max, abs(p[1] - yc))
+        for p in rimP:
+            d = dirs.get(tuple(round(c, 2) for c in p), axis)  # resampled verts fall back to the axis dir
+            if math.hypot(d[0], d[2]) < 0.2:
                 d = axis
-            e = _extend_along(v, d, cx, cz, R + margin)
-            lead = min(_FLARE_LEAD, 0.9 * math.dist(v, e))           # keep the neck short of the wall
-            neck.append([v[i] + d[i] * lead for i in range(3)])
-            endpt.append(e)
+            u0 = (math.degrees(math.atan2(p[2] - cz, p[0] - cx)) - bc + 180) % 360 - 180
+            phi = math.atan2((p[1] - yc) / y_max, u0 / u_max)  # direction about the mouth centre
+            pol.append([list(p), d, math.hypot(p[0] - cx, p[2] - cz), phi])
 
-        def _widen(p):                                   # scale p's offset from the mouth centreline by w
-            def f(w):
-                along = sum((p[i] - rc[i]) * axis[i] for i in range(3))
-                cpt = [rc[i] + along * axis[i] for i in range(3)]
-                return [cpt[i] + w * (p[i] - cpt[i]) for i in range(3)]
-            return f
+        def horn_pt(e, t, k):
+            """Throat follows the vert's ENTRANCE-POLY direction (the proven rock-threading path); the
+            ellipse spread blends in on top as t^k, so early cross-sections ride the native angles and
+            the bell only opens once the surface is out of the rock zone."""
+            p0, d, r0, phi = e
+            r_t = r0 + (R + 2.0 - r0) * t
+            base = _extend_along(p0, d, cx, cz, r_t)
+            w = t ** k
+            ub = (math.degrees(math.atan2(base[2] - cz, base[0] - cx)) - bc + 180) % 360 - 180
+            u = ub + (_FLARE_ARC * math.cos(phi) - ub) * w
+            y = base[1] + (yc + _FLARE_HALFH * math.sin(phi) - base[1]) * w
+            b = math.radians(bc + u)
+            return [cx + r_t * math.cos(b), y, cz + r_t * math.sin(b)]
 
-        # rings: bore rim -> neck (ONE straight band, angle unchanged) -> _FLARE_WIDEN_RINGS widening rings
-        rings = [list(rim), list(neck)]                  # first two rings are straight (w = 1)
-        for k in range(1, _FLARE_WIDEN_RINGS + 1):
-            frac = k / _FLARE_WIDEN_RINGS
-            w = 1.0 + (_FLARE_WIDEN - 1.0) * frac
-            ring = []
-            for nk, e in zip(neck, endpt):
-                pos = [nk[i] + (e[i] - nk[i]) * frac for i in range(3)]  # slide neck -> wall
-                ring.append(_widen(pos)(w))                             # widen only here
-            rings.append(ring)
-        n = len(rim)
-        for s in range(len(rings) - 1):                  # loft consecutive rings
-            A, B = rings[s], rings[s + 1]
-            for i in range(n):
-                a, b = A[i], A[(i + 1) % n]
-                c, dd = B[i], B[(i + 1) % n]
+        k = 1.0                                          # solve the gentlest k whose BELL clears the rock
+        while k < 6.0:                                   # (t < 0.25 is throat, rim-locked, k-independent)
+            ok = True
+            for e in pol:
+                for s in range(5, 20):
+                    if _in_rock(horn_pt(e, s / 20.0, k)):
+                        ok = False; break
+                if not ok:
+                    break
+            if ok:
+                break
+            k += 0.25
+        print(f'  horn mouth {li}: widening exponent k={k:.2f}')
+        rings = [[horn_pt(e, s / _FLARE_SWEEP, k) for e in pol] for s in range(1, _FLARE_SWEEP + 1)]
+        W = rings[-1]
+        ring2 = [_proj_r(q, R + margin) for q in W]      # outer ring: caps safely outside the shell
+        rings.append(ring2)
+        tris += _bridge(rim, rings[0])                   # 8 -> _FLARE_RES merge-loft (manifold, no T-verts)
+        for A, B in zip(rings, rings[1:]):
+            m = len(A)
+            for i in range(m):
+                a, b = A[i], A[(i + 1) % m]
+                c, dd = B[i], B[(i + 1) % m]
                 tris += [[a, b, dd], [a, dd, c]]
-        last = rings[-1]                                 # cap the widened wall ring -> closed cutter
-        ec = [sum(p[i] for p in last) / len(last) for i in range(3)]
-        for i in range(n):
-            tris.append([ec, last[i], last[(i + 1) % n]])
+        ec = _proj_r([sum(p[i] for p in ring2) / len(ring2) for i in range(3)], R + margin)
+        for i in range(len(ring2)):                      # cap the outer ring -> closed cutter. The centroid
+            tris.append([ec, ring2[i], ring2[(i + 1) % len(ring2)]])  # is re-projected onto the outer radius
+    return tris                                          # so no cap chord dips back inside the wall
+
+
+def _resample_closed(ring, N):
+    """Resample a closed polygon to N points, equally spaced by arclength (point 0 preserved)."""
+    n = len(ring)
+    seg = [math.dist(ring[i], ring[(i + 1) % n]) for i in range(n)]
+    total = sum(seg) or 1.0
+    out, k, acc = [], 0, 0.0
+    for s in range(N):
+        target = total * s / N
+        while k < n - 1 and acc + seg[k] < target - 1e-9:
+            acc += seg[k]; k += 1
+        f = (target - acc) / (seg[k] or 1.0)
+        a, b = ring[k], ring[(k + 1) % n]
+        out.append([a[i] + f * (b[i] - a[i]) for i in range(3)])
+    return out
+
+
+def _bridge(A, B):
+    """Triangulate the annulus between two closed rings with different vert counts by merged arclength
+    params — every boundary edge of A and B is used exactly once, so the result stays manifold."""
+    def params(P):
+        n = len(P)
+        seg = [math.dist(P[i], P[(i + 1) % n]) for i in range(n)]
+        total = sum(seg) or 1.0
+        out, acc = [], 0.0
+        for s in seg:
+            out.append(acc / total); acc += s
+        return out
+    pa, pb = params(A), params(B)
+    na, nb = len(A), len(B)
+    tris, i, j = [], 0, 0
+    while i < na or j < nb:
+        nexta = pa[i + 1] if i + 1 < na else 1.0
+        nextb = pb[j + 1] if j + 1 < nb else 1.0
+        if j >= nb or (i < na and nexta <= nextb):
+            tris.append([A[i % na], B[j % nb], A[(i + 1) % na]]); i += 1
+        else:
+            tris.append([A[i % na], B[j % nb], B[(j + 1) % nb]]); j += 1
     return tris
 
 
