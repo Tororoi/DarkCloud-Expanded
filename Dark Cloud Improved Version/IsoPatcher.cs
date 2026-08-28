@@ -1507,7 +1507,9 @@ namespace Dark_Cloud_Improved_Version
             //   c.OLT.s/sqrt.s/max.s/min.s are .word-encoded — DERIVE from the formula, fd is bits 10:6 (the fd=31
             //   no-op bug); nop after mtc1/FP-compare; CheckHit args 5-7 = REGISTERS t0/t1/t2 (hitOut/mode/skip) —
             //   set explicitly at every cast, NEVER inherit (stale t2 = the mask-skipping saga). [[native-camera-functions]]
-            const float BASE_DIST   = 80f;   // resting orbit distance when nothing blocks
+            const float BASE_DIST   = 70f;   // resting orbit distance when nothing blocks (vanilla
+                                             // EdInitCameraParam's camera_near_dist ~70; was 80 during
+                                             // the camera rework — reverted to vanilla feel 2026-08)
             const float REST_H      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
             const float CEIL_DIST   = 80f;  // how far UP the ceiling probe looks for a tunnel roof to duck under
             const float MIN_CEIL_CLEAR = 4f;// eye stays this far BELOW a detected ceiling (tunnel duck depth)
