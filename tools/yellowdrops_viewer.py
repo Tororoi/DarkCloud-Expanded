@@ -159,7 +159,15 @@ layers.append({'key':'pond_arc','label':'STEP 3: convex edge on arc, equal segme
 _p4 = _pond.pond_tris()
 layers.append({'key':'pond_sub','label':f'STEP 4: spline-ladder rebuild ({len(_p4)} tris), step 3 as cage',
                'tris':_p4,
-               'color':[220,120,255],'alpha':0.6,'border':'#d7f','on':True,'group':'Crescent pond proposal'})
+               'color':[220,120,255],'alpha':0.6,'border':'#d7f','on':False,'group':'Crescent pond proposal'})
+_p5 = _pond.chord_path_tris()
+layers.append({'key':'pond_chord','label':f'STEP 5: chord path arch-to-arch (half-moon flat side) ({len(_p5)} tris)',
+               'tris':_p5,
+               'color':[255,150,90],'alpha':0.6,'border':'#f96','on':False,'group':'Crescent pond proposal'})
+_p7 = _pond.fused_tris()
+layers.append({'key':'pond_fused','label':f'STEP 7: FUSED ground+path, single mesh ({len(_p7)} tris)',
+               'tris':_p7,
+               'color':[130,220,170],'alpha':0.75,'border':'#7ea','on':True,'group':'Crescent pond proposal'})
 html = build_html(
     title="Yellow Drops (s13) — fishing placement + collision",
     layers=layers, node_labels=nodelabels, points=points, point_labels=point_labels,
