@@ -12,7 +12,7 @@ of the C sweeps wider.
 Knob: BULGE_ADD (extra bulge at the chord midpoint; the strip's current sagitta is ~108).
 Later steps (crescent closure, facing) build on this warped strip.
 """
-import math, sys, os
+import math, re, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scene_placed import placed_meshes
 
@@ -248,6 +248,270 @@ def pond_tris():
         if any((round(p[0], 2), round(p[1], 2), round(p[2], 2)) not in ladder for p in t):
             out.append([_xform(p) for p in t])
     return out
+
+
+# ---- step 5: straight path between the two archways -------------------------------------------
+# ARCH-TO-ARCH, uniform width, both long edges parallel:
+#   SW edge  = straight from Q (NW_ANCHOR, the NW arch's south face) to P5 (781,16,837) at the SE
+#              arch, skirted — "pointed at the arch" per user direction
+#   pond edge= parallel to it, welded at P2 (473.72,23,418.22); its SE end E lands ON wall B (the
+#              strip's last inner-edge segment), so the pond keeps the arc + a wall-B sliver
+#   NW end   = P2 -> P1 (wall A attach, with the mA sliver) -> end-cap tri out to Q, end skirt P1->Q
+#   SE end   = wedge filling between E and walls B/C out to P5
+# Same cross-section style: +CROWN_H crown ridges inset CROWN_INSET from each long edge, tapered
+# flush at both ends so the T-seams sit level with the existing tops.
+CROWN_INSET = 15.0
+CROWN_H = 4.0
+NW_ANCHOR = (349.0, 23.0, 403.0)     # Q: south face of the NW archway (bbox (286,260)-(417,403))
+
+
+def chord_path_tris(stations=5):
+    P1 = _xform([377.0, 23.0, 415.0]);  P1b = _xform([377.0, _BOTTOM_Y, 415.0])    # wall A west end
+    P2 = _xform([452.0, 23.0, 440.0]);  P2b = _xform([452.0, _BOTTOM_Y, 440.0])    # chord start (pond)
+    P3 = _xform([718.0, 16.0, 672.0]);  P3b = _xform([718.0, _BOTTOM_Y, 672.0])    # chord end (pond)
+    P5 = [781.0, 16.0, 837.0];          P5b = [781.0, _BOTTOM_Y, 837.0]            # SE arch stub (raw)
+    # spline midpoints of the strip's first/last inner-edge segments (exact rebuilt-mesh verts)
+    ein = _resample([_xform([float(x), float(y), float(z)]) for x, y, z in CHAINS['E_in']], SUBDIV_LEVELS,
+                    snap=_arc_snap)
+    mA, mB = ein[1], ein[-2]
+    einb = _resample([_xform([float(x), _BOTTOM_Y, float(z)]) for x, y, z in CHAINS['E_in']],
+                     SUBDIV_LEVELS, snap=_arc_snap)
+    mBb, P3bw = einb[-2], einb[-3]
+    # SW edge AIMED AT THE NW ARCH: straight from Q (arch south face) to P5 (SE arch). The pond
+    # (NE) edge stays welded at P2 and runs PARALLEL to it (uniform, thinner width); its SE end E
+    # lands ON wall B (the strip's last inner-edge segment), where the wedge takes over.
+    Q = list(NW_ANCHOR)
+    Qb = [Q[0], _BOTTOM_Y, Q[2]]
+    dL = math.hypot(P5[0] - Q[0], P5[2] - Q[2])
+    d = ((P5[0] - Q[0]) / dL, (P5[2] - Q[2]) / dL)             # both long edges run along d
+    # E = intersection of the line P2 + t*d with wall B's first segment P3->mB (solve in xz)
+    wx, wz = mB[0] - P3[0], mB[2] - P3[2]
+    den = d[0] * wz - d[1] * wx
+    t = ((P3[0] - P2[0]) * wz - (P3[2] - P2[2]) * wx) / den
+    u = (d[0] * (P3[2] - P2[2]) - d[1] * (P3[0] - P2[0])) / -den
+    E = [P2[0] + t * d[0], P3[1] + u * (mB[1] - P3[1]), P2[2] + t * d[1]]
+    Eb = [E[0], P3bw[1] + u * (mBb[1] - P3bw[1]), E[2]]
+
+    def rule(a, b):
+        return [[a[k] + (b[k] - a[k]) * i / (stations - 1) for k in range(3)] for i in range(stations)]
+
+    ne, sw = rule(P2, E), rule(Q, P5)
+    neb, swb = rule(P2b, Eb), rule(Qb, P5b)
+    c_ne, c_sw = [], []
+    for i in range(stations):
+        ux, uz = sw[i][0] - ne[i][0], sw[i][2] - ne[i][2]
+        L = math.hypot(ux, uz); ux, uz = ux / L, uz / L
+        h = CROWN_H if 0 < i < stations - 1 else 0.0
+        c_ne.append([ne[i][0] + CROWN_INSET * ux, ne[i][1] + h, ne[i][2] + CROWN_INSET * uz])
+        c_sw.append([sw[i][0] - CROWN_INSET * ux, sw[i][1] + h, sw[i][2] - CROWN_INSET * uz])
+    UP = [0.0, 1.0, 0.0]
+    m = stations // 2
+    out = []
+    out += _band(ne, c_ne, up=UP)
+    out += _band(c_ne, c_sw, up=UP)
+    out += _band(c_sw, sw, up=UP)
+    out += _band(ne, neb, out_dir=[ne[m][0] - c_ne[m][0], 0.0, ne[m][2] - c_ne[m][2]])   # pond-side skirt
+    out += _band(sw, swb, out_dir=[sw[m][0] - c_sw[m][0], 0.0, sw[m][2] - c_sw[m][2]])   # outer skirt
+    out += _band([P1, Q], [P1b, Qb], out_dir=[-d[0], 0.0, -d[1]])                        # NW end skirt
+    # NW end cap: cover the triangle between the straight t=0 section line and the P2->P1->Q bend
+    out.append([list(P2), list(P1), list(Q)])
+    # NW sliver: blend the end edge to wall A's bulged spline midpoint
+    out.append([list(P1), list(mA), list(P2)])
+    # SE wedge: fill between the band's NE corner E and walls B (via its spline midpoint) / C
+    q = _xform([741.0, 16.0, 755.0])                      # transformed strip terminus (744.78,16,751.21)
+    r = [741.0, 16.0, 755.0]                              # raw stub vert (wall C north end)
+    for a, b in ((E, mB), (mB, q), (q, r)):
+        w = [b[k] - a[k] for k in range(3)]; v = [P5[k] - a[k] for k in range(3)]
+        if (w[2] * v[0] - w[0] * v[2]) < 0:
+            out.append([list(P5), list(a), list(b)])
+        else:
+            out.append([list(P5), list(b), list(a)])
+    return out
+
+
+# ---- step 7: FUSE strip + path + surroundings into one mesh -----------------------------------
+# No stacked/overlapping surfaces, shared verts at every seam, no bumps in the walkable top:
+#  * the path's NW boundary IS wall A's polyline (P2->mA->P1), zipped straight into the band —
+#    the old end-cap and sliver overlays are gone
+#  * E/Eb are inserted INTO the strip's inner-edge rows, so the wedge seam has no T-junction
+#  * strip skirts buried under the path (wall A stretch, wall B below E) are removed
+#  * surrounding RAW ground is included, with any vert shared with the strip snapped through the
+#    step 1-3 transform — closing the warp cracks at the junction cuts
+# merge-zone shoulder flattening: the old paths' crown ridges (+7 NW plaza rim, +4 SE tail rim)
+# would sit in the MIDDLE of the fused walkable surface — lower them to their adjacent edge level
+# so the plaza/tail slopes spread gently instead of forming a berm (user-marked bump tris).
+BLEND_LOWER = {
+    (297.0, 398.0): 23.0,      # walkway crown at the region edge
+    (380.0, 399.0): 23.0,      # C_in terminus (NW plaza rim)
+    (421.48, 407.14): 23.94,   # C_in spline mid (pairs mA)
+    (474.09, 410.85): 23.0,    # C_in station 2 (pairs P2)
+    (757.74, 697.17): 12.0,    # C_in spline mid (pairs mB)
+    (756.27, 745.72): 16.0,    # C_in terminus (pairs q)
+    (794.0, 823.0): 16.0,      # SE stub crown (pairs stub edge y16)
+}
+
+
+def _blend_lower(tris):
+    for t in tris:
+        for pt in t:
+            for (kx, kz), y in BLEND_LOWER.items():
+                if abs(pt[0] - kx) <= 0.3 and abs(pt[2] - kz) <= 0.3:
+                    pt[1] = y
+    return tris
+
+
+def _zip4(rowA, rowB, up):
+    tris = []
+    for i in range(len(rowA) - 1):
+        a0, a1, b0, b1 = rowA[i], rowA[i + 1], rowB[i], rowB[i + 1]
+        if sum((a0[k] - b1[k]) ** 2 for k in range(3)) <= sum((a1[k] - b0[k]) ** 2 for k in range(3)):
+            quads = ([a0, a1, b1], [a0, b1, b0])
+        else:
+            quads = ([a0, a1, b0], [a1, b1, b0])
+        for tri in quads:
+            u = [tri[1][k] - tri[0][k] for k in range(3)]; v = [tri[2][k] - tri[0][k] for k in range(3)]
+            n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]
+            if n[0]*up[0] + n[1]*up[1] + n[2]*up[2] < 0:
+                tri = [tri[0], tri[2], tri[1]]
+            tris.append([list(pt) for pt in tri])
+    return tris
+
+
+def fused_tris(region=(240.0, 980.0, 180.0, 980.0)):
+    P1 = _xform([377.0, 23.0, 415.0]);  P1b = _xform([377.0, _BOTTOM_Y, 415.0])
+    P2 = _xform([452.0, 23.0, 440.0]);  P2b = _xform([452.0, _BOTTOM_Y, 440.0])
+    P5 = [781.0, 16.0, 837.0];          P5b = [781.0, _BOTTOM_Y, 837.0]
+    ein = _resample([_xform([float(x), float(y), float(z)]) for x, y, z in CHAINS['E_in']],
+                    SUBDIV_LEVELS, snap=_arc_snap)
+    einb = _resample([_xform([float(x), _BOTTOM_Y, float(z)]) for x, y, z in CHAINS['E_in']],
+                     SUBDIV_LEVELS, snap=_arc_snap)
+    mA, mB, P3w = ein[1], ein[-2], ein[-3]
+    mBb, P3bw = einb[-2], einb[-3]
+    dL = math.hypot(P5[0] - NW_ANCHOR[0], P5[2] - NW_ANCHOR[2])
+    d = ((P5[0] - NW_ANCHOR[0]) / dL, (P5[2] - NW_ANCHOR[2]) / dL)   # aim: NW arch -> SE arch
+    # Q sits ON the existing walkway's south edge (P1 -> (297,407)) where the P5-parallel SW
+    # line crosses it, so the path mouth fuses flush into the walkway in front of the arch
+    W297 = [297.0, 23.0, 407.0]; W297b = [297.0, _BOTTOM_Y, 407.0]
+    ex, ez = W297[0] - P1[0], W297[2] - P1[2]
+    det = d[0] * ez - d[1] * ex
+    sQ = (d[0] * (P5[2] - P1[2]) - d[1] * (P5[0] - P1[0])) / det
+    Q = [P1[0] + sQ * ex, 23.0, P1[2] + sQ * ez]
+    Qb = [Q[0], _BOTTOM_Y, Q[2]]
+    # E = where the path's pond-edge LINE (from P2 along d) re-enters the R=182.5 circle, so the
+    # pond rim is ONE continuous arc from P2 around to E; the horn sliver beyond it (out to wall B)
+    # becomes path surface. Heights blend the old wall-B levels (P3w y8 -> mB y12).
+    acx, acz, aR = _ARC
+    t0 = (acx - P2[0]) * d[0] + (acz - P2[2]) * d[1]
+    hh = (acx - P2[0]) * d[1] - (acz - P2[2]) * d[0]
+    tE = t0 + math.sqrt(aR * aR - hh * hh)
+    E = [P2[0] + tE * d[0], 10.0, P2[2] + tE * d[1]]
+    Eb = [E[0], -15.0, E[2]]
+    q = _xform([741.0, 16.0, 755.0])
+
+    # -- strip rows, with E fused into the inner-edge rows --
+    rows = {name: _resample([_xform([float(x), float(y), float(z)]) for x, y, z in ch], SUBDIV_LEVELS,
+                            snap=_arc_snap if name == 'E_in' else None)
+            for name, ch in CHAINS.items()}
+    rows['E_out_b'] = _resample([_xform([float(x), _BOTTOM_Y, float(z)]) for x, y, z in CHAINS['E_out']],
+                                SUBDIV_LEVELS)
+    rows['E_in_b'] = einb
+    iP3 = len(ein) - 3                                  # index of P3w (the arc corner)
+    UP = [0.0, 1.0, 0.0]
+    out = []
+    out += _band(rows['E_out'], rows['C_out'], up=UP)
+    out += _band(rows['C_out'], rows['C_in'], up=UP)
+    out += _band(rows['C_in'], rows['E_in'], up=UP)
+    m = len(rows['E_out']) // 2
+    out += _band(rows['E_out'], rows['E_out_b'],
+                 out_dir=[rows['E_out'][m][0] - rows['C_out'][m][0], 0.0,
+                          rows['E_out'][m][2] - rows['C_out'][m][2]])
+    odi = [rows['E_in'][m][0] - rows['C_in'][m][0], 0.0, rows['E_in'][m][2] - rows['C_in'][m][2]]
+    out += _band(rows['E_in'][2:iP3 + 1], rows['E_in_b'][2:iP3 + 1], out_dir=odi)  # pond-facing only
+
+    # -- chord path, boundary-fused --
+    stations = 5
+
+    def rule(a, b):
+        return [[a[k] + (b[k] - a[k]) * i / (stations - 1) for k in range(3)] for i in range(stations)]
+
+    ne, sw = rule(P2, E), rule(Q, P5)
+    neb, swb = rule(P2b, Eb), rule(Qb, P5b)
+    c_ne, c_sw = [], []
+    for i in range(stations):
+        ux, uz = sw[i][0] - ne[i][0], sw[i][2] - ne[i][2]
+        L = math.hypot(ux, uz); ux, uz = ux / L, uz / L
+        h = CROWN_H if 0 < i < stations - 1 else 0.0
+        c_ne.append([ne[i][0] + CROWN_INSET * ux, ne[i][1] + h, ne[i][2] + CROWN_INSET * uz])
+        c_sw.append([sw[i][0] - CROWN_INSET * ux, sw[i][1] + h, sw[i][2] - CROWN_INSET * uz])
+    out += _band(ne[1:4], c_ne[1:4], up=UP)
+    out += _band(c_ne[1:4], c_sw[1:4], up=UP)
+    out += _band(c_sw[1:4], sw[1:4], up=UP)
+    out += _zip4([P2, mA, P1, Q], [ne[1], c_ne[1], c_sw[1], sw[1]], UP)           # fused NW end
+    # fused SE end: the band CLIPS against existing ground — wall B (mB->q) then the stub's
+    # snapped west edge (q->P5). No wedge: the strip tail / stub already own the ground beyond.
+    out += _zip4([ne[3], c_ne[3], c_sw[3], sw[3]], [E, mB, q, P5], UP)
+    # horn sliver: the small top piece between the rim chord E->P3w and wall B, plus the rim skirt
+    horn = [list(E), list(P3w), list(mB)]
+    u1 = [horn[1][k] - horn[0][k] for k in range(3)]; v1 = [horn[2][k] - horn[0][k] for k in range(3)]
+    if u1[2] * v1[0] - u1[0] * v1[2] < 0:
+        horn = [horn[0], horn[2], horn[1]]
+    out.append(horn)
+    out += _band([E, P3w], [Eb, P3bw], out_dir=[acx - E[0], 0.0, acz - E[2]])
+    mm = stations // 2
+    out += _band(ne, neb, out_dir=[ne[mm][0] - c_ne[mm][0], 0.0, ne[mm][2] - c_ne[mm][2]])
+    out += _band(sw, swb, out_dir=[sw[mm][0] - c_sw[mm][0], 0.0, sw[mm][2] - c_sw[mm][2]])
+    # (no NW end skirt: the mouth fuses flush into the walkway edge at Q)
+    # walkway fixes: split its edge tris at Q; keep only the water-facing part of its skirt
+    out.append([list(W297), list(Q), [380.0, 30.0, 399.0]])
+    out.append([list(Q), list(P1), [380.0, 30.0, 399.0]])
+    out.append([list(Q), list(W297), list(W297b)])
+    out.append([list(Q), list(W297b), list(Qb)])
+
+    # -- junction-stub pass-throughs + surrounding raw ground, seam verts snapped --
+    def vk(p):
+        return (round(p[0], 2), round(p[1], 2), round(p[2], 2))
+
+    stripverts = {vk(p) for tri in strip_tris() for p in tri}
+    striptris = {frozenset(vk(p) for p in tri) for tri in strip_tris()}
+    for tri in strip_tris():                                                      # stubs, as step 4
+        if any(vk(p) not in _ladder_keys() for p in tri):
+            out.append([_xform(p) for p in tri])
+    x0, x1, z0, z1 = region
+    for msh in placed_meshes('gedit/s13/scene.scn', 'gedit/s13/mapinfo.cfg'):
+        if re.match(r'grid(8|9|10|11)\b', msh['name']) is None:
+            continue
+        verts = msh['verts']
+        for tr in msh['tris']:
+            p = [list(verts[i]) for i in tr]
+            c = [(p[0][k] + p[1][k] + p[2][k]) / 3 for k in range(3)]
+            if not (x0 <= c[0] <= x1 and z0 <= c[2] <= z1):
+                continue
+            if frozenset(vk(pt) for pt in p) in striptris:
+                continue                                                          # replaced above
+            # the stub's west skirt on (741,755)-(781,837) is buried under the path now
+            if all(min(math.hypot(pt[0]-741.0, pt[2]-755.0),
+                       math.hypot(pt[0]-781.0, pt[2]-837.0)) < 0.1 for pt in p):
+                continue
+            # walkway pieces replaced by the Q-split versions above: its south-edge top tri and
+            # the full edge skirt (P1 <-> (297,407))
+            if frozenset(vk(pt) for pt in p) == frozenset(
+                    [(297.0, 23.0, 407.0), (377.0, 23.0, 415.0), (380.0, 30.0, 399.0)]):
+                continue
+            if all(min(math.hypot(pt[0]-377.0, pt[2]-415.0),
+                       math.hypot(pt[0]-297.0, pt[2]-407.0)) < 0.1 for pt in p):
+                continue
+            out.append([_xform(pt) if vk(pt) in stripverts else pt for pt in p])
+    return _blend_lower(out)
+
+
+def _ladder_keys():
+    ks = set()
+    for ch in CHAINS.values():
+        for x, y, z in ch:
+            ks.add((round(float(x), 2), round(float(y), 2), round(float(z), 2)))
+    for x, y, z in CHAINS['E_out'] + CHAINS['E_in']:
+        ks.add((round(float(x), 2), round(_BOTTOM_Y, 2), round(float(z), 2)))
+    return ks
 
 
 if __name__ == '__main__':
