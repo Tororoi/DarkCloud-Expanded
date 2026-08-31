@@ -212,7 +212,8 @@ CHECKS<div id="err" style="color:#f66"></div></div></div>
 <b>Selected polys: <span id="selcount" style="color:#f44">0</span></b>
 <button id="selclear" style="float:right;font-size:10px">clear</button>
 <button id="selundo" style="float:right;font-size:10px;margin-right:4px">undo</button><br>
-<span style="color:#888">click=nearest poly &middot; shift+click=add/remove &middot; shift+drag=box add &middot; Ctrl/Cmd+Z=undo</span>
+<span style="color:#888">click=nearest poly &middot; shift+click=add/remove &middot; shift+drag=box add &middot; Ctrl/Cmd+Z=undo &middot; <b style="color:#fdba5b">F+drag=fishing rect</b></span>
+<input id="fishout" readonly spellcheck="false" placeholder="hold F + drag on the water to define a fishing rect" onclick="this.select()" style="width:100%;margin-top:5px;background:#0d1117;color:#fdba5b;border:1px solid #333;border-radius:4px;font-family:monospace;font-size:10px;box-sizing:border-box;padding:3px"/>
 <textarea id="sellist" readonly spellcheck="false" placeholder="clicked polys appear here: x0,y0,z0, x1,y1,z1, x2,y2,z2 (one triangle per line)" style="width:100%;height:130px;margin-top:5px;background:#0d1117;color:#6ee7b7;border:1px solid #333;border-radius:4px;font-family:monospace;font-size:10px;box-sizing:border-box"></textarea>
 </div>
 <script>try{
@@ -241,6 +242,7 @@ let CTR=[0,0,0];   // world-space orbit pivot: space+drag translates it in the v
                    // rotation AND zoom stay centred on the panned point. rot0 = raw (compass).
 function rot(p){return rot0([p[0]-CTR[0],p[1]-CTR[1],p[2]-CTR[2]]);}
 let CLIP=null,RSEL=null;   // CLIP=[minX,maxX,minZ,maxZ] world-XZ mask rect (cmd+drag); RSEL = in-progress drag
+let FSEL=null,FRECT=null,FHELD=false;   // F+drag = define a fishing rect on the water plane (world XZ)
 function inClip(wx,wz){return !CLIP||(wx>=CLIP[0]&&wx<=CLIP[1]&&wz>=CLIP[2]&&wz<=CLIP[3]);}
 // Sutherland-Hodgman clip of a world tri against the CLIP rect's 4 vertical planes (y interpolated),
 // so the rect behaves as a true mask: boundary-straddling polys are cut at the edge, not dropped whole.
@@ -305,6 +307,7 @@ function draw(){
  if(on('t_points')) drawLabels();
  if(GEO&&GEOON())gOverlay(f);
  drawClipRect(f);
+ drawFishRect(f);
  drawCompass();
  drawBoxSel();
 }
@@ -315,6 +318,15 @@ function drawClipRect(f){
  const c=[P([R[0],WATER,R[2]]),P([R[1],WATER,R[2]]),P([R[1],WATER,R[3]]),P([R[0],WATER,R[3]])];
  cx.save();cx.setLineDash([6,4]);cx.strokeStyle=RSEL?'#6ee7b7':'rgba(110,231,183,0.55)';cx.lineWidth=1.5;
  cx.beginPath();cx.moveTo(c[0][0],c[0][1]);for(let i=1;i<4;i++)cx.lineTo(c[i][0],c[i][1]);cx.closePath();cx.stroke();cx.restore();
+}
+function drawFishRect(f){
+ const R=FSEL?[Math.min(FSEL.x0,FSEL.x1),Math.max(FSEL.x0,FSEL.x1),Math.min(FSEL.z0,FSEL.z1),Math.max(FSEL.z0,FSEL.z1)]:FRECT;
+ if(!R)return;
+ const P=p=>{const r=rot(p);return [W/2+r[0]*f,H/2-r[1]*f];};
+ const c=[P([R[0],WATER,R[2]]),P([R[1],WATER,R[2]]),P([R[1],WATER,R[3]]),P([R[0],WATER,R[3]])];
+ cx.save();cx.setLineDash([8,4]);cx.strokeStyle=FSEL?'#fdba5b':'rgba(253,186,91,0.8)';cx.lineWidth=2;
+ cx.beginPath();cx.moveTo(c[0][0],c[0][1]);for(let i=1;i<4;i++)cx.lineTo(c[i][0],c[i][1]);cx.closePath();cx.stroke();
+ cx.fillStyle='rgba(253,186,91,0.10)';cx.fill();cx.restore();
 }
 // ---- software z-buffer fill (correct occlusion for interpenetrating models) ----
 // Two passes: opaque (writes depth) then transparent (depth-tested, alpha-blended, back-to-front). `all`
@@ -471,6 +483,8 @@ let SPACE=false,panning=false;
 addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)){SPACE=true;e.preventDefault();if(!drag)cv.style.cursor='move';}});
 addEventListener('keyup',e=>{if(e.code==='Space'){SPACE=false;if(!panning)cv.style.cursor='grab';}});
 addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.code==='KeyZ'&&!/INPUT|TEXTAREA/.test(e.target.tagName)){e.preventDefault();undoSel();}});
+addEventListener('keydown',e=>{if(e.code==='KeyF'&&!/INPUT|TEXTAREA/.test(e.target.tagName)){FHELD=true;if(!drag)cv.style.cursor='crosshair';}});
+addEventListener('keyup',e=>{if(e.code==='KeyF'){FHELD=false;if(!FSEL)cv.style.cursor='grab';}});
 // screen -> world (x,z) on the y=WATER plane (same inversion as the coordinate readout); null when too flat
 function groundPt(mx,my){const f=Math.min(W,H)*0.5*zoom/300,rx=(mx-W/2)/f,ry=-(my-H/2)/f;
  const cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch);
@@ -479,6 +493,8 @@ function groundPt(mx,my){const f=Math.min(W,H)*0.5*zoom/300,rx=(mx-W/2)/f,ry=-(m
  return [rx*cyw+z1*syw+CTR[0],-rx*syw+z1*cyw+CTR[2]];}
 cv.addEventListener('pointerdown',e=>{
  const rr=cv.getBoundingClientRect();
+ if(FHELD){const g=groundPt(e.clientX-rr.left,e.clientY-rr.top);
+   if(g){FSEL={x0:g[0],z0:g[1],x1:g[0],z1:g[1]};FASTDRAW=true;draw();}return;}   // F+drag = fishing rect
  if(e.metaKey||e.ctrlKey){moved=true;const g=groundPt(e.clientX-rr.left,e.clientY-rr.top);
    if(g){RSEL={x0:g[0],z0:g[1],x1:g[0],z1:g[1]};FASTDRAW=true;draw();}return;}   // start clip-rect drag
  if(e.shiftKey){const mx=e.clientX-rr.left,my=e.clientY-rr.top;   // shift+drag = rubber-band select
@@ -491,6 +507,11 @@ addEventListener('pointerup',e=>{
  if(BSEL){ const r=cv.getBoundingClientRect();
    if(moved) boxSelect(BSEL); else pickAt(e.clientX-r.left,e.clientY-r.top,true);   // no drag = shift+click add/remove
    BSEL=null;FASTDRAW=false;draw();return;}
+ if(FSEL){const w=Math.abs(FSEL.x1-FSEL.x0),h=Math.abs(FSEL.z1-FSEL.z0);
+  if(w>2&&h>2){FRECT=[Math.min(FSEL.x0,FSEL.x1),Math.max(FSEL.x0,FSEL.x1),Math.min(FSEL.z0,FSEL.z1),Math.max(FSEL.z0,FSEL.z1)];
+   const o=document.getElementById('fishout');
+   if(o){o.value='rect (x1,z1,x2,z2) = '+Math.round(FRECT[0])+', '+Math.round(FRECT[2])+', '+Math.round(FRECT[1])+', '+Math.round(FRECT[3]);}}
+  FSEL=null;FASTDRAW=false;cv.style.cursor=FHELD?'crosshair':'grab';draw();return;}
  if(RSEL){const w=Math.abs(RSEL.x1-RSEL.x0),h=Math.abs(RSEL.z1-RSEL.z0);
   CLIP=(w>2&&h>2)?[Math.min(RSEL.x0,RSEL.x1),Math.max(RSEL.x0,RSEL.x1),Math.min(RSEL.z0,RSEL.z1),Math.max(RSEL.z0,RSEL.z1)]:CLIP;
   RSEL=null;FASTDRAW=false;draw();return;}
@@ -505,6 +526,8 @@ addEventListener('pointerup',e=>{
 addEventListener('pointermove',e=>{
  if(BSEL){const rr=cv.getBoundingClientRect();BSEL.x1=e.clientX-rr.left;BSEL.y1=e.clientY-rr.top;
   if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;draw();return;}
+ if(FSEL){const rr=cv.getBoundingClientRect(),g=groundPt(e.clientX-rr.left,e.clientY-rr.top);
+  if(g){FSEL.x1=g[0];FSEL.z1=g[1];draw();}return;}
  if(RSEL){const rr=cv.getBoundingClientRect(),g=groundPt(e.clientX-rr.left,e.clientY-rr.top);
   if(g){RSEL.x1=g[0];RSEL.z1=g[1];draw();}return;}
  if(panning){const f=Math.min(W,H)*0.5*zoom/300,dx=(e.clientX-px)/f,dy=(e.clientY-py)/f;

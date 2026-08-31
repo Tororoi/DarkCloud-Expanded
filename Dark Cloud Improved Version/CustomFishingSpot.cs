@@ -266,11 +266,18 @@ namespace Dark_Cloud_Improved_Version
             // Water level is still the town's declared WATER_SURFACE height (1). Note the trigger is OUTSIDE
             // that surface's square (+/-320 about the origin), so this liquid is probably NOT that surface —
             // if the bobber floats above or sinks below the visible liquid, this is the number to move.
+            // MOVED 2026-08-30 to the WEST BANK bulge edge (bank top y23, bulge peak z~102; assumes the
+            // west-bank ground bake — tools/yellowdrops_pond.py WEST_BULGE). Player stands at the edge
+            // facing WEST (forward = (sin yaw, cos yaw) = (-1,0) -> yaw -pi/2); the rect is the open water
+            // pocket west of the bulged edge (one mid pillar at x -590..-550, z 50..177 — casts just land
+            // around it). Old spot: rect (-609,-444,-409,-244), trig (-575,9,-286), stance (-582.9,9.6,-276.8) yaw 2.31.
             new Spot(23, "Yellow Drops liquid", 7,  // area 7 = DEDICATED custom area, baked into FishingLoadFish (IsoPatcher) — Tarton/Nonky/Negie/Bon
-                     -609f, -444f, -409f, -244f, water: 1f, ground: -15f,
-                     tx: -575f, ty: 9f, tz: -286f, radius: InteractRadius,
-                     sx: -582.9f, sy: 9.6f, sz: -276.8f, facing: 2.31f,
-                     fishDepth: 8f),   // ONE KNOB: fish at WaterLevel-8 (was vanilla 12) AND the hook rests there —
+                     -692f, -156f, -378f, 270f, water: 5.25f, ground: -15f,   // user-drawn rect; water = raised surface 4.25 + the spot's usual +1
+                     tx: -465f, ty: 30f, tz: 40f, radius: InteractRadius,
+                     sx: -468f, sy: 30f, sz: 40f, facing: -1.5708f,
+                     fishDepth: 8f,
+                     cameraHeight: 30f),   // lower than the vanilla 40: the bank sits high (y30) over
+                                           // the water (y1), so the stock look-down angle felt steep   // ONE KNOB: fish at WaterLevel-8 (was vanilla 12) AND the hook rests there —
                                        // LineConfigSplit derives distpBelow = (8−HookBodyDrop)/5 ≈ 0.906 (fish-at-hook)
         };
 
@@ -504,6 +511,7 @@ namespace Dark_Cloud_Improved_Version
             if (!Enabled) return;
 
             PinFishCamHeight();   // keep the patched SetHeight site fed (per-spot fishing camera height)
+            PinYdWaterLevel();    // Yellow Drops: hold the live water level against the camera-window re-derive
 
             InstallShallowLinePatch();   // idempotent retry: lands the cold FishLineStep patch once the game's
                                          // code is present (ApplyNewChanges may fire before it is), before fishing
@@ -661,6 +669,19 @@ namespace Dark_Cloud_Improved_Version
         /// at word 471). The height-TARGET REST_H (word 147) now reads <see cref="CodeCaves.Mailbox.CameraRestH"/>
         /// instead, which we drive below.</summary>
         internal const float TownRestH = 5f;
+
+        /// <summary>Yellow Drops: pin the live water level (<see cref="FishingSpot.WaterLevel"/>) to the
+        /// spot's configured water while a session is live. The west-pocket spot sits OUTSIDE the town's
+        /// +-320 WATER_SURFACE square, and the engine re-derives the level from the camera-following
+        /// surface window each frame — so once the surface was raised (0 -> 4.25), the level (and with it
+        /// the bobber float height / line pay-out) visibly flickered with CAMERA ANGLE. Fishing-window
+        /// only: outside fishing, WaterLevel==0 is what the install/teardown liveness checks expect.</summary>
+        private static void PinYdWaterLevel()
+        {
+            if (!InFishingWindow || _installedMap != YellowDropsMapNo || _active.MapNo != YellowDropsMapNo) return;
+            if (Math.Abs(Memory.ReadFloat(FishingSpot.WaterLevel) - _active.Water) > 0.001f)
+                Memory.WriteFloat(FishingSpot.WaterLevel, _active.Water);
+        }
 
         private static void PinFishCamHeight()
         {
@@ -2391,14 +2412,18 @@ namespace Dark_Cloud_Improved_Version
         /// pay-out trigger.</summary>
         private static float RodTipFrontDist() => PointFrontDist(RopePoint);
 
-        /// <summary>Signed distance of a rope point in front of the player along the camera-forward axis.</summary>
+        /// <summary>Signed distance of a rope point in front of the player, along the PLAYER'S FACING
+        /// (the spot's stance yaw — the session snaps the player to it; forward = (sin f, cos f)).
+        /// ⚠ This used to project along the CAMERA-forward axis (angS), which INVERTS when the follow
+        /// camera ends up in front of the player — the wind-up/fling gates then read backwards and the
+        /// cast pay-out silently never fired ("line doesn't lengthen when the camera is in front").
+        /// The rest-baseline delta logic above is unaffected: only the axis changed.</summary>
         private static float PointFrontDist(long ropePoint)
         {
-            uint cp = Memory.ReadUInt(FishCamPtrVar) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(cp) || !EditLoop.TryReadPlayerPos(out float px, out _, out float pz)) return 0f;
-            float ang = Memory.ReadFloat(Memory.ToMmu(cp) + 0x2DC);   // rendered follow angle (angS)
+            if (!EditLoop.TryReadPlayerPos(out float px, out _, out float pz)) return 0f;
+            float f = _active.Facing;
             float dx = Memory.ReadFloat(ropePoint + 0) - px, dz = Memory.ReadFloat(ropePoint + 8) - pz;
-            return dx * -(float)Math.Sin(ang) + dz * -(float)Math.Cos(ang);
+            return dx * (float)Math.Sin(f) + dz * (float)Math.Cos(f);
         }
 
         private const  long FishCamPtrVar = 0x21D19678;   // follow-camera ptr (dist @cam+0x2D0, height +0x2D4)
