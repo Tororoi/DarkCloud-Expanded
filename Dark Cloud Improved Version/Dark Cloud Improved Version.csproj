@@ -84,6 +84,14 @@
       <Link>Resources\FishingCollision\queens_2.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="..\game_data\yellowdrops\yellowdrops_23.bin" Condition="Exists('..\game_data\yellowdrops\yellowdrops_23.bin')">
+      <Link>Resources\FishingCollision\yellowdrops_23.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\game_data\yellowdrops\s1301_smooth.bin" Condition="Exists('..\game_data\yellowdrops\s1301_smooth.bin')">
+      <Link>Resources\isoPatch\s1301_smooth.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <!-- Extracted game assets from the UNTRACKED game_data/ folder. Guarded by Exists() so a clean checkout
          builds without them (these features degrade gracefully at runtime when the file is absent). Link
          keeps the output layout (Resources/Fish, Resources/Sign) so runtime load paths are unchanged. Never

@@ -81,7 +81,9 @@ namespace Dark_Cloud_Improved_Version
         // Yellow Drops (s13): no injected sign yet — inject one at the fishing spot like the other towns.
         const string S13_SCENE = "gedit/s13/scene.scn", S13_MAPINFO = "gedit/s13/mapinfo.cfg";
         const string S13_ANCHOR = "s1301";                                   // an existing s13 GROUND block
-        const int YSIGN_X = -575, YSIGN_Y = 9, YSIGN_Z = -286, YSIGN_RY = 0; // at the spot (tx,ty,tz); RY tune in-game
+        // Moved 2026-08-30 to the WEST BANK bulge edge (needs the west-bank ground bake; the old spot
+        // was (-575,9,-286)). ry 90 = face EAST toward the player walking up (sceVu0RotMatrixY fold).
+        const int YSIGN_X = -465, YSIGN_Y = 30, YSIGN_Z = 40, YSIGN_RY = 90;  // at the spot (tx,ty,tz), on the y30 plateau
 
         // Carved ladder climb points, WORLD space (the ladder verts are world-baked so its part sits at origin
         // identity). Derived by running the vanilla Moon-Factory hasigo1 climb points — bottom (9.9,0,-48.4),
@@ -364,9 +366,9 @@ namespace Dark_Cloud_Improved_Version
             // Yellow Drops (s13): no native/injected sign, so inject the same kanban sign at its fishing spot,
             // carrying the baked fishing trigger — makes all three custom towns uniform (sign + native trigger).
             progress("Injecting the Yellow Drops sign …");
-            Redirect(S13_SCENE, BuildInjectedScene(ReadArchive(S13_SCENE), kanbanMds, tmplHdr,
+            Redirect(S13_SCENE, BuildInjectedScene(RaiseYdSuimenn(ReplaceS13Ground(ReadArchive(S13_SCENE))), kanbanMds, tmplHdr, BuildKanbanCollision(),
                                                    funcData: BuildFishingFunc(YDROPS_TRIG)));
-            Redirect(S13_MAPINFO, BuildInjectedMapinfo(ReadArchive(S13_MAPINFO), YSIGN_X, YSIGN_Y, YSIGN_Z, YSIGN_RY, S13_ANCHOR));
+            Redirect(S13_MAPINFO, BuildInjectedMapinfo(RaiseYdWater(ReadArchive(S13_MAPINFO)), YSIGN_X, YSIGN_Y, YSIGN_Z, YSIGN_RY, S13_ANCHOR));
 
             // 4) fishing labels: append spare labels to each custom fishing town's event.stb so the runtime
             //    installer always has dedicated room and never runs out on the town's tiny native spare pool
@@ -729,6 +731,82 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Injects a `kanban` part into a scene.scn. <paramref name="templateHeader"/> is a 0x160-byte
         /// PTS part header (carved from s04a01 with <see cref="PartHeader"/>) — self-contained, so the same one
         /// is reused for Brownboo AND Queens.</summary>
+        /// <summary>
+        /// Yellow Drops WEST-BANK BULGE (smoothed, 2x station density). The subdivided bank grows
+        /// the grid10/grid11 visual MDTs plus the s1301_a crown wall and s1301_c camera wall, so a
+        /// float-patch can't carry it — instead the ENTIRE s1301 subfile is rebuilt offline
+        /// (tools/westbank_smooth_bake.py -> Resources/isoPatch/s1301_smooth.bin: re-laid nested
+        /// MDS blocks, edge-split + sine-shifted geometry, verified byte-identical everywhere else)
+        /// and swapped in here: the new sub is appended to scene.scn and the s1301 directory entry
+        /// repointed at it (old bytes become dead space; the DATA.DAT tail copy absorbs the growth).
+        /// Guarded on the original sub's size so a foreign scene fails loudly. Missing bin = skip.
+        /// </summary>
+        /// <summary>Yellow Drops water raised 0 -> 4.25 (user request: the bank-notch lip height).
+        /// Three coordinated levels: the mapinfo WATER_SURFACE plane rows (here), the suimenn visual
+        /// sheet (RaiseYdSuimenn), and Spot 23's gameplay water (5.25 = surface + the same +1 the
+        /// spot always used).</summary>
+        const float YD_WATER_Y = 4.25f;
+
+        static byte[] RaiseYdWater(byte[] mapinfo)
+        {
+            string txt = Encoding.Latin1.GetString(mapinfo);
+            string oldMin = "\t\t\t-320, 0, -320,", newMin = "\t\t\t-320, 4.25, -320,";
+            string oldMax = "\t\t\t320, 0, 320,",  newMax = "\t\t\t320, 4.25, 320,";
+            if (txt.IndexOf(oldMin, StringComparison.Ordinal) < 0 || txt.IndexOf(oldMax, StringComparison.Ordinal) < 0)
+                throw new Exception("YD water raise: WATER_SURFACE rows not found in s13 mapinfo");
+            txt = txt.Replace(oldMin, newMin).Replace(oldMax, newMax);
+            Console.WriteLine($"   YD water surface: WATER_SURFACE raised to {YD_WATER_Y}");
+            return Encoding.Latin1.GetBytes(txt);
+        }
+
+        /// <summary>Raise the suimenn visual sheet (s1302, town-wide yellow liquid) by writing the
+        /// node's matrix Y translation (entry 1, sub-relative 0x244). Guarded on the vanilla ~0 value.</summary>
+        static byte[] RaiseYdSuimenn(byte[] scene)
+        {
+            int n = (int)U32(scene, 4);
+            for (int i = 0; i < n; i++)
+            {
+                int ent = 0x10 + i * 0x30;
+                if (Encoding.Latin1.GetString(scene, ent, 6) != "s1302\0") continue;
+                int off = (int)U32(scene, ent + 0x10) + 0x244;
+                float cur = BitConverter.ToSingle(scene, off);
+                if (Math.Abs(cur) > 0.001f)
+                    throw new Exception($"YD water raise: suimenn Ty is {cur}, expected ~0 — layout drift");
+                Array.Copy(BitConverter.GetBytes(YD_WATER_Y), 0, scene, off, 4);
+                Console.WriteLine($"   YD water surface: suimenn sheet raised to {YD_WATER_Y}");
+                return scene;
+            }
+            throw new Exception("YD water raise: s1302 not found");
+        }
+
+        static byte[] ReplaceS13Ground(byte[] scene)
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "Resources", "isoPatch", "s1301_smooth.bin");
+            if (!File.Exists(path))
+            {
+                Console.WriteLine("   s1301_smooth.bin missing (tools/westbank_smooth_bake.py) — bank stays vanilla");
+                return scene;
+            }
+            byte[] rebuilt = File.ReadAllBytes(path);
+            int n = (int)U32(scene, 4);
+            int ent = -1;
+            for (int i = 0; i < n; i++)
+                if (Encoding.Latin1.GetString(scene, 0x10 + i * 0x30, 6) == "s1301\0") { ent = 0x10 + i * 0x30; break; }
+            if (ent < 0) throw new Exception("s1301 not found in s13 scene directory");
+            uint oldSize = U32(scene, ent + 0x14);
+            if (oldSize != 0x4ca50)
+                throw new Exception($"s1301 size 0x{oldSize:x} != expected 0x4ca50 — regenerate s1301_smooth.bin");
+            var scn = new List<byte>(scene);
+            int blob = (int)Align(scn.Count, 16);
+            while (scn.Count < blob) scn.Add(0);
+            scn.AddRange(rebuilt);
+            byte[] outp = scn.ToArray();
+            U32(outp, ent + 0x10, (uint)blob);
+            U32(outp, ent + 0x14, (uint)rebuilt.Length);
+            Console.WriteLine($"   s1301 replaced with smoothed west bank ({rebuilt.Length} bytes @0x{blob:x})");
+            return outp;
+        }
+
         static byte[] BuildInjectedScene(byte[] scene, byte[] kanbanMds, byte[] templateHeader, byte[] collisionMds = null,
                                          string partName = "kanban", bool bakeIdentity = true, byte[] funcData = null)
         {
@@ -1523,7 +1601,7 @@ namespace Dark_Cloud_Improved_Version
             const float HEIGHT_EASE = 0.3f;  // per-frame ease of height toward its target
             const float DIST_EASE   = 0.3f; // per-frame ease of horizontal distance toward its target
             const float SLIDE_MARGIN = 8f;   // swept-slide standoff + proximity-extension reach. KEEP <= MARGIN (else the two setpoints oscillate)
-            const float SLIDE_BIAS = 0.03125f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
+            const float SLIDE_BIAS = 0.0625f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
             const float SLIDE_FRICTION = 0.6f; // contact drag at FULL tangency (keep-floor); head-on contact is undamped — keep = 1 − (1−F)·|n_t|
             float SLIDE_FRICTION_INV = 1f - SLIDE_FRICTION;   // injected form (asm folds 1−F to save the 1.0 load)
             const float CLIMB_PEAK = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
