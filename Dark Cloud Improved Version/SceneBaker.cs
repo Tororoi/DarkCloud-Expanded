@@ -1,3 +1,4 @@
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -126,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Queens georama-part subfile swaps (Resources/isoPatch/queens_parts.bin, built by
-        /// tools/export_queens_parts.py: u32 count; per part name[8] + u32 origSize + u32 newSize +
+        /// tools/queens_snake_statue_collision.py: u32 count; per part name[8] + u32 origSize + u32 newSize +
         /// bytes 16-aligned). Currently e03h06: `_c` camera hull doubled in height + `_a` player
         /// collision replaced with the full visual mesh split into sub-200-poly nodes. Each rebuilt
         /// sub is appended to scene.scn and its directory entry repointed; guarded on the original
@@ -136,7 +137,7 @@ namespace Dark_Cloud_Improved_Version
             string path = Path.Combine(AppContext.BaseDirectory, "Resources", "isoPatch", "queens_parts.bin");
             if (!File.Exists(path))
             {
-                Console.WriteLine("   queens_parts.bin missing (tools/export_queens_parts.py) — vanilla part collision stays");
+                Console.WriteLine("   queens_parts.bin missing (tools/queens_snake_statue_collision.py) — vanilla part collision stays");
                 return scene;
             }
             byte[] bin = File.ReadAllBytes(path);
@@ -302,7 +303,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Type-3 fishing trigger (func type 0x12): +0x70 = the SCRIPT LABEL id (fptosi'd, must be > 0),
         // +0x60 = trigger radius. Always-on ([0,24]); no frame gate.
-        internal static byte[] BuildFishingFunc(float[] localPos, int label = FishingLabel)
+        internal static byte[] BuildFishingFunc(float[] localPos, int label = FishingLabelId)
             => BuildFuncEntry(0x12, 0f, 24f, 0, 0, "", localPos, new[] { 0f, 0f, 0f },
                               new[] { 10f, 10f, 10f }, label, 0f);
 
@@ -317,7 +318,7 @@ namespace Dark_Cloud_Improved_Version
             // label 402. CanalTide enables EITHER the ladder pair (low tide → climb) OR this point (high tide
             // → "tide too high" on X-press), never both. Radius 8 ≈ the ladder's fixed 6 so it fires where the
             // climb would. Mirrors the climb-down's "hasigo" frame + LadderClimbTop so it resolves to the same spot.
-            var m = BuildFuncEntry(0x12, 0f, 24f, 0, 0, "hasigo", LadderClimbTop, LadderRotation, new[] { 8f, 8f, 8f }, LadderMessageLabel, 0f);
+            var m = BuildFuncEntry(0x12, 0f, 24f, 0, 0, "hasigo", LadderClimbTop, LadderRotation, new[] { 8f, 8f, 8f }, LadderMsgLabelId, 0f);
             var outb = new byte[b.Length + t.Length + m.Length];
             Array.Copy(b, 0, outb, 0, b.Length); Array.Copy(t, 0, outb, b.Length, t.Length);
             Array.Copy(m, 0, outb, b.Length + t.Length, m.Length);

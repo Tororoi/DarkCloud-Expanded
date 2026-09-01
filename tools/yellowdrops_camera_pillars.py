@@ -14,7 +14,8 @@ pillar_hulls() -> {label: {'tris': [...], 'foot': [(x,z)...]}} — one entry per
 import math, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scene_placed import placed_meshes
-from tri_util import chaikin as _chaikin
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "iso_patch", "collision"))
+from collision_geom import chaikin
 
 PILLAR_PAD = 8.0          # outward padding of the hull beyond the visual footprint
 HULL_N = 8                # max hull points per leg
@@ -111,7 +112,7 @@ def pillar_hulls():
             for p in hull:
                 d = math.hypot(p[0]-cx, p[1]-cz) or 1.0
                 padded.append((p[0] + (p[0]-cx)/d*PILLAR_PAD, p[1] + (p[1]-cz)/d*PILLAR_PAD))
-            feet.append(_chaikin(padded))                 # one round of corner-cutting -> smoother
+            feet.append(chaikin(padded))                 # one round of corner-cutting -> smoother
         out[label] = {'tris': _walls(feet), 'foot': feet}
     return out
 

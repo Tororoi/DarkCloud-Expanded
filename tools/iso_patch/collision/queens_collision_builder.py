@@ -29,7 +29,7 @@ from extract_scene_mesh import load_scene, xform
 import scene_placed
 from scene_placed import placed_meshes
 import mdt_codec
-from tri_util import kd_split
+from collision_geom import kd_split
 import georama_collision as gc
 from collision_mds_writer import _variant_off, _replace_a_block, _unique_names, fit_node_name, build_flat_mds, _pool_split
 from queens_terrain_collision_data import (camera_tris, flat_ground_tris, pipe_drum_tris, both_wall_tris, player_wall_tris,

@@ -7,7 +7,7 @@ queens_parts.bin) as a selectable layer in PART-LOCAL coordinates, plus referenc
 
 Workflow: click / shift+click / shift+drag polys of the "custom _a" layer, copy the triangle list
 from the panel, and hand it over with instructions (remove / replace) — edits land in
-tools/queens_snake_statue_surgery_data.py (PLAYER_COLLISION_REMOVE_TRIS / PLAYER_COLLISION_ADD_TRIS) and re-export via tools/export_queens_parts.py.
+tools/queens_snake_statue_surgery_data.py (PLAYER_COLLISION_REMOVE_TRIS / PLAYER_COLLISION_ADD_TRIS) and re-export via tools/queens_snake_statue_collision.py.
 
 Run: python3 tools/queens_snake_statue_viewer.py -> game_data/queens/queens_snake_statue_viewer.html
 """

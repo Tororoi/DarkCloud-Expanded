@@ -14,7 +14,7 @@ import math
 import os, sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)                                     # this dir (sibling collision modules)
-sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (scene_placed, georama_collision, tri_util…)
+sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (scene_placed, georama_collision…)
 from collision_geom import (_box, _plane_x, _plane_z, _horiz, tri_key_int, tri_key_winding, triangle_normal, _dot3,
                             simplify_coplanar, _plane_region, _dir_quad, _quad)
 
