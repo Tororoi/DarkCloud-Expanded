@@ -291,6 +291,9 @@ namespace Dark_Cloud_Improved_Version
         /// EventMode does when it returns you to walking: <c>SetAngleSoon(charaYaw + offset)</c>.</summary>
         internal const int CameraAngle    = 0x2D8;
         internal const int CameraAngleNow = 0x2DC;
+        /// <summary>The Ed time-change fade box alpha: 0 clear .. 128 black. Read by CanalTide to hide the
+        /// discrete tide jump inside the period fade and by the wading cape gate.</summary>
+        internal const long FadeBoxAlpha     = 0x21D3D1CC;
         internal const long ChangeTimeEvent   = 0x202A28A0;
         internal const long EditArea          = 0x202A28DC;
 

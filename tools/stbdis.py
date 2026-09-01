@@ -1,13 +1,12 @@
 import os
 import struct
-
-dat = open(os.path.join(DC1_DATA_DIR, "data.dat"),'rb')
-
 import json
 
 # Extracted Dark Cloud disc dir; required — see .env.sample.
 DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
 if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+dat = open(os.path.join(DC1_DATA_DIR, "data.dat"),'rb')
 CMD = {int(k):v for k,v in json.load(open('/tmp/stbcmds.json')).items()}
 def u32(s,o): return struct.unpack('<I',s[o:o+4])[0]
 

@@ -392,6 +392,17 @@ namespace Dark_Cloud_Improved_Version
         internal const int  DrawSlots = 10;        // MainDraw's hardcoded EdDrawCharacter count
     }
 
+    /// <summary>The fishing-line Verlet rope arrays (mod-access form = ELF addr + 0x20000000): main line
+    /// point[], bobber ukip/ukiv, hook hookv. Resolved from the SCUS_971.11 symtab; layout confirmed in the
+    /// FishLineStep decomp. Read/written by FishingCast.</summary>
+    internal static class FishingRope
+    {
+        internal const long Point = 0x21D55E30;   // point[0] = rod tip; 24 x 0x10 (vec4)
+        internal const long Ukip  = 0x21D56350;   // ukip[0] = bobber; 4 x 0x10
+        internal const long Ukiv  = 0x21D563D0;   // ukiv[0];  4 x 0x10
+        internal const long Hookv = 0x21D56310;   // hookv[0]; 3 x 0x10
+    }
+
     /// <summary>The running-event id, set by EdEventInit before the enter script's fade + loads.</summary>
     internal static class EditEvent
     {

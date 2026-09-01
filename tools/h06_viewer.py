@@ -7,7 +7,7 @@ queens_parts.bin) as a selectable layer in PART-LOCAL coordinates, plus referenc
 
 Workflow: click / shift+click / shift+drag polys of the "custom _a" layer, copy the triangle list
 from the panel, and hand it over with instructions (remove / replace) — edits land in
-tools/queens_h06.py (A_REMOVE_TRIS etc.) and re-export via tools/export_queens_parts.py.
+tools/queens_h06_surgery.py (A_REMOVE_TRIS / A_EXTRA_TRIS) and re-export via tools/export_queens_parts.py.
 
 Run: python3 tools/h06_viewer.py -> game_data/queens/h06_viewer.html
 """
