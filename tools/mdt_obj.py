@@ -14,7 +14,7 @@ Round-trip is geometry-exact (same set of world triangles), not byte-exact — r
 regroups submeshes, which the engine renders identically. Colour-block meshes aren't supported by the OBJ
 path yet (cliffs/terrain/water have none); export raises if one is passed.
 """
-import os, json, struct
+import os, json
 import mdt_codec
 
 

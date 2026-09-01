@@ -12,12 +12,17 @@ Run: python3 tools/queens_viewer.py  ->  game_data/queens/queens_viewer.html
 """
 import os, sys, re, math, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'iso_patch'))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'iso_patch', 'collision'))
 import scene_placed
 import bake_player_camera_collision as _bscc
 from scene_placed import placed_meshes
 from scene_viewer_html import build_html
 from extract_scene_mesh import load_scene, read_verts, read_tris, xform
+import carve_ladder
+import canal_visual_cap as _cap
+from georama_parts import lod_models, lod_layers
+from queens_hcam import candidate_tris as _hcam_candidates, split_tris as _hcam_split
 from georama_parts import part_models
 from georama_default import default_layout
 from georama_collision import collision_local, parse_coll_mdt
@@ -181,7 +186,6 @@ CANAL_SIGN_POS, CANAL_SIGN_RY = (800.0, 0.0, 0.0), -90   # under eastern bridge,
 # ---- LOW-TIDE FISHING proposals (canal-lowtide-fishing-plan.md): carved Factory ladder on the
 #      south canal wall centred at x=705, + the canal-floor fishing sign under the bridge facing west.
 #      Ladder from tools/carve_ladder.py (donor e05a01 'hasigo1'); sign = the real kanban mesh.
-import carve_ladder
 layers.append({'key': 'ladder', 'label': "PROPOSED ladder (e05 'hasigo1' trimmed to 70)",
                'tris': carve_ladder.placed_ladder_tris(),
                'color': [220,220,230], 'alpha': 1.0, 'border': '#fff', 'on': True})
@@ -193,8 +197,6 @@ layers.append({'key': 'newsign', 'label': 'PROPOSED canal-floor sign (real kanba
 #      look-up gap from the low-tide canal floor. Drawn EXACTLY as authored (host node grid1__n; NW/NE
 #      corners reused from its slant-wall records, SE/SW appended copying the x-twin's UV/normal), so the
 #      added geometry can be inspected against the surrounding walls.
-sys.path.insert(0, os.path.join(HERE, 'iso_patch'))
-import canal_visual_cap as _cap
 layers.append({'key': 'canalcap', 'label': 'SHIPPED canal west-end cap (2 tris, grid1__n @ y=50)',
                'tris': [[list(p) for p in t] for t in _cap.CAP_TRIS],
                'color': [240, 120, 200], 'alpha': 0.85, 'border': '#f6c', 'on': True})
@@ -592,7 +594,6 @@ print(f"vanilla camera coll (_c): {len(_vcam_static)} static tris + {_vgeo} geor
 # ---- simplified VISUAL LODs (h04/h05/h08/h09): candidate bases for more-detailed camera meshes.
 #      Attached per-part (same centering as the visual) so the georama toggles overlay them on the
 #      placed buildings — 'simplified visual LOD1/LOD2' checkboxes in the georama panel.
-from georama_parts import lod_models
 for _bn, _lv in lod_models('gedit/e03/scene.scn', r'e03h(04|05|08|09)$').items():
     _part = GPARTS.get(_bn)
     if not _part or '_ctr' not in _part:
@@ -606,7 +607,6 @@ for _bn, _lv in lod_models('gedit/e03/scene.scn', r'e03h(04|05|08|09)$').items()
 # ---- CUSTOM `_c` CANDIDATES (h04/h05/h08/h09): LOD2 base + FULL-mesh features LOD2 flattens —
 #      the curved roof (upper zone of the main body node), the canopies (hiyoke*) and the round
 #      roof chimney-pillar (entotu; h04/h05/h08 only). Preview overlay first; bake comes after review.
-from queens_hcam import candidate_tris as _hcam_candidates, split_tris as _hcam_split
 for _bn, _ct in _hcam_candidates().items():
     _part = GPARTS.get(_bn)
     if not _part or '_ctr' not in _part:
@@ -618,7 +618,6 @@ for _bn, _ct in _hcam_candidates().items():
 # ---- LOD comparison layers (shared helper): buildings h01-h12 ship _0/_1/_2 (full/medium/low),
 #      trees t01/t02 ship _0/_2. One toggle per level, world-placed at the default-layout position;
 #      assets not in the default layout (h01, t02) line up in a showroom row outside the SW corner.
-from georama_parts import lod_layers
 _inst_of = {}
 for _o in GDEFAULT:
     _inst_of.setdefault(_o['name'], []).append(_o)

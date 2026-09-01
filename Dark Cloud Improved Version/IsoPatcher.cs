@@ -992,16 +992,7 @@ namespace Dark_Cloud_Improved_Version
 
         static int Find(byte[] hay, byte[] needle) => FindFrom(hay, needle, 0);
 
-        static int FindFrom(byte[] hay, byte[] needle, int start)
-        {
-            for (int i = Math.Max(0, start); i <= hay.Length - needle.Length; i++)
-            {
-                int j = 0;
-                while (j < needle.Length && hay[i + j] == needle[j]) j++;
-                if (j == needle.Length) return i;
-            }
-            return -1;
-        }
+        static int FindFrom(byte[] hay, byte[] needle, int start) => ReusableFunctions.IndexOfBytes(hay, needle, start);
 
         // ── scene.scn: make Brownboo's houses single-sided so the camera, when it ends up INSIDE a house, sees
         //    straight through it instead of hitting the near walls (the camera already clips in; the problem is
@@ -1035,16 +1026,7 @@ namespace Dark_Cloud_Improved_Version
             return scene;
         }
 
-        static int FindLast(byte[] hay, byte[] needle, int before)
-        {
-            for (int i = Math.Min(before, hay.Length - needle.Length); i >= 0; i--)
-            {
-                int j = 0;
-                while (j < needle.Length && hay[i + j] == needle[j]) j++;
-                if (j == needle.Length) return i;
-            }
-            return -1;
-        }
+        static int FindLast(byte[] hay, byte[] needle, int before) => ReusableFunctions.LastIndexOfBytes(hay, needle, before);
 
         // ── scene.scn: delete stray horizontal triangles that a top-down edit camera sees (edit-mode view fix) ──
         // Two sets, both up-facing horizontal triangles sitting outside the town, so they stay visible from an
@@ -2315,9 +2297,9 @@ namespace Dark_Cloud_Improved_Version
         // standalone 1-node MDS (parent -1, block-relative meshOff 0x80). Matches mds_surgery.build.
         static byte[] CarveKanban(byte[] scene)
         {
-            int ki = IndexOf(scene, Encoding.ASCII.GetBytes("kanban\0"), 0);
+            int ki = FindFrom(scene, Encoding.ASCII.GetBytes("kanban\0"), 0);
             if (ki < 0) throw new IOException("Could not find the fishing-sign mesh (kanban) in the ISO.");
-            int mds = LastIndexOf(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, ki - 8);
+            int mds = FindLast(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, ki - 8);
             int tbl = (int)U32(scene, mds + 0xC), count = (int)U32(scene, mds + 8);
             int knOff = -1;
             for (int i = 0; i < count; i++) { int no = mds + tbl + i * 0x70; if (NameAt(scene, no + 8, 0x20) == "kanban") { knOff = no; break; } }
@@ -2346,9 +2328,9 @@ namespace Dark_Cloud_Improved_Version
         static byte[] CarveRippleDecal(byte[] scene, float half = DECAL_HALF)
         {
             const string NODE_NAME = "hamon__A01z";
-            int ki = IndexOf(scene, Encoding.ASCII.GetBytes(NODE_NAME + "\0"), 0);
+            int ki = FindFrom(scene, Encoding.ASCII.GetBytes(NODE_NAME + "\0"), 0);
             if (ki < 0) throw new IOException("Could not find the ripple decal (hamon__A01z) in the ISO.");
-            int mds = LastIndexOf(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, ki - 8);
+            int mds = FindLast(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, ki - 8);
             int tbl = (int)U32(scene, mds + 0xC), count = (int)U32(scene, mds + 8);
             int ndOff = -1;
             for (int i = 0; i < count; i++) { int no = mds + tbl + i * 0x70; if (NameAt(scene, no + 8, 0x20) == NODE_NAME) { ndOff = no; break; } }
@@ -2408,7 +2390,7 @@ namespace Dark_Cloud_Improved_Version
             return outb;
         }
 
-        static int Align16(int x) => (x + 0xF) & ~0xF;
+        static int Align16(int x) => (int)Align(x, 16);
         static void WrF(byte[] b, int o, float f) => Array.Copy(BitConverter.GetBytes(f), 0, b, o, 4);
 
         // ── canal ladder: carve the Factory metal ladder (e05a01/hasigo1) from the user's ISO and reshape it
@@ -2605,7 +2587,7 @@ namespace Dark_Cloud_Improved_Version
             int nParts = (int)U32(scene, 4), poff = -1;
             for (int i = 0; i < nParts; i++) { int e = 0x10 + i * 0x30; if (NameAt(scene, e, 0x10) == LADDER_PART) { poff = (int)U32(scene, e + 0x10); break; } }
             if (poff < 0) throw new IOException($"Ladder part {LADDER_PART} not found in the ISO.");
-            int mds = IndexOf(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, poff);
+            int mds = FindFrom(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, poff);
             if (mds < 0) throw new IOException("Ladder part MDS not found.");
             int tbl = mds + (int)U32(scene, mds + 0xC), count = (int)U32(scene, mds + 8), no = -1;
             for (int i = 0; i < count; i++) { int c = tbl + i * 0x70; if (NameAt(scene, c + 8, 0x20) == LADDER_NODE) { no = c; break; } }
@@ -2631,25 +2613,5 @@ namespace Dark_Cloud_Improved_Version
             return outb;
         }
 
-        static int IndexOf(byte[] hay, byte[] needle, int start)
-        {
-            for (int i = start; i <= hay.Length - needle.Length; i++)
-            {
-                bool ok = true;
-                for (int j = 0; j < needle.Length; j++) if (hay[i + j] != needle[j]) { ok = false; break; }
-                if (ok) return i;
-            }
-            return -1;
-        }
-        static int LastIndexOf(byte[] hay, byte[] needle, int before)
-        {
-            for (int i = Math.Min(before, hay.Length - needle.Length); i >= 0; i--)
-            {
-                bool ok = true;
-                for (int j = 0; j < needle.Length; j++) if (hay[i + j] != needle[j]) { ok = false; break; }
-                if (ok) return i;
-            }
-            return -1;
-        }
     }
 }

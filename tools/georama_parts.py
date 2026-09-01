@@ -11,7 +11,7 @@ lod_models(scene_rel, name_re) -> {part_name: {'0': tris, '1': tris, '2': tris}}
   (verified against the inline off/size record of `_a` across all Queens subs), so variant k = k-th
   MDS block. Parts with fewer than two LOD levels are omitted.
 """
-import re, struct
+import re
 import mdt_codec
 from extract_scene_mesh import load_scene, xform
 import scene_placed

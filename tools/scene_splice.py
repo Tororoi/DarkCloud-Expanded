@@ -19,6 +19,9 @@ import struct, re
 import mdt_codec
 
 
+# ⚠ This variant reads the directory OFFSET from word@4. For gedit scene.scn files word@4 is the
+# sub-file COUNT (directory is fixed at 0x10) — use scene_placed.scn_dir for those; this form is
+# kept only for whatever container scene_splice's original callers fed it.
 def _dir(scn):
     """[(name, off, size, entry_file_offset)] for every SCN sub-file directory entry."""
     assert scn[:4] == b'SCN\x00', "not an SCN container"

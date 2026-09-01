@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 os.environ.setdefault("DC1_DATA_DIR", os.path.join(HERE, "..", ".."))
 import ps2iso
-from bake_player_camera_collision import build_flat_mds, _replace_a_block, load_scene
+from bake_player_camera_collision import build_flat_mds, _replace_a_block
 from brownboo_camera_collision import (vanilla_v_nodes, iwa01_ring_obj56, _kd_split)
 
 SEC = ps2iso.SECTOR
@@ -100,16 +100,7 @@ def main():
     # verify: decode the baked block back out of the new scene bytes
     import re
     import scene_placed
-    DIR = {}
-    o = 0x10
-    while o + 0x30 <= len(new_scn):
-        nm = new_scn[o:o + 16].split(b'\x00')[0].decode('latin1', 'replace')
-        if not nm or not nm[0].isalnum():
-            break
-        off, size = struct.unpack_from('<II', new_scn, o + 0x10)
-        DIR[nm] = (off, size)
-        o += 0x30
-    off, size = DIR['s04g01']
+    off, size = scene_placed._scndir(new_scn)['s04g01']
     sub = new_scn[off:off + size]
     m = next(re.finditer(rb's04g01_v\.mds\x00', sub))
     vo = struct.unpack_from('<I', sub, m.end() + 3)[0]

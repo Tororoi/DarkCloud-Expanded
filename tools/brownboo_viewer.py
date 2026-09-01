@@ -755,7 +755,7 @@ print(f"custom obj56: {len(_cus)} tris")
 
 # ---- IWA01 tunnel-rock hull: REPLACES the lumpy obj56 iwa01 selection with a rock-centred circle wall +
 #      native tunnel interior + entrance collars extended along their own taper to meet the circle. ----
-from brownboo_camera_collision import iwa01_ring_tris, iwa01_ring_obj56, custom_obj56_full, tight_obj56
+from brownboo_camera_collision import iwa01_ring_tris, iwa01_ring_obj56, custom_obj56_full
 _ibuild = iwa01_ring_tris()
 _iobj56 = iwa01_ring_obj56()
 _ifull  = custom_obj56_full()

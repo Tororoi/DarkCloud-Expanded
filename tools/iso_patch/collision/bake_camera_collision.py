@@ -18,23 +18,14 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)                                     # this dir (build_coll_mdt)
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (shared infra)
 from extract_scene_mesh import load_scene
-import scene_placed, scene_splice as ss, georama_collision as gc
+import scene_placed, georama_collision as gc
 from georama_parts import part_models
-from build_coll_mdt import build_coll_mdt
+from georama_collision import build_coll_mdt
 
 
-def _dir(scn):
-    """[(name, off, size, entry_file_offset)] — directory is a fixed 0x10, 0x30-byte entries (word@4 is the
-    sub-file COUNT, not the dir offset; ss._dir mis-reads this for these scenes)."""
-    out, o = [], 0x10
-    while o + 0x30 <= len(scn):
-        nm = scn[o:o + 16].split(b'\x00')[0].decode('latin1', 'replace')
-        if not nm or not nm[0].isalnum():
-            break
-        off, size = struct.unpack_from('<II', scn, o + 0x10)
-        out.append((nm, off, size, o))
-        o += 0x30
-    return out
+# Directory parser: fixed 0x10, 0x30-byte entries (word@4 is the sub-file COUNT, not the dir
+# offset; scene_splice._dir mis-reads this for gedit scenes).
+_dir = scene_placed.scn_dir
 
 
 def _splice_a_root(scn, sub_name, new_mdt):

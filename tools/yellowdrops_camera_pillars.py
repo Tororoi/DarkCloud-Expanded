@@ -14,6 +14,7 @@ pillar_hulls() -> {label: {'tris': [...], 'foot': [(x,z)...]}} — one entry per
 import math, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scene_placed import placed_meshes
+from tri_util import chaikin as _chaikin
 
 PILLAR_PAD = 8.0          # outward padding of the hull beyond the visual footprint
 HULL_N = 8                # max hull points per leg
@@ -89,17 +90,6 @@ def _walls(feet):
             tris.append([[a[0], Y_LO, a[1]], [b[0], Y_LO, b[1]], [b[0], Y_HI, b[1]]])
             tris.append([[a[0], Y_LO, a[1]], [b[0], Y_HI, b[1]], [a[0], Y_HI, a[1]]])
     return tris
-
-
-def _chaikin(poly):
-    """One corner-cutting pass (Chaikin): doubles the points, rounds the corners."""
-    out = []
-    n = len(poly)
-    for i in range(n):
-        a, b = poly[i], poly[(i + 1) % n]
-        out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
-        out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
-    return out
 
 
 def pillar_hulls():

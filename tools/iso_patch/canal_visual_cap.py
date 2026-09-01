@@ -52,8 +52,8 @@ for _i in range(4):
 
 
 def _dir(scn):
-    from bake_player_camera_collision import _dir as d
-    return d(scn)
+    from scene_placed import scn_dir
+    return scn_dir(scn)
 
 
 def _find_rec(m, pos, tol=0.5):

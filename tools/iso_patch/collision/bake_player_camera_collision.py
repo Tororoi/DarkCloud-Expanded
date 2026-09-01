@@ -27,41 +27,15 @@ from extract_scene_mesh import load_scene, xform
 import scene_placed
 from scene_placed import placed_meshes
 import mdt_codec
-from build_coll_mdt import build_coll_mdt
+from georama_collision import build_coll_mdt
+from tri_util import kd_split
 import georama_collision as gc
 
 
 # ==========================================================================
 # MDS splice + kd-split primitives (former bake_terrain_camera_collision.py).
 # ==========================================================================
-def _dir(scn):
-    out, o = [], 0x10
-    while o + 0x30 <= len(scn):
-        nm = scn[o:o + 16].split(b'\x00')[0].decode('latin1', 'replace')
-        if not nm or not nm[0].isalnum():
-            break
-        off, size = struct.unpack_from('<II', scn, o + 0x10)
-        out.append((nm, off, size, o))
-        o += 0x30
-    return out
-
-
-def kd_split(tris, max_tris=100):
-    """Recursively median-split the triangle soup along its longest centroid axis until each leaf <= max_tris.
-    Gives compact, balanced buckets (tight bboxes -> effective per-node culling)."""
-    def cen(t):
-        return ((t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3, (t[0][2] + t[1][2] + t[2][2]) / 3)
-
-    def rec(ts):
-        if len(ts) <= max_tris:
-            return [ts]
-        cs = [cen(t) for t in ts]
-        axis = max(range(3), key=lambda a: max(c[a] for c in cs) - min(c[a] for c in cs))
-        order = sorted(range(len(ts)), key=lambda i: cs[i][axis])
-        mid = len(ts) // 2
-        return rec([ts[i] for i in order[:mid]]) + rec([ts[i] for i in order[mid:]])
-
-    return rec(list(tris))
+_dir = scene_placed.scn_dir   # canonical directory parser (list form)
 
 
 def _variant_off(sub, name, suffix='_a'):

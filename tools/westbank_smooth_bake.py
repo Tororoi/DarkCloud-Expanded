@@ -20,7 +20,7 @@ appends it to scene.scn and repoints the directory entry — the old sub bytes b
 
 Run: python3 tools/westbank_smooth_bake.py       (runs the self-tests, then writes the bin)
 """
-import os, sys, struct, math
+import os, sys, struct
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from extract_scene_mesh import load_scene
@@ -28,6 +28,7 @@ import scene_placed as sp
 import mdt_codec
 from yellowdrops_westbank import WB_ROWS, wb_profile, WB_SUBDIV
 from yellowdrops_camera_pillars import pillar_hulls, doumu_hug_xz
+from georama_collision import build_coll_mdt
 
 Y_LOCAL = 210.0            # s1301 node frames sit at world y + 210 (translation-only matrices)
 TOL = 0.35
@@ -279,36 +280,6 @@ def edit_coll_mdt(scn_bytes, fo, chains):
     return bytes(out), nmoved
 
 
-# ---------------- new collision MDTs (pillar camera hulls) ---------------------------------------
-def build_coll_mdt(world_tris, y_shift=210.0):
-    """Minimal camera-collision MDT from world tris (CreateCollisionMDT-verified fields only:
-    POS @w[4], DL @w[10] with count @DL+0x14, records (i0,i1,i2,attrIdx,0); attrIdx=-1 + w[14]=0
-    -> zeroed per-poly tag). Node frames sit at T=(0,-210,0), so local y = world y + 210."""
-    verts, vidx, recs = [], {}, []
-    for t in world_tris:
-        idx = []
-        for pnt in t:
-            key = (round(pnt[0], 3), round(pnt[1] + y_shift, 3), round(pnt[2], 3))
-            if key not in vidx:
-                vidx[key] = len(verts)
-                verts.append(key)
-            idx.append(vidx[key])
-        recs.append(idx)
-    POS = 0x40
-    DL = POS + len(verts) * 0x10
-    dl = struct.pack('<6I', 0x3400b8, 0x10, len(recs), 0, 3, len(recs))
-    dl += b''.join(struct.pack('<3i2i', r[0], r[1], r[2], -1, 0) for r in recs)
-    total = DL + len(dl)
-    total += (-total) % 16
-    out = bytearray(total)
-    hw = [0x54444d, 0x40, total, len(verts), POS, 0, 0, 0, 0, len(dl), DL, 0, 0, 0, 0, 0]
-    struct.pack_into('<16I', out, 0, *hw)
-    for i, v in enumerate(verts):
-        struct.pack_into('<4f', out, POS + i * 0x10, v[0], v[1], v[2], 1.0)
-    out[DL:DL + len(dl)] = dl
-    return bytes(out)
-
-
 # ---------------- MDS container re-lay -----------------------------------------------------------
 def relay_mds(sub, mds_off, mds_size, edits, add_nodes=None, template_node=1):
     """Rebuild the nested MDS at mds_off with per-node-name replacement MDT bytes, optionally
@@ -447,7 +418,7 @@ def main():
     # iriguti hulls dropped 2026-08-31 per user review (not beneficial in-game); extru gates only.
     hulls = pillar_hulls()
     namemap = {'extru_inner_S': 'pcam_xs', 'extru_inner_N': 'pcam_xn'}
-    add_c = [(namemap[k], build_coll_mdt(d['tris'])) for k, d in hulls.items() if k in namemap]
+    add_c = [(namemap[k], build_coll_mdt(d['tris'], y_shift=210.0)) for k, d in hulls.items() if k in namemap]
     print(f'stage 3b: {len(add_c)} pillar-hull camera nodes '
           f'({sum(len(hulls[k]["tris"]) for k in namemap)} tris total)')
 

@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import scene_placed
 from extract_scene_mesh import load_scene, xform, read_verts, read_tris
 from georama_collision import parse_coll_mdt
+from tri_util import kd_split
 
 
 def _rmkey(t):
@@ -377,31 +378,8 @@ def custom_h01_v_nodes(max_tris=100, scn=None):
     keep = [t for t in pool if min(p[1] for p in t) < H01_KEEP_BELOW]
     legs, rest = _leg_clusters(keep)
     out = [(f'h01leg{k}', tris) for k, tris in enumerate(legs) if tris]
-    out += [(f'h01v{i:02d}', bk) for i, bk in enumerate(_kd_split(rest, max_tris))]
+    out += [(f'h01v{i:02d}', bk) for i, bk in enumerate(kd_split(rest, max_tris, proportional=True))]
     return out
-
-
-def _kd_split(tris, max_tris=100):
-    """Split along the longest centroid axis into ceil(n/max_tris) spatially-compact leaves. Unlike a plain
-    median split (which halves to powers of two and can land leaves at ~max/2), each cut hands both sides a
-    PROPORTIONAL share of the leaves they need, so every leaf ends up just under max_tris."""
-    import math as _m
-
-    def cen(t):
-        return ((t[0][0]+t[1][0]+t[2][0])/3, (t[0][1]+t[1][1]+t[2][1])/3, (t[0][2]+t[1][2]+t[2][2])/3)
-
-    def rec(ts):
-        k = _m.ceil(len(ts) / max_tris)                 # leaves this subtree must produce
-        if k <= 1:
-            return [ts]
-        cs = [cen(t) for t in ts]
-        axis = max(range(3), key=lambda a: max(c[a] for c in cs) - min(c[a] for c in cs))
-        order = sorted(range(len(ts)), key=lambda i: cs[i][axis])
-        kl = k // 2                                      # left subtree's leaf share
-        mid = round(len(ts) * kl / k)
-        return rec([ts[i] for i in order[:mid]]) + rec([ts[i] for i in order[mid:]])
-
-    return rec(list(tris))
 
 
 def part_v_nodes(sub_name='s04h01', max_tris=100, scn=None):
@@ -427,7 +405,7 @@ def part_v_nodes(sub_name='s04h01', max_tris=100, scn=None):
         v = [xform(M, p) for p in read_verts(scn, fo)]
         pool += [[list(v[a]), list(v[b]), list(v[c])] for a, b, c in read_tris(scn, fo)]
     stem = sub_name[3:]                                     # 's04h01' -> 'h01'
-    return [(f'{stem}v{i:02d}', bk) for i, bk in enumerate(_kd_split(pool, max_tris))]
+    return [(f'{stem}v{i:02d}', bk) for i, bk in enumerate(kd_split(pool, max_tris, proportional=True))]
 
 
 # ---- ROCK SHELLS (2026-08): replace the three dense/concave rock camera hulls in obj56 with coarse CONVEX

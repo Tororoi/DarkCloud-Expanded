@@ -106,3 +106,88 @@ if __name__ == '__main__':
         print(f"  {nm}_a  tris={len(t):4}  W={max(xs)-min(xs):.0f} D={max(zs)-min(zs):.0f} H={max(ys)-min(ys):.0f}")
         tot += len(t)
     print(f"{len(cl)} collision parts, {tot} tris")
+
+# ---------------- collision MDT ENCODER (mirror of parse_coll_mdt) -------------------------------
+# Moved here from tools/iso_patch/collision/build_coll_mdt.py (2026-09) so the encoder lives next to
+# its decoder; the westbank/queens copy (slightly different filler words, same consumed fields) was
+# deleted at the same time. CreateCollisionMDT reads: total @w2, verts @w4 (stride 0x10 XYZW),
+# DL @w10 (count @DL+0x14, records @DL+0x18 stride 5 int32), colour block @w14 (0 = skip -> zeroed
+# per-poly tag). attrs: optional per-tri 16-byte colour entries (event-trigger tags).
+def build_coll_mdt(tris, colour=False, attrs=None, y_shift=0.0):
+    # dedupe verts -> indexed POS block (quantise to avoid float dupes). y_shift: node frames that
+    # sit at T=(0,-y_shift,0) need local y = world y + y_shift (e.g. the s1301 pcam hulls at 210).
+    index = {}
+    verts = []
+    idx = []
+    for t in tris:
+        tri = []
+        for p in t:
+            key = (round(p[0], 3), round(p[1] + y_shift, 3), round(p[2], 3))
+            i = index.get(key)
+            if i is None:
+                i = len(verts)
+                index[key] = i
+                verts.append((float(p[0]), float(p[1]) + y_shift, float(p[2])))
+            tri.append(i)
+        idx.append(tuple(tri))
+
+    vc, tc = len(verts), len(idx)
+    POS = 0x40
+    pos_bytes = b''.join(struct.pack('<4f', v[0], v[1], v[2], 1.0) for v in verts)
+
+    # per-triangle colour-block entries: dedupe distinct 16-byte entries, map each tri -> its entry index
+    entries, tri_cidx = [], []
+    if attrs is not None:
+        if len(attrs) != tc:
+            raise ValueError(f'attrs len {len(attrs)} != tri count {tc}')
+        seen = {}
+        for e in attrs:
+            e = bytes(e)
+            if len(e) != 0x10:
+                raise ValueError('each attr must be a 16-byte colour entry')
+            j = seen.get(e)
+            if j is None:
+                j = len(entries); seen[e] = j; entries.append(e)
+            tri_cidx.append(j)
+
+    DL = POS + len(pos_bytes)
+    DL = (DL + 0xf) & ~0xf
+    # DL header (0x18): [tag, 0x10, tc, 0x20202020, 3, tc] then records
+    dl = bytearray(struct.pack('<6I', 0x003400b8, 0x10, tc, 0x20202020, 3, tc))
+    for ti, (a, b, c) in enumerate(idx):
+        cidx = tri_cidx[ti] if attrs is not None else 0
+        dl += struct.pack('<5i', a, b, c, cidx, 0)
+
+    body_end = DL + len(dl)
+    colour_off = 0
+    if attrs is not None:
+        colour_off = (body_end + 0xf) & ~0xf
+        body_end = colour_off + 0x10 * len(entries)
+    elif colour:
+        colour_off = (body_end + 0xf) & ~0xf
+        body_end = colour_off + 0x10
+
+    total = (body_end + 0xf) & ~0xf
+
+    hdr = [0] * 16
+    hdr[0] = 0x0054444d   # 'MDT\0'
+    hdr[1] = 0x40
+    hdr[2] = total
+    hdr[3] = vc
+    hdr[4] = POS
+    hdr[5] = 2 * tc
+    hdr[8] = 0
+    hdr[10] = DL
+    hdr[13] = 1
+    hdr[14] = colour_off
+
+    mdt = bytearray(total)
+    struct.pack_into('<16I', mdt, 0, *hdr)
+    mdt[POS:POS + len(pos_bytes)] = pos_bytes
+    mdt[DL:DL + len(dl)] = dl
+    if attrs is not None:
+        blk = b''.join(entries)
+        mdt[colour_off:colour_off + len(blk)] = blk
+    elif colour:
+        struct.pack_into('<4B', mdt, colour_off, 0x80, 0x80, 0x80, 0x80)
+    return bytes(mdt)

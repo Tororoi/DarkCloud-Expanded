@@ -97,7 +97,6 @@ namespace Dark_Cloud_Improved_Version
         // Water DISTORTION is fully NATIVE (e03 mapinfo: the canal body is world-anchored and its
         // WATER_SHAKE sources agitate it — IsoPatcher.WorldAnchorCanalWater). The old C# height-buffer
         // poking experiments (PlayerRipple/RippleProbe) were deleted 2026-08 — recoverable via git.
-        private const long  CamPtrVar = 0x21D19678;             // follow-camera ptr (ref/look-at @cam+0x2C0/+0x2C8)
         private const long  WaveSpeedOff = 0x94, WaveDampOff = 0x98;   // Hamon params in CWater (cw = body+0x90)
 
         private static int _rippleSlot = -1;                    // cached canal CWater body index (see CanalBody)
@@ -122,7 +121,7 @@ namespace Dark_Cloud_Improved_Version
         // CWater array is at base+0x15040 (4 bodies, stride 0x3B0), pos.y @ +0x44, active @ +0x20 (Y-follow flag
         // off, so a write to +0x44 holds). The canal body sits at Y31; the two fountain pools (Y113 / Y5.6) are
         // left alone. Re-pinned every frame because a Queens area transition rebuilds the array back to Y31.
-        private const long RippleEditGroundPtr = 0x202A28D8;
+        private const long RippleEditGroundPtr = EditGround.EditGroundPtr;
         private const long RippleArrOff = 0x15040, RippleStride = 0x3B0;
         private const int  RippleSlots  = 4;
 
@@ -264,12 +263,11 @@ namespace Dark_Cloud_Improved_Version
             // tick reliably catches it — unlike the one-frame fully-black warp trigger, which is why THAT is native.
             if (_camActive && Memory.ReadFloat(FadeAlpha) >= FadeSnapAlpha)
             {
-                uint cp = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;
-                if (Memory.IsValidGuest(cp))
+                long cam = FollowCamera.Base();
+                if (cam != 0)
                 {
-                    long cam = Memory.ToMmu(cp);
-                    Memory.WriteFloat(cam + CamOffAngle, 0f);
-                    Memory.WriteFloat(cam + CamOffAngleSmooth, 0f);
+                    Memory.WriteFloat(cam + FollowCamera.Angle, 0f);
+                    Memory.WriteFloat(cam + FollowCamera.AngleNow, 0f);
                 }
             }
 
@@ -686,8 +684,10 @@ namespace Dark_Cloud_Improved_Version
         // commands (_SET_FOLLOW_CAMERA etc.) run on the battle-only DAT_01d3d210 camera (null in town), and the town
         // _RESET_CAMERA path defers to EventMode, which the arrival event never routes through. So we set it here.
         private const int   EastHarborMapNo = 19;
-        private const long  CamOffDist = 0x2D0, CamOffHeight = 0x2D4, CamOffAngle = 0x2D8, CamOffAngleSmooth = 0x2DC;
-        private const long  CamOffRefX = 0x2C0, CamOffRefY = 0x2C4, CamOffRefZ = 0x2C8;   // ref (look-at) xyz used by Step
+        private const long  CamOffDist = FollowCamera.Dist, CamOffHeight = FollowCamera.Height,
+                            CamOffAngle = FollowCamera.Angle, CamOffAngleSmooth = FollowCamera.AngleNow;
+        private const long  CamOffRefX = FollowCamera.RefX, CamOffRefY = FollowCamera.RefY,
+                            CamOffRefZ = FollowCamera.RefZ;   // ref (look-at) xyz used by Step
         private const long  CamCurPos = 0x260, CamCurRef = 0x270, CamNextPos = 0x280, CamNextRef = 0x290; // base CCamera ease pair
         private const float DockCamDist = 69.7f, DockCamHeight = 5.0f, DockCamAngle = 0.0f;  // just under BASE_DIST (70, vanilla rest since 2026-08; was 79.7 under the 80 rest)
         private const float DockRefLoadedX = -1000f;         // ref.x below this ⇒ the dock ref is loaded (dock = -1311)
@@ -761,9 +761,8 @@ namespace Dark_Cloud_Improved_Version
             if (!_camActive) return;
             if (++_camAge > CamTimeout) { _camActive = false; return; }               // never arrived — give up
             if (Memory.ReadInt(EditLoop.MapNo) != EastHarborMapNo) return;            // still loading / not there yet
-            uint p = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) return;
-            long cam = Memory.ToMmu(p);
+            long cam = FollowCamera.Base();
+            if (cam == 0) return;
             // ⚠ The map load REBUILDS the camera a beat after MapNo flips to 19, and the rebuild restores the
             // carried-over Queens angle (5.05) — so an early write (while ref is still (0,0,0)/transient) gets
             // wiped. Wait until the DOCK ref is loaded (ref.x ≈ -1311), THEN force everything: by that point the
@@ -890,7 +889,7 @@ namespace Dark_Cloud_Improved_Version
         // can be pinned down; EditInfo.Base is logged for reference.
         private static long FindMizuFrame()
         {
-            uint ei = Memory.ReadUInt(0x202A27B0) & Memory.PhysAddrMask;
+            uint ei = Memory.ReadUInt(EditInfo.EditInfoPtr) & Memory.PhysAddrMask;
             Log($"EditInfo.Base=0x{ei:X} — broad-scanning for mizu__a01…");
             const long START = 0x20300000, END = 0x21E00000;
             const int PAGE = 0x40000;                              // 256 KB pages, overlapped by the needle
@@ -898,7 +897,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 byte[] buf = Memory.ReadBytesBatch(p, (int)Math.Min(PAGE, END - p));
                 if (buf == null) continue;
-                int idx = IndexOf(buf, MizuName);
+                int idx = ReusableFunctions.IndexOfBytes(buf, MizuName);
                 if (idx >= 0)
                 {
                     long frame = p + idx - FrameName;
@@ -908,17 +907,6 @@ namespace Dark_Cloud_Improved_Version
             }
             Log("mizu__a01 not found in 0x20300000-0x21E00000");
             return 0;
-        }
-
-        private static int IndexOf(byte[] hay, byte[] needle, int from = 0)
-        {
-            for (int i = Math.Max(0, from); i <= hay.Length - needle.Length; i++)
-            {
-                int j = 0;
-                while (j < needle.Length && hay[i + j] == needle[j]) j++;
-                if (j == needle.Length) return i;
-            }
-            return -1;
         }
 
         private static float TargetY(TimeOfDay tod) => tod switch
