@@ -92,6 +92,10 @@
       <Link>Resources\isoPatch\s1301_smooth.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="..\game_data\queens\queens_parts.bin" Condition="Exists('..\game_data\queens\queens_parts.bin')">
+      <Link>Resources\isoPatch\queens_parts.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <!-- Extracted game assets from the UNTRACKED game_data/ folder. Guarded by Exists() so a clean checkout
          builds without them (these features degrade gracefully at runtime when the file is absent). Link
          keeps the output layout (Resources/Fish, Resources/Sign) so runtime load paths are unchanged. Never

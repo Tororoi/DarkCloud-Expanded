@@ -589,6 +589,32 @@ for _bn in [n for n in _DIR if re.match(r'e03h\d\d$', n)]:
     _vgeo += len(_t)
 print(f"vanilla camera coll (_c): {len(_vcam_static)} static tris + {_vgeo} georama tris")
 
+# ---- simplified VISUAL LODs (h04/h05/h08/h09): candidate bases for more-detailed camera meshes.
+#      Attached per-part (same centering as the visual) so the georama toggles overlay them on the
+#      placed buildings — 'simplified visual LOD1/LOD2' checkboxes in the georama panel.
+from georama_parts import lod_models
+for _bn, _lv in lod_models('gedit/e03/scene.scn', r'e03h(04|05|08|09)$').items():
+    _part = GPARTS.get(_bn)
+    if not _part or '_ctr' not in _part:
+        continue
+    _cxm, _my, _czm = _part['_ctr']
+    for _l in ('1', '2'):
+        if _l in _lv:
+            _part[f'lod{_l}tris'] = [[[q[0] - _cxm, q[1] - _my, q[2] - _czm] for q in t] for t in _lv[_l]]
+            print(f"  LOD{_l} overlay {_bn}: {len(_lv[_l])} tris")
+
+# ---- CUSTOM `_c` CANDIDATES (h04/h05/h08/h09): LOD2 base + FULL-mesh features LOD2 flattens —
+#      the curved roof (upper zone of the main body node), the canopies (hiyoke*) and the round
+#      roof chimney-pillar (entotu; h04/h05/h08 only). Preview overlay first; bake comes after review.
+from queens_hcam import candidate_tris as _hcam_candidates, split_tris as _hcam_split
+for _bn, _ct in _hcam_candidates().items():
+    _part = GPARTS.get(_bn)
+    if not _part or '_ctr' not in _part:
+        continue
+    _cxm, _my, _czm = _part['_ctr']
+    _part['candtris'] = [[[q[0] - _cxm, q[1] - _my, q[2] - _czm] for q in t] for t in _ct]
+    print(f"  _c candidate {_bn}: {len(_ct)} tris in {len(_hcam_split(_ct))} bake nodes")
+
 # ---- LOD comparison layers (shared helper): buildings h01-h12 ship _0/_1/_2 (full/medium/low),
 #      trees t01/t02 ship _0/_2. One toggle per level, world-placed at the default-layout position;
 #      assets not in the default layout (h01, t02) line up in a showroom row outside the SW corner.
