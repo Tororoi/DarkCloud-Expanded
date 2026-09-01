@@ -695,7 +695,10 @@ namespace Dark_Cloud_Improved_Version
             // per-spot): distpBELOW = the spot's hook depth (bobber→hook hang), distpABOVE = aerial reach,
             // ramped out by the cast pay-out below. Anchor is FIXED at point[18] (A=18 baked in the ISO caves).
             if (live) Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, _lineBelow);   // hang = the spot's hook depth
-            FishingCast.Tick(live, _lineAboveStart, _lineAbove, _active.Facing);       // line LENGTH + cast pay-out
+            // Pay-out projects the rod tip along the player's LIVE facing: they can turn (and walk) before casting,
+            // so the session-start stance yaw is only the fallback when the character can't be read.
+            float facing = EditLoop.TryReadPlayerYaw(out float liveYaw) ? liveYaw : _active.Facing;
+            FishingCast.Tick(live, _lineAboveStart, _lineAbove, facing);               // line LENGTH + cast pay-out
 
             _fishingWasLive = live;
         }

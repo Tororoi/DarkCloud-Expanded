@@ -343,6 +343,17 @@ namespace Dark_Cloud_Improved_Version
             x = Memory.ReadFloat(c); y = Memory.ReadFloat(c + 4); z = Memory.ReadFloat(c + 8);
             return true;
         }
+
+        /// <summary>The player's LIVE yaw (rotation Y of the town CCharacter, radians; forward = (sin, cos) —
+        /// the convention the fishing stances were captured in). False if the character isn't resolvable.</summary>
+        internal static bool TryReadPlayerYaw(out float yaw)
+        {
+            yaw = 0f;
+            uint p = Memory.ReadUInt(CharaPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return false;
+            yaw = Memory.ReadFloat(Memory.ToMmu(p) + CharaRotation + 4);
+            return true;
+        }
     }
 
     /// <summary>
