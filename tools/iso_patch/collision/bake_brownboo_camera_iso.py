@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Bake the authored Brownboo CAMERA collision into the mod's already-patched ISO, in place.
+"""Bake the authored Brownboo CAMERA collision + the fishing ROCK collision into the mod's already-patched
+ISO, in place.
+
+  • `s04g01_a` (PLAYER collision, also the fishing gather's source): the three hand-simplified rocks
+    (brownboo_rock_data.ROCKS, authored data) are APPENDED as nodes
+    rock_iwa01/02/03 — vanilla nodes byte-identical (append_variant_nodes). Every rock face is a slope, so
+    the fishing floors-only compaction keeps them: the bobber can't cast onto/through the rocks and the
+    fish can't swim through them, with no runtime append. Gather at the cast rect: 648 + 202 = 850 (<1024).
 
 Rebuilds gedit/s04/scene.scn's `s04g01_v` (the town camera-collision variant — the slot every other town
 names `_c`, see LoadMapObject @0x19B790) as a flat multi-node MDS:
@@ -21,7 +28,10 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 os.environ.setdefault("DC1_DATA_DIR", os.path.join(HERE, "..", ".."))
 import ps2iso
 from bake_player_camera_collision import build_flat_mds, _replace_a_block
+from collision_mds import append_variant_nodes
+from georama_collision import build_coll_mdt
 from brownboo_camera_collision import vanilla_v_nodes, iwa01_ring_obj56
+from brownboo_rock_data import ROCKS
 from tri_util import kd_split
 
 SEC = ps2iso.SECTOR
@@ -45,6 +55,18 @@ def baked_named(scn=None):
     named = [('v', van_v)]
     named += [(f'c56_{i:02d}', bk) for i, bk in enumerate(kd_split(iwa01_ring_obj56(scn), 100, proportional=True))]
     return named
+
+
+def rock_nodes():
+    """[(node_name, collision MDT bytes)] for the three rocks — one node each (84/81/37 tris)."""
+    return [(nm, build_coll_mdt(tris)) for nm, tris in ROCKS]
+
+
+def bake_rocks(scn):
+    """Append the rock nodes to s04g01_a. Refuses to double-bake (a rock node already present)."""
+    if b'rock_iwa01' in scn:
+        raise SystemExit("s04g01_a already carries the rock nodes (already-baked scene?)")
+    return append_variant_nodes(scn, 's04g01', rock_nodes(), suffix='_a')
 
 
 def _hd2_slot(hd2_r, i): return hd2_r["ext"] * SEC + 16 + i * 32
@@ -88,6 +110,8 @@ def main():
 
         new_scn, delta = _replace_a_block(scn0, 's04g01', build_flat_mds(named), suffix='_v')
         print(f"scene {len(scn0):,} -> {len(new_scn):,} B (delta {delta:+,})")
+        new_scn, rdelta = bake_rocks(new_scn)
+        print(f"s04g01_a + rocks: delta {rdelta:+,} B")
 
         if tail + len(new_scn) > dat_size:
             raise SystemExit("ran out of DATA.DAT tail space")
@@ -109,6 +133,11 @@ def main():
     cnt2 = struct.unpack_from('<I', sub, vo + 8)[0]
     print(f"verify: baked s04g01_v has {cnt2} nodes (want {len(named)})")
     assert cnt2 == len(named)
+    ma = next(re.finditer(rb's04g01_a\.mds\x00', sub))
+    ao = struct.unpack_from('<I', sub, ma.end() + 3)[0]
+    acnt = struct.unpack_from('<I', sub, ao + 8)[0]
+    print(f"verify: baked s04g01_a has {acnt} nodes (3 vanilla + {len(rock_nodes())} rocks)")
+    assert acnt == 3 + len(rock_nodes())
     print(f"\nDONE (in place) -> {iso}")
 
 

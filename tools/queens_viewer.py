@@ -373,8 +373,8 @@ layers.append({'key': 'fc_contain', 'label': f'fish-coll: canal walls ({len(FISH
 # ---- VANILLA fishing cpoly: the exact polys PickUpPoly gathered at the spot, dumped live from RAM by
 #      FishingCollision.DumpFullGather (needs CustomFishingSpot.Diagnostics=true + DC_DUMP_DIR set; writes
 #      game_data/queens/vanilla_cpoly.csv). Split by NORMALISED |normal.Y| the same way the mod does: the
-#      floors-only filter KEEPS |ny|>0.2 (floors+slopes) and DROPS |ny|<=0.2 (walls). Walls are what would
-#      contain the fish, so seeing them is the point (the probe warned there are none near this spot).
+#      old floors-only filter KEPT |ny|>0.2 (floors+slopes) and DROPPED |ny|<=0.2 (walls); since 2026-09
+#      the mod keeps the walls (they contain the fish), so the split is informational only.
 def load_vanilla_cpoly(path):
     floors, slopes, walls = [], [], []
     if not os.path.exists(path):

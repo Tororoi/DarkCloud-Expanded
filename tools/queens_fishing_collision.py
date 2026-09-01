@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Queens (map 2) custom fishing collision — the triangles the mod appends to cpoly at fishing time
-(FishingCollision.AddMeshTriangles reads queens_2.bin; export via tools/export_queens_collision.py).
+(FishingCollision.AddMeshTriangles reads queens_2.bin; built by tools/build_fishing_collision.py).
 
 Three groups, ALL kept at full mesh resolution (no simplification, per design):
   - bridges: the two canal bridge meshes obj40 (X~800) + obj44 (X~-48), entire meshes.

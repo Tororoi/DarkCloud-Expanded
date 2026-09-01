@@ -6,7 +6,7 @@ a player standing at the water's edge: edge columns move -x by WEST_BULGE*sin(pi
 section; paired crown columns follow; section ends stay welded. WB_SUBDIV inserts stations for a
 smoother waterline (2x density). Consumers:
   tools/westbank_smooth_bake.py         (bakes game_data/yellowdrops/s1301_smooth.bin)
-  tools/export_yellowdrops_collision.py (DCFC fish walls -> yellowdrops_23.bin)
+  tools/build_fishing_collision.py      (DCFC fish walls -> yellowdrops_23.bin)
   tools/yellowdrops_viewer.py           (proposal/verification layers)
 
 (The crescent-pond redesign that used to live in this file — steps 1-10 — was REVERTED by user
@@ -43,10 +43,11 @@ def wb_moves():
 FISH_WALL_BOTTOM = -24.0     # fish swim at WaterLevel-8 = y-7; walls run bank-top down to here
 
 
-# P3/P4 pillar-base fish collision: the fishing pipeline strips walls from the cpoly gather
-# (ReplaceWithFloorsOnly), so the pillars' EXISTING base collision (s1301_a obj3) vanishes at
-# fishing time and fish swim through. These are that collision's tris VERBATIM (user-extracted),
-# re-appended via the same DCFC bin as the bank walls.
+# P3/P4 pillar-base fish collision: the pillars' base collision tris VERBATIM (user-extracted),
+# re-appended via the DCFC bin. Still NEEDED after native walls stopped being stripped (2026-09):
+# checked offline, the native s13 `_a` in the bank band only exists at y 30..126 (the crown wall above
+# the bank top) — nothing native reaches into the water where the fish are (y ~ -4), and the pillar
+# bases have no `_a` duplicate at all.
 PILLAR_BASE_TRIS = [
     [[-561.8, -20.64, 51.68], [-581.76, -20.64, 53.74], [-565.42, -3.28, 59.78]],
     [[-565.42, -3.28, 59.78], [-576.57, -3.28, 60.93], [-561.84, 13.44, 56.8]],

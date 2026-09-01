@@ -126,3 +126,62 @@ def _pool_split(pool, prefix, used, max_tris=100):
     source meshes (then splitting) packs NEARBY polys into the same node regardless of which mesh they came from,
     so every node has a tight bounding box — which is exactly what the runtime frame-gather self-cull keys off."""
     return [(_fit(f'{prefix}{bi}', used, 15), bk) for bi, bk in enumerate(kd_split(pool, max_tris))]
+
+
+def append_variant_nodes(scn, sub_name, add_nodes, suffix='_a', template_node=1):
+    """Append collision nodes to a sub-file's existing `<name><suffix>` MDS WITHOUT touching its vanilla
+    nodes: the header/table are re-laid with extra entries cloned from `template_node` (name/index/
+    mesh-offset overwritten; parent + matrix inherited — identity, parent 0 for the ground subs), every
+    vanilla MDT block is copied byte-for-byte (so per-tri colour/attribute entries such as the
+    loading-zone trigger tags survive untouched), then the new MDTs follow. Splices the rebuilt block back
+    via _replace_a_block. add_nodes = [(node_name, mdt_bytes), ...]. Returns (new_scn, delta)."""
+    entry = next((e for e in _dir(scn) if e[0] == sub_name), None)
+    if entry is None:
+        raise KeyError(sub_name)
+    _, sub_off, sub_size, _ = entry
+    sub = bytes(scn[sub_off:sub_off + sub_size])
+    vo = _variant_off(sub, sub_name, suffix)
+    if vo is None:
+        raise KeyError(f"{sub_name}: no {suffix}")
+    after = []
+    for m in re.finditer(rb'[\w]+\.mds\x00', sub):
+        fpos = m.end() + 3
+        if fpos + 4 > len(sub):
+            continue
+        toff = struct.unpack_from('<I', sub, fpos)[0]
+        if vo < toff < sub_size and sub[toff:toff + 3] == b'MDS':
+            after.append(toff)
+    mds_size = (min(after) if after else sub_size) - vo
+    cnt, tbl = struct.unpack_from('<II', sub, vo + 8)
+    nodes = []
+    for i in range(cnt):
+        b = vo + tbl + i * 0x70
+        nm = sub[b + 8:b + 24].split(b'\x00')[0].decode('latin1')
+        mo = struct.unpack_from('<i', sub, b + 0x28)[0]
+        nodes.append((i, nm, mo))
+    order = sorted([n for n in nodes if n[2]], key=lambda n: n[2])
+    blocks = []
+    for k, (i, nm, mo) in enumerate(order):
+        end = order[k + 1][2] if k + 1 < len(order) else mds_size
+        blocks.append((i, sub[vo + mo: vo + end]))
+    out = bytearray(sub[vo: vo + tbl + cnt * 0x70])
+    for k, (nm, mdt) in enumerate(add_nodes):
+        ent = bytearray(sub[vo + tbl + template_node * 0x70: vo + tbl + (template_node + 1) * 0x70])
+        struct.pack_into('<I', ent, 0, cnt + k)
+        nmb = nm.encode('latin1')[:15]
+        ent[8:24] = nmb + b'\x00' * (16 - len(nmb))
+        out += ent
+    struct.pack_into('<I', out, 8, cnt + len(add_nodes))
+    for i, raw in blocks:
+        new_mo = len(out)
+        out += raw
+        while len(out) % 16:
+            out += b'\x00'
+        struct.pack_into('<i', out, tbl + i * 0x70 + 0x28, new_mo)
+    for k, (nm, mdt) in enumerate(add_nodes):
+        new_mo = len(out)
+        out += mdt
+        while len(out) % 16:
+            out += b'\x00'
+        struct.pack_into('<i', out, tbl + (cnt + k) * 0x70 + 0x28, new_mo)
+    return _replace_a_block(scn, sub_name, bytes(out), suffix)

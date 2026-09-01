@@ -31,7 +31,8 @@ def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
 
 TOWNS = {"e03": ("gedit/e03/scene.scn", "gedit/e03/mapinfo.cfg")}
 # s04 (Brownboo) is handled separately below: its bake REBUILDS the s04g01_v camera variant (authored
-# obj56 + s04h01 hull, tools/brownboo_camera_collision.py) instead of the e03-style ground-`_a` pipeline.
+# obj56 + s04h01 hull, tools/brownboo_camera_collision.py) and APPENDS the fishing rock nodes to s04g01_a
+# (bake_brownboo_camera_iso.bake_rocks) instead of the e03-style ground-`_a` pipeline.
 DEFAULT_ISO = os.path.expanduser("~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso")
 
 
@@ -114,7 +115,7 @@ def main():
                 # iwa01_hull_data.py). RE-ENABLED 2026-08 for the CSG-hull approach after the earlier
                 # per-leg-node attempt clipped; CullBuildings (see-through houses) still runs alongside.
                 from bake_player_camera_collision import build_flat_mds, _replace_a_block
-                from bake_brownboo_camera_iso import baked_named
+                from bake_brownboo_camera_iso import baked_named, bake_rocks
                 s04_scene = read_archive("gedit/s04/scene.scn")
                 try:
                     named = baked_named()                      # extraction (authoring env)
@@ -123,6 +124,10 @@ def main():
                 s04_new, s04_delta = _replace_a_block(s04_scene, 's04g01', build_flat_mds(named), suffix='_v')
                 print(f"s04: s04g01_v rebuilt: {len(named)} nodes, {sum(len(t) for _, t in named)} tris, "
                       f"scene {len(s04_scene):,} -> {len(s04_new):,} B")
+                # Fishing ROCK collision: append the hand-simplified rocks to s04g01_a (player collision =
+                # the fishing gather's source; every rock face is a slope, so nothing strips them).
+                s04_new, rock_delta = bake_rocks(s04_new)
+                print(f"s04: s04g01_a + rock nodes (delta {rock_delta:+,} B)")
                 redirect_file("gedit/s04/scene.scn", s04_new, b"SCN\x00")
                 continue
             if code not in TOWNS:
