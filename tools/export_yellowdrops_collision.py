@@ -2,7 +2,7 @@
 """Export Yellow Drops (map 23) custom fishing collision to the DCFC binary the mod reads
 (FishingCollision.AddMeshTriangles -> Resources/FishingCollision/yellowdrops_23.bin).
 
-Content = the west-bank fish walls (yellowdrops_pond.westbank_fish_walls: the bulged waterline,
+Content = the west-bank fish walls (yellowdrops_westbank.westbank_fish_walls: the bulged waterline,
 bank top down to FISH_WALL_BOTTOM). Format identical to export_queens_collision.py.
 
 Run: python3 tools/export_yellowdrops_collision.py -> game_data/yellowdrops/yellowdrops_23.bin
@@ -11,7 +11,7 @@ Run: python3 tools/export_yellowdrops_collision.py -> game_data/yellowdrops/yell
 import os, sys, struct
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from yellowdrops_pond import westbank_fish_walls
+from yellowdrops_westbank import westbank_fish_walls
 
 MAP_NO = 23
 OUT = os.path.normpath(os.path.join(HERE, "..", "game_data", "yellowdrops", f"yellowdrops_{MAP_NO}.bin"))

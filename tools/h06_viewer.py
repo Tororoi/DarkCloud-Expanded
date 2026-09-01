@@ -18,7 +18,7 @@ from extract_scene_mesh import load_scene
 import scene_placed
 from georama_collision import parse_coll_mdt
 from scene_viewer_html import build_html
-from queens_h06 import full_visual_tris, apply_surgery, funnel_c_tris, C_SCALE_Y, C_TOP_WIDEN, C_SEGMENTS
+from queens_h06 import full_visual_tris, apply_surgery, cylinder_c_tris, C_SCALE_Y, C_RADIUS_MUL, C_SEGMENTS
 
 OUT = os.path.join(HERE, "..", "game_data", "queens")
 os.makedirs(OUT, exist_ok=True)
@@ -46,7 +46,7 @@ def coll_block(slot):
 
 van_a = coll_block(0x78)
 van_c = coll_block(0xc0)
-new_c = funnel_c_tris(sub)   # exact same geometry the bake ships
+new_c = cylinder_c_tris(sub)   # exact same geometry the bake ships
 
 layers = [
     {'key': 'acand', 'label': f'custom _a (BAKED: full visual, {len(cand)} tris) — SELECT here',
@@ -55,7 +55,7 @@ layers = [
      'tris': van_a, 'color': [120, 255, 140], 'alpha': 0.5, 'border': '#6f8', 'on': False},
     {'key': 'van_c', 'label': f'vanilla _c (cyl, {len(van_c)} tris)',
      'tris': van_c, 'color': [80, 200, 255], 'alpha': 0.4, 'border': '#5bf', 'on': False},
-    {'key': 'new_c', 'label': f'BAKED _c (head-centered cylinder: {C_SEGMENTS}-gon, height x{C_SCALE_Y:g}, r x{C_TOP_WIDEN:g}, {len(new_c)} tris)',
+    {'key': 'new_c', 'label': f'BAKED _c (head-centered cylinder: {C_SEGMENTS}-gon, height x{C_SCALE_Y:g}, r x{C_RADIUS_MUL:g}, {len(new_c)} tris)',
      'tris': new_c, 'color': [255, 200, 80], 'alpha': 0.4, 'border': '#fc5', 'on': False},
 ]
 html = build_html(

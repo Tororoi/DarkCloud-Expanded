@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Queens h06 collision upgrades (user-directed 2026-08-31):
-  `_c` (camera): the existing cyl77 hull stretched to DOUBLE height (y *= 2 about its base; pure
-      in-place vertex edit, block size unchanged).
-  `_a` (player): replaced with the FULL detailed visual mesh (all _0 nodes, 985 tris), kd-split
-      into sub-MAX_A_TRIS nodes and rebuilt as a fresh MDS APPENDED at the sub's end with the
-      header's _a words (+0x78/+0x7c) repointed (old _a block becomes dead space).
+"""Queens h06 collision upgrades (user-directed 2026-08/09):
+  `_c` (camera): replaced with a simple open cylinder (cylinder_c_tris) — C_SEGMENTS-gon at
+      C_RADIUS_MUL x the vanilla mean ring radius, centered on the snake-head summit (C_HEAD_XZ),
+      doubled height — built as a fresh MDS APPENDED at the sub's end, +0xc0/+0xc4 repointed.
+  `_a` (player): replaced with the FULL detailed visual mesh (all _0 nodes) plus the collision
+      surgery below (A_REMOVE_TRIS / A_EXTRA_TRIS), rebuilt as a fresh MDS APPENDED at the sub's
+      end with the header's _a words (+0x78/+0x7c) repointed (old blocks become dead space).
 
-rebuild_h06() -> (new_sub_bytes, orig_size). Exported to game_data/queens/queens_parts.bin
+rebuild_h06() -> (new_sub_bytes, orig_size, chunks). Exported to game_data/queens/queens_parts.bin
 (IsoPatcher.ApplyQueensPartSwaps: u32 count; per part name[8] + u32 origSize + u32 newSize + bytes).
 """
-import math, os, re, struct, sys
+import math, os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_scene_mesh import load_scene, xform
 import scene_placed
 import mdt_codec
 from queens_hcam import split_tris, build_coll_mds
 
-MAX_A_TRIS = 1000     # crash-test: single node = the whole 985-tri model, to empirically verify
-                      # the 400-poly player-gather cap. (100 caused more snagging than 200.)
+MAX_A_TRIS = 1000     # single node = the whole model. Settled: the 400-poly cap does NOT bind
+                      # georama-part collision, and fewer/larger nodes snag less than many small ones.
 C_SCALE_Y = 2.0
-C_TOP_WIDEN = 2.0     # cylinder radius = vanilla mean ring radius x this
+C_RADIUS_MUL = 2.0    # cylinder radius = vanilla mean ring radius x this
 C_SEGMENTS = 16       # ring segments: vanilla octagon subdivided once, snapped to a true circle
 C_HEAD_XZ = (-13.80, 49.65)   # cylinder axis: centroid of the two snake-head summit tris
                               # (-18.79,114.81,56.87 / -5.77,118.98,50.67 / -17.82,116.89,49.15)
@@ -471,7 +472,6 @@ A_EXTRA_TRIS = [
     [[-44.15, 75.53, -0.81], [-43.72, 110.51, 18.74], [-44.15, 105.53, -0.81]],
     [[-43.72, 80.51, 18.74], [-39.04, 85.17, 28.89], [-39.04, 115.17, 28.89]],
     [[-43.72, 80.51, 18.74], [-39.04, 115.17, 28.89], [-43.72, 110.51, 18.74]],
-    # extension quad: upper-wall end continued at its own climb angle to the 90u lower wall
     # skirt-band OUTER edge wall down to ground y=0 (user-directed; outward winding)
     [[64.03, 0.01, -20.24], [48.88, 0.0, -42.75], [48.88, 2.22, -42.75]],
     [[64.03, 0.01, -20.24], [64.03, 0.0, -20.24], [48.88, 0.0, -42.75]],
@@ -481,7 +481,6 @@ A_EXTRA_TRIS = [
     [[29.59, 8.49, -59.24], [29.59, 0.0, -59.24], [0.46, 0.0, -67.39]],
     [[0.46, 13.82, -67.39], [-34.59, 0.0, -61.78], [-34.59, 20.04, -61.78]],
     [[0.46, 13.82, -67.39], [0.46, 0.0, -67.39], [-34.59, 0.0, -61.78]],
-    # rounded taper chain from skirt end to (-48.94,0) corner (user, 12 tris; drop wall removed)
     # rounded taper into main building: skirt end (-34.59,-61.78) h20.04 -> (-48.94,0) h34.09 (user, 20 tris)
     [[-34.59, 0.0, -61.78], [-40.83, 0.0, -57.79], [-40.83, 20.43, -57.79]],
     [[-34.59, 0.0, -61.78], [-40.83, 20.43, -57.79], [-34.59, 20.04, -61.78]],
@@ -562,9 +561,9 @@ def full_visual_tris(scn, DIR, name='e03h06'):
     return out
 
 
-def funnel_c_tris(sub):
+def cylinder_c_tris(sub):
     """The replacement `_c` hull as part-local tris: a simple open cylinder — C_SEGMENTS-gon,
-    radius = vanilla mean ring radius x C_TOP_WIDEN, centered on the snake-head summit
+    radius = vanilla mean ring radius x C_RADIUS_MUL, centered on the snake-head summit
     (C_HEAD_XZ) so the hull is equidistant around a player standing there, from y=0 to
     ymax*C_SCALE_Y. Side quads only (no caps), wound OUTWARD like the vanilla hull."""
     c_off = struct.unpack_from('<I', sub, 0xc0)[0]
@@ -583,7 +582,7 @@ def funnel_c_tris(sub):
     cz = sum(v[2] for v in base) / len(base)
     rad = sum(math.hypot(v[0] - cx, v[2] - cz) for v in base) / len(base)
     hx, hz = C_HEAD_XZ
-    top_y, r = ymax * C_SCALE_Y, rad * C_TOP_WIDEN
+    top_y, r = ymax * C_SCALE_Y, rad * C_RADIUS_MUL
     ring_b = []; ring_t = []
     for i in range(C_SEGMENTS):
         a = 2 * math.pi * i / C_SEGMENTS
@@ -609,11 +608,11 @@ def rebuild_h06(scn, DIR):
     off, size = DIR['e03h06']
     sub = bytearray(scn[off:off + size])
     vis = full_visual_tris(scn, DIR)
-    # -- _c: circular funnel, rebuilt as a fresh MDS appended at the end (vert count grows) --
+    # -- _c: open cylinder, rebuilt as a fresh MDS appended at the end (vert count grows) --
     c_off = struct.unpack_from('<I', sub, 0xc0)[0]
     c_size = struct.unpack_from('<I', sub, 0xc4)[0]
     old_c = bytes(sub[c_off:c_off + c_size])
-    new_c = build_coll_mds(old_c, [funnel_c_tris(bytes(sub))], name_prefix='hc')
+    new_c = build_coll_mds(old_c, [cylinder_c_tris(bytes(sub))], name_prefix='hc')
     # -- _a: full visual mesh, split, appended, repointed --
     a_off = struct.unpack_from('<I', sub, 0x78)[0]
     a_size = struct.unpack_from('<I', sub, 0x7c)[0]

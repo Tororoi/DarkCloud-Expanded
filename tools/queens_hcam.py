@@ -5,13 +5,9 @@ Candidate geometry (user-directed): the part's LOD2 visual mesh as the base, plu
 features LOD2 flattens — the curved roofs (upper ROOF_ZONE of each structural body node), the
 canopies (hiyoke* incl. the nuki fringe) and the round roof chimney-pillar (entotu; h04/05/08).
 
-Bake: each part subfile's `_c` block is LAST in the file, so the rebuild is truncate-and-append:
-a new `_c` MDS (root + N child nodes, each a <=MAX_NODE_TRIS collision MDT via kd splitting for
-per-node gather culling), with only the header's _c SIZE word (+0xc4) and the scene directory
-entry changing. Node frames are identity — MDT verts are written in raw part-local coordinates.
-
-Shared by the viewer overlay (tools/queens_viewer.py) and the exporter
-(tools/export_queens_hcam.py) so what you review is what bakes.
+The bake was REVERTED (2026-08: "not much benefit — just use the vanilla _c meshes"); this module
+survives as (a) the queens_viewer.py candidate overlay and (b) the home of split_tris /
+build_coll_mds, which tools/queens_h06.py uses for the h06 rebuild that DID ship.
 """
 import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -141,26 +137,9 @@ def build_coll_mds(old_mds, chunks, name_prefix='hc'):
     return bytes(new_c)
 
 
-def rebuild_part_sub(scn, DIR, name, chunks):
-    """The part's subfile bytes with its `_c` block (last in the file) replaced by a new MDS:
-    root null node + one identity-frame node per chunk."""
-    off, size = DIR[name]
-    sub = bytearray(scn[off:off + size])
-    c_off = struct.unpack_from('<I', sub, 0xc0)[0]
-    c_size = struct.unpack_from('<I', sub, 0xc4)[0]
-    assert c_off + c_size == size, f'{name}: _c is not the last block'
-    old_c = bytes(sub[c_off:c_off + c_size])
-    new_c = build_coll_mds(old_c, chunks)
-    out = bytearray(sub[:c_off]) + new_c
-    struct.pack_into('<I', out, 0xc4, len(new_c))
-    return bytes(out), size
-
-
 if __name__ == '__main__':
     scn = load_scene('gedit/e03/scene.scn')
     DIR = scene_placed._scndir(scn)
     for part, tris in candidate_tris().items():
         chunks = split_tris(tris)
-        new, old_size = rebuild_part_sub(scn, DIR, part, chunks)
-        print(f'{part}: {len(tris)} tris -> {len(chunks)} nodes ({[len(c) for c in chunks]}), '
-              f'sub {old_size} -> {len(new)} bytes')
+        print(f'{part}: {len(tris)} tris -> {len(chunks)} nodes ({[len(c) for c in chunks]})')

@@ -117,7 +117,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ExtraCount    = 64;
 
         /// <summary>The four base-ground grids. CEditGround holds 4 CEditArea pointers at +4+i*4
-        /// (PickUpPoly__11CEditGround loops these; GeoramaProbe.Status reads them too).</summary>
+        /// (PickUpPoly__11CEditGround loops these).</summary>
         internal const long AreaPtrBase = 0x4;
         internal const int  AreaCount   = 4;
     }

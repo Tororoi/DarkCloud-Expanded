@@ -358,5 +358,12 @@ game_data
 
 # Local env values for dev tools/diagnostics (copy of .env.sample); never commit
 .env
-tools/town_camera_collision.bin
-tools/camera_height.bin
+# Assembler outputs — never commit .bins under tools/. The consumed copies live in
+# Resources/isoPatch/ (camelCase), written by tools/build_stubs.py (`make stubs`).
+tools/*.bin
+
+# Accidental shell-redirect outputs from ghidra helper runs (files named after an address arg)
+/0x*
+
+# Runtime probe dump (GeoramaProbe DumpDir writes it; readers look in game_data/, never tools/)
+tools/ground_grid.csv

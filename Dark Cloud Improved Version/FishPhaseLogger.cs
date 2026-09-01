@@ -43,7 +43,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class FishPhaseLogger
     {
-        internal static bool Enabled = true;
+        internal static bool Enabled = false;   // dev diagnostic — spawns a polling thread per fishing session when on
 
         private static Thread _thread;
         private static volatile bool _running;
@@ -350,26 +350,6 @@ namespace Dark_Cloud_Improved_Version
                     $"[FishInfo] area={areaId} slot={slotIndex} {Fish.GetName(fishId)} (id={fishId}) " +
                     $"scaleDivisor={scaleDivisor:F1} baseSize={baseSize:F1} max={maxSize:F1}({(int)(maxSize*10)}cm) " +
                     $"size={size:F4} ({(int)(size*10)}cm) fp={fpMin}-{fpMax}");
-                // bait affinity table — values are bite-likelihood weights (0.0=never, 1.0=normal)
-                // float affEvy      = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffEvy);
-                // float affMimi     = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMimi);
-                // float affPrickly  = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPrickly);
-                // float affCherry   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffThrobbingCherry);
-                // float affPeach    = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffGooeyPeach);
-                // float affBombnuts = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBombnuts);
-                // float affPoison   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPoisonousApple);
-                // float affBanana   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMellowBanana);
-                // float affCarrot   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffCarrot);
-                // float affPotato   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPotatoCake);
-                // float affMinon    = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffMinon);
-                // float affBattan   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffBattan);
-                // float affPetite   = Memory.ReadFloat(slotStart + FishSlotOffsets.BaitAffPetitefish);
-                // Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                //     $"[BaitAff]  area={areaId} slot={slotIndex} {Fish.GetName(fishId)} " +
-                //     $"Evy={affEvy:F2} Mimi={affMimi:F2} Prickly={affPrickly:F2} " +
-                //     $"Cherry={affCherry:F2} Peach={affPeach:F2} " +
-                //     $"Bomb={affBombnuts:F2} Poison={affPoison:F2} Banana={affBanana:F2} Carrot={affCarrot:F2} " +
-                //     $"Potato={affPotato:F2} Minon={affMinon:F2} Battan={affBattan:F2} Petite={affPetite:F2}");
             }
             // DumpFishSlot(slotBase, slotCount);
         }

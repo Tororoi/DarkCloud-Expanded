@@ -15,7 +15,7 @@ namespace Dark_Cloud_Improved_Version
     /// Driven from <see cref="Tick"/> in TownCharacter's loop. It dumps each town once on entry
     /// (its Georama parts and their types, its water surfaces with heights and tints, its texture
     /// banks, the live fishing state) and tracks the player's position — walk the edge of a pool and
-    /// <see cref="ReportBox"/> hands you a rectangle. <see cref="Mark"/> pins a corner.
+    /// <see cref="Mark"/> pins the corners of a fishing rectangle.
     ///
     /// Two things this got wrong the first time, both now fixed, both worth not repeating:
     ///
@@ -862,28 +862,6 @@ namespace Dark_Cloud_Improved_Version
 
 
 
-        /// <summary>Where we are and whether the overhead camera has anything to stand on.</summary>
-        internal static void Status()
-        {
-            int map = Memory.ReadInt(EditLoop.MapNo);
-            int mode = Memory.ReadInt(EditLoop.GameMode);
-            int flag = Memory.ReadInt(EditLoop.EdDebugMoveFlag);
-
-            long g = EditGround.Base();
-            int areas = 0;
-            if (g != 0)
-                for (int i = 0; i < 4; i++)
-                    if (Memory.IsValidGuest(Memory.ReadUInt(g + 4 + i * 4) & Memory.PhysAddrMask)) areas++;
-
-            Log($"MapNo={map}  GameMode={mode}  EdDebugMoveFlag={flag}  " +
-                $"nativeOverhead={(map < 5 ? "yes" : "NO")}  CEditGround={(g != 0 ? "ok" : "NULL")}  " +
-                $"editAreas={areas}/4");
-
-            if (flag > 0 && areas == 0)
-                Log("   WARNING: overhead forced on, but this map has NO edit areas — " +
-                    "the cursor has no grid to walk. If Select hangs, this is why.");
-        }
-
         // ---------------------------------------------------------------- position box
 
         /// <summary>Pin the current position — call it at each corner of the water you want to fish.</summary>
@@ -892,22 +870,6 @@ namespace Dark_Cloud_Improved_Version
             if (!ReadPos(out float x, out float y, out float z)) return;
             Accumulate(x, y, z);
             Log($"MARK x={x:0.##}  y={y:0.##} (height)  z={z:0.##}");
-        }
-
-        /// <summary>The bounding box of everywhere the player has been since the watch started —
-        /// i.e. a ready-made fishing rectangle, plus the Y range to pick a water level from.</summary>
-        internal static void ReportBox()
-        {
-            if (!_haveBox) { Log("no positions sampled"); return; }
-
-            Log("===== BOX =====");
-            Log($"   fishing_rect cornerA = ({_minX:0.##}, {_minZ:0.##})");
-            Log($"   fishing_rect cornerB = ({_maxX:0.##}, {_maxZ:0.##})");
-            Log($"   size {(_maxX - _minX):0.#} x {(_maxZ - _minZ):0.#}");
-            Log($"   Y ranged {_minY:0.##} .. {_maxY:0.##}   " +
-                $"-> WaterLevel is the water's SURFACE, GroundLevel its bed; " +
-                $"walking the bank gives you the bank height, not the surface — " +
-                $"cross-check against the water-surface HEIGHT from DumpTown().");
         }
 
         private static void Accumulate(float x, float y, float z)

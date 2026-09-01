@@ -192,37 +192,8 @@ for L in layers:
 from georama_parts import lod_layers
 layers += lod_layers('gedit/s13/scene.scn', r's13\d\d')
 
-# ---- CRESCENT POND PROPOSAL (tools/yellowdrops_pond.py; knobs there) vs the current grid8 strip ----
-import yellowdrops_pond as _pond
-_curstrip=[]
-for _m in PLACED:
-    if _m['name']=='grid8':
-        _v=_m.get('verts'); 
-        for _t in (_m.get('tris') or []):
-            _p=[_v[i] for i in _t] if isinstance(_t[0],int) else _t
-            _c=[( _p[0][k]+_p[1][k]+_p[2][k])/3 for k in range(3)]
-            if 360<=_c[0]<=840 and 320<=_c[2]<=770:
-                _curstrip.append([list(q) for q in _p])
-layers.append({'key':'pond_cur','label':f'CURRENT grid8 strip ({len(_curstrip)} tris) — to be reshaped',
-               'tris':_curstrip,'color':[255,120,120],'alpha':0.55,'border':'#f77','on':True,
-               'group':'Crescent pond proposal'})
-layers.append({'key':'pond_bent','label':f'STEP 1: existing strip bent outward (+{int(_pond.BULGE_ADD)} mid-bulge)',
-               'tris':_pond.bent_strip_tris(),
-               'color':[120,255,140],'alpha':0.6,'border':'#6f8','on':False,'group':'Crescent pond proposal'})
-layers.append({'key':'pond_low','label':f'STEP 2: pond floor lowered ({int(_pond.LOWER_DELTA)}) — seam tris become ramps',
-               'tris':_pond.lowered_tris(),
-               'color':[80,200,255],'alpha':0.6,'border':'#5cf','on':False,'group':'Crescent pond proposal'})
-layers.append({'key':'pond_arc','label':'STEP 3: convex edge on arc, equal segment lengths (5 x 95.4)',
-               'tris':_pond.arc_tris(),
-               'color':[255,200,80],'alpha':0.6,'border':'#fc5','on':False,'group':'Crescent pond proposal'})
-_p4 = _pond.pond_tris()
-layers.append({'key':'pond_sub','label':f'STEP 4: spline-ladder rebuild ({len(_p4)} tris), step 3 as cage',
-               'tris':_p4,
-               'color':[220,120,255],'alpha':0.6,'border':'#d7f','on':False,'group':'Crescent pond proposal'})
-_p5 = _pond.chord_path_tris()
-layers.append({'key':'pond_chord','label':f'STEP 5: chord path arch-to-arch (half-moon flat side) ({len(_p5)} tris)',
-               'tris':_p5,
-               'color':[255,150,90],'alpha':0.6,'border':'#f96','on':False,'group':'Crescent pond proposal'})
+import yellowdrops_westbank as _pond
+
 # ---- fishing SIGN: real kanban.mds at the baked YSIGN_* position (IsoPatcher). In-game ry +90
 #      faces EAST (sceVu0RotMatrixY fold) and the viewer renders +90 east too (user-confirmed).
 _KB = open(os.path.join(HERE, "..", "game_data", "fishsign", "kanban.mds"), "rb").read()
@@ -327,7 +298,7 @@ layers.append({'key': 'fishcol_pillars', 'label': f'FISH collision: P3/P4 pillar
                'tris': _fw_pill, 'color': [255,140,60], 'alpha': 0.55, 'border': '#f93', 'on': True,
                'group': 'Fish collision (DCFC bin)'})
 # camera wall (miti_c) bulged by the same z-profile the bake table uses
-_z0, _z1 = _pond._WB_SPAN
+_z0, _z1 = _pond.WB_SPAN
 _bulge_c = []
 for _nn, _tris in _coll_cache.get(('s1301', '_c'), []):
     if _nn != 'miti_c':
@@ -372,26 +343,21 @@ layers.append({'key': 'doumu_hug', 'label': f'BAKED doumu_c hugged closer (-{int
                'tris': _doumu, 'color': [120,255,140], 'alpha': 0.6, 'border': '#6f8', 'on': True,
                'group': 'Camera collision (_c)'})
 
-# ---- pillar camera hulls (proposal): simplified vertical camera collision around the 4 iriguti
-#      arch legs + the 2 inner extru gate legs (tools/yellowdrops_camera_pillars.py). Toggle against
-#      the visual 'factory entrance arches' / 'archways' layers to check clip vs padding.
+# ---- pillar camera hulls (BAKED): simplified vertical camera collision around the 2 inner
+#      extru gate legs (tools/yellowdrops_camera_pillars.py). Toggle against the visual
+#      'archways' layer to check clip vs padding.
 from yellowdrops_camera_pillars import pillar_hulls as _pillar_hulls
 for _lbl, _dd in _pillar_hulls().items():
-    _baked = _lbl.startswith('extru')          # iriguti hulls dropped from the bake per user review
     layers.append({'key': f'pilcam_{_lbl}',
-                   'label': f'{_lbl} camera hull ({len(_dd["tris"])} tris)' + ('' if _baked else ' [NOT BAKED]'),
-                   'tris': _dd['tris'], 'color': [255,120,50] if _baked else [140,140,140],
-                   'alpha': 0.45, 'border': '#f83' if _baked else '#999',
-                   'on': _baked, 'group': 'Pillar camera hulls (proposal)'})
+                   'label': f'{_lbl} camera hull ({len(_dd["tris"])} tris)',
+                   'tris': _dd['tris'], 'color': [255,120,50],
+                   'alpha': 0.45, 'border': '#f83',
+                   'on': True, 'group': 'Pillar camera hulls (baked)'})
 
 _wb = _pond.westbank_tris()
 layers.append({'key':'westbank','label':f'WEST BANK: edge bulged out (+{int(_pond.WEST_BULGE)}) for camera room ({len(_wb)} tris)',
                'tris':_wb,
                'color':[255,180,60],'alpha':0.7,'border':'#fb5','on':True,'group':'West bank proposal'})
-_p7 = _pond.fused_tris()
-layers.append({'key':'pond_fused','label':f'STEP 7: FUSED ground+path, single mesh ({len(_p7)} tris)',
-               'tris':_p7,
-               'color':[130,220,170],'alpha':0.75,'border':'#7ea','on':True,'group':'Crescent pond proposal'})
 html = build_html(
     title="Yellow Drops (s13) — fishing placement + collision",
     layers=layers, node_labels=nodelabels, points=points, point_labels=point_labels,

@@ -1,33 +1,28 @@
 #!/usr/bin/env python3
-"""Simplified vertical camera-collision hulls for the Yellow Drops arch pillars (viewer proposal).
+"""Simplified vertical camera-collision hulls for the Yellow Drops torii-gate pillars (baked),
+plus the doumu_c factory-wall hug shared with the ISO bake.
 
-Targets: the 4 iriguti factory-entrance arches (2 legs each, sub s1305) and the 2 INNER extru12
-torii gates (s1303 / s1304; the s1313/s1314 ones are far outside the play area). Per leg: collect
-visual verts in the leg's height band, take the xz convex hull, simplify to <= HULL_N points
-(angle-binned, keeping the most distant point per bin so extents survive), pad outward by
-PILLAR_PAD, and emit vertical wall quads from Y_LO to Y_HI (the miti_c camera-wall convention).
+Targets: the 2 INNER extru12 torii gates (s1303 / s1304; the s1313/s1314 ones are far outside the
+play area). Per leg: collect visual verts in the leg's ground-footprint band, take the xz convex
+hull, simplify to <= HULL_N points (angle-binned, keeping the most distant point per bin so
+extents survive), pad outward by PILLAR_PAD, Chaikin-round, and emit vertical wall quads from
+Y_LO to Y_HI (the miti_c camera-wall convention). (The 4 iriguti factory-entrance arches were
+dropped 2026-08-31 per user review — not beneficial in-game; code deleted, recoverable via git.)
 
-pillar_hulls() -> {label: {'tris': [...], 'foot': [(x,z)...]}} — one entry per arch instance.
+pillar_hulls() -> {label: {'tris': [...], 'foot': [(x,z)...]}} — one entry per gate instance.
 """
 import math, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from scene_placed import placed_meshes, _ground_placements
-from extract_scene_mesh import load_scene
+from scene_placed import placed_meshes
 
 PILLAR_PAD = 8.0          # outward padding of the hull beyond the visual footprint
 HULL_N = 8                # max hull points per leg
 Y_LO, Y_HI = -10.0, 130.0 # camera wall span (matches the vanilla miti_c walls)
-# vert band used for the footprint. iriguti: the pillar SHAFT slice only (user-marked, y~48-70) —
-# the hull hugs the shaft and may clip the flared base below / capital above (explicitly OK).
-# iriguti: mid-shaft slice (those pillars LEAN, so the footprint would misplace the hull at
-# camera height). extru: the legs are straight, so the true ground FOOTPRINT is the right base.
-BANDS = {'iriguti': (46.0, 72.0), 'extru': (20.0, 45.0)}
+# vert band used for the footprint: the extru legs are straight, so the true ground FOOTPRINT is
+# the right base.
+BANDS = {'extru': (20.0, 45.0)}
 
 _TARGETS = [   # (label, mesh-name prefix, sub, inst)
-    ('iriguti_NE', 'iriguti', 's1305', 0),
-    ('iriguti_SW', 'iriguti', 's1305', 1),
-    ('iriguti_E',  'iriguti', 's1305', 2),
-    ('iriguti_W',  'iriguti', 's1305', 3),
     ('extru_inner_S', 'extru', 's1303', 0),
     ('extru_inner_N', 'extru', 's1304', 0),
 ]
@@ -82,37 +77,6 @@ def _simplify(hull, n):
     return [bins[b][1] for b in sorted(bins)]
 
 
-def _split_axis(pts, ax, az):
-    """Split at the widest gap of the projections onto (ax,az) — middle half only."""
-    proj = sorted((p[0]*ax + p[1]*az, p) for p in pts)
-    n = len(proj)
-    gap_i, gap = 0, -1.0
-    for i in range(n // 4, 3 * n // 4):
-        d = proj[i+1][0] - proj[i][0]
-        if d > gap:
-            gap, gap_i = d, i
-    return [p for _, p in proj[:gap_i+1]], [p for _, p in proj[gap_i+1:]]
-
-
-def _iriguti_xform(foot0, inst):
-    """Map instance-0 footprints to another s1305 placement (identical template, rotated) so all
-    four arches carry the SAME authored hull shape."""
-    pls = [pl for pl in _ground_placements(load_scene('gedit/s13/mapinfo.cfg').decode('latin1', 'replace'))
-           if pl[0] == 's1305']
-    (n0, p0, r0), (ni, pi, ri) = pls[0], pls[inst]
-    t0 = math.radians(r0[1]); ti = math.radians(ri[1])
-    out = []
-    for foot in foot0:
-        nf = []
-        for x, z in foot:
-            lx = (x - p0[0]) * math.cos(t0) - (z - p0[2]) * math.sin(t0)   # inverse of _place_y
-            lz = (x - p0[0]) * math.sin(t0) + (z - p0[2]) * math.cos(t0)
-            nf.append((lx * math.cos(ti) + lz * math.sin(ti) + pi[0],
-                       -lx * math.sin(ti) + lz * math.cos(ti) + pi[2]))
-        out.append(nf)
-    return out
-
-
 def _walls(feet):
     tris = []
     for foot in feet:
@@ -141,38 +105,13 @@ def _chaikin(poly):
 def pillar_hulls():
     placed = placed_meshes('gedit/s13/scene.scn', 'gedit/s13/mapinfo.cfg')
     out = {}
-    iriguti0 = None
     for label, pref, subn, inst in _TARGETS:
-        if pref == 'iriguti' and inst > 0 and iriguti0 is not None:
-            feet = _iriguti_xform(iriguti0, inst)
-            out[label] = {'tris': _walls(feet), 'foot': feet}
-            continue
         verts = []
         for pm in placed:
             if pm['sub'] == subn and pm['inst'] == inst and pm['name'].startswith(pref):
                 lo, hi = BANDS[pref]
                 verts += [(round(v[0], 2), round(v[2], 2)) for v in pm['verts'] if lo <= v[1] <= hi]
-        if pref == 'iriguti':
-            # shaft-band verts form 3 islands: the factory ATTACHMENT (nearest the origin — no hull
-            # wanted) and the TWO free-standing pillars. Cluster by proximity, drop the innermost.
-            cl = []
-            for pnt in sorted(verts):
-                for c in cl:
-                    if any(abs(pnt[0]-q[0]) <= 30 and abs(pnt[1]-q[1]) <= 30 for q in c):
-                        c.append(pnt); break
-                else:
-                    cl.append([pnt])
-            merged = []
-            for c in cl:
-                for m2 in merged:
-                    if any(abs(pp[0]-q[0]) <= 30 and abs(pp[1]-q[1]) <= 30 for pp in c for q in m2):
-                        m2.extend(c); break
-                else:
-                    merged.append(list(c))
-            merged.sort(key=lambda c: -math.hypot(sum(p[0] for p in c)/len(c), sum(p[1] for p in c)/len(c)))
-            legs = merged[:2]                             # the two outermost islands = the pillars
-        else:
-            legs = _cluster2(verts)
+        legs = _cluster2(verts)
         tris, feet = [], []
         for leg in legs:
             hull = _simplify(_hull(leg), HULL_N)
@@ -183,10 +122,7 @@ def pillar_hulls():
                 d = math.hypot(p[0]-cx, p[1]-cz) or 1.0
                 padded.append((p[0] + (p[0]-cx)/d*PILLAR_PAD, p[1] + (p[1]-cz)/d*PILLAR_PAD))
             feet.append(_chaikin(padded))                 # one round of corner-cutting -> smoother
-        tris = _walls(feet)
-        out[label] = {'tris': tris, 'foot': feet}
-        if pref == 'iriguti' and inst == 0:
-            iriguti0 = feet
+        out[label] = {'tris': _walls(feet), 'foot': feet}
     return out
 
 
