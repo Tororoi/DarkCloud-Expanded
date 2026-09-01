@@ -778,7 +778,7 @@ mesh ("MDT" block)
 `meshOffset` is absolute, so it is the **only** fixup a rebuild needs — nothing inside an MDT block
 points outside itself. That is what makes this surgery clean.
 
-Tool: **`tools/mds_surgery.py`** (`list` / `extract`).
+Tool: **`tools/analysis/mds_surgery.py`** (`list` / `extract`).
 
 #### The oasis, dissected
 
@@ -800,7 +800,7 @@ is a yaw of ~48.7° plus a translation of (90, 2, 64) — its position within th
 #### The result
 
 ```
-python3 tools/mds_surgery.py oasis.mds extract kanban --recenter --unrotate -o fishsign.mds
+python3 tools/analysis/mds_surgery.py oasis.mds extract kanban --recenter --unrotate -o fishsign.mds
 ```
 
 **`fishsign.mds` — 2,160 bytes, 1 node, identity matrix, at the origin.** Re-parses cleanly.
@@ -961,7 +961,7 @@ The **entry name** is what a mesh's `HB<name>` reference resolves against — *n
 filename. A bank can be called anything; only its entry names matter to the meshes. That is what
 makes this tractable.
 
-Tool: **`tools/img_surgery.py`** (`list` / `extract` / `make`).
+Tool: **`tools/analysis/img_surgery.py`** (`list` / `extract` / `make`).
 
 `e04b01.img` (864,112 B, Muska Lacka's ground bank) holds 16 entries; the last is:
 
@@ -972,7 +972,7 @@ Tool: **`tools/img_surgery.py`** (`list` / `extract` / `make`).
 #### The result
 
 ```
-python3 tools/img_surgery.py e04b01.img make e01b24 -o fishsign.img
+python3 tools/analysis/img_surgery.py e04b01.img make e01b24 -o fishsign.img
 ```
 
 **`fishsign.img` — 17,536 bytes, one entry (`e01b24`), TIM2 payload byte-identical.** A structurally
@@ -1127,7 +1127,7 @@ script snaps the player into the fishing stance.** Skip it and the rod misbehave
 he walked in, facing wherever he was facing, so the cast goes off toward dry land, the bobber never
 reaches water, and the engine rejects it.
 
-⚠ **The command table was off by one until now.** `tools/stbdis.py` read `/tmp/stbcmds.json`, which had
+⚠ **The command table was off by one until now.** `tools/analysis/stbdis.py` read `/tmp/stbcmds.json`, which had
 been built from the dispatch table with the id/handler pair the wrong way round. It reported `500` as
 `_FADE_OUT` and `997` as `_INIT_FISH`. The true names, rebuilt from the ELF by matching the known pair
 `{handler = 0x1969A0, id = 998}`:

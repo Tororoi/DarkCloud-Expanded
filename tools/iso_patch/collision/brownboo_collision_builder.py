@@ -18,6 +18,9 @@ through these helpers and redirects the scene into the DATA.DAT tail).
                   recoverable via git). Same proven pipeline as the Queens e03g04_c bake (build_flat_mds + _replace_a_block),
                   just targeting suffix `_v`.
 """
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', '..', 'lib'))
+import toolpath  # noqa: F401 — puts every tools/ subfolder on sys.path
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)

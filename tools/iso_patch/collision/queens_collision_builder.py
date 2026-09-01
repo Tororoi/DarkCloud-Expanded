@@ -21,6 +21,9 @@ bake_structures_from_bytes) are re-exported below. ISO wrapper: iso_patch/patch_
 
   bake_structures(scene_rel, town='e03', max_tris=100) -> (new_scn, stats, manifest)
 """
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', '..', 'lib'))
+import toolpath  # noqa: F401 — puts every tools/ subfolder on sys.path
 import os, sys, struct, re, math
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)                                     # this dir (collision_mds_writer / collision_geom / queens_terrain_collision_data)

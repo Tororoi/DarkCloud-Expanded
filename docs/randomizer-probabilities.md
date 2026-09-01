@@ -1,6 +1,6 @@
 # Enemy Randomizer — Appearance Probabilities
 
-_Generated 2026-06-25 from `Dark Cloud Improved Version/EnemyData.cs` + `EnemyModelInjector.cs` by Monte-Carlo simulation (300,000 floors per dungeon). Re-run `tools/randomizer-probabilities.py` after changing themes/membership._
+_Generated 2026-06-25 from `Dark Cloud Improved Version/EnemyData.cs` + `EnemyModelInjector.cs` by Monte-Carlo simulation (300,000 floors per dungeon). Re-run `tools/analysis/randomizer-probabilities.py` after changing themes/membership._
 
 ## What this measures
 

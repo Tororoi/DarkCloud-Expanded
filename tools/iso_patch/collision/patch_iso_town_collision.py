@@ -13,6 +13,9 @@ collision. It operates IN PLACE and re-uses the free tail IsoPatcher already ope
 
 Pair with the mod's CameraWallCollision.TerrainOnly = true.
 """
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', '..', 'lib'))
+import toolpath  # noqa: F401 — puts every tools/ subfolder on sys.path
 import os, sys, struct, shutil
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)                              # collision/ (queens_collision_builder)
@@ -31,7 +34,7 @@ def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
 
 TOWNS = {"e03": ("gedit/e03/scene.scn", "gedit/e03/mapinfo.cfg")}
 # s04 (Brownboo) is handled separately below: its bake REBUILDS the s04g01_v camera variant (authored
-# obj56 + s04h01 hull, tools/brownboo_camera_collision.py) and APPENDS the fishing rock nodes to s04g01_a
+# obj56 + s04h01 hull, tools/brownboo/brownboo_camera_collision.py) and APPENDS the fishing rock nodes to s04g01_a
 # (brownboo_collision_builder.bake_rocks) instead of the e03-style ground-`_a` pipeline.
 DEFAULT_ISO = os.path.expanduser("~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso")
 
@@ -111,7 +114,7 @@ def main():
             if code == "s04":
                 # Brownboo s04g01_v camera-collision rebuild (brownboo_collision_builder.baked_named):
                 # custom obj56 = central-cylinder simplification + the iwa01 rock replaced by a CSG hull
-                # (cylinder shell minus flared tunnel cutter, tools/brownboo_rock_hull_builder.py, frozen to
+                # (cylinder shell minus flared tunnel cutter, tools/brownboo/brownboo_rock_hull_builder.py, frozen to
                 # brownboo_rock_hull_data.py). RE-ENABLED 2026-08 for the CSG-hull approach after the earlier
                 # per-leg-node attempt clipped; CullBuildings (see-through houses) still runs alongside.
                 from queens_collision_builder import build_flat_mds, _replace_a_block
