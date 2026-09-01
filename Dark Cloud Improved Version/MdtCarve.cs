@@ -9,20 +9,20 @@ using static Dark_Cloud_Improved_Version.IsoPatcher;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Visual-MDT parse / carve / rebuild toolkit (C# port of tools/carve_ladder.py) and the canal-ladder
-    /// carve that uses it: de-yaw, clip, snap, compact, world-place, re-emit. LAD_X is the ladder's world X
-    /// (IsoPatcher.LAD_BOTTOM/LAD_TOP derive their climb points from it).
+    /// Visual-MDT parse / carve / rebuild toolkit (C# port of tools/carve_queens_ladder.py) and the canal-ladder
+    /// carve that uses it: de-yaw, clip, snap, compact, world-place, re-emit. LadderWorldX is the ladder's world X
+    /// (IsoPatcher.LadderClimbBottom/LadderClimbTop derive their climb points from it).
     /// </summary>
     internal static class MdtCarve
     {
         // ── canal ladder: carve the Factory metal ladder (e05a01/hasigo1) from the user's ISO and reshape it
-        //    for the Queens canal wall. Faithful C# port of tools/carve_ladder.py (the reference the viewer
+        //    for the Queens canal wall. Faithful C# port of tools/carve_queens_ladder.py (the reference the viewer
         //    renders): de-yaw ~9.5° so the rails run parallel to X, clip the bottom off at the mid-rung gap
         //    (y=22) with edge interpolation so the rails stay watertight, snap the cut ring to the floor and
         //    shift so the donor's ground mount lands on the walkway (y=70), compact, then translate to the
         //    world placement (centred x=700, feet on the walkway). Emitted as a kanban-style 1-node MDS with
         //    world-baked verts (mapinfo GROUND "hasigo" places it at the origin). ──
-        internal const float LAD_CUT_Y = 22f, LAD_SNAP_Y = 20f, LAD_SHIFT = 20f, LAD_X = 706f, LAD_FEET_Z = 52f;
+        internal const float LadderCutY = 22f, LadderSnapY = 20f, LadderShiftY = 20f, LadderWorldX = 706f, LadderFeetZ = 52f;
 
         internal sealed class Mdt
         {
@@ -104,7 +104,7 @@ namespace Dark_Cloud_Improved_Version
             // atlas cells in-game (the gray/gold/brown garble). Only spatial data (pos, normals) de-yaws.
             RotY(m.pos); if (m.uv.Count > 0) RotY(m.uv);
 
-            // 2) clip everything below LAD_CUT_Y, interpolating a new vert on each crossing edge
+            // 2) clip everything below LadderCutY, interpolating a new vert on each crossing edge
             int firstNew = m.pos.Count, stride = m.hasCol ? 4 : 3;
             var cache = new Dictionary<string, int[]>();
             int[] CutVert(int[] rA, int[] rB)
@@ -114,7 +114,7 @@ namespace Dark_Cloud_Improved_Version
                 string key = string.Join(",", a) + "|" + string.Join(",", b);
                 if (cache.TryGetValue(key, out var got)) return got;
                 float[] pa = m.pos[a[0]], pb = m.pos[b[0]];
-                float t = (LAD_CUT_Y - pa[1]) / (pb[1] - pa[1]);
+                float t = (LadderCutY - pa[1]) / (pb[1] - pa[1]);
                 m.pos.Add(Lerp(pa, pb, t)); m.uv.Add(Lerp(m.uv[a[1]], m.uv[b[1]], t));
                 var rec = new int[stride]; rec[0] = m.pos.Count - 1; rec[1] = m.uv.Count - 1;
                 if (m.norm.Count > 0) { m.norm.Add(Lerp(m.norm[a[2]], m.norm[b[2]], t)); rec[2] = m.norm.Count - 1; } else rec[2] = 0;
@@ -131,7 +131,7 @@ namespace Dark_Cloud_Improved_Version
                     for (int i = 0; i < 3; i++)
                     {
                         int[] A = tri[i], B = tri[(i + 1) % 3];
-                        bool inA = m.pos[A[0]][1] >= LAD_CUT_Y, inB = m.pos[B[0]][1] >= LAD_CUT_Y;
+                        bool inA = m.pos[A[0]][1] >= LadderCutY, inB = m.pos[B[0]][1] >= LadderCutY;
                         if (inA) poly.Add(A);
                         if (inA != inB) poly.Add(CutVert(A, B));
                     }
@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
 
             // 3) snap the cut ring to the floor + shift so the ground mount lands on the walkway
             for (int i = 0; i < m.pos.Count; i++)
-                m.pos[i][1] = (i >= firstNew ? LAD_SNAP_Y : m.pos[i][1]) - LAD_SHIFT;
+                m.pos[i][1] = (i >= firstNew ? LadderSnapY : m.pos[i][1]) - LadderShiftY;
 
             // 4) compact: drop the now-unreferenced (clipped-away) verts from every stream
             CompactStream(m, 0, m.pos); CompactStream(m, 1, m.uv);
@@ -168,7 +168,7 @@ namespace Dark_Cloud_Improved_Version
         {
             float minx = float.MaxValue, maxx = float.MinValue, feet = float.MinValue;
             foreach (var v in m.pos) { minx = Math.Min(minx, v[0]); maxx = Math.Max(maxx, v[0]); if (v[1] > 69) feet = Math.Max(feet, v[2]); }
-            float dx = LAD_X - (minx + maxx) / 2, dz = LAD_FEET_Z - feet;
+            float dx = LadderWorldX - (minx + maxx) / 2, dz = LadderFeetZ - feet;
             foreach (var v in m.pos) { v[0] += dx; v[2] += dz; }
         }
 
@@ -207,13 +207,13 @@ namespace Dark_Cloud_Improved_Version
             // Scope to the e05a01 PART (the node name also appears in a name table before the geometry, so a
             // bare string search grabs the wrong one): part-table entry -> its MDS -> node-table scan.
             int nParts = (int)U32(scene, 4), poff = -1;
-            for (int i = 0; i < nParts; i++) { int e = 0x10 + i * 0x30; if (NameAt(scene, e, 0x10) == LADDER_PART) { poff = (int)U32(scene, e + 0x10); break; } }
-            if (poff < 0) throw new IOException($"Ladder part {LADDER_PART} not found in the ISO.");
+            for (int i = 0; i < nParts; i++) { int e = 0x10 + i * 0x30; if (NameAt(scene, e, 0x10) == LadderDonorPart) { poff = (int)U32(scene, e + 0x10); break; } }
+            if (poff < 0) throw new IOException($"Ladder part {LadderDonorPart} not found in the ISO.");
             int mds = FindFrom(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, poff);
             if (mds < 0) throw new IOException("Ladder part MDS not found.");
             int tbl = mds + (int)U32(scene, mds + 0xC), count = (int)U32(scene, mds + 8), no = -1;
-            for (int i = 0; i < count; i++) { int c = tbl + i * 0x70; if (NameAt(scene, c + 8, 0x20) == LADDER_NODE) { no = c; break; } }
-            if (no < 0) throw new IOException($"{LADDER_NODE} node index not found.");
+            for (int i = 0; i < count; i++) { int c = tbl + i * 0x70; if (NameAt(scene, c + 8, 0x20) == LadderDonorNode) { no = c; break; } }
+            if (no < 0) throw new IOException($"{LadderDonorNode} node index not found.");
             int meshOff = (int)U32(scene, no + 0x28);
             int mdt = (scene[mds + meshOff] == 'M') ? mds + meshOff : meshOff;   // meshOff is block-relative
             if (!(scene[mdt] == 'M' && scene[mdt + 1] == 'D' && scene[mdt + 2] == 'T')) throw new IOException("ladder MDT not resolved.");

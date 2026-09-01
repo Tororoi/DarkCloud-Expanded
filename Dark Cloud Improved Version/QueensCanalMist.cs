@@ -7,7 +7,7 @@ namespace Dark_Cloud_Improved_Version
     /// (ElfPatches.PatchQueensSprayHook) populated with one entry per waterfall mouth at the live tide level.
     /// Pure data writes; CanalTide writes it at low tide and clears it otherwise.
     /// </summary>
-    internal static class QueensSpray
+    internal static class QueensCanalMist
     {
         // ── Waterfall mist ───────────────────────────────────────────────────────────────────────────
         // The engine's own EffectWaterSpray (the Matataki waterfall mist, "shibuki"/飛沫 spray texture) is spawned

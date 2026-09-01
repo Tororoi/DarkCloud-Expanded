@@ -2,7 +2,7 @@
 # the OBJ/Blender tooling was retired once the rocks were signed off).
 # Brownboo fishing-rock collision: the three hand-simplified (Blender) rocks iwa01/02/03, game-space
 # triangles [[x,y,z],[x,y,z],[x,y,z]] (s04g01 sits at the origin, so local == world). Appended as
-# nodes of s04g01_a by bake_brownboo_camera_iso.bake_rocks at Patch ISO. Every face is a slope
+# nodes of s04g01_a by brownboo_collision_builder.bake_rocks at Patch ISO. Every face is a slope
 # (|normal.y| >= 0.045) so the fishing floors gate keeps them.
 ROCKS = [
     ('rock_iwa01', [

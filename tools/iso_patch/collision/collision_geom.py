@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pure triangle geometry for the collision bakes (no town data): box/plane predicates, rounded tri keys,
 vector math, the coplanar-merge engine (simplify_coplanar) and authored-quad builders. Split out of
-bake_player_camera_collision.py (2026-09)."""
+queens_collision_builder.py (2026-09)."""
 import math
 
 
@@ -23,18 +23,18 @@ def _horiz(t):                                     # near-horizontal face (a flo
     return abs(n[1]) > 0.7 * (math.hypot(*n) or 1.0)
 
 
-def _rmkey(t):
+def tri_key_int(t):
     return tuple(sorted(tuple(round(c) for c in p) for p in t))
 
 
-def _wkey(t):
+def tri_key_winding(t):
     """Winding-PRESERVING key: min cyclic rotation of the 3 rounded vertices. Reversing a tri's winding yields a
     DIFFERENT key, so a flip touches only tris matching the known-backwards winding — never their correct twin."""
     v = [tuple(round(c) for c in p) for p in t]
     return min((v[0], v[1], v[2]), (v[1], v[2], v[0]), (v[2], v[0], v[1]))
 
 
-def _tnormal(t):
+def triangle_normal(t):
     a, b, c = t
     u = [b[i] - a[i] for i in range(3)]
     v = [c[i] - a[i] for i in range(3)]
@@ -92,7 +92,7 @@ def _plane_quad(u, v, nn, d, a0, b0, a1, b1):
         return [a*u[i] + b*v[i] + d*nn[i] for i in range(3)]
     A, B, C, D = P(a0, b0), P(a1, b0), P(a1, b1), P(a0, b1)
     t1, t2 = [A, B, C], [A, C, D]
-    if _dot3(_tnormal(t1), nn) < 0:                 # keep the group's one-sided facing
+    if _dot3(triangle_normal(t1), nn) < 0:                 # keep the group's one-sided facing
         t1, t2 = [A, C, B], [A, D, C]
     return [t1, t2]
 
@@ -112,7 +112,7 @@ def simplify_coplanar(tris, snap=5.0, outward=0.0, top=None, keep_windows=False)
         return round(x / snap) * snap
     groups, out = {}, []
     for t in tris:
-        n = _tnormal(t)
+        n = triangle_normal(t)
         if math.sqrt(_dot3(n, n)) < 1e-9:
             out.append(t); continue                 # degenerate — leave it
         nn = _unit3(n)
@@ -187,7 +187,7 @@ def _plane_region(axis, off, x=None, y=None, z=None):
 def _dir_quad(a, b, c, d, want):
     """Quad (a,b,c,d) as two tris, wound so its face normal points the same way as `want`."""
     tt = [[a, b, c], [a, c, d]]
-    return tt if _dot3(_tnormal(tt[0]), want) >= 0 else [[a, c, b], [a, d, c]]
+    return tt if _dot3(triangle_normal(tt[0]), want) >= 0 else [[a, c, b], [a, d, c]]
 
 
 def _quad(a, b, c, d):

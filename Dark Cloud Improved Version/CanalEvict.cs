@@ -10,10 +10,12 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CanalEvict
     {
+        private static void Log(string m) => CanalTide.Log(m, nameof(CanalEvict));
+
         // Tide-evict: a player caught in the drained canal when the tide rises (morning→afternoon) is warped
         // to the East Harbor dock under the same black fade. Fired by writing the label-403 event id to the
         // engine's start_event_no — EditLoop runs it, the script's _MAP_JUMP does the full load (see
-        // CustomFishingSpot.BuildCanalWarpBytecode). One-shot per Queens visit (the load leaves Queens anyway).
+        // FishingScriptBuilder.BuildCanalWarpBytecode). One-shot per Queens visit (the load leaves Queens anyway).
         // Direct _MAP_JUMP: the Queens time-change is script EVENT 132 (RunEvent 0x84, GameMode 0xe). Rather
         // than queue a new event via start_event_no (which would run only AFTER 132 ends), we set the map-jump
         // on the CURRENTLY running event — NextMapNo + arrival StartEventNo + the return code EdEventMode reads.
@@ -59,14 +61,14 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Per-tick evict bookkeeping (Queens only): ARM while the player wades the drained canal, raise
         /// the native evict flag at the low→non-low boundary if they were caught, keep the one-shot flag clean
         /// otherwise, and zero the orbit angle under the Queens fade-out so East Harbor inherits no swing.</summary>
-        internal static void Update(float shownLvl, float target)
+        internal static void Update(float shownWaterLevel, float target)
         {
             // TIDE-EVICT — the timing is owned by NATIVE code now (IsoPatcher.PatchCanalEvictFadeHook hooks
             // EdFadeInOut's fully-black store @0x189970). This side only maintains the flag: ARM while the player
             // wades the drained low-tide canal, and at the period boundary (tide turns low→non-low) raise the
             // native evict flag if they were caught. The fade-hook reads it on the exact fully-black frame and
             // does the _MAP_JUMP to the East Harbor dock (+ clears the flag) — frame-perfect, no fade polling.
-            if (shownLvl <= LowTideThreshold && PlayerInCanal()) _evictArm = EvictArmHold;
+            if (shownWaterLevel <= LowTideThreshold && PlayerInCanal()) _evictArm = EvictArmHold;
             else if (_evictArm > 0) _evictArm--;
 
             // Don't fire while a fishing session is entering/active: _LOAD_FISHING_DATA perturbs the scene's

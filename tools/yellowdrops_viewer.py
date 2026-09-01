@@ -15,7 +15,7 @@ Run: python3 tools/yellowdrops_viewer.py  ->  game_data/yellowdrops/yellowdrops_
 """
 import os, sys, re, math, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import scene_placed as _sp
+import scene_placed
 from scene_placed import placed_meshes
 from scene_viewer_html import build_html
 from extract_scene_mesh import load_scene, read_verts, read_tris, xform
@@ -192,7 +192,7 @@ for L in layers:
 from georama_parts import lod_layers
 layers += lod_layers('gedit/s13/scene.scn', r's13\d\d')
 
-import yellowdrops_westbank as _pond
+import yellowdrops_westbank_data as westbank
 
 # ---- fishing SIGN: real kanban.mds at the baked YSIGN_* position (IsoPatcher). In-game ry +90
 #      faces EAST (sceVu0RotMatrixY fold) and the viewer renders +90 east too (user-confirmed).
@@ -219,8 +219,8 @@ layers.append({'key': 'signcol', 'label': 'sign collision (kanban_a panel)',
 # ---- NATIVE collision: nested <sub>_a.mds (player) / <sub>_c.mds (camera) inside each placed ground
 #      sub-file, world-placed with the sub's mapinfo GROUND transform (brownboo_viewer pattern).
 _scnraw = load_scene('gedit/s13/scene.scn')
-_scndirmap = _sp._scndir(_scnraw)
-_placements = _sp._ground_placements(load_scene('gedit/s13/mapinfo.cfg').decode('latin1', 'replace'))
+_scndirmap = scene_placed.scn_directory_map(_scnraw)
+_placements = scene_placed._ground_placements(load_scene('gedit/s13/mapinfo.cfg').decode('latin1', 'replace'))
 
 def _nested_coll(sub_name, suf):
     if sub_name not in _scndirmap:
@@ -241,7 +241,7 @@ def _nested_coll(sub_name, suf):
     if vo is None:
         return []
     mds = off + vo
-    nodes, wm = _sp._accum(_scnraw, mds)
+    nodes, wm = scene_placed._accum(_scnraw, mds)
     out = []
     for i, (nn, mo, par, mat) in enumerate(nodes):
         if mo == 0:
@@ -264,7 +264,7 @@ for _cname, _cpos, _crot in _placements:
         if (_cname, _suf) not in _coll_cache:
             _coll_cache[(_cname, _suf)] = _nested_coll(_cname, _suf)
         for _nn, _tris in _coll_cache[(_cname, _suf)]:
-            _w = [[_sp._place_y(pnt, _cpos, _crot[1]) for pnt in t] for t in _tris]
+            _w = [[scene_placed._place_y(pnt, _cpos, _crot[1]) for pnt in t] for t in _tris]
             _tag = f'{_cname}#{_ci}' if _inst_n[_cname] or _cname in ('s1305','s1306','s1309','s1310','s1311','s1312') else _cname
             layers.append({'key': f'nc{_suf}_{_cname}_{_ci}_{_nn}',
                            'label': f'{_tag}{_suf} {_nn} ({len(_w)}) [{_kind}]',
@@ -275,7 +275,7 @@ print('native collision layers:', _coll_counts)
 
 # ---- WEST BANK: player collision bulged with the same column moves as the visual ground, so the
 #      player can walk the extended plateau (the crown-line wall + floor verts follow the bulge).
-_wbm = _pond.wb_moves()
+_wbm = westbank.wb_moves()
 _bulge_a = []
 for _nn, _tris in _coll_cache.get(('s1301', '_a'), []):     # s1301 is placed at the origin
     for t in _tris:
@@ -288,17 +288,17 @@ for _nn, _tris in _coll_cache.get(('s1301', '_a'), []):     # s1301 is placed at
                 if abs(pnt[0] - kx) <= 0.5 and abs(pnt[2] - kz) <= 0.5:
                     pnt[0] += dxw
         _bulge_a.append(nt)
-_fw = _pond.westbank_fish_walls()
-_fw_bank = [t for t in _fw if t[0][0] < -370 and t[0][2] < 300 and t not in ()][:len(_fw) - len(_pond.PILLAR_BASE_TRIS)]
-_fw_pill = _fw[len(_fw) - len(_pond.PILLAR_BASE_TRIS):]
-layers.append({'key': 'fishcol_bank', 'label': f'FISH collision: bank walls (DCFC bin, {len(_fw_bank)} tris, to y{int(_pond.FISH_WALL_BOTTOM)})',
+_fw = westbank.westbank_fish_walls()
+_fw_bank = [t for t in _fw if t[0][0] < -370 and t[0][2] < 300 and t not in ()][:len(_fw) - len(westbank.PILLAR_BASE_TRIS)]
+_fw_pill = _fw[len(_fw) - len(westbank.PILLAR_BASE_TRIS):]
+layers.append({'key': 'fishcol_bank', 'label': f'FISH collision: bank walls (DCFC bin, {len(_fw_bank)} tris, to y{int(westbank.FISH_WALL_BOTTOM)})',
                'tris': _fw_bank, 'color': [255,60,120], 'alpha': 0.55, 'border': '#f36', 'on': True,
                'group': 'Fish collision (DCFC bin)'})
 layers.append({'key': 'fishcol_pillars', 'label': f'FISH collision: P3/P4 pillar bases (DCFC bin, {len(_fw_pill)} tris)',
                'tris': _fw_pill, 'color': [255,140,60], 'alpha': 0.55, 'border': '#f93', 'on': True,
                'group': 'Fish collision (DCFC bin)'})
 # camera wall (miti_c) bulged by the same z-profile the bake table uses
-_z0, _z1 = _pond.WB_SPAN
+_z0, _z1 = westbank.WB_SPAN
 _bulge_c = []
 for _nn, _tris in _coll_cache.get(('s1301', '_c'), []):
     if _nn != 'miti_c':
@@ -310,12 +310,12 @@ for _nn, _tris in _coll_cache.get(('s1301', '_c'), []):
         nt = [list(pnt) for pnt in t]
         for pnt in nt:
             if -445.0 <= pnt[0] <= -395.0 and _z0 < pnt[2] < _z1:
-                pnt[0] += -_pond.WEST_BULGE * math.sin(math.pi * (pnt[2] - _z0) / (_z1 - _z0))
+                pnt[0] += -westbank.WEST_BULGE * math.sin(math.pi * (pnt[2] - _z0) / (_z1 - _z0))
         _bulge_c.append(nt)
 layers.append({'key': 'wb_ccol', 'label': f'WEST BANK: camera wall bulged ({len(_bulge_c)} tris)',
                'tris': _bulge_c, 'color': [90,220,255], 'alpha': 0.5, 'border': '#5cf', 'on': False,
                'group': 'West bank proposal'})
-_ws = _pond.westbank_smooth()
+_ws = westbank.westbank_smooth()
 for _k, _lbl, _cc, _bb in (('vis', 'smoothed WATERLINE (visual)', [255,180,60], '#fb5'),
                            ('acol', 'smoothed player collision', [255,90,190], '#f5b'),
                            ('ccol', 'smoothed camera wall + floor', [90,220,255], '#5cf')):
@@ -354,8 +354,8 @@ for _lbl, _dd in _pillar_hulls().items():
                    'alpha': 0.45, 'border': '#f83',
                    'on': True, 'group': 'Pillar camera hulls (baked)'})
 
-_wb = _pond.westbank_tris()
-layers.append({'key':'westbank','label':f'WEST BANK: edge bulged out (+{int(_pond.WEST_BULGE)}) for camera room ({len(_wb)} tris)',
+_wb = westbank.westbank_tris()
+layers.append({'key':'westbank','label':f'WEST BANK: edge bulged out (+{int(westbank.WEST_BULGE)}) for camera room ({len(_wb)} tris)',
                'tris':_wb,
                'color':[255,180,60],'alpha':0.7,'border':'#fb5','on':True,'group':'West bank proposal'})
 html = build_html(

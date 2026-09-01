@@ -16,12 +16,12 @@ namespace Dark_Cloud_Improved_Version
     internal static class SceneBaker
     {
         // ── scene.scn: append a `kanban` PTS part cloned from s04a01, + a 26th part-table entry ──
-        internal static readonly int[] SIZE_FIELDS = { 0x4C, 0x50, 0x54, 0x78, 0x90, 0xA8, 0xC0, 0xD8 };
-        internal const int MDSSIZE_FIELD = 0x58;
+        internal static readonly int[] PartSizeFields = { 0x4C, 0x50, 0x54, 0x78, 0x90, 0xA8, 0xC0, 0xD8 };
+        internal const int PartMdsSizeField = 0x58;
         // LoadPTS (0x19f6f0) reads the `_a` collision variant's OFFSET at part+0x78 and its SIZE (gate) at
         // part+0x7c; if size>0 it feeds part+offset to LoadCollisionFile -> CreateCollisionMDT.
-        internal const int COLL_OFF_FIELD = 0x78, COLL_SIZE_FIELD = 0x7C;
-        internal const int MDS_OFF_FIELD  = 0x48;   // part+0x48 = MDS data offset (LoadPTS); shifts when func-data precedes the MDS
+        internal const int PartCollisionOffsetField = 0x78, PartCollisionSizeField = 0x7C;
+        internal const int PartMdsOffsetField  = 0x48;   // part+0x48 = MDS data offset (LoadPTS); shifts when func-data precedes the MDS
 
         /// <summary>The kanban's collision: a single solid PANEL hugging the sign, as an MDS-wrapped COLLISION
         /// MDT. This mirrors how Muska Lacka's native sign is collided (e04m01_a @ the kanban): one flat box
@@ -89,11 +89,11 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Yellow Drops water raised 0 -> 4.25 (user request: the bank-notch lip height).
         /// Three coordinated levels: the mapinfo WATER_SURFACE plane rows (here), the suimenn visual
-        /// sheet (RaiseYdSuimenn), and Spot 23's gameplay water (5.25 = surface + the same +1 the
+        /// sheet (RaiseYellowDropsSurfaceMesh), and Spot 23's gameplay water (5.25 = surface + the same +1 the
         /// spot always used).</summary>
-        internal const float YD_WATER_Y = 4.25f;
+        internal const float YellowDropsWaterY = 4.25f;
 
-        internal static byte[] RaiseYdWater(byte[] mapinfo)
+        internal static byte[] RaiseYellowDropsWaterPlane(byte[] mapinfo)
         {
             string txt = Encoding.Latin1.GetString(mapinfo);
             string oldMin = "\t\t\t-320, 0, -320,", newMin = "\t\t\t-320, 4.25, -320,";
@@ -101,13 +101,13 @@ namespace Dark_Cloud_Improved_Version
             if (txt.IndexOf(oldMin, StringComparison.Ordinal) < 0 || txt.IndexOf(oldMax, StringComparison.Ordinal) < 0)
                 throw new Exception("YD water raise: WATER_SURFACE rows not found in s13 mapinfo");
             txt = txt.Replace(oldMin, newMin).Replace(oldMax, newMax);
-            Console.WriteLine($"   YD water surface: WATER_SURFACE raised to {YD_WATER_Y}");
+            Console.WriteLine($"   YD water surface: WATER_SURFACE raised to {YellowDropsWaterY}");
             return Encoding.Latin1.GetBytes(txt);
         }
 
         /// <summary>Raise the suimenn visual sheet (s1302, town-wide yellow liquid) by writing the
         /// node's matrix Y translation (entry 1, sub-relative 0x244). Guarded on the vanilla ~0 value.</summary>
-        internal static byte[] RaiseYdSuimenn(byte[] scene)
+        internal static byte[] RaiseYellowDropsSurfaceMesh(byte[] scene)
         {
             int n = (int)U32(scene, 4);
             for (int i = 0; i < n; i++)
@@ -118,8 +118,8 @@ namespace Dark_Cloud_Improved_Version
                 float cur = BitConverter.ToSingle(scene, off);
                 if (Math.Abs(cur) > 0.001f)
                     throw new Exception($"YD water raise: suimenn Ty is {cur}, expected ~0 — layout drift");
-                Array.Copy(BitConverter.GetBytes(YD_WATER_Y), 0, scene, off, 4);
-                Console.WriteLine($"   YD water surface: suimenn sheet raised to {YD_WATER_Y}");
+                Array.Copy(BitConverter.GetBytes(YellowDropsWaterY), 0, scene, off, 4);
+                Console.WriteLine($"   YD water surface: suimenn sheet raised to {YellowDropsWaterY}");
                 return scene;
             }
             throw new Exception("YD water raise: s1302 not found");
@@ -176,18 +176,18 @@ namespace Dark_Cloud_Improved_Version
         /// Yellow Drops WEST-BANK BULGE (smoothed, 2x station density). The subdivided bank grows
         /// the grid10/grid11 visual MDTs plus the s1301_a crown wall and s1301_c camera wall, so a
         /// float-patch can't carry it — instead the ENTIRE s1301 subfile is rebuilt offline
-        /// (tools/westbank_smooth_bake.py -> Resources/isoPatch/s1301_smooth.bin: re-laid nested
+        /// (tools/bake_yellowdrops_westbank.py -> Resources/isoPatch/yellowdrops_westbank_ground.bin: re-laid nested
         /// MDS blocks, edge-split + sine-shifted geometry, verified byte-identical everywhere else)
         /// and swapped in here: the new sub is appended to scene.scn and the s1301 directory entry
         /// repointed at it (old bytes become dead space; the DATA.DAT tail copy absorbs the growth).
         /// Guarded on the original sub's size so a foreign scene fails loudly. Missing bin = skip.
         /// </summary>
-        internal static byte[] ReplaceS13Ground(byte[] scene)
+        internal static byte[] ReplaceYellowDropsGround(byte[] scene)
         {
-            string path = Path.Combine(AppContext.BaseDirectory, "Resources", "isoPatch", "s1301_smooth.bin");
+            string path = Path.Combine(AppContext.BaseDirectory, "Resources", "isoPatch", "yellowdrops_westbank_ground.bin");
             if (!File.Exists(path))
             {
-                Console.WriteLine("   s1301_smooth.bin missing (tools/westbank_smooth_bake.py) — bank stays vanilla");
+                Console.WriteLine("   yellowdrops_westbank_ground.bin missing (tools/bake_yellowdrops_westbank.py) — bank stays vanilla");
                 return scene;
             }
             byte[] rebuilt = File.ReadAllBytes(path);
@@ -198,7 +198,7 @@ namespace Dark_Cloud_Improved_Version
             if (ent < 0) throw new Exception("s1301 not found in s13 scene directory");
             uint oldSize = U32(scene, ent + 0x14);
             if (oldSize != 0x4ca50)
-                throw new Exception($"s1301 size 0x{oldSize:x} != expected 0x4ca50 — regenerate s1301_smooth.bin");
+                throw new Exception($"s1301 size 0x{oldSize:x} != expected 0x4ca50 — regenerate yellowdrops_westbank_ground.bin");
             var scn = new List<byte>(scene);
             int blob = (int)Align(scn.Count, 16);
             while (scn.Count < blob) scn.Add(0);
@@ -247,20 +247,20 @@ namespace Dark_Cloud_Improved_Version
             }
             int psize = part.Count;
             byte[] pa = part.ToArray();
-            foreach (int o in SIZE_FIELDS) U32(pa, o, (uint)psize);
-            U32(pa, MDSSIZE_FIELD, (uint)kb.Length);
+            foreach (int o in PartSizeFields) U32(pa, o, (uint)psize);
+            U32(pa, PartMdsSizeField, (uint)kb.Length);
             if (funcData != null)
             {
                 int src = (int)U32(pa, 4);                             // __src sub-block offset within the part (0xe0)
-                U32(pa, MDS_OFF_FIELD, (uint)mdsOff);                  // part+0x48: MDS data offset, now past the func block
+                U32(pa, PartMdsOffsetField, (uint)mdsOff);                  // part+0x48: MDS data offset, now past the func block
                 U32(pa, src + 0x70, 0x80);                            // __src+0x70: func-data offset (= part 0x160, right after hdr)
-                U32(pa, src + 0x74, (uint)(funcLen / FUNC_STRIDE));   // __src+0x74: entry count -> EdInitEventPoint loop bound
+                U32(pa, src + 0x74, (uint)(funcLen / EventFuncEntryStride));   // __src+0x74: entry count -> EdInitEventPoint loop bound
                 U32(pa, src + 0x04, (uint)(0x80 + funcLen));          // __src+0x04: memcpy size must cover the func block
             }
             if (collisionMds != null)
             {
-                U32(pa, COLL_OFF_FIELD,  (uint)collOff);              // part+0x78: `_a` collision offset (overrides the SIZE_FIELDS write)
-                U32(pa, COLL_SIZE_FIELD, (uint)collLen);             // part+0x7c: its size — LoadPTS loads it only when > 0
+                U32(pa, PartCollisionOffsetField,  (uint)collOff);              // part+0x78: `_a` collision offset (overrides the PartSizeFields write)
+                U32(pa, PartCollisionSizeField, (uint)collLen);             // part+0x7c: its size — LoadPTS loads it only when > 0
             }
 
             int blob = (int)Align(scn.Count, 16);
@@ -283,26 +283,26 @@ namespace Dark_Cloud_Improved_Version
         internal static byte[] BuildFuncEntry(int type, float t0, float t1, int link, int mapflag, string name,
                                      float[] pos, float[] rot, float[] radius, float p70, float p74)
         {
-            var e = new byte[FUNC_STRIDE];
-            void F(int o, float v) => Array.Copy(BitConverter.GetBytes(v), 0, e, o, 4);
+            var e = new byte[EventFuncEntryStride];
+            void WriteF32(int o, float v) => Array.Copy(BitConverter.GetBytes(v), 0, e, o, 4);
             U32(e, 0x10, (uint)type);
-            F(0x18, t0); F(0x1C, t1);
+            WriteF32(0x18, t0); WriteF32(0x1C, t1);
             U32(e, 0x20, (uint)link); U32(e, 0x24, (uint)mapflag);
             if (!string.IsNullOrEmpty(name))
             {
                 byte[] nb = Encoding.Latin1.GetBytes(name);
                 Array.Copy(nb, 0, e, 0x30, Math.Min(nb.Length, 0x1F));
             }
-            F(0x40, pos[0]); F(0x44, pos[1]); F(0x48, pos[2]);
-            F(0x50, rot[0]); F(0x54, rot[1]); F(0x58, rot[2]);
-            if (radius != null) { F(0x60, radius[0]); F(0x64, radius[1]); F(0x68, radius[2]); }
-            F(0x70, p70); F(0x74, p74);
+            WriteF32(0x40, pos[0]); WriteF32(0x44, pos[1]); WriteF32(0x48, pos[2]);
+            WriteF32(0x50, rot[0]); WriteF32(0x54, rot[1]); WriteF32(0x58, rot[2]);
+            if (radius != null) { WriteF32(0x60, radius[0]); WriteF32(0x64, radius[1]); WriteF32(0x68, radius[2]); }
+            WriteF32(0x70, p70); WriteF32(0x74, p74);
             return e;
         }
 
         // Type-3 fishing trigger (func type 0x12): +0x70 = the SCRIPT LABEL id (fptosi'd, must be > 0),
         // +0x60 = trigger radius. Always-on ([0,24]); no frame gate.
-        internal static byte[] BuildFishingFunc(float[] localPos, int label = FISH_LABEL)
+        internal static byte[] BuildFishingFunc(float[] localPos, int label = FishingLabel)
             => BuildFuncEntry(0x12, 0f, 24f, 0, 0, "", localPos, new[] { 0f, 0f, 0f },
                               new[] { 10f, 10f, 10f }, label, 0f);
 
@@ -311,13 +311,13 @@ namespace Dark_Cloud_Improved_Version
         // (mirrors native hasigo1: 12 bottom / 2 top). Gated to the ladder frame ("hasigo").
         internal static byte[] BuildLadderFunc()
         {
-            var b = BuildFuncEntry(0x13, 0f, 24f, LAD_LINK, 0, "hasigo", LAD_BOTTOM, LAD_FACE, null, 0f, LAD_RUNGS_BOT);
-            var t = BuildFuncEntry(0x14, 0f, 24f, LAD_LINK, 0, "hasigo", LAD_TOP,    LAD_FACE, null, 0f, LAD_RUNGS_TOP);
+            var b = BuildFuncEntry(0x13, 0f, 24f, LadderLinkId, 0, "hasigo", LadderClimbBottom, LadderRotation, null, 0f, LadderRungsBottom);
+            var t = BuildFuncEntry(0x14, 0f, 24f, LadderLinkId, 0, "hasigo", LadderClimbTop,    LadderRotation, null, 0f, LadderRungsTop);
             // Tide-message trigger co-located with the climb-down (TOP) end: a type-3 script point naming
             // label 402. CanalTide enables EITHER the ladder pair (low tide → climb) OR this point (high tide
             // → "tide too high" on X-press), never both. Radius 8 ≈ the ladder's fixed 6 so it fires where the
-            // climb would. Mirrors the climb-down's "hasigo" frame + LAD_TOP so it resolves to the same spot.
-            var m = BuildFuncEntry(0x12, 0f, 24f, 0, 0, "hasigo", LAD_TOP, LAD_FACE, new[] { 8f, 8f, 8f }, LADDER_MSG_LABEL, 0f);
+            // climb would. Mirrors the climb-down's "hasigo" frame + LadderClimbTop so it resolves to the same spot.
+            var m = BuildFuncEntry(0x12, 0f, 24f, 0, 0, "hasigo", LadderClimbTop, LadderRotation, new[] { 8f, 8f, 8f }, LadderMessageLabel, 0f);
             var outb = new byte[b.Length + t.Length + m.Length];
             Array.Copy(b, 0, outb, 0, b.Length); Array.Copy(t, 0, outb, b.Length, t.Length);
             Array.Copy(m, 0, outb, b.Length + t.Length, m.Length);
@@ -332,14 +332,14 @@ namespace Dark_Cloud_Improved_Version
         // double-sided — their inward-facing back faces show through as stray geometry that hides the town
         // from an overhead edit-mode camera. Flipping the 12 upper nodes' suffix to `__s` makes them
         // attribute-identical to the (correctly culled) lower rings. One byte per node; geometry unchanged.
-        internal static readonly string[] UPPER_WALL_NODES = {
+        internal static readonly string[] BrownbooUpperWallNodes = {
             "s04g0105__n", "s04g0106__n", "s04g0107__n", "s04g0108__n", "s04g0109__n", "s04g0110__n",
             "s04g0111__n", "s04g0112__n", "s04g0113__n", "s04g0114__n", "s04g0115__n", "s04g0116__n",
         };
 
         internal static byte[] CullUpperCraterWalls(byte[] scene)
         {
-            foreach (string node in UPPER_WALL_NODES)
+            foreach (string node in BrownbooUpperWallNodes)
             {
                 byte[] key = Encoding.Latin1.GetBytes(node + "\0");   // the null-terminated node-name field
                 int at = Find(scene, key);
@@ -430,7 +430,7 @@ namespace Dark_Cloud_Improved_Version
                         int i2 = BitConverter.ToInt32(scene, recbase + (k + 2) * rb);
                         if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vcount || i1 >= vcount || i2 >= vcount) continue;
                         if (i0 == i1 || i1 == i2 || i0 == i2) continue;
-                        double cyc = (F(scene, vbase + i0 * 0x10 + 4) + F(scene, vbase + i1 * 0x10 + 4) + F(scene, vbase + i2 * 0x10 + 4)) / 3.0;
+                        double cyc = (F32(scene, vbase + i0 * 0x10 + 4) + F32(scene, vbase + i1 * 0x10 + 4) + F32(scene, vbase + i2 * 0x10 + 4)) / 3.0;
                         if (cyc >= yMax) continue;                                      // only strays below the cutoff
                         if (!UpFacing(scene, vbase, i0, i1, i2)) continue;
                         U32(scene, recbase + (k + 1) * rb, (uint)i0);                  // collapse -> zero-area tri
@@ -445,9 +445,9 @@ namespace Dark_Cloud_Improved_Version
         // these nodes have identity rotation, so a local +Y normal is a world +Y normal.
         internal static bool UpFacing(byte[] s, int vbase, int i0, int i1, int i2)
         {
-            float ax = F(s, vbase + i0 * 0x10), ay = F(s, vbase + i0 * 0x10 + 4), az = F(s, vbase + i0 * 0x10 + 8);
-            float bx = F(s, vbase + i1 * 0x10), by = F(s, vbase + i1 * 0x10 + 4), bz = F(s, vbase + i1 * 0x10 + 8);
-            float cx = F(s, vbase + i2 * 0x10), cy = F(s, vbase + i2 * 0x10 + 4), cz = F(s, vbase + i2 * 0x10 + 8);
+            float ax = F32(s, vbase + i0 * 0x10), ay = F32(s, vbase + i0 * 0x10 + 4), az = F32(s, vbase + i0 * 0x10 + 8);
+            float bx = F32(s, vbase + i1 * 0x10), by = F32(s, vbase + i1 * 0x10 + 4), bz = F32(s, vbase + i1 * 0x10 + 8);
+            float cx = F32(s, vbase + i2 * 0x10), cy = F32(s, vbase + i2 * 0x10 + 4), cz = F32(s, vbase + i2 * 0x10 + 8);
             double nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
             double ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
             double nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
@@ -472,7 +472,7 @@ namespace Dark_Cloud_Improved_Version
         //     the Y offset, kept at the full vanilla 2.0 for the strongest look; lower here to taste.
         //   • No poke sources — fixed-cell WATER_SHAKE reads as nothing on a camera-relative grid; removed.
         //     Just the vanilla gentle ambient wander.
-        // The Z-fight jitter (mizu mesh vs refraction at the same tide Y) is handled by CanalTide.Refraction
+        // The Z-fight jitter (mizu mesh vs refraction at the same tide Y) is handled by CanalWaterEffects.Refraction
         // YOffset. Corners/pos/colour/follow-flags otherwise unchanged from vanilla. Guarded: one match.
         internal static byte[] TuneCanalWater(byte[] cfg)
         {

@@ -1,5 +1,5 @@
 using System;
-using static Dark_Cloud_Improved_Version.FishingLabels;
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// takes the STACK ENTRY COUNT in a1, including the command id, which is the first entry. Modelled on
     /// Norune's real scripts (exact offsets: game_data/docs/fishing-engine-re.md §norune-script).
     /// </summary>
-    internal static class FishingStbEmit
+    internal static class FishingScriptBuilder
     {
         /// <summary>
         /// The script local that <c>_LOAD_SYNC</c> reports into, so the load loop waits exactly as long as the
@@ -320,24 +320,24 @@ namespace Dark_Cloud_Improved_Version
         /// vanilla's call shape verbatim (label 11 / 133): push the destination REF first so it sits below the
         /// args, push the args, CALL_FUNC, then STORE (which writes *destVar and re-pushes the value) and POP.
         /// </summary>
-        private static void EmitMenuCall(StbWriter w, int msgId, int count, int destVar, int menuCbRel)
+        private static void EmitMenuCall(StbWriter w, int msgId, int count, int destVar, int menuCodeBaseOffset)
         {
             w.UseLocals(destVar + 1);
             w.PushVarRef(destVar);        // ref stays at the bottom of the stack for the trailing STORE
             w.PushInt(msgId);             // arg0 -> callee var0
             w.PushInt(count);             // arg1 -> callee var1
-            w.CallFunc(menuCbRel);        // returns the chosen line on the stack
+            w.CallFunc(menuCodeBaseOffset);        // returns the chosen line on the stack
             w.Store();                    // *destVar = choice
             w.Pop();
         }
 
         /// <summary>Emit the entry/quit menu: the shared CALL_FUNC subroutine when one was allocated
-        /// (<paramref name="menuCbRel"/> &gt;= 0), else an inline copy as a fallback. Either way the choice
+        /// (<paramref name="menuCodeBaseOffset"/> &gt;= 0), else an inline copy as a fallback. Either way the choice
         /// lands in <paramref name="destVar"/> for the caller to branch on.</summary>
-        internal static void EmitMenu(StbWriter w, int msgId, int count, int destVar, int menuCbRel,
+        internal static void EmitMenu(StbWriter w, int msgId, int count, int destVar, int menuCodeBaseOffset,
                                      int vPad, int vLy, int vHeld, int vScratch)
         {
-            if (menuCbRel >= 0) EmitMenuCall(w, msgId, count, destVar, menuCbRel);
+            if (menuCodeBaseOffset >= 0) EmitMenuCall(w, msgId, count, destVar, menuCodeBaseOffset);
             else EmitSelectMenu(w, msgId, count, destVar, vPad, vLy, vHeld, vScratch);
         }
 

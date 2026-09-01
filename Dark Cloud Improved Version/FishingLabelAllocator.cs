@@ -1,6 +1,6 @@
 using System;
 using static Dark_Cloud_Improved_Version.CustomFishingSpot;
-using static Dark_Cloud_Improved_Version.FishingLabels;
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// (the normal path) or fall back to hijacking never-dispatched native spare labels (the arena), then
     /// serialize StbWriter scripts into them (code + string blob + jump fixups + the label header fields).
     /// </summary>
-    internal static class FishingLabelArena
+    internal static class FishingLabelAllocator
     {
         /// <summary>
         /// Labels that must NOT be hijacked.
@@ -29,27 +29,27 @@ namespace Dark_Cloud_Improved_Version
         /// everywhere. Notably 300 is EXCLUDED: it is a real, dispatched event in Queens (e03) and Yellow
         /// Drops (s13), so hijacking it — as the old size-first picker did — silently broke a town event.
         /// A fixed whitelist beats a runtime scan here: the data can't change, a scan that found everything
-        /// used would leave the spot uninstallable, and one list keeps every area consistent. (BuildArena
+        /// used would leave the spot uninstallable, and one list keeps every area consistent. (BuildHijackPool
         /// still drops any of these a live event POINT references — cheap insurance for a future area — but
         /// no town's event points touch the 300-block, verified live for the three fishing towns.)
         /// </summary>
         // 301-310: the towns' own native spare labels (offline-verified never dispatched). This pool is the
         // FALLBACK path only — a spot on an unpatched disc, or a town without baked labels. The three custom
-        // fishing towns are ISO-patched with labels 9600/400/133/134 already numbered (IsoPatcher.ExtendStb),
+        // fishing towns are ISO-patched with labels 9600/400/133/134 already numbered (StbLabelBaker.ExtendStb),
         // which the installer claims directly by id (ClaimLabel/FindLabelById), bypassing this pool entirely.
         private static readonly System.Collections.Generic.HashSet<int> SafeHijackLabels =
             new System.Collections.Generic.HashSet<int>
             { 301, 302, 303, 304, 305, 306, 307, 310 };
 
         /// <summary>One hijackable label: its table slot, its id, and the code region it owns.</summary>
-        internal sealed class Lab
+        internal sealed class ScriptLabel
         {
             internal int Slot, Id, Off, Size, Entry;
             internal bool Used;
         }
 
-        internal static readonly System.Collections.Generic.List<Lab> _arena =
-            new System.Collections.Generic.List<Lab>();
+        internal static readonly System.Collections.Generic.List<ScriptLabel> _hijackPool =
+            new System.Collections.Generic.List<ScriptLabel>();
 
         /// <summary>
         /// Collect the hijackable labels, in CODE ORDER.
@@ -59,9 +59,9 @@ namespace Dark_Cloud_Improved_Version
         /// through, which is the only way the ~2 KB entry script fits: the spare labels in Yellow Drops are
         /// 650-800 B apiece.
         /// </summary>
-        internal static void BuildArena(long stb, int labelCount, int tbl)
+        internal static void BuildHijackPool(long stb, int labelCount, int tbl)
         {
-            _arena.Clear();
+            _hijackPool.Clear();
 
             // PROTECT LABELS A LIVE EVENT POINT DISPATCHES. We only ever hijack labels the town isn't using —
             // system labels (<300) are protected by id, but a town CAN put a real story trigger on a >=300
@@ -70,9 +70,9 @@ namespace Dark_Cloud_Improved_Version
             // it, Allocate could retire a label something in the world still fires.
             var referenced = new System.Collections.Generic.HashSet<int>();
             long arr = EventPoints.Base();
-            int epn = arr == 0 ? 0 : Memory.ReadInt(EventPoints.Count);
+            int eventPointCount = arr == 0 ? 0 : Memory.ReadInt(EventPoints.Count);
             const int MaxEventPoints = 0x100;   // the event array physically holds 256 points
-            for (int i = 0; i < epn && i <= MaxEventPoints; i++)
+            for (int i = 0; i < eventPointCount && i <= MaxEventPoints; i++)
             {
                 long e = EventPoints.Slot(arr, i);
                 if (Memory.ReadInt(e + EventPoints.Type) == EventPoints.TypeScript)
@@ -101,7 +101,7 @@ namespace Dark_Cloud_Improved_Version
                 sizes.Append($"{all[i].id}:{(size > 0 ? size.ToString() : "end")}" +
                              $"{(safe ? "+" : "")}{(epRef ? "@" : "")} ");
                 if (!safe || epRef || size <= 0) continue;   // + = safe hijack pool, @ = event-point (skip)
-                _arena.Add(new Lab
+                _hijackPool.Add(new ScriptLabel
                 {
                     Slot = all[i].slot, Id = all[i].id, Off = all[i].off, Size = size,
                     Entry = (int)(tbl + all[i].slot * TownScript.LabelStride),
@@ -111,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Bytes a script needs: header skip + code + string blob + alignment slack.</summary>
-        internal static int Need(StbWriter w) => TownScript.LabelCodeSkip + w.ToArray().Length + w.StringBytes + 8;
+        internal static int ScriptByteSize(StbWriter w) => TownScript.LabelCodeSkip + w.ToArray().Length + w.StringBytes + 8;
 
         /// <summary>
         /// Claim a run of adjacent unused labels totalling at least <paramref name="need"/> bytes, and return
@@ -124,25 +124,25 @@ namespace Dark_Cloud_Improved_Version
         /// Every label a run does swallow is marked used (so a later allocation cannot hand out the same
         /// bytes) and RETIRED (so the engine cannot dispatch into the middle of the script we write over it).
         /// </summary>
-        internal static Lab Allocate(long stb, int need, out int end)
+        internal static ScriptLabel Allocate(long stb, int need, out int end)
         {
-            for (int len = 1; len <= _arena.Count; len++)
-            for (int i = 0; i + len <= _arena.Count; i++)
+            for (int len = 1; len <= _hijackPool.Count; len++)
+            for (int i = 0; i + len <= _hijackPool.Count; i++)
             {
                 int total = 0;
                 bool usable = true;
                 for (int j = i; j < i + len; j++)
                 {
-                    if (_arena[j].Used ||
-                        (j > i && _arena[j].Off != _arena[j - 1].Off + _arena[j - 1].Size))   // not adjacent
+                    if (_hijackPool[j].Used ||
+                        (j > i && _hijackPool[j].Off != _hijackPool[j - 1].Off + _hijackPool[j - 1].Size))   // not adjacent
                     { usable = false; break; }
-                    total += _arena[j].Size;
+                    total += _hijackPool[j].Size;
                 }
                 if (!usable || total < need) continue;
 
                 {
                     int j = i + len - 1;
-                    for (int k = i; k <= j; k++) _arena[k].Used = true;
+                    for (int k = i; k <= j; k++) _hijackPool[k].Used = true;
 
                     // RETIRE THE SWALLOWED LABELS. A run's later labels keep their table entries, but we are
                     // about to write straight THROUGH their code — so their codeOffset would then point into
@@ -155,13 +155,13 @@ namespace Dark_Cloud_Improved_Version
                     // town event beats a hard crash, and there is nowhere else to put a 1.5 KB script.
                     for (int k = i + 1; k <= j; k++)
                     {
-                        Memory.WriteInt(stb + _arena[k].Entry, RetiredLabelId + k);
-                        Log($"   label {_arena[k].Id} RETIRED (its code is inside our script now) — " +
+                        Memory.WriteInt(stb + _hijackPool[k].Entry, RetiredLabelId + k);
+                        Log($"   label {_hijackPool[k].Id} RETIRED (its code is inside our script now) — " +
                             $"the town can no longer dispatch into it");
                     }
 
-                    end = _arena[i].Off + total;
-                    return _arena[i];
+                    end = _hijackPool[i].Off + total;
+                    return _hijackPool[i];
                 }
             }
             end = 0;
@@ -170,14 +170,14 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>
         /// The label to write <paramref name="targetId"/>'s script into. PREFERS the ISO-baked label that
-        /// already carries this id (<see cref="IsoPatcher.ExtendStb"/> stamps 9600/400/133/134 straight into
+        /// already carries this id (<see cref="StbLabelBaker.ExtendStb"/> stamps 9600/400/133/134 straight into
         /// the three custom fishing towns): it is correctly numbered and sized to hold its one script, so we
         /// write into it directly — no renumber, no arena run, no spanning. FALLS BACK to renaming a native
         /// orphan for a town/ISO without the baked labels (an unpatched disc, or a spot added to a new town).
         /// </summary>
-        internal static Lab ClaimLabel(long stb, int labelCount, int tbl, int targetId, int need, out int end)
+        internal static ScriptLabel ClaimLabel(long stb, int labelCount, int tbl, int targetId, int need, out int end)
         {
-            Lab baked = FindLabelById(stb, labelCount, tbl, targetId);
+            ScriptLabel baked = FindLabelById(stb, labelCount, tbl, targetId);
             if (baked != null) { end = baked.Off + baked.Size; return baked; }
             return Allocate(stb, need, out end);   // native-orphan fallback; caller renames it to targetId
         }
@@ -185,7 +185,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Find the label whose id is <paramref name="id"/> and return its code region (its size is
         /// the gap to the next label by offset). Null if absent. Used to claim a pre-baked, pre-numbered
         /// fishing label directly, without the fit-allocator's size search.</summary>
-        internal static Lab FindLabelById(long stb, int labelCount, int tbl, int id)
+        internal static ScriptLabel FindLabelById(long stb, int labelCount, int tbl, int id)
         {
             int myOff = -1, mySlot = -1;
             var offs = new int[labelCount];
@@ -198,7 +198,7 @@ namespace Dark_Cloud_Improved_Version
             if (mySlot < 0) return null;
             int next = int.MaxValue;
             for (int i = 0; i < labelCount; i++) if (offs[i] > myOff && offs[i] < next) next = offs[i];
-            return new Lab
+            return new ScriptLabel
             {
                 Id = id, Slot = mySlot, Off = myOff,
                 Size = next == int.MaxValue ? 0 : next - myOff,
@@ -249,7 +249,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void InstallEngineLabel(long stb, int labelCount, int tbl, int targetId, StbWriter w, string what)
         {
-            Lab lab = ClaimLabel(stb, labelCount, tbl, targetId, Need(w), out int end);
+            ScriptLabel lab = ClaimLabel(stb, labelCount, tbl, targetId, ScriptByteSize(w), out int end);
             if (lab == null)
             {
                 Log($"   NO room for label {targetId} — that fishing button will do nothing");

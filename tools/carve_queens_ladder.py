@@ -31,7 +31,7 @@ SHIFT = GROUND_Y - TARGET_GROUND          # 20
 
 def donor_mdt():
     scn = load_scene("gedit/e05/scene.scn")
-    off, size = scene_placed._scndir(scn)[DONOR_PART]
+    off, size = scene_placed.scn_directory_map(scn)[DONOR_PART]
     m = re.search(rb'MDS', scn[off:off + size])
     nodes, _ = scene_placed._accum(scn, off + m.start())
     mo = next(mo for nn, mo, par, mat in nodes if nn == DONOR_NODE)

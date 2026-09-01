@@ -7,6 +7,12 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// All vanilla. See docs/custom-fishing-spot.md for how these fit together.
     /// </summary>
+    /// <summary>Town map numbers (EditLoop.MapNo values) the mod branches on. See docs/town-event-labels.md.</summary>
+    internal static class TownMapNo
+    {
+        internal const int Queens = 2, Brownboo = 14, EastHarbor = 19, YellowDrops = 23;
+    }
+
     internal static class EditInfo
     {
         /// <summary>ELF <c>edit_info</c> — a POINTER to the big EDIT_MAP_INFO buffer that
@@ -381,7 +387,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int AngleNow = 0x2DC;   // smoothed yaw (== EditLoop.CameraAngleNow)
 
         /// <summary>The per-frame camera-collision gather arena struct pointer
-        /// (WorkBuffer: {+0 data, +8 used, +C cap}) — see CameraGatherArenaFix.</summary>
+        /// (WorkBuffer: {+0 data, +8 used, +C cap}) — see TownCameraPolyBuffer.</summary>
         internal const long WorkBufferPtr = 0x202A2388;
 
         /// <summary>The camera object as an MMU address, or 0 if the pointer isn't live.</summary>
@@ -607,7 +613,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     // NOTE: the fish depth is NOT patched in code (FishingInitFish's inline `lui r2,0x4140` = 12.0). Patching
     // that just-JIT'd fishing instruction crashes PCSX2; shallow fishing moves the fish by a data write to the
-    // fish-slot Y instead (CustomFishingSpot.ApplyShallowFishDepth). See FishLineShallow below.
+    // fish-slot Y instead (FishingCollision.ApplyFishDepth). See FishLineShallow below.
 
     /// <summary>
     /// Shallow-hook via the fishing line's BOBBER ANCHOR, done recompiler-safely.

@@ -10,6 +10,8 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CanalWading
     {
+        private static void Log(string m) => CanalTide.Log(m, nameof(CanalWading));
+
         // ── WADING (current design): at LOW TIDE, the PLAYER is drawn EARLY, mizu stays 100% vanilla ─────
         // GS transparency only reveals what is ALREADY in the framebuffer, so for the submerged body to sit
         // "under" the water it must be in the framebuffer before the water part's own native pass draws.

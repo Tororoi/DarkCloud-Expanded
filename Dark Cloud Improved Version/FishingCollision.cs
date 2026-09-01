@@ -37,7 +37,7 @@ namespace Dark_Cloud_Improved_Version
             // Capture the FULL native gather at the current cast rect (the viewer's ground truth for the
             // fishing-gather replica); Diagnostics-gated inside.
             DumpFullGather(buf, nativeCount, mapNo);
-            if (mapNo != 14) return;   // only Brownboo has in-water ladders
+            if (mapNo != TownMapNo.Brownboo) return;   // only Brownboo has in-water ladders
 
             int keep = 0, ladtops = 0;
             for (int i = 0; i < nativeCount; i++)
@@ -67,7 +67,7 @@ namespace Dark_Cloud_Improved_Version
         /// <see cref="LadderRadius"/> of a ladder. Brownboo-only (the positions are its own).</summary>
         private static bool IsLadderTopFloor(long poly, int mapNo)
         {
-            if (mapNo != 14) return false;
+            if (mapNo != TownMapNo.Brownboo) return false;
 
             float y0 = Memory.ReadFloat(poly + 4);
             float y1 = Memory.ReadFloat(poly + 0x10 + 4);
@@ -226,13 +226,13 @@ namespace Dark_Cloud_Improved_Version
             int need = 16 + triCount * 9 * 4;
             if (triCount < 0 || data.Length < need) { Log($"   mesh collision: truncated ({data.Length} < {need})"); return 0; }
 
-            float F(int i) => BitConverter.ToSingle(data, i);
+            float F32(int i) => BitConverter.ToSingle(data, i);
             int p = 16, added = 0;
             for (int t = 0; t < triCount; t++, p += 36)
             {
-                float ax = F(p),      ay = F(p + 4),  az = F(p + 8);
-                float bx = F(p + 12), by = F(p + 16), bz = F(p + 20);
-                float cx = F(p + 24), cy = F(p + 28), cz = F(p + 32);
+                float ax = F32(p),      ay = F32(p + 4),  az = F32(p + 8);
+                float bx = F32(p + 12), by = F32(p + 16), bz = F32(p + 20);
+                float cx = F32(p + 24), cy = F32(p + 28), cz = F32(p + 32);
 
                 // plane normal = (b-a) x (c-a), normalized
                 float ux = bx - ax, uy = by - ay, uz = bz - az;

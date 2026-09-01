@@ -33,79 +33,79 @@ namespace Dark_Cloud_Improved_Version
             // CLEAN FREE-CAMERA BASE + STAGE-2 PULL-IN: strip ALL of vanilla's camera collision, then add our OWN
             // smooth pull-in with a space buffer. Sites guarded before any write. (To A/B vanilla's orbit-the-hit-point
             // slide instead, drop the CameraAutoMove stub and NOP its AddAngle 0x169CF8/D14 + AddHeight 0x169D50.)
-            const uint STUB_VA  = 0x0014B830;   // CheckCameraWidth entry           (guard addiu sp,-0x100)
-            const uint BVAR4_VA = 0x0016B1E8;   // `clear s6` (bVar4=false, right blocked → gates rotation)
-            const uint BVAR5_VA = 0x0016B2FC;   // `clear s4` (bVar5=false, left  blocked → gates rotation)
-            const uint CAM_VA   = 0x00169B70;   // CameraAutoMove entry (slide/auto-follow/rotate/height-when-close)
-            const uint VADJ_VA  = 0x0016B6A8;   // vertical-adjust SetHeight (raise to clear a ceiling within 18u)
-            const uint RSTD_VA  = 0x0016B724;   // reset: SetDistance(near)   \ fires when clipped-close or too-high
-            const uint RSTH_VA  = 0x0016B738;   // reset: SetHeight(10)       |  → snaps + flips the camera to the
-            const uint RSTA_VA  = 0x0016B764;   // reset: AddAngle(flip)      / opposite side of the player
-            const uint HFLOOR_SNAP_VA = 0x0016BC54; // floor-snap SetHeight(5/35): clamps height UP to 5 when it's lower,
+            const uint StubAddr  = 0x0014B830;   // CheckCameraWidth entry           (guard addiu sp,-0x100)
+            const uint RotationGateRightAddr = 0x0016B1E8;   // `clear s6` (bVar4=false, right blocked → gates rotation)
+            const uint RotationGateLeftAddr = 0x0016B2FC;   // `clear s4` (bVar5=false, left  blocked → gates rotation)
+            const uint CameraAutoMoveAddr   = 0x00169B70;   // CameraAutoMove entry (slide/auto-follow/rotate/height-when-close)
+            const uint CeilingRaiseAddr  = 0x0016B6A8;   // vertical-adjust SetHeight (raise to clear a ceiling within 18u)
+            const uint ResetDistanceAddr  = 0x0016B724;   // reset: SetDistance(near)   \ fires when clipped-close or too-high
+            const uint ResetHeightAddr  = 0x0016B738;   // reset: SetHeight(10)       |  → snaps + flips the camera to the
+            const uint ResetAngleAddr  = 0x0016B764;   // reset: AddAngle(flip)      / opposite side of the player
+            const uint HeightFloorSnapAddr = 0x0016BC54; // floor-snap SetHeight(5/35): clamps height UP to 5 when it's lower,
                                                     // which blocks the ground-relative DROP (camera below the player when
                                                     // he walks uphill). NOP so height can go < 5 / negative; our baseline
                                                     // keeps the eye BASE_H above the ground under it, so it never clips.
-            const uint STICKY1_VA = 0x0016B834; // vanilla stick-Y AddHeight (accumulative, height<30 branch) — replaced by
-            const uint STICKY2_VA = 0x0016B84C; //   our deadzoned absolute stick offset in the pull-in. NOP both.
-            const uint PULLIN_VA = 0x0014B838;
-            const uint HOOK_VA  = 0x0016B5DC;   // jal CheckHitVertical → retarget to our pull-in (s5=buf,s8=count live)
+            const uint StickHeightAddr1 = 0x0016B834; // vanilla stick-Y AddHeight (accumulative, height<30 branch) — replaced by
+            const uint StickHeightAddr2 = 0x0016B84C; //   our deadzoned absolute stick offset in the pull-in. NOP both.
+            const uint PullInAddr = 0x0014B838;
+            const uint HookAddr  = 0x0016B5DC;   // jal CheckHitVertical → retarget to our pull-in (s5=buf,s8=count live)
             // Town camera clamps distance to [near=70, far=80] AFTER our hook, easing our pull-in back UP to 70 every
             // frame (line 618-621) — so the pull-in "mostly passes through". NOP the near-clamp + the bVar6 SetDistance
             // so our pull-in owns +0x2D0. (Far-clamp 0x16B994 left as a safety; we already clamp target ≤ BASE 80.)
-            const uint NCLAMP_VA = 0x0016B9E8;  // AddDistance(+(70-dist)/10) near-clamp → fights pull-in
-            const uint SDST_VA   = 0x0016BBCC;  // if(bVar6) SetDistance(70) → hard-resets distance
+            const uint DistanceNearClampAddr = 0x0016B9E8;  // AddDistance(+(70-dist)/10) near-clamp → fights pull-in
+            const uint DistanceResetAddr   = 0x0016BBCC;  // if(bVar6) SetDistance(70) → hard-resets distance
             // The "too close" reset block (fires when dist < near*0.5 = 35, CONSTANT in the canal) snapped 4 things;
             // we NOPped its SetDistance/SetHeight/AddAngle (RSTD/RSTH/RSTA) but MISSED the SetAngleSoon @0x16B754 —
             // which sets rendered-angle(+0x2DC)=target(+0x2D8), KILLING the angle easing every frame we're pulled in.
             // That snap (size = the easing lag, so bigger the faster you rotate) was the reproducible slide jump. NOP it.
-            const uint SANGLE_VA  = 0x0016B754;  // reset-block SetAngleSoon → kills angle easing (the slide jump)
-            const uint SANGLE2_VA = 0x0016B7A8;  // sibling SetAngleSoon (MapNo 0x23 only; NOP for consistency)
+            const uint ResetAngleSoonAddr  = 0x0016B754;  // reset-block SetAngleSoon → kills angle easing (the slide jump)
+            const uint ResetAngleSoonMapAddr = 0x0016B7A8;  // sibling SetAngleSoon (MapNo 0x23 only; NOP for consistency)
             // The reset block's LAST effect: a vtable call (**(cam+0x2B8)+8)(cam,-1) = Step(cam,-1), whose param_2<0
             // path does +0x2DC=+0x2D8 — ANOTHER hard angle snap. Fires when dist<35 (constant while pulled in). CSV
             // proved it: rendered angle catches up ~2.4° the frame dist crosses 35. NOP the jalr → block fully inert.
-            const uint RSTVT_VA   = 0x0016B7C0;  // reset-block jalr t9 = Step(cam,-1) → snaps +0x2DC (the residual jump)
+            const uint ResetStepVtableAddr   = 0x0016B7C0;  // reset-block jalr t9 = Step(cam,-1) → snaps +0x2DC (the residual jump)
 
             void Guard(uint va, uint want, string what) {
                 if (RdU32(fs, ElfOff(va)) != want)
                     throw new IOException($"Native-camera site 0x{va:X} ({what}) not vanilla — unmodified Dark Cloud (USA) ISO expected.");
             }
-            Guard(STUB_VA,  0x27BDFF00, "CheckCameraWidth");
-            Guard(BVAR4_VA, 0x7000B628, "rotation-gate R"); Guard(BVAR5_VA, 0x7000A628, "rotation-gate L");
-            Guard(CAM_VA,   0x27BDFFA0, "CameraAutoMove");
-            Guard(VADJ_VA,  0x0C0492EC, "vertical SetHeight");
-            Guard(RSTD_VA,  0x0C0492DC, "reset SetDistance"); Guard(RSTH_VA, 0x0C0492EC, "reset SetHeight");
-            Guard(RSTA_VA,  0x0C0492D4, "reset AddAngle");
+            Guard(StubAddr,  0x27BDFF00, "CheckCameraWidth");
+            Guard(RotationGateRightAddr, 0x7000B628, "rotation-gate R"); Guard(RotationGateLeftAddr, 0x7000A628, "rotation-gate L");
+            Guard(CameraAutoMoveAddr,   0x27BDFFA0, "CameraAutoMove");
+            Guard(CeilingRaiseAddr,  0x0C0492EC, "vertical SetHeight");
+            Guard(ResetDistanceAddr,  0x0C0492DC, "reset SetDistance"); Guard(ResetHeightAddr, 0x0C0492EC, "reset SetHeight");
+            Guard(ResetAngleAddr,  0x0C0492D4, "reset AddAngle");
             // Camera scratch (stick ease @0x01F10040, E_prev quad @0x01F10050) lives on the MAILBOX DATA page —
             // boot-zeroed heap, no ELF init needed/possible; moved off the code page so per-frame writes stop
             // forcing PCSX2 to re-JIT the camera function (see CodeCaveAddresses cave map).
-            Guard(HOOK_VA,  0x0C052820, "pull-in hook (jal CheckHitVertical)");
-            Guard(NCLAMP_VA, 0x0C0492E4, "distance near-clamp"); Guard(SDST_VA, 0x0C0492DC, "bVar6 SetDistance");
-            Guard(SANGLE_VA, 0x0C0492CC, "reset SetAngleSoon"); Guard(SANGLE2_VA, 0x0C0492CC, "reset SetAngleSoon(map)");
-            Guard(RSTVT_VA, 0x0320F809, "reset vtable Step(-1)");
+            Guard(HookAddr,  0x0C052820, "pull-in hook (jal CheckHitVertical)");
+            Guard(DistanceNearClampAddr, 0x0C0492E4, "distance near-clamp"); Guard(DistanceResetAddr, 0x0C0492DC, "bVar6 SetDistance");
+            Guard(ResetAngleSoonAddr, 0x0C0492CC, "reset SetAngleSoon"); Guard(ResetAngleSoonMapAddr, 0x0C0492CC, "reset SetAngleSoon(map)");
+            Guard(ResetStepVtableAddr, 0x0320F809, "reset vtable Step(-1)");
 
-            WrU32(fs, ElfOff(STUB_VA + 0), 0x03E00008);   // CheckCameraWidth → jr ra
-            WrU32(fs, ElfOff(STUB_VA + 4), 0x00001021);   //   addu v0,zero,zero (return 0 → width-slide off)
-            WrU32(fs, ElfOff(BVAR4_VA), 0x00000000);      // free rotation right (bVar4 stays true)
-            WrU32(fs, ElfOff(BVAR5_VA), 0x00000000);      // free rotation left  (bVar5 stays true)
-            WrU32(fs, ElfOff(CAM_VA + 0), 0x03E00008);    // CameraAutoMove → jr ra (no collision slide/rotate/height)
-            WrU32(fs, ElfOff(CAM_VA + 4), 0x00000000);    //   nop (delay slot)
-            WrU32(fs, ElfOff(VADJ_VA), 0x00000000);       // no ceiling height-rise ("angle goes up")
-            WrU32(fs, ElfOff(RSTD_VA), 0x00000000);       // no reset distance snap
-            WrU32(fs, ElfOff(RSTH_VA), 0x00000000);       // no reset height snap
-            WrU32(fs, ElfOff(RSTA_VA), 0x00000000);       // no reset angle flip ("reset to opposite side")
-            WrU32(fs, ElfOff(NCLAMP_VA), 0x00000000);     // no near-clamp ease-up (was forcing dist back to 70)
-            WrU32(fs, ElfOff(SDST_VA), 0x00000000);       // no bVar6 SetDistance(70) hard-reset
-            WrU32(fs, ElfOff(SANGLE_VA), 0x00000000);     // no reset SetAngleSoon → angle easing survives (fixes slide jump)
-            WrU32(fs, ElfOff(SANGLE2_VA), 0x00000000);    // no sibling SetAngleSoon (MapNo 0x23)
-            WrU32(fs, ElfOff(RSTVT_VA), 0x00000000);      // no reset Step(cam,-1) → +0x2DC angle snap gone (block inert)
-            Guard(HFLOOR_SNAP_VA, 0x0C0492EC, "height floor-snap SetHeight");
+            WrU32(fs, ElfOff(StubAddr + 0), 0x03E00008);   // CheckCameraWidth → jr ra
+            WrU32(fs, ElfOff(StubAddr + 4), 0x00001021);   //   addu v0,zero,zero (return 0 → width-slide off)
+            WrU32(fs, ElfOff(RotationGateRightAddr), 0x00000000);      // free rotation right (bVar4 stays true)
+            WrU32(fs, ElfOff(RotationGateLeftAddr), 0x00000000);      // free rotation left  (bVar5 stays true)
+            WrU32(fs, ElfOff(CameraAutoMoveAddr + 0), 0x03E00008);    // CameraAutoMove → jr ra (no collision slide/rotate/height)
+            WrU32(fs, ElfOff(CameraAutoMoveAddr + 4), 0x00000000);    //   nop (delay slot)
+            WrU32(fs, ElfOff(CeilingRaiseAddr), 0x00000000);       // no ceiling height-rise ("angle goes up")
+            WrU32(fs, ElfOff(ResetDistanceAddr), 0x00000000);       // no reset distance snap
+            WrU32(fs, ElfOff(ResetHeightAddr), 0x00000000);       // no reset height snap
+            WrU32(fs, ElfOff(ResetAngleAddr), 0x00000000);       // no reset angle flip ("reset to opposite side")
+            WrU32(fs, ElfOff(DistanceNearClampAddr), 0x00000000);     // no near-clamp ease-up (was forcing dist back to 70)
+            WrU32(fs, ElfOff(DistanceResetAddr), 0x00000000);       // no bVar6 SetDistance(70) hard-reset
+            WrU32(fs, ElfOff(ResetAngleSoonAddr), 0x00000000);     // no reset SetAngleSoon → angle easing survives (fixes slide jump)
+            WrU32(fs, ElfOff(ResetAngleSoonMapAddr), 0x00000000);    // no sibling SetAngleSoon (MapNo 0x23)
+            WrU32(fs, ElfOff(ResetStepVtableAddr), 0x00000000);      // no reset Step(cam,-1) → +0x2DC angle snap gone (block inert)
+            Guard(HeightFloorSnapAddr, 0x0C0492EC, "height floor-snap SetHeight");
             Guard(0x0016BC0C, 0x0C0492EC, "height CEILING snap SetHeight(60)");   // vanilla snaps +0x2D4 down to 60 every frame it
             WrU32(fs, ElfOff(0x0016BC0C), 0x00000000);                            //   exceeds 60 — capped EVERY tall-cliff mechanism
-            WrU32(fs, ElfOff(HFLOOR_SNAP_VA), 0x00000000); // no floor-snap → height can drop below 5 (camera below player)
-            Guard(STICKY1_VA, 0x0C0492F4, "vanilla stick-Y AddHeight #1");
-            Guard(STICKY2_VA, 0x0C0492F4, "vanilla stick-Y AddHeight #2");
-            WrU32(fs, ElfOff(STICKY1_VA), 0x00000000);    // our deadzoned stick offset replaces the vanilla accumulative one
-            WrU32(fs, ElfOff(STICKY2_VA), 0x00000000);
+            WrU32(fs, ElfOff(HeightFloorSnapAddr), 0x00000000); // no floor-snap → height can drop below 5 (camera below player)
+            Guard(StickHeightAddr1, 0x0C0492F4, "vanilla stick-Y AddHeight #1");
+            Guard(StickHeightAddr2, 0x0C0492F4, "vanilla stick-Y AddHeight #2");
+            WrU32(fs, ElfOff(StickHeightAddr1), 0x00000000);    // our deadzoned stick offset replaces the vanilla accumulative one
+            WrU32(fs, ElfOff(StickHeightAddr2), 0x00000000);
 
             // ── STAGE 2: our own smooth pull-in (hosted in the reclaimed CheckCameraWidth slack) ──
             // Wraps `jal CheckHitVertical` @0x16B5DC (s5=CCPoly buffer, s8=poly count live in callee-saved regs):
@@ -128,60 +128,60 @@ namespace Dark_Cloud_Improved_Version
             // ===== CAMERA TUNABLES (tools/town_camera_collision.s) — edit these; they inject into the template's constant slots
             //       below on each patch (no asm regen). PutVal = single `lui` (integer / .25 step, low16==0);
             //       PutEase = `lui`+`ori` (any float). Indices auto-located from the source; guards trip loudly on drift.
-            // ARCHITECTURE: dist target = BASE_DIST always (no wall-ray pull-in). Height target = REST_H + stick;
+            // ARCHITECTURE: dist target = BaseDistance always (no wall-ray pull-in). Height target = RestHeight + stick;
             //   ceiling probe DUCKS it (tunnel), ground probe FLOORS it (hard, world-space). ALL height motion is
-            //   RATE-LIMITED: falls ≤ H_FALL_RATE/frame in WORLD Y (cameraHeight.bin cave sub @0x27D090 — a falling
-            //   player outruns the camera; WARP_BREAK skips the bound across true warps), climb rises ≤ CLIMB_RISE/
+            //   RATE-LIMITED: falls ≤ HeightFallRate/frame in WORLD Y (cameraHeight.bin cave sub @0x27D090 — a falling
+            //   player outruns the camera; WarpBreak skips the bound across true warps), climb rises ≤ ClimbRise/
             //   frame (anchored to last APPLIED height, not the eased value — the ease decay otherwise eats the rise).
             //   The height sub also owns the CLIFF logic: pinned+occluded → the boom glides toward the player at
-            //   GROUND_GLIDE_K·current/frame (progressive ratchet over the lip; floor GLIDE_MIN_DIST), and while
-            //   descending (excess > DESCENT_HOLD) the boom may shorten but never extend (kills the lip-crossover
+            //   GroundGlideGain·current/frame (progressive ratchet over the lip; floor GlideMinDistance), and while
+            //   descending (excess > DescentHold) the boom may shorten but never extend (kills the lip-crossover
             //   bounce). The SWEPT-SLIDE (persisted origin E_prev @0x01F10050, mailbox data page — off the code page
             //   so PCSX2 doesn't re-JIT per frame) resolves wall contact on the authored-normal side via the weighted
-            //   d/h/θ decomposition (SLIDE_BIAS = angle share); |n_t|-scaled friction (head-on undamped →
-            //   SLIDE_FRICTION keep at full tangency); θ REACQUISITION (SLIDE_GAIN, stick-gated) slides toward rest;
-            //   occlusion-gated GEOMETRIC CLIMB h = REST_H + CLIMB_K·(BASE−d')² (LOS pivot→E_prev, 5th cast, flag
+            //   d/h/θ decomposition (SlideBias = angle share); |n_t|-scaled friction (head-on undamped →
+            //   SlideFriction keep at full tangency); θ REACQUISITION (SlideGain, stick-gated) slides toward rest;
+            //   occlusion-gated GEOMETRIC CLIMB h = RestHeight + CLIMB_K·(BASE−d')² (LOS pivot→E_prev, 5th cast, flag
             //   @0x54(sp) — NOT 0x98, the corner-verify spill slot); CORNER VERIFY resolves a second plane (min-norm)
             //   for concave seams. Vanilla height clamps NOP'd BOTH ways (floor snap 0x16BC54 + ceiling snap 0x16BC0C
             //   — the 60-unit ceiling silently capped every tall-cliff mechanism until found). ⚠ EE gotchas:
             //   c.OLT.s/sqrt.s/max.s/min.s are .word-encoded — DERIVE from the formula, fd is bits 10:6 (the fd=31
             //   no-op bug); nop after mtc1/FP-compare; CheckHit args 5-7 = REGISTERS t0/t1/t2 (hitOut/mode/skip) —
             //   set explicitly at every cast, NEVER inherit (stale t2 = the mask-skipping saga). [[native-camera-functions]]
-            const float BASE_DIST   = 70f;   // resting orbit distance when nothing blocks (vanilla
+            const float BaseDistance   = 70f;   // resting orbit distance when nothing blocks (vanilla
                                              // EdInitCameraParam's camera_near_dist ~70; was 80 during
                                              // the camera rework — reverted to vanilla feel 2026-08)
-            const float REST_H      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
-            const float CEIL_DIST   = 80f;  // how far UP the ceiling probe looks for a tunnel roof to duck under
-            const float MIN_CEIL_CLEAR = 4f;// eye stays this far BELOW a detected ceiling (tunnel duck depth)
-            const float STICK_DEADZONE = 0.3f; // right-stick Y below this |deflection| (0..1) does nothing
-            const float STICK_SCALE    = -25f; // manual height offset at full stick deflection (up = raise)
-            const float STICK_EASE     = 0.1f; // per-frame ease of the stick offset (LOW = gentle onset)
-            const float HEIGHT_EASE = 0.3f;  // per-frame ease of height toward its target
-            const float DIST_EASE   = 0.3f; // per-frame ease of horizontal distance toward its target
-            const float SLIDE_MARGIN = 8f;   // swept-slide standoff + proximity-extension reach. KEEP <= MARGIN (else the two setpoints oscillate)
-            const float SLIDE_BIAS = 0.125f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
-            const float SLIDE_FRICTION = 0.6f; // contact drag at FULL tangency (keep-floor); head-on contact is undamped — keep = 1 − (1−F)·|n_t|
-            float SLIDE_FRICTION_INV = 1f - SLIDE_FRICTION;   // injected form (asm folds 1−F to save the 1.0 load)
-            const float CLIMB_PEAK = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
-            float CLIMB_K = (CLIMB_PEAK - REST_H) / (BASE_DIST * BASE_DIST);   // quadratic climb gain - zero slope at touch
-            const float CLIMB_RISE = 2f;     // climb RE-ENABLED for pull-in only (its intrusion term max(BASE−d', 0)
+            const float RestHeight      = 5f;   // resting eye height above the pivot (flat — no slope-rise/climb anymore)
+            const float CeilingProbeDistance   = 80f;  // how far UP the ceiling probe looks for a tunnel roof to duck under
+            const float MinCeilingClearance = 4f;// eye stays this far BELOW a detected ceiling (tunnel duck depth)
+            const float StickDeadzone = 0.3f; // right-stick Y below this |deflection| (0..1) does nothing
+            const float StickScale    = -25f; // manual height offset at full stick deflection (up = raise)
+            const float StickEase     = 0.1f; // per-frame ease of the stick offset (LOW = gentle onset)
+            const float HeightEase = 0.3f;  // per-frame ease of height toward its target
+            const float DistanceEase   = 0.3f; // per-frame ease of horizontal distance toward its target
+            const float SlideMargin = 8f;   // swept-slide standoff + proximity-extension reach. KEEP <= MARGIN (else the two setpoints oscillate)
+            const float SlideBias = 0.125f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
+            const float SlideFriction = 0.6f; // contact drag at FULL tangency (keep-floor); head-on contact is undamped — keep = 1 − (1−F)·|n_t|
+            float SLIDE_FRICTION_INV = 1f - SlideFriction;   // injected form (asm folds 1−F to save the 1.0 load)
+            const float ClimbPeak = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
+            float CLIMB_K = (ClimbPeak - RestHeight) / (BaseDistance * BaseDistance);   // quadratic climb gain - zero slope at touch
+            const float ClimbRise = 2f;     // climb RE-ENABLED for pull-in only (its intrusion term max(BASE−d', 0)
                                              // is zero at/beyond rest, so it natively fires only when pinched in), at
                                              // the original rate cap. Composes with the height freeze: the clamp chain
                                              // max(min(curve, last+RISE), h_e) ratchets the eye UP over the wall while
                                              // pinned; descent back to rest goes through the ease once d recovers past
                                              // the gate. Occlusion-gated (visible only) — occlusion still moves nothing.
-            const float SLIDE_GAIN = 0f;     // 0 = θ auto-slide DISABLED (same user rule — no automatic motion at/inside
+            const float SlideGain = 0f;     // 0 = θ auto-slide DISABLED (same user rule — no automatic motion at/inside
                                              // rest; it only ever acted on contact frames. PutVal steps 0.0625/0.125/0.25)
-            const float MIN_GROUND_CLEAR = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
-            const float H_FALL_RATE    = 2f;    // max WORLD-space height drop per frame (absolute descent bound — a falling player outruns the camera)
-            const float WARP_BREAK     = 400f; // world-y discontinuity beyond which the descent bound is skipped (true warps only —
+            const float MinGroundClearance = 6f; // eye never gets closer than this to the ground under it (stick-down guard)
+            const float HeightFallRate    = 2f;    // max WORLD-space height drop per frame (absolute descent bound — a falling player outruns the camera)
+            const float WarpBreak     = 400f; // world-y discontinuity beyond which the descent bound is skipped (true warps only —
             // the eased desired-height drops ~30% of the offset per frame, so a LONG fall legitimately opens a
             // gap of hundreds of units; 400 misread that as a warp and released the bound mid-fall)
-            const float GROUND_GLIDE_K = 0f; // 0 = glide DISABLED (same user rule — the pinned+occluded pull-in was the
+            const float GroundGlideGain = 0f; // 0 = glide DISABLED (same user rule — the pinned+occluded pull-in was the
                                              // camera "trying to clear the occlusion" on its own; occlusion no longer
                                              // drives any automatic movement)
-            const float GLIDE_MIN_DIST = 12f;   // the ground glide never pulls the boom closer than this
-            const float DESCENT_HOLD   = 15f;   // height excess above rest that freezes OUTWARD dist recovery (kills the lip-crossover bounce)
+            const float GlideMinDistance = 12f;   // the ground glide never pulls the boom closer than this
+            const float DescentHold   = 15f;   // height excess above rest that freezes OUTWARD dist recovery (kills the lip-crossover bounce)
             // Assembled template (378 words) from tools/town_camera_collision.s — pull-in + ceiling-duck + stick, one-sided _c, no climb. The KNOBS are the consts above, NOT the hex — they get
             // written into the flagged word slots after this literal (PutVal/PutEase, indices guarded). Regenerate this
             // array via mips_asm.py only if the CODE changes. R5900 quirks: c.OLT.s / sqrt.s are .word-encoded; a nop
@@ -232,37 +232,37 @@ namespace Dark_Cloud_Improved_Version
                 pullIn[luiIdx] = 0x3C080000u | (b >> 16);
                 pullIn[oriIdx] = 0x35080000u | (b & 0xFFFF);
             }
-            float STICK_DZ2 = STICK_DEADZONE * STICK_DEADZONE;   // deadzone² (compared vs stickY²)
+            float STICK_DZ2 = StickDeadzone * StickDeadzone;   // deadzone² (compared vs stickY²)
             // ⚠ slot indices are +2 from the 2026-08 winding-agnostic insert (jal cameraNormSide + nop at
             //   words 14/15 of town_camera_collision.s) — every slot at/after word 14 shifted by 2.
-            PutVal(144, BASE_DIST, nameof(BASE_DIST));   // resting dist target
-            PutVal(436, BASE_DIST, nameof(BASE_DIST));   // reacquisition rest
-            PutVal(453, BASE_DIST, nameof(BASE_DIST));   // climb intrusion reference
-            // NOTE: word 147 (the height-target REST_H) is now a `lw $t0,0x28($t3)` that reads REST_H from the
+            PutVal(144, BaseDistance, nameof(BaseDistance));   // resting dist target
+            PutVal(436, BaseDistance, nameof(BaseDistance));   // reacquisition rest
+            PutVal(453, BaseDistance, nameof(BaseDistance));   // climb intrusion reference
+            // NOTE: word 147 (the height-target RestHeight) is now a `lw $t0,0x28($t3)` that reads RestHeight from the
             // CameraRestH mailbox (data-driven — see town_camera_collision.s). The mod writes town-rest (5) there
             // normally and the spot's fishing height while a session is live, so the fishing rest height is a
             // TARGET the camera eases to, not a per-frame hard clamp. So NO PutVal(147) here anymore.
-            PutVal(471, REST_H, nameof(REST_H));   // climb-curve base (still baked at town rest — climb only RAISES, so it's inert while the fishing rest is higher)
-            PutVal(43, CEIL_DIST, nameof(CEIL_DIST));
-            PutVal(155, MIN_CEIL_CLEAR, nameof(MIN_CEIL_CLEAR));   // tunnel-duck clearance
-            PutVal(168, MIN_GROUND_CLEAR, nameof(MIN_GROUND_CLEAR));
-            PutVal(480, CLIMB_RISE, nameof(CLIMB_RISE));   // climb rise rate cap
-            PutVal(271, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // proximity-extension reach
-            PutVal(349, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // need standoff
-            PutVal(562, SLIDE_MARGIN, nameof(SLIDE_MARGIN));   // corner second-resolution standoff
-            PutVal(442, SLIDE_GAIN, nameof(SLIDE_GAIN));   // θ reacquisition
-            PutVal(118, STICK_SCALE, nameof(STICK_SCALE));
+            PutVal(471, RestHeight, nameof(RestHeight));   // climb-curve base (still baked at town rest — climb only RAISES, so it's inert while the fishing rest is higher)
+            PutVal(43, CeilingProbeDistance, nameof(CeilingProbeDistance));
+            PutVal(155, MinCeilingClearance, nameof(MinCeilingClearance));   // tunnel-duck clearance
+            PutVal(168, MinGroundClearance, nameof(MinGroundClearance));
+            PutVal(480, ClimbRise, nameof(ClimbRise));   // climb rise rate cap
+            PutVal(271, SlideMargin, nameof(SlideMargin));   // proximity-extension reach
+            PutVal(349, SlideMargin, nameof(SlideMargin));   // need standoff
+            PutVal(562, SlideMargin, nameof(SlideMargin));   // corner second-resolution standoff
+            PutVal(442, SlideGain, nameof(SlideGain));   // θ reacquisition
+            PutVal(118, StickScale, nameof(StickScale));
             PutEase(110, 111, STICK_DZ2, nameof(STICK_DZ2));
-            PutEase(129, 130, STICK_EASE, nameof(STICK_EASE));
-            PutEase(181, 182, HEIGHT_EASE, nameof(HEIGHT_EASE));
-            PutEase(197, 198, DIST_EASE, nameof(DIST_EASE));
-            PutEase(374, 375, SLIDE_BIAS, nameof(SLIDE_BIAS));
+            PutEase(129, 130, StickEase, nameof(StickEase));
+            PutEase(181, 182, HeightEase, nameof(HeightEase));
+            PutEase(197, 198, DistanceEase, nameof(DistanceEase));
+            PutEase(374, 375, SlideBias, nameof(SlideBias));
             PutEase(423, 424, SLIDE_FRICTION_INV, nameof(SLIDE_FRICTION_INV));
             PutEase(466, 467, CLIMB_K, nameof(CLIMB_K));
             if (pullIn.Length > 634)   // 0x14B838 + 634*4 == 0x14C220 == set2DSprite_Start: flush, no headroom left
                 throw new IOException($"townCameraCollision.bin is {pullIn.Length} words — overruns set2DSprite_Start @0x14C220 (max 634).");
             for (int i = 0; i < pullIn.Length; i++)
-                WrU32(fs, ElfOff(PULLIN_VA + (uint)(i * 4)), pullIn[i]);
+                WrU32(fs, ElfOff(PullInAddr + (uint)(i * 4)), pullIn[i]);
             // Camera-cave auxiliary bank (tools/camera_norm_side.s, dead CharaChange region past
             // fishlineUncastGate): entry @0x228F00 = gather-count export (Mailbox.CamGatherCount; called by
             // the cave at word 14), SubA @0x228F40 / SubB @0x229000 = per-contact WINDING-AGNOSTIC normal
@@ -285,7 +285,7 @@ namespace Dark_Cloud_Improved_Version
             uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
             // REACQUISITION GATE (word 3 of the sub, 2026-08, HEIGHT-ONLY since the recovery fix): when
             // wall-pinched strictly inside rest the sub freezes only the HEIGHT target at current — the
-            // DIST target always seeks BASE_DIST so a wall-pinned camera recovers back out to resting
+            // DIST target always seeks BaseDistance so a wall-pinned camera recovers back out to resting
             // distance once unconstrained (the swept-slide caps it against walls meanwhile); height
             // unfreezes as soon as distance recovers past the gate. Slot 4 = the gate threshold, BASE−1:
             // STRICT so open-field rest (d eases asymptotically to BASE) never freezes — the right-stick
@@ -294,15 +294,15 @@ namespace Dark_Cloud_Improved_Version
             //   land at nearly the same world y — Queens→Brownboo Δy≈110, under the 400 y-break — so the
             //   y-only test left the descent bound grinding the eye down from the SOURCE map's height =
             //   the warp-arrival pan. E_prev >128u from the ref in X or Z now skips the bound.)
-            PutValIn(heightFn, 4, BASE_DIST - 1f, "REACQ_GATE");
-            PutValIn(heightFn, 43, WARP_BREAK, nameof(WARP_BREAK));
-            PutValIn(heightFn, 50, H_FALL_RATE, nameof(H_FALL_RATE));
-            PutValIn(heightFn, 68, GROUND_GLIDE_K, nameof(GROUND_GLIDE_K));
-            PutValIn(heightFn, 73, GLIDE_MIN_DIST, nameof(GLIDE_MIN_DIST));
-            PutValIn(heightFn, 81, DESCENT_HOLD, nameof(DESCENT_HOLD));
+            PutValIn(heightFn, 4, BaseDistance - 1f, "REACQ_GATE");
+            PutValIn(heightFn, 43, WarpBreak, nameof(WarpBreak));
+            PutValIn(heightFn, 50, HeightFallRate, nameof(HeightFallRate));
+            PutValIn(heightFn, 68, GroundGlideGain, nameof(GroundGlideGain));
+            PutValIn(heightFn, 73, GlideMinDistance, nameof(GlideMinDistance));
+            PutValIn(heightFn, 81, DescentHold, nameof(DescentHold));
             for (int i = 0; i < heightFn.Length; i++)
                 WrU32(fs, ElfOff(0x0027D090 + (uint)(i * 4)), heightFn[i]);
-            WrU32(fs, ElfOff(HOOK_VA), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
+            WrU32(fs, ElfOff(HookAddr), 0x0C052E0E);        // retarget jal CheckHitVertical → our pull-in @0x14B838
         }
 
         // ── Fishing camera → center on the bobber instead of the player/bobber midpoint ──────────────
@@ -352,18 +352,18 @@ namespace Dark_Cloud_Improved_Version
         /// per tick — a 0 there would drop the camera to height 0.</summary>
         internal static void PatchFishingCameraHeight(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint LUI_VA = 0x0016C2DC, MTC1_VA = 0x0016C2E0;
-            const uint VAN_LUI = 0x3C024220, VAN_MTC1 = 0x44826000;   // lui $2,0x4220 (40.0f) ; mtc1 $2,$f12
-            uint gotLui = RdU32(fs, ElfOff(LUI_VA)), gotMtc1 = RdU32(fs, ElfOff(MTC1_VA));
-            if (gotLui != VAN_LUI || gotMtc1 != VAN_MTC1)
-                throw new IOException($"Fishing camera-height site 0x{LUI_VA:X} is not vanilla " +
+            const uint LuiAddr = 0x0016C2DC, Mtc1Addr = 0x0016C2E0;
+            const uint VanillaLui = 0x3C024220, VanillaMtc1 = 0x44826000;   // lui $2,0x4220 (40.0f) ; mtc1 $2,$f12
+            uint gotLui = RdU32(fs, ElfOff(LuiAddr)), gotMtc1 = RdU32(fs, ElfOff(Mtc1Addr));
+            if (gotLui != VanillaLui || gotMtc1 != VanillaMtc1)
+                throw new IOException($"Fishing camera-height site 0x{LuiAddr:X} is not vanilla " +
                                       $"(got 0x{gotLui:X8}/0x{gotMtc1:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
 
             const uint SLOT = (uint)(CodeCaves.Mailbox.FishCamHeight & 0x1FFFFFFF);   // guest (PINE addr minus the 0x20000000 view)
             uint hi = SLOT >> 16, lo = SLOT & 0xFFFF;
             if (lo >= 0x8000) hi += 1;                       // lwc1's offset is SIGNED — compensate like the assembler
-            WrU32(fs, ElfOff(LUI_VA),  0x3C020000u | hi);                      // lui  $2,hi
-            WrU32(fs, ElfOff(MTC1_VA), 0xC4000000u | (2u << 21) | (12u << 16) | lo);  // lwc1 $f12,lo($2)
+            WrU32(fs, ElfOff(LuiAddr),  0x3C020000u | hi);                      // lui  $2,hi
+            WrU32(fs, ElfOff(Mtc1Addr), 0xC4000000u | (2u << 21) | (12u << 16) | lo);  // lwc1 $f12,lo($2)
         }
 
         // ── Fishing camera-collision gather: see ALL camera walls while fishing ──────────────────────
@@ -375,12 +375,12 @@ namespace Dark_Cloud_Improved_Version
         // Fix: one word — the fishing path's `li a3,1` becomes `ori a3,zero,0xffff`, same mask as walking.
         internal static void PatchFishingCameraGather(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint MASK_VA = 0x0016AF4C;   // fishing-path `li a3,0x1` feeding jal PickUpCameraPoly @0x16AF50
-            uint got = RdU32(fs, ElfOff(MASK_VA));
+            const uint FishingMaskAddr = 0x0016AF4C;   // fishing-path `li a3,0x1` feeding jal PickUpCameraPoly @0x16AF50
+            uint got = RdU32(fs, ElfOff(FishingMaskAddr));
             if (got == 0x3407FFFF) return;     // already patched (idempotent re-run)
             if (got != 0x24070001)
-                throw new IOException($"Fishing camera-gather mask site 0x{MASK_VA:X} is not vanilla `li a3,1` (got 0x{got:X8}) — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(MASK_VA), 0x3407FFFF);   // ori a3,zero,0xffff — full camera-poly mask while fishing
+                throw new IOException($"Fishing camera-gather mask site 0x{FishingMaskAddr:X} is not vanilla `li a3,1` (got 0x{got:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(FishingMaskAddr), 0x3407FFFF);   // ori a3,zero,0xffff — full camera-poly mask while fishing
         }
     }
 }

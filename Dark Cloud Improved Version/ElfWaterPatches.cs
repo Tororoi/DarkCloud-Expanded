@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using static Dark_Cloud_Improved_Version.IsoBytes;
-using static Dark_Cloud_Improved_Version.Mips;
+using static Dark_Cloud_Improved_Version.MipsAsm;
 using static Dark_Cloud_Improved_Version.IsoPatcher;
 
 namespace Dark_Cloud_Improved_Version
@@ -38,7 +38,7 @@ namespace Dark_Cloud_Improved_Version
         // ENTERED — fall-through is a reference no target-scan will ever show.
         internal static void PatchDrawWaterCompaction(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint SPAN_START = 0x001A3768;   // hosts HELPER + call sites + the water-redraw HOOK_CAVE
+            const uint SpanStart = 0x001A3768;   // hosts HELPER + call sites + the water-redraw HOOK_CAVE
             uint[] vanillaSpan =
             {
                 0x8E0200F4, 0x00021080, 0x00541021, 0x8C440004, 0x0C05C080, 0x00000000,
@@ -83,7 +83,7 @@ namespace Dark_Cloud_Improved_Version
             //    the submerged body never appeared even after the texture-group fix. Placed AFTER the
             //    relocated unconditional `b` so normal DrawWater flow can never fall into it (same
             //    fall-through rule as the helper/hook cave).
-            const uint B1_START = 0x001A36F8;
+            const uint Block1Start = 0x001A36F8;
             uint[] vanillaB1 =
             {
                 0x72402628, 0x27A50080, 0x8E5900A0, 0x8F390014, 0x0320F809, 0x00000000,
@@ -100,15 +100,15 @@ namespace Dark_Cloud_Improved_Version
             };
 
             for (int i = 0; i < vanillaSpan.Length; i++)
-                if (RdU32(fs, ElfOff(SPAN_START + (uint)i * 4)) != vanillaSpan[i])
-                    throw new IOException($"DrawWater compaction site 0x{SPAN_START + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+                if (RdU32(fs, ElfOff(SpanStart + (uint)i * 4)) != vanillaSpan[i])
+                    throw new IOException($"DrawWater compaction site 0x{SpanStart + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
             for (int i = 0; i < vanillaB1.Length; i++)
-                if (RdU32(fs, ElfOff(B1_START + (uint)i * 4)) != vanillaB1[i])
-                    throw new IOException($"DrawWater compaction site 0x{B1_START + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+                if (RdU32(fs, ElfOff(Block1Start + (uint)i * 4)) != vanillaB1[i])
+                    throw new IOException($"DrawWater compaction site 0x{Block1Start + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
             for (int i = 0; i < patchedSpan.Length; i++)
-                WrU32(fs, ElfOff(SPAN_START + (uint)i * 4), patchedSpan[i]);
+                WrU32(fs, ElfOff(SpanStart + (uint)i * 4), patchedSpan[i]);
             for (int i = 0; i < patchedB1.Length; i++)
-                WrU32(fs, ElfOff(B1_START + (uint)i * 4), patchedB1[i]);
+                WrU32(fs, ElfOff(Block1Start + (uint)i * 4), patchedB1[i]);
         }
 
         /// <summary>
@@ -150,10 +150,10 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void PatchWaterRedraw(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint HOOK_VA = 0x0017C1DC, HOOK_DELAY_VA = 0x0017C1E0;
-            const uint VAN_HOOK_LW = 0x8F829074, VAN_HOOK_BNE = 0x14400081;   // lw v0,-0x6f8c(gp) ; bne v0,zero,+0x81(->0x17C3E8)
-            const uint PAY_START = 0x0017BC00;    // GameMode-match payload — becomes stub(3) + relocated-copy(46)
-            const uint HOOK_CAVE_VA = 0x001A3858; // inside DrawWater, freed by PatchDrawWaterCompaction
+            const uint HookAddr = 0x0017C1DC, HookDelayAddr = 0x0017C1E0;
+            const uint VanillaHookLw = 0x8F829074, VanillaHookBne = 0x14400081;   // lw v0,-0x6f8c(gp) ; bne v0,zero,+0x81(->0x17C3E8)
+            const uint PayloadStart = 0x0017BC00;    // GameMode-match payload — becomes stub(3) + relocated-copy(46)
+            const uint HookCaveAddr = 0x001A3858; // inside DrawWater, freed by PatchDrawWaterCompaction
 
             uint[] vanillaPayload =
             {
@@ -214,7 +214,7 @@ namespace Dark_Cloud_Improved_Version
             //    payload's DIRECT blit must not overtake it, same race as the player capture) before
             //    joining the payload. Region entry is pure fall-through from 0x17BB70 (whole-ELF scan:
             //    nothing branches into it, not even its first word).
-            const uint GATE_VA = 0x0017BB74;
+            const uint GateAddr = 0x0017BB74;
             uint[] vanillaGate =
             {
                 0x8F838760, 0x2402000A, 0x10620020, 0x00000000, 0x24020005, 0x1062001D,
@@ -246,16 +246,16 @@ namespace Dark_Cloud_Improved_Version
             //   via MGDraw at the hook rendered OPAQUE over the body (either authored-opaque or missing the
             //   native pass's blend state), burying the player.
 
-            uint gotLw = RdU32(fs, ElfOff(HOOK_VA)), gotBne = RdU32(fs, ElfOff(HOOK_DELAY_VA));
-            if (gotLw != VAN_HOOK_LW || gotBne != VAN_HOOK_BNE)
-                throw new IOException($"Water-redraw hook site 0x{HOOK_VA:X} is not vanilla " +
+            uint gotLw = RdU32(fs, ElfOff(HookAddr)), gotBne = RdU32(fs, ElfOff(HookDelayAddr));
+            if (gotLw != VanillaHookLw || gotBne != VanillaHookBne)
+                throw new IOException($"Water-redraw hook site 0x{HookAddr:X} is not vanilla " +
                                       $"(got 0x{gotLw:X8}/0x{gotBne:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
             for (int i = 0; i < vanillaPayload.Length; i++)
-                if (RdU32(fs, ElfOff(PAY_START + (uint)i * 4)) != vanillaPayload[i])
-                    throw new IOException($"Water-redraw payload site 0x{PAY_START + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+                if (RdU32(fs, ElfOff(PayloadStart + (uint)i * 4)) != vanillaPayload[i])
+                    throw new IOException($"Water-redraw payload site 0x{PayloadStart + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
             for (int i = 0; i < vanillaGate.Length; i++)
-                if (RdU32(fs, ElfOff(GATE_VA + (uint)i * 4)) != vanillaGate[i])
-                    throw new IOException($"Water-redraw gate site 0x{GATE_VA + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
+                if (RdU32(fs, ElfOff(GateAddr + (uint)i * 4)) != vanillaGate[i])
+                    throw new IOException($"Water-redraw gate site 0x{GateAddr + (uint)i * 4:X} is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
 
             // ── EARLY-PLAYER hook: the `jal ReloadTexture(mgr, pkt, 0x15)` at 0x17BB48 is retargeted to
             //    EARLY_STUB, which (when armed) binds the player's group 8, MGDraws the player, then replays
@@ -264,20 +264,20 @@ namespace Dark_Cloud_Improved_Version
             //    version) required re-binding 0x15 AFTER the anime-step, which clobbered the texture
             //    manager's staleness bookkeeping and froze all water texture animation. Delay slot at
             //    0x17BB4C is a vanilla nop, untouched; 0x17BB6C stays fully vanilla.
-            const uint HOOK2_VA = 0x0017BB48;
-            const uint VAN_HOOK2 = 0x0C04CC1C;   // jal ReloadTexture__15CTextureManagerFP13sceVif1Packeti
-            uint gotHook2 = RdU32(fs, ElfOff(HOOK2_VA));
-            if (gotHook2 != VAN_HOOK2)
-                throw new IOException($"Early-player hook site 0x{HOOK2_VA:X} is not vanilla " +
+            const uint Hook2Addr = 0x0017BB48;
+            const uint VanillaHook2 = 0x0C04CC1C;   // jal ReloadTexture__15CTextureManagerFP13sceVif1Packeti
+            uint gotHook2 = RdU32(fs, ElfOff(Hook2Addr));
+            if (gotHook2 != VanillaHook2)
+                throw new IOException($"Early-player hook site 0x{Hook2Addr:X} is not vanilla " +
                                       $"(got 0x{gotHook2:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
 
             for (int i = 0; i < patchedPayload.Length; i++)
-                WrU32(fs, ElfOff(PAY_START + (uint)i * 4), patchedPayload[i]);
+                WrU32(fs, ElfOff(PayloadStart + (uint)i * 4), patchedPayload[i]);
             for (int i = 0; i < patchedGate.Length; i++)
-                WrU32(fs, ElfOff(GATE_VA + (uint)i * 4), patchedGate[i]);
-            WrU32(fs, ElfOff(HOOK2_VA), 0x0C05EEE9);   // jal EARLY_STUB (0x17BBA4)
-            WrU32(fs, ElfOff(HOOK_VA), J(HOOK_CAVE_VA));
-            WrU32(fs, ElfOff(HOOK_DELAY_VA), 0);   // nop — HOOK_CAVE replicates the displaced check itself
+                WrU32(fs, ElfOff(GateAddr + (uint)i * 4), patchedGate[i]);
+            WrU32(fs, ElfOff(Hook2Addr), 0x0C05EEE9);   // jal EARLY_STUB (0x17BBA4)
+            WrU32(fs, ElfOff(HookAddr), J(HookCaveAddr));
+            WrU32(fs, ElfOff(HookDelayAddr), 0);   // nop — HOOK_CAVE replicates the displaced check itself
         }
 
         // ── Cape early-draw (waterfall occlusion, low tide) ──────────────────────────────────────────
@@ -289,10 +289,10 @@ namespace Dark_Cloud_Improved_Version
         // too. MUST run AFTER PatchWaterRedraw (which writes the `jal MGDraw` this replaces).
         internal static void PatchCapeEarlyDraw(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint STUB_VA = 0x00228D40;   // dead CharaChange space, past the spray-bias shim (0x228D00, 60 B)
-            const uint HOOK_VA = 0x0017BBD0;   // EARLY_STUB `jal MGDraw` (patchedGate[23], set by PatchWaterRedraw)
-            if (RdU32(fs, ElfOff(HOOK_VA)) != 0x0C04BB60)   // = jal MGDraw (0x0012ED80)
-                throw new IOException($"Cape early-draw hook site 0x{HOOK_VA:X} is not `jal MGDraw` — PatchWaterRedraw must run first / unmodified ISO expected.");
+            const uint StubAddr = 0x00228D40;   // dead CharaChange space, past the spray-bias shim (0x228D00, 60 B)
+            const uint HookAddr = 0x0017BBD0;   // EARLY_STUB `jal MGDraw` (patchedGate[23], set by PatchWaterRedraw)
+            if (RdU32(fs, ElfOff(HookAddr)) != 0x0C04BB60)   // = jal MGDraw (0x0012ED80)
+                throw new IOException($"Cape early-draw hook site 0x{HookAddr:X} is not `jal MGDraw` — PatchWaterRedraw must run first / unmodified ISO expected.");
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.capeEarlyDraw.bin")
                 ?? throw new IOException("Embedded EE function missing: capeEarlyDraw.bin (reassemble tools/cape_early_draw.s and rebuild)");
@@ -300,8 +300,8 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFE0)   // first insn = addiu $sp,$sp,-0x20
                 throw new IOException($"capeEarlyDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal MGDraw → jal capeEarlyDraw (which re-does MGDraw + the cloth loop)
+                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal MGDraw → jal capeEarlyDraw (which re-does MGDraw + the cloth loop)
         }
     }
 }

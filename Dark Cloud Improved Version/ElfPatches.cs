@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using static Dark_Cloud_Improved_Version.IsoBytes;
-using static Dark_Cloud_Improved_Version.Mips;
+using static Dark_Cloud_Improved_Version.MipsAsm;
 using static Dark_Cloud_Improved_Version.IsoPatcher;
 using static Dark_Cloud_Improved_Version.ElfCameraPatches;
 using static Dark_Cloud_Improved_Version.ElfWaterPatches;
@@ -23,9 +23,9 @@ namespace Dark_Cloud_Improved_Version
         {
             uint[] w = {
                 Addiu(sp, sp, -0x20), Sw(a0, 0x14, sp), Sw(a1, 0x18, sp),
-                Move(a0, a1), Lui(a1, STR_VA >> 16), Ori(a1, a1, STR_VA & 0xFFFF), Addiu(a2, zero, 0),
+                Move(a0, a1), Lui(a1, BootCaveStringAddr >> 16), Ori(a1, a1, BootCaveStringAddr & 0xFFFF), Addiu(a2, zero, 0),
                 Jal(GetPackFile), 0,
-                Lui(t0, DIAG_VA >> 16), Sw(v0, (int)(DIAG_VA & 0xFFFF), t0),
+                Lui(t0, BootCaveDiagAddr >> 16), Sw(v0, (int)(BootCaveDiagAddr & 0xFFFF), t0),
                 Move(a1, v0), Lui(a0, SysTexMgr >> 16), Ori(a0, a0, SysTexMgr & 0xFFFF),
                 Addiu(a2, zero, -1), Addiu(a3, zero, 0), Addiu(t0, zero, 0),
                 Jal(EnterIMGFile), 0,
@@ -35,13 +35,13 @@ namespace Dark_Cloud_Improved_Version
             };
             var b = new byte[w.Length * 4];
             for (int i = 0; i < w.Length; i++) Array.Copy(BitConverter.GetBytes(w[i]), 0, b, i * 4, 4);
-            if (b.Length > CAVE_LEN) throw new InvalidOperationException($"cave {b.Length}B > {CAVE_LEN}B");
+            if (b.Length > BootCaveMaxBytes) throw new InvalidOperationException($"cave {b.Length}B > {BootCaveMaxBytes}B");
             return b;
         }
 
         internal static uint ElfPatchAndCrc(FileStream fs, Rec elf)
         {
-            long elfIso = (long)elf.Ext * SECTOR;
+            long elfIso = (long)elf.Ext * SectorBytes;
             byte[] eh = Rd(fs, elfIso, 0x34);
             uint phoff = U32(eh, 0x1c); ushort phent = BitConverter.ToUInt16(eh, 0x2a), phnum = BitConverter.ToUInt16(eh, 0x2c);
             long pOff = -1, pVa = -1;
@@ -57,12 +57,12 @@ namespace Dark_Cloud_Improved_Version
             byte[] cave = BuildCave();
             if (RdU32(fs, ElfOff(DETOUR_VA)) != Jal(LoadFile) || RdU32(fs, ElfOff(DETOUR_VA + 4)) != 0)
                 throw new IOException("Boot-loader patch site is not vanilla — is this an unmodified Dark Cloud (USA) ISO?");
-            byte[] caveWas = Rd(fs, ElfOff(CAVE_VA), cave.Length);
+            byte[] caveWas = Rd(fs, ElfOff(BootCaveAddr), cave.Length);
             foreach (byte x in caveWas) if (x != 0) throw new IOException("Boot-cave region not empty — unexpected ISO.");
 
-            Wr(fs, ElfOff(STR_VA), Encoding.ASCII.GetBytes("fishsign.img\0"));
-            Wr(fs, ElfOff(CAVE_VA), cave);
-            WrU32(fs, ElfOff(DETOUR_VA), J(CAVE_VA));
+            Wr(fs, ElfOff(BootCaveStringAddr), Encoding.ASCII.GetBytes("fishsign.img\0"));
+            Wr(fs, ElfOff(BootCaveAddr), cave);
+            WrU32(fs, ElfOff(DETOUR_VA), J(BootCaveAddr));
 
             PatchFishingLoadFish(fs, ElfOff);
             PatchFishBox(fs, ElfOff);
@@ -96,10 +96,10 @@ namespace Dark_Cloud_Improved_Version
         // (Stub = tools/canal_evict_fade_hook.s → Resources/isoPatch/canalEvictFadeHook.bin.)
         internal static void PatchCanalEvictFadeHook(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint STUB_VA = 0x00228BB0;   // dead CharaChangeLoop (reclaimable; jal-legal ELF code)
-            const uint HOOK_VA = 0x00189970;   // EdFadeInOut fade-out `fade_end = 1` store
-            if (RdU32(fs, ElfOff(HOOK_VA)) != 0xAF83920C)
-                throw new IOException($"Canal-evict hook site 0x{HOOK_VA:X} is not vanilla `sw $v1,-0x6df4($gp)` — unmodified Dark Cloud (USA) ISO expected.");
+            const uint StubAddr = 0x00228BB0;   // dead CharaChangeLoop (reclaimable; jal-legal ELF code)
+            const uint HookAddr = 0x00189970;   // EdFadeInOut fade-out `fade_end = 1` store
+            if (RdU32(fs, ElfOff(HookAddr)) != 0xAF83920C)
+                throw new IOException($"Canal-evict hook site 0x{HookAddr:X} is not vanilla `sw $v1,-0x6df4($gp)` — unmodified Dark Cloud (USA) ISO expected.");
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.canalEvictFadeHook.bin")
                 ?? throw new IOException("Embedded EE function missing: canalEvictFadeHook.bin (reassemble tools/canal_evict_fade_hook.s and rebuild)");
@@ -107,8 +107,8 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0xAF83920C)
                 throw new IOException($"canalEvictFadeHook.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
+                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
         }
 
         // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
@@ -119,10 +119,10 @@ namespace Dark_Cloud_Improved_Version
         // one-word swap. (Stub = tools/queens_spray_cave.s → Resources/isoPatch/queensSprayCave.bin.)
         internal static void PatchQueensSprayHook(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint STUB_VA = 0x00228C00;   // dead CharaChange space, past the fade hook (0x228BB0, ~64 B)
-            const uint HOOK_VA = 0x0017C5A0;   // MainDraw `jal EditEffectStep2` (convergence point before DrawEffect)
-            if (RdU32(fs, ElfOff(HOOK_VA)) != 0x0C059B78)   // = jal 0x00166de0
-                throw new IOException($"Queens-spray hook site 0x{HOOK_VA:X} is not vanilla `jal EditEffectStep2` — unmodified Dark Cloud (USA) ISO expected.");
+            const uint StubAddr = 0x00228C00;   // dead CharaChange space, past the fade hook (0x228BB0, ~64 B)
+            const uint HookAddr = 0x0017C5A0;   // MainDraw `jal EditEffectStep2` (convergence point before DrawEffect)
+            if (RdU32(fs, ElfOff(HookAddr)) != 0x0C059B78)   // = jal 0x00166de0
+                throw new IOException($"Queens-spray hook site 0x{HookAddr:X} is not vanilla `jal EditEffectStep2` — unmodified Dark Cloud (USA) ISO expected.");
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.queensSprayCave.bin")
                 ?? throw new IOException("Embedded EE function missing: queensSprayCave.bin (reassemble tools/queens_spray_cave.s and rebuild)");
@@ -130,8 +130,8 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFE0)   // first insn = addiu $sp,$sp,-0x20
                 throw new IOException($"queensSprayCave.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal EditEffectStep2 → jal queensSprayCave (which re-does that call)
+                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal EditEffectStep2 → jal queensSprayCave (which re-does that call)
         }
 
         // ── Spray velocity-bias shim ─────────────────────────────────────────────────────────────────
@@ -141,10 +141,10 @@ namespace Dark_Cloud_Improved_Version
         // this is transparent there. (Stub = tools/spray_bias_shim.s → Resources/isoPatch/sprayBiasShim.bin.)
         internal static void PatchSprayBiasShim(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint STUB_VA = 0x00228D00;   // dead CharaChange space, past the spray cave (0x228C00, 180 B)
-            const uint HOOK_VA = 0x00165184;   // EffectWaterSpray `jal EnterEffect`
-            if (RdU32(fs, ElfOff(HOOK_VA)) != 0x0C059260)   // = jal 0x00164980 (EnterEffect)
-                throw new IOException($"Spray-bias hook site 0x{HOOK_VA:X} is not vanilla `jal EnterEffect` — unmodified Dark Cloud (USA) ISO expected.");
+            const uint StubAddr = 0x00228D00;   // dead CharaChange space, past the spray cave (0x228C00, 180 B)
+            const uint HookAddr = 0x00165184;   // EffectWaterSpray `jal EnterEffect`
+            if (RdU32(fs, ElfOff(HookAddr)) != 0x0C059260)   // = jal 0x00164980 (EnterEffect)
+                throw new IOException($"Spray-bias hook site 0x{HookAddr:X} is not vanilla `jal EnterEffect` — unmodified Dark Cloud (USA) ISO expected.");
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.sprayBiasShim.bin")
                 ?? throw new IOException("Embedded EE function missing: sprayBiasShim.bin (reassemble tools/spray_bias_shim.s and rebuild)");
@@ -152,8 +152,8 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0801F2)   // first insn = lui $t0,0x1f2
                 throw new IOException($"sprayBiasShim.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(HOOK_VA), Jal(STUB_VA));   // jal EnterEffect → jal sprayBiasShim (which re-does that call)
+                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // jal EnterEffect → jal sprayBiasShim (which re-does that call)
         }
 
         // ── FishingLoadFish species-selection rewrite (baked, race-free) ─────────────────────────────
@@ -163,11 +163,11 @@ namespace Dark_Cloud_Improved_Version
         // keep their exact distributions, with two requested vanilla edits folded in: area 2 (Matataki)
         // Gummy->Niler and area 3 (East Harbor) Piccoly->Gobbler. Equal-weight pools are `rand%N -> byte
         // table` lookups, so adding a fish later is one table byte + bumping N (212 bytes of nop headroom
-        // remain in-region). Assembled by tools/iso_patch/asm_fishpools.py; the full original and new
+        // remain in-region). Assembled by tools/iso_patch/assemble_fish_pools.py; the full original and new
         // listings live in game_data/docs/fishing-loadfish-re.md.
         internal static void PatchFishingLoadFish(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint REGION_VA = 0x001A8A48;   // start of the per-slot species-selection region
+            const uint SpeciesRegionAddr = 0x001A8A48;   // start of the per-slot species-selection region
             // vanilla anchors spread across the region — reject a non-vanilla / already-patched ISO
             foreach (var (va, word) in new (uint va, uint word)[]
             {
@@ -214,7 +214,7 @@ namespace Dark_Cloud_Improved_Version
                 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
             };
             for (int i = 0; i < region.Length; i++)
-                WrU32(fs, ElfOff(REGION_VA + (uint)i * 4), region[i]);
+                WrU32(fs, ElfOff(SpeciesRegionAddr + (uint)i * 4), region[i]);
 
             // FishNum per area: default 6; area 0 -> 4 (native override kept); area 4 -> 5. The area-4
             // compare instruction @0x1a8998 doubles as the stored value, so the compare const stays 4 and
@@ -284,10 +284,10 @@ namespace Dark_Cloud_Improved_Version
         // (Cave = tools/fishline_uncast_gate.s. ISO-baked, so patching hot fishing code is safe.)
         internal static void PatchFishingUncastGate(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CAVE_VA = 0x00228E20;                       // dead CharaChange region (ex cast-scale slot)
-            const uint GATE_VA = 0x0016C6D0;                       // EdMoveChara: slti at,st_cnt,0x1f (check delay)
-            const uint LUI_VA = 0x001AA2D4, MTC_VA = 0x001AA2D8;   // CheckUkiHook tail: lui v0,0x40a0 ; mtc1 v0,f1
-            uint gotG = RdU32(fs, ElfOff(GATE_VA)), gotL = RdU32(fs, ElfOff(LUI_VA)), gotM = RdU32(fs, ElfOff(MTC_VA));
+            const uint UncastGateCaveAddr = 0x00228E20;                       // dead CharaChange region (ex cast-scale slot)
+            const uint GateAddr = 0x0016C6D0;                       // EdMoveChara: slti at,st_cnt,0x1f (check delay)
+            const uint LuiAddr = 0x001AA2D4, MtcAddr = 0x001AA2D8;   // CheckUkiHook tail: lui v0,0x40a0 ; mtc1 v0,f1
+            uint gotG = RdU32(fs, ElfOff(GateAddr)), gotL = RdU32(fs, ElfOff(LuiAddr)), gotM = RdU32(fs, ElfOff(MtcAddr));
             if (gotG != 0x2841001F || gotL != 0x3C0240A0 || gotM != 0x44820800)
                 throw new IOException($"Fishing uncast-gate sites are not vanilla (got 0x{gotG:X8}/0x{gotL:X8}/0x{gotM:X8}) — unmodified Dark Cloud (USA) ISO expected.");
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
@@ -297,15 +297,15 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C0840A0)   // first insn = lui $t0,0x40a0
                 throw new IOException($"fishlineUncastGate.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CAVE_VA + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(GATE_VA), 0x28410004);   // slti at,st_cnt,4 — consult the check almost immediately
+                WrU32(fs, ElfOff(UncastGateCaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(GateAddr), 0x28410004);   // slti at,st_cnt,4 — consult the check almost immediately
             // Route the tail through QueensDragCheck @0x229360 (camera_norm_side.s bank) FIRST: in Queens,
             // waiting-state only, a float dragged past the canal wall (|z|>49.5) or inside a bridge-pillar
             // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
             // settled-height cave below, unmodified. (Wall-stopped rest positions 48 / arch face 25 stay
             // fishable — the drag thresholds sit deliberately beyond them.)
-            WrU32(fs, ElfOff(LUI_VA), J(0x002294C0)); // height tail -> drag check -> settled-gated cave (v10 addr)
-            WrU32(fs, ElfOff(MTC_VA), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
+            WrU32(fs, ElfOff(LuiAddr), J(0x002294C0)); // height tail -> drag check -> settled-gated cave (v10 addr)
+            WrU32(fs, ElfOff(MtcAddr), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
             // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @0x229440, camera_norm_side.s) ──
             // FishLineStep's uki ground probe lifts the bobber onto ANY floor poly at its (x,z) — bridge
             // decks and pipe tops included (they're walkable, so they're in the fishing cpoly gather).
@@ -313,12 +313,12 @@ namespace Dark_Cloud_Improved_Version
             // y 8.7 -> 77.8 onto the pipes; also "cast under the bridge -> bobber on top". The gate skips
             // the lift in Queens when the floor sits above water+5 (deck/pipe top — the flight clamp keeps
             // Queens casts inside the canal, so real banks are unreachable; other towns stay vanilla).
-            const uint UKI_GND_VA = 0x001AA538, UKI_GND_D = 0x001AA53C;   // lui v0,0x3f80 ; mtc1 v0,f1
-            uint gotUG = RdU32(fs, ElfOff(UKI_GND_VA)), gotUGd = RdU32(fs, ElfOff(UKI_GND_D));
+            const uint UkiGroundLuiAddr = 0x001AA538, UkiGroundMtcAddr = 0x001AA53C;   // lui v0,0x3f80 ; mtc1 v0,f1
+            uint gotUG = RdU32(fs, ElfOff(UkiGroundLuiAddr)), gotUGd = RdU32(fs, ElfOff(UkiGroundMtcAddr));
             if (gotUG != 0x3C023F80 || gotUGd != 0x44820800)
                 throw new IOException($"Uki ground-lift site not vanilla (got 0x{gotUG:X8}/0x{gotUGd:X8}).");
-            WrU32(fs, ElfOff(UKI_GND_VA), J(0x00229690));  // ground store head -> overhead-floor-gated bank sub (v10 addr)
-            WrU32(fs, ElfOff(UKI_GND_D), 0);               // displaced mtc1 -> nop (sub redoes the store)
+            WrU32(fs, ElfOff(UkiGroundLuiAddr), J(0x00229690));  // ground store head -> overhead-floor-gated bank sub (v10 addr)
+            WrU32(fs, ElfOff(UkiGroundMtcAddr), 0);               // displaced mtc1 -> nop (sub redoes the store)
         }
 
         // ── Fishing rope split rest length ───────────────────────────────────────────────────────────
@@ -332,11 +332,11 @@ namespace Dark_Cloud_Improved_Version
         // cold-patch which touches the DIFFERENT anchor-load instructions). See the feasibility doc.
         internal static void PatchFishLineSplit(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint STUB_VA = 0x00228DC0, STEP_CAVE = 0x00228DEC;   // init_cave / step_cave (one bin)
-            const uint INIT_LWC1 = 0x001A9CAC, INIT_SUB = 0x001A9CB0;  // FishLineInit: lwc1 f0,distp ; sub.S f0,f1,f0
-            const uint STEP_LWC1 = 0x001AA7C8, STEP_SUB = 0x001AA7CC;  // FishLineStep: lwc1 f1,distp ; sub.S f2,f0,f1
-            if (RdU32(fs, ElfOff(INIT_LWC1)) != 0xC78087B4 || RdU32(fs, ElfOff(INIT_SUB)) != 0x46000801 ||
-                RdU32(fs, ElfOff(STEP_LWC1)) != 0xC78187B4 || RdU32(fs, ElfOff(STEP_SUB)) != 0x46010081)
+            const uint StubAddr = 0x00228DC0, StepCaveAddr = 0x00228DEC;   // init_cave / step_cave (one bin)
+            const uint InitLwc1Addr = 0x001A9CAC, InitSubAddr = 0x001A9CB0;  // FishLineInit: lwc1 f0,distp ; sub.S f0,f1,f0
+            const uint StepLwc1Addr = 0x001AA7C8, StepSubAddr = 0x001AA7CC;  // FishLineStep: lwc1 f1,distp ; sub.S f2,f0,f1
+            if (RdU32(fs, ElfOff(InitLwc1Addr)) != 0xC78087B4 || RdU32(fs, ElfOff(InitSubAddr)) != 0x46000801 ||
+                RdU32(fs, ElfOff(StepLwc1Addr)) != 0xC78187B4 || RdU32(fs, ElfOff(StepSubAddr)) != 0x46010081)
                 throw new IOException("FishLine-split sites are not vanilla `lwc1 distp`/`sub.S` — unmodified Dark Cloud (USA) ISO expected.");
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.fishlineSplitCaves.bin")
@@ -345,9 +345,9 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x2A080013)   // first insn = slti $t0,$s0,0x13
                 throw new IOException($"fishlineSplitCaves.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(STUB_VA + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(INIT_LWC1), J(STUB_VA));    WrU32(fs, ElfOff(INIT_SUB), 0);   // j init_cave ; nop
-            WrU32(fs, ElfOff(STEP_LWC1), J(STEP_CAVE));  WrU32(fs, ElfOff(STEP_SUB), 0);   // j step_cave ; nop
+                WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(InitLwc1Addr), J(StubAddr));    WrU32(fs, ElfOff(InitSubAddr), 0);   // j init_cave ; nop
+            WrU32(fs, ElfOff(StepLwc1Addr), J(StepCaveAddr));  WrU32(fs, ElfOff(StepSubAddr), 0);   // j step_cave ; nop
         }
 
         // (A "cast-trajectory scale" cave hooked into the FishLineSetUki/SetHook tails was tried here and

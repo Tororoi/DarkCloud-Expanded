@@ -7,7 +7,7 @@ canopies (hiyoke* incl. the nuki fringe) and the round roof chimney-pillar (ento
 
 The bake was REVERTED (2026-08: "not much benefit — just use the vanilla _c meshes"); this module
 survives as (a) the queens_viewer.py candidate overlay and (b) the home of split_tris /
-build_coll_mds, which tools/queens_h06.py uses for the h06 rebuild that DID ship.
+build_coll_mds, which tools/queens_snake_statue_collision.py uses for the h06 rebuild that DID ship.
 """
 import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -58,7 +58,7 @@ def _node_tris(scn, DIR, sub_name):
 def candidate_tris():
     """{part: [tris]} in RAW part-local coordinates (uncentered — bake frame)."""
     scn = load_scene('gedit/e03/scene.scn')
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     lods = lod_models('gedit/e03/scene.scn', r'e03h(04|05|08|09)$')
     out = {}
     for part in CAND_PARTS:
@@ -131,7 +131,7 @@ def build_coll_mds(old_mds, chunks, name_prefix='hc'):
 
 if __name__ == '__main__':
     scn = load_scene('gedit/e03/scene.scn')
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     for part, tris in candidate_tris().items():
         chunks = split_tris(tris)
         print(f'{part}: {len(tris)} tris -> {len(chunks)} nodes ({[len(c) for c in chunks]})')

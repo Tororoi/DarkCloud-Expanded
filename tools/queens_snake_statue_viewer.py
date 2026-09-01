@@ -7,9 +7,9 @@ queens_parts.bin) as a selectable layer in PART-LOCAL coordinates, plus referenc
 
 Workflow: click / shift+click / shift+drag polys of the "custom _a" layer, copy the triangle list
 from the panel, and hand it over with instructions (remove / replace) — edits land in
-tools/queens_h06_surgery.py (A_REMOVE_TRIS / A_EXTRA_TRIS) and re-export via tools/export_queens_parts.py.
+tools/queens_snake_statue_surgery_data.py (PLAYER_COLLISION_REMOVE_TRIS / PLAYER_COLLISION_ADD_TRIS) and re-export via tools/export_queens_parts.py.
 
-Run: python3 tools/h06_viewer.py -> game_data/queens/h06_viewer.html
+Run: python3 tools/queens_snake_statue_viewer.py -> game_data/queens/queens_snake_statue_viewer.html
 """
 import os, struct, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -18,13 +18,13 @@ from extract_scene_mesh import load_scene
 import scene_placed
 from georama_collision import parse_coll_mdt
 from scene_viewer_html import build_html
-from queens_h06 import full_visual_tris, apply_surgery, cylinder_c_tris, C_SCALE_Y, C_RADIUS_MUL, C_SEGMENTS
+from queens_snake_statue_collision import full_visual_tris, apply_surgery, camera_hull_cylinder_tris, CAMERA_HULL_SCALE_Y, CAMERA_HULL_RADIUS_MUL, CAMERA_HULL_SEGMENTS
 
 OUT = os.path.join(HERE, "..", "game_data", "queens")
 os.makedirs(OUT, exist_ok=True)
 
 scn = load_scene('gedit/e03/scene.scn')
-DIR = scene_placed._scndir(scn)
+DIR = scene_placed.scn_directory_map(scn)
 off, size = DIR['e03h06']
 sub = scn[off:off + size]
 
@@ -46,7 +46,7 @@ def coll_block(slot):
 
 van_a = coll_block(0x78)
 van_c = coll_block(0xc0)
-new_c = cylinder_c_tris(sub)   # exact same geometry the bake ships
+new_c = camera_hull_cylinder_tris(sub)   # exact same geometry the bake ships
 
 layers = [
     {'key': 'acand', 'label': f'custom _a (BAKED: full visual, {len(cand)} tris) — SELECT here',
@@ -55,12 +55,12 @@ layers = [
      'tris': van_a, 'color': [120, 255, 140], 'alpha': 0.5, 'border': '#6f8', 'on': False},
     {'key': 'van_c', 'label': f'vanilla _c (cyl, {len(van_c)} tris)',
      'tris': van_c, 'color': [80, 200, 255], 'alpha': 0.4, 'border': '#5bf', 'on': False},
-    {'key': 'new_c', 'label': f'BAKED _c (head-centered cylinder: {C_SEGMENTS}-gon, height x{C_SCALE_Y:g}, r x{C_RADIUS_MUL:g}, {len(new_c)} tris)',
+    {'key': 'new_c', 'label': f'BAKED _c (head-centered cylinder: {CAMERA_HULL_SEGMENTS}-gon, height x{CAMERA_HULL_SCALE_Y:g}, r x{CAMERA_HULL_RADIUS_MUL:g}, {len(new_c)} tris)',
      'tris': new_c, 'color': [255, 200, 80], 'alpha': 0.4, 'border': '#fc5', 'on': False},
 ]
 html = build_html(
     title="Queens e03h06 — collision surgery (part-local coords)",
     layers=layers, coord_note="part-local, ground y=0")
-path = os.path.join(OUT, "h06_viewer.html")
+path = os.path.join(OUT, "queens_snake_statue_viewer.html")
 open(path, "w").write(html)
 print(f"-> {os.path.normpath(path)}")

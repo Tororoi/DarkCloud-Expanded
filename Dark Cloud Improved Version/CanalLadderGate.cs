@@ -9,7 +9,9 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class CanalLadderGate
     {
-        // Canal-ladder tide gate: the injected event points all sit at x≈LAD_X (706) — the climb pair (rec
+        private static void Log(string m) => CanalTide.Log(m, nameof(CanalLadderGate));
+
+        // Canal-ladder tide gate: the injected event points all sit at x≈LadderWorldX (706) — the climb pair (rec
         // types 4/5) plus our co-located type-3 message point (label 402). CheckEventPoint bails on
         // enabled(+0x00)==0, and EdGetEvent matches ONE point, so flipping enabled by tide switches which one
         // the X-press hits: LOW → climb pair on / message off (real climb); otherwise → climb pair off /
@@ -17,8 +19,8 @@ namespace Dark_Cloud_Improved_Version
         private const long EvArrPtr = 0x01D19700, EvCountAddr = 0x01D19704;  // live ED_EVENT_POINT array ptr + count (guest form of EventPoints.ArrayPtr/Count)
         private const long EvStride = EventPoints.Stride, EvEnabled = EventPoints.Enabled, EvType = EventPoints.Type,
                            EvLabel = EventPoints.ItemOrLabel, EvPos = EventPoints.Position;
-        private const int  LadderMsgLabel = IsoPatcher.LADDER_MSG_LABEL;      // == 402
-        private const float LadderGateX = 706f, LadderGateXTol = 12f;        // LAD_X ± tol — only our cluster
+        private const int  LadderMsgLabel = IsoPatcher.LadderMessageLabel;      // == 402
+        private const float LadderGateX = 706f, LadderGateXTol = 12f;        // LadderWorldX ± tol — only our cluster
         private static bool _loggedLadderGate;
 
         internal static void Apply(bool low)

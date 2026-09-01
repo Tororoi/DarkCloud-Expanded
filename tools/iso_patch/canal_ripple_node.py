@@ -38,7 +38,7 @@ import os, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))            # tools/ (mdt_codec, extract_scene_mesh)
-sys.path.insert(0, os.path.join(HERE, "collision"))     # bake_player_camera_collision (_dir)
+sys.path.insert(0, os.path.join(HERE, "collision"))     # scene_placed (scn_directory_list)
 
 SUB_NAME   = "e03c08"                # the Queens WATER part (hosts mizu__a01)
 DONOR_NODE = b"hamon__A01z\x00"      # Norune's waterwheel ripple splat (e01 scene)
@@ -47,9 +47,7 @@ SCALE      = 0.45                    # +-86 donor -> +-39 player ring
 PARK_Y     = -3000.0                 # baked into the node matrix: loads hidden until CanalTide moves it
 
 
-def _dir(scn):
-    from scene_placed import scn_dir
-    return scn_dir(scn)
+from scene_placed import scn_directory_list
 
 
 # ══ RING RETEXTURE — put the BOBBER's ripple sprite into Queens' animated ripple texture ═══════════
@@ -254,7 +252,7 @@ def carve_donor_mdt(e01scn: bytes) -> bytearray:
 
 def add_wading_ripple(scn: bytes, e01scn: bytes):
     """Return (new_scene_bytes, delta)."""
-    entry = next((e for e in _dir(scn) if e[0] == SUB_NAME), None)
+    entry = next((e for e in scn_directory_list(scn) if e[0] == SUB_NAME), None)
     if entry is None:
         raise KeyError(f"{SUB_NAME} not in scene directory")
     _, sub_off, sub_size, _ = entry
@@ -311,7 +309,7 @@ def add_wading_ripple(scn: bytes, e01scn: bytes):
     struct.pack_into("<I", new_sub, 0x58, len(new_sub) - mds)
 
     out = bytearray(scn[:sub_off]) + new_sub + bytearray(scn[sub_off + sub_size:])
-    for name, off, size, eoff in _dir(scn):
+    for name, off, size, eoff in scn_directory_list(scn):
         if off == sub_off:
             struct.pack_into("<I", out, eoff + 0x14, size + delta)
         elif off > sub_off:
@@ -333,7 +331,7 @@ if __name__ == "__main__":
     scn1, delta = add_wading_ripple(scn0, e01)
 
     # 1) the e03c08 sub still parses: both nodes resolve to valid MDTs, ripple extents are player-scale
-    entry = next(e for e in _dir(scn1) if e[0] == SUB_NAME)
+    entry = next(e for e in scn_directory_list(scn1) if e[0] == SUB_NAME)
     _, off, size, _ = entry
     sub = scn1[off:off + size]
     mds = sub.find(b"MDS\x00")
@@ -362,13 +360,13 @@ if __name__ == "__main__":
     assert tbl == 0x10, tbl
 
     # 2) mizu's MDT bytes are UNTOUCHED, just shifted +0x70 (insert-style surgery)
-    e0 = next(e for e in _dir(scn0) if e[0] == SUB_NAME)
+    e0 = next(e for e in scn_directory_list(scn0) if e[0] == SUB_NAME)
     old = scn0[e0[1]:e0[1] + e0[2]]
     assert sub[0x1E0 + 0x70:e0[2] + 0x70] == old[0x1E0:]             # mizu MDT byte-identical at +0x70
 
     # 3) every OTHER sub-file's bytes are byte-identical at its (shifted) offset
-    d0 = {n: (o, s) for n, o, s, _ in _dir(scn0)}
-    d1 = {n: (o, s) for n, o, s, _ in _dir(scn1)}
+    d0 = {n: (o, s) for n, o, s, _ in scn_directory_list(scn0)}
+    d1 = {n: (o, s) for n, o, s, _ in scn_directory_list(scn1)}
     assert set(d0) == set(d1)
     moved = 0
     for n in d0:

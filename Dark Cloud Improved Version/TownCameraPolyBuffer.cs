@@ -23,7 +23,7 @@ namespace Dark_Cloud_Improved_Version
     /// Pure data writes through the engine's own pointer (struct @*0x202A2388: {+0 data, +8 used, +C cap});
     /// asserted while in TOWN mode (2), restored to vanilla when leaving it. Fully revertible.
     /// </summary>
-    internal static class CameraGatherArenaFix
+    internal static class TownCameraPolyBuffer
     {
         internal static bool Enabled = true;
         internal static bool Diagnostics = false;   // log the redirect/restore transitions
@@ -56,7 +56,7 @@ namespace Dark_Cloud_Improved_Version
                 _redirected = true;
                 if (Diagnostics)
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[CamArena] gather arena -> 0x{NewBaseGuest:X8} cap {NewCapUnits} units " +
+                        $"[CameraPolyBuffer] gather arena -> 0x{NewBaseGuest:X8} cap {NewCapUnits} units " +
                         $"({NewCapUnits / 5} polys; was 0x{_origBase:X8} cap {_origCap})");
             }
             else if (_redirected && data == NewBaseGuest && _origBase != 0)
@@ -66,7 +66,7 @@ namespace Dark_Cloud_Improved_Version
                 _redirected = false;
                 if (Diagnostics)
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[CamArena] gather arena restored -> 0x{_origBase:X8} cap {_origCap}");
+                        $"[CameraPolyBuffer] gather arena restored -> 0x{_origBase:X8} cap {_origCap}");
             }
         }
     }

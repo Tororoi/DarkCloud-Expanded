@@ -4,7 +4,7 @@ the fishing cpoly at session start) from one manifest, one writer:
 
   map  2  Queens        game_data/queens/queens_2.bin                <- queens_fishing_collision (bridges + pipes
                                                                       from the disc + authored containment walls)
-  map 23  Yellow Drops  game_data/yellowdrops/yellowdrops_23.bin     <- yellowdrops_westbank.westbank_fish_walls
+  map 23  Yellow Drops  game_data/yellowdrops/yellowdrops_23.bin     <- yellowdrops_westbank_data.westbank_fish_walls
 
 Both embed ISO-derived geometry, so they stay UNTRACKED and the csproj Links them into
 Resources/FishingCollision/ at build (guarded by Exists()). They are appended at RUNTIME (not ISO-baked)
@@ -14,7 +14,7 @@ geometry lacks. Yellow Drops' bank chain IS such a wall (native `_a` stops at th
 sit at y~-4) and stays. Queens' 440 bridge + 216 pipe tris duplicate the baked e03 ground `_a` and can
 probably be trimmed to its 57 containment walls once the in-game check confirms it.
 The Brownboo rocks are NOT a bin: they are authored Python data (iso_patch/collision/brownboo_rock_data.py)
-baked into the ISO's s04g01_a by bake_brownboo_camera_iso.py.
+baked into the ISO's s04g01_a by brownboo_collision_builder.py.
 
 Format: 'DCFC', u32 version=1, u32 mapNo, u32 triCount, then triCount x 9 floats (3 verts; the mod
 computes the plane normal itself).
@@ -47,7 +47,7 @@ def queens_tris():
 
 
 def yellowdrops_tris():
-    from yellowdrops_westbank import westbank_fish_walls
+    from yellowdrops_westbank_data import westbank_fish_walls
     return westbank_fish_walls()
 
 

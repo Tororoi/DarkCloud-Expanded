@@ -6,8 +6,8 @@ slot +0x20 — the slot every other town names `_c`; Brownboo labels it `_v`). N
 camera hull (untouched); node `obj56` (900 tris) carries the structures — including the big central cylinder —
 and is what we simplify here.
 
-Directed edits, Queens-style: `_RM` holds exact vanilla tris to REMOVE (matched by rounded-vertex key),
-`_ADD` holds authored replacement tris. custom_obj56_tris() = vanilla obj56 − _RM + _ADD.
+Directed edits, Queens-style: `CAMERA_HULL_REMOVE_TRIS` holds exact vanilla tris to REMOVE (matched by rounded-vertex key),
+`CAMERA_HULL_ADD_TRIS` holds authored replacement tris. custom_obj56_tris() = vanilla obj56 − CAMERA_HULL_REMOVE_TRIS + CAMERA_HULL_ADD_TRIS.
 Shared by tools/brownboo_viewer.py (the "custom obj56" toggle) and the future ISO bake.
 
 Run standalone for a summary: python3 tools/brownboo_camera_collision.py
@@ -18,9 +18,11 @@ import scene_placed
 from extract_scene_mesh import load_scene, xform, read_verts, read_tris
 from georama_collision import parse_coll_mdt
 from tri_util import kd_split
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "iso_patch", "collision"))
+from collision_geom import triangle_normal
 
 
-def _rmkey(t):
+def tri_key_tenth(t):
     return tuple(sorted(tuple(round(c, 1) for c in p) for p in t))
 
 
@@ -30,7 +32,7 @@ def vanilla_v_nodes(scn=None):
     (needs DC1_DATA_DIR — the viewer/authoring path)."""
     if scn is None:
         scn = load_scene('gedit/s04/scene.scn')
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     off, size = DIR['s04g01']
     sub = scn[off:off + size]
     m = next(re.finditer(rb's04g01_v\.mds\x00', sub), None)
@@ -53,17 +55,19 @@ def vanilla_v_nodes(scn=None):
     return out
 
 
-def _parse(raw):
+def parse_tri_block(raw):
+    """'x,y,z,x,y,z,x,y,z' per line (blank lines skipped) -> [[v0,v1,v2], ...]."""
     out = []
     for ln in raw.strip().splitlines():
-        xs = [float(x) for x in ln.split(',')]
-        out.append([xs[0:3], xs[3:6], xs[6:9]])
+        if ln.strip():
+            xs = [float(x) for x in ln.split(',')]
+            out.append([xs[0:3], xs[3:6], xs[6:9]])
     return out
 
 
 # ---- REMOVE: the big central cylinder's tall side walls (y≈7-14 -> 200, radius ≈75 ring around the
 #      centre) — first pass of the simplification (user-selected 2026-08). ----
-_RM = _parse("""
+CAMERA_HULL_REMOVE_TRIS = parse_tri_block("""
 40.66,10,-63.62, 54.84,200,-53.71, 54.84,7,-53.71
 40.66,10,-63.62, 40.66,200,-63.62, 54.84,200,-53.71
 54.84,7,-53.71, 64.98,200,-42.04, 64.98,8,-42.04
@@ -116,18 +120,11 @@ _RM = _parse("""
 8.13,8,-77.2, 24.39,200,-71.45, 24.39,10,-71.45
 """)
 
-def _tnormal(t):
-    a, b, c = t
-    u = [b[i] - a[i] for i in range(3)]
-    v = [c[i] - a[i] for i in range(3)]
-    return [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]
-
-
-def _q(a, b, c, d, want):
+def quad_facing(a, b, c, d, want):
     """Quad a-b-c-d -> 2 tris wound so normal·want >= 0 (camera collision is one-sided, faces the play area)."""
     out = []
     for t in ([a, b, c], [a, c, d]):
-        n = _tnormal(t)
+        n = triangle_normal(t)
         out.append(t if n[0]*want[0] + n[1]*want[1] + n[2]*want[2] >= 0 else [t[0], t[2], t[1]])
     return [[list(p) for p in t] for t in out]
 
@@ -157,7 +154,7 @@ _CHORD_SEGS = {((24.39, -71.45), (40.66, -63.62)), ((9.02, 74.96), (-9.02, 74.96
                ((-52.98, 53.79), (-64.23, 39.68))}
 
 
-def _ray_r(poly, th):
+def ray_radius(poly, th):
     """Radius where the ray from the origin at angle th crosses the closed 2D polygon."""
     dx, dz = math.cos(th), math.sin(th)
     best = None
@@ -175,7 +172,7 @@ def _ray_r(poly, th):
     return best
 
 
-def _ang(x, z):
+def angle_xz(x, z):
     a = math.atan2(z, x)
     return a + 2 * math.pi if a < 0 else a
 
@@ -184,22 +181,22 @@ def _cone_cyl_tris():
     """(annulus tris, cylinder-above tris): the roof-cone extension out to the old cylinder ring at the
     per-direction slope, plus the cylinder walls from the meet height up to y200 (chord segments skipped).
     Annulus faces UP, walls face OUTWARD (the play-area side)."""
-    A = sorted(([x, _CONE_Y1, z] for x, z in _CONE_OUTER), key=lambda p: _ang(p[0], p[2]))
+    A = sorted(([x, _CONE_Y1, z] for x, z in _CONE_OUTER), key=lambda p: angle_xz(p[0], p[2]))
     B = []
     for x, z in _CYL_RING:
-        th = _ang(x, z)
+        th = angle_xz(x, z)
         r_c = math.hypot(x, z)
-        r_o = _ray_r(_CONE_OUTER, th) or 51.0
-        r_i = _ray_r(_CONE_INNER, th) or 23.2
+        r_o = ray_radius(_CONE_OUTER, th) or 51.0
+        r_i = ray_radius(_CONE_INNER, th) or 23.2
         y = _CONE_Y1 + (_CONE_Y1 - _CONE_Y0) / (r_o - r_i) * (r_c - r_o)
         B.append([x, y, z])
-    B.sort(key=lambda p: _ang(p[0], p[2]))
+    B.sort(key=lambda p: angle_xz(p[0], p[2]))
     # stitch the two rings by merged angular walk
     ann = []
     na, nb = len(A), len(B)
     i = j = 0
-    aa = [_ang(p[0], p[2]) for p in A]
-    ba = [_ang(p[0], p[2]) for p in B]
+    aa = [angle_xz(p[0], p[2]) for p in A]
+    ba = [angle_xz(p[0], p[2]) for p in B]
     while i < na or j < nb:
         ai, bj = A[i % na], B[j % nb]
         a_next = aa[(i + 1) % na] + (2 * math.pi if i + 1 >= na else 0)
@@ -208,7 +205,7 @@ def _cone_cyl_tris():
             t = [ai, B[j % nb], A[(i + 1) % na]]; i += 1
         else:
             t = [ai, B[j % nb], B[(j + 1) % nb]]; j += 1
-        n = _tnormal(t)
+        n = triangle_normal(t)
         ann.append(t if n[1] >= 0 else [t[0], t[2], t[1]])     # face UP
     # cylinder walls: meet height -> y200, outward
     walls = []
@@ -218,16 +215,16 @@ def _cone_cyl_tris():
         if seg in _CHORD_SEGS or (seg[1], seg[0]) in _CHORD_SEGS:
             continue
         mx, mz = (p1[0] + p2[0]) / 2, (p1[2] + p2[2]) / 2
-        walls += _q(p1, p2, [p2[0], _CYL_TOP, p2[2]], [p1[0], _CYL_TOP, p1[2]], [mx, 0, mz])
+        walls += quad_facing(p1, p2, [p2[0], _CYL_TOP, p2[2]], [p1[0], _CYL_TOP, p1[2]], [mx, 0, mz])
     return ann, walls
 
 
-_ANN, _CYLW = _cone_cyl_tris()
+ROOF_ANNULUS_TRIS, CYLINDER_WALL_TRIS = _cone_cyl_tris()
 
 # ---- ADD: authored replacement tris = the h01 roof-cone extension annulus + the cylinder from the meet
 #      height up. (The three fin bump-out chord walls that used to lead this list were removed — no longer
 #      wanted, and they never shipped once obj56 went vanilla-cylinder + rock-hull only.) ----
-_ADD = _ANN + _CYLW
+CAMERA_HULL_ADD_TRIS = ROOF_ANNULUS_TRIS + CYLINDER_WALL_TRIS
 
 # ---- s04h01 `_v` edits: drop everything fully ABOVE the kept roof band (the cone+cylinder shell covers
 #      it). LOCAL-space rule (part sits at mapinfo y=-10, so local y = world y + 10). ----
@@ -241,7 +238,7 @@ H01_KEEP_BELOW = _CONE_Y1 + 10.0 - 0.1        # local: tris with ALL verts >= th
 #      Each leg becomes ONE contiguous node: a leg split across kd nodes gave those nodes huge bounding
 #      boxes, the near-box gather pulled everything at once, and the 400-poly camera buffer overflowed ->
 #      silent truncation = camera clipping. Tight per-leg bboxes keep the gather small.
-_LEG_TMPL = _parse("""
+_LEG_TMPL = parse_tri_block("""
 -21.52,42.32,8.8, -48.88,49.5,19.75, -21.58,42.32,-8.94
 -21.58,42.32,-8.94, -48.88,49.5,19.75, -49.12,49.5,-20.35
 -24.46,37.52,10.13, -40.82,29.29,6.2, -24.46,37.52,-10.13
@@ -343,7 +340,7 @@ _LEG_TMPL = _parse("""
 """)
 
 
-def _cen3(t):
+def tri_centroid(t):
     return [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3,
             (t[0][2] + t[1][2] + t[2][2]) / 3]
 
@@ -356,11 +353,11 @@ def _leg_clusters(pool, tol=1.5):
         th = k * math.pi / 4
         c, sn = math.cos(th), math.sin(th)
         rots.append([( p[0]*c - p[2]*sn, p[1], p[0]*sn + p[2]*c )
-                     for p in ([_cen3([[q[0], q[1] + 10.0, q[2]] for q in t]) for t in _LEG_TMPL])])
+                     for p in ([tri_centroid([[q[0], q[1] + 10.0, q[2]] for q in t]) for t in _LEG_TMPL])])
     legs = [[] for _ in range(8)]
     rest = []
     for t in pool:
-        cx, cy, cz = _cen3(t)
+        cx, cy, cz = tri_centroid(t)
         best_k, best_d = None, tol
         for k in range(8):
             for rx, ry, rz in rots[k]:
@@ -389,7 +386,7 @@ def part_v_nodes(sub_name='s04h01', max_tris=100, scn=None):
     each mapinfo placement, so one mesh serves every instance. Returns [('h01v00', tris), ...]."""
     if scn is None:
         scn = load_scene('gedit/s04/scene.scn')
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     off, size = DIR[sub_name]
     m = next(re.finditer(rb'MDS\x00', scn[off:off + size]))
     mds = off + m.start()
@@ -447,11 +444,11 @@ def _shell_prism(tris, pad=1.0):
     for k in range(8):
         (x0, z0), (x1, z1) = ring[k], ring[(k + 1) % 8]
         mx, mz = (x0 + x1) / 2, (z0 + z1) / 2
-        out += _q([x0, ymin, z0], [x1, ymin, z1], [x1, ymax, z1], [x0, ymax, z0], [mx, 0, mz])
+        out += quad_facing([x0, ymin, z0], [x1, ymin, z1], [x1, ymax, z1], [x0, ymax, z0], [mx, 0, mz])
     for k in range(1, 7):                                   # top fan (faces up)
         (x0, z0), (x1, z1), (x2, z2) = ring[0], ring[k], ring[k + 1]
         t = [[x0, ymax, z0], [x1, ymax, z1], [x2, ymax, z2]]
-        out.append(t if _tnormal(t)[1] >= 0 else [t[0], t[2], t[1]])
+        out.append(t if triangle_normal(t)[1] >= 0 else [t[0], t[2], t[1]])
     return out
 
 
@@ -465,8 +462,8 @@ def rock_shell_obj56(scn=None):
         sel = _rock_sel_tris(keep, box)
         if not sel:
             raise SystemExit(f'rock shell: no hull tris matched for {name} (drift?)')
-        selkeys = set(_rmkey(t) for t in sel)
-        keep = [t for t in keep if _rmkey(t) not in selkeys]
+        selkeys = set(tri_key_tenth(t) for t in sel)
+        keep = [t for t in keep if tri_key_tenth(t) not in selkeys]
         removed += sel
         shells += _shell_prism(sel)
     return keep + shells, removed, shells
@@ -482,16 +479,9 @@ _IWA01_BOT = -15.0
 _IWA01_PAD = 4.0
 
 
-def _P(raw):
-    out = []
-    for ln in raw.strip().splitlines():
-        if ln.strip():
-            x = [float(v) for v in ln.split(',')]
-            out.append([x[0:3], x[3:6], x[6:9]])
-    return out
 
 
-_IWA01_WEST = _P("""
+_IWA01_WEST = parse_tri_block("""
 -167.92,29.7,-52.47, -161.65,34.59,-41.16, -169.79,40.38,-42.83
 -161.65,34.59,-41.16, -172.38,40.35,-31.57, -169.79,40.38,-42.83
 -161.65,34.59,-41.16, -164.94,34.49,-29.88, -172.38,40.35,-31.57
@@ -509,7 +499,7 @@ _IWA01_WEST = _P("""
 -171.69,17.54,-55.71, -163.52,16.01,-51.6, -159.62,28.25,-48.39
 -167.92,29.7,-52.47, -159.62,28.25,-48.39, -161.65,34.59,-41.16
 """)
-_IWA01_EAST = _P("""
+_IWA01_EAST = parse_tri_block("""
 -123.04,38.75,-36.34, -125.26,38.74,-25.25, -131.68,35.04,-26.03
 -123.04,38.75,-36.34, -131.68,35.04,-26.03, -128.7,35.07,-37.26
 -123.04,38.75,-36.34, -128.7,35.07,-37.26, -126.84,28.52,-43.55
@@ -527,7 +517,7 @@ _IWA01_EAST = _P("""
 -131.68,35.04,-26.03, -125.26,38.74,-25.25, -123.62,28.93,-15.17
 -131.68,35.04,-26.03, -123.62,28.93,-15.17, -133.43,28.46,-19.13
 """)
-_IWA01_INTERIOR = _P("""
+_IWA01_INTERIOR = parse_tri_block("""
 -128.7,35.07,-37.26, -131.68,35.04,-26.03, -164.94,34.49,-29.88
 -128.7,35.07,-37.26, -164.94,34.49,-29.88, -161.65,34.59,-41.16
 -159.62,28.25,-48.39, -128.7,35.07,-37.26, -161.65,34.59,-41.16
@@ -548,8 +538,8 @@ _IWA01_INTERIOR = _P("""
 
 # vanilla obj56 tris inside the _ROCK_SEL['iwa01'] bbox that must SURVIVE the removal: the low walkway/
 # bank strip running through and past both tunnel mouths (y~9-14 path collision + its water-side skirts).
-# Matched by centroid (tolerance), not _rmkey — one tri's coords land on a 0.05 rounding boundary.
-_IWA01_KEEP = _P("""
+# Matched by centroid (tolerance), not tri_key_tenth — one tri's coords land on a 0.05 rounding boundary.
+_IWA01_KEEP = parse_tri_block("""
 -87.73,9,29.73, -92.08,-10,10.68, -87.73,-10,29.73
 -87.73,9,29.73, -92.08,12,10.68, -92.08,-10,10.68
 -92.08,12,10.68, -89.97,-10,-10.28, -92.08,-10,10.68
@@ -584,7 +574,7 @@ def _iwa01_keep_match(tris):
     return [t for t in tris if any(max(abs(a - b) for a, b in zip(cen(t), c)) < 0.2 for c in kc)]
 
 
-def _v3(a, o, b):
+def vec3(a, o, b):
     return [a[i] + o * b[i] for i in range(3)]
 
 def _dot(a, b): return sum(a[i] * b[i] for i in range(3))
@@ -666,15 +656,15 @@ def _extend_to_circle(o, iv, cx, cz, R):
     if a < 1e-9 or disc < 0:
         return None
     t = (-b + math.sqrt(disc)) / (2 * a)
-    return _v3(o, t, d)
+    return vec3(o, t, d)
 
 
 def _iwa01_build():
     """The iwa01 camera hull: the cylinder shell around the rock MINUS the flared tunnel cutter (exact
-    CSG difference), top & bottom caps stripped. Authored in tools/export_iwa01_blender.py and FROZEN to
-    tools/iwa01_hull_data.py as a plain tri literal, so the bake needs no CSG deps. Re-run that generator
+    CSG difference), top & bottom caps stripped. Authored in tools/export_brownboo_rock_blender.py and FROZEN to
+    tools/brownboo_rock_hull_data.py as a plain tri literal, so the bake needs no CSG deps. Re-run that generator
     (needs trimesh+manifold3d) to regenerate the frozen data after tweaking the funnel/cylinder params."""
-    from iwa01_hull_data import IWA01_HULL
+    from brownboo_rock_hull_data import IWA01_HULL
     return [[list(p) for p in t] for t in IWA01_HULL]
 
 
@@ -687,8 +677,8 @@ def iwa01_ring_obj56(scn=None):
     strip through the tunnel (_IWA01_KEEP) survives the bbox removal — the hull doesn't cover it."""
     obj56 = next(t for nn, t in vanilla_v_nodes(scn) if nn == 'obj56')
     sel = _rock_sel_tris(obj56, _ROCK_SEL['iwa01'])
-    selk = set(_rmkey(t) for t in sel) - set(_rmkey(t) for t in _iwa01_keep_match(sel))
-    keep = [t for t in obj56 if _rmkey(t) not in selk]
+    selk = set(tri_key_tenth(t) for t in sel) - set(tri_key_tenth(t) for t in _iwa01_keep_match(sel))
+    keep = [t for t in obj56 if tri_key_tenth(t) not in selk]
     return [list(map(list, t)) for t in keep] + _iwa01_build()
 
 
@@ -735,15 +725,15 @@ def _house_cylinders(nseg=16):
             ax_, az = hx + R * math.cos(a0), hz + R * math.sin(a0)
             bx, bz = hx + R * math.cos(a1), hz + R * math.sin(a1)
             mx, mz = (ax_ + bx) / 2 - hx, (az + bz) / 2 - hz
-            out += _q([ax_, y0, az], [bx, y0, bz], [bx, y1, bz], [ax_, y1, az], [mx, 0, mz])
+            out += quad_facing([ax_, y0, az], [bx, y0, bz], [bx, y1, bz], [ax_, y1, az], [mx, 0, mz])
     return out
 
 
 def tight_obj56(scn=None):
     """iwa01_ring_obj56 (rock hull) + the tighter building cylinders — the full shipped obj56."""
     base = iwa01_ring_obj56(scn)
-    selk = set(_rmkey(t) for t in _house_ring_sel(base))
-    out = [t for t in base if _rmkey(t) not in selk]
+    selk = set(tri_key_tenth(t) for t in _house_ring_sel(base))
+    out = [t for t in base if tri_key_tenth(t) not in selk]
     removed = len(base) - len(out)
     if not 150 <= removed <= 230:                        # ~208 expected (5 rings; h01's is denser)
         raise SystemExit(f'house-ring removal drift: removed {removed}, expected ~208')
@@ -751,39 +741,39 @@ def tight_obj56(scn=None):
 
 
 def custom_obj56_tris(scn=None):
-    """Vanilla obj56 minus _RM plus _ADD. Raises if any _RM entry fails to match (drift guard)."""
+    """Vanilla obj56 minus CAMERA_HULL_REMOVE_TRIS plus CAMERA_HULL_ADD_TRIS. Raises if any CAMERA_HULL_REMOVE_TRIS entry fails to match (drift guard)."""
     van = next((tris for nn, tris in vanilla_v_nodes(scn) if nn == 'obj56'), [])
-    keys = set(_rmkey(t) for t in _RM)
-    out = [t for t in van if _rmkey(t) not in keys]
+    keys = set(tri_key_tenth(t) for t in CAMERA_HULL_REMOVE_TRIS)
+    out = [t for t in van if tri_key_tenth(t) not in keys]
     removed = len(van) - len(out)
     if removed != len(keys):
         raise SystemExit(f'obj56 removal drift: {removed} matched of {len(keys)} keys')
-    return out + [[list(p) for p in t] for t in _ADD]
+    return out + [[list(p) for p in t] for t in CAMERA_HULL_ADD_TRIS]
 
 
 def custom_obj56_full(scn=None):
-    """Vanilla obj56 with BOTH obj56 edits applied: the central-cylinder simplification (- _RM + _ADD)
+    """Vanilla obj56 with BOTH obj56 edits applied: the central-cylinder simplification (- CAMERA_HULL_REMOVE_TRIS + CAMERA_HULL_ADD_TRIS)
     AND the iwa01 rock replaced by the CSG hull (- iwa01 selection + _iwa01_build). The two removals are
     disjoint regions (cylinder vs rock); a combined drift guard trips if either fails to match cleanly."""
     van = next((tris for nn, tris in vanilla_v_nodes(scn) if nn == 'obj56'), [])
-    rm_keys = set(_rmkey(t) for t in _RM)
+    rm_keys = set(tri_key_tenth(t) for t in CAMERA_HULL_REMOVE_TRIS)
     sel = _rock_sel_tris(van, _ROCK_SEL['iwa01'])
-    iwa_keys = set(_rmkey(t) for t in sel) - set(_rmkey(t) for t in _iwa01_keep_match(sel))
-    keep = [t for t in van if _rmkey(t) not in rm_keys and _rmkey(t) not in iwa_keys]
+    iwa_keys = set(tri_key_tenth(t) for t in sel) - set(tri_key_tenth(t) for t in _iwa01_keep_match(sel))
+    keep = [t for t in van if tri_key_tenth(t) not in rm_keys and tri_key_tenth(t) not in iwa_keys]
     removed = len(van) - len(keep)
     if removed != len(rm_keys) + len(iwa_keys):
         raise SystemExit(f'obj56 full removal drift: {removed} removed vs '
-                         f'{len(rm_keys)}(_RM)+{len(iwa_keys)}(iwa01) expected')
-    return [list(map(list, t)) for t in keep] + [[list(p) for p in t] for t in _ADD] + _iwa01_build()
+                         f'{len(rm_keys)}(CAMERA_HULL_REMOVE_TRIS)+{len(iwa_keys)}(iwa01) expected')
+    return [list(map(list, t)) for t in keep] + [[list(p) for p in t] for t in CAMERA_HULL_ADD_TRIS] + _iwa01_build()
 
 
 if __name__ == '__main__':
     van = next((tris for nn, tris in vanilla_v_nodes() if nn == 'obj56'), [])
     cus = custom_obj56_tris()
-    print(f'obj56: vanilla {len(van)} -> custom {len(cus)} ({len(_RM)} removed, {len(_ADD)} added)')
+    print(f'obj56: vanilla {len(van)} -> custom {len(cus)} ({len(CAMERA_HULL_REMOVE_TRIS)} removed, {len(CAMERA_HULL_ADD_TRIS)} added)')
     hv = custom_h01_v_nodes()
     print(f's04h01_v custom: {sum(len(t) for _, t in hv)} tris in {len(hv)} nodes '
           f'(max {max(len(t) for _, t in hv)}/node)')
-    ann, cyl = _ANN, _CYLW
+    ann, cyl = ROOF_ANNULUS_TRIS, CYLINDER_WALL_TRIS
     ys = sorted(set(round(p[1], 1) for t in ann for p in t if p[1] > 50))
     print(f'annulus {len(ann)} tris (meet heights {ys[0]}..{ys[-1]}), cylinder-above {len(cyl)} tris')

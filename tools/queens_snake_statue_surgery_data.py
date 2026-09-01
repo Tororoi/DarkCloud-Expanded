@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Queens h06 (snake statue) player-collision SURGERY DATA — the user-selected triangles from
-tools/h06_viewer.py. Consumed by tools/queens_h06.py (apply_surgery). Pure data: every entry is a
+tools/queens_snake_statue_viewer.py. Consumed by tools/queens_snake_statue_collision.py (apply_surgery). Pure data: every entry is a
 verbatim viewer selection (irreproducible by code), so edit by appending, never by regenerating.
 
-  A_REMOVE_TRIS — tris of the full visual mesh that are REMOVED from the baked `_a`
-  A_EXTRA_TRIS  — replacement/guard geometry ADDED (walls, tapers, ramps)
+  PLAYER_COLLISION_REMOVE_TRIS — tris of the full visual mesh that are REMOVED from the baked `_a`
+  PLAYER_COLLISION_ADD_TRIS  — replacement/guard geometry ADDED (walls, tapers, ramps)
 """
-# collision surgery (from tools/h06_viewer.py selections): tris listed here VERBATIM are removed
-# from the baked _a; add replacement geometry to A_EXTRA_TRIS. Matched per-tri with 0.05 tolerance,
+# collision surgery (from tools/queens_snake_statue_viewer.py selections): tris listed here VERBATIM are removed
+# from the baked _a; add replacement geometry to PLAYER_COLLISION_ADD_TRIS. Matched per-tri with 0.05 tolerance,
 # any vertex rotation.
-A_REMOVE_TRIS = [   # h06 collision surgery, deduped (307 unique tris across 4 user batches)
+PLAYER_COLLISION_REMOVE_TRIS = [   # h06 collision surgery, deduped (307 unique tris across 4 user batches)
     [[46.11, -1.86, -41.76], [64.03, -5.79, -20.24], [60.6, -9.45, -20.32]],
     [[48.88, 2.22, -42.75], [64.03, -5.79, -20.24], [46.11, -1.86, -41.76]],
     [[46.11, -1.86, -41.76], [27.59, 3.94, -57.47], [48.88, 2.22, -42.75]],
@@ -417,7 +417,7 @@ A_REMOVE_TRIS = [   # h06 collision surgery, deduped (307 unique tris across 4 u
 ]
 
 
-A_EXTRA_TRIS = [
+PLAYER_COLLISION_ADD_TRIS = [
     # spiral-ramp inner-lip guard wall (user-directed): segments 1-3 = 30u tall,
     # segments 4-8 (from (-19.76,32.65) onward) TRIPLED to 90u; outward-facing winding
     [[-40.67, 33.87, -26.03], [-43.34, 41.16, -3.0], [-43.34, 71.16, -3.0]],

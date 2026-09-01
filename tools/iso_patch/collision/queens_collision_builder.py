@@ -13,17 +13,17 @@ Buildings keep their vanilla `_a`/`_c` (buildings=False). grouped_collision() po
 kd_splits them into <=100-poly, spatially-compact nodes (tight bbox = free runtime gather culling); it is shared
 with queens_viewer.py so both write / show the identical grouping.
 
-Split 2026-09 into: collision_mds.py (MDS splice + flat-MDS serialiser), collision_geom.py (pure tri math +
-coplanar merge), e03_collision_data.py (all authored Queens geometry, removal regions, directed camera jobs),
+Split 2026-09 into: collision_mds_writer.py (MDS splice + flat-MDS serialiser), collision_geom.py (pure tri math +
+coplanar merge), queens_terrain_collision_data.py (all authored Queens geometry, removal regions, directed camera jobs),
 and this façade (scene introspection, grouped_collision, the bake entry points). The names other tools import
 from here (build_flat_mds, _replace_a_block, grouped_collision, trigger_nodes, load_scene,
-bake_structures_from_bytes) are re-exported below. ISO wrapper: iso_patch/bake_structure_collision_iso.py.
+bake_structures_from_bytes) are re-exported below. ISO wrapper: iso_patch/patch_iso_town_collision.py.
 
   bake_structures(scene_rel, town='e03', max_tris=100) -> (new_scn, stats, manifest)
 """
 import os, sys, struct, re, math
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)                                     # this dir (collision_mds / collision_geom / e03_collision_data)
+sys.path.insert(0, _HERE)                                     # this dir (collision_mds_writer / collision_geom / queens_terrain_collision_data)
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (scene_placed, mdt_codec, georama_collision…)
 from extract_scene_mesh import load_scene, xform
 import scene_placed
@@ -31,29 +31,29 @@ from scene_placed import placed_meshes
 import mdt_codec
 from tri_util import kd_split
 import georama_collision as gc
-from collision_mds import _dir, _variant_off, _replace_a_block, _unique_names, _fit, build_flat_mds, _pool_split
-from e03_collision_data import (camera_tris, flat_ground_tris, pipe_drum_tris, both_wall_tris, player_wall_tris,
+from collision_mds_writer import _variant_off, _replace_a_block, _unique_names, fit_node_name, build_flat_mds, _pool_split
+from queens_terrain_collision_data import (camera_tris, flat_ground_tris, pipe_drum_tris, both_wall_tris, player_wall_tris,
                                 invisible_tris, perimeter_wall_tris, simplify_terrain, fix_camera_winding,
-                                cam_merge_selected, _e03_gate_torch_simplify)
+                                cam_merge_selected, gate_torch_simplify)
 
 
-def _num(prefix, n):
+def node_index(prefix, n):
     m = re.match(prefix + r'(\d+)', n)
     return int(m.group(1)) if m else None
 
 
-def is_cam_node(nm):
+def is_camera_structure_node(nm):
     # obj42 here = the VISIBLE short-wall mesh (y70-76), NOT the 626-tri collision node named obj42 inside the
     # ground `_a` (that's the town-wide player collision with the tall invisible walls — unrelated, dropped).
     # No 'kanban' — the injected fishing sign isn't a terrain structure and has no ground-style `_a`.
     # obj1/obj9 (the canal pipes) are EXCLUDED here — their hollow tube collision is replaced by solid octagonal
     # drums (both_walls.pipe_drum_tris).
-    return nm.startswith('grid3') or _num('obj', nm) in (40, 44, 6, 33, 34, 43, 45, 42)
+    return nm.startswith('grid3') or node_index('obj', nm) in (40, 44, 6, 33, 34, 43, 45, 42)
 
 
-def _obj42_coll(scn):
+def short_wall_collision(scn):
     """obj42 short-wall COLLISION tris (world = local), per ground sub-file that contains it."""
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     out = {}
     for g in [n for n in DIR if re.match(r'e03g\d\d$', n)]:
         off, size = DIR[g]; sub = scn[off:off + size]; vo = gc._variant_a(sub, g)
@@ -81,7 +81,7 @@ def trigger_nodes(scn):
     {sub: [(node_name, [tri,...], [colour_entry_16b,...]), ...]}. These MUST survive into the rebuilt `_a`,
     else EdEventPointCpPoly gathers no tagged poly at the event point and the town exit stops working.
     (Queens e03: e03g04 nodes 'map' dest=1 / 'minato' dest=3; e03g05 node 'obj41_2' dest=2.)"""
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     out = {}
     for g in [n for n in DIR if re.match(r'e03g\d\d$', n)]:
         off, size = DIR[g]; sub = scn[off:off + size]; vo = gc._variant_a(sub, g)
@@ -162,7 +162,7 @@ def building_collision_nodes(scn, max_tris=100, wall_max_ny=None, lod=2):
     tris → ~2.6MB of pool) overflows it — a coarse LOD stays COMPLETE (same bbox, roofs walkable) at ~1/3 the
     tris. The whole (coarse) mesh is kept — several Queens buildings have WALKABLE roofs, so dropping horizontal
     faces left holes. Optional wall_max_ny (0..1) additionally keeps only |face-normal.y| <= it — off by default."""
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     out = {}
     for g in sorted(n for n in DIR if re.match(r'e03h\d\d$', n)):
         off, size = DIR[g]; sub = scn[off:off + size]
@@ -214,7 +214,7 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     cam_own = defaultdict(list)                                    # obj40/obj44: each ships as its OWN camera node
     own_names = {'obj40', 'obj44'} if town == 'e03' else set()    # identical ~216-tri gate meshes
     for pm in placed:
-        if not is_cam_node(pm['name']):
+        if not is_camera_structure_node(pm['name']):
             continue
         v = pm['verts']
         t = simplify_terrain([[list(v[a]), list(v[b]), list(v[c])] for a, b, c in pm['tris']])
@@ -238,7 +238,7 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
         if i == 0:                                                 # first ground anchors the town-wide walls
             pool += perim + bw + inv + pw
         named = _pool_split(pool, 'pcol', used, max_tris)
-        trigs = [(_fit(tn, used, 15), tt, te) for tn, tt, te in triggers.get(sub, [])]
+        trigs = [(fit_node_name(tn, used, 15), tt, te) for tn, tt, te in triggers.get(sub, [])]
         player[sub] = (named, trigs)
 
     # ---- CAMERA `_c`: consolidated structure + both-walls + perimeter (NO canal/railings/triggers = player-only).
@@ -261,16 +261,16 @@ def grouped_collision(placed, scn, town='e03', max_tris=100):
     # the camera, and NW-Queens already SATURATES it — bigger nodes coarsen the cull and blow the cap. Keep at 100.
     camera = _pool_split(cam_pool, 'ccol', used, max_tris)
     if town == 'e03':                                              # obj40/obj44: 4 corner torches -> outer cube faces
-        cam_own = {nm: _e03_gate_torch_simplify(tt) for nm, tt in cam_own.items()}
+        cam_own = {nm: gate_torch_simplify(tt) for nm, tt in cam_own.items()}
     own_named = [(f'c{nm}', fix_camera_winding(tt)) for nm, tt in sorted(cam_own.items())]
-    camera += [(_fit(nm, used, 15), tt) for nm, tt in own_named]   # obj40/obj44: own node each, unsplit
+    camera += [(fit_node_name(nm, used, 15), tt) for nm, tt in own_named]   # obj40/obj44: own node each, unsplit
 
     sets = {'structure': cstruct + [t for _, tt in own_named for t in tt],
             'bwalls': cbw + cext, 'perimeter': cperim, 'invisible': inv + pw}
     return {'subs': subs, 'player': player, 'camera': camera, 'sets': sets}
 
 
-def drop_obj48_zwrite(scn):
+def enable_waterfall_zwrite(scn):
     """Turn the waterfall render frames' Z-WRITE back ON so they occlude the player's BODY. The obj48 falls
     (`obj48__a01z[N]`) and the taki fall's back layer (`taki2__a01z`) carry the `z` per-frame flag (SetFrameAttr
     → CFrame+0x104=0 = ZBUF.ZMSK, no depth write), so a player behind a fall draws on top of it. Replace that
@@ -303,7 +303,7 @@ def bake_structures(scene_rel, town='e03', max_tris=100, buildings=False, wall_m
     G = grouped_collision(P, scn, town, max_tris)
 
     stats, manifest = [], []
-    dirnames = set(scene_placed._scndir(scn).keys())
+    dirnames = set(scene_placed.scn_directory_map(scn).keys())
 
     # ---- PLAYER `_a` per ground sub-file ----
     for sub in G['subs']:
@@ -324,7 +324,7 @@ def bake_structures(scene_rel, town='e03', max_tris=100, buildings=False, wall_m
     #      e03g05 has no `_c`). The town camera reads this via the native camera frame (+0xdc), so the mod must
     #      NOT alias camera=player. Buildings keep their vanilla `_a`/`_c`.
     cam_named = G['camera']
-    DIRmap = scene_placed._scndir(scn)
+    DIRmap = scene_placed.scn_directory_map(scn)
     cam_host = next((s for s in G['subs'] if s in DIRmap
                      and _variant_off(scn[DIRmap[s][0]:DIRmap[s][0] + DIRmap[s][1]], s, '_c') is not None), None)
     if cam_host and cam_named:
@@ -349,9 +349,9 @@ def bake_structures(scene_rel, town='e03', max_tris=100, buildings=False, wall_m
 
     # Waterfalls Z-write ON so the player's BODY occludes behind them. This depth-clips Toan's CLOTH cape (a
     # known smaller artifact); the full fix (draw falls after the character) is blocked by the DrawWater/
-    # refraction entanglement — see drop_obj48_zwrite. To revert: comment the two lines below.
+    # refraction entanglement — see enable_waterfall_zwrite. To revert: comment the two lines below.
     if town == 'e03':
-        scn, _z = drop_obj48_zwrite(scn)
+        scn, _z = enable_waterfall_zwrite(scn)
     return scn, stats, manifest
 
 
@@ -388,7 +388,7 @@ if __name__ == '__main__':
     for sub, ns, cn, iv, ct, it, d in stats:
         print(f"  {sub}: {cn} collision nodes ({ct} tris) from {ns} sources  (Δ{d:+})")
     # validate: within-sub-file name uniqueness (flat _a, no camcol/aroot)
-    DIR = scene_placed._scndir(new_scn)
+    DIR = scene_placed.scn_directory_map(new_scn)
     for g in ('e03g04', 'e03g05'):
         off, size = DIR[g]; sub = new_scn[off:off + size]; vo = gc._variant_a(sub, g); mds = off + vo
         cnt, tbl = struct.unpack_from('<II', new_scn, mds + 8)

@@ -3,8 +3,8 @@
 C# build consumes). Single source of truth for each stub's assemble base VA — these MUST match
 the STUB_VA / write-site constants in IsoPatcher.cs (the per-stub patch methods note their VA).
 
-    python3 tools/build_stubs.py            # assemble + write all
-    python3 tools/build_stubs.py --check    # assemble only; fail if any output differs from
+    python3 tools/build_ee_stubs.py            # assemble + write all
+    python3 tools/build_ee_stubs.py --check    # assemble only; fail if any output differs from
                                             # the committed Resources copy (CI / pre-commit)
 
 Run after editing any tools/*.s, then rebuild the app so the EmbeddedResource updates.
@@ -47,7 +47,7 @@ def main():
             open(path, 'wb').write(blob)
             print(f'  WROTE   {dest} ({len(blob)} B @0x{base:06X})')
     if stale:
-        raise SystemExit(f'--check failed: {", ".join(stale)} out of date — run tools/build_stubs.py')
+        raise SystemExit(f'--check failed: {", ".join(stale)} out of date — run tools/build_ee_stubs.py')
 
 
 if __name__ == '__main__':

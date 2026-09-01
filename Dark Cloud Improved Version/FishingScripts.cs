@@ -1,6 +1,6 @@
 using System;
 using static Dark_Cloud_Improved_Version.FishingSpots;
-using static Dark_Cloud_Improved_Version.FishingStbEmit;
+using static Dark_Cloud_Improved_Version.FishingScriptBuilder;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -26,7 +26,7 @@ namespace Dark_Cloud_Improved_Version
         internal const string NormalModel     = "chara/c01d.chr";
         private const string NormalModelCfg  = "info.cfg";
 
-        internal static StbWriter BuildFishingBytecode(Spot s, int menuCbRel)
+        internal static StbWriter BuildFishingBytecode(Spot s, int menuCodeBaseOffset)
         {
             var w = new StbWriter();
 
@@ -78,7 +78,7 @@ namespace Dark_Cloud_Improved_Version
             // mes (which lacks msg 20) — the "heavily distorted" bubble. 8 yields (~133 ms) clears a full tick
             // interval with margin, so the swap is reliably done first.
             for (int i = 0; i < 8; i++) w.Yield();
-            EmitMenu(w, 20, 4, /*sel*/2, menuCbRel, /*pad*/3, /*ly*/4, /*held*/5, /*scratch*/6);
+            EmitMenu(w, 20, 4, /*sel*/2, menuCodeBaseOffset, /*pad*/3, /*ly*/4, /*held*/5, /*scratch*/6);
 
             // Exchange FP (1) / Fishing log (2) each open their own engine menu then return; Quit (3) returns.
             // Only "Fish" (0) falls through to the session setup below. (Norune's label 11 returns after FP/log
@@ -181,7 +181,7 @@ namespace Dark_Cloud_Improved_Version
             // down) or from the exposed floor at low tide. RebuildFishingScript re-bakes EVERY installed script
             // on a tide change, so the canal script tracks the tide too (not frozen at its install-time level).
             // Everywhere else: the spot's fixed height.
-            float water = s.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : s.Water;
+            float water = s.MapNo == TownMapNo.Queens ? CanalTide.QueensWaterLevel() : s.Water;
             w.PushFloat(water);
             w.PushFloat(s.Ground);
             w.Ext(8);                                 // 1 command id + 7 arguments
@@ -268,7 +268,7 @@ namespace Dark_Cloud_Improved_Version
         /// The RET matters: we set no return code, so <c>EventMode</c> takes its <c>default:</c> branch and
         /// puts <c>GameMode</c> back to 1 (walking). That is how Norune's exit path ends too.
         /// </summary>
-        internal static StbWriter BuildExitBytecode(Spot s, int menuCbRel)
+        internal static StbWriter BuildExitBytecode(Spot s, int menuCodeBaseOffset)
         {
             var w = new StbWriter();
             w.Yield();                                // same rule as the main script — see BuildFishingBytecode
@@ -286,7 +286,7 @@ namespace Dark_Cloud_Improved_Version
             // Circle during fishing asks the engine for label 133 (this script). Norune's 133 shows a 2-option
             // confirm before actually leaving. The session is already open, so window 1 already holds our menu
             // text (msg 22). Choice lands in var8 (high range, clear of the position locals below).
-            EmitMenu(w, 22, 2, /*sel*/8, menuCbRel, /*pad*/9, /*ly*/10, /*held*/11, /*scratch*/12);
+            EmitMenu(w, 22, 2, /*sel*/8, menuCodeBaseOffset, /*pad*/9, /*ly*/10, /*held*/11, /*scratch*/12);
             int doQuit = w.MarkForward();
             w.PushVar(8); w.PushInt(0); w.Cmp(StbWriter.CmpEq); w.BrFalse(doQuit);   // sel != 0 (Quit) -> leave
                 // Continue (0): keep the session running. _SET_RETURN_CODE(11) is exactly what Norune's 133

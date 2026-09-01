@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Queens h06 collision upgrades (user-directed 2026-08/09):
-  `_c` (camera): replaced with a simple open cylinder (cylinder_c_tris) — C_SEGMENTS-gon at
-      C_RADIUS_MUL x the vanilla mean ring radius, centered on the snake-head summit (C_HEAD_XZ),
+  `_c` (camera): replaced with a simple open cylinder (camera_hull_cylinder_tris) — CAMERA_HULL_SEGMENTS-gon at
+      CAMERA_HULL_RADIUS_MUL x the vanilla mean ring radius, centered on the snake-head summit (CAMERA_HULL_AXIS_XZ),
       doubled height — built as a fresh MDS APPENDED at the sub's end, +0xc0/+0xc4 repointed.
   `_a` (player): replaced with the FULL detailed visual mesh (all _0 nodes) plus the collision
-      surgery below (A_REMOVE_TRIS / A_EXTRA_TRIS), rebuilt as a fresh MDS APPENDED at the sub's
+      surgery below (PLAYER_COLLISION_REMOVE_TRIS / PLAYER_COLLISION_ADD_TRIS), rebuilt as a fresh MDS APPENDED at the sub's
       end with the header's _a words (+0x78/+0x7c) repointed (old blocks become dead space).
 
 rebuild_h06() -> (new_sub_bytes, orig_size, chunks). Exported to game_data/queens/queens_parts.bin
@@ -15,19 +15,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_scene_mesh import load_scene, xform
 import scene_placed
 import mdt_codec
-from queens_hcam import split_tris, build_coll_mds
+from queens_building_camera_hulls import split_tris, build_coll_mds
 
-MAX_A_TRIS = 1000     # single node = the whole model. Settled: the 400-poly cap does NOT bind
+MAX_PLAYER_COLLISION_TRIS = 1000     # single node = the whole model. Settled: the 400-poly cap does NOT bind
                       # georama-part collision, and fewer/larger nodes snag less than many small ones.
-C_SCALE_Y = 2.0
-C_RADIUS_MUL = 2.0    # cylinder radius = vanilla mean ring radius x this
-C_SEGMENTS = 16       # ring segments: vanilla octagon subdivided once, snapped to a true circle
-C_HEAD_XZ = (-13.80, 49.65)   # cylinder axis: centroid of the two snake-head summit tris
+CAMERA_HULL_SCALE_Y = 2.0
+CAMERA_HULL_RADIUS_MUL = 2.0    # cylinder radius = vanilla mean ring radius x this
+CAMERA_HULL_SEGMENTS = 16       # ring segments: vanilla octagon subdivided once, snapped to a true circle
+CAMERA_HULL_AXIS_XZ = (-13.80, 49.65)   # cylinder axis: centroid of the two snake-head summit tris
                               # (-18.79,114.81,56.87 / -5.77,118.98,50.67 / -17.82,116.89,49.15)
                               # and (-5.77,118.98,50.67 / -16.85,114.81,41.43 / -17.82,116.89,49.15)
 
 
-from queens_h06_surgery import A_REMOVE_TRIS, A_EXTRA_TRIS   # user-selected tris (viewer)
+from queens_snake_statue_surgery_data import PLAYER_COLLISION_REMOVE_TRIS, PLAYER_COLLISION_ADD_TRIS   # user-selected tris (viewer)
 
 def _tri_matches(t, ref, tol=0.05):
     for rot in range(3):
@@ -40,13 +40,13 @@ def _tri_matches(t, ref, tol=0.05):
 def apply_surgery(tris):
     kept, removed = [], 0
     for t in tris:
-        if any(_tri_matches(t, ref) for ref in A_REMOVE_TRIS):
+        if any(_tri_matches(t, ref) for ref in PLAYER_COLLISION_REMOVE_TRIS):
             removed += 1
             continue
         kept.append(t)
-    if A_REMOVE_TRIS and removed != len(A_REMOVE_TRIS):
-        print(f'  WARNING: {removed} tris removed but {len(A_REMOVE_TRIS)} listed — check coords')
-    kept += [[list(p) for p in t] for t in A_EXTRA_TRIS]
+    if PLAYER_COLLISION_REMOVE_TRIS and removed != len(PLAYER_COLLISION_REMOVE_TRIS):
+        print(f'  WARNING: {removed} tris removed but {len(PLAYER_COLLISION_REMOVE_TRIS)} listed — check coords')
+    kept += [[list(p) for p in t] for t in PLAYER_COLLISION_ADD_TRIS]
     return kept
 
 
@@ -72,11 +72,11 @@ def full_visual_tris(scn, DIR, name='e03h06'):
     return out
 
 
-def cylinder_c_tris(sub):
-    """The replacement `_c` hull as part-local tris: a simple open cylinder — C_SEGMENTS-gon,
-    radius = vanilla mean ring radius x C_RADIUS_MUL, centered on the snake-head summit
-    (C_HEAD_XZ) so the hull is equidistant around a player standing there, from y=0 to
-    ymax*C_SCALE_Y. Side quads only (no caps), wound OUTWARD like the vanilla hull."""
+def camera_hull_cylinder_tris(sub):
+    """The replacement `_c` hull as part-local tris: a simple open cylinder — CAMERA_HULL_SEGMENTS-gon,
+    radius = vanilla mean ring radius x CAMERA_HULL_RADIUS_MUL, centered on the snake-head summit
+    (CAMERA_HULL_AXIS_XZ) so the hull is equidistant around a player standing there, from y=0 to
+    ymax*CAMERA_HULL_SCALE_Y. Side quads only (no caps), wound OUTWARD like the vanilla hull."""
     c_off = struct.unpack_from('<I', sub, 0xc0)[0]
     cnt, tbl = struct.unpack_from('<II', sub, c_off + 8)
     vs = []
@@ -92,16 +92,16 @@ def cylinder_c_tris(sub):
     cx = sum(v[0] for v in base) / len(base)
     cz = sum(v[2] for v in base) / len(base)
     rad = sum(math.hypot(v[0] - cx, v[2] - cz) for v in base) / len(base)
-    hx, hz = C_HEAD_XZ
-    top_y, r = ymax * C_SCALE_Y, rad * C_RADIUS_MUL
+    hx, hz = CAMERA_HULL_AXIS_XZ
+    top_y, r = ymax * CAMERA_HULL_SCALE_Y, rad * CAMERA_HULL_RADIUS_MUL
     ring_b = []; ring_t = []
-    for i in range(C_SEGMENTS):
-        a = 2 * math.pi * i / C_SEGMENTS
+    for i in range(CAMERA_HULL_SEGMENTS):
+        a = 2 * math.pi * i / CAMERA_HULL_SEGMENTS
         ring_b.append([hx + r * math.cos(a), 0.0, hz + r * math.sin(a)])
         ring_t.append([hx + r * math.cos(a), top_y, hz + r * math.sin(a)])
     tris = []
-    for i in range(C_SEGMENTS):
-        j = (i + 1) % C_SEGMENTS
+    for i in range(CAMERA_HULL_SEGMENTS):
+        j = (i + 1) % CAMERA_HULL_SEGMENTS
         for tr in ([ring_b[i], ring_b[j], ring_t[j]], [ring_b[i], ring_t[j], ring_t[i]]):
             ab = [tr[1][k] - tr[0][k] for k in range(3)]
             ac = [tr[2][k] - tr[0][k] for k in range(3)]
@@ -123,12 +123,12 @@ def rebuild_h06(scn, DIR):
     c_off = struct.unpack_from('<I', sub, 0xc0)[0]
     c_size = struct.unpack_from('<I', sub, 0xc4)[0]
     old_c = bytes(sub[c_off:c_off + c_size])
-    new_c = build_coll_mds(old_c, [cylinder_c_tris(bytes(sub))], name_prefix='hc')
+    new_c = build_coll_mds(old_c, [camera_hull_cylinder_tris(bytes(sub))], name_prefix='hc')
     # -- _a: full visual mesh, split, appended, repointed --
     a_off = struct.unpack_from('<I', sub, 0x78)[0]
     a_size = struct.unpack_from('<I', sub, 0x7c)[0]
     old_a = bytes(sub[a_off:a_off + a_size])
-    chunks = split_tris(apply_surgery(vis), MAX_A_TRIS)
+    chunks = split_tris(apply_surgery(vis), MAX_PLAYER_COLLISION_TRIS)
     new_a = build_coll_mds(old_a, chunks, name_prefix='ha')
     while len(sub) % 16:
         sub += b'\x00'
@@ -145,7 +145,7 @@ def rebuild_h06(scn, DIR):
 
 if __name__ == '__main__':
     scn = load_scene('gedit/e03/scene.scn')
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     new, orig, chunks = rebuild_h06(scn, DIR)
     print(f'e03h06: sub {orig} -> {len(new)} bytes; _a = {sum(len(c) for c in chunks)} tris '
-          f'in {len(chunks)} nodes ({[len(c) for c in chunks]}); _c height x{C_SCALE_Y}')
+          f'in {len(chunks)} nodes ({[len(c) for c in chunks]}); _c height x{CAMERA_HULL_SCALE_Y}')
