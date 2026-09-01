@@ -95,14 +95,10 @@
     </None>
     <!-- Extracted game assets from the UNTRACKED game_data/ folder. Guarded by Exists() so a clean checkout
          builds without them (these features degrade gracefully at runtime when the file is absent). Link
-         keeps the output layout (Resources/Fish, Resources/Sign) so runtime load paths are unchanged. Never
+         keeps the output layout (Resources/Fish) so runtime load paths are unchanged. Never
          redistributed. f19a (Priscleen, from a DC2 disc) is pending a runtime-extraction path. -->
     <None Include="..\game_data\priscleen\f19a.chr" Condition="Exists('..\game_data\priscleen\f19a.chr')">
       <Link>Resources\Fish\f19a.chr</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Include="..\game_data\fishsign\fishsign.chr" Condition="Exists('..\game_data\fishsign\fishsign.chr')">
-      <Link>Resources\Sign\fishsign.chr</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

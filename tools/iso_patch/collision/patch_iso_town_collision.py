@@ -111,7 +111,7 @@ def main():
             if code == "s04":
                 # Brownboo s04g01_v camera-collision rebuild (brownboo_collision_builder.baked_named):
                 # custom obj56 = central-cylinder simplification + the iwa01 rock replaced by a CSG hull
-                # (cylinder shell minus flared tunnel cutter, tools/export_brownboo_rock_blender.py, frozen to
+                # (cylinder shell minus flared tunnel cutter, tools/brownboo_rock_hull_builder.py, frozen to
                 # brownboo_rock_hull_data.py). RE-ENABLED 2026-08 for the CSG-hull approach after the earlier
                 # per-leg-node attempt clipped; CullBuildings (see-through houses) still runs alongside.
                 from queens_collision_builder import build_flat_mds, _replace_a_block

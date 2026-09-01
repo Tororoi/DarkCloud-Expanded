@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Generate a self-contained Blender script for hand-authoring the iwa01 camera-collision hull.
+"""Regenerate the frozen iwa01 camera-collision hull (tools/brownboo_rock_hull_data.py).
 
-Run this once (needs DC1_DATA_DIR via .env) to bake the geometry into a standalone Blender .py
-with no external deps. Open Blender, load the emitted script in the Text Editor, and Run — you get
-TWO watertight solid objects to combine with a Boolean modifier:
+hull_tris() computes the finished hull headlessly — cylinder shell around the rock MINUS the flared tunnel
+cutter (exact sequential CSG, needs trimesh+manifold3d) — from the authoring inputs kept in
+tools/brownboo_camera_collision.py (_IWA01_* tri blocks, _collar_pairs, _iwa01_visual_circle);
+freeze_hull() writes it as a plain literal so the ISO bake needs no CSG deps.
 
-  cylinder_solid   the enclosing circle as a closed, capped cylinder (the shell around the rock)
-  tunnel_solid     the tunnel passage (bore + both collars) as a closed tube, each mouth extended
-                   out PAST the cylinder wall and capped, so a Boolean cuts clean through
+  python3 tools/brownboo_rock_hull_builder.py     # -> rewrites tools/brownboo_rock_hull_data.py
 
-  python3 tools/export_brownboo_rock_blender.py            # -> game_data/blender/iwa01_scene.py
-
-Both are manifold (welded verts, every edge shared by exactly two faces) so Blender's exact Boolean
-solver produces a clean result: Difference (cylinder minus tunnel) carves the passage; Union merges
-them. Recalculate normals (Shift+N) after Booleaning if faces look inside-out.
+(The interactive Blender-scene emitter this file grew from, and the shelved anti-climb corner-box cutter,
+were removed 2026-09 — recoverable via git. The hull is FINALIZED; run this only to re-freeze after a
+deliberate parameter change.)
 """
 import os, sys, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -337,50 +334,6 @@ def _bridge(A, B):
     return tris
 
 
-# The bore's two UPPER ANGLED wall quads (between the y~28 side-wall tops and the y~34.5-35 ceiling
-# edge): sloped planes convert lateral camera push into climb (the swept-slide resolves along the hit
-# plane, and a slanted plane's slide direction has an upward component). Corners as
-# (lower-west, upper-west, lower-east, upper-east) — these lines define the CORNER BOX below.
-_BORE_ANGLED = [
-    ([-166.39, 28.13, -23.63], [-164.94, 34.49, -29.88], [-133.43, 28.46, -19.13], [-131.68, 35.04, -26.03]),
-    ([-159.62, 28.25, -48.39], [-161.65, 34.59, -41.16], [-126.84, 28.52, -43.55], [-128.70, 35.07, -37.26]),
-]
-
-
-def _corner_box_tris(cx, cz, R, lift=0.4):
-    """SECOND cutter: a rectangular slab spanning the tunnel's upper region — vertical sides through the
-    _BORE_ANGLED lower edges, near-flat top just above the native ceiling — extended `ext` units PAST both
-    mouths along the bore axis. Differencing this after the tunnel solid squares the upper angled walls
-    of the bore AND the collars in one continuous corridor: no end walls at the mouth planes, so none of
-    the wedge pockets an in-place L-profile-with-fillers left for the camera to jam into. ⚠ each corner
-    is extended TO A TARGET RADIUS (R-1.5, just inside the wall, deep in the horn bell): a fixed-length
-    extension undershoots — the corner verts sit at r~21, so mid-throat cap fragments survive as new
-    pocket walls (shipped twice). Inside the bell the horn is wider than the box in every direction, so
-    the end caps melt entirely; the slab's protrusions along the way carve harmlessly into rock interior,
-    and its bottom face lies inside the bore/funnel voids — the sequential Boolean removes all of it."""
-    (lwA, uwA, leA, ueA), (lwB, uwB, leB, ueB) = _BORE_ANGLED
-    ax = [(lwA[0] - leA[0]) + (lwB[0] - leB[0]), 0.0, (lwA[2] - leA[2]) + (lwB[2] - leB[2])]
-    L = math.hypot(ax[0], ax[2]) or 1.0
-    ax = [ax[0] / L, 0.0, ax[2] / L]                     # unit axis pointing WEST (lw ends are west)
-    def X(p, sgn, y=None):                               # extend p along +-axis until xz-radius R-1.5
-        q = _extend_along([p[0], p[1] if y is None else y, p[2]],
-                          [sgn * ax[0], 0.0, sgn * ax[2]], cx, cz, R - 1.5)
-        return q
-    bwA, beA = X(lwA, +1), X(leA, -1)                    # bottom corners (y ~28, inside the bore void)
-    bwB, beB = X(lwB, +1), X(leB, -1)
-    twA, teA = X(lwA, +1, uwA[1] + lift), X(leA, -1, ueA[1] + lift)   # top corners: lower edges' xz at
-    twB, teB = X(lwB, +1, uwB[1] + lift), X(leB, -1, ueB[1] + lift)   # ceiling height (+lift eats slivers)
-    quads = [
-        (bwA, beA, teA, twA),                            # side A (vertical)
-        (bwB, beB, teB, twB),                            # side B (vertical)
-        (twA, teA, teB, twB),                            # top (near-flat, just above the native ceiling)
-        (bwA, beA, beB, bwB),                            # bottom (inside the bore void -> melts away)
-        (bwA, twA, twB, bwB),                            # west cap (inside the funnel void)
-        (beA, teA, teB, beB),                            # east cap (inside the funnel void)
-    ]
-    return [[list(a), list(b), list(c)] for a, b, c, d in quads for a, b, c in ((a, b, c), (a, c, d))]
-
-
 def hull_tris(round_to=2):
     """The finished iwa01 camera hull, computed headlessly (no Blender): cylinder shell MINUS the flared
     tunnel cutter MINUS the anti-climb corner box (sequential exact CSG differences), top/bottom caps
@@ -393,7 +346,7 @@ def hull_tris(round_to=2):
     cyl = trimesh.Trimesh(vertices=cv, faces=cf, process=True); cyl.fix_normals()
     tun = trimesh.Trimesh(vertices=tv, faces=tf, process=True); tun.fix_normals()
     # (the anti-climb corner box was tried here — cyl-tun-box sequential difference — and dropped:
-    #  squaring the bore's upper walls didn't help the camera in-game. _corner_box_tris stays shelved.)
+    #  squaring the bore's upper walls didn't help the camera in-game; its code was removed 2026-09.)
     hull = cyl.difference(tun, engine='manifold')
     ymin, ymax = hull.vertices[:, 1].min(), hull.vertices[:, 1].max()
     out = []
@@ -412,10 +365,10 @@ def freeze_hull(path):
     """Write the computed hull to a plain-literal Python module the bake can import with no CSG deps."""
     tris = hull_tris()
     with open(path, 'w') as fh:
-        fh.write('# GENERATED by tools/export_brownboo_rock_blender.py (freeze_hull) — do not edit by hand.\n')
+        fh.write('# GENERATED by tools/brownboo_rock_hull_builder.py (freeze_hull) — do not edit by hand.\n')
         fh.write('# iwa01 camera-collision hull: cylinder shell around the rock MINUS the flared tunnel\n')
         fh.write('# cutter (exact CSG difference), top & bottom caps stripped. Game-space triangles,\n')
-        fh.write('# each [[x,y,z],[x,y,z],[x,y,z]]. Regenerate by running export_brownboo_rock_blender.py.\n')
+        fh.write('# each [[x,y,z],[x,y,z],[x,y,z]]. Regenerate by running brownboo_rock_hull_builder.py.\n')
         fh.write('IWA01_HULL = [\n')
         for t in tris:
             fh.write(f'    {t!r},\n')
@@ -423,197 +376,8 @@ def freeze_hull(path):
     return len(tris)
 
 
-def main():
-    cx, cz, R = _iwa01_visual_circle()
-
-    cyl_v, cyl_f = _weld(_cylinder_tris(cx, cz, R, _IWA01_BOT, _IWA01_TOP))
-    tun_v, tun_f = _weld(_tunnel_solid_tris(cx, cz, R))
-
-    objs = {
-        'cylinder_solid': (cyl_v, cyl_f, (0.60, 0.62, 0.68)),
-        'tunnel_solid':   (tun_v, tun_f, (0.20, 0.70, 0.90)),
-    }
-
-    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'game_data', 'blender')
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, 'iwa01_scene.py')
-
-    with open(out_path, 'w') as fh:
-        fh.write(_HEADER)
-        fh.write('OBJECTS = {\n')
-        for name, (verts, faces, colour) in objs.items():
-            fh.write(f'  {name!r}: dict(\n')
-            fh.write(f'    verts={verts!r},\n')
-            fh.write(f'    faces={faces!r},\n')
-            fh.write(f'    colour={colour!r}),\n')
-        fh.write('}\n')
-        fh.write(_BODY)
-
-    print(f'wrote {out_path}')
-    print(f'  circle centre ({cx:.1f},{cz:.1f}) R={R:.1f}  y[{_IWA01_BOT},{_IWA01_TOP}]')
-    print(f'  cylinder_solid: {len(cyl_v)} verts, {len(cyl_f)} tris, non-manifold edges: {_nonmanifold(cyl_f)}')
-    print(f'  tunnel_solid:   {len(tun_v)} verts, {len(tun_f)} tris, non-manifold edges: {_nonmanifold(tun_f)}')
-    print('  emitted script cuts iwa01_hull = cylinder_solid MINUS tunnel_solid (Boolean, applied)')
-
-    # freeze the SAME cut headlessly so the bake needs no CSG deps
-    data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'brownboo_rock_hull_data.py')
-    try:
-        nfaces = freeze_hull(data_path)
-        print(f'  froze {nfaces}-tri hull -> {data_path}')
-    except ImportError as e:
-        print(f'  [skip freeze] {e} (pip install trimesh manifold3d scipy networkx to enable)')
-
-
-# ── Blender-side template (the emitted script is DATA above + this code) ──────────────────────
-
-_HEADER = '''"""GENERATED by tools/export_brownboo_rock_blender.py — do not edit by hand; re-run the generator.
-
-Open in Blender's Text Editor and press Run. It builds `cylinder_solid` (the closed shell around the
-rock) and `tunnel_solid` (the passage as a closed cutter — bore + collars, each mouth flared along
-its OWN entrance-poly angle out through the wall), then AUTOMATICALLY cuts the hole: it Boolean-
-Differences the cylinder by the tunnel, applies it, and deletes the cylinder's top & bottom cap faces,
-leaving `iwa01_hull` — the OPEN wall with two flared tunnel openings plus the bored passage walls.
-That is the finished camera-collision mesh. cylinder_solid + tunnel_solid are kept (hidden) for
-reference. Recalculate normals (Shift+N) on iwa01_hull if any face looks inside-out.
-
-Coordinates are RAW GAME SPACE mapped game (x,y,z) -> Blender (x, z, y) so the rock stands upright
-(game +Y up becomes Blender +Z up). The export-back note at the bottom maps your result back.
-"""
-import bpy, bmesh
-
-'''
-
-_BODY = '''
-
-def _g2b(p):
-    """game (x,y,z) -> Blender (x, z, y): game Y-up becomes Blender Z-up."""
-    return (p[0], p[2], p[1])
-
-
-def _ensure_collection(name):
-    col = bpy.data.collections.get(name)
-    if col is None:
-        col = bpy.data.collections.new(name)
-        bpy.context.scene.collection.children.link(col)
-    return col
-
-
-def _clear(col):
-    for ob in list(col.objects):
-        bpy.data.objects.remove(ob, do_unlink=True)
-
-
-def _mat(name, rgb):
-    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    m.use_nodes = False
-    m.diffuse_color = (rgb[0], rgb[1], rgb[2], 1.0)
-    return m
-
-
-def _recalc_outward(me):
-    """Make face normals coherent and outward — the hand-authored bore/collar tris and the generated
-    loft/cap tris don't share a global winding, and the EXACT Boolean needs a consistently-wound solid
-    or it treats one mouth as closed. Weld first so shared edges connect, then recalc."""
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.01)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(me)
-    bm.free()
-    me.update()
-
-
-def _make(col, name, verts, faces, rgb):
-    me = bpy.data.meshes.new(name)
-    me.from_pydata([_g2b(v) for v in verts], [], [list(f) for f in faces])
-    me.validate()
-    me.update()
-    _recalc_outward(me)
-    ob = bpy.data.objects.new(name, me)
-    ob.data.materials.append(_mat(name + '_mat', rgb))
-    ob.color = (rgb[0], rgb[1], rgb[2], 1.0)
-    ob.show_wire = True
-    col.objects.link(ob)
-    return ob
-
-
-def _cut_hull(col, base, cutters):
-    """iwa01_hull = base (cylinder) MINUS each cutter in turn (tunnel, then the anti-climb corner box),
-    Boolean-applied. base/cutters left hidden."""
-    hull = base.copy()
-    hull.data = base.data.copy()
-    hull.name = 'iwa01_hull'
-    hull.data.materials.clear()
-    hull.data.materials.append(_mat('iwa01_hull_mat', (0.80, 0.78, 0.55)))
-    hull.color = (0.80, 0.78, 0.55, 1.0)
-    hull.show_wire = True
-    col.objects.link(hull)
-
-    bpy.context.view_layer.objects.active = hull
-    for ob in bpy.context.selected_objects:
-        ob.select_set(False)
-    hull.select_set(True)
-    for i, cutter in enumerate(cutters):
-        m = hull.modifiers.new(f'iwa01_cut{i}', 'BOOLEAN')
-        m.operation = 'DIFFERENCE'
-        m.solver = 'EXACT'
-        m.object = cutter
-        bpy.ops.object.modifier_apply(modifier=m.name)
-        cutter.hide_set(True)
-    _strip_caps(hull.data)                               # open the cylinder: drop top & bottom faces
-
-    base.hide_set(True)
-    return hull
-
-
-def _strip_caps(me):
-    """Delete the cylinder's flat top & bottom faces so only the wall (with tunnel openings) + the bored
-    passage walls remain — the finished open camera shell. Caps are the horizontal faces sitting at the
-    mesh's min/max height (Blender Z, which is game Y); every other face is near-vertical wall."""
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    zs = [v.co.z for v in bm.verts]
-    zmax, zmin = max(zs), min(zs)
-    tol = 0.5
-    kill = [f for f in bm.faces
-            if abs(f.normal.z) > 0.9
-            and (abs(f.calc_center_median().z - zmax) < tol or abs(f.calc_center_median().z - zmin) < tol)]
-    bmesh.ops.delete(bm, geom=kill, context='FACES')
-    bm.to_mesh(me)
-    bm.free()
-    me.update()
-
-
-def build():
-    col = _ensure_collection('iwa01_ref')
-    _clear(col)
-    made = {name: _make(col, name, d['verts'], d['faces'], d['colour']) for name, d in OBJECTS.items()}
-    hull = _cut_hull(col, made['cylinder_solid'], [made['tunnel_solid']])
-    # shade viewport by object colour so the per-object colours show without material mode
-    for area in bpy.context.screen.areas if bpy.context.screen else []:
-        if area.type == 'VIEW_3D':
-            area.spaces[0].shading.color_type = 'OBJECT'
-    print('iwa01_ref built: iwa01_hull (cut, caps stripped -> open camera shell) + cylinder_solid, '
-          f'tunnel_solid (hidden refs); hull faces={len(hull.data.polygons)}')
-
-
-build()
-
-# ── EXPORT-BACK NOTE ─────────────────────────────────────────────────────────────────────────
-# When the hull is how you want it (edit "iwa01_hull", or whatever object you finish with), run this
-# in the Text Editor to print game-space triangles ready to paste into brownboo_camera_collision.py.
-# It triangulates n-gons and maps Blender (x,y,z) back to game (x, z, y):
-#
-#   import bpy, bmesh
-#   ob = bpy.data.objects['iwa01_hull']
-#   bm = bmesh.new(); bm.from_mesh(ob.data)
-#   bmesh.ops.triangulate(bm, faces=bm.faces)
-#   for f in bm.faces:
-#       t = [(round(v.co.x,2), round(v.co.z,2), round(v.co.y,2)) for v in f.verts]
-#       print('  ' + ' '.join(f'{x} {y} {z}' for (x,y,z) in t))
-#   bm.free()
-'''
-
-
 if __name__ == '__main__':
-    main()
+    import os
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'brownboo_rock_hull_data.py')
+    n = freeze_hull(out)
+    print(f'froze {n} hull tris -> {out}')

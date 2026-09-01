@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     internal static class FishingSpots
     {
         /// <summary>A spot to install. Rect corners and the water plane come from the town's own
-        /// <c>WATER_SURFACE</c> (see GeoramaProbe's dump); the trigger box just has to be somewhere the
+        /// <c>WATER_SURFACE</c> (see the retired GeoramaProbe's dump — git); the trigger box just has to be somewhere the
         /// player will walk.</summary>
         internal readonly struct Spot
         {

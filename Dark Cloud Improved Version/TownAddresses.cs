@@ -333,10 +333,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int CharaRotation = 0x60;
 
         /// <summary>The player's TOWN world position (x, y, z), via <see cref="CharaPtr"/> — the
-        /// pointer-chase GeoramaProbe already validated live. Pattern moved here so every feature that
+        /// pointer-chase the (since retired) GeoramaProbe validated live. Pattern moved here so every feature that
         /// needs the town player's world position (CustomFishingSpot, CanalTide, …) shares ONE correct
         /// read instead of re-deriving it (or worse, reaching for <c>Player.positionX/Y/Z</c> —
-        /// GeoramaProbe's own doc comment on <see cref="CharaPosition"/> explains why those mislead: a
+        /// the retired GeoramaProbe's doc comment on <see cref="CharaPosition"/> explains why those mislead: a
         /// live reading showed the triple tracking EDITAREA base heights, not the player).
         /// ⚠ This is TOWN-ONLY. Do not reuse in a dungeon context (see <c>Addresses.dunPositionX/Y/Z</c>
         /// for that — a DIFFERENT global, named for exactly this reason).</summary>

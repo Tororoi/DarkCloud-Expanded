@@ -122,7 +122,6 @@ namespace Dark_Cloud_Improved_Version
             if (!FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData)) return;
             if (!ResolveLiveSlotBase(ref areaData)) return;   // custom area: CFish not ready yet this tick
             CheckFishingQuest(areaData);
-            // FishPhaseLogger.PollSlotDynamics(areaData);
             SteerFishToPlayer(areaData);
         }
 
