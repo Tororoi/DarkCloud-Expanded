@@ -303,7 +303,7 @@ namespace Dark_Cloud_Improved_Version
                     string skip = size <= 0f ? " SKIP(size<=0)"
                         : fishId < 0 || fishId >= FishModelTable.Count ? $" SKIP(id out of range 0..{FishModelTable.Count - 1})"
                         : "";
-                    diag.AppendLine($"[AriseDiag]   raw[{i:D2}] fishId={fishId} size={size:F3} (~{(int)Math.Floor(size * 10f)}cm){skip}");
+                    diag.AppendLine($"[AriseDiag]   raw[{i:D2}] fishId={fishId} size={size:F3} (~{(int)Math.Floor(size)}cm){skip}");
                 }
                 if (size <= 0f || fishId < 0 || fishId >= FishModelTable.Count) continue;
                 if (!bestEntry.TryGetValue(fishId, out int bestIdx) ||
@@ -387,7 +387,7 @@ namespace Dark_Cloud_Improved_Version
             int cap = fishId == Fish.MardanGarayan.Id || fishId == Fish.BaronGarayan.Id
                 ? GarayanRecordCap : NormalRecordCap;
             int capCm = vanillaMaxCm * 2;
-            int recordCm = (int)Math.Floor(recordSize * 10f);
+            int recordCm = (int)Math.Floor(recordSize);
             if (recordCm < vanillaMaxCm)
             { why = $"{fishData.Name} (id {fishId}): record {recordCm}cm (raw {recordSize:F3}) < vanilla max {vanillaMaxCm}cm -> +0"; return 0; }
             if (recordCm >= capCm)

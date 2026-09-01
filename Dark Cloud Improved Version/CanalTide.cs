@@ -91,31 +91,17 @@ namespace Dark_Cloud_Improved_Version
         private const long WaterOff = 0x90;                     // CWater within the CEditGround water body
         private const long CwW = 0x00, CwH = 0x04, CwBuf = 0x08;
 
-        // Corners are ABSOLUTE WORLD x/z (see the fix note on PlayerRipple below) — no frame translation
+        // Corners are ABSOLUTE WORLD x/z (per the LoadGroundData/SetVertex decompile) — no frame translation
         // needed to interpret them, so CWater's own frame (+0xB0) plays no part in this math.
         private const long CwCorner = 0x20, CwCornerStride = 0x10;
-        // ⚠ DEV VALUES — cranked WAY up so the movement disturbance is obvious while we tune it. The cfg
-        // WATER_SHAKE baseline is ~0.5; dial RippleAmp back down toward that once the behaviour is right.
-        private const float RippleAmp = 12f;                    // per-spike amplitude (dev; baseline ~0.5)
-        private const float RippleMinMove = 0.15f;              // only ripple when actually moving through the water
-        private const int   RippleRadius = 1;                   // cell radius of the spike (1 = 3x3, rounder wave)
-        // Water DISTORTION is now fully NATIVE (e03 mapinfo: the canal body is world-anchored and its
-        // WATER_SHAKE sources agitate it — IsoPatcher.WorldAnchorCanalWater). The C# height-buffer poking
-        // below (PlayerRipple + probe) is DISABLED; PinRipple (tide-level pin) and RippleDecal (the ring
-        // decal) still run. Flip CSharpWaterShake true only to re-enable the old runtime experiments.
-        internal static bool CSharpWaterShake = false;
-        internal static bool RippleProbe = false;               // DEV: gentle wandering spike, sim-propagated (see PlayerRipple)
-        private const float RippleProbeAmp = 1.5f;              // DEV probe spike amplitude (let Hamon spread it)
+        // Water DISTORTION is fully NATIVE (e03 mapinfo: the canal body is world-anchored and its
+        // WATER_SHAKE sources agitate it — IsoPatcher.WorldAnchorCanalWater). The old C# height-buffer
+        // poking experiments (PlayerRipple/RippleProbe) were deleted 2026-08 — recoverable via git.
         private const long  CamPtrVar = 0x21D19678;             // follow-camera ptr (ref/look-at @cam+0x2C0/+0x2C8)
         private const long  WaveSpeedOff = 0x94, WaveDampOff = 0x98;   // Hamon params in CWater (cw = body+0x90)
-        private const float RippleDampAdd = 0.25f;              // extra damping to keep the disturbance focused
-        private static float _dampOrig = float.NaN;             // captured authored damping (restore/uncompound)
-        private const float RippleMoveNorm = 4f;                // movement that yields a full-amplitude spike
-        private const float RippleMaxDisp = 3f;                 // HARD cap on cell displacement (kills buildup)
 
         private static int _rippleSlot = -1;                    // cached canal CWater body index (see CanalBody)
-        private static int  _rippleLogTick;                     // throttle for the PlayerRipple diagnostic
-        private static float _lastPx, _lastPz;
+        private static int  _rippleLogTick;                     // throttle for the ripple-gate diagnostic
         private static bool _loggedArm;                // one log line per low-tide arming
         private static uint _lastClothSig;             // signature of the player cloth chain last tick (stability gate for the cape early-draw)
         private static int  _capeStableTicks;          // consecutive ticks the cloth chain has been valid+unchanged
@@ -123,7 +109,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool _loggedStaleFlag;          // one log line when a stale evict flag is proactively cleared
         private static int  _colorSaved = -1;          // canal body's OWN colour bytes, captured before we touch them
 
-        internal static bool Diagnostics = true;      // log frame-find + writes while we validate the lever
+        internal static bool Diagnostics = false;     // log frame-find + writes (dev)
         private const  long  FadeAlpha    = 0x21D3D1CC;  // Ed time-change fade box alpha: 0 clear .. 128 black
         // Snap the tide while the fade box is this dark (of 128). The mod ticks ~50 ms (~3 frames), so this has
         // to be low enough that a tick reliably lands inside the black window, high enough that the screen is
@@ -168,9 +154,6 @@ namespace Dark_Cloud_Improved_Version
         private const float DecalParkY = -3000f;
         private const float DecalStillThresh = 0.5f;       // per-tick x+y+z movement below this = "standing still"
         private const int   DecalStillHold = 3;            // ticks of stillness before the calm ripple appears
-        // PROBE: ignore the wading gate and show the ripple everywhere in Queens (still-gated), any tide —
-        // visual-confirmation mode. Turn OFF once confirmed.
-        internal static bool DecalProbe = false;   // true = diagnostic (ring anywhere when still); false = the real water gate
         private static long _decalPart;                    // cached part (mmu); 0 = unknown
         private static int  _decalNextScan;
         private static float _decalLastY = DecalParkY;
@@ -205,7 +188,7 @@ namespace Dark_Cloud_Improved_Version
                 _rippleSlot = -1; _colorSaved = -1; _loggedArm = false;                   // Queens-only state
                 _capeStableTicks = 0; _lastClothSig = 0; _loggedCapeGate = false;          // cape early-draw stability gate
                 _loggedStaleFlag = false;                                                 // stale-flag clear log
-                _dampOrig = float.NaN; _mizuDrawSaved = int.MinValue;                     // ripple sim + diag state
+                _mizuDrawSaved = int.MinValue;                                            // mizu draw-flag diag state
                 _poleL = 0; _poleR = 0; _loggedPoles = false;                             // ladder-rail ripples
                 _loggedLadderGate = false;                                                // ladder tide-gate log
                 _evictArm = 0; _flagTtl = 0; _prevTarget = float.NaN;                     // re-arm the tide-evict; drop the flag so it can't linger into another town
@@ -265,7 +248,7 @@ namespace Dark_Cloud_Improved_Version
                     Memory.WriteInt(CanalEvictFlag, 0);
                 }
             }
-            else if (BisectFlags.EvictFlagPin && Memory.ReadInt(CanalEvictFlag) != 0)
+            else if (Memory.ReadInt(CanalEvictFlag) != 0)
             {
                 Memory.WriteInt(CanalEvictFlag, 0);
                 if (!_loggedStaleFlag) { Log("canal-evict flag was set with no eviction pending → cleared (would have false-warped the next fade)"); _loggedStaleFlag = true; }
@@ -340,7 +323,7 @@ namespace Dark_Cloud_Improved_Version
             // redraw is Z-clipped at the waterline into a crisp dry top half. mizu itself is left entirely
             // alone (native layer, native pass — no hide, no redraw). Re-armed every tick; disarmed at
             // medium/high tide and whenever the player pointer is unreadable.
-            bool low = _shownLvl <= LowTideThreshold && BisectFlags.CapeEarlyDraw;
+            bool low = _shownLvl <= LowTideThreshold;
             bool armed = false;
             if (low)
             {
@@ -430,8 +413,6 @@ namespace Dark_Cloud_Improved_Version
                 { Memory.WriteIntFast(_frame + FrameDrawFlag, _mizuDrawSaved); _mizuDrawSaved = int.MinValue; }
                 ApplyLowTideColor(false);   // quad stays NATIVE colour
             }
-            PlayerRipple(_shownLvl);
-
             RippleDecal(_shownLvl, low);
             PoleRipples(_shownLvl);
             LadderTideGate(low);
@@ -535,154 +516,6 @@ namespace Dark_Cloud_Improved_Version
         }
 
 
-        /// <summary>Ripple the canal where the player wades through it — the town half of the healing-spring
-        /// look. Town water has NO player-contact path of its own (the dungeon's expanding-ring system is a
-        /// separate stack), so we supply the contact: write an amplitude spike into the CWater height buffer at
-        /// the player's grid cell, exactly as <c>Shake__6CWater</c> does, and the engine's own StepWater/Hamon
-        /// wave step (already running per frame for this body) propagates and draws it. Pure data — no patch.
-        ///
-        /// Only spikes while the player is INSIDE the water quad and BELOW the surface, and only when actually
-        /// moving (a standing player leaves the surface calm, like the springs).</summary>
-        private static void PlayerRipple(float level)
-        {
-            if (!CSharpWaterShake) return;                                 // water distortion is native now (mapinfo)
-            // Throttled bail-reason logger: every ~1 s, report the FIRST gate that stops the ripple, so a
-            // "no interaction" report tells us exactly which condition is closed.
-            bool dbg = Diagnostics && _tick - _rippleLogTick >= 20;
-            void Why(string r) { if (dbg) { _rippleLogTick = _tick; Log($"PlayerRipple gate: {r}"); } }
-
-            long body = CanalBody();
-            if (body == 0) { Why("no canal body"); return; }
-            long cw = body + WaterOff;
-
-            int gw = Memory.ReadInt(cw + CwW), gh = Memory.ReadInt(cw + CwH);
-            if (gw <= 2 || gh <= 2 || gw > 512 || gh > 512) { Why($"bad grid {gw}x{gh}"); return; }
-            uint bufGuest = Memory.ReadUInt(cw + CwBuf) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(bufGuest)) { Why($"bad buf 0x{bufGuest:X}"); return; }
-
-            // TIGHTEN: boost the wave-sim DAMPING (Hamon's [0x26] @ cw+0x98 — the friction term
-            // `-damping*(cur-old)`) so a player spike dies out near the source instead of spreading into
-            // patchy far-waves. Additive (works whether the authored damping is 0 or not); captured once so
-            // the boost isn't compounded, re-applied each frame in case an area reload resets it.
-            if (float.IsNaN(_dampOrig)) _dampOrig = Memory.ReadFloat(cw + WaveDampOff);
-            Memory.WriteFloat(cw + WaveDampOff, _dampOrig + RippleDampAdd);
-
-            if (RippleProbe)
-            {
-                // The grid is centred on the camera's look-at (ref, which tracks the player), covering
-                // ref.xz ± the local corner extent — map the player relative to that. Inject ONLY where the
-                // player IS and ONLY when MOVING (a still player pumps no energy, so the water calms and a
-                // paused game — frozen position — adds nothing: this replaces the frame-counter gate, which
-                // an in-game pause defeats). The written displacement is HARD-CLAMPED so it can never build
-                // up regardless of tick/pause timing (the real cause of the burst on unpause).
-                if (!EditLoop.TryReadPlayerPos(out float ppx, out float ppy, out float ppz)) { Why("no player pos (probe)"); return; }
-                float pmoved = Math.Abs(ppx - _lastPx) + Math.Abs(ppz - _lastPz);
-                _lastPx = ppx; _lastPz = ppz;
-
-                uint camG = Memory.ReadUInt(CamPtrVar) & Memory.PhysAddrMask;
-                if (!Memory.IsValidGuest(camG)) { Why("no camera"); return; }
-                long camM = Memory.ToMmu(camG);
-                float refX = Memory.ReadFloat(camM + 0x2C0), refZ = Memory.ReadFloat(camM + 0x2C8);
-
-                float exMinX = float.MaxValue, exMaxX = float.MinValue, exMinZ = float.MaxValue, exMaxZ = float.MinValue;
-                for (int c = 0; c < 4; c++)
-                {
-                    float lx = Memory.ReadFloat(cw + CwCorner + c * CwCornerStride);
-                    float lz = Memory.ReadFloat(cw + CwCorner + c * CwCornerStride + 8);
-                    exMinX = Math.Min(exMinX, lx); exMaxX = Math.Max(exMaxX, lx);
-                    exMinZ = Math.Min(exMinZ, lz); exMaxZ = Math.Max(exMaxZ, lz);
-                }
-                float sX = exMaxX - exMinX, sZ = exMaxZ - exMinZ;
-                float uu = (ppx - refX) / sX + 0.5f;                       // player relative to ref, mapped to [0,1]
-                float vv = (ppz - refZ) / sZ + 0.5f;
-                int cx = Math.Clamp((int)(uu * (gw - 1)), 1, gw - 2);
-                int cy = Math.Clamp((int)(vv * (gh - 1)), 1, gh - 2);
-
-                if (pmoved >= RippleMinMove)
-                {
-                    long pbuf = Memory.ToMmu(bufGuest);
-                    long cell = pbuf + (long)(cx * gh + cy) * 4;
-                    float pamp = RippleProbeAmp * Math.Min(1f, pmoved / RippleMoveNorm);
-                    float next = Math.Clamp(Memory.ReadFloat(cell) - pamp, -RippleMaxDisp, RippleMaxDisp);
-                    Memory.WriteFloat(cell, next);
-                }
-                if (dbg)
-                {
-                    _rippleLogTick = _tick;
-                    Log($"RippleProbe: player({ppx:0},{ppz:0}) moved {pmoved:0.0} cell({cx},{cy}) of {gw}x{gh}");
-                }
-                return;
-            }
-
-            // ⚠ FIXED 2026-08: this used to read guest 0x21EA1D30 (+4/+8) as a plain (x,y,z) vector — that
-            // is Addresses.dunPositionX, the DUNGEON player-position global, and even its OWN (x,y,z)
-            // ordering is non-adjacent (Y sits at +0x38, Z at +0x34 — not +4/+8). In town it is unrelated
-            // data, so "moved"/"py" were noise: the ripple gate almost never opened correctly, which is
-            // the reported "no interaction with the water at all". EditLoop.TryReadPlayerPos is the
-            // TOWN-correct read (GeoramaProbe-verified CCharacter CFrame chase).
-            if (!EditLoop.TryReadPlayerPos(out float px, out float py, out float pz)) { Why("no player pos"); return; }
-
-            float moved = Math.Abs(px - _lastPx) + Math.Abs(pz - _lastPz);
-            _lastPx = px; _lastPz = pz;
-            if (py > level) { Why($"above water: py {py:0.0} > level {level:0.0}"); return; }
-            if (moved < RippleMinMove) { Why($"not moving: {moved:0.00} < {RippleMinMove}"); return; }
-
-            // ⚠ FIXED 2026-08: this used to ADD the water frame's translation on top of the corners — WRONG,
-            // and the reason the ripple never fired even after the player-position fix. Decompiled the actual
-            // loader (LoadGroundData +0x0CF8, calls CWater::SetVertex): the 4 corners are copied straight from
-            // the mapinfo WATER_SURFACE cfg's min/max (edit_info plane +0x20/+0x30) — i.e. they are ALREADY
-            // ABSOLUTE WORLD X/Z, not local offsets from the frame. The frame's own position (SetPosition, same
-            // load site) is a SEPARATE thing (corner[2] + an attached MapParts object's position) that the
-            // renderer uses for its own model-transform bookkeeping — irrelevant to where the quad's world
-            // corners are, which is all this needs. Adding it shifted the computed quad far from the player,
-            // so the in-quad test always failed. Min/max over all four corners so the result is independent of
-            // their winding.
-            // The canal refraction is a camera/player-following infinite plane: the 4 corners are LOCAL
-            // offsets (±320 / ±70), and the body's own position (+0x40/+0x48) — updated to track the view
-            // each frame by DrawWaterSurface — is where that window sits in the world. So the world quad is
-            // bodyPos + localCorner (NOT the raw corners, which centre on the origin and never cover the
-            // player's actual canal x ~ 1000).
-            float bodyPosX = Memory.ReadFloat(body + 0x40), bodyPosZ = Memory.ReadFloat(body + 0x48);
-            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                float cxv = bodyPosX + Memory.ReadFloat(cw + CwCorner + i * CwCornerStride);
-                float czv = bodyPosZ + Memory.ReadFloat(cw + CwCorner + i * CwCornerStride + 8);
-                minX = Math.Min(minX, cxv); maxX = Math.Max(maxX, cxv);
-                minZ = Math.Min(minZ, czv); maxZ = Math.Max(maxZ, czv);
-            }
-            float spanX = maxX - minX, spanZ = maxZ - minZ;
-            if (spanX <= 0.01f || spanZ <= 0.01f) { Why($"degenerate quad {spanX:0}x{spanZ:0}"); return; }
-
-            float u = (px - minX) / spanX;
-            float v = (pz - minZ) / spanZ;
-            if (u < 0f || u > 1f || v < 0f || v > 1f)                      // outside the water quad
-            { Why($"outside quad: p({px:0},{pz:0}) vs X[{minX:0},{maxX:0}] Z[{minZ:0},{maxZ:0}]"); return; }
-
-            int cellX = (int)(u * (gw - 1)), cellY = (int)(v * (gh - 1));
-
-            // Shake: buf[x*H + y] += amp. Spike scaled by how fast the player is wading, capped. Spread it
-            // over a small cell neighbourhood (radius RippleRadius, linear falloff) so the disturbance is a
-            // rounder, bigger wave than a single-cell poke. Each cell clamped to [1, dim-2] like Shake.
-            long bufBase = Memory.ToMmu(bufGuest);
-            float amp = -RippleAmp * Math.Min(1f, moved / 4f);
-            for (int dx = -RippleRadius; dx <= RippleRadius; dx++)
-                for (int dy = -RippleRadius; dy <= RippleRadius; dy++)
-                {
-                    int cx = Math.Clamp(cellX + dx, 1, gw - 2);
-                    int cy = Math.Clamp(cellY + dy, 1, gh - 2);
-                    float falloff = 1f - (Math.Abs(dx) + Math.Abs(dy)) / (float)(2 * RippleRadius + 1);
-                    long cell = bufBase + (long)(cx * gh + cy) * 4;
-                    Memory.WriteFloat(cell, Memory.ReadFloat(cell) + amp * falloff);
-                }
-            if (Diagnostics && _tick - _rippleLogTick >= 20)              // ~1 s throttle
-            {
-                _rippleLogTick = _tick;
-                Log($"PlayerRipple: cell ({cellX},{cellY}) of {gw}x{gh}, moved {moved:0.0}, amp {amp:0.0}");
-            }
-        }
-
-
         /// <summary>Drive the wading ripple part (see the WADING RIPPLE note above): keep its layer on
         /// the WATER pass and, while wading the canal at LOW tide, hold it just above the waterline under
         /// the player; park it otherwise. The texture animates natively (TEX_ANIME) — position is the only
@@ -709,22 +542,16 @@ namespace Dark_Cloud_Improved_Version
             else if (_decalStillTicks < DecalStillHold) _decalStillTicks++;
             bool still = _decalStillTicks >= DecalStillHold;
 
-            bool here;
-            if (DecalProbe)
-                here = still;                                        // probe: anywhere in Queens, when still
-            else
+            // In the canal water = LOW tide + feet at/below the low surface (on the ladder the feet ride the
+            // rungs ABOVE it → py > level → no ring) + inside the canal's Z channel. NOTE: the canal water
+            // FOLLOWS THE CAMERA IN X, so its X corners are camera-LOCAL (useless for a world test) — the
+            // channel runs the length of X. Only Z is world (Z isn't followed), so gate on the Z band.
+            bool inWater = low && py <= level && InCanalZ(pz);
+            bool here = still && inWater;
+            if (Diagnostics && still && low && _tick - _rippleLogTick >= 40)
             {
-                // In the canal water = LOW tide + feet at/below the low surface (on the ladder the feet ride the
-                // rungs ABOVE it → py > level → no ring) + inside the canal's Z channel. NOTE: the canal water
-                // FOLLOWS THE CAMERA IN X, so its X corners are camera-LOCAL (useless for a world test) — the
-                // channel runs the length of X. Only Z is world (Z isn't followed), so gate on the Z band.
-                bool inWater = low && py <= level && InCanalZ(pz);
-                here = still && inWater;
-                if (Diagnostics && still && low && _tick - _rippleLogTick >= 40)
-                {
-                    _rippleLogTick = _tick;
-                    Log($"ripple gate: py {py:0.#} level {level:0.#} pz {pz:0.#} inWater={inWater}");
-                }
+                _rippleLogTick = _tick;
+                Log($"ripple gate: py {py:0.#} level {level:0.#} pz {pz:0.#} inWater={inWater}");
             }
 
             if (here)

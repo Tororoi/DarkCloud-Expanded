@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bake the SMOOTHED (2x-density) west-bank bulge into a rebuilt s1301 subfile.
 
-The smoothed waterline inserts WB_SUBDIV stations per segment (yellowdrops_pond), which GROWS the
+The smoothed waterline inserts WB_SUBDIV stations per segment (yellowdrops_westbank), which GROWS the
 meshes — so instead of the in-place float patches of the old 3-station bulge, this tool rebuilds
 the three nested blocks of gedit/s13/scene.scn's s1301 subfile:
 
@@ -26,7 +26,7 @@ sys.path.insert(0, HERE)
 from extract_scene_mesh import load_scene
 import scene_placed as sp
 import mdt_codec
-from yellowdrops_pond import _WB_ROWS, _wb_profile, WB_SUBDIV
+from yellowdrops_westbank import WB_ROWS, wb_profile, WB_SUBDIV
 from yellowdrops_camera_pillars import pillar_hulls, doumu_hug_xz
 
 Y_LOCAL = 210.0            # s1301 node frames sit at world y + 210 (translation-only matrices)
@@ -34,15 +34,15 @@ TOL = 0.35
 
 # station chains (vanilla local coords) per mesh, split into the pieces each mesh owns
 def _chain(row, lo_z, hi_z):
-    return [(x, y + Y_LOCAL, z) for x, y, z in _WB_ROWS[row] if lo_z <= z <= hi_z]
+    return [(x, y + Y_LOCAL, z) for x, y, z in WB_ROWS[row] if lo_z <= z <= hi_z]
 
 CHAINS = {
     'grid10': [_chain('edge_top', -150, 0), _chain('edge_bot', -150, 0), _chain('crown', -150, 0)],
     'grid11': [_chain('edge_top', -30, 280), _chain('edge_bot', -30, 280), _chain('crown', -30, 280)],
-    '_a':     [[(x, 240.0, z) for x, y, z in _WB_ROWS['crown']],          # wall base = floor edge
-               [(x, 336.0, z) for x, y, z in _WB_ROWS['crown']]],         # wall top
-    '_c':     [[(x, 240.0, z) for x, y, z in _WB_ROWS['cam']],            # camera wall top/floor edge
-               [(x, 200.0, z) for x, y, z in _WB_ROWS['cam']]],           # camera wall bottom (y-10)
+    '_a':     [[(x, 240.0, z) for x, y, z in WB_ROWS['crown']],          # wall base = floor edge
+               [(x, 336.0, z) for x, y, z in WB_ROWS['crown']]],         # wall top
+    '_c':     [[(x, 240.0, z) for x, y, z in WB_ROWS['cam']],            # camera wall top/floor edge
+               [(x, 200.0, z) for x, y, z in WB_ROWS['cam']]],           # camera wall bottom (y-10)
 }
 
 
@@ -169,7 +169,7 @@ def edit_visual_mdt(scn_bytes, fo, chains):
     for p in m.pos:
         for c in cols:
             if _colmatch(p, c):
-                p[0] += _wb_profile(p[2])
+                p[0] += wb_profile(p[2])
                 nmoved += 1
                 break
     # write back as pure triangle-list submeshes grouped by material
@@ -254,7 +254,7 @@ def edit_coll_mdt(scn_bytes, fo, chains):
     for p in pos:
         for c in cols:
             if _colmatch(p, c):
-                p[0] += _wb_profile(p[2])
+                p[0] += wb_profile(p[2])
                 nmoved += 1
                 break
     # APPEND-AND-REPOINT: the collision MDT holds blocks we haven't mapped beyond POS/DL, so the

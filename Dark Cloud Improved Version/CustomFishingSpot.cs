@@ -87,15 +87,9 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>Stretch the fishing line while fishing here: <c>distp</c> (the Verlet rope's per-segment
             /// rest length) is multiplied by this, so the whole line reaches farther down. For a spot whose
-            /// water sits low under the rod (Queens canal, tide 31). NaN/0 = vanilla length. This is INDEPENDENT
-            /// of <see cref="ShallowBobber"/> — Queens stretches the line but keeps the vanilla bobber anchor.</summary>
+            /// water sits low under the rod (Queens canal, tide 31). NaN/0 = vanilla length.</summary>
             internal readonly float LineScale;
             internal bool HasLineScale => LineScale > 0f;
-
-            /// <summary>Move the bobber's line anchor toward the hook (Brownboo's shallow pond) so the hook
-            /// rises to the fish. SEPARATE from <see cref="FishDepth"/>: a spot can lower its fish (FishDepth)
-            /// and/or lengthen its line (LineScale) while keeping the vanilla bobber anchor.</summary>
-            internal readonly bool ShallowBobber;
 
             /// <summary>DIAGNOSTIC: skip the turi model swap. Proven the model load (not the rect, not pool
             /// memory) is what crashes Brownboo — with the swap skipped it reaches fishing mode.</summary>
@@ -121,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
                           float facing = float.NaN, bool diagSkipModel = false,
                           float fx1 = float.NaN, float fz1 = float.NaN, float fx2 = float.NaN,
                           float fz2 = float.NaN, float fishDepth = float.NaN,
-                          float lineScale = float.NaN, bool shallowBobber = false, int labelId = FishingLabelId,
+                          float lineScale = float.NaN, int labelId = FishingLabelId,
                           float cameraHeight = VanillaFishCamHeight)
             {
                 CameraHeight = cameraHeight;
@@ -131,7 +125,7 @@ namespace Dark_Cloud_Improved_Version
                 StandX = sx; StandY = sy; StandZ = sz; Facing = facing;
                 DiagSkipModel = diagSkipModel; LabelId = labelId;
                 FishX1 = fx1; FishZ1 = fz1; FishX2 = fx2; FishZ2 = fz2; FishDepth = fishDepth;
-                LineScale = lineScale; ShallowBobber = shallowBobber;
+                LineScale = lineScale;
             }
         }
 
@@ -185,11 +179,10 @@ namespace Dark_Cloud_Improved_Version
                      // low tide it is low (8), so fish sit just above the floor, not up
                      // at the flooded-tide surface.
                      sx: 794f, sy: 0f, sz: 0f, facing: 1.5708f,
-                     // ⚠ shallowBobber is SUPERSEDED for Queens (LineConfigSplit resolves by tide — this spot
-                     // is only reachable at LOW tide, where the hook rests at QueensFishDepthLow below the
-                     // surface). fishDepth matches it so the fish sit exactly at the hook (this spot's
+                     // This spot is only reachable at LOW tide, where the hook rests at QueensFishDepthLow below
+                     // the surface. fishDepth matches it so the fish sit exactly at the hook (this spot's
                      // empirically confirmed bite geometry; keep the two in lockstep when retuning).
-                     shallowBobber: true, fishDepth: QueensFishDepthLow, labelId: 401,  // its own label -> deterministic canal stance
+                     fishDepth: QueensFishDepthLow, labelId: 401,  // its own label -> deterministic canal stance
                      // standing IN the canal: drop the raised fishing angle (40) — full town height (5) felt
                      // too cramped by eye, 20 is the tuned balance.
                      cameraHeight: CanalWadingCamHeight),
@@ -229,10 +222,8 @@ namespace Dark_Cloud_Improved_Version
                      // trigger + stance just south of the sign (212,-53); face NORTH (yaw pi = -Z) toward the sign (212,-61)
                      tx: 212f, ty: 12f, tz: -53f, radius: InteractRadius,
                      sx: 212f, sy: 10f, sz: -53f, facing: 3.14159f,
-                     shallowBobber: true, // LEGACY flag — inert here: fishDepth below makes this spot DEPTH-DRIVEN
-                                          // (LineConfigSplit only consults shallowBobber for spots with NO fishDepth).
-                                          // The bobber anchor is FIXED at point[18] (A=18 baked into the ISO split
-                                          // caves) — hook depth is pure distpBelow data, no anchor moves.
+                     // The bobber anchor is FIXED at point[18] (A=18 baked into the ISO split caves) —
+                     // hook depth is pure distpBelow data, no anchor moves.
                      fishDepth: 6f        // ONE KNOB: fish at WaterLevel-6 (CFrame translation Y @ fish+0x1264, the
                                           // authoritative depth) AND the hook rests there too — LineConfigSplit
                                           // derives distpBelow = (6−HookBodyDrop)/5 (fish-at-hook bite geometry).
@@ -267,7 +258,7 @@ namespace Dark_Cloud_Improved_Version
             // that surface's square (+/-320 about the origin), so this liquid is probably NOT that surface —
             // if the bobber floats above or sinks below the visible liquid, this is the number to move.
             // MOVED 2026-08-30 to the WEST BANK bulge edge (bank top y23, bulge peak z~102; assumes the
-            // west-bank ground bake — tools/yellowdrops_pond.py WEST_BULGE). Player stands at the edge
+            // west-bank ground bake — tools/yellowdrops_westbank.py WEST_BULGE). Player stands at the edge
             // facing WEST (forward = (sin yaw, cos yaw) = (-1,0) -> yaw -pi/2); the rect is the open water
             // pocket west of the bulged edge (one mid pillar at x -590..-550, z 50..177 — casts just land
             // around it). Old spot: rect (-609,-444,-409,-244), trig (-575,9,-286), stance (-582.9,9.6,-276.8) yaw 2.31.
@@ -453,9 +444,9 @@ namespace Dark_Cloud_Improved_Version
                 float ls = s.HasLineScale ? s.LineScale : 1f;
                 // GENERAL RULE: a spot that pins its fish depth gets the hook resting AT the fish (the bite
                 // geometry confirmed at Queens low tide) — one knob (fishDepth) drives both. Spots without
-                // a fish depth keep the legacy anchor-equivalence mapping (vanilla or shallowBobber).
+                // a fish depth keep the legacy vanilla anchor-equivalence mapping.
                 float below = s.HasFishDepth ? BelowForDepth(s.FishDepth)
-                                             : Below(s.ShallowBobber ? 20 : 18, ls);
+                                             : Below(18, ls);
                 if (s.MapNo == YellowDropsMapNo)
                     return (ShortLineStart, ExtendedCastAbove, below);   // Yellow Drops: same extended pay-out cast as Queens
                 return (1f, ls, below);
@@ -517,7 +508,6 @@ namespace Dark_Cloud_Improved_Version
                                          // code is present (ApplyNewChanges may fire before it is), before fishing
 
             int map = Memory.ReadInt(EditLoop.MapNo);
-            CameraPassThrough.Apply(map);   // Brownboo + Queens: let the follow-camera pass through buildings (MapNo-gated inside)
 
             // Leaving a town and coming back RELOADS it — the script buffer is re-read and the event array
             // rebuilt, so our install is gone. Remembering "already installed for map 23" would then skip a
@@ -604,7 +594,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>True only if BOTH halves of our install are still live: the renumbered fishing label in
         /// the stb, AND our event point. A cold save-load can leave a PARTIAL install — the label gets
-        /// written but TryCreateEventPoint fails (no donor/free slot yet) or the point is wiped as the load
+        /// written but event-point creation fails (no donor/free slot yet) or the point is wiped as the load
         /// finishes — and a label-only check would wrongly report "installed" forever, so the "!" never
         /// appears (the bug on first load into Yellow Drops). Checking the event point too forces a retry.</summary>
         private static bool FishingInstallPresent()
@@ -928,6 +918,7 @@ namespace Dark_Cloud_Improved_Version
             var referenced = new System.Collections.Generic.HashSet<int>();
             long arr = EventPoints.Base();
             int epn = arr == 0 ? 0 : Memory.ReadInt(EventPoints.Count);
+            const int MaxEventPoints = 0x100;   // the event array physically holds 256 points
             for (int i = 0; i < epn && i <= MaxEventPoints; i++)
             {
                 long e = EventPoints.Slot(arr, i);
@@ -1966,98 +1957,6 @@ namespace Dark_Cloud_Improved_Version
             return w;
         }
 
-        /// <summary>
-        /// Claim a free slot and make it a type-3 trigger for <paramref name="labelId"/>.
-        ///
-        /// The first attempt wrote only type / label / position / box, and the point was SILENTLY REJECTED:
-        /// the engine's point check bails unless the Enabled field is non-zero. That is why nothing happened
-        /// in Queens or Brownboo even though the install logged success.
-        ///
-        /// Rather than reverse-engineer the remaining fields (there is a time window and more besides), CLONE
-        /// a working point and override only what we mean to change. Copying a known-good record is more
-        /// robust than reconstructing one from a partial map.
-        /// </summary>
-        // The event array physically holds 256 points; the live count is mirrored to EventPoints.Count each
-        // frame. When the town's own points fill the front of the array with no gap (a cold save-load — Yellow
-        // Drops packs 12 with none free), we APPEND at index=count and bump the count, exactly as the engine's
-        // own loader does. (array base / count field offsets: game_data/docs/fishing-engine-re.md §event-point-record)
-        private const int MaxEventPoints = 0x100;
-        private const long EventCountFromBase = -0x9010;   // count field, relative to the event-array base
-
-        private static bool TryCreateEventPoint(Spot s, int labelId, out int slot)
-        {
-            long arr = EventPoints.Base();
-            int n = Memory.ReadInt(EventPoints.Count);
-            if (arr == 0 || n <= 0 || n > MaxEventPoints) { slot = -1; return false; }
-
-            // A live point to copy the unknown fields from + the first reusable free slot (index 0 reserved).
-            long donor = 0;
-            int freeIdx = -1;
-            for (int i = 0; i < n; i++)
-            {
-                int ty = Memory.ReadInt(EventPoints.Slot(arr, i) + EventPoints.Type);
-                if (ty != EventPoints.TypeFree) { if (donor == 0) donor = EventPoints.Slot(arr, i); }
-                else if (i >= 1 && freeIdx < 0) freeIdx = i;
-            }
-            if (donor == 0) { slot = -1; return false; }   // no template to clone — genuinely can't build one
-
-            // Reuse a free slot if one exists; otherwise append at index=count (physical room up to 256).
-            bool append = freeIdx < 0;
-            int target = append ? n : freeIdx;
-            if (target >= MaxEventPoints) { slot = -1; return false; }
-            long e = EventPoints.Slot(arr, target);
-
-            byte[] tmpl = Memory.ReadBytesBatch(donor, EventPoints.Stride);
-            Memory.WriteBytesBatch(e, tmpl);          // inherit every field we have not mapped
-
-            Memory.WriteInt(e + EventPoints.Enabled, 1);            // the engine's point check bails if this is 0
-            Memory.WriteInt(e + EventPoints.MapFlag, 0);            // no "already done" gate
-
-            // THE ONE THAT SILENTLY SWALLOWED THE LAST ATTEMPT. The donor is a door, whose PartIndex is
-            // >= 0 — so EdGetEvent tried to resolve a Georama part and either skipped the point or made
-            // our world coordinates part-relative. -1 means "free-standing, Position is world space".
-            Memory.WriteInt(e + EventPoints.PartIndex, -1);
-            Memory.WriteInt(e + EventPoints.ObjectPtr, 0);          // no CMapObject to inherit a position from
-            Memory.WriteInt(e + EventPoints.FramePtr, 0);           // no visibility gate
-
-            // THE ONE THAT SILENTLY KILLED THE TRIGGER AT NIGHT. CheckEventPoint gates every point on
-            // EdCheckTime(NowTime, point+0x40, point+0x44); a cloned donor door carries a day-only window, so
-            // our trigger went dead outside it (the inconsistent "disappears mid-night" bug). start==end==0
-            // is the always-on encoding — EdCheckTime then returns 1 for every time of day. (§time-window)
-            Memory.WriteInt(e + EventPoints.TimeStart, 0);
-            Memory.WriteInt(e + EventPoints.TimeEnd, 0);
-
-            Memory.WriteInt(e + EventPoints.ItemOrLabel, labelId);  // type 3 -> the SCRIPT LABEL
-
-            // Suppress the sparkle. The engine draws an animated 3D "shiny marker" at a type-3 point when the
-            // field below is > 0. We inherit it from the donor, so a re-install that clones a marked point
-            // shows a sparkle at the trigger. Our "!" prompt IS the indicator, so force it off.
-            // (draw routine + field: game_data/docs/fishing-engine-re.md §event-point-record)
-            Memory.WriteInt(e + 0x20, 0);
-
-            // The donor is a door, so we inherited its name — a live MAP DESTINATION. Type 3 never jumps, but
-            // leaving a live map name on a point we are about to fire is asking for a day-long bug. Blank it.
-            Memory.WriteBytesBatch(e + EventPoints.Name, new byte[16]);
-
-            Memory.WriteFloat(e + EventPoints.Position, s.TrigX);
-            Memory.WriteFloat(e + EventPoints.Position + 4, s.TrigY);
-            Memory.WriteFloat(e + EventPoints.Position + 8, s.TrigZ);
-            Memory.WriteFloat(e + EventPoints.Radius, s.Radius);    // a scalar radius, NOT a box
-
-            // Type LAST: it is what marks the slot live. Writing it first would expose a half-built point.
-            Memory.WriteInt(e + EventPoints.Type, EventPoints.TypeScript);
-
-            // If we appended, raise the live count at its SOURCE so the engine iterates far enough to see our
-            // new slot — it copies that into EventPoints.Count every frame. (§event-point-record)
-            if (append)
-            {
-                Memory.WriteInt(arr + EventCountFromBase, n + 1);
-                Log($"   appended event point at index {target} (count {n} -> {n + 1}); array was full");
-            }
-
-            slot = target;
-            return true;
-        }
 
         /// <summary>
         /// Report every event match the engine makes, and keep an eye on our own slot.
@@ -2216,7 +2115,7 @@ namespace Dark_Cloud_Improved_Version
                 // after that, so it's the reliable precursor (the "pull back" you described). Blip: max ~3, no
                 // wind-up yet -> not armed. Real casts wind up to -9..-21, well past the -5 gate.
                 if (cf >= 3 && rodFwd < CastWindupThresh) _castWoundUp = true;
-                if (cf == 3) Log($"[cast-rod] fwd={rodFwd:0.##} wound={_castWoundUp} cur={cur:0.##}");   // TEMP trace
+                if (cf == 3 && Diagnostics) Log($"[cast-rod] fwd={rodFwd:0.##} wound={_castWoundUp} cur={cur:0.##}");
                 if (cf < 3 || cur > target)
                     cur = cf < 3 ? start : target;                            // reeled in (or target shrank): snap
                 // RETRACT on the uncast pull-in: chara_fishing stays >= 3 through the whole uncast animation,
@@ -2239,7 +2138,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 bool paying = cur > start + 0.01f && cur < target;
                 if (paying != _payingOut)
-                { Log($"[payout] {(paying ? $"START (rodtip {RodTipFrontDist():0.#}, out {BobberOutDist():0.#})" : $"end (distp {cur:0.##}, out {BobberOutDist():0.#})")}"); _payingOut = paying; }
+                { if (Diagnostics) Log($"[payout] {(paying ? $"START (rodtip {RodTipFrontDist():0.#}, out {BobberOutDist():0.#})" : $"end (distp {cur:0.##}, out {BobberOutDist():0.#})")}"); _payingOut = paying; }
                 Memory.WriteFloat(FishLineShallow.DistpAddr, cur);
                 _distpScaled = true;
             }
@@ -2249,100 +2148,6 @@ namespace Dark_Cloud_Improved_Version
                 _distpScaled = false;
             }
 
-            // CAST MOMENTUM. With distpAbove tripled the aerial line is 3x longer, but the throw ANIMATION
-            // flings the bobber only a vanilla distance — the extra slack droops instead of carrying forward.
-            // Fire DURING the cast (phase 4), at the WHIP MOMENT: when the animation flings the bobber, its
-            // velocity (ukiv) spikes OUTWARD (away from the rod). Detect that spike and boost in the bobber's
-            // own velocity direction — mid-flight, so the boost is part of the throw arc, not a push after
-            // landing. The outward-motion check is the safety: the wind-up and any reel-in move the bobber
-            // TOWARD the rod and never trigger. Scaled by the line-length ratio (3x line ≈ 3x throw) and
-            // decayed. Verlet: FishLineStep re-derives velo = point − old_p, so added velo carries via old_p —
-            // pure data writes, recompiler-safe.
-            if (live)
-            {
-                int phase = Memory.ReadInt(FishingAddresses.Phase);
-                if (phase != _castPrevPhase)
-                {
-                    // ARM only on a FRESH cast: standing/idle -> Casting. (The uncast path also passes through
-                    // these states; the outward-velocity trigger below is what actually rejects it, but the
-                    // fresh-cast arm keeps the whip detector from even looking during a reel-in.)
-                    if (BisectFlags.CastBoost && phase == FishingState.Phase_Casting &&
-                        (_castPrevPhase == FishingState.Phase_Walking || _castPrevPhase == FishingState.Phase_Idle))
-                        _castPrimed = true;
-
-                    // Leaving the cast/rod-out states drops a primed cast and kills any running boost.
-                    if (phase != FishingState.Phase_Casting && phase != FishingState.Phase_HookInWater
-                        && phase != FishingState.Phase_Uncasting)
-                    { _castPrimed = false; _castBoostFrames = 0; }
-                    Log($"[cast-boost] phase {_castPrevPhase} -> {phase}");   // TEMP diagnostic — remove once the flow is confirmed
-                    _castPrevPhase = phase;
-                }
-
-                // WHIP DETECTOR (primed, during the cast animation): trigger the moment the bobber's horizontal
-                // speed spikes outward. Direction = the bobber's own velocity (the animation already aimed it).
-                if (_castPrimed && phase == FishingState.Phase_Casting)
-                {
-                    float vx = Memory.ReadFloat(RopeUkiv + 0), vz = Memory.ReadFloat(RopeUkiv + 8);
-                    float speed = (float)Math.Sqrt(vx * vx + vz * vz);
-                    if (speed >= CastWhipMinSpeed)
-                    {
-                        // outward = velocity points away from the rod (dot(bobber−rod, v) > 0)
-                        float bx = Memory.ReadFloat(RopeUkip + 0) - Memory.ReadFloat(RopePoint + 0);
-                        float bz = Memory.ReadFloat(RopeUkip + 8) - Memory.ReadFloat(RopePoint + 8);
-                        if (bx * vx + bz * vz > 0f)
-                        {
-                            _castPrimed = false;
-                            _castDir = (vx / speed, 0f, vz / speed);
-                            _castBoostFrames = CastBoostFrames;
-                            Log($"[cast-boost] WHIP speed={speed:0.##} dir=({_castDir.x:0.##},{_castDir.z:0.##})");
-                        }
-                    }
-                }
-
-                // Push: starts mid-cast (phase 4) and may run on into 5/7 as the bobber lands.
-                if (_castBoostFrames > 0 &&
-                    (phase == FishingState.Phase_Casting || phase == FishingState.Phase_HookInWater
-                     || phase == FishingState.Phase_Uncasting))
-                {
-                    float ratio = FishLineShallow.VanillaDistp > 0f
-                        ? Memory.ReadFloat(FishLineShallow.DistpAddr) / FishLineShallow.VanillaDistp : 1f;
-                    float decay = (float)_castBoostFrames / CastBoostFrames;   // taper: ease the bobber forward, no overshoot snap-back
-                    ApplyCastImpulse(_castDir, CastBoostMag * ratio * decay);
-                    ComputeCastDir(out float dNow);
-                    Log($"[cast-boost] push f={_castBoostFrames} outDist={dNow:0.#}");   // TEMP — trajectory trace to tune
-                    _castBoostFrames--;
-                }
-
-                // TEMP diagnostic: catch the PASS-THROUGH directly. Log ONLY the frames where the eye is past a
-                // canal wall (|eye.z| > 52) while the bobber is inside the canal (|bob.z| < 48) — i.e. a canal
-                // wall is between camera and bobber. If dist is still ~80 there, the collision NEVER stopped the
-                // eye crossing z=+-50 (walls not in the gather / crossing missed). If dist is low, it tried but
-                // the eye still got past. eyeStepZ = how far the eye's z moved since last sample (a big jump = a
-                // fast/teleport step that could skip the swept crossing test).
-                if (phase == FishingState.Phase_HookInWater || phase == FishingState.Phase_Uncasting)
-                {
-                    uint cp = Memory.ReadUInt(FishCamPtrVar) & Memory.PhysAddrMask;
-                    if (Memory.IsValidGuest(cp))
-                    {
-                        long cam = Memory.ToMmu(cp);
-                        float rx = Memory.ReadFloat(cam + 0x2C0), ry = Memory.ReadFloat(cam + 0x2C4), rz = Memory.ReadFloat(cam + 0x2C8);
-                        float dist = Memory.ReadFloat(cam + 0x2D0), h = Memory.ReadFloat(cam + 0x2D4), ang = Memory.ReadFloat(cam + 0x2DC);
-                        float ex = rx + dist * (float)Math.Sin(ang), ey = ry + h, ez = rz + dist * (float)Math.Cos(ang);
-                        float bz = Memory.ReadFloat(RopeUkip + 8);
-                        bool pastWall = Math.Abs(ez) > 52f && Math.Abs(bz) < 48f && ey < 78f;   // eye over a bank, bobber in canal, eye at wall height
-                        if (pastWall)
-                        {
-                            var (tot, zw, canal) = ScanCameraGather(ex);   // is a canal wall (z-facing, z~+-50) even in the gathered buffer?
-                            Log($"[fish-cam THROUGH] dist={dist:0.#} eye=({ex:0.#},{ey:0.#},{ez:0.#}) bobZ={bz:0.#} step={ez - _lastEyeZ:0.#} | gather: total={tot} zWalls={zw} canalWalls={canal}");
-                        }
-                        else if (++_camLogTick % 12 == 0)
-                            Log($"[fish-cam] dist={dist:0.#} eye=({ex:0.#},{ey:0.#},{ez:0.#}) bobZ={bz:0.#} ang={ang:0.##}");
-                        _lastEyeZ = ez;
-                    }
-                }
-            }
-            else { _castPrimed = false; _castBoostFrames = 0; _castPrevPhase = -1; }
-
             _fishingWasLive = live;
         }
 
@@ -2350,14 +2155,9 @@ namespace Dark_Cloud_Improved_Version
         // Rope arrays (mod-access form = ELF addr + 0x20000000): main line `point`/`velo`, bobber `ukiv`,
         // hook `hookv`. Resolved from the SCUS_971.11 symtab; layout confirmed in FishLineStep decomp.
         private const long RopePoint = 0x21D55E30;   // point[0] = rod tip; 24 x 0x10 (vec4)
-        private const long RopeVelo  = 0x21D56130;   // velo[0];  24 x 0x10
         private const long RopeUkip  = 0x21D56350;   // ukip[0] = bobber; 4 x 0x10
         private const long RopeUkiv  = 0x21D563D0;   // ukiv[0];  4 x 0x10
         private const long RopeHookv = 0x21D56310;   // hookv[0]; 3 x 0x10
-        private const int   CastBoostFrames  = 12;    // frames of forward push from the whip (decays over this span)
-        private const float CastBoostMag     = 1.0f;  // per-frame forward velocity added (x line-length ratio x decay) — tune to taste
-        private const float CastUpFrac       = 0.25f; // small up component so the bobber arcs out instead of sinking
-        private const float CastWhipMinSpeed = 0.5f;  // horizontal bobber speed (ukiv) that counts as the throw whip — tune from the WHIP log line
         private const float CastRodTipFront   = 2f;    // rod tip this far FORWARD OF ITS REST position (post-wind-up) -> start the pay-out
         private const float CastWindupThresh  = -5f;   // rod tip must swing this far BEHIND rest first (the wind-up) to arm the trigger
         private static float _rodRestFront;            // rod-tip front-distance at rest (baselined while not casting)
@@ -2426,44 +2226,7 @@ namespace Dark_Cloud_Improved_Version
             return dx * (float)Math.Sin(f) + dz * (float)Math.Cos(f);
         }
 
-        private const  long FishCamPtrVar = 0x21D19678;   // follow-camera ptr (dist @cam+0x2D0, height +0x2D4)
-        private static bool _castPrimed;             // saw a fresh Casting; fire the boost on the next HookInWater
-        private static int  _castBoostFrames;        // remaining boost frames
-        private static int  _castPrevPhase = -1;     // last Phase value (edge detection)
-        private static int  _camLogTick;             // TEMP: throttle the fishing camera-dist trace
-        private static float _lastEyeZ;              // TEMP: previous eye.z for the pass-through step trace
 
-        /// <summary>TEMP: scan the live CAMERA gather buffer (WorkBuffer, exactly as CameraCPolyProbe reads it —
-        /// the camera gather is its last use each frame) and count total polys, z-facing walls, and canal-wall
-        /// polys (z-facing with a vertex at z≈±50 within ~200 of the eye's x). canalWalls==0 ⇒ the canal walls
-        /// aren't in the buffer the collision checks — a GATHER problem, not height/winding.</summary>
-        private static (int total, int zWalls, int canalWalls) ScanCameraGather(float eyeX)
-        {
-            const long WorkBufferPtr = 0x202A2388;
-            uint structRaw = Memory.ReadUInt(WorkBufferPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(structRaw)) return (0, 0, 0);
-            long structMmu = Memory.ToMmu(structRaw);
-            uint baseRaw = Memory.ReadUInt(structMmu) & Memory.PhysAddrMask;
-            int used = Memory.ReadInt(structMmu + 8);
-            if (!Memory.IsValidGuest(baseRaw)) return (0, 0, 0);
-            long b = Memory.ToMmu(baseRaw);
-            int lim = Math.Min(512, Math.Max(1, used / 5 + 4));
-            int total = 0, zWalls = 0, canal = 0;
-            for (int k = 0; k < lim; k++)
-            {
-                float[] p = Memory.ReadFloatBatch(b + (long)k * 0x50, 15);   // v0(0-2) v1(4-6) v2(8-10) normal(12-14)
-                float nl = (float)Math.Sqrt(p[12] * p[12] + p[13] * p[13] + p[14] * p[14]);
-                if (!(nl > 1e-4f) || float.IsNaN(p[0]) || float.IsInfinity(p[0]) || Math.Abs(p[0]) > 1e5f) continue;
-                total++;
-                float ny = p[13] / nl, nz = p[14] / nl;
-                if (Math.Abs(nz) < 0.8f || Math.Abs(ny) > 0.4f) continue;   // not a z-facing wall
-                zWalls++;
-                bool atCanalZ = Math.Abs(Math.Abs(p[2]) - 50) < 3 || Math.Abs(Math.Abs(p[6]) - 50) < 3 || Math.Abs(Math.Abs(p[10]) - 50) < 3;
-                if (atCanalZ && Math.Abs(p[0] - eyeX) < 200f) canal++;
-            }
-            return (total, zWalls, canal);
-        }
-        private static (float x, float y, float z) _castDir;   // horizontal cast direction, captured at takeover
 
         /// <summary>Horizontal cast direction = normalize(bobber - rod-tip) in XZ (the throw already aimed it);
         /// <paramref name="outDist"/> = the un-normalized horizontal distance (how far the bobber is cast out front).</summary>
@@ -2474,25 +2237,6 @@ namespace Dark_Cloud_Improved_Version
             outDist = (float)Math.Sqrt(dx * dx + dz * dz);
             if (outDist < 0.01f) return (0f, 0f, 0f);
             return (dx / outDist, 0f, dz / outDist);
-        }
-
-        /// <summary>Add a forward+up velocity to the BOBBER and HOOK only. Deliberately NOT the main line:
-        /// pushing the aerial points while the rod tip (point[0]) stays pinned stretches the near-rod segment,
-        /// and the constraint solver snaps it back → the bounce. Driving just the bobber slides it forward and
-        /// drags the anchor (point[18]) via the bobber constraint; the aerial SLACK (90u of line for ~60u of
-        /// reach at 3x) follows freely, so the bobber ends up forward with nothing to rebound against.</summary>
-        private static void ApplyCastImpulse((float x, float y, float z) d, float mag)
-        {
-            float ix = d.x * mag, iy = CastUpFrac * mag, iz = d.z * mag;
-            for (int i = 0; i < 4; i++) AddVelo(RopeUkiv  + i * 0x10, ix, iy, iz);  // bobber
-            for (int i = 0; i < 3; i++) AddVelo(RopeHookv + i * 0x10, ix, iy, iz);  // hook
-        }
-
-        private static void AddVelo(long addr, float ix, float iy, float iz)
-        {
-            Memory.WriteFloat(addr + 0, Memory.ReadFloat(addr + 0) + ix);
-            Memory.WriteFloat(addr + 4, Memory.ReadFloat(addr + 4) + iy);
-            Memory.WriteFloat(addr + 8, Memory.ReadFloat(addr + 8) + iz);
         }
 
         private static bool _fishingWasLive;
@@ -2637,23 +2381,6 @@ namespace Dark_Cloud_Improved_Version
             why = "walking/other";
             return false;
         }
-        private static void DumpSlot(string tag, long e)
-        {
-            if (!Diagnostics) return;
-            Log($"{tag} enabled={Memory.ReadInt(e + EventPoints.Enabled)} " +
-                $"mapFlag={Memory.ReadInt(e + EventPoints.MapFlag)} " +
-                $"partIndex={Memory.ReadInt(e + EventPoints.PartIndex)} " +
-                $"type={Memory.ReadInt(e + EventPoints.Type)} " +
-                $"objPtr=0x{Memory.ReadUInt(e + EventPoints.ObjectPtr):X} " +
-                $"framePtr=0x{Memory.ReadUInt(e + EventPoints.FramePtr):X} " +
-                $"label={Memory.ReadInt(e + EventPoints.ItemOrLabel)}");
-            Log($"{tag} pos=({Memory.ReadFloat(e + EventPoints.Position):0.#}, " +
-                $"{Memory.ReadFloat(e + EventPoints.Position + 4):0.#}, " +
-                $"{Memory.ReadFloat(e + EventPoints.Position + 8):0.#})  " +
-                $"radius={Memory.ReadFloat(e + EventPoints.Radius):0.#}  " +
-                $"time=({Memory.ReadFloat(e + 0x40):0.##}, {Memory.ReadFloat(e + 0x44):0.##})");
-        }
-
         private static void Log(string s) =>
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[CustomFishingSpot] " + s);
     }

@@ -308,9 +308,6 @@ namespace Dark_Cloud_Improved_Version
             _exhaustedSlots.Clear();
             _activationLoggedSlots.Clear();
             _flashTimerSnapshot.Clear();
-            _modelDumpFired = false;
-            _lastTeleportDebugTime = DateTime.MinValue;
-            _teleportPhase2Pending = false;
         }
 
         internal static void PollEnemyDynamics()
@@ -658,97 +655,6 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // --- DEBUG: freeze-then-teleport all active enemies to player every 3 s ---
-        // Phase 1 (t=0s): freeze all enemies (FreezeTimer=300) and log pre-freeze position.
-        // Phase 2 (t=1s): write position while frozen; log before/after to see if write sticks.
-        // If position changes and holds for 1s, LocationX/Y/Z is writable when movement AI is paused.
-        // If position snaps back immediately, the engine overwrites even frozen enemies.
-        private static DateTime _lastTeleportDebugTime = DateTime.MinValue;
-        private static bool _teleportPhase2Pending = false;
-        internal static void TeleportEnemiesDebug()
-        {
-            double elapsed = (DateTime.UtcNow - _lastTeleportDebugTime).TotalSeconds;
-
-            if (!_teleportPhase2Pending && elapsed < 3.0) return;
-
-            float px = Memory.ReadFloat(Player.dunPositionX);
-            float py = Memory.ReadFloat(Player.dunPositionY);
-            float pz = Memory.ReadFloat(Player.dunPositionZ);
-
-            if (!_teleportPhase2Pending)
-            {
-                // Phase 1: freeze all active enemies and snapshot their positions.
-                _lastTeleportDebugTime = DateTime.UtcNow;
-                _teleportPhase2Pending = true;
-                for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
-                {
-                    int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
-                    if (Memory.ReadInt(slotBase) <= 0) continue;
-                    float x = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
-                    float y = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);
-                    float z = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
-                    Memory.WriteInt(slotBase + EnemySlotOffsets.FreezeTimer, 300);
-                    ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
-                    Console.WriteLine($"[TeleportDebug] FREEZE slot={i} id={id} pos=({x:F1},{y:F1},{z:F1}) frozen");
-                }
-            }
-            else if (elapsed >= 1.0)
-            {
-                // Phase 2: write position while frozen; refresh freeze so it doesn't expire mid-test.
-                _teleportPhase2Pending = false;
-                for (int i = 0; i < EnemyAddresses.FloorSlots.Count; i++)
-                {
-                    int slotBase = EnemyAddresses.FloorSlots.SlotAddr(i, 0);
-                    if (Memory.ReadInt(slotBase) <= 0) continue;
-                    float xBefore = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
-                    float yBefore = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);
-                    float zBefore = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationZ);
-                    Memory.WriteInt(slotBase + EnemySlotOffsets.FreezeTimer, 300);
-                    Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationX, px);
-                    Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationY, py);
-                    Memory.WriteFloat(slotBase + EnemySlotOffsets.LocationZ, pz);
-                    float xAfter = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
-                    float yAfter = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);
-                    ushort id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(i, EnemySlotOffsets.EnemySpeciesId));
-                    Console.WriteLine($"[TeleportDebug] WRITE slot={i} id={id} before=({xBefore:F1},{yBefore:F1}) after=({xAfter:F1},{yAfter:F1}) target=({px:F1},{py:F1})");
-                }
-            }
-        }
-        // --- DEBUG: one-shot model table scan for slot 0 render position ---
-        // Fires once when slot 0's slot position is non-zero and stable.
-        // Scans the first 0x400 bytes of the model table entry for slot 0 as floats,
-        // printing any that are within 5.0 units of the known slot X or Y coordinate.
-        // The matching offsets are candidates for the true render/transform position.
-        private static bool _modelDumpFired = false;
-        internal static void DumpModelTableForRenderPosition()
-        {
-            if (_modelDumpFired) return;
-            int slotBase = EnemyAddresses.FloorSlots.SlotAddr(0, 0);
-            if (Memory.ReadInt(slotBase) <= 0) return;
-            float slotX = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationX);
-            float slotY = Memory.ReadFloat(slotBase + EnemySlotOffsets.LocationY);
-            if (Math.Abs(slotX) < 10.0f && Math.Abs(slotY) < 10.0f) return;
-
-            _modelDumpFired = true;
-            int modelBase = ModelScaleOffsets.ModelBase + 0 * ModelScaleOffsets.ModelStride;
-            int stride    = ModelScaleOffsets.ModelStride; // 0x3510
-
-            // Scan the full model table entry as floats.
-            // Print any value in [50, 3000] — the world-coordinate range seen in this dungeon.
-            // Also flag values within 5 units of the slot X or Y (written position).
-            Console.WriteLine($"[ModelDump] slot=0 slotPos=({slotX:F1},{slotY:F1}) scanning 0x{modelBase:X8}+0x{stride:X4} for world-range floats");
-            for (int off = 0; off < stride; off += 4)
-            {
-                float val = Memory.ReadFloat(modelBase + off);
-                if (float.IsNaN(val) || float.IsInfinity(val)) continue;
-                if (val < 50.0f || val > 3000.0f) continue;
-                bool nearX = Math.Abs(val - slotX) < 5.0f;
-                bool nearY = Math.Abs(val - slotY) < 5.0f;
-                Console.WriteLine($"[ModelDump]   +0x{off:X4} = {val:F2}{(nearX ? " ~X" : "")}{(nearY ? " ~Y" : "")}");
-            }
-            Console.WriteLine("[ModelDump] scan complete");
-        }
-        // --- END DEBUG ---
 
 
         internal class Digger

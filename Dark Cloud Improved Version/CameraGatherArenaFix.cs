@@ -23,9 +23,10 @@ namespace Dark_Cloud_Improved_Version
     /// Pure data writes through the engine's own pointer (struct @*0x202A2388: {+0 data, +8 used, +C cap});
     /// asserted while in TOWN mode (2), restored to vanilla when leaving it. Fully revertible.
     /// </summary>
-    internal static class CameraGatherArena
+    internal static class CameraGatherArenaFix
     {
         internal static bool Enabled = true;
+        internal static bool Diagnostics = false;   // log the redirect/restore transitions
 
         private const long WorkBufferPtr = 0x202A2388;   // -> struct {dataPtr, ?, used, cap}
         private const uint NewBaseGuest  = 0x01F56400;   // Mirage MeshCave (dungeon-only) — see class doc
@@ -53,17 +54,19 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(s, NewBaseGuest);
                 Memory.WriteInt(s + 0xC, NewCapUnits);
                 _redirected = true;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[CamArena] gather arena -> 0x{NewBaseGuest:X8} cap {NewCapUnits} units " +
-                    $"({NewCapUnits / 5} polys; was 0x{_origBase:X8} cap {_origCap})");
+                if (Diagnostics)
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[CamArena] gather arena -> 0x{NewBaseGuest:X8} cap {NewCapUnits} units " +
+                        $"({NewCapUnits / 5} polys; was 0x{_origBase:X8} cap {_origCap})");
             }
             else if (_redirected && data == NewBaseGuest && _origBase != 0)
             {
                 Memory.WriteUInt(s, _origBase);                  // hand MeshCave back before any dungeon Mirage
                 Memory.WriteInt(s + 0xC, _origCap);
                 _redirected = false;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                    $"[CamArena] gather arena restored -> 0x{_origBase:X8} cap {_origCap}");
+                if (Diagnostics)
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[CamArena] gather arena restored -> 0x{_origBase:X8} cap {_origCap}");
             }
         }
     }
