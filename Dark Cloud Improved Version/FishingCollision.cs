@@ -4,72 +4,52 @@ using System.IO;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Fishing collision fabrication (split out of CustomFishingSpot): at session start, drop the native cpoly
-    /// walls and keep only floors/slopes (the surfaces the hook/bobber raycast honours), then append the town's
-    /// exact rock triangles. CustomFishingSpot.WatchFishingStart drives it with the spot's MapNo.
+    /// Fishing collision fabrication (split out of CustomFishingSpot): at session start, drop Brownboo's
+    /// ladder-top platforms from the cpoly, append the town's custom DCFC collision (Queens / Yellow Drops
+    /// fish walls), and keep the fish's cpoly count in sync. CustomFishingSpot.WatchFishingStart drives it.
     /// </summary>
     internal static class FishingCollision
     {
         private static void Log(string s) =>
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[FishingCollision] " + s);
 
-        /// <summary>The floor-ness cutoff, ALIGNED with the engine's slope gate: the bobber/hook raycast counts
-        /// a poly as ground when |normal.Y| &gt; the FishLineStep threshold — vanilla 0.2, lowered to 0.05 by
-        /// IsoPatcher.PatchFishLineSlopeGate so steep slopes stop the bobber (the 87° canal banks lean at
-        /// ny = 0.052 for exactly this). Keep everything the engine gate can use (0.045 &lt; 0.05 for margin);
-        /// only true walls — parallel to the vertical ray, useless to it by geometry — are dropped.</summary>
-        private const float FloorNormalYMin = 0.045f;
-
         /// <summary>
-        /// Rewrite the native cpoly to keep ONLY near-horizontal polys (floors + slopes), dropping every
-        /// vertical wall. Proven: (a) the hook/bobber only ever land on floor-ish polys (FishLineStep honours
-        /// |normal.Y| &gt; 0.2), so walls never mattered to them, and (b) the player's OWN movement collision — a
-        /// separate system from cpoly — keeps them on the boardwalk during a session. So we throw away ~460 wall
-        /// polys and free the whole budget for the rock collision.
+        /// Brownboo-only: drop the walkable LADDER-TOP platforms from the fishing cpoly so the bobber's ground-lift
+        /// can't deposit it on a platform above the water. The player needs those floors (its own collision
+        /// system, not cpoly), so this has to be a fishing-time filter. Everything else — walls included — is KEPT:
+        /// the bobber/hook probe never treats a wall as ground (|normal.y| &lt;= 0.2), and the fish are STOPPED by
+        /// walls, which is exactly the containment the native geometry provides. (This used to strip every wall
+        /// to make room for the runtime rock append; the rocks are ISO-baked now and no town needs the room.)
         ///
         /// Pure runtime memory op: forward-compact the buffer in place (write index never outruns read index)
-        /// and lower CPolyNum. Runs once, AFTER PickUpPoly has gathered — so no bearing on the 1024 gather cap.
-        /// Reloading the town restores the full native set.
+        /// and lower CPolyNum. Runs once, AFTER PickUpPoly has gathered. Reloading the town restores the set.
         /// </summary>
-        internal static void ReplaceWithFloorsOnly(int mapNo)
+        internal static void DropLadderTopFloors(int mapNo)
         {
             uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) { Log("   floors-only: cpoly ptr invalid — skipping"); return; }
+            if (!Memory.IsValidGuest(p)) { Log("   ladder-top filter: cpoly ptr invalid — skipping"); return; }
             long buf = Memory.ToMmu(p);
 
             int nativeCount = Memory.ReadInt(FishingSpot.CPolyNum);
             if (nativeCount <= 0 || nativeCount > FishingSpot.CPolyMax)
-            { Log($"   floors-only: native count {nativeCount} unusable — skipping"); return; }
+            { Log($"   ladder-top filter: native count {nativeCount} unusable — skipping"); return; }
 
-            // Capture the FULL gather (floors + walls) at the current cast rect, BEFORE we compact — this is
-            // the ground-truth geometry the viewer splits into floor/slope/wall, so widening the rect can be
-            // verified. Runs here (not in the probe) because CustomFishingSpot.Tick fires before the probe,
-            // so by the time the probe dumps, the walls are already gone.
+            // Capture the FULL native gather at the current cast rect (the viewer's ground truth for the
+            // fishing-gather replica); Diagnostics-gated inside.
             DumpFullGather(buf, nativeCount, mapNo);
+            if (mapNo != 14) return;   // only Brownboo has in-water ladders
 
-            int keep = 0, walls = 0, ladtops = 0;
+            int keep = 0, ladtops = 0;
             for (int i = 0; i < nativeCount; i++)
             {
                 long poly = buf + (long)i * 0x50;
-                float nx = Memory.ReadFloat(poly + 0x30);
-                float ny = Memory.ReadFloat(poly + 0x30 + 4);
-                float nz = Memory.ReadFloat(poly + 0x30 + 8);
-                float nl = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
-                if (nl <= 0f || Math.Abs(ny) / nl <= FloorNormalYMin) { walls++; continue; }   // a true wall — drop it
-
-                // Also drop floor polys sitting on TOP of the in-water ladders (platforms above the water,
-                // not pond floor) — the bobber/hook have no business catching on them. Gated on the poly's
-                // LOWEST vertex, so pond floor near a ladder base (low Y) is kept; only the high tops go.
                 if (IsLadderTopFloor(poly, mapNo)) { ladtops++; continue; }
-
                 if (keep != i)
                     Memory.WriteBytesBatch(buf + (long)keep * 0x50, Memory.ReadBytesBatch(poly, 0x50));
                 keep++;
             }
-
             Memory.WriteInt(FishingSpot.CPolyNum, keep);
-            Log($"   floors-only: kept {keep} floor/slope polys (dropped {walls} walls + {ladtops} " +
-                $"ladder-top floors) — cpoly {nativeCount} → {keep}");
+            Log($"   ladder-top filter: dropped {ladtops} ladder-top floors — cpoly {nativeCount} → {keep}");
         }
 
         /// <summary>Brownboo's in-water ladder (s04r*) XZ positions, from gedit/s04/mapinfo.cfg. Used to
@@ -106,9 +86,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Append the town's fabricated fishing collision from the DCFC .bin to cpoly — the decoded
         /// rock triangles plus any hand-picked triangles (both baked into the .bin by
-        /// tools/export_rock_collision.py). Runs after the floors-only compaction, so it lands in the slots
+        /// tools/build_fishing_collision.py). Runs after the floors-only compaction, so it lands in the slots
         /// freed by the dropped walls.</summary>
-        internal static void AppendRockCollision(int mapNo)
+        internal static void AppendCustomCollision(int mapNo)
         {
             uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(p)) { Log("   rocks: cpoly ptr invalid — skipping"); return; }
@@ -119,8 +99,9 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] template = Memory.ReadBytesBatch(buf, 0x50);   // a real poly, for its non-vertex fields
             var polys = new System.Collections.Generic.List<byte[]>();
+            if (!File.Exists(MeshCollisionFile(mapNo))) return;   // town's custom collision is ISO-baked (Brownboo rocks) or none
             int added = AddMeshTriangles(polys, template, mapNo);
-            if (added == 0) { Log($"   collision: no mesh file for map {mapNo} (or 0 tris)"); return; }
+            if (added == 0) { Log($"   collision: mesh file for map {mapNo} has 0 tris"); return; }
 
             int total = count + polys.Count;
             if (total > FishingSpot.CPolyBufferMax)
@@ -142,7 +123,7 @@ namespace Dark_Cloud_Improved_Version
         ///
         /// _LOAD_FISHING_DATA copies the gathered polys into the global cpoly and _INIT_FISH hands each fish a
         /// SNAPSHOT of the count (SetCPoly -> fish+0x2404) a few frames later — but BEFORE that our
-        /// AppendRockCollision has grown the buffer (45 -> 758). So the fish test only the original polys and
+        /// AppendCustomCollision has grown the buffer (45 -> 758). So the fish test only the original polys and
         /// swim straight through the containment walls we appended at the TAIL. The list pointer they hold is
         /// the same growing buffer, so only the count is stale: bump it and they test the whole buffer.
         /// Runs every live frame (the fish appear a few frames after the append); cheap (&lt;=6 int writes,

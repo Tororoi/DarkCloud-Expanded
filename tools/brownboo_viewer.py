@@ -485,35 +485,19 @@ def _min_face_flatness(tris, water):
 ROCK_CELL, ROCK_MARGIN, ROCK_SIDES, ROCK_LEVELS, ROCK_LIFT = 8.0, 2.0, 12, 5, 2.0
 SMALL_CELL, SMALL_MARGIN, SMALL_SIDES, SMALL_LEVELS, SMALL_LIFT = 6.0, 1.5, 10, 4, 1.5
 YCAP, YBOTTOM = 40.0, -9.0        # ignore geometry above 40 (the lintel); extend collision down to -9
-def _load_obj_tris(path):
-    """Read triangles from a (hand-simplified, Blender) OBJ — the same meshes the mod loads. Faces may be
-    tris/quads/ngons (fan-triangulated); only vertex indices are used."""
-    vs = []; out = []
-    for line in open(path):
-        if line.startswith('v '):
-            p = line.split(); vs.append([float(p[1]), float(p[2]), float(p[3])])
-        elif line.startswith('f '):
-            idx = []
-            for tok in line.split()[1:]:
-                vi = tok.split('/')[0]
-                if vi: n = int(vi); idx.append(n-1 if n > 0 else len(vs)+n)
-            for k in range(1, len(idx)-1):
-                out.append([vs[idx[0]], vs[idx[k]], vs[idx[k+1]]])
-    return out
-
-# rock collision: prefer each rock's hand-simplified Blender mesh (tools/rock_obj/<rock>_simple.obj) —
-# exactly what the mod loads via assemble_rock_collision.py — and fall back to the smooth lathe for rocks
-# not yet done in Blender, so the viewer always matches the shipped .bin.
-_ROCK_OBJ = os.path.join(HERE, '..', 'Dark Cloud Improved Version', 'Resources', 'FishingCollision', 'rock_obj')
+# rock collision: each rock's hand-simplified Blender mesh as FROZEN in brownboo_rock_data.py — exactly what
+# the Patch ISO bake appends to s04g01_a — with the smooth lathe as a fallback for a rock absent from it.
+sys.path.insert(0, os.path.join(HERE, 'iso_patch', 'collision'))
+from brownboo_rock_data import ROCKS as _ROCKS
+_ROCK_DATA = dict(_ROCKS)
 col_rocks = []
 _rock_src = []
 for _nm, (_v, _ts) in GOT.items():
     if not _nm.startswith('iwa'): continue
     _base = _nm.split('__')[0]
-    _simple = os.path.join(_ROCK_OBJ, _base + '_simple.obj')
     _rt = [[_v[a], _v[b], _v[c]] for a, b, c in _ts]
-    if os.path.exists(_simple):
-        _r = _load_obj_tris(_simple); _src = 'blender'
+    if 'rock_' + _base in _ROCK_DATA:
+        _r = [[list(p) for p in t] for t in _ROCK_DATA['rock_' + _base]]; _src = 'blender'
     elif _base == 'iwa03':
         _r = build_rock_smooth(_rt, SMALL_CELL, WATER, YCAP, YBOTTOM, SMALL_SIDES, SMALL_LEVELS, SMALL_MARGIN, SMALL_LIFT); _src = 'lathe'
     else:
@@ -584,9 +568,9 @@ print(f"sign mesh: {len(sign_mesh)} tris at {SIGN_POS}")
 #   above box-top : entirely above BOX_TOP  -> irrelevant to bobber/hook (they only matter near water)
 #   NE corner     : x>NE_X & z<NE_Z         -> the unreachable north-east pocket
 #   ladder-tops   : within LAD_R of a ladder & above LAD_Y -> the shafts/platforms climbing out of water
-# The mod drops ALL vertical walls wholesale (floors-only experiment), so the only remaining reclaim is
-# the FLOOR platforms sitting on top of the in-water ladders — floors the bobber/hook would otherwise
-# catch on. Near a ladder AND entirely above LAD_Y (pond floor near a ladder base is low-Y, so it stays).
+# The mod KEEPS the native walls in the fishing cpoly (since 2026-09; they contain the fish); its only
+# reclaim is the FLOOR platforms sitting on top of the in-water ladders — floors the bobber/hook would
+# otherwise catch on. Near a ladder AND entirely above LAD_Y (pond floor near a ladder base is low-Y, so it stays).
 # Mirrors the mod's IsLadderTopFloor (LADDER positions / radius / height must match CustomFishingSpot.cs).
 LAD_POS = [(p[1][0], p[1][2]) for p in placements if p[0].startswith('s04r')]
 LAD_R, LAD_Y = 45, 25   # top platforms lean out up to ~42u from the base position
@@ -672,10 +656,10 @@ LAY = [
     ('cplant','COLL plants','D.col_plants','[80,230,120]',0.9,'#5e8'),
     ('cbuild','COLL buildings','D.col_build','[205,120,255]',0.7,'#c8f'),
     ('cperim','COLL perimeter (inset 20)','D.col_perim','[60,210,255]',0.5,'#3df'),
-    ('vfloor','VANILLA floor (KEPT)','D.van_floor','[90,200,255]',0.8,'#5cf'),
-    ('vwall','VANILLA wall (DROPPED)','D.van_wall','[255,90,160]',0.8,'#f6a'),
-    ('vmid','VANILLA slope (KEPT)','D.van_mid','[255,215,80]',0.8,'#fd5'),
-    ('vcut','VANILLA ladder-top floor (DROPPED)','D.van_dropped','[120,120,130]',0.7,'#999'),
+    ('vfloor','VANILLA floor (KEPT) [live dump]','D.van_floor','[90,200,255]',0.8,'#5cf'),
+    ('vwall','VANILLA wall (KEPT since 2026-09) [live dump]','D.van_wall','[255,90,160]',0.8,'#f6a'),
+    ('vmid','VANILLA slope (KEPT) [live dump]','D.van_mid','[255,215,80]',0.8,'#fd5'),
+    ('vcut','VANILLA ladder-top floor (DROPPED) [live dump]','D.van_dropped','[120,120,130]',0.7,'#999'),
     ('gridbot','ground grid: pond BOTTOM','D.grid_bottom','[40,180,190]',0.85,'#3cc'),
     ('gridland','ground grid: land','D.grid_land','[90,110,90]',0.7,'#7a7'),
 ]
@@ -743,6 +727,40 @@ for _suf, _kind, _col, _bord in (('_a', 'player', [255, 120, 220], '#f7c'),
                            [[min(xs), min(ys), min(zs)], [max(xs), max(ys), max(zs)]], _key])
         _nc_counts[f'{_suf}:{_nn}'] = len(_tris)
 print("native collision:", _nc_counts)
+
+# ---- FISHING GATHER replica: exactly what _LOAD_FISHING_DATA's PickUpPoly collects at the CURRENT cast
+#      rect (RE'd 2026-09, tools/ghidra: _LOAD_FISHING_DATA -> PickUpPoly__11CEditGround(box = rect x/z,
+#      y +-1000, flag 0) -> per part CheckBox (x/z only) -> PickUpNearPoly__13CCollisionMDT = pure per-poly
+#      AABB-vs-box test, NO attribute filter; then the 4 CEditArea grids emit 2 tris per in-rect cell whose
+#      code != 0x81 (the pond cells are 0x81 -> skipped, so Brownboo's gather is s04g01_a polys only). The
+#      loader HANGS if the count exceeds 0x400 = 1024 (its stack buffer) — the label shows the headroom.
+#      Grid term: replicated from ground_grid.csv when that dump exists, else 0 (none in Brownboo anyway).
+def _fishing_gather(x1, z1, x2, z2):
+    polys = []
+    for _sub in _sp._scndir(scn):
+        for _nn, _tris in _native_coll(_sub, '_a'):
+            for _t in _tris:
+                _xs = [q[0] for q in _t]; _zs = [q[2] for q in _t]
+                if max(_xs) < x1 or min(_xs) > x2 or max(_zs) < z1 or min(_zs) > z2: continue
+                polys.append(_t)
+    grid = 0
+    if os.path.exists(GRID_CSV):      # cells whose origin sits in the rect (+1 cell margin), code != 0x81
+        with open(GRID_CSV) as fh:
+            for r in _csv.DictReader(fh):
+                wx, wz, h, code = float(r['worldX']), float(r['worldZ']), float(r['height']), int(r['code'])
+                if code == 0x81 or wx < x1 - 20 or wx > x2 + 20 or wz < z1 - 20 or wz > z2 + 20: continue
+                grid += 2
+    return polys, grid
+_gath, _gath_grid = _fishing_gather(RECT_X1, RECT_Z1, RECT_X2, RECT_Z2)
+_gath_n = len(_gath) + _gath_grid
+layers.append({'key': 'fishgather',
+               'label': f'FISHING GATHER replica @ rect ({RECT_X1},{RECT_Z1})-({RECT_X2},{RECT_Z2}): '
+                        f'{_gath_n} of 1024 cap ({len(_gath)} s04g01_a polys'
+                        + (f' + {_gath_grid} grid tris' if _gath_grid else '') + ')',
+               'tris': _gath, 'color': [255, 230, 90], 'alpha': 0.75, 'border': '#fe7', 'on': True,
+               'group': 'Fishing gather'})
+print(f"fishing gather replica: {_gath_n} polys of 1024 ({len(_gath)} from s04g01_a, {_gath_grid} grid)"
+      + ("  (grid term needs ground_grid.csv — absent)" if not os.path.exists(GRID_CSV) else ""))
 
 # ---- CUSTOM camera collision: our authored version of s04g01_v obj56 (vanilla − removals + additions,
 #      tools/brownboo_camera_collision.py — the future ISO bake reads the same module). ----

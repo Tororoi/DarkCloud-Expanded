@@ -655,14 +655,12 @@ namespace Dark_Cloud_Improved_Version
                 Log($"line config for '{_active.Name}': above x{_lineAboveStart:0.##}→x{_lineAbove:0.##}, below {_lineBelow:0.##} " +
                     $"(tide level {(_active.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : _active.Water):0.#})");
 
-                // Drop every vertical wall from the native cpoly, keeping only the floors/slopes the hook/bobber
-                // raycast honours: player movement (its own collision system) still keeps you on the boardwalk,
-                // and dropping the walls frees the poly budget for the rocks below.
-                FishingCollision.ReplaceWithFloorsOnly(_spot.MapNo);
-                // APPEND the simplified rock collision (decoded offline, tools/export_rock_collision.py) so the
-                // bobber can't cast onto/through the rocks and fish can't swim through them. Runs after the
-                // floors-only compaction, so it fills the slots freed by the dropped walls.
-                FishingCollision.AppendRockCollision(_spot.MapNo);
+                // Brownboo: drop the ladder-top platforms from the cpoly (bobber ground-lift guard). Native walls
+                // are KEPT — they contain the fish; the bobber probe never treats a wall as ground.
+                FishingCollision.DropLadderTopFloors(_spot.MapNo);
+                // APPEND the town's fishing collision (DCFC bin, tools/build_fishing_collision.py) so the
+                // fish are boxed in where the native geometry is open (Queens / Yellow Drops fish walls).
+                FishingCollision.AppendCustomCollision(_spot.MapNo);
 
                 // TEST AID for the Priscleen port: stamp the loaded fish as species 8 (no-op unless the
                 // PriscleenFish.ForceAllSpecies8 switch is on).
