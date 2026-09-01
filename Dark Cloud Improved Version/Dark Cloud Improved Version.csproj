@@ -22,24 +22,6 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.*" />
   </ItemGroup>
   <ItemGroup>
-    <!-- RubyMemeFix = extracted c05 game data from the UNTRACKED game_data/ folder. Every include below is
-         guarded by Exists() so the build NEVER requires an untracked file: a clean checkout (no game_data/)
-         builds fine and simply omits these assets. Present for local dev only; never redistributed. -->
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Fire" Condition="Exists('..\game_data\RubyMemeFix\Fire')">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Fire</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Holy" Condition="Exists('..\game_data\RubyMemeFix\Holy')">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Holy</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Ice" Condition="Exists('..\game_data\RubyMemeFix\Ice')">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Ice</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Thunder" Condition="Exists('..\game_data\RubyMemeFix\Thunder')">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Thunder</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\game_data\RubyMemeFix\Wind" Condition="Exists('..\game_data\RubyMemeFix\Wind')">
-      <LogicalName>Dark_Cloud_Improved_Version.Resources.RubyMemeFix.Wind</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
     <!-- Town-camera collision/controller EE function (assembled from tools/town_camera_collision.s @0x14B838).
          IsoPatcher reads this at patch time; regenerate = reassemble + copy the .bin here + refresh slot indices. -->
