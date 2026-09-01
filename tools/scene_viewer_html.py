@@ -28,7 +28,7 @@ import re
 # render THROUGH the z-buffer with the scene; click a palette part to pick up, click a platform to place,
 # drag a placed part to move it, R=rotate, Del=delete, Esc=drop. Uses the renderer's rot()/W/H/zoom/draw.
 _GEORAMA_JS = r'''const GEO=D.georama;
-let gpl=[],gHeld=null,gRot=0,gSel=-1,gMove=-1,gCur=null,gShowColl=false,gShowCamColl=false,gShowParts=true;const gUsed=new Set();
+let gpl=[],gHeld=null,gRot=0,gSel=-1,gMove=-1,gCur=null,gShowColl=false,gShowCamColl=false,gShowLod1=false,gShowLod2=false,gShowCand=false,gShowParts=true;const gUsed=new Set();
 const GF=()=>Math.min(W,H)*0.5*zoom/300;
 function gFp(n,r){const p=GEO.parts[n];return (r&1)?[p.fd,p.fw]:[p.fw,p.fd];}
 function gXform(tris,X,Y,Z,r){const a=r*Math.PI/2,ca=Math.cos(a),sa=Math.sin(a),o=[];
@@ -50,6 +50,12 @@ function gAddTris(all){
    else if(P.ctris){const wt=gXform(P.ctris,o.x,o.y,o.z,o.rot);for(const t of wt)gPush(all,t,[230,20,20],1);}});
  if(gShowCamColl)gpl.forEach(o=>{const cm=GEO.parts[o.name].camtris;if(cm){const wt=gXform(cm,o.x,o.y,o.z,o.rot);
    for(const t of wt)gPush(all,t,[80,200,255],1);}});
+ if(gShowLod1)gpl.forEach(o=>{const lm=GEO.parts[o.name].lod1tris;if(lm){const wt=gXform(lm,o.x,o.y,o.z,o.rot);
+   for(const t of wt)gPush(all,t,[110,200,160],0.65);}});
+ if(gShowLod2)gpl.forEach(o=>{const lm=GEO.parts[o.name].lod2tris;if(lm){const wt=gXform(lm,o.x,o.y,o.z,o.rot);
+   for(const t of wt)gPush(all,t,[230,130,120],0.65);}});
+ if(gShowCand)gpl.forEach(o=>{const lm=GEO.parts[o.name].candtris;if(lm){const wt=gXform(lm,o.x,o.y,o.z,o.rot);
+   for(const t of wt)gPush(all,t,[255,220,90],0.7);}});
  if(gHeld&&gCur){const fp=gFp(gHeld,gRot),ct=gCellC(gCur.reg,gCur.cx,gCur.cz,fp[0],fp[1]),wt=gXform(GEO.parts[gHeld].tris,ct[0],ct[1],ct[2],gRot),
    col=GEO.parts[gHeld].kind==='tree'?[150,230,160]:[255,210,150];for(const t of wt)gPush(all,t,col,0.55);}}
 function gPick(mx,my){const f=GF(),rx=(mx-W/2)/f,ry=-(my-H/2)/f,cyw=Math.cos(yaw),syw=Math.sin(yaw),sp=Math.sin(pitch),cp=Math.cos(pitch);
@@ -85,6 +91,9 @@ for(const b of document.querySelectorAll('.gpb'))b.onclick=()=>gSetHeld(b.datase
 document.getElementById('gparts').onchange=e=>{gShowParts=e.target.checked;draw();};
 document.getElementById('gcoll').onchange=e=>{gShowColl=e.target.checked;draw();};
 document.getElementById('gcamcoll').onchange=e=>{gShowCamColl=e.target.checked;draw();};
+{const e4=document.getElementById('glod1');if(e4)e4.onchange=e=>{gShowLod1=e.target.checked;draw();};}
+{const e5=document.getElementById('glod2');if(e5)e5.onchange=e=>{gShowLod2=e.target.checked;draw();};}
+{const e6=document.getElementById('gcand');if(e6)e6.onchange=e=>{gShowCand=e.target.checked;draw();};}
 document.getElementById('greset').onclick=gDefault;
 document.getElementById('gclear').onclick=()=>{gpl=[];gUsed.clear();gSel=-1;gUpd();gPalRefresh();draw();};
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();
@@ -92,6 +101,16 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();
  else if(k==='escape')gSetHeld(null);
  else if(k==='delete'||k==='backspace'){if(gSel>=0){const o=gpl[gSel];if(GEO.parts[o.name]&&GEO.parts[o.name].kind==='bldg')gUsed.delete(o.name);gpl.splice(gSel,1);gSel=-1;gUpd();gPalRefresh();draw();}}});
 gDefault();'''
+
+
+def _pcnt(georama, key):
+    """' (h04:587 h05:725 ...)' — per-part tri counts for a georama part attribute, for toggle labels."""
+    if not georama:
+        return ''
+    items = [(n, len(p[key])) for n, p in sorted(georama.get('parts', {}).items()) if key in p]
+    if not items:
+        return ''
+    return ' <span style="color:#889">(' + ' '.join(f'{n[-3:]}:{c}' for n, c in items) + ')</span>'
 
 
 def build_html(title, layers, node_labels=None, points=None, point_labels=None,
@@ -132,7 +151,13 @@ def build_html(title, layers, node_labels=None, points=None, point_labels=None,
                     '<label style="color:#f7787f;cursor:pointer"><input type="checkbox" id="gcoll" '
                     'style="vertical-align:middle"> vanilla player coll _a (georama)</label><br>'
                     '<label style="color:#5bf;cursor:pointer"><input type="checkbox" id="gcamcoll" '
-                    'style="vertical-align:middle"> vanilla cam coll _c (georama)</label><br>'
+                    'style="vertical-align:middle"> vanilla cam coll _c (georama)' + _pcnt(georama, 'camtris') + '</label><br>'
+                    '<label style="color:#7da;cursor:pointer"><input type="checkbox" id="glod1" '
+                    'style="vertical-align:middle"> simplified visual LOD1 medium' + _pcnt(georama, 'lod1tris') + '</label><br>'
+                    '<label style="color:#e87;cursor:pointer"><input type="checkbox" id="glod2" '
+                    'style="vertical-align:middle"> simplified visual LOD2 low' + _pcnt(georama, 'lod2tris') + '</label><br>'
+                    '<label style="color:#fd6;cursor:pointer"><input type="checkbox" id="gcand" '
+                    'style="vertical-align:middle"> custom _c candidate [NOT BAKED — vanilla _c kept]' + _pcnt(georama, 'candtris') + '</label><br>'
                     '<button id="greset">reset to default</button> <button id="gclear">clear</button><br>'
                     'placed: <b id="gpc">0</b></div>'
                     '<textarea id="gout" readonly style="width:100%;height:90px;margin-top:5px;background:#0d1117;'

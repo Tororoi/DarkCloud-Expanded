@@ -330,7 +330,7 @@ namespace Dark_Cloud_Improved_Version
             progress("Carving + injecting the canal ladder …");
             byte[] ladderMds = CarveLadder(ReadArchive(LADDER_SCENE));   // from the user's ISO (Factory e05a01/hasigo1)
             // Queens north-bank kanban carries the label-400 fishing trigger (QUEENS_TRIG local offset).
-            byte[] e03scene = BuildInjectedScene(ReadArchive(E03_SCENE), kanbanMds, tmplHdr, BuildKanbanCollision(),
+            byte[] e03scene = BuildInjectedScene(ApplyQueensPartSwaps(ReadArchive(E03_SCENE)), kanbanMds, tmplHdr, BuildKanbanCollision(),
                                                  funcData: BuildFishingFunc(QUEENS_TRIG));
             // The canal-floor sign is its OWN part `kanbanc` (small duplicate of the kanban mesh) carrying a
             // DIFFERENT trigger (label 401 -> its own per-sign script with the canal-floor stance), so triggering
@@ -777,6 +777,53 @@ namespace Dark_Cloud_Improved_Version
                 return scene;
             }
             throw new Exception("YD water raise: s1302 not found");
+        }
+
+        /// <summary>Queens georama-part subfile swaps (Resources/isoPatch/queens_parts.bin, built by
+        /// tools/export_queens_parts.py: u32 count; per part name[8] + u32 origSize + u32 newSize +
+        /// bytes 16-aligned). Currently e03h06: `_c` camera hull doubled in height + `_a` player
+        /// collision replaced with the full visual mesh split into sub-200-poly nodes. Each rebuilt
+        /// sub is appended to scene.scn and its directory entry repointed; guarded on the original
+        /// sub size. Missing bin = skip (vanilla part collision stays).</summary>
+        static byte[] ApplyQueensPartSwaps(byte[] scene)
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "Resources", "isoPatch", "queens_parts.bin");
+            if (!File.Exists(path))
+            {
+                Console.WriteLine("   queens_parts.bin missing (tools/export_queens_parts.py) — vanilla part collision stays");
+                return scene;
+            }
+            byte[] bin = File.ReadAllBytes(path);
+            int nparts = BitConverter.ToInt32(bin, 0);
+            int rp = 4;
+            var scn = new List<byte>(scene);
+            int n = (int)U32(scene, 4);
+            for (int k = 0; k < nparts; k++)
+            {
+                string name = Encoding.Latin1.GetString(bin, rp, 8).TrimEnd('\0');
+                int origSize = BitConverter.ToInt32(bin, rp + 8);
+                int newSize = BitConverter.ToInt32(bin, rp + 12);
+                rp += 16;
+                byte[] rebuilt = new byte[newSize];
+                Array.Copy(bin, rp, rebuilt, 0, newSize);
+                rp += newSize + ((-newSize) % 16 + 16) % 16;
+                byte[] cur = scn.ToArray();
+                int ent = -1;
+                for (int i = 0; i < n; i++)
+                    if (Encoding.Latin1.GetString(cur, 0x10 + i * 0x30, name.Length + 1) == name + "\0")
+                    { ent = 0x10 + i * 0x30; break; }
+                if (ent < 0) throw new Exception($"part swap: {name} not in e03 scene directory");
+                if (U32(cur, ent + 0x14) != (uint)origSize)
+                    throw new Exception($"part swap: {name} size {U32(cur, ent + 0x14)} != expected {origSize} — regenerate the bin");
+                int blob = (int)Align(scn.Count, 16);
+                while (scn.Count < blob) scn.Add(0);
+                scn.AddRange(rebuilt);
+                byte[] outp = scn.ToArray();
+                U32(outp, ent + 0x10, (uint)blob); U32(outp, ent + 0x14, (uint)newSize);
+                scn = new List<byte>(outp);
+                Console.WriteLine($"   {name}: rebuilt collision swapped in ({newSize} bytes @0x{blob:x})");
+            }
+            return scn.ToArray();
         }
 
         static byte[] ReplaceS13Ground(byte[] scene)
@@ -1601,7 +1648,7 @@ namespace Dark_Cloud_Improved_Version
             const float HEIGHT_EASE = 0.3f;  // per-frame ease of height toward its target
             const float DIST_EASE   = 0.3f; // per-frame ease of horizontal distance toward its target
             const float SLIDE_MARGIN = 8f;   // swept-slide standoff + proximity-extension reach. KEEP <= MARGIN (else the two setpoints oscillate)
-            const float SLIDE_BIAS = 0.0625f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
+            const float SLIDE_BIAS = 0.125f; // angle-axis weight² in the slide: 1 = neutral (resists rotation), small = FREE glide (dist/height resolve, rotation flows)
             const float SLIDE_FRICTION = 0.6f; // contact drag at FULL tangency (keep-floor); head-on contact is undamped — keep = 1 − (1−F)·|n_t|
             float SLIDE_FRICTION_INV = 1f - SLIDE_FRICTION;   // injected form (asm folds 1−F to save the 1.0 load)
             const float CLIMB_PEAK = 60f;    // height the climb curve reaches at full pinch (d' = 0); the BELL's peak
