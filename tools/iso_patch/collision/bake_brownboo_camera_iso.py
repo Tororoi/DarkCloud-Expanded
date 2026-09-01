@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 os.environ.setdefault("DC1_DATA_DIR", os.path.join(HERE, "..", ".."))
 import ps2iso
 from bake_player_camera_collision import build_flat_mds, _replace_a_block
-from brownboo_camera_collision import (vanilla_v_nodes, iwa01_ring_obj56, _kd_split)
+from brownboo_camera_collision import vanilla_v_nodes, iwa01_ring_obj56
+from tri_util import kd_split
 
 SEC = ps2iso.SECTOR
 def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
@@ -42,7 +43,7 @@ def baked_named(scn=None):
     if not van_v:
         raise SystemExit("vanilla s04g01_v node 'v' not found (already-baked scene?)")
     named = [('v', van_v)]
-    named += [(f'c56_{i:02d}', bk) for i, bk in enumerate(_kd_split(iwa01_ring_obj56(scn), 100))]
+    named += [(f'c56_{i:02d}', bk) for i, bk in enumerate(kd_split(iwa01_ring_obj56(scn), 100, proportional=True))]
     return named
 
 

@@ -272,6 +272,31 @@ namespace Dark_Cloud_Improved_Version
             return added;
         }
 
+        /// <summary>Move the spawned fish to WaterLevel-FishDepth by writing their depth directly (data only) —
+        /// replaces the crash-prone FishingInitFish code patch.
+        ///
+        /// Depth is the CFrame translation Y at <c>fish+0x1264</c> (Fish::Get/SetPosition route through the frame
+        /// at fish+0x1250; the +0xB0..0xB8 "LivePos" fields are only a readout cache). FishingStepFish moves the
+        /// fish with a depth delta hardcoded to 0, so the depth is a fixed point of its per-frame read/add/write
+        /// loop — one write to the real translation sticks (we also mirror the cache for the same-frame visual).</summary>
+        internal static void ApplyFishDepth(float fishDepth)
+        {
+            uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(p)) return;
+            long baseAddr = Memory.ToMmu(p);
+            float depth = Memory.ReadFloat(FishingSpot.WaterLevel) - fishDepth;
+            int num = Memory.ReadInt(FishingSpot.FishNum);
+
+            const int FrameDepthY = 0x1264;   // CFrame translation Y (depth) — the authoritative field
+            for (int i = 0; i < num && i < 6; i++)
+            {
+                long fish = baseAddr + (long)i * FishSlotOffsets.Stride;
+                Memory.WriteFloat(fish + FrameDepthY, depth);                 // authoritative
+                Memory.WriteFloat(fish + FishSlotOffsets.LivePosZ, depth);    // readout cache (immediate visual)
+            }
+            Log($"   fish moved to WaterLevel-{fishDepth} ({num} fish)");
+        }
+
         private static void PutVec(byte[] b, int off, float x, float y, float z)
         {
             Array.Copy(BitConverter.GetBytes(x), 0, b, off + 0, 4);
