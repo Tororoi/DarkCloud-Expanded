@@ -15,14 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'iso_patch'))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'iso_patch', 'collision'))
 import scene_placed
-import bake_player_camera_collision as _bscc
+import queens_collision_builder
 from scene_placed import placed_meshes
 from scene_viewer_html import build_html
 from extract_scene_mesh import load_scene, read_verts, read_tris, xform
-import carve_ladder
-import canal_visual_cap as _cap
+import carve_queens_ladder
+import canal_visual_cap
 from georama_parts import lod_models, lod_layers
-from queens_hcam import candidate_tris as _hcam_candidates, split_tris as _hcam_split
+from queens_building_camera_hulls import candidate_tris as _hcam_candidates, split_tris as _hcam_split
 from georama_parts import part_models
 from georama_default import default_layout
 from georama_collision import collision_local, parse_coll_mdt
@@ -82,7 +82,7 @@ SIGN_POS = (250.0, 70.0, -64.0)              # baked sign position (QSIGN_* in I
 SIGN_RY  = 180                               # mapinfo ry (degrees): facing north (-Z), opposite Brownboo's +Z-facing ry 0
 
 # ---- layer taxonomy (ordered; first match wins). Main geometry ON by default; clutter OFF. ----
-def _num(prefix, n):
+def node_index(prefix, n):
     m = re.match(prefix + r'(\d+)', n)
     return int(m.group(1)) if m else None
 
@@ -92,16 +92,16 @@ LAYERS_SPEC = [
     ('walls',     lambda n: n.startswith('kabe'),                        [130,120,100],   '#cb9', False),
     ('awnings',   lambda n: n.startswith('hiyoke'),                      [150,90,70],     '#d87', False),
     # palm trees = leaves (ha*), trunks (cyl*), bases (cube* except cube41 = lamppost)
-    ('lamppost',  lambda n: _num('cube', n) == 41,                       [220,200,120],   '#ec8', False),
+    ('lamppost',  lambda n: node_index('cube', n) == 41,                       [220,200,120],   '#ec8', False),
     ('palmtrees', lambda n: n.startswith('ha') or n.startswith('cyl')
                             or n.startswith('cube'),                     [90,160,90],     '#7c6', False),
     ('poles',     lambda n: re.match(r'k\d+__', n) is not None,          [190,170,120],   '#eb9', False),
     ('windows',   lambda n: n.startswith('win'),                         [110,190,220],   '#7ce', False),
     ('lights',    lambda n: n.startswith('light'),                       [220,200,120],   '#ec8', False),
-    ('ships',     lambda n: _num('obj', n) in (38, 41),                  [170,140,110],   '#da7', False),
-    ('bridges',   lambda n: _num('obj', n) in (40, 44),                  [180,150,120],   '#eb8', False),
-    ('pipes',     lambda n: _num('obj', n) in (1, 9),                    [130,150,170],   '#9bd', False),
-    ('shortwalls',lambda n: _num('obj', n) == 42,                        [160,130,100],   '#c96', False),
+    ('ships',     lambda n: node_index('obj', n) in (38, 41),                  [170,140,110],   '#da7', False),
+    ('bridges',   lambda n: node_index('obj', n) in (40, 44),                  [180,150,120],   '#eb8', False),
+    ('pipes',     lambda n: node_index('obj', n) in (1, 9),                    [130,150,170],   '#9bd', False),
+    ('shortwalls',lambda n: node_index('obj', n) == 42,                        [160,130,100],   '#c96', False),
     ('structures',lambda n: n.startswith('obj'),                         [150,110,80],    '#c96', False),
 ]
 
@@ -185,9 +185,9 @@ CANAL_SIGN_POS, CANAL_SIGN_RY = (800.0, 0.0, 0.0), -90   # under eastern bridge,
 
 # ---- LOW-TIDE FISHING proposals (canal-lowtide-fishing-plan.md): carved Factory ladder on the
 #      south canal wall centred at x=705, + the canal-floor fishing sign under the bridge facing west.
-#      Ladder from tools/carve_ladder.py (donor e05a01 'hasigo1'); sign = the real kanban mesh.
+#      Ladder from tools/carve_queens_ladder.py (donor e05a01 'hasigo1'); sign = the real kanban mesh.
 layers.append({'key': 'ladder', 'label': "PROPOSED ladder (e05 'hasigo1' trimmed to 70)",
-               'tris': carve_ladder.placed_ladder_tris(),
+               'tris': carve_queens_ladder.placed_ladder_tris(),
                'color': [220,220,230], 'alpha': 1.0, 'border': '#fff', 'on': True})
 layers.append({'key': 'newsign', 'label': 'PROPOSED canal-floor sign (real kanban, faces west)',
                'tris': kanban_mesh(CANAL_SIGN_POS, CANAL_SIGN_RY),
@@ -198,7 +198,7 @@ layers.append({'key': 'newsign', 'label': 'PROPOSED canal-floor sign (real kanba
 #      corners reused from its slant-wall records, SE/SW appended copying the x-twin's UV/normal), so the
 #      added geometry can be inspected against the surrounding walls.
 layers.append({'key': 'canalcap', 'label': 'SHIPPED canal west-end cap (2 tris, grid1__n @ y=50)',
-               'tris': [[list(p) for p in t] for t in _cap.CAP_TRIS],
+               'tris': [[list(p) for p in t] for t in canal_visual_cap.CAP_TRIS],
                'color': [240, 120, 200], 'alpha': 0.85, 'border': '#f6c', 'on': True})
 
 # ---- SHIPPED cast-collision geometry (camera_norm_side.s FishLineClamp v4/v5 + QueensDragCheck):
@@ -238,8 +238,8 @@ layers.append({'key': 'castboxes', 'label': 'CAST bridge-support boxes (stop-dea
 #      node (tight per-node bbox = free runtime gather culling). Four toggles: custom CAMERA collision (_c),
 #      custom PLAYER collision (_a), plus perimeter walls and invisible walls broken out on their own. Each
 #      split node still gets its own node-label box (gated on its layer) so "node labels" reveals the grouping.
-_scn_bytes = _bscc.load_scene('gedit/e03/scene.scn')
-_G = _bscc.grouped_collision(PLACED, _scn_bytes, 'e03', 100)
+_scn_bytes = queens_collision_builder.load_scene('gedit/e03/scene.scn')
+_G = queens_collision_builder.grouped_collision(PLACED, _scn_bytes, 'e03', 100)
 
 def _add_nodes(named, layerkey, prefix=''):
     tris = []
@@ -347,9 +347,9 @@ print(f"CAM _c inside fish rect: {len(_fr_tris)} tris; worst ±160 gather box = 
 
 # ---- LOADING-ZONE trigger quads (the town exits): attribute-tagged collision polys in the vanilla ground
 #      `_a`. EdEventPointCpPoly gathers these around each event point; GetEventPoly reads the destination from
-#      the hit poly's colour tag (+0x40 short). The bake must carry them over (bake_player_camera_collision
+#      the hit poly's colour tag (+0x40 short). The bake must carry them over (queens_collision_builder
 #      .trigger_nodes) or the exits stop working — this is exactly what broke when we dropped `_a`.
-_TRIGS = _bscc.trigger_nodes(_bscc.load_scene('gedit/e03/scene.scn'))
+_TRIGS = queens_collision_builder.trigger_nodes(queens_collision_builder.load_scene('gedit/e03/scene.scn'))
 _trig_tris, _dests = [], []
 for _sub, _tns in _TRIGS.items():
     for _tn, _tt, _te in _tns:
@@ -557,7 +557,7 @@ GEORAMA = {'parts': GPARTS, 'regions': GREGIONS, 'default': GDEFAULT, 'roads': G
 #      game uses for the CAMERA (10-16 tris/building, far simpler than the `_a` player collision — the "missing
 #      piece": vanilla keeps detail only for the player). Two toggles: static scene assets (grounds, world) and
 #      georama buildings (attached to GPARTS.camtris, so the "vanilla cam coll" georama toggle moves it w/ parts).
-_scn = load_scene('gedit/e03/scene.scn'); _DIR = scene_placed._scndir(_scn)
+_scn = load_scene('gedit/e03/scene.scn'); _DIR = scene_placed.scn_directory_map(_scn)
 def _variant_coll(name, suf):
     if name not in _DIR: return None
     off, size = _DIR[name]; sub = _scn[off:off + size]

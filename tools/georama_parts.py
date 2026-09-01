@@ -39,7 +39,7 @@ def _mds_tris(scn, mds):
 
 def lod_models(scene_rel, name_re):
     scn = load_scene(scene_rel)
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     rx = re.compile(name_re)
     out = {}
     for sub in sorted(DIR):
@@ -103,7 +103,7 @@ def lod_layers(scene_rel, name_re, instances=None, group='LOD compare (full/medi
 
 def part_models(scene_rel, name_re):
     scn = load_scene(scene_rel)
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     rx = re.compile(name_re)
     out = {}
     for sub in sorted(DIR):

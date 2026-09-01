@@ -3,9 +3,9 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// The script-label ids the custom fishing spots use (baked into the towns' event.stb by IsoPatcher /
-    /// TextBaker, claimed by FishingLabelArena at runtime). One home for both sides of that contract.
+    /// StbLabelBaker, claimed by FishingLabelAllocator at runtime). One home for both sides of that contract.
     /// </summary>
-    internal static class FishingLabels
+    internal static class FishingLabelIds
     {
         /// <summary>An id nothing will ever ask for, given to labels whose code we have overwritten.</summary>
         internal const int RetiredLabelId = 9000;
@@ -22,16 +22,16 @@ namespace Dark_Cloud_Improved_Version
         internal const int MenuSubLabelId = 9600;
 
         /// <summary>The canal-ladder "tide too high" message label + its event-mes id — both baked into the
-        /// ISO by IsoPatcher (spare label 402, event-mes 23). Must match <see cref="IsoPatcher.LADDER_MSG_LABEL"/>.</summary>
-        internal const int LadderMsgLabelId = IsoPatcher.LADDER_MSG_LABEL;
+        /// ISO by IsoPatcher (spare label 402, event-mes 23). Must match <see cref="IsoPatcher.LadderMessageLabel"/>.</summary>
+        internal const int LadderMsgLabelId = IsoPatcher.LadderMessageLabel;
         internal const int LadderMsgId = 23;
 
         /// <summary>Canal tide-evict warp: label 403 holds a <c>_MAP_JUMP(EastHarborMapArg)</c> script that
         /// CanalTide fires as an event when the tide rises on a player stuck in the drained canal. The map arg
         /// is 1-BASED (VM does MapJump(arg-1)), so 20 → MapNo 19 = East Harbor. Must match
-        /// <see cref="IsoPatcher.CANAL_WARP_LABEL"/>.</summary>
-        internal const int CanalWarpLabelId = IsoPatcher.CANAL_WARP_LABEL;
+        /// <see cref="IsoPatcher.CanalWarpLabel"/>.</summary>
+        internal const int CanalWarpLabelId = IsoPatcher.CanalWarpLabel;
         internal const int EastHarborMapArg = 20;   // MapNo 19 + 1 (the _MAP_JUMP arg is 1-based)
-        internal const int DockSpawnEvent   = IsoPatcher.DOCK_SPAWN_LABEL;   // baked s09 event that places the player at the dock
+        internal const int DockSpawnEvent   = IsoPatcher.DockSpawnLabel;   // baked s09 event that places the player at the dock
     }
 }

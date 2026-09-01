@@ -1,6 +1,6 @@
 using System;
 using System.Text;
-using static Dark_Cloud_Improved_Version.QueensSpray;
+using static Dark_Cloud_Improved_Version.QueensCanalMist;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -30,14 +30,13 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// Split 2026-09: this class owns the tide LEVEL (target/shown, fade-hidden snap, mizu frame write) and
     /// orchestrates the Queens-only sub-systems: CanalEvict (tide-evict + dock camera), CanalWading (early
-    /// player/cape draw), CanalRipples (CWater body, refraction pin, ripple decals), CanalLadderGate and
-    /// QueensSpray (waterfall mist).
+    /// player/cape draw), CanalWaterEffects (CWater body, refraction pin, ripple decals), CanalLadderGate and
+    /// QueensCanalMist (waterfall mist).
     /// </summary>
 
     internal static class CanalTide
     {
         internal static bool Enabled = true;
-        internal const int QueensMapNo = 2;
 
         private const float MizuBaselineY   = 30f;         // mizu__a01 vertex surface height (world, node matrix = 0)
         private const long  FrameName       = 0x118;       // CFrame node-name string
@@ -55,13 +54,13 @@ namespace Dark_Cloud_Improved_Version
         private const  int   FadeGraceTicks = 60;        // ~3 s: no fade seen -> snap anyway, still instantly
 
         private static long  _frame;                   // cached mizu__a01 CFrame (mmu); 0 = unknown
-        private static float _shownLvl = float.NaN;    // water level currently displayed (lags target while hidden)
-        private static float _lastMizu = float.NaN;    // last level written to the mesh (set-once while stable)
-        private static int   _rebakeLvl = int.MinValue;
-        private static int   _tick, _nextScan, _pend;  // re-scan throttle + frames a change has waited for a fade
+        private static float _shownWaterLevel = float.NaN;    // water level currently displayed (lags target while hidden)
+        private static float _lastMeshLevel = float.NaN;    // last level written to the mesh (set-once while stable)
+        private static int   _lastBakedLevel = int.MinValue;
+        private static int   _tickCount, _nextFrameScanTick, _pendingFadeTicks;  // re-scan throttle + frames a change has waited for a fade
         private static bool  _loggedFound, _loggedMiss;
 
-        internal static void Log(string m) { if (Diagnostics) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[CanalTide] " + m); }
+        internal static void Log(string m, string tag = nameof(CanalTide)) { if (Diagnostics) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[" + tag + "] " + m); }
 
         /// <summary>Queens fishing water level for the current time of day (LOW = morning 8, MEDIUM =
         /// afternoon + night 31, HIGH = dusk 52). Pushed into the injected _LOAD_FISHING_DATA water arg
@@ -76,37 +75,37 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Enabled) return;
             CanalEvict.DockCamera();   // post-warp: set the dock camera in East Harbor — runs in ANY map, so BEFORE the Queens bail
-            if (Memory.ReadInt(EditLoop.MapNo) != QueensMapNo)
+            if (Memory.ReadInt(EditLoop.MapNo) != TownMapNo.Queens)
             {
-                _frame = 0; _shownLvl = float.NaN; _lastMizu = float.NaN; _rebakeLvl = int.MinValue;
-                CanalRipples.Reset(); CanalWading.Reset(); CanalEvict.Reset(); CanalLadderGate.Reset();   // Queens-only state
+                _frame = 0; _shownWaterLevel = float.NaN; _lastMeshLevel = float.NaN; _lastBakedLevel = int.MinValue;
+                CanalWaterEffects.Reset(); CanalWading.Reset(); CanalEvict.Reset(); CanalLadderGate.Reset();   // Queens-only state
                 Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
                 ClearSprayTable();                                                        // no waterfall mist outside Queens
                 return;
             }
 
-            _tick++;
+            _tickCount++;
 
             float target = QueensWaterLevel();
-            if (float.IsNaN(_shownLvl)) _shownLvl = target;    // first frame in town — start at the current level
+            if (float.IsNaN(_shownWaterLevel)) _shownWaterLevel = target;    // first frame in town — start at the current level
 
-            CanalEvict.Update(_shownLvl, target);   // tide-evict flag + arrival camera-swing kill (Queens fade-out)
+            CanalEvict.Update(_shownWaterLevel, target);   // tide-evict flag + arrival camera-swing kill (Queens fade-out)
 
             // (re)locate the mesh CFrame. A fresh find means the town just (re)loaded — safe to snap under the
             // load's own black screen.
             bool freshFrame = false;
-            if (!FrameStillMizu(_frame) && _tick >= _nextScan)
+            if (!FrameStillMizu(_frame) && _tickCount >= _nextFrameScanTick)
             {
                 Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);   // disarm while the frame is unknown/stale
                 _frame = FindMizuFrame();
                 if (_frame == 0)
                 {
-                    _nextScan = _tick + 100;   // ~5s back-off (the scan is heavy)
+                    _nextFrameScanTick = _tickCount + 100;   // ~5s back-off (the scan is heavy)
                     if (!_loggedMiss) { Log("mizu__a01 CFrame not found in 0x20300000-0x21E00000"); _loggedMiss = true; }
                 }
                 else
                 {
-                    freshFrame = true; _loggedMiss = false; _lastMizu = float.NaN;
+                    freshFrame = true; _loggedMiss = false; _lastMeshLevel = float.NaN;
                     if (!_loggedFound) { Log($"mizu__a01 CFrame @0x{_frame:X}"); _loggedFound = true; }
                 }
             }
@@ -117,35 +116,35 @@ namespace Dark_Cloud_Improved_Version
             // period rolled over while the mod was mid-attach), snap anyway once the grace period is up: an
             // instant change is right even when it isn't hidden. This used to RAMP in that case, which is what
             // made the water visibly slide between levels.
-            if (Math.Abs(target - _shownLvl) > 0.01f)
+            if (Math.Abs(target - _shownWaterLevel) > 0.01f)
             {
                 float alpha = Memory.ReadFloat(EditLoop.FadeBoxAlpha);
                 bool hidden = freshFrame || alpha >= FadeSnapAlpha;
-                if (hidden || ++_pend > FadeGraceTicks) { _shownLvl = target; _pend = 0; }
+                if (hidden || ++_pendingFadeTicks > FadeGraceTicks) { _shownWaterLevel = target; _pendingFadeTicks = 0; }
             }
-            else _pend = 0;
+            else _pendingFadeTicks = 0;
 
             // Waterfall mist only at LOW tide (the falls meet the drained canal then); clear it otherwise.
-            if (_shownLvl <= LowTideThreshold) WriteSprayTable(_shownLvl); else ClearSprayTable();
+            if (_shownWaterLevel <= LowTideThreshold) WriteSprayTable(_shownWaterLevel); else ClearSprayTable();
 
             // Write the shown level to the SURFACE mesh (CFrame set-once while stable, re-applied on a fresh
             // frame) and to the RIPPLE (CEditGround CWater body, pinned every frame — see PinRipple).
-            if (_frame != 0 && (freshFrame || Math.Abs(_shownLvl - _lastMizu) > 0.01f))
+            if (_frame != 0 && (freshFrame || Math.Abs(_shownWaterLevel - _lastMeshLevel) > 0.01f))
             {
-                Memory.WriteFloat(_frame + FrameMatTransY, _shownLvl - MizuBaselineY);
+                Memory.WriteFloat(_frame + FrameMatTransY, _shownWaterLevel - MizuBaselineY);
                 Memory.WriteIntFast(_frame + FrameWorldDirty, 0);   // force world-matrix recompute from local
-                _lastMizu = _shownLvl;
+                _lastMeshLevel = _shownWaterLevel;
             }
-            bool low = _shownLvl <= LowTideThreshold;
+            bool low = _shownWaterLevel <= LowTideThreshold;
             CanalWading.Arm(low);                       // low tide: early player/cape draw under the water pass
-            CanalRipples.Tick(_shownLvl, low, _frame);  // refraction pin, quad colour, ripple decals
+            CanalWaterEffects.Tick(_shownWaterLevel, low, _frame);  // refraction pin, quad colour, ripple decals
             CanalLadderGate.Apply(low);
 
             // Re-bake the FISHING water (baked into the injected script at install) once the shown level has
             // settled on a new level — re-writes only the fishing bytecode, skipped mid-session.
             int t = (int)MathF.Round(target);
-            if (Math.Abs(_shownLvl - target) < 0.01f && t != _rebakeLvl)
-            { CustomFishingSpot.RebuildFishingScript(); _rebakeLvl = t; }
+            if (Math.Abs(_shownWaterLevel - target) < 0.01f && t != _lastBakedLevel)
+            { CustomFishingSpot.RebuildFishingScript(); _lastBakedLevel = t; }
         }
 
         private static bool FrameStillMizu(long f)

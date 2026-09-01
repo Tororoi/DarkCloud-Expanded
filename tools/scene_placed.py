@@ -14,7 +14,7 @@ import mdt_codec
 from extract_scene_mesh import load_scene, xform
 
 
-def scn_dir(scn):
+def scn_directory_list(scn):
     """The scene.scn sub-file directory (0x30-stride entries from 0x10) as an ordered list of
     (name, off, size, entry_off) — entry_off is where the entry itself sits, for repointing."""
     out, o = [], 0x10
@@ -28,10 +28,10 @@ def scn_dir(scn):
     return out
 
 
-def _scndir(scn):
+def scn_directory_map(scn):
     """{name: (off, size)} — first entry wins (the sub-file's data is shared across instances)."""
     d = {}
-    for nm, off, size, _ in scn_dir(scn):
+    for nm, off, size, _ in scn_directory_list(scn):
         d.setdefault(nm, (off, size))
     return d
 
@@ -118,7 +118,7 @@ def _flatten(m):
 def placed_meshes(scene_rel, mapinfo_rel):
     scn = load_scene(scene_rel)
     cfg = load_scene(mapinfo_rel).decode('latin1', 'replace')
-    DIR = _scndir(scn)
+    DIR = scn_directory_map(scn)
     placements = _ground_placements(cfg)
     inst_counter = {}
     out = []

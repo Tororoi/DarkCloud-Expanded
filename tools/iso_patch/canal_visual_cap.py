@@ -26,7 +26,7 @@ import os, re, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))            # tools/ (mdt_codec, extract_scene_mesh)
-sys.path.insert(0, os.path.join(HERE, "collision"))     # bake_player_camera_collision (_dir)
+sys.path.insert(0, os.path.join(HERE, "collision"))     # scene_placed (scn_directory_list)
 import mdt_codec
 
 SUB_NAME  = "e03g05"
@@ -51,9 +51,7 @@ for _i in range(4):
     CAP_TRIS += [(a, b, c), (a, c, d)]
 
 
-def _dir(scn):
-    from scene_placed import scn_dir
-    return scn_dir(scn)
+from scene_placed import scn_directory_list
 
 
 def _find_rec(m, pos, tol=0.5):
@@ -70,7 +68,7 @@ def _find_rec(m, pos, tol=0.5):
 
 def add_canal_cap(scn: bytes):
     """Return (new_scene_bytes, delta). Raises if the container doesn't look as expected."""
-    entry = next((e for e in _dir(scn) if e[0] == SUB_NAME), None)
+    entry = next((e for e in scn_directory_list(scn) if e[0] == SUB_NAME), None)
     if entry is None:
         raise KeyError(f"{SUB_NAME} not in scene directory")
     _, sub_off, sub_size, _ = entry
@@ -212,7 +210,7 @@ def add_canal_cap(scn: bytes):
 
     # 3. SCN directory: this sub grows; later subs shift
     out = bytearray(scn[:sub_off]) + new_sub + bytearray(scn[sub_off + sub_size:])
-    for name, off, size, eoff in _dir(scn):
+    for name, off, size, eoff in scn_directory_list(scn):
         if off == sub_off:
             struct.pack_into("<I", out, eoff + 0x14, size + delta)
         elif off > sub_off:

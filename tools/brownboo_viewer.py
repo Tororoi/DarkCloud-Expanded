@@ -21,11 +21,11 @@ os.makedirs(OUT, exist_ok=True)
 HTML_NAME = "brownboo_viewer.html"
 
 scn = load_scene('gedit/s04/scene.scn')
-GOT = extract_mesh(scn)
+BROWNBOO_MESHES = extract_mesh(scn)
 
-def T(pred):
+def tris_where(pred):
     out = []
-    for name, (v, ts) in GOT.items():
+    for name, (v, ts) in BROWNBOO_MESHES.items():
         if pred(name):
             for a, b, c in ts: out.append([list(v[a]), list(v[b]), list(v[c])])
     return out
@@ -50,9 +50,9 @@ PRED = {
     'fence':       lambda n: n.startswith('st0'),
     'crater':      lambda n: any(n.startswith(c) for c in craterids),
     # NOTE: enter__s is NOT here — it is a CHILD of the crater wall s04g0102__s, so its own matrix alone
-    # (what T()/extract_mesh uses) puts it underground. It's built with full parent accumulation below.
+    # (what tris_where()/extract_mesh uses) puts it underground. It's built with full parent accumulation below.
 }
-visual = {k: T(p) for k, p in PRED.items()}
+visual = {k: tris_where(p) for k, p in PRED.items()}
 
 # ---- instanced meshes placed from mapinfo.cfg ----
 cfg = load_scene('gedit/s04/mapinfo.cfg').decode('latin1', 'replace')
@@ -230,8 +230,8 @@ print(f"entrance: {len(entrance)} tris (parent-accumulated)")
 # (verified: all 128 of its tris lie in the ~16-wide shoreline band), while s04w01__za01 is the stilt/
 # plant foam (the sunburst rings around the boardwalk posts + the plant rings, 256 tris). Earlier
 # proximity rules kept nicking real ring tris that pass near an edge-stilt; the node split never does.
-visual['foam_outer'] = T(lambda n: n.startswith('s04w02') and 'za01' in n)   # the shore ring
-visual['foam_obj']   = T(lambda n: n.startswith('s04w01') and 'za01' in n)   # stilt/plant foam
+visual['foam_outer'] = tris_where(lambda n: n.startswith('s04w02') and 'za01' in n)   # the shore ring
+visual['foam_obj']   = tris_where(lambda n: n.startswith('s04w01') and 'za01' in n)   # stilt/plant foam
 print("foam split:", len(visual['foam_outer']), "outer-shore ring +", len(visual['foam_obj']), "stilt/plant")
 
 # ---- per-node labels (name + highlighted bounding-box border), drawn as an overlay like the fishing
@@ -249,7 +249,7 @@ def scene_layid(name):
     if name.startswith('s04w01') and 'za01' in name: return 'foamobj'
     return None
 nodelabels = list(placed_labels)
-for name, (v, ts) in GOT.items():
+for name, (v, ts) in BROWNBOO_MESHES.items():
     lay = scene_layid(name)
     if not v or lay is None:
         continue
@@ -492,7 +492,7 @@ from brownboo_rock_data import ROCKS as _ROCKS
 _ROCK_DATA = dict(_ROCKS)
 col_rocks = []
 _rock_src = []
-for _nm, (_v, _ts) in GOT.items():
+for _nm, (_v, _ts) in BROWNBOO_MESHES.items():
     if not _nm.startswith('iwa'): continue
     _base = _nm.split('__')[0]
     _rt = [[_v[a], _v[b], _v[c]] for a, b, c in _ts]
@@ -505,7 +505,7 @@ for _nm, (_v, _ts) in GOT.items():
     col_rocks += _r; _rock_src.append(f'{_base}={len(_r)}({_src})')
 _flat = _min_face_flatness(col_rocks, WATER)
 print(f"[rock collision] {len(col_rocks)} tris  [{', '.join(_rock_src)}]  min|ny|/l(above water)={_flat:.3f}")
-col_stilts = clip_group(T(lambda n: n.startswith('s04g0401') or n in ('s04g402', 's04g403', 's04g404')))  # -9..44
+col_stilts = clip_group(tris_where(lambda n: n.startswith('s04g0401') or n in ('s04g402', 's04g403', 's04g404')))  # -9..44
 col_plants = clip_group(plants, hi=WATER)   # placed s04a01, capped at water
 col_build  = clip_group(houses, hi=WATER)   # placed s04h*,  capped at water
 # perimeter: the traced shoreline inset 20 units inward, extruded to a vertical wall CY_LO..WATER
@@ -694,23 +694,23 @@ layers += lod_layers('gedit/s04/scene.scn', r's04[a-z]\d')
 #      Every other town names the +0x20 slot `_c`; Brownboo just labels it `_v`. The camera mesh (nodes
 #      v/obj56, walls to y250) is town-wide — the houses' camera hulls are baked into it, not per-part.
 #      s04g01's mapinfo placement is the origin, so local == world. One toggle per node.
-import scene_placed as _sp
-from georama_collision import parse_coll_mdt as _pcm
+import scene_placed
+from georama_collision import parse_coll_mdt
 def _native_coll(sub_name, suf):
-    _dir = _sp._scndir(scn)
-    off, size = _dir[sub_name]
+    directory = scene_placed.scn_directory_map(scn)
+    off, size = directory[sub_name]
     sub = scn[off:off + size]
     m = next(re.finditer((re.escape(sub_name) + suf + r'\.mds\x00').encode(), sub), None)
     if not m: return []
     vo = struct.unpack_from('<I', sub, m.end() + 3)[0]
     if not (0 < vo < len(sub) and sub[vo:vo + 3] == b'MDS'): return []
-    mds = off + vo; nodes, wm = _sp._accum(scn, mds); out = []
+    mds = off + vo; nodes, wm = scene_placed._accum(scn, mds); out = []
     for i, (nn, mo, par, mat) in enumerate(nodes):
         if mo == 0: continue
         fo = next((c for c in (mo, mds + mo) if 0 < c < len(scn) and scn[c:c + 3] == b'MDT'), None)
         if not fo: continue
         M = wm(i)
-        tris = [[list(xform(M, a)), list(xform(M, b)), list(xform(M, c))] for a, b, c in _pcm(scn, fo)]
+        tris = [[list(xform(M, a)), list(xform(M, b)), list(xform(M, c))] for a, b, c in parse_coll_mdt(scn, fo)]
         if tris: out.append((nn, tris))
     return out
 _nc_counts = {}
@@ -737,7 +737,7 @@ print("native collision:", _nc_counts)
 #      Grid term: replicated from ground_grid.csv when that dump exists, else 0 (none in Brownboo anyway).
 def _fishing_gather(x1, z1, x2, z2):
     polys = []
-    for _sub in _sp._scndir(scn):
+    for _sub in scene_placed.scn_directory_map(scn):
         for _nn, _tris in _native_coll(_sub, '_a'):
             for _t in _tris:
                 _xs = [q[0] for q in _t]; _zs = [q[2] for q in _t]

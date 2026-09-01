@@ -20,9 +20,9 @@ import mdt_codec
 
 
 # ⚠ This variant reads the directory OFFSET from word@4. For gedit scene.scn files word@4 is the
-# sub-file COUNT (directory is fixed at 0x10) — use scene_placed.scn_dir for those; this form is
+# sub-file COUNT (directory is fixed at 0x10) — use scene_placed.scn_directory_list for those; this form is
 # kept only for whatever container scene_splice's original callers fed it.
-def _dir(scn):
+def scn_directory_legacy(scn):
     """[(name, off, size, entry_file_offset)] for every SCN sub-file directory entry."""
     assert scn[:4] == b'SCN\x00', "not an SCN container"
     diroff = struct.unpack_from('<I', scn, 4)[0]
@@ -63,7 +63,7 @@ def _find_node(scn, sub_off, sub_size, node_name):
 def splice_mdt(scn, sub_name, node_name, new_mdt):
     """Return new scene.scn bytes with `node_name`'s MDT replaced by `new_mdt` (any size)."""
     scn = bytearray(scn)
-    entry = next((e for e in _dir(scn) if e[0] == sub_name), None)
+    entry = next((e for e in scn_directory_legacy(scn) if e[0] == sub_name), None)
     if entry is None:
         raise KeyError(f"sub-file {sub_name!r} not found")
     _, sub_off, sub_size, _ = entry
@@ -86,7 +86,7 @@ def splice_mdt(scn, sub_name, node_name, new_mdt):
             struct.pack_into('<i', out, b + 0x28, smo + delta)
 
     # 3) fix the SCN directory: this sub-file's size += delta; every later sub-file's offset += delta
-    for name, off, size, eoff in _dir(scn):     # iterate original dir (offsets pre-shift)
+    for name, off, size, eoff in scn_directory_legacy(scn):     # iterate original dir (offsets pre-shift)
         if off == sub_off:
             struct.pack_into('<I', out, eoff + 0x14, size + delta)
         elif off > sub_off:
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     scn = load_scene(rel)
 
     # locate the node's MDT, parse it, ADD a triangle (3 new verts) to submesh 0
-    entry = next(e for e in _dir(scn) if e[0] == sub)
+    entry = next(e for e in scn_directory_legacy(scn) if e[0] == sub)
     _, so, ss, _ = entry
     mds, idx, cnt, table, mo, mdt_abs, old_size = _find_node(scn, so, ss, node)
     m = mdt_codec.parse_mdt(scn, mdt_abs)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """All hand-authored / directed Queens (e03) collision geometry. Split out of
-bake_player_camera_collision.py (2026-09). Sections, in dependency order (several tables are built at
+queens_collision_builder.py (2026-09). Sections, in dependency order (several tables are built at
 import time from the raw dumps, so keep the order):
   1. BOTH-frame walls, flat-ground quads, pipe drums; player-only railings; canal invisible walls;
      the perimeter wall (formerly the both_walls / player_walls / invisible_walls / perimeter_wall modules)
@@ -8,14 +8,14 @@ import time from the raw dumps, so keep the order):
   3. directed camera `_c` simplification: the LIVE jobs (canal wall front/back/cap, town walls, arcade back,
      z=200 notch) + cam_merge_selected. The 2026-08 gate/arch/obj43/obj45/obj33/walkway/SE-torch customs were
      REVERTED to vanilla by user decision and their builders + raw dumps deleted 2026-09 (recoverable via git).
-  4. obj40/obj44 gate-torch simplification tables + _e03_gate_torch_simplify
+  4. obj40/obj44 gate-torch simplification tables + gate_torch_simplify
 """
 import math
 import os, sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)                                     # this dir (sibling collision modules)
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (scene_placed, georama_collision, tri_util…)
-from collision_geom import (_box, _plane_x, _plane_z, _horiz, _rmkey, _wkey, _tnormal, _dot3,
+from collision_geom import (_box, _plane_x, _plane_z, _horiz, tri_key_int, tri_key_winding, triangle_normal, _dot3,
                             simplify_coplanar, _plane_region, _dir_quad, _quad)
 
 
@@ -155,7 +155,7 @@ def flat_ground_tris(town='e03'):
 
 # SOLID octagonal drums (both frames) replacing the hollow obj1/obj9 pipe tubes (which had an extruded inner hole).
 # Each tube = an octagon in the X-Y plane (cardinal radius R, diagonal d) extruded along z; the drum is that outer
-# octagon, side-walled and end-capped (no hole). obj1/obj9 are dropped from is_cam_node so only the drum remains.
+# octagon, side-walled and end-capped (no hole). obj1/obj9 are dropped from is_camera_structure_node so only the drum remains.
 _PIPE_DRUMS = {
     'e03': [   # (center_x, center_y, z0, z1, R, d) — each obj instance is TWO short stub-pipes (NOT a crossing
                # tube): a south stub z[-50,-40] and a north stub z[40,50] at each bank. 3 instances => 6 pipes.
@@ -229,7 +229,7 @@ def player_wall_tris(town='e03'):
 # Player-only invisible walls: canal containment (former invisible_walls.py)
 # ==========================================================================
 
-_E03 = """
+CANAL_CONTAINMENT_RAW = """
 0,70,50, 700,70,50, 700,168.25,50
 0,70,50, 700,168.25,50, 0,168.25,50
 -100,168.25,50, -200,70,50, -100,70,50
@@ -310,7 +310,7 @@ _E03 = """
 1400,170,50, 1400,170,-50, 1400,244,-50
 """
 
-_INVIS_DATA = {'e03': _E03}
+_INVIS_DATA = {'e03': CANAL_CONTAINMENT_RAW}
 
 
 def invisible_tris(town='e03', max_height=5.0):
@@ -353,7 +353,7 @@ _PERIM_CORNERS = {
 
 # Corner-loop walls made REDUNDANT by an inner wall (the north-U in _BOTH_WALLS bounds the camera there now),
 # dropped by rounded-int key.
-_PREMOVE_E03 = """
+CANAL_PRE_REMOVE_RAW = """
 1000,500,-150, 1000,170,-1100, 1000,170,-150
 1000,500,-150, 1000,500,-1100, 1000,170,-1100
 1000,500,-1100, -500,170,-1100, 1000,170,-1100
@@ -370,12 +370,8 @@ _EXTRA = {
 }
 
 
-def _pkey(t):
-    return tuple(sorted(tuple(round(c) for c in p) for p in t))
-
-
-_PREMOVE = {'e03': set(_pkey([[float(x) for x in l.split(',')][i:i + 3] for i in (0, 3, 6)])
-                       for l in _PREMOVE_E03.strip().split('\n'))}
+_PREMOVE = {'e03': set(tri_key_int([[float(x) for x in l.split(',')][i:i + 3] for i in (0, 3, 6)])
+                       for l in CANAL_PRE_REMOVE_RAW.strip().split('\n'))}
 
 
 def perimeter_wall_tris(town='e03', y_bottom=170.0, y_top=500.0):
@@ -391,7 +387,7 @@ def perimeter_wall_tris(town='e03', y_bottom=170.0, y_top=500.0):
         walls.append([list(At), list(Bt), list(Bb)])
         walls.append([list(At), list(Bb), list(Ab)])
     rem = _PREMOVE.get(town, set())
-    out = [w for w in walls if _pkey(w) not in rem]
+    out = [w for w in walls if tri_key_int(w) not in rem]
     for a, b, h in _EXTRA.get(town, []):                              # extra railings: base edge extruded up
         a0, b0 = list(a), list(b)
         a1 = [a[0], a[1] + h, a[2]]; b1 = [b[0], b[1] + h, b[2]]
@@ -408,24 +404,6 @@ def perimeter_wall_tris(town='e03', y_bottom=170.0, y_top=500.0):
 # sharing the footprint), tris are matched by their own PLANE (all verts coplanar) or restricted to horizontal
 # faces, so a broad box never deletes a neighbour. Verified to remove EXACTLY the old set — only 6 irregular
 # corner/scatter tris need the exact residue below.
-def _box(t, x0, x1, y0, y1, z0, z1, e=0.5):
-    return all(x0 - e <= p[0] <= x1 + e and y0 - e <= p[1] <= y1 + e and z0 - e <= p[2] <= z1 + e for p in t)
-
-
-def _plane_x(t, xv, z0, z1, y0, y1, e=0.5):        # tri coplanar with x=xv, within a z/y window
-    return all(abs(p[0] - xv) < e and z0 - e <= p[2] <= z1 + e and y0 - e <= p[1] <= y1 + e for p in t)
-
-
-def _plane_z(t, zv, x0, x1, y0, y1, e=0.5):        # tri coplanar with z=zv, within an x/y window
-    return all(abs(p[2] - zv) < e and x0 - e <= p[0] <= x1 + e and y0 - e <= p[1] <= y1 + e for p in t)
-
-
-def _horiz(t):                                     # near-horizontal face (a floor/top; |normal.y| > 0.7)
-    e1 = [t[1][i] - t[0][i] for i in range(3)]; e2 = [t[2][i] - t[0][i] for i in range(3)]
-    n = [e1[1]*e2[2] - e1[2]*e2[1], e1[2]*e2[0] - e1[0]*e2[2], e1[0]*e2[1] - e1[1]*e2[0]]
-    return abs(n[1]) > 0.7 * (math.hypot(*n) or 1.0)
-
-
 def _in_remove_region(t):
     """True if t is structure collision the bake drops because a hand-authored wall/quad replaces it (e03)."""
     return (
@@ -448,7 +426,7 @@ def _in_remove_region(t):
 
 
 # The handful of irregular corner/scatter tris no clean region captures without also deleting a kept neighbour.
-_REMOVE_RESIDUE_E03 = """
+CANAL_REMOVE_RESIDUE_RAW = """
 600,270,1300, 600,366,1200, 600,262,1200
 650,370,1300, 600,370,1300, 600,370,1400
 650,370,1300, 600,370,1400, 650,370,1400
@@ -457,15 +435,15 @@ _REMOVE_RESIDUE_E03 = """
 -200,50,50, -200,0,50, -600,0,50
 """
 
-_RESIDUE = set(_rmkey([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3, 6)])
-               for ln in _REMOVE_RESIDUE_E03.strip().split('\n') if ln.strip())
+_RESIDUE = set(tri_key_int([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3, 6)])
+               for ln in CANAL_REMOVE_RESIDUE_RAW.strip().split('\n') if ln.strip())
 
 
 # ── One-sided CAMERA collision: these baked camera-wall tris are wound so their normal faces AWAY from the play
 #    area. Under the backface-culled player→camera raycast (the mod's camera reads `_c` one-sided now) that lets the
 #    ray pass straight through them instead of being blocked. Flip their winding so the normal faces the play area.
 #    Applied to the CAMERA path + viewer sets only; player `_a` collision is two-sided (CheckHit) so it's unchanged.
-_BACKFACE_E03 = """
+CANAL_BACKFACE_RAW = """
 -400,70,-100, 900,70,-50, -400,70,-50
 -400,70,-100, 900,70,-100, 900,70,-50
 -400,70,-50, -200,70,-50, -200,70,50
@@ -501,14 +479,14 @@ _BACKFACE_E03 = """
 """
 
 
-_BACKFACE_KEYS = {_wkey([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3, 6)])
-                  for ln in _BACKFACE_E03.strip().split('\n') if ln.strip()}
+_BACKFACE_KEYS = {tri_key_winding([[float(x) for x in ln.split(',')][i:i + 3] for i in (0, 3, 6)])
+                  for ln in CANAL_BACKFACE_RAW.strip().split('\n') if ln.strip()}
 
 
 def fix_camera_winding(tris):
     """Reverse the winding of any tri whose winding matches a known-backwards camera wall (normal faces the play
     area afterward). Returns a new list; non-matching tris pass through unchanged."""
-    return [[t[0], t[2], t[1]] if _wkey(t) in _BACKFACE_KEYS else t for t in tris]
+    return [[t[0], t[2], t[1]] if tri_key_winding(t) in _BACKFACE_KEYS else t for t in tris]
 
 
 def _in_flat_region(t):
@@ -536,7 +514,7 @@ def simplify_terrain(tris):
       (3) Delete flat ground inside a _FLAT_REGIONS rectangle — replaced by one quad (flat_ground_tris).
       (4) Delete the x[-200,900] canal side walls — replaced by 2 quads (_BOTH_WALLS)."""
     return [t for t in tris if max(p[0] for p in t) > -499.0 and min(p[0] for p in t) < 1600.0
-            and not _in_remove_region(t) and _rmkey(t) not in _RESIDUE
+            and not _in_remove_region(t) and tri_key_int(t) not in _RESIDUE
             and not _in_flat_region(t) and not _canal_wall(t)]
 
 
@@ -547,7 +525,7 @@ def simplify_terrain(tris):
 # tri; `outward`/`snap` tune the merge for that group.
 
 
-_E03_TOWNWALL_RAW = """-400,170,200,-400,70,200,-300,70,200
+TOWN_WALL_RAW = """-400,170,200,-400,70,200,-300,70,200
 -400,170,200,-300,70,200,-300,170,200
 -300,170,200,-400,270,200,-400,170,200
 -300,170,200,-300,268,200,-400,270,200
@@ -897,12 +875,12 @@ _E03_TOWNWALL_RAW = """-400,170,200,-400,70,200,-300,70,200
 -400,100,800,-400,68,700,-400,100,700
 600,0,200,600,270,1300,600,270,200
 600,0,200,600,0,1300,600,270,1300"""
-_E03_TOWNWALL_KEYS = set(_rmkey([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
-                         for ln in _E03_TOWNWALL_RAW.strip().split('\n'))
+TOWN_WALL_KEYS = set(tri_key_int([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
+                         for ln in TOWN_WALL_RAW.strip().split('\n'))
 
 
 # Arcade back-side geometry (x[-500,-400]) now hidden behind the solid x=-400 wall -> removed outright.
-_E03_ARCBACK_RAW = """-400,170,150,-400,70,150,-400,70,50
+ARCADE_BACK_RAW = """-400,170,150,-400,70,150,-400,70,50
 -400,170,50,-400,270,150,-400,170,150
 -400,170,50,-400,267,50,-400,270,150
 -400,170,150,-400,70,50,-400,170,50
@@ -938,25 +916,25 @@ _E03_ARCBACK_RAW = """-400,170,150,-400,70,150,-400,70,50
 -400,200,1000,-500,200,1000,-500,200,900
 -500,200,1200,-400,200,1100,-400,200,1200
 -500,200,1200,-500,200,1100,-400,200,1100"""
-_E03_ARCBACK_KEYS = set(_rmkey([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
-                        for ln in _E03_ARCBACK_RAW.strip().split('\n'))
+ARCADE_BACK_KEYS = set(tri_key_int([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
+                        for ln in ARCADE_BACK_RAW.strip().split('\n'))
 
 
 def _e03_arcback_sel(t):
-    return _rmkey(t) in _E03_ARCBACK_KEYS
+    return tri_key_int(t) in ARCADE_BACK_KEYS
 
 
 def _e03_townwall_sel(t):
-    return _rmkey(t) in _E03_TOWNWALL_KEYS
+    return tri_key_int(t) in TOWN_WALL_KEYS
 
 
 def _e03_townwall_tris():
     """Vertical faces run through simplify_coplanar (each kept on-plane, flattened in Y, but the archway/gate HOLES
     preserved — the flatten fills only from each column's lowest wall cell up, so base openings stay open) + the 3
     flat walkway tops. Holes: e.g. a 5-arch arcade in the x=-400 wall, so this is a bit above 36."""
-    raw = [[float(x) for x in ln.split(',')] for ln in _E03_TOWNWALL_RAW.strip().split('\n')]
+    raw = [[float(x) for x in ln.split(',')] for ln in TOWN_WALL_RAW.strip().split('\n')]
     allt = [[r[0:3], r[3:6], r[6:9]] for r in raw]
-    vert = [t for t in allt if abs(_tnormal(t)[1]) / (math.sqrt(_dot3(_tnormal(t), _tnormal(t))) or 1.0) < 0.5]
+    vert = [t for t in allt if abs(triangle_normal(t)[1]) / (math.sqrt(_dot3(triangle_normal(t), triangle_normal(t))) or 1.0) < 0.5]
     # The x=-400 arcade windows are decorative (not walkable) EXCEPT the z[500,600] arch (obj45's passage). Fill
     # each non-walkable z-section solid (one quad); everything else goes through the hole-preserving merge.
     x400_solid = [(200, 500, 280.0), (600, 1300, 270.0)]   # (z0, z1, top-y); z[200,500] raised to support y280 walkway
@@ -986,11 +964,11 @@ def _e03_townwall_tris():
     out += _dir_quad([600, 380, 200], [650, 380, 200], [650, 380, 1300], [600, 380, 1300], [0, 1, 0])   # spine top
     # flatten the z=200 (+z) wall's staircase base at x[0,600] to one flat quad y[0,280]
     out = [t for t in out if not (all(abs(p[2] - 200) < 1 and -1 <= p[0] <= 601 and -1 <= p[1] <= 281 for p in t)
-                                  and _tnormal(t)[2] > 0)]
+                                  and triangle_normal(t)[2] > 0)]
     out += _dir_quad([0, 0, 200], [600, 0, 200], [600, 280, 200], [0, 280, 200], [0, 0, 1])
     # flatten the z=200 (-z) wall's staircase at x[600,1300] to one flat quad y[70,380]
     out = [t for t in out if not (all(abs(p[2] - 200) < 1 and 599 <= p[0] <= 1301 and 69 <= p[1] <= 381 for p in t)
-                                  and _tnormal(t)[2] < 0)]
+                                  and triangle_normal(t)[2] < 0)]
     out += _dir_quad([600, 70, 200], [1300, 70, 200], [1300, 380, 200], [600, 380, 200], [0, 0, -1])
     # (REVERTED 2026-08 with the obj33 customs: the x=695 return stays, the obj33-bridge/cap quads are
     #  gone, and the z=200/z=250 x[1400,1500] + x=1500 z[-100,200] wall sections are KEPT — they were
@@ -999,7 +977,7 @@ def _e03_townwall_tris():
     # simplify 10 units ABOVE the obj33 roof ledge (horizontal y=370, x[1500,1600]) — cap them at 370
     # and close the top with a y=370 lid over the rampart section so the ledge line runs flush through.
     def _x1400sec(t, zplane, nsign):
-        n = _tnormal(t)
+        n = triangle_normal(t)
         return (all(1399 <= p[0] <= 1501 and 169 <= p[1] <= 381 and abs(p[2] - zplane) < 1 for p in t)
                 and n[2] * nsign > 0)
     out = [t for t in out if not (_x1400sec(t, 250, +1) or _x1400sec(t, 200, -1))]
@@ -1018,7 +996,7 @@ def _e03_townwall_tris():
     return out
 
 
-_E03_Z200NOTCH_KEYS = set(_rmkey([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
+Z200_NOTCH_KEYS = set(tri_key_int([[float(x) for x in ln.split(',')][i:i+3] for i in (0, 3, 6)])
                           for ln in """695,70,200,695,170,200,700,70,200
 695,170,200,700,70,200,700,170,200
 695,170,200,695,270,200,700,270,200
@@ -1026,7 +1004,7 @@ _E03_Z200NOTCH_KEYS = set(_rmkey([[float(x) for x in ln.split(',')][i:i+3] for i
 
 
 def _e03_z200notch_sel(t):
-    return _rmkey(t) in _E03_Z200NOTCH_KEYS
+    return tri_key_int(t) in Z200_NOTCH_KEYS
 
 
 def _e03_north_face(t):
@@ -1044,13 +1022,13 @@ def _e03_wall_cap(t):
     zs = [p[2] for p in t]
     return (max(zs) - min(zs) > 40 and all(-152 <= p[2] <= -98 for p in t)
             and all(-401 <= p[0] <= 1501 for p in t) and min(p[1] for p in t) >= 258
-            and _tnormal(t)[1] > 0)
+            and triangle_normal(t)[1] > 0)
 
 
 # WALL_TOP: shared top height for the whole z=-100/-150 canal wall structure. = the tallest merged wall top
 # (the z=-100 front, 280) so closing only RAISES the back wall (275->280) and the cap (max 277.61 -> 280) — never
 # lowers a wall or reduces the cap's peak, per the directive.
-_E03_WALL_TOP = 280.0
+CANAL_WALL_TOP_Y = 280.0
 
 _CAM_MERGE_JOBS = {
     'e03': [
@@ -1058,18 +1036,18 @@ _CAM_MERGE_JOBS = {
         # the selected tris (authored OUTWARD, optional shared `top`); 'replace' swaps them for authored `tris`.
         # South-back canal wall z=-150, x[-400,900], flattened to the shared WALL_TOP: 48 tris -> 4 (x[200,300] gap).
         {'kind': 'merge', 'sel': _plane_region(2, -150, x=(-400, 900), y=(55, 290)),
-         'snap': 5.0, 'outward': 0.0, 'top': _E03_WALL_TOP},
+         'snap': 5.0, 'outward': 0.0, 'top': CANAL_WALL_TOP_Y},
         # North-front canal face z=-100: wall x[-400,900] + end towers x[900,1500] -> span A (x[-400,200]) +
         # span B (x[300,1500]), both y[70,WALL_TOP]. 69 tris -> 4; x[200,300] passage gap kept, span B lined up
         # with the cap's front edge. (Tower rising base y98..170 is filled down to y70 to make span B one quad.)
         {'kind': 'replace', 'sel': _e03_north_face,
-         'tris': _quad([-400, 70, -100], [200, 70, -100], [200, _E03_WALL_TOP, -100], [-400, _E03_WALL_TOP, -100])
-               + _quad([300, 70, -100], [1500, 70, -100], [1500, _E03_WALL_TOP, -100], [300, _E03_WALL_TOP, -100])},
+         'tris': _quad([-400, 70, -100], [200, 70, -100], [200, CANAL_WALL_TOP_Y, -100], [-400, CANAL_WALL_TOP_Y, -100])
+               + _quad([300, 70, -100], [1500, 70, -100], [1500, CANAL_WALL_TOP_Y, -100], [300, CANAL_WALL_TOP_Y, -100])},
         # Top cap connecting the two faces (36 bumpy tris) -> one flat up-facing quad at WALL_TOP spanning
         # z[-150,-100], x[-400,1500], so it closes flush with both raised wall tops.
         {'kind': 'replace', 'sel': _e03_wall_cap,
-         'tris': _quad([-400, _E03_WALL_TOP, -100], [1500, _E03_WALL_TOP, -100],
-                       [1500, _E03_WALL_TOP, -150], [-400, _E03_WALL_TOP, -150])},
+         'tris': _quad([-400, CANAL_WALL_TOP_Y, -100], [1500, CANAL_WALL_TOP_Y, -100],
+                       [1500, CANAL_WALL_TOP_Y, -150], [-400, CANAL_WALL_TOP_Y, -150])},
         # (obj34 pylons/gable, obj43, obj45, obj33 and the walkway raise: REVERTED 2026-08 to vanilla `_c`;
         #  their custom builders were deleted 2026-09 — see the module docstring.)
         # Remaining major town walls (350 tris) -> 24 (9 vertical faces on-plane + 3 walkway tops).
@@ -1104,8 +1082,8 @@ def cam_merge_selected(tris, town):
     return out + remaining
 
 
-_E03_GATE_XMIN_REF = -73.93                                    # obj44's min x; obj40 is the same mesh at +848 x
-_E03_GATE_RAIL = [                                             # inner side-railings (mid wall + corner gussets) to drop
+GATE_X_MIN_REF = -73.93                                    # obj44's min x; obj40 is the same mesh at +848 x
+GATE_RAILING_TRIS = [                                             # inner side-railings (mid wall + corner gussets) to drop
     [[-68.21, 76.68, 25.02], [-68.21, 84.68, 25.02], [-68.0, 70.0, 50.0]],
     [[-68.0, 70.0, 50.0], [-68.21, 84.68, 25.02], [-68.0, 78.0, 50.0]],
     [[-68.21, 76.68, 25.02], [-68.21, 86.9, 0.0], [-68.21, 84.68, 25.02]],
@@ -1125,8 +1103,8 @@ _E03_GATE_RAIL = [                                             # inner side-rail
 ]
 
 
-_E03_GATE_RAISE_DY = 8.0
-_E03_GATE_RAISE = [                                            # walkway-top surface: raise +8 to meet the parapet tops
+GATE_WALKWAY_RAISE_DY = 8.0
+GATE_WALKWAY_RAISE_TRIS = [                                            # walkway-top surface: raise +8 to meet the parapet tops
     [[-68.21, 76.68, 25.02], [-68.0, 70.0, 50.0], [-28.0, 70.0, 50.0]],
     [[-68.21, 76.68, 25.02], [-28.0, 70.0, 50.0], [-27.79, 76.68, 25.02]],
     [[-27.79, 76.68, 25.02], [-68.21, 78.9, 0.0], [-68.21, 76.68, 25.02]],
@@ -1136,7 +1114,7 @@ _E03_GATE_RAISE = [                                            # walkway-top sur
     [[-27.79, 76.68, -25.02], [-68.0, 70.0, -50.0], [-68.21, 76.68, -25.02]],
     [[-27.79, 76.68, -25.02], [-28.0, 70.0, -50.0], [-68.0, 70.0, -50.0]],
 ]
-_E03_GATE_EXTEND = [                                           # outer side-face: raise its top edge (verts y>=65) +8
+GATE_OUTER_FACE_EXTEND_TRIS = [                                           # outer side-face: raise its top edge (verts y>=65) +8
     [[-73.0, 70.0, -50.0], [-73.07, 47.0, -50.0], [-73.07, 47.0, -36.0]],
     [[-73.07, 47.0, -36.0], [-73.0, 76.68, -25.0], [-73.0, 70.0, -50.0]],
     [[-73.07, 47.0, -36.0], [-73.07, 53.0, -26.0], [-73.0, 76.68, -25.0]],
@@ -1162,7 +1140,7 @@ _E03_GATE_EXTEND = [                                           # outer side-face
     [[-23.0, 70.0, -50.0], [-22.93, 53.0, -26.0], [-22.93, 47.0, -36.0]],
     [[-23.0, 70.0, -50.0], [-22.93, 47.0, -36.0], [-23.0, 47.0, -50.0]],
 ]
-_E03_GATE_OUTER = [                                            # vertical filler walls (x=-73/-23, y70..86.9) now obsolete
+GATE_OUTER_FILLER_TRIS = [                                            # vertical filler walls (x=-73/-23, y70..86.9) now obsolete
     [[-23.0, 78.0, -50.0], [-23.0, 76.68, -25.0], [-23.0, 70.0, -50.0]],
     [[-23.0, 84.68, -25.02], [-23.0, 76.68, -25.0], [-23.0, 78.0, -50.0]],
     [[-23.0, 84.68, -25.02], [-23.0, 78.9, 0.0], [-23.0, 76.68, -25.0]],
@@ -1180,7 +1158,7 @@ _E03_GATE_OUTER = [                                            # vertical filler
     [[-73.0, 84.68, 25.02], [-73.0, 76.68, 25.0], [-73.0, 78.0, 50.0]],
     [[-73.0, 78.0, 50.0], [-73.0, 76.68, 25.0], [-73.0, 70.0, 50.0]],
 ]
-_E03_GATE_ROOF24 = [                                           # the 24-tri domed roof (barrel vault) -> merge to 8
+GATE_ROOF_24_TRIS = [                                           # the 24-tri domed roof (barrel vault) -> merge to 8
     [[-27.79, 84.68, -25.02], [-28.0, 78.0, -50.0], [-68.0, 78.0, -50.0]],
     [[-27.79, 84.68, -25.02], [-68.0, 78.0, -50.0], [-68.21, 84.68, -25.02]],
     [[-68.21, 84.68, -25.02], [-68.0, 78.0, -50.0], [-73.0, 78.0, -50.0]],
@@ -1206,7 +1184,7 @@ _E03_GATE_ROOF24 = [                                           # the 24-tri dome
     [[-68.21, 84.68, 25.02], [-28.0, 78.0, 50.0], [-27.79, 84.68, 25.02]],
     [[-68.21, 84.68, 25.02], [-68.0, 78.0, 50.0], [-28.0, 78.0, 50.0]],
 ]
-_E03_GATE_ROOF8 = [                                            # 4 full-width quads x[-73,-23] over the z-arch profile
+GATE_ROOF_8_TRIS = [                                            # 4 full-width quads x[-73,-23] over the z-arch profile
     [[-73.0, 78.0, -50.0], [-23.0, 78.0, -50.0], [-23.0, 84.68, -25.0], [-73.0, 84.68, -25.0]],
     [[-73.0, 84.68, -25.0], [-23.0, 84.68, -25.0], [-23.0, 86.9, 0.0], [-73.0, 86.9, 0.0]],
     [[-73.0, 86.9, 0.0], [-23.0, 86.9, 0.0], [-23.0, 84.68, 25.0], [-73.0, 84.68, 25.0]],
@@ -1214,24 +1192,24 @@ _E03_GATE_ROOF8 = [                                            # 4 full-width qu
 ]
 
 
-def _gate_rk(t, dx=0.0):
+def bridge_gate_tri_key(t, dx=0.0):
     return tuple(sorted((round(p[0] + dx, 1), round(p[1], 1), round(p[2], 1)) for p in t))
 
 
-def _e03_gate_torch_simplify(tris):
+def gate_torch_simplify(tris):
     """obj40/obj44 (identical bridge-gate meshes): replace each of the 4 corner torch-posts (y>=77) with a full-
     height corner COLUMN — bounding cube in x/z, extended DOWN to y=0 (the deck is open below the torches: no
     solid body at mid-height, nothing inward of the centre-facing sides, so nothing gets buried). Emits top (+y)
     + all 4 vertical sides; the bottom (-y) is dropped (it would sit in the ground at y=0). Also drops the inner
-    side-railings (_E03_GATE_RAIL). Corners/offset are read off the mesh's own bbox, so this works for obj44 and
+    side-railings (GATE_RAILING_TRIS). Corners/offset are read off the mesh's own bbox, so this works for obj44 and
     its +848-x twin obj40 alike. ~104 torch tris + 16 rail tris removed -> 40 cube tris."""
     xs = [p[0] for t in tris for p in t]
     zs = [p[2] for t in tris for p in t]
     xmin, xmax, zmin, zmax = min(xs), max(xs), min(zs), max(zs)
-    dx = round(xmin - _E03_GATE_XMIN_REF)
-    dropkeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_RAIL + _E03_GATE_OUTER)
-    raisekeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_RAISE)
-    extendkeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_EXTEND)
+    dx = round(xmin - GATE_X_MIN_REF)
+    dropkeys = set(bridge_gate_tri_key(rt, dx) for rt in GATE_RAILING_TRIS + GATE_OUTER_FILLER_TRIS)
+    raisekeys = set(bridge_gate_tri_key(rt, dx) for rt in GATE_WALKWAY_RAISE_TRIS)
+    extendkeys = set(bridge_gate_tri_key(rt, dx) for rt in GATE_OUTER_FACE_EXTEND_TRIS)
     Y0, XW, ZW = 77.25, 7.0, 8.0                       # y>=77 gate geometry is torches only; XW/ZW capture one corner
     regions = []
     for sx in (0, 1):
@@ -1241,14 +1219,14 @@ def _e03_gate_torch_simplify(tris):
             regions.append((rx[0], rx[1], rz[0], rz[1], sx, sz))
     keep, cap = [], [[] for _ in regions]
     for t in tris:
-        k = _gate_rk(t)
+        k = bridge_gate_tri_key(t)
         if k in dropkeys:                              # inner side-railings + obsolete outer filler walls
             continue
         if k in raisekeys:                             # raise the walkway top +8 to merge with the parapet tops
-            keep.append([[p[0], p[1] + _E03_GATE_RAISE_DY, p[2]] for p in t])
+            keep.append([[p[0], p[1] + GATE_WALKWAY_RAISE_DY, p[2]] for p in t])
             continue
         if k in extendkeys:                            # extend outer side-face up: raise its top edge (y>=65) +8
-            keep.append([[p[0], p[1] + (_E03_GATE_RAISE_DY if p[1] >= 65 else 0.0), p[2]] for p in t])
+            keep.append([[p[0], p[1] + (GATE_WALKWAY_RAISE_DY if p[1] >= 65 else 0.0), p[2]] for p in t])
             continue
         c = [sum(p[i] for p in t) / 3 for i in range(3)]
         r = None
@@ -1270,9 +1248,9 @@ def _e03_gate_torch_simplify(tris):
         out += _dir_quad([X0, YB, Z0], [X1, YB, Z0], [X1, YT, Z0], [X0, YT, Z0], [0, 0, -1])  # -z side -> y0
         out += _dir_quad([X0, YB, Z1], [X1, YB, Z1], [X1, YT, Z1], [X0, YT, Z1], [0, 0, 1])   # +z side -> y0
     # merge the 24-tri domed roof (barrel vault, flat in x) into 8: 4 full-width quads over the z-arch profile
-    roofkeys = set(_gate_rk(rt, dx) for rt in _E03_GATE_ROOF24)
-    out = [t for t in out if _gate_rk(t) not in roofkeys]
-    for q in _E03_GATE_ROOF8:
+    roofkeys = set(bridge_gate_tri_key(rt, dx) for rt in GATE_ROOF_24_TRIS)
+    out = [t for t in out if bridge_gate_tri_key(t) not in roofkeys]
+    for q in GATE_ROOF_8_TRIS:
         p = [[v[0] + dx, v[1], v[2]] for v in q]
         out += _dir_quad(p[0], p[1], p[2], p[3], [0, 1, 0])
     # close each z-end face's middle gap (between the corner gussets): ground y70 -> roof low edge y78

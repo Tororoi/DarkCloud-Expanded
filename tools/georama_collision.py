@@ -65,7 +65,7 @@ def _mesh_local(scn, mds):
 def collision_local(scene_rel, name_re):
     """{part_name: local collision tris} for every sub-file matching name_re that has an `_a` variant."""
     scn = load_scene(scene_rel)
-    DIR = scene_placed._scndir(scn)
+    DIR = scene_placed.scn_directory_map(scn)
     rx = re.compile(name_re)
     out = {}
     for name in sorted(DIR):

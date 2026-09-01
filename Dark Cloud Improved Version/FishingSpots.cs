@@ -1,5 +1,5 @@
 using System;
-using static Dark_Cloud_Improved_Version.FishingLabels;
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -222,7 +222,7 @@ namespace Dark_Cloud_Improved_Version
             // that surface's square (+/-320 about the origin), so this liquid is probably NOT that surface —
             // if the bobber floats above or sinks below the visible liquid, this is the number to move.
             // MOVED 2026-08-30 to the WEST BANK bulge edge (bank top y23, bulge peak z~102; assumes the
-            // west-bank ground bake — tools/yellowdrops_westbank.py WEST_BULGE). Player stands at the edge
+            // west-bank ground bake — tools/yellowdrops_westbank_data.py WEST_BULGE). Player stands at the edge
             // facing WEST (forward = (sin yaw, cos yaw) = (-1,0) -> yaw -pi/2); the rect is the open water
             // pocket west of the bulged edge (one mid pillar at x -590..-550, z 50..177 — casts just land
             // around it). Old spot: rect (-609,-444,-409,-244), trig (-575,9,-286), stance (-582.9,9.6,-276.8) yaw 2.31.
@@ -254,7 +254,6 @@ namespace Dark_Cloud_Improved_Version
         /// look-down angle (40), but with enough height to see around while standing in the water.</summary>
         internal const float CanalWadingCamHeight = 20f;
 
-        internal const int   YellowDropsMapNo    = 23;
         internal const float QueensFishDepthLow  = 7.0f;   // low tide: FISH depth below the surface (user-tuned); hook rests there too (fish-at-hook bite geometry)
 
         internal static bool TryGetSpot(int map, out Spot spot)

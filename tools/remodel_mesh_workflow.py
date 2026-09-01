@@ -4,13 +4,13 @@ into a new scene.scn (offline), validating that the whole scene still decodes. T
 growth + IsoPatcher) is a separate, later step — this tool proves the edit end-to-end without touching the ISO.
 
   # 1. export a node to OBJ (+ .mtl + .mdtjson sidecar) for Blender:
-  python3 tools/remodel.py export gedit/s13/scene.scn s1308 obj2__n game_data/yellowdrops/edit/obj2
+  python3 tools/remodel_mesh_workflow.py export gedit/s13/scene.scn s1308 obj2__n game_data/yellowdrops/edit/obj2
 
   # 2. edit game_data/yellowdrops/edit/obj2.obj in Blender (add/remove/move tris; keep an existing usemtl
   #    for new faces; DON'T rename the object), export back over the same .obj (triangulate on export).
 
   # 3. apply the edited OBJ -> a new scene.scn, with full-scene validation:
-  python3 tools/remodel.py apply gedit/s13/scene.scn s1308 obj2__n game_data/yellowdrops/edit/obj2 \
+  python3 tools/remodel_mesh_workflow.py apply gedit/s13/scene.scn s1308 obj2__n game_data/yellowdrops/edit/obj2 \
           game_data/yellowdrops/edit/scene_s13_edited.scn
 """
 import sys, os
@@ -20,9 +20,9 @@ import mdt_codec, mdt_obj, scene_splice
 
 
 def _node_mdt(scn, sub, node):
-    entry = next((e for e in scene_splice._dir(scn) if e[0] == sub), None)
+    entry = next((e for e in scene_splice.scn_directory_legacy(scn) if e[0] == sub), None)
     if entry is None:
-        raise SystemExit(f"sub-file {sub!r} not found; available: {[e[0] for e in scene_splice._dir(scn)]}")
+        raise SystemExit(f"sub-file {sub!r} not found; available: {[e[0] for e in scene_splice.scn_directory_legacy(scn)]}")
     _, so, ss, _ = entry
     _, _, _, _, _, mdt_abs, _ = scene_splice._find_node(scn, so, ss, node)
     return mdt_abs

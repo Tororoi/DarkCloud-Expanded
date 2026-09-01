@@ -3,9 +3,9 @@
 
 kd_split unifies the three former implementations exactly — callers keep their proven node
 layouts by picking the same knobs they always used:
-  bake_player_camera_collision.kd_split   -> kd_split(tris, 100)                       (3-axis median)
+  queens_collision_builder.kd_split   -> kd_split(tris, 100)                       (3-axis median)
   brownboo_camera_collision._kd_split     -> kd_split(tris, 100, proportional=True)
-  queens_hcam.split_tris                  -> kd_split(tris, 200, axes=(0, 2))          (xz median)
+  queens_building_camera_hulls.split_tris                  -> kd_split(tris, 200, axes=(0, 2))          (xz median)
 """
 import math
 

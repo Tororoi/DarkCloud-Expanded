@@ -6,7 +6,7 @@
 #   make stubs                     ->  reassemble all EE cave stubs (tools/*.s) into Resources/isoPatch/
 #   make stubs-check               ->  verify the committed stub .bins match their .s sources
 #   make fishcol                   ->  rebuild every town's fishing collision .bin (tools/build_fishing_collision.py)
-#   make fishcol-check             ->  verify those .bins match their sources (rock OBJs / generators)
+#   make fishcol-check             ->  verify those .bins match their generators
 #
 # These wrap the dotnet-native launch profiles in Dark Cloud Improved Version/Properties/launchSettings.json,
 # so `dotnet run --launch-profile <user|dev|test>` (or an IDE's run-profile dropdown) does the same thing.
@@ -19,9 +19,9 @@ fishcol:
 fishcol-check:
 	python3 tools/build_fishing_collision.py --check
 stubs:
-	python3 tools/build_stubs.py
+	python3 tools/build_ee_stubs.py
 stubs-check:
-	python3 tools/build_stubs.py --check
+	python3 tools/build_ee_stubs.py --check
 start user:
 	dotnet run --project "$(PROJECT)" --launch-profile user
 dev:

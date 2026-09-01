@@ -5,7 +5,7 @@ Bulge the west bank edge (x~-424..-388, z -142..275, user-marked) westward for c
 a player standing at the water's edge: edge columns move -x by WEST_BULGE*sin(pi*s) along the
 section; paired crown columns follow; section ends stay welded. WB_SUBDIV inserts stations for a
 smoother waterline (2x density). Consumers:
-  tools/westbank_smooth_bake.py         (bakes game_data/yellowdrops/s1301_smooth.bin)
+  tools/bake_yellowdrops_westbank.py         (bakes game_data/yellowdrops/yellowdrops_westbank_ground.bin)
   tools/build_fishing_collision.py      (DCFC fish walls -> yellowdrops_23.bin)
   tools/yellowdrops_viewer.py           (proposal/verification layers)
 

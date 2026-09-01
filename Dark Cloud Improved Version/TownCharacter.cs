@@ -1051,7 +1051,7 @@ namespace Dark_Cloud_Improved_Version
                 TownEditMode.Tick();       //overhead camera + safe exit, every town
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
                 CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
-                CameraGatherArenaFix.Tick(); //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)
+                TownCameraPolyBuffer.Tick(); //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket
             }

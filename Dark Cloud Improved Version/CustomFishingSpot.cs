@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using static Dark_Cloud_Improved_Version.FishingSpots;
-using static Dark_Cloud_Improved_Version.FishingLabels;
-using static Dark_Cloud_Improved_Version.FishingLabelArena;
-using static Dark_Cloud_Improved_Version.FishingStbEmit;
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
+using static Dark_Cloud_Improved_Version.FishingLabelAllocator;
+using static Dark_Cloud_Improved_Version.FishingScriptBuilder;
 using static Dark_Cloud_Improved_Version.FishingScripts;
 
 namespace Dark_Cloud_Improved_Version
@@ -40,9 +40,9 @@ namespace Dark_Cloud_Improved_Version
     /// Everything here is RAM-only and per-load: reloading the town restores the stock script.
     ///
     /// Split 2026-09: this class is the runtime ORCHESTRATOR (install, tick, session window, camera/level
-    /// pins). The data and machinery live in FishingSpots (the spot table), FishingLabels (ids),
-    /// FishingLabelArena (where scripts go), FishingStbEmit + FishingScripts (the bytecode), FishingCast
-    /// (the cast pay-out), with the villager hide in VillagerPlacement and fish depth in FishingCollision.
+    /// pins). The data and machinery live in FishingSpots (the spot table), FishingLabelIds (ids),
+    /// FishingLabelAllocator (where scripts go), FishingScriptBuilder + FishingScripts (the bytecode), FishingCastPayout
+    /// (the cast pay-out), with the villager hide in FishingVillagers and fish depth in FishingCollision.
     /// </summary>
     internal static class CustomFishingSpot
     {
@@ -64,9 +64,9 @@ namespace Dark_Cloud_Improved_Version
         private static int _installedMap = -1;
 
         // Location of the installed fishing bytecode, so it can be re-baked in place on a tide change. 0 = not
-        // installed. _fishStb also guards the re-bake (stb-moved check).
-        private static long _fishStb;
-        private static int _fishCodeOff, _fishEnd, _fishMenuCbRel;
+        // installed. _fishingStbBase also guards the re-bake (stb-moved check).
+        private static long _fishingStbBase;
+        private static int _fishingMenuCodeBaseOffset;
         // EVERY installed fishing script for the current town — Queens has TWO (north-bank label 400 +
         // canal-floor label 401), each its OWN per-sign script from the shared BuildFishingBytecode builder,
         // differing only in stance. Re-baked together on a tide change so both track the same tide.
@@ -78,24 +78,21 @@ namespace Dark_Cloud_Improved_Version
         /// rebuild — the install path handles that). Queens only; no labels or event points are touched.</summary>
         internal static void RebuildFishingScript()
         {
-            if (_installedMap != CanalTide.QueensMapNo || _fishStb == 0 || InFishingWindow) return;
+            if (_installedMap != TownMapNo.Queens || _fishingStbBase == 0 || InFishingWindow) return;
             long stb = TownScript.Base();
-            if (stb == 0 || stb != _fishStb) return;
+            if (stb == 0 || stb != _fishingStbBase) return;
             foreach (var (spot, codeOff, end) in _tideScripts)
-                WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, _fishMenuCbRel),
+                WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, _fishingMenuCodeBaseOffset),
                             $"re-bake '{spot.Name}' water level for the current tide");
         }
 
         private static int _lastSeenMap = int.MinValue;
         private static int _settleTicks;
 
-        private static int _slot = -1;
-        private static long _slotAddr;
         private static Spot _spot;
         private static int _lastParam = int.MinValue;
         private static int _lastMode = int.MinValue;
         private static int _lastGameMode = int.MinValue;
-        private static int _watchdog;
 
         // ── Shallow-hook (Brownboo) — DATA-ONLY, recompiler-safe. See TownAddresses.FishLineShallow. ─────────
         private static bool _shallowLineInstalled;
@@ -169,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
             // 5·distpBelow + HookBodyDrop). Floored so distpBelow can never collapse (0 kills the hang).
             static float BelowForDepth(float depth) => Math.Max((depth - HookBodyDrop) / 5f, 0.2f);
             static float Below(int oldAnchor, float ls) => (23 - oldAnchor) * FishLineShallow.VanillaDistp * ls / 5f;
-            if (s.MapNo != CanalTide.QueensMapNo)
+            if (s.MapNo != TownMapNo.Queens)
             {
                 float ls = s.HasLineScale ? s.LineScale : 1f;
                 // GENERAL RULE: a spot that pins its fish depth gets the hook resting AT the fish (the bite
@@ -177,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
                 // a fish depth keep the legacy vanilla anchor-equivalence mapping.
                 float below = s.HasFishDepth ? BelowForDepth(s.FishDepth)
                                              : Below(18, ls);
-                if (s.MapNo == YellowDropsMapNo)
+                if (s.MapNo == TownMapNo.YellowDrops)
                     return (ShortLineStart, ExtendedCastAbove, below);   // Yellow Drops: same extended pay-out cast as Queens
                 return (1f, ls, below);
             }
@@ -234,15 +231,14 @@ namespace Dark_Cloud_Improved_Version
                     _verifyTicks = 0;
                     if (!FishingInstallPresent())
                     {
-                        int ty = _slotAddr == 0 ? -99 : Memory.ReadInt(_slotAddr + EventPoints.Type);
-                        Log($"install incomplete (slot={_slot} type={ty}) — re-installing");
+                        Log("install incomplete — re-installing");
                         ResetInstallState();
                     }
                 }
                 if (map == _installedMap)
                 {
-                    WatchMatches(); UpdateFishingWindow(); VillagerPlacement.HideForSession(InFishingWindow); PriscleenFish.Tick();
-                    if (_spot.MapNo == 14) VillagerPlacement.PinMango();   // Brownboo: nudge Mango out from under the (baked) sign
+                    WatchMatches(); UpdateFishingWindow(); FishingVillagers.HideForSession(InFishingWindow); PriscleenFish.Tick();
+                    if (_spot.MapNo == TownMapNo.Brownboo) FishingVillagers.PinMango();   // Brownboo: nudge Mango out from under the (baked) sign
                     return;
                 }
             }
@@ -277,9 +273,7 @@ namespace Dark_Cloud_Improved_Version
         private static void ResetInstallState()
         {
             _installedMap = -1;
-            _fishStb = 0;
-            _slot = -1;
-            _slotAddr = 0;
+            _fishingStbBase = 0;
             _fishingWasLive = false;
             InFishingWindow = false;
             _settleTicks = 0;
@@ -287,12 +281,12 @@ namespace Dark_Cloud_Improved_Version
             _lastParam = int.MinValue;
             _lastMode = int.MinValue;
             // (anchor toggle retired — the bobber is always at point[18]; nothing to reset there)
-            FishingCast.Reset();
+            FishingCastPayout.Reset();
             Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, FishLineShallow.VanillaDistp);   // hang back to vanilla for the next town
             _lineAboveStart = 1f; _lineAbove = 1f; _lineBelow = FishLineShallow.VanillaDistp;
             PriscleenFish.Uninstall();
-            VillagerPlacement.Uninstall();
-            VillagerPlacement.ResetSession();
+            FishingVillagers.Uninstall();
+            FishingVillagers.ResetSession();
         }
 
         /// <summary>True only if BOTH halves of our install are still live: the renumbered fishing label in
@@ -312,9 +306,9 @@ namespace Dark_Cloud_Improved_Version
             int n = Memory.ReadInt(stb + TownScript.LabelCount);
             int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
             if (n <= 0 || n >= 4000 || tbl <= 0) return true;
-            Lab lab = FindLabelById(stb, n, tbl, FishingLabelId);
+            ScriptLabel lab = FindLabelById(stb, n, tbl, FishingLabelId);
             if (lab == null) return true;                        // label table mid-rebuild — wait
-            byte[] want = BuildFishingBytecode(_spot, _fishMenuCbRel).ToArray();
+            byte[] want = BuildFishingBytecode(_spot, _fishingMenuCodeBaseOffset).ToArray();
             if (want.Length < 4) return true;
             int firstWord = Memory.ReadInt((int)stb + lab.Off + TownScript.LabelCodeSkip);
             return firstWord == BitConverter.ToInt32(want, 0);   // matches -> our script is live; differs -> wiped
@@ -363,7 +357,7 @@ namespace Dark_Cloud_Improved_Version
         /// only: outside fishing, WaterLevel==0 is what the install/teardown liveness checks expect.</summary>
         private static void PinYdWaterLevel()
         {
-            if (!InFishingWindow || _installedMap != YellowDropsMapNo || _active.MapNo != YellowDropsMapNo) return;
+            if (!InFishingWindow || _installedMap != TownMapNo.YellowDrops || _active.MapNo != TownMapNo.YellowDrops) return;
             if (Math.Abs(Memory.ReadFloat(FishingSpot.WaterLevel) - _active.Water) > 0.001f)
                 Memory.WriteFloat(FishingSpot.WaterLevel, _active.Water);
         }
@@ -383,7 +377,7 @@ namespace Dark_Cloud_Improved_Version
             // engages the walls (medium: 40→35; dusk high 52: →14; low 6: 40 unchanged). No climb-disable
             // is needed on top: the patched SetHeight site (0x16C2DC) re-pins the height to this word every
             // fishing frame AFTER the collision cave runs, so nothing can raise the camera during fishing.
-            if (_installedMap == CanalTide.QueensMapNo && _spot.MapNo == CanalTide.QueensMapNo)
+            if (_installedMap == TownMapNo.Queens && _spot.MapNo == TownMapNo.Queens)
             {
                 float water = CanalTide.QueensWaterLevel();
                 h = Math.Max(QueensFishCamMinH, Math.Min(h, QueensCamWallTopY - QueensCamWallClear - water));
@@ -443,28 +437,28 @@ namespace Dark_Cloud_Improved_Version
             Log($"   pool at install: used {Memory.ReadInt(FishingPool.Used) * FishingPool.BlockSize / 1024} KB " +
                 $"of {Memory.ReadInt(FishingPool.Capacity) * FishingPool.BlockSize / 1024} KB");
 
-            BuildArena(stb, labelCount, tbl);   // native-orphan pool, used only as the unbaked-town fallback
+            BuildHijackPool(stb, labelCount, tbl);   // native-orphan pool, used only as the unbaked-town fallback
 
             // Each script goes into the ISO-baked label that already carries its final id (9600/400/133/134),
             // sized to fit it in one label — so nothing is renumbered or split. ClaimLabel falls back to a
             // renamed native orphan on an unpatched disc. The MENU is claimed FIRST so its offset is known
             // before the entry/quit scripts CALL_FUNC it; on the fallback path that also marks its orphan used
-            // before the entry script's arena is carved out. If it can't be placed, menuCbRel stays -1 and
+            // before the entry script's arena is carved out. If it can't be placed, menuCodeBaseOffset stays -1 and
             // both menus fall back to inline copies.
             int codeBaseVal = Memory.ReadInt(stb + TownScript.CodeBase);
-            int menuCbRel = -1;
-            Lab menuLab = ClaimLabel(stb, labelCount, tbl, MenuSubLabelId, Need(BuildMenuSubroutine()), out int menuEnd);
+            int menuCodeBaseOffset = -1;
+            ScriptLabel menuLab = ClaimLabel(stb, labelCount, tbl, MenuSubLabelId, ScriptByteSize(BuildMenuSubroutine()), out int menuEnd);
             if (menuLab != null)
             {
                 Memory.WriteInt(stb + menuLab.Entry, MenuSubLabelId);   // no-op for a baked label; renames a fallback orphan
                 WriteScript(stb, menuLab.Off, menuEnd, BuildMenuSubroutine(),
                             "shared menu-select subroutine (CALL_FUNC target for entry + quit menus)");
-                menuCbRel = menuLab.Off - codeBaseVal;
-                Log($"   menu subroutine: label {MenuSubLabelId} (code @+0x{menuLab.Off:X}, CALL_FUNC cb-rel 0x{menuCbRel:X})");
+                menuCodeBaseOffset = menuLab.Off - codeBaseVal;
+                Log($"   menu subroutine: label {MenuSubLabelId} (code @+0x{menuLab.Off:X}, CALL_FUNC cb-rel 0x{menuCodeBaseOffset:X})");
             }
             else Log("   no spare label for the shared menu subroutine — entry/quit menus fall back to inline");
 
-            Lab lab = ClaimLabel(stb, labelCount, tbl, spot.LabelId, Need(BuildFishingBytecode(spot, menuCbRel)), out int end);
+            ScriptLabel lab = ClaimLabel(stb, labelCount, tbl, spot.LabelId, ScriptByteSize(BuildFishingBytecode(spot, menuCodeBaseOffset)), out int end);
             if (lab == null)
             {
                 Log("   the spare labels cannot hold the fishing script — skipping");
@@ -480,17 +474,17 @@ namespace Dark_Cloud_Improved_Version
             Log($"   entry script @0x{stb:X}  labels={labelCount}  label {labelId} " +
                 $"(code @+0x{codeOff:X}, {end - codeOff}B region)");
 
-            WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, menuCbRel),
+            WriteScript(stb, codeOff, end, BuildFishingBytecode(spot, menuCodeBaseOffset),
                         $"_LOAD_MAIN_CHARA({FishingModel}) + _LOAD_FISHING_DATA(area={spot.AreaId}, " +
                         $"water={spot.Water}) + stance + bait + fishing");
             // remember exactly where the fishing bytecode lives so the CanalTide tide change can re-bake just
             // its water arg (BuildFishingBytecode re-reads CanalTide.QueensWaterLevel) without touching the
             // labels or the event point.
-            _fishStb = stb; _fishCodeOff = codeOff; _fishEnd = end; _fishMenuCbRel = menuCbRel;
+            _fishingStbBase = stb; _fishingMenuCodeBaseOffset = menuCodeBaseOffset;
             _tideScripts.Clear();
             _tideScripts.Add((spot, codeOff, end));   // primary; secondaries (Queens canal) added in the loop below
 
-            InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingExitLabel, BuildExitBytecode(spot, menuCbRel),
+            InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingExitLabel, BuildExitBytecode(spot, menuCodeBaseOffset),
                                $"restore {NormalModel} + re-place player + _EXIT_FISHING   [Circle = leave]");
             InstallEngineLabel(stb, labelCount, tbl, EventPoints.FishingBaitLabel, BuildBaitBytecode(),
                                $"_GOTO_CHANGE_ESA + load the chosen bait   [Square = bait menu]");
@@ -502,10 +496,10 @@ namespace Dark_Cloud_Improved_Version
             foreach (var extra in Spots)
             {
                 if (extra.MapNo != spot.MapNo || extra.LabelId == spot.LabelId) continue;
-                Lab el = ClaimLabel(stb, labelCount, tbl, extra.LabelId, Need(BuildFishingBytecode(extra, menuCbRel)), out int eEnd);
+                ScriptLabel el = ClaimLabel(stb, labelCount, tbl, extra.LabelId, ScriptByteSize(BuildFishingBytecode(extra, menuCodeBaseOffset)), out int eEnd);
                 if (el == null) { Log($"   secondary spot '{extra.Name}': no spare label {extra.LabelId} — skipped"); continue; }
                 Memory.WriteInt(stb + el.Entry, extra.LabelId);
-                WriteScript(stb, el.Off, eEnd, BuildFishingBytecode(extra, menuCbRel),
+                WriteScript(stb, el.Off, eEnd, BuildFishingBytecode(extra, menuCodeBaseOffset),
                             $"secondary fishing spot '{extra.Name}' (area={extra.AreaId}, stance {extra.StandX},{extra.StandY},{extra.StandZ})");
                 _tideScripts.Add((extra, el.Off, eEnd));   // re-baked with the primary on every tide change
                 Log($"   secondary spot '{extra.Name}' installed at label {extra.LabelId} (code @+0x{el.Off:X})");
@@ -515,9 +509,9 @@ namespace Dark_Cloud_Improved_Version
             // baked type-3 point (IsoPatcher) instead of the native climb-down at HIGH tide; the script is the
             // same prompt-don't-pounce shape as the fishing entry — draws "!", and only on X-press shows the
             // line. Rides the fishing install/self-heal (same stb), so no separate presence check.
-            if (spot.MapNo == CanalTide.QueensMapNo)
+            if (spot.MapNo == TownMapNo.Queens)
             {
-                Lab ml = ClaimLabel(stb, labelCount, tbl, LadderMsgLabelId, Need(BuildLadderMessageBytecode()), out int mlEnd);
+                ScriptLabel ml = ClaimLabel(stb, labelCount, tbl, LadderMsgLabelId, ScriptByteSize(BuildLadderMessageBytecode()), out int mlEnd);
                 if (ml == null) Log($"   ladder message: no spare label {LadderMsgLabelId} — skipped");
                 else
                 {
@@ -529,7 +523,7 @@ namespace Dark_Cloud_Improved_Version
 
                 // Canal tide-evict warp (label 403): CanalTide fires it as an event to warp a player caught in
                 // the drained canal to the East Harbor dock when the tide rises. Just the _MAP_JUMP script.
-                Lab wl = ClaimLabel(stb, labelCount, tbl, CanalWarpLabelId, Need(BuildCanalWarpBytecode()), out int wlEnd);
+                ScriptLabel wl = ClaimLabel(stb, labelCount, tbl, CanalWarpLabelId, ScriptByteSize(BuildCanalWarpBytecode()), out int wlEnd);
                 if (wl == null) Log($"   canal tide-evict: no spare label {CanalWarpLabelId} — skipped");
                 else
                 {
@@ -546,8 +540,6 @@ namespace Dark_Cloud_Improved_Version
             // 400. The baked point survives day/night AND town rebuilds; only the runtime script can be lost
             // (a same-map rebuild re-reads the stb), which FishingInstallPresent now detects by script content.
             _ = labelId;
-            _slot = -1;
-            _slotAddr = 0;
             _spot = spot;
             _active = spot;   // default until a session pins the actually-fished spot (ActiveSpot)
 
@@ -559,7 +551,7 @@ namespace Dark_Cloud_Improved_Version
             (_lineAboveStart, _lineAbove, _lineBelow) = LineConfigSplit(spot);
             Memory.WriteFloat(CodeCaves.Mailbox.LineDistpBelow, _lineBelow);
 
-            if (spot.MapNo == 14) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
+            if (spot.MapNo == TownMapNo.Brownboo) PriscleenFish.Install();   // Priscleen (DC2 fish) into species 8, Brownboo only
 
             Log($"   fishing script installed for label {FishingLabelId} " +
                 $"(trigger is BAKED into the ISO at ~({spot.TrigX},{spot.TrigY},{spot.TrigZ}))");
@@ -598,10 +590,9 @@ namespace Dark_Cloud_Improved_Version
                 _lastParam = param;
                 uint pt = Memory.ReadUInt(EventPoints.MatchedPoint) & Memory.PhysAddrMask;
                 long e = Memory.IsValidGuest(pt) ? Memory.ToMmu(pt) : 0;
-                bool ours = e != 0 && e == _slotAddr;
 
                 if (param > 0 || e != 0)
-                    Log($"MATCH param={param} point=0x{pt:X8}{(ours ? "  <<< OURS" : "")}  " +
+                    Log($"MATCH param={param} point=0x{pt:X8}  " +
                         $"labelRequest={Memory.ReadInt(EventPoints.ScriptLabelRequest)}" +
                         (e != 0 ? $"  type={Memory.ReadInt(e + EventPoints.Type)} " +
                                   $"label/item={Memory.ReadInt(e + EventPoints.ItemOrLabel)}" : ""));
@@ -618,14 +609,6 @@ namespace Dark_Cloud_Improved_Version
                 _lastMode = mode;
             }
 
-            // Did our slot survive? The array is built progressively during load, and something later in the
-            // sequence could reclaim it.
-            if (_slot < 0 || ++_watchdog < 100) return;   // every ~5 s
-            _watchdog = 0;
-
-            int type = Memory.ReadInt(_slotAddr + EventPoints.Type);
-            if (type != EventPoints.TypeScript)
-                Log($"our event point [{_slot}] is GONE (type is now {type}) — something reclaimed the slot");
         }
 
         /// <summary>
@@ -653,7 +636,7 @@ namespace Dark_Cloud_Improved_Version
                 _active = ActiveSpot();
                 (_lineAboveStart, _lineAbove, _lineBelow) = LineConfigSplit(_active);
                 Log($"line config for '{_active.Name}': above x{_lineAboveStart:0.##}→x{_lineAbove:0.##}, below {_lineBelow:0.##} " +
-                    $"(tide level {(_active.MapNo == CanalTide.QueensMapNo ? CanalTide.QueensWaterLevel() : _active.Water):0.#})");
+                    $"(tide level {(_active.MapNo == TownMapNo.Queens ? CanalTide.QueensWaterLevel() : _active.Water):0.#})");
 
                 // Brownboo: drop the ladder-top platforms from the cpoly (bobber ground-lift guard). Native walls
                 // are KEPT — they contain the fish; the bobber probe never treats a wall as ground.
@@ -698,7 +681,7 @@ namespace Dark_Cloud_Improved_Version
             // Pay-out projects the rod tip along the player's LIVE facing: they can turn (and walk) before casting,
             // so the session-start stance yaw is only the fallback when the character can't be read.
             float facing = EditLoop.TryReadPlayerYaw(out float liveYaw) ? liveYaw : _active.Facing;
-            FishingCast.Tick(live, _lineAboveStart, _lineAbove, facing);               // line LENGTH + cast pay-out
+            FishingCastPayout.Tick(live, _lineAboveStart, _lineAbove, facing);               // line LENGTH + cast pay-out
 
             _fishingWasLive = live;
         }
@@ -732,7 +715,7 @@ namespace Dark_Cloud_Improved_Version
             // Villagers are hidden LAZILY by UpdateVillagerHide once the screen is fully black (they must stay
             // on screen while the entry menu is up), so there is nothing to do on OPEN; on CLOSE, put them back.
             if (InFishingWindow) return;
-            VillagerPlacement.RestoreAfterSession();
+            FishingVillagers.RestoreAfterSession();
         }
 
         private static bool ComputeFishingWindow(out string why)

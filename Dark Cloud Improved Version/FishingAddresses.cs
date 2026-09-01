@@ -394,7 +394,7 @@ namespace Dark_Cloud_Improved_Version
 
     /// <summary>The fishing-line Verlet rope arrays (mod-access form = ELF addr + 0x20000000): main line
     /// point[], bobber ukip/ukiv, hook hookv. Resolved from the SCUS_971.11 symtab; layout confirmed in the
-    /// FishLineStep decomp. Read/written by FishingCast.</summary>
+    /// FishLineStep decomp. Read/written by FishingCastPayout.</summary>
     internal static class FishingRope
     {
         internal const long Point = 0x21D55E30;   // point[0] = rod tip; 24 x 0x10 (vec4)

@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// Carve the mod's sign/ladder textures and the kanban + ripple-decal meshes out of the user's OWN ISO
     /// (nothing game-derived is bundled): TIM2 extraction, IM2 bank building, and the 1-node MDS wrappers.
     /// </summary>
-    internal static class AssetCarver
+    internal static class IsoAssetCarver
     {
         // ── sign + ladder textures: CARVE from the user's OWN ISO. The sign glyph e01b24 lives in Muska Lacka
         //    (e04/img.pak); the metal-ladder texture e05t06 lives in the Factory (e05/img.pak). Both go into ONE
@@ -111,20 +111,20 @@ namespace Dark_Cloud_Improved_Version
         // `hamon__A01z` (Norune waterwheel) is 56 tris that EACH map the full 0→1 texture — in-game that
         // tiled the ring ~28× across a big patch ("wrong texture, too big"). Here we carve only hamon's
         // MATERIAL (`e01b22`, Queens' TEX_ANIME ripple texture, ring-retextured by the bake post-step) and
-        // emit a fresh 4-vert / 2-tri quad at ±DECAL_HALF with UV 0→1, so the ring shows once. Node keeps
+        // emit a fresh 4-vert / 2-tri quad at ±RippleDecalHalfExtent with UV 0→1, so the ring shows once. Node keeps
         // the `__za01` suffix attrs (z=no-Z-write, a01=alpha-test). Injected as static part "wripple";
         // CanalTide flips the part LAYER (+0xE4) to 0x15 so DrawWater's per-layer loop draws it in the
         // WATER pass (water texture group resident — a normal-layer part sampling it renders garbage).
-        internal const float DECAL_HALF = 5.5f;  // ring half-extent (11 units across, tight around the player's feet)
-        internal static byte[] CarveRippleDecal(byte[] scene, float half = DECAL_HALF)
+        internal const float RippleDecalHalfExtent = 5.5f;  // ring half-extent (11 units across, tight around the player's feet)
+        internal static byte[] CarveRippleDecal(byte[] scene, float half = RippleDecalHalfExtent)
         {
-            const string NODE_NAME = "hamon__A01z";
-            int ki = FindFrom(scene, Encoding.ASCII.GetBytes(NODE_NAME + "\0"), 0);
+            const string RippleNodeName = "hamon__A01z";
+            int ki = FindFrom(scene, Encoding.ASCII.GetBytes(RippleNodeName + "\0"), 0);
             if (ki < 0) throw new IOException("Could not find the ripple decal (hamon__A01z) in the ISO.");
             int mds = FindLast(scene, new byte[] { (byte)'M', (byte)'D', (byte)'S', 0 }, ki - 8);
             int tbl = (int)U32(scene, mds + 0xC), count = (int)U32(scene, mds + 8);
             int ndOff = -1;
-            for (int i = 0; i < count; i++) { int no = mds + tbl + i * 0x70; if (NameAt(scene, no + 8, 0x20) == NODE_NAME) { ndOff = no; break; } }
+            for (int i = 0; i < count; i++) { int no = mds + tbl + i * 0x70; if (NameAt(scene, no + 8, 0x20) == RippleNodeName) { ndOff = no; break; } }
             if (ndOff < 0) throw new IOException("hamon__A01z node index not found.");
             int mdt = mds + (int)U32(scene, ndOff + 0x28);
             // carve the material descriptor verbatim (hw[14] = MAT offset; stride 0x60, name "e01b22" @+0x34)

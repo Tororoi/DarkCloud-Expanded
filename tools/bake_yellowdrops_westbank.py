@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bake the SMOOTHED (2x-density) west-bank bulge into a rebuilt s1301 subfile.
 
-The smoothed waterline inserts WB_SUBDIV stations per segment (yellowdrops_westbank), which GROWS the
+The smoothed waterline inserts WB_SUBDIV stations per segment (yellowdrops_westbank_data), which GROWS the
 meshes — so instead of the in-place float patches of the old 3-station bulge, this tool rebuilds
 the three nested blocks of gedit/s13/scene.scn's s1301 subfile:
 
@@ -15,18 +15,18 @@ the three nested blocks of gedit/s13/scene.scn's s1301 subfile:
 
 Mechanics: each edited MDT is rebuilt; each nested MDS is re-laid (contiguous blocks, mds-relative
 `mo` in the node table); the sub header's block (offset,size) words are repointed; the sub is
-emitted whole as game_data/yellowdrops/s1301_smooth.bin for IsoPatcher.ReplaceS13Ground (which
+emitted whole as game_data/yellowdrops/yellowdrops_westbank_ground.bin for IsoPatcher.ReplaceS13Ground (which
 appends it to scene.scn and repoints the directory entry — the old sub bytes become dead space).
 
-Run: python3 tools/westbank_smooth_bake.py       (runs the self-tests, then writes the bin)
+Run: python3 tools/bake_yellowdrops_westbank.py       (runs the self-tests, then writes the bin)
 """
 import os, sys, struct
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from extract_scene_mesh import load_scene
-import scene_placed as sp
+import scene_placed
 import mdt_codec
-from yellowdrops_westbank import WB_ROWS, wb_profile, WB_SUBDIV
+from yellowdrops_westbank_data import WB_ROWS, wb_profile, WB_SUBDIV
 from yellowdrops_camera_pillars import pillar_hulls, doumu_hug_xz
 from georama_collision import build_coll_mdt
 
@@ -322,7 +322,7 @@ def relay_mds(sub, mds_off, mds_size, edits, add_nodes=None, template_node=1):
 
 def main():
     scn = load_scene('gedit/s13/scene.scn')
-    soff, ssize = sp._scndir(scn)['s1301']
+    soff, ssize = scene_placed.scn_directory_map(scn)['s1301']
     sub = scn[soff:soff + ssize]
     VIS_OFF, VIS_SIZE = 0xb20, 0x39af0
     A_OFF, A_SIZE = 0x3a610, 0x9bd0
@@ -385,7 +385,7 @@ def main():
     # The node's accumulated frame carries a SCALE, so verts go local -> world (node matrix),
     # hug in world space, then back through the inverted 3x3.
     from extract_scene_mesh import xform as _xf
-    nodes3, wm3 = sp._accum(sub, C_OFF)
+    nodes3, wm3 = scene_placed._accum(sub, C_OFF)
     for i, (nn3, mo3, par3, mat3) in enumerate(nodes3):
         if nn3 != 'doumu_c' or mo3 == 0:
             continue
@@ -435,7 +435,7 @@ def main():
     for o in (0x90, 0xa8, 0xc0):
         struct.pack_into('<I', new, o, c_off)
     struct.pack_into('<I', new, 0xc4, len(cmds))
-    OUT = os.path.normpath(os.path.join(HERE, '..', 'game_data', 'yellowdrops', 's1301_smooth.bin'))
+    OUT = os.path.normpath(os.path.join(HERE, '..', 'game_data', 'yellowdrops', 'yellowdrops_westbank_ground.bin'))
     with open(OUT, 'wb') as f:
         f.write(new)
     print(f'stage 4: new s1301 = {len(new)} bytes (was {ssize}, +{len(new) - ssize}) -> {OUT}')

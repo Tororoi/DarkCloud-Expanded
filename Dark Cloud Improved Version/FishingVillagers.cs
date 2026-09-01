@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// dispatch redirect and drawing the CFrame through a hijacked TreasureCursor / cloned event point — was
     /// superseded by that disc bake; see git history if it's ever needed again.)
     /// </summary>
-    internal static class VillagerPlacement
+    internal static class FishingVillagers
     {
         internal static bool Enabled = true;
 
@@ -142,6 +142,6 @@ namespace Dark_Cloud_Improved_Version
         internal static void Uninstall() => _mangoDumped = false;
 
         private static void Log(string s) =>
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + " [VillagerPlacement] " + s);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + " [FishingVillagers] " + s);
     }
 }

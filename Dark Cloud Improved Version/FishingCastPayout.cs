@@ -9,7 +9,7 @@ namespace Dark_Cloud_Improved_Version
     /// start scale, then ramp it out under the flying bobber once the rod-tip wind-up + forward fling is seen,
     /// amplifying the flight; snap back on reel-in / uncast. Pure per-tick memory math over the rope arrays.
     /// </summary>
-    internal static class FishingCast
+    internal static class FishingCastPayout
     {
         // Rope arrays: FishingAddresses.FishingRope (point/ukip/ukiv/hookv), resolved from the SCUS_971.11 symtab.
         private static bool  _distpScaled;   // is the shared line rest-length currently stretched for this spot?

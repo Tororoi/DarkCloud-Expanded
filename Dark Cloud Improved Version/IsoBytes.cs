@@ -13,7 +13,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class IsoBytes
     {
-        internal const int SECTOR = 2048;
+        internal const int SectorBytes = 2048;
 
         // ── little-endian FileStream I/O ──
         internal static byte[] Rd(FileStream fs, long off, int n) { fs.Seek(off, SeekOrigin.Begin); var b = new byte[n]; int r = 0; while (r < n) { int k = fs.Read(b, r, n - r); if (k == 0) break; r += k; } return b; }
@@ -24,27 +24,27 @@ namespace Dark_Cloud_Improved_Version
         internal static void   U32(byte[] b, int o, uint v) => Array.Copy(BitConverter.GetBytes(v), 0, b, o, 4);
         internal static ushort U16(byte[] b, int o) => BitConverter.ToUInt16(b, o);
         internal static void   U16(byte[] b, int o, ushort v) { b[o] = (byte)v; b[o + 1] = (byte)(v >> 8); }
-        internal static long  Align(long x, int a = SECTOR) => (x + a - 1) & ~((long)a - 1);
+        internal static long  Align(long x, int a = SectorBytes) => (x + a - 1) & ~((long)a - 1);
 
         internal class Rec { public long RecOff; public uint Ext; public uint Size; }
 
         internal static Dictionary<string, Rec> ParseRoot(FileStream fs)
         {
-            byte[] pvd = Rd(fs, 16L * SECTOR, SECTOR);
+            byte[] pvd = Rd(fs, 16L * SectorBytes, SectorBytes);
             if (pvd[0] != 1 || Encoding.ASCII.GetString(pvd, 1, 5) != "CD001")
                 throw new IOException("Not a 2048-byte ISO9660 image — is this the right file?");
             uint rootLba = U32(pvd, 158), rootSize = U32(pvd, 166);
-            byte[] d = Rd(fs, (long)rootLba * SECTOR, (int)rootSize);
+            byte[] d = Rd(fs, (long)rootLba * SectorBytes, (int)rootSize);
             var recs = new Dictionary<string, Rec>();
             int pos = 0;
             while (pos + 33 <= d.Length)
             {
                 int ln = d[pos];
-                if (ln == 0) { pos = (pos / SECTOR + 1) * SECTOR; continue; }
+                if (ln == 0) { pos = (pos / SectorBytes + 1) * SectorBytes; continue; }
                 uint ext = U32(d, pos + 2), size = U32(d, pos + 10);
                 int nlen = d[pos + 32];
                 string name = Encoding.Latin1.GetString(d, pos + 33, nlen).Split(';')[0].ToUpperInvariant();
-                recs[name] = new Rec { RecOff = (long)rootLba * SECTOR + pos, Ext = ext, Size = size };
+                recs[name] = new Rec { RecOff = (long)rootLba * SectorBytes + pos, Ext = ext, Size = size };
                 pos += ln;
             }
             return recs;
@@ -87,7 +87,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static int FindLast(byte[] hay, byte[] needle, int before) => ReusableFunctions.LastIndexOfBytes(hay, needle, before);
 
-        internal static float F(byte[] b, int o) => BitConverter.ToSingle(b, o);
+        internal static float F32(byte[] b, int o) => BitConverter.ToSingle(b, o);
 
         internal static int FindMdt(byte[] scene, string node)
         {
@@ -112,19 +112,5 @@ namespace Dark_Cloud_Improved_Version
 
         internal static int Align16(int x) => (int)Align(x, 16);
         internal static void WrF(byte[] b, int o, float f) => Array.Copy(BitConverter.GetBytes(f), 0, b, o, 4);
-    }
-
-    /// <summary>MIPS (EE) instruction encoders + register numbers for the hand-built ELF caves.</summary>
-    internal static class Mips
-    {
-        internal const int zero = 0, v0 = 2, a0 = 4, a1 = 5, a2 = 6, a3 = 7, t0 = 8, sp = 29;
-        internal static uint Lui(int rt, uint i) => 0x3C000000u | ((uint)rt << 16) | (i & 0xFFFF);
-        internal static uint Ori(int rt, int rs, uint i) => 0x34000000u | ((uint)rs << 21) | ((uint)rt << 16) | (i & 0xFFFF);
-        internal static uint Lw(int rt, int o, int b) => 0x8C000000u | ((uint)b << 21) | ((uint)rt << 16) | (uint)(o & 0xFFFF);
-        internal static uint Sw(int rt, int o, int b) => 0xAC000000u | ((uint)b << 21) | ((uint)rt << 16) | (uint)(o & 0xFFFF);
-        internal static uint Addiu(int rt, int rs, int i) => 0x24000000u | ((uint)rs << 21) | ((uint)rt << 16) | (uint)(i & 0xFFFF);
-        internal static uint Move(int rd, int rs) => Ori(rd, rs, 0);
-        internal static uint Jal(uint tgt) => 0x0C000000u | ((tgt >> 2) & 0x03FFFFFF);
-        internal static uint J(uint tgt) => 0x08000000u | ((tgt >> 2) & 0x03FFFFFF);
     }
 }

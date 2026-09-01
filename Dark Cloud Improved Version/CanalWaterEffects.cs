@@ -9,8 +9,10 @@ namespace Dark_Cloud_Improved_Version
     /// tide, keep/tint its quad colour, and drive the wading ripple + ladder-rail ripple parts (layer flip to
     /// the water pass, position pin). The refraction diagnostic (WaterDiag) lives here too.
     /// </summary>
-    internal static class CanalRipples
+    internal static class CanalWaterEffects
     {
+        private static void Log(string m) => CanalTide.Log(m, nameof(CanalWaterEffects));
+
         // ── CWater quad colour (body+0x120..0x123 R/G/B/A): kept NATIVE in the current design (the
         // underwater blend comes from mizu's own pass over the early-drawn player, not the quad).
         // ApplyLowTideColor(false) each tick self-restores anything an earlier build overrode. Kept as a
@@ -43,14 +45,14 @@ namespace Dark_Cloud_Improved_Version
         // needed to interpret them, so CWater's own frame (+0xB0) plays no part in this math.
         private const long CwCorner = 0x20, CwCornerStride = 0x10;
         // Water DISTORTION is fully NATIVE (e03 mapinfo: the canal body is world-anchored and its
-        // WATER_SHAKE sources agitate it — IsoPatcher.WorldAnchorCanalWater). The old C# height-buffer
+        // WATER_SHAKE sources agitate it — SceneBaker.TuneCanalWater). The old C# height-buffer
         // poking experiments (PlayerRipple/RippleProbe) were deleted 2026-08 — recoverable via git.
         private const long  WaveSpeedOff = 0x94, WaveDampOff = 0x98;   // Hamon params in CWater (cw = body+0x90)
 
         private static int _rippleSlot = -1;                    // cached canal CWater body index (see CanalBody)
         private static int  _rippleLogTick;                     // throttle for the ripple-gate diagnostic
         private static int  _colorSaved = -1;          // canal body's OWN colour bytes, captured before we touch them
-        private static int  _tick;                     // this class's own tick counter (scan back-offs / log throttles)
+        private static int  _tickCount;                     // this class's own tick counter (scan back-offs / log throttles)
 
         // Canal RIPPLE lever. The animated water is the mapinfo WATER "e03c08" body drawn by
         // DrawWaterSurface__11CEditGround. The CEditGround is *(gp-0x6f18) = *(0x202A28D8) — NOT edit_info; its
@@ -82,7 +84,7 @@ namespace Dark_Cloud_Improved_Version
         private static long _poleL, _poleR;
         private static int  _poleNextScan;
         private static bool _loggedPoles;
-        // Ring sits at the MIZU TEXTURE height (world Y = _shownLvl, = MizuBaselineY + frame trans) rather than
+        // Ring sits at the MIZU TEXTURE height (world Y = _shownWaterLevel, = MizuBaselineY + frame trans) rather than
         // up at the refraction/distortion plane (level + RefractionYOffset). Just a hair above the mizu mesh so
         // it draws on top of the texture without coplanar z-fight — visually flush with the water surface.
         private const float DecalLift = 0.2f;
@@ -100,7 +102,7 @@ namespace Dark_Cloud_Improved_Version
         /// refraction diagnostic), and drive the wading + ladder-rail ripple decals.</summary>
         internal static void Tick(float level, bool low, long mizuFrame)
         {
-            _tick++;
+            _tickCount++;
             PinRipple(level);
             if (WaterDiag)
             {
@@ -252,9 +254,9 @@ namespace Dark_Cloud_Improved_Version
             // channel runs the length of X. Only Z is world (Z isn't followed), so gate on the Z band.
             bool inWater = low && py <= level && InCanalZ(pz);
             bool here = still && inWater;
-            if (Diagnostics && still && low && _tick - _rippleLogTick >= 40)
+            if (Diagnostics && still && low && _tickCount - _rippleLogTick >= 40)
             {
-                _rippleLogTick = _tick;
+                _rippleLogTick = _tickCount;
                 Log($"ripple gate: py {py:0.#} level {level:0.#} pz {pz:0.#} inWater={inWater}");
             }
 
@@ -285,7 +287,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_poleL == 0 || _poleR == 0)
             {
-                if (_tick < _poleNextScan) return;
+                if (_tickCount < _poleNextScan) return;
                 uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(egGuest)) return;
                 long arr = Memory.ToMmu(egGuest) + StaticPartsOff;
@@ -299,7 +301,7 @@ namespace Dark_Cloud_Improved_Version
                     if (Math.Abs(x - PoleLX) < 3f) _poleL = pt;
                     else if (Math.Abs(x - PoleRX) < 3f) _poleR = pt;
                 }
-                if (_poleL == 0 || _poleR == 0) { _poleNextScan = _tick + 100; return; }
+                if (_poleL == 0 || _poleR == 0) { _poleNextScan = _tickCount + 100; return; }
                 if (!_loggedPoles) { Log($"pole ripples found (L @0x{_poleL:X}, R @0x{_poleR:X})"); _loggedPoles = true; }
             }
             float y = level + DecalLift;
@@ -340,7 +342,7 @@ namespace Dark_Cloud_Improved_Version
                 if (Math.Abs(y - DecalParkY) < 1f || Math.Abs(y - _decalLastY) < 1f) return _decalPart;
                 _decalPart = 0; _decalShown = false;
             }
-            if (_tick < _decalNextScan) return 0;
+            if (_tickCount < _decalNextScan) return 0;
             uint egGuest = Memory.ReadUInt(RippleEditGroundPtr) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(egGuest)) return 0;
             long arr = Memory.ToMmu(egGuest) + StaticPartsOff;
@@ -372,7 +374,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 return pt;
             }
-            _decalNextScan = _tick + 100;   // ~5 s back-off — the part appears once the scene is loaded
+            _decalNextScan = _tickCount + 100;   // ~5 s back-off — the part appears once the scene is loaded
             return 0;
         }
 

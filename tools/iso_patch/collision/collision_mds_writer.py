@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Engine-level MDS splice + flat collision-MDS serialiser (town-agnostic). Split out of
-bake_player_camera_collision.py (2026-09); that module re-exports these names for its importers.
+queens_collision_builder.py (2026-09); that module re-exports these names for its importers.
 
   _variant_off / _replace_a_block  — locate / replace a sub-file's `<name>_a` (or `_c`) MDS block in scene.scn
   build_flat_mds                   — [(node, tris[, colour_entries])] -> flat `_a` MDS (root + children)
-  _pool_split / _fit               — kd_split a pooled soup into <=max_tris nodes with unique 15-char names
+  _pool_split / fit_node_name               — kd_split a pooled soup into <=max_tris nodes with unique 15-char names
 """
 import re, struct
 import os, sys
@@ -16,7 +16,6 @@ from georama_collision import build_coll_mdt
 from tri_util import kd_split
 
 
-_dir = scene_placed.scn_dir   # canonical directory parser (list form)
 
 
 def _variant_off(sub, name, suffix='_a'):
@@ -34,7 +33,7 @@ def _replace_a_block(scn, sub_name, new_mds, suffix='_a'):
     SCN directory. suffix='_a' (player) by default; '_c' rewrites the camera-collision variant. Returns
     (new_scn, delta)."""
     scn = bytearray(scn)
-    entry = next((e for e in _dir(scn) if e[0] == sub_name), None)
+    entry = next((e for e in scene_placed.scn_directory_list(scn) if e[0] == sub_name), None)
     if entry is None:
         raise KeyError(sub_name)
     _, sub_off, sub_size, _ = entry
@@ -66,7 +65,7 @@ def _replace_a_block(scn, sub_name, new_mds, suffix='_a'):
         if toff > vo:
             struct.pack_into('<I', out, pos, toff + delta)
     # SCN directory
-    for name, off, size, eoff in _dir(scn):
+    for name, off, size, eoff in scene_placed.scn_directory_list(scn):
         if off == sub_off:
             struct.pack_into('<I', out, eoff + 0x14, size + delta)
         elif off > sub_off:
@@ -88,7 +87,7 @@ def _unique_names(names):
     return out
 
 
-def _fit(name, used, maxlen=15):
+def fit_node_name(name, used, maxlen=15):
     cand = name[:maxlen]; k = 0
     while cand in used:
         k += 1; suf = '~' + str(k); cand = name[:maxlen - len(suf)] + suf
@@ -125,7 +124,7 @@ def _pool_split(pool, prefix, used, max_tris=100):
     """kd_split a POOLED triangle soup into <=max_tris spatially-compact nodes with unique names. Pooling across
     source meshes (then splitting) packs NEARBY polys into the same node regardless of which mesh they came from,
     so every node has a tight bounding box — which is exactly what the runtime frame-gather self-cull keys off."""
-    return [(_fit(f'{prefix}{bi}', used, 15), bk) for bi, bk in enumerate(kd_split(pool, max_tris))]
+    return [(fit_node_name(f'{prefix}{bi}', used, 15), bk) for bi, bk in enumerate(kd_split(pool, max_tris))]
 
 
 def append_variant_nodes(scn, sub_name, add_nodes, suffix='_a', template_node=1):
@@ -135,7 +134,7 @@ def append_variant_nodes(scn, sub_name, add_nodes, suffix='_a', template_node=1)
     vanilla MDT block is copied byte-for-byte (so per-tri colour/attribute entries such as the
     loading-zone trigger tags survive untouched), then the new MDTs follow. Splices the rebuilt block back
     via _replace_a_block. add_nodes = [(node_name, mdt_bytes), ...]. Returns (new_scn, delta)."""
-    entry = next((e for e in _dir(scn) if e[0] == sub_name), None)
+    entry = next((e for e in scene_placed.scn_directory_list(scn) if e[0] == sub_name), None)
     if entry is None:
         raise KeyError(sub_name)
     _, sub_off, sub_size, _ = entry
