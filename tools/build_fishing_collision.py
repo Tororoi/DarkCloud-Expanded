@@ -23,6 +23,9 @@ computes the plane normal itself).
     python3 tools/build_fishing_collision.py --check    # rebuild in memory; fail if any file differs
     python3 tools/build_fishing_collision.py 2 23       # only these maps
 """
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'lib'))
+import toolpath  # noqa: F401 — puts every tools/ subfolder on sys.path
 import os, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))

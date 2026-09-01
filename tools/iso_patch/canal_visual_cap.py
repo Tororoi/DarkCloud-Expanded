@@ -22,6 +22,9 @@ The MDT grows, so the splice fixes every reference layer (all verified against t
 Run standalone for an offline structural check against the extracted disc:
     DC1_DATA_DIR=~/ROMs/dc_extracted python3 tools/iso_patch/canal_visual_cap.py
 """
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'lib'))
+import toolpath  # noqa: F401 — puts every tools/ subfolder on sys.path
 import os, re, struct, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))

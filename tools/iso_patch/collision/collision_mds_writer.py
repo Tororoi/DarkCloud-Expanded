@@ -6,6 +6,9 @@ queens_collision_builder.py (2026-09); that module re-exports these names for it
   build_flat_mds                   — [(node, tris[, colour_entries])] -> flat `_a` MDS (root + children)
   _pool_split / fit_node_name               — kd_split a pooled soup into <=max_tris nodes with unique 15-char names
 """
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', '..', 'lib'))
+import toolpath  # noqa: F401 — puts every tools/ subfolder on sys.path
 import re, struct
 import os, sys
 _HERE = os.path.dirname(os.path.abspath(__file__))

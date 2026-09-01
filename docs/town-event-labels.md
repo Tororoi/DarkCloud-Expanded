@@ -2,7 +2,7 @@
 
 Every label listed in a per-area table below is **already in use** — a system handler, a live vanilla event, or a label this mod occupies at runtime. **Do not reuse any of them** for a new custom event in that area. Free labels are in the Spare Pool. Areas are ordered by `gedit` code.
 
-> Derived **offline** from the extracted retail ISO (`gedit/<area>/event.stb`), which never changes. Area names are decoded from each area's `gedit/<code>/mapinfo.cfg` header (Shift-JIS). Regenerate with `tools/extract_scene_mesh.py` if a new fishing area is added.
+> Derived **offline** from the extracted retail ISO (`gedit/<area>/event.stb`), which never changes. Area names are decoded from each area's `gedit/<code>/mapinfo.cfg` header (Shift-JIS). Regenerate with `tools/lib/extract_scene_mesh.py` if a new fishing area is added.
 
 ## Area index
 

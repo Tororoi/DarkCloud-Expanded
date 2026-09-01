@@ -81,7 +81,7 @@ catch-bubble injection).
 The `.mes` buffer format (cracked via `GetTextLineDataTop` @ `0x14F4B0`): `u16 count`, `u16` (SetBuff's
 `+0x17A8`/`+0x17AC` delta), `count × {u16 id, u16 wordOff}`, then text. A message's text is at byte
 `2*(count + wordOff + 1)`; glyphs are 16-bit meswin codes, `0xFF01` terminates. Decode/encode with
-`tools/mes_decode.py`.
+`tools/analysis/mes_decode.py`.
 
 ### The name-dedup gotcha (verified)
 
