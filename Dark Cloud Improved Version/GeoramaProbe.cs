@@ -896,12 +896,7 @@ namespace Dark_Cloud_Improved_Version
         /// naming does not survive contact with the data. The CFrame is unambiguous, so use it.
         /// </summary>
         /// <summary>The player's yaw, from the CObject rotation at +0x60 (see EditLoop.CharaRotation).</summary>
-        internal static float ReadYaw()
-        {
-            uint p = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(p)) return 0f;
-            return Memory.ReadFloat(Memory.ToMmu(p) + EditLoop.CharaRotation + 4);
-        }
+        internal static float ReadYaw() => EditLoop.TryReadPlayerYaw(out float yaw) ? yaw : 0f;
 
         private static bool ReadPos(out float x, out float y, out float z)
         {

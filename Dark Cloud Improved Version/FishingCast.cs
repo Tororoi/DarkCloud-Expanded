@@ -13,7 +13,7 @@ namespace Dark_Cloud_Improved_Version
     {
         // Rope arrays: FishingAddresses.FishingRope (point/ukip/ukiv/hookv), resolved from the SCUS_971.11 symtab.
         private static bool  _distpScaled;   // is the shared line rest-length currently stretched for this spot?
-        private static float _facing;        // the fished spot's stance yaw (forward = (sin f, cos f)) — PointFrontDist's axis
+        private static float _facing;        // the player's LIVE yaw this tick (forward = (sin f, cos f)) — PointFrontDist's axis
 
         private const float CastRodTipFront   = 2f;    // rod tip this far FORWARD OF ITS REST position (post-wind-up) -> start the pay-out
         private const float CastWindupThresh  = -5f;   // rod tip must swing this far BEHIND rest first (the wind-up) to arm the trigger
@@ -59,7 +59,7 @@ namespace Dark_Cloud_Improved_Version
         private static float RodTipFrontDist() => PointFrontDist(FishingRope.Point);
 
         /// <summary>Signed distance of a rope point in front of the player, along the PLAYER'S FACING
-        /// (the spot's stance yaw — the session snaps the player to it; forward = (sin f, cos f)).
+        /// (the LIVE yaw fed to Tick each tick — the player can turn before casting; forward = (sin f, cos f)).
         /// ⚠ This used to project along the CAMERA-forward axis (angS), which INVERTS when the follow
         /// camera ends up in front of the player — the wind-up/fling gates then read backwards and the
         /// cast pay-out silently never fired ("line doesn't lengthen when the camera is in front").
@@ -85,7 +85,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Per-tick line LENGTH + cast pay-out (see the comment block inside). <paramref name="aboveStart"/> /
         /// <paramref name="above"/> are the session-resolved distpAbove scales (LineConfigSplit), <paramref name="facing"/>
-        /// the fished spot's stance yaw. Restores the vanilla rest length the moment the session ends.</summary>
+        /// the player's LIVE yaw (the stance yaw only as a fallback — the player can turn before casting, and a stale
+        /// facing inverted the wind-up/fling gates the same way the old camera-axis projection did).
+        /// Restores the vanilla rest length the moment the session ends.</summary>
         internal static void Tick(bool live, float aboveStart, float above, float facing)
         {
             _facing = facing;
