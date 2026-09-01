@@ -17,9 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import scene_placed
 from extract_scene_mesh import load_scene, xform, read_verts, read_tris
 from georama_collision import parse_coll_mdt
-from tri_util import kd_split
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "iso_patch", "collision"))
-from collision_geom import triangle_normal
+from collision_geom import triangle_normal, kd_split
 
 
 def tri_key_tenth(t):

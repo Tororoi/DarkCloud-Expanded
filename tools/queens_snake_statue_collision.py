@@ -7,15 +7,17 @@
       surgery below (PLAYER_COLLISION_REMOVE_TRIS / PLAYER_COLLISION_ADD_TRIS), rebuilt as a fresh MDS APPENDED at the sub's
       end with the header's _a words (+0x78/+0x7c) repointed (old blocks become dead space).
 
-rebuild_h06() -> (new_sub_bytes, orig_size, chunks). Exported to game_data/queens/queens_parts.bin
-(IsoPatcher.ApplyQueensPartSwaps: u32 count; per part name[8] + u32 origSize + u32 newSize + bytes).
+rebuild_h06() -> (new_sub_bytes, orig_size, chunks). Run this file directly to export
+game_data/queens/queens_parts.bin for IsoPatcher.ApplyQueensPartSwaps.
 """
 import math, os, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_scene_mesh import load_scene, xform
 import scene_placed
 import mdt_codec
-from queens_building_camera_hulls import split_tris, build_coll_mds
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'iso_patch', 'collision'))
+from collision_geom import kd_split
+from georama_collision import build_coll_mdt
 
 MAX_PLAYER_COLLISION_TRIS = 1000     # single node = the whole model. Settled: the 400-poly cap does NOT bind
                       # georama-part collision, and fewer/larger nodes snag less than many small ones.
@@ -115,6 +117,46 @@ def camera_hull_cylinder_tris(sub):
     return tris
 
 
+def build_coll_mds(old_mds, chunks, name_prefix='hc'):
+    """A fresh collision MDS: header cloned from old_mds, root null node + one identity-frame
+    node per chunk (entries cloned from old_mds's first mesh node)."""
+    cnt0, tbl0 = struct.unpack_from('<II', old_mds, 8)
+    template = None
+    for i in range(cnt0):
+        b = tbl0 + i * 0x70
+        if struct.unpack_from('<i', old_mds, b + 0x28)[0]:
+            template = old_mds[b:b + 0x70]
+            break
+    assert template is not None
+
+    def entry(idx, nm, mo, par):
+        e = bytearray(template)
+        struct.pack_into('<i', e, 0, idx)
+        nmb = nm.encode('latin1')
+        e[8:24] = nmb + b'\x00' * (16 - len(nmb))
+        struct.pack_into('<ii', e, 0x28, mo, par)
+        ident = [1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0]
+        struct.pack_into('<16f', e, 0x30, *ident)
+        return bytes(e)
+
+    n = len(chunks)
+    new_c = bytearray(old_mds[:0x10])
+    struct.pack_into('<I', new_c, 8, n + 1)
+    new_c += entry(0, 'null1', 0, -1)
+    mdts = [build_coll_mdt(ch, y_shift=0.0) for ch in chunks]
+    pos = 0x10 + (n + 1) * 0x70
+    offs = []
+    for m in mdts:
+        offs.append(pos)
+        pos += len(m) + ((-len(m)) % 16)
+    for k in range(n):
+        new_c += entry(k + 1, f'{name_prefix}{k:02d}', offs[k], 0)
+    for m in mdts:
+        new_c += m
+        new_c += b'\x00' * ((-len(m)) % 16)
+    return bytes(new_c)
+
+
 def rebuild_h06(scn, DIR):
     off, size = DIR['e03h06']
     sub = bytearray(scn[off:off + size])
@@ -128,7 +170,7 @@ def rebuild_h06(scn, DIR):
     a_off = struct.unpack_from('<I', sub, 0x78)[0]
     a_size = struct.unpack_from('<I', sub, 0x7c)[0]
     old_a = bytes(sub[a_off:a_off + a_size])
-    chunks = split_tris(apply_surgery(vis), MAX_PLAYER_COLLISION_TRIS)
+    chunks = kd_split(apply_surgery(vis), MAX_PLAYER_COLLISION_TRIS, axes=(0, 2))
     new_a = build_coll_mds(old_a, chunks, name_prefix='ha')
     while len(sub) % 16:
         sub += b'\x00'
@@ -144,8 +186,20 @@ def rebuild_h06(scn, DIR):
 
 
 if __name__ == '__main__':
+    # Export the rebuilt part to the bin IsoPatcher.ApplyQueensPartSwaps consumes.
+    # Format: u32 count; per part: name[8] + u32 origSubSize (guard) + u32 newSubSize + bytes (16-aligned).
     scn = load_scene('gedit/e03/scene.scn')
     DIR = scene_placed.scn_directory_map(scn)
-    new, orig, chunks = rebuild_h06(scn, DIR)
-    print(f'e03h06: sub {orig} -> {len(new)} bytes; _a = {sum(len(c) for c in chunks)} tris '
-          f'in {len(chunks)} nodes ({[len(c) for c in chunks]}); _c height x{CAMERA_HULL_SCALE_Y}')
+    OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        '..', 'game_data', 'queens', 'queens_parts.bin'))
+    blob = bytearray()
+    entries = [('e03h06',) + rebuild_h06(scn, DIR)[:2]]
+    blob += struct.pack('<I', len(entries))
+    for name, new, orig in entries:
+        blob += name.encode('latin1').ljust(8, b'\x00')
+        blob += struct.pack('<II', orig, len(new))
+        blob += new
+        blob += b'\x00' * ((-len(new)) % 16)
+        print(f'{name}: sub {orig} -> {len(new)}')
+    open(OUT, 'wb').write(blob)
+    print(f'wrote {len(blob)} bytes -> {OUT}')

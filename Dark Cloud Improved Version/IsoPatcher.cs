@@ -11,6 +11,7 @@ using static Dark_Cloud_Improved_Version.MesTextBaker;
 using static Dark_Cloud_Improved_Version.IsoAssetCarver;
 using static Dark_Cloud_Improved_Version.MdtCarve;
 using static Dark_Cloud_Improved_Version.ElfPatches;
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -18,7 +19,8 @@ namespace Dark_Cloud_Improved_Version
     /// Creates a patched COPY of the user's stock Dark Cloud (USA) ISO with the fishing signs baked in, and
     /// publishes the matching pnach to the PCSX2 cheats folder. Cross-platform (macOS / Windows / Linux).
     ///
-    /// C# port of tools/iso_patch/{build_sign_iso, sign_scene, ps2iso}.py — the PROVEN Python patcher. The
+    /// C# port of the (since retired, 2026-09) Python prototype build_sign_iso/sign_scene; the shared ISO
+    /// primitives live on in tools/iso_patch/ps2iso.py. The
     /// patch only rearranges data already on the user's disc: absorb the trailing DMMY. padding into DATA.DAT,
     /// then redirect DATA.HD2 index entries at the freed tail (mes_tex.pak = boot texture, s04/scene.scn =
     /// native kanban part, s04/mapinfo.cfg = its placement), plus a tiny ELF boot-cave that registers the
@@ -63,18 +65,8 @@ namespace Dark_Cloud_Improved_Version
         // Layout + field map: memory town-event-points.md. Func type: 0x12 -> type-3 SCRIPT, 0x13/0x14 ->
         // type-4/5 ladder BOTTOM/TOP. Time [0,24] -> ConvertTime start==end==7 == always-on.
         internal const int EventFuncEntryStride = 0xC0;
-        internal const int FishingLabel = 400;        // == CustomFishingSpot.FishingLabelId; north-bank / primary spot
-        internal const int CanalFishingLabel = 401;  // Queens canal-floor spot — its own label + stance (kanbanc sign)
-        // Queens canal ladder "tide too high" message: a type-3 script point (label 402) co-located with the
-        // climb-down; CanalTide gates the native ladder OR this point by tide. Event-mes id 23 = the line.
-        internal const int LadderMessageLabel = 402;   // == CustomFishingSpot.LadderMsgLabelId
-        internal const int LadderMessageId = 23;                // event-mes id the label-402 script shows
-        // Queens canal tide-evict: label 403 = a tiny _MAP_JUMP(East Harbor) script CanalTide fires as an
-        // event when the tide rises on a player caught in the drained canal (== CustomFishingSpot.CanalWarpLabelId).
-        internal const int CanalWarpLabel = 403;
-        // Dock-spawn event baked into East Harbor (s09): the canal warp's _MAP_JUMP(20, this) makes the engine
-        // run it as the arrival event, placing the player at the Shipwreck dock instead of the Queens-side entry.
-        internal const int DockSpawnLabel = 404;   // == CustomFishingSpot.DockSpawnEvent
+        // Fishing/canal label ids (400/401/402/403/404 + the mes id) live in FishingLabelIds —
+        // the single home for both the bake below and the runtime installer.
         // The Shipwreck (Sunken Ship, s25) exit spot in East Harbor — captured live from a CameraDiag ref after
         // leaving the ship: world (−1311, ~7, 875.7). (Event 128's (1311,7,875.7) was PART-LOCAL — X mirrored →
         // +1311 was off-map. NOT func_mapj00 (−1088,20,1001) = Rando's shop.) Y=7 = feet; the ref's 21 is the
@@ -280,7 +272,7 @@ namespace Dark_Cloud_Improved_Version
             // DIFFERENT trigger (label 401 -> its own per-sign script with the canal-floor stance), so triggering
             // it fishes from the canal floor instead of teleporting to the north bank. Same local trigger offset.
             e03scene = BuildInjectedScene(e03scene, kanbanMds, tmplHdr, BuildKanbanCollision("kanbanc_a"), partName: "kanbanc",
-                                          funcData: BuildFishingFunc(QueensTriggerOffset, CanalFishingLabel));
+                                          funcData: BuildFishingFunc(QueensTriggerOffset, CanalFishingLabelId));
             // The ladder part carries its two baked climb points (type-4 bottom / type-5 top).
             e03scene = BuildInjectedScene(e03scene, ladderMds, tmplHdr, null, "hasigo", bakeIdentity: false,
                                           funcData: BuildLadderFunc());
@@ -324,8 +316,8 @@ namespace Dark_Cloud_Improved_Version
                 Redirect(stbName, ExtendStb(ReadArchive(stbName)));
 
             // Tide-evict destination: bake the dock-spawn event into East Harbor (s09) so the canal warp's
-            // _MAP_JUMP(20, DockSpawnLabel) lands the player at the Shipwreck dock natively (no runtime pin).
-            Redirect("gedit/s09/event.stb", BakeStbLabel(ReadArchive("gedit/s09/event.stb"), DockSpawnLabel, BuildDockSpawnCode()));
+            // _MAP_JUMP(20, DockSpawnEvent) lands the player at the Shipwreck dock natively (no runtime pin).
+            Redirect("gedit/s09/event.stb", BakeStbLabel(ReadArchive("gedit/s09/event.stb"), DockSpawnEvent, BuildDockSpawnCode()));
 
             // 5) fishing text: carve the catch bubble (talk mes 2000) + entry/quit menu (event mes 20/21/22)
             //    from the user's OWN Norune mes and append them to each custom fishing town's talk + event mes,
@@ -349,7 +341,7 @@ namespace Dark_Cloud_Improved_Version
                 // offset (the menu reads 20/21/22 by id), so the small shift is harmless.
                 Redirect($"gedit/{code}/{code}_1.mes",
                          AppendMes(ReadArchive($"gedit/{code}/{code}_1.mes"),
-                                   (20, menu20), (21, menu21), (22, menu22), (LadderMessageId, ladderMsg)));
+                                   (20, menu20), (21, menu21), (22, menu22), (LadderMsgId, ladderMsg)));
             }
 
             // 6) ELF boot-cave + CRC

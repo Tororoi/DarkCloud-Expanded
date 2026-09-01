@@ -13,7 +13,7 @@ sys.path.insert(0, _HERE)                                     # this dir (siblin
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))   # tools/ (scene_placed, georama_collision, tri_util…)
 import scene_placed
 from georama_collision import build_coll_mdt
-from tri_util import kd_split
+from collision_geom import kd_split
 
 
 

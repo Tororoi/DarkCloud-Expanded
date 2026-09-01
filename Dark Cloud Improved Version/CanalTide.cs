@@ -30,7 +30,8 @@ namespace Dark_Cloud_Improved_Version
     ///
     /// Split 2026-09: this class owns the tide LEVEL (target/shown, fade-hidden snap, mizu frame write) and
     /// orchestrates the Queens-only sub-systems: CanalEvict (tide-evict + dock camera), CanalWading (early
-    /// player/cape draw), CanalWaterEffects (CWater body, refraction pin, ripple decals), CanalLadderGate and
+    /// player/cape draw), CanalWaterEffects (CWater body, refraction pin, ripple decals), the ladder tide
+    /// gate (below) and
     /// QueensCanalMist (waterfall mist).
     /// </summary>
 
@@ -78,7 +79,7 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(EditLoop.MapNo) != TownMapNo.Queens)
             {
                 _frame = 0; _shownWaterLevel = float.NaN; _lastMeshLevel = float.NaN; _lastBakedLevel = int.MinValue;
-                CanalWaterEffects.Reset(); CanalWading.Reset(); CanalEvict.Reset(); CanalLadderGate.Reset();   // Queens-only state
+                CanalWaterEffects.Reset(); CanalWading.Reset(); CanalEvict.Reset(); _loggedLadderGate = false;   // Queens-only state
                 Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);                         // disarm the baked redraw
                 ClearSprayTable();                                                        // no waterfall mist outside Queens
                 return;
@@ -138,7 +139,7 @@ namespace Dark_Cloud_Improved_Version
             bool low = _shownWaterLevel <= LowTideThreshold;
             CanalWading.Arm(low);                       // low tide: early player/cape draw under the water pass
             CanalWaterEffects.Tick(_shownWaterLevel, low, _frame);  // refraction pin, quad colour, ripple decals
-            CanalLadderGate.Apply(low);
+            LadderGateApply(low);
 
             // Re-bake the FISHING water (baked into the injected script at install) once the shown level has
             // settled on a new level — re-writes only the fishing bytecode, skipped mid-session.
@@ -180,6 +181,54 @@ namespace Dark_Cloud_Improved_Version
             }
             Log("mizu__a01 not found in 0x20300000-0x21E00000");
             return 0;
+        }
+
+        // ── Canal-ladder tide gate (former CanalLadderGate.cs) ──────────────────────────────────────
+        // Canal-ladder tide gate: the injected event points all sit at x≈LadderWorldX (706) — the climb pair (rec
+        // types 4/5) plus our co-located type-3 message point (label 402). CheckEventPoint bails on
+        // enabled(+0x00)==0, and EdGetEvent matches ONE point, so flipping enabled by tide switches which one
+        // the X-press hits: LOW → climb pair on / message off (real climb); otherwise → climb pair off /
+        // message on (the "tide too high" line). Re-asserted every tick so a town rebuild can't strand it.
+        private const long EvArrPtr = 0x01D19700, EvCountAddr = 0x01D19704;  // live ED_EVENT_POINT array ptr + count (guest form of EventPoints.ArrayPtr/Count)
+        private const long EvStride = EventPoints.Stride, EvEnabled = EventPoints.Enabled, EvType = EventPoints.Type,
+                           EvLabel = EventPoints.ItemOrLabel, EvPos = EventPoints.Position;
+        private const int  LadderMsgLabel = FishingLabelIds.LadderMsgLabelId;   // == 402
+        private const float LadderGateX = 706f, LadderGateXTol = 12f;        // LadderWorldX ± tol — only our cluster
+        private static bool _loggedLadderGate;
+
+        private static void LadderGateApply(bool low)
+        {
+            uint arrGuest = Memory.ReadUInt(EvArrPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(arrGuest)) return;
+            long arr = Memory.ToMmu(arrGuest);
+            int count = Memory.ReadInt(EvCountAddr);
+            if (count <= 0 || count > 256) return;                            // sanity — array not yet built
+
+            int climbs = 0, msgs = 0;
+            for (int i = 0; i < count; i++)
+            {
+                long rec = arr + i * EvStride;
+                int type = Memory.ReadInt(rec + EvType);
+                if (type != 3 && type != 4 && type != 5) continue;
+                if (Math.Abs(Memory.ReadFloat(rec + EvPos) - LadderGateX) > LadderGateXTol) continue;  // our x706 cluster only
+                if (type == 3)
+                {
+                    if (Memory.ReadInt(rec + EvLabel) != LadderMsgLabel) continue;  // not our message point (e.g. a fishing sign)
+                    SetEventEnabled(rec, !low); msgs++;                             // message: on at high tide
+                }
+                else { SetEventEnabled(rec, low); climbs++; }                       // climb pair: on at low tide
+            }
+            if (!_loggedLadderGate && (climbs > 0 || msgs > 0))
+            {
+                Log($"ladder tide-gate wired ({climbs} climb pt, {msgs} message pt; low={low})");
+                _loggedLadderGate = true;
+            }
+        }
+
+        private static void SetEventEnabled(long rec, bool on)
+        {
+            int want = on ? 1 : 0;
+            if (Memory.ReadInt(rec + EvEnabled) != want) Memory.WriteInt(rec + EvEnabled, want);
         }
 
         private static float TargetY(TimeOfDay tod) => tod switch

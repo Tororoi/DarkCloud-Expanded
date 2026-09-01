@@ -8,7 +8,12 @@ no file is ever grown or shifted. The two levers we rely on:
     padding file (the game never reads it), yielding ~63 MB of free tail space for new archive entries.
   * rename_root_file() / replace_in_file() — same-length in-place edits (used to change the boot serial).
 
-No side effects at import — callers open the ISO and pass the handle in.
+No side effects at import — callers open the ISO and pass the handle in. CLI (former absorb_dummy.py /
+make_patched_copy.py):
+
+  python3 tools/iso_patch/ps2iso.py absorb --dryrun            # validate the DMMY. absorb against $DC1_ISO
+  python3 tools/iso_patch/ps2iso.py absorb /path/to/out.iso    # write a patched COPY with the absorb applied
+  python3 tools/iso_patch/ps2iso.py copy [--name N] [--out D] [--dryrun]   # named patched copy for PCSX2
 """
 import struct
 
@@ -128,3 +133,66 @@ def absorb_dummy(f, recs, host="DATA.DAT", dummy="DMMY."):
     new_size  = h['size'] + dummy_sectors*SECTOR
     set_file_size(f, h, new_size)
     return free_off, new_size - free_off
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────────────────────────
+def _cli_absorb(args):
+    import os, sys, shutil
+    src = os.environ.get("DC1_ISO")
+    if not src: raise SystemExit("Set $DC1_ISO to your Dark Cloud (USA) ISO (see .env.sample)")
+    with open(src, "rb") as f:
+        recs = parse_root(f)
+    dat, dm = recs["DATA.DAT"], recs["DMMY."]
+    dummy_sectors = (dm["size"] + SECTOR - 1) // SECTOR
+    print(f"source ISO : {src}")
+    print(f"DATA.DAT   : dir-record @ {dat['rec_off']:#x}, size {dat['size']:,}")
+    print(f"absorb ->  : new size {dat['size'] + dummy_sectors*SECTOR:,} "
+          f"(+{dummy_sectors*SECTOR/1e6:.1f} MB free at archive offset {dat['size']:#x})")
+    if "--dryrun" in args:
+        print("dry run — no file written."); return
+    out = next((a for a in args if not a.startswith("--")), None)
+    if not out: raise SystemExit("give an output path for the patched copy, or use --dryrun")
+    print(f"copying -> {out} ...")
+    shutil.copyfile(src, out)
+    with open(out, "r+b") as f:
+        free_off, free_bytes = absorb_dummy(f, parse_root(f))
+    print(f"done. +{free_bytes/1e6:.1f} MB free @ offset {free_off:#x}. Boot {out} — must run identically to stock.")
+
+def _cli_copy(args):
+    import os, shutil, argparse
+    ap = argparse.ArgumentParser(prog="ps2iso.py copy",
+                                 description="Patched COPY of $DC1_ISO: absorb DMMY. into DATA.DAT (~63 MB free "
+                                             "tail); serial SCUS-97111 unchanged so Region/Compat + the CRC-keyed "
+                                             "pnach still apply and saves are shared.")
+    ap.add_argument("--out", default=os.path.dirname(os.environ.get("DC1_ISO", "") or "."))
+    ap.add_argument("--name", default="Dark Cloud - Expanded",
+                    help="output filename (no .iso); shows in PCSX2's File Title column")
+    ap.add_argument("--dryrun", action="store_true")
+    a = ap.parse_args(args)
+    src = os.environ.get("DC1_ISO")
+    if not src: raise SystemExit("Set $DC1_ISO to your Dark Cloud (USA) ISO (see .env.sample)")
+    with open(src, "rb") as f:
+        recs = parse_root(f)
+    dat, dm = recs.get("DATA.DAT"), recs.get("DMMY.")
+    if dat is None or dm is None:
+        raise SystemExit("expected DATA.DAT + DMMY. in the ISO root — is this a Dark Cloud (USA) disc?")
+    dummy_sectors = (dm["size"] + SECTOR - 1) // SECTOR
+    out = os.path.join(a.out, a.name + ".iso")
+    print(f"source ISO : {src}")
+    print(f"absorb     : DATA.DAT {dat['size']:,} -> {dat['size'] + dummy_sectors*SECTOR:,} "
+          f"(+{dummy_sectors*SECTOR/1e6:.1f} MB free)")
+    print(f"output     : {out}")
+    if a.dryrun:
+        print("dry run — no file written."); return
+    print(f"copying -> {out} ...")
+    shutil.copyfile(src, out)
+    with open(out, "r+b") as f:
+        free_off, free_bytes = absorb_dummy(f, parse_root(f))
+    print(f"done. +{free_bytes/1e6:.1f} MB free @ {free_off:#x}. PCSX2 Title 'Dark Cloud'; File Title '{a.name}'.")
+
+if __name__ == "__main__":
+    import sys
+    cmds = {"absorb": _cli_absorb, "copy": _cli_copy}
+    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
+        raise SystemExit(__doc__)
+    cmds[sys.argv[1]](sys.argv[2:])

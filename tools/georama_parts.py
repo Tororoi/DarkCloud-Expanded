@@ -12,6 +12,7 @@ lod_models(scene_rel, name_re) -> {part_name: {'0': tris, '1': tris, '2': tris}}
   MDS block. Parts with fewer than two LOD levels are omitted.
 """
 import re
+import struct
 import mdt_codec
 from extract_scene_mesh import load_scene, xform
 import scene_placed
@@ -136,6 +137,34 @@ def part_models(scene_rel, name_re):
         out[sub] = {'tris': tris,
                     'bbox': [round(min(xs),1), round(min(ys),1), round(min(zs),1),
                              round(max(xs),1), round(max(ys),1), round(max(zs),1)]}
+    return out
+
+# ── DEFAULT town layout (former georama_default.py) ─────────────────────────────────────────────
+# gdata0.edt = 16-byte records (x,y,z float, code int32), code==-1 ends. code low-16 = part index
+# (0..11 = buildings e03h01..e03h12, 12 = tree, 13 = road), high-16 (signed) = rotation (mod 4).
+def default_layout(gdata_rel):
+    edt = load_scene(gdata_rel)
+    out = {'buildings': [], 'trees': [], 'roads': []}
+    o = 0xc
+    while o + 16 <= len(edt):
+        x, y, z = struct.unpack_from('<3f', edt, o)
+        code = struct.unpack_from('<i', edt, o + 12)[0]
+        o += 16
+        if code == -1:
+            break
+        part = code & 0xffff
+        rot = (code >> 16) & 0xffff
+        if rot >= 0x8000:
+            rot -= 0x10000
+        rot &= 3
+        x, y, z = round(x), round(y), round(z)          # snap off the 0.1 bias
+        if part <= 11:
+            out['buildings'].append({'part': part, 'name': 'e03h%02d' % (part + 1),
+                                     'x': x, 'y': y, 'z': z, 'rot': rot})
+        elif part == 12:
+            out['trees'].append({'x': x, 'y': y, 'z': z, 'rot': rot})
+        elif part == 13:
+            out['roads'].append({'x': x, 'y': y, 'z': z, 'rot': rot})
     return out
 
 

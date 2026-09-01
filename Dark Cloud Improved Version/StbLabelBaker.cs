@@ -1,3 +1,4 @@
+using static Dark_Cloud_Improved_Version.FishingLabelIds;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -33,12 +34,13 @@ namespace Dark_Cloud_Improved_Version
         // SINGLE label. The mod's install claims each by id and writes straight into it: no runtime renumber,
         // and nothing spills across two labels (the old "arena run" that retired a second label). The three
         // custom fishing towns have no native 133/134/400/9600, so these ids are collision-free.
-        // ⚠ FishingSpareLabelIds MUST match CustomFishingSpot.{MenuSubLabelId=9600, FishingLabelId=400} and
-        // EventPoints.{FishingExitLabel=133, FishingBaitLabel=134}. Sizes measured 2026-07-24:
+        // Ids come straight from FishingLabelIds / EventPoints — the same constants the runtime installer
+        // claims, so bake and install cannot drift. Sizes measured 2026-07-24:
         // menu 1780, enter 1994, quit 892, bait 436. Label 401 = the Queens canal-floor per-sign script (its own
         // stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
-        internal const int FishingTerminatorLabelId = 9500;
-        internal static readonly int[] FishingSpareLabelIds   = { 9600, 400, 401, 133, 134, LadderMessageLabel, CanalWarpLabel };  // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict
+        internal static readonly int[] FishingSpareLabelIds   =
+            { MenuSubLabelId, FishingLabelId, CanalFishingLabelId, EventPoints.FishingExitLabel,
+              EventPoints.FishingBaitLabel, LadderMsgLabelId, CanalWarpLabelId };   // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict
         internal static readonly int[] FishingSpareLabelSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300, 0x100 };               // one size per id, same order
         // ↑ labels 402 (ladder tide-message) + 403 (tide-evict _MAP_JUMP) baked into every fishing town's stb
         //   (unused outside Queens, harmless — like 401); CustomFishingSpot installs them in Queens only.
@@ -74,7 +76,7 @@ namespace Dark_Cloud_Improved_Version
             return outb;
         }
 
-        // The dock-spawn event body (baked into s09 as DockSpawnLabel): reset the world coord to identity so
+        // The dock-spawn event body (baked into s09 as DockSpawnEvent): reset the world coord to identity so
         // the coords are plain world, snap the player (charaId -1) to the Shipwreck dock, face DockSpawnFacing, RET.
         // Same shape CustomFishingSpot uses for the fishing stance (_SET_WORLD_COORD + _SET_NPC_POS/_ROT).
         internal static byte[] BuildDockSpawnCode()

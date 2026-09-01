@@ -29,7 +29,7 @@ from collision_mds_writer import append_variant_nodes
 from georama_collision import build_coll_mdt
 from brownboo_camera_collision import vanilla_v_nodes, iwa01_ring_obj56
 from brownboo_rock_data import ROCKS
-from tri_util import kd_split
+from collision_geom import kd_split
 
 H01_POS_Y = -10.0                                   # s04h01's single mapinfo placement (0,-10,0) rot 0
 

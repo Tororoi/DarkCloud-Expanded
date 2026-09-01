@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Pure triangle geometry for the collision bakes (no town data): box/plane predicates, rounded tri keys,
-vector math, the coplanar-merge engine (simplify_coplanar) and authored-quad builders. Split out of
-queens_collision_builder.py (2026-09)."""
+vector math, the coplanar-merge engine (simplify_coplanar), authored-quad builders, and the shared
+kd_split / chaikin triangle-soup utilities (former tri_util.py). Split out of queens_collision_builder.py
+(2026-09). kd_split unifies three per-tool implementations exactly — callers keep their proven node
+layouts via the knobs: queens bake -> kd_split(t, 100); brownboo -> proportional=True; snake statue/
+building hulls -> axes=(0, 2)."""
 import math
 
 
@@ -193,3 +196,40 @@ def _dir_quad(a, b, c, d, want):
 def _quad(a, b, c, d):
     """Two tris (a,b,c,d wound in order) for an explicit authored quad."""
     return [[a, b, c], [a, c, d]]
+
+
+def kd_split(tris, max_tris, axes=(0, 1, 2), proportional=False):
+    """Recursively split the triangle soup along its longest centroid axis (of `axes`) until each
+    leaf <= max_tris. Median split (default) gives balanced power-of-two leaves (can land at
+    ~max/2); proportional hands each side its ceil(n/max) leaf share, so leaves sit just under
+    max_tris."""
+    def cen(t):
+        return ((t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3,
+                (t[0][2] + t[1][2] + t[2][2]) / 3)
+
+    def rec(ts):
+        if proportional:
+            k = math.ceil(len(ts) / max_tris)
+            if k <= 1:
+                return [ts]
+        elif len(ts) <= max_tris:
+            return [ts]
+        cs = [cen(t) for t in ts]
+        axis = max(axes, key=lambda a: max(c[a] for c in cs) - min(c[a] for c in cs))
+        order = sorted(range(len(ts)), key=lambda i: cs[i][axis])
+        mid = round(len(ts) * (k // 2) / k) if proportional else len(ts) // 2
+        return rec([ts[i] for i in order[:mid]]) + rec([ts[i] for i in order[mid:]])
+
+    return rec(list(tris))
+
+
+def chaikin(poly):
+    """One corner-cutting pass (Chaikin) on a closed xz polygon: doubles the points, rounds the
+    corners."""
+    out = []
+    n = len(poly)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
+        out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
+    return out
