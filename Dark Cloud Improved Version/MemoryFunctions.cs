@@ -42,7 +42,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!string.IsNullOrEmpty(xdg))
                 {
                     candidates.Add(Path.Combine(xdg, sockName));
-                    candidates.Add(Path.Combine(xdg, "app", "net.pcsx2.PCSX2", sockName)); // Flatpak
+                    candidates.Add(Path.Combine(xdg, ".flatpak", "net.pcsx2.PCSX2", "xdg-run", sockName)); // Flatpak
                 }
                 candidates.Add(Path.Combine(Path.GetTempPath(), sockName)); // macOS $TMPDIR
                 candidates.Add("/tmp/" + sockName);
