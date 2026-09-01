@@ -32,7 +32,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_mangoDumped)
             {
                 _mangoDumped = true;
-                long v = 0x21D25B90 + MangoSlot * 0x14A0;
+                long v = Villagers.ObjBase + MangoSlot * 0x14A0;
                 Log($"Mango = villager[{MangoSlot}] modelId={Memory.ReadShort(v + 0x1449)}: VILLAGER_INFO+0x70 was " +
                     $"({Memory.ReadFloat(info + 0x70):0.#}, {Memory.ReadFloat(info + 0x74):0.#}, {Memory.ReadFloat(info + 0x78):0.#}) " +
                     $"-> ({MangoX}, {MangoY}, {MangoZ})");

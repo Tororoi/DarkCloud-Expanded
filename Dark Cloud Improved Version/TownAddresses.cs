@@ -348,6 +348,36 @@ namespace Dark_Cloud_Improved_Version
     /// (0x158D80) both start with <c>if (map &lt; 0 || 5 &lt; map) return NULL;</c>. All six slots are
     /// populated in the retail build, so there is no free slot for a seventh Georama town.
     /// </summary>
+    /// <summary>
+    /// The live town follow-camera (CCameraFollow), reached through the ELF's camera POINTER —
+    /// resolves to <see cref="EditLoop.MainCamera"/> while walking/fishing. One home for the
+    /// pointer and the Step-consumed field offsets (previously re-declared per feature file).
+    /// </summary>
+    internal static class FollowCamera
+    {
+        /// <summary>Pointer to the active CCameraFollow.</summary>
+        internal const long Ptr = 0x21D19678;
+
+        internal const int RefX = 0x2C0;       // ref (look-at) xyz used by Step
+        internal const int RefY = 0x2C4;
+        internal const int RefZ = 0x2C8;
+        internal const int Dist = 0x2D0;
+        internal const int Height = 0x2D4;
+        internal const int Angle = 0x2D8;      // target yaw (== EditLoop.CameraAngle)
+        internal const int AngleNow = 0x2DC;   // smoothed yaw (== EditLoop.CameraAngleNow)
+
+        /// <summary>The per-frame camera-collision gather arena struct pointer
+        /// (WorkBuffer: {+0 data, +8 used, +C cap}) — see CameraGatherArenaFix.</summary>
+        internal const long WorkBufferPtr = 0x202A2388;
+
+        /// <summary>The camera object as an MMU address, or 0 if the pointer isn't live.</summary>
+        internal static long Base()
+        {
+            uint p = Memory.ReadUInt(Ptr) & Memory.PhysAddrMask;
+            return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
+        }
+    }
+
     internal static class GeoramaTables
     {
         internal const long EditPartsData   = 0x202540D0; // 6 maps x 25 parts x 188 B = 28,200

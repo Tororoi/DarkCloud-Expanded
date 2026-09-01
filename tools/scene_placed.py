@@ -14,15 +14,25 @@ import mdt_codec
 from extract_scene_mesh import load_scene, xform
 
 
-def _scndir(scn):
-    o, d = 0x10, {}
+def scn_dir(scn):
+    """The scene.scn sub-file directory (0x30-stride entries from 0x10) as an ordered list of
+    (name, off, size, entry_off) — entry_off is where the entry itself sits, for repointing."""
+    out, o = [], 0x10
     while o + 0x30 <= len(scn):
-        nm = scn[o:o+16].split(b'\x00')[0].decode('latin1', 'replace')
+        nm = scn[o:o + 16].split(b'\x00')[0].decode('latin1', 'replace')
         if not nm or not nm[0].isalnum():
             break
         off, size = struct.unpack_from('<II', scn, o + 0x10)
-        d.setdefault(nm, (off, size))   # first entry wins (the sub-file's data is shared across instances)
+        out.append((nm, off, size, o))
         o += 0x30
+    return out
+
+
+def _scndir(scn):
+    """{name: (off, size)} — first entry wins (the sub-file's data is shared across instances)."""
+    d = {}
+    for nm, off, size, _ in scn_dir(scn):
+        d.setdefault(nm, (off, size))
     return d
 
 

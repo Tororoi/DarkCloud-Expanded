@@ -13,7 +13,7 @@ game list's File Title / filename column (the Title column stays the proper Game
   python3 tools/iso_patch/make_patched_copy.py --name "Dark Cloud - Expanded"
 Requires $DC1_ISO (see .env.sample).
 """
-import os, sys, shutil, argparse
+import os, shutil, argparse
 import ps2iso
 
 def main():

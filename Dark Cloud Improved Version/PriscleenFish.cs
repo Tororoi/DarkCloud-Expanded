@@ -41,7 +41,7 @@ namespace Dark_Cloud_Improved_Version
         private const uint StandInPathPtr = 0x0029FC38;     // -> "chara/f01a.chr" (name_419[0]; a real file)
         private const string StandInTag  = "f01a";          // identifies the redirected caught-model BG load
 
-        private const long BgReadInfo = 0x21CBB0C0;         // bg_read_info: 32 slots, stride 0x9C
+        private const long BgReadInfo = BgRead.Table;  // bg_read_info: 32 slots, stride 0x9C
         private const int  BgSlots    = 32;
         private const int  BgStride   = 0x9C;
         private const int  BgActive   = 0x00;               // slot in use (LoadFileBG sets 1)
@@ -50,8 +50,8 @@ namespace Dark_Cloud_Improved_Version
         private const int  BgSize     = 0x90;               // file size
         private const int  BgBuffer   = 0x8C;               // -> the destination buffer the model was read into
 
-        private const long BattleFishPtr = 0x202A2B60;      // BattleFish: the CFish* currently being reeled
-        private const long FishArrayPtr  = 0x202A2B58;      // Fish: the CFish[] base pointer
+        private const long BattleFishPtr = FishingSpot.BattleFish;  // the CFish* currently being reeled
+        private const long FishArrayPtr  = FishingSpot.Fish;        // the CFish[] base pointer
         private const int  FishStride    = 0x2410;
         private const int  CFishSpecies  = 0x00;            // CFish+0 = species id
 

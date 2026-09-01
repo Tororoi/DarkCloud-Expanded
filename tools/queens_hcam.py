@@ -15,7 +15,8 @@ from extract_scene_mesh import load_scene, xform
 import scene_placed
 import mdt_codec
 from georama_parts import lod_models
-from westbank_smooth_bake import build_coll_mdt
+from georama_collision import build_coll_mdt
+from tri_util import kd_split
 
 CAND_PARTS = ('e03h04', 'e03h05', 'e03h08', 'e03h09')
 ROOF_ZONE = 0.45             # per-body-node: tris with lowest vert above this height fraction = roof
@@ -84,17 +85,8 @@ def candidate_tris():
 
 
 def split_tris(tris, max_tris=MAX_NODE_TRIS):
-    """Recursive median kd-split on the longest xz axis until every chunk <= max_tris."""
-    if len(tris) <= max_tris:
-        return [tris]
-    cens = [((t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][2] + t[1][2] + t[2][2]) / 3) for t in tris]
-    xs = [c[0] for c in cens]; zs = [c[1] for c in cens]
-    ax = 0 if (max(xs) - min(xs)) >= (max(zs) - min(zs)) else 1
-    order = sorted(range(len(tris)), key=lambda i: cens[i][ax])
-    mid = len(order) // 2
-    a = [tris[i] for i in order[:mid]]
-    b = [tris[i] for i in order[mid:]]
-    return split_tris(a, max_tris) + split_tris(b, max_tris)
+    """Median kd-split on the longest xz axis until every chunk <= max_tris (tri_util.kd_split)."""
+    return kd_split(tris, max_tris, axes=(0, 2))
 
 
 def build_coll_mds(old_mds, chunks, name_prefix='hc'):

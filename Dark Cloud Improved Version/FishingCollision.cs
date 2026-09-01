@@ -135,7 +135,7 @@ namespace Dark_Cloud_Improved_Version
         // Fish array + collision-count layout: `Fish` (ptr) @0x202A2B58, `FishNum` @0x202A2B64; each CFish is
         // 0x2410 bytes; SetCPoly__5CFishFP6CCPolyi (0x240470) stores the poly list @+0x2400 and the COUNT
         // @+0x2404, which Step__5CFishFv (0x240480) reads to test movement against.
-        private const long FishPtr = 0x202A2B58, FishNumAddr = 0x202A2B64;
+        private const long FishPtr = FishingSpot.Fish, FishNumAddr = FishingSpot.FishNum;
         private const long FishStride = 0x2410, FishCPolyCount = 0x2404;
 
         /// <summary>Re-point every live fish's cpoly COUNT at the current cpoly_num.

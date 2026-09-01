@@ -28,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool Enabled = true;
         internal static bool Diagnostics = false;   // log the redirect/restore transitions
 
-        private const long WorkBufferPtr = 0x202A2388;   // -> struct {dataPtr, ?, used, cap}
+        private const long WorkBufferPtr = FollowCamera.WorkBufferPtr;   // -> struct {dataPtr, ?, used, cap}
         private const uint NewBaseGuest  = 0x01F56400;   // Mirage MeshCave (dungeon-only) — see class doc
         private const int  NewCapUnits   = 0x5800;       // 0x58000 B / 0x10 = 4505 CCPolys' worth
 

@@ -17,7 +17,7 @@ shipped patcher will carve them from the user's ISO instead; the bytes are ident
   python3 tools/iso_patch/build_sign_iso.py            # -> ~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso
 Requires $DC1_ISO (see .env.sample).
 """
-import os, sys, struct, shutil
+import os, struct, shutil
 import ps2iso
 
 SEC = 2048

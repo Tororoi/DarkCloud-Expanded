@@ -6,6 +6,34 @@ namespace Dark_Cloud_Improved_Version
 {
     public class ReusableFunctions
     {
+
+        /// <summary>First occurrence of <paramref name="needle"/> in <paramref name="hay"/> at or after
+        /// <paramref name="start"/>, else -1. The one byte-search for the ISO/scene patchers (was
+        /// duplicated as IsoPatcher.Find/FindFrom/IndexOf and CanalTide.IndexOf).</summary>
+        internal static int IndexOfBytes(byte[] hay, byte[] needle, int start = 0)
+        {
+            for (int i = System.Math.Max(0, start); i <= hay.Length - needle.Length; i++)
+            {
+                int j = 0;
+                while (j < needle.Length && hay[i + j] == needle[j]) j++;
+                if (j == needle.Length) return i;
+            }
+            return -1;
+        }
+
+        /// <summary>Last occurrence of <paramref name="needle"/> starting at or before
+        /// <paramref name="before"/>, else -1.</summary>
+        internal static int LastIndexOfBytes(byte[] hay, byte[] needle, int before)
+        {
+            for (int i = System.Math.Min(before, hay.Length - needle.Length); i >= 0; i--)
+            {
+                int j = 0;
+                while (j < needle.Length && hay[i + j] == needle[j]) j++;
+                if (j == needle.Length) return i;
+            }
+            return -1;
+        }
+
         /// <summary>
         /// Returns a timestamp to use in the console logs
         /// </summary>
