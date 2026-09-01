@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Diagnostics;
 using static Dark_Cloud_Improved_Version.IsoBytes;
 using static Dark_Cloud_Improved_Version.SceneBaker;
+using static Dark_Cloud_Improved_Version.TownSceneBakes;
 using static Dark_Cloud_Improved_Version.StbLabelBaker;
 using static Dark_Cloud_Improved_Version.MesTextBaker;
 using static Dark_Cloud_Improved_Version.IsoAssetCarver;
@@ -27,7 +28,7 @@ namespace Dark_Cloud_Improved_Version
     /// texture. Nothing game-derived is bundled — the sign mesh + texture are carved from the user's OWN ISO.
     ///
     /// Split 2026-09: this class keeps the config bank, the orchestration (Patch / ApplySignPatch) and
-    /// the pnach/collision-bake post-steps; the transforms live in IsoBytes, SceneBaker, StbLabelBaker,
+    /// the pnach/collision-bake post-steps; the transforms live in IsoBytes, SceneBaker, TownSceneBakes, StbLabelBaker,
     /// IsoAssetCarver, MdtCarve and ElfPatches / ElfCameraPatches / ElfWaterPatches (all `using static`'d here).
     /// </summary>
     internal static class IsoPatcher

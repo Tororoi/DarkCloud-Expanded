@@ -1140,7 +1140,9 @@ GATE_OUTER_FACE_EXTEND_TRIS = [                                           # oute
     [[-23.0, 70.0, -50.0], [-22.93, 53.0, -26.0], [-22.93, 47.0, -36.0]],
     [[-23.0, 70.0, -50.0], [-22.93, 47.0, -36.0], [-23.0, 47.0, -50.0]],
 ]
-GATE_OUTER_FILLER_TRIS = [                                            # vertical filler walls (x=-73/-23, y70..86.9) now obsolete
+GATE_OUTER_FILLER_TRIS = [    # VANILLA vertical filler walls (x=-73/-23, y70..86.9), obsolete IN-GAME once the
+                              # roof merge covers them -> gate_torch_simplify DROPS them from the mesh. LIVE data:
+                              # deleting this list puts 32 tris back into the baked _c (verified 2026-09).
     [[-23.0, 78.0, -50.0], [-23.0, 76.68, -25.0], [-23.0, 70.0, -50.0]],
     [[-23.0, 84.68, -25.02], [-23.0, 76.68, -25.0], [-23.0, 78.0, -50.0]],
     [[-23.0, 84.68, -25.02], [-23.0, 78.9, 0.0], [-23.0, 76.68, -25.0]],

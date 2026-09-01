@@ -14,8 +14,8 @@ through these helpers and redirects the scene into the DATA.DAT tail).
       `v`       — the vanilla terrain camera hull, byte-identical tris (404) — NOT ours to change;
       `c56_*`   — obj56 with ONLY the iwa01 rock replaced by the CSG hull (horn funnels + tunnel),
                   kd-split into <=100-tri nodes. Building cylinders stay VANILLA (the tightened cylinders of
-                  2026-08 clipped visibly — camera geometry needs padding; tight_obj56 remains available but
-                  unwired). Same proven pipeline as the Queens e03g04_c bake (build_flat_mds + _replace_a_block),
+                  2026-08 clipped visibly — camera geometry needs padding; the tight_obj56 code was removed 2026-09,
+                  recoverable via git). Same proven pipeline as the Queens e03g04_c bake (build_flat_mds + _replace_a_block),
                   just targeting suffix `_v`.
 """
 import os, sys

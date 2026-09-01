@@ -557,7 +557,7 @@ sign_mesh = [[[_sv[i][0] + SIGN_POS[0], _sv[i][1] + SIGN_POS[1], _sv[i][2] + SIG
              for a, b, c in read_tris(_kb, 0x80)]
 print(f"sign mesh: {len(sign_mesh)} tris at {SIGN_POS}")
 
-# ---- VANILLA native cpoly, dumped live from RAM by GeoramaProbe.DumpCPolyFile ----
+# ---- VANILLA native cpoly, dumped live from RAM by the retired GeoramaProbe (git) ----
 # This is the EXACT collision the town already loads (PickUpPoly) at fishing-spot load. Splitting by
 # the triangle's (NORMALIZED) normal.Y shows what KIND of collision exists where: floor-ish (|ny|>0.7)
 # is what the hook/bobber raycast honours; wall-ish (|ny|<0.3) is what would contain fish.
@@ -577,7 +577,7 @@ LAD_R, LAD_Y = 45, 25   # top platforms lean out up to ~42u from the base positi
 def van_cut(cx, cy, cz, miny):
     return miny >= LAD_Y and any(math.hypot(cx-lx, cz-lz) < LAD_R for lx, lz in LAD_POS)
 van_floor, van_wall, van_mid, van_dropped = [], [], [], []
-CPOLY_CSV = os.path.join(OUT, 'vanilla_cpoly.csv')   # dumped by GeoramaProbe into game_data/brownboo/
+CPOLY_CSV = os.path.join(OUT, 'vanilla_cpoly.csv')   # dumped by the retired GeoramaProbe into game_data/brownboo/
 if os.path.exists(CPOLY_CSV):
     with open(CPOLY_CSV) as fh:
         next(fh, None)   # header row
@@ -602,7 +602,7 @@ if os.path.exists(CPOLY_CSV):
 else:
     print("vanilla cpoly: (no vanilla_cpoly.csv — start fishing in Brownboo to dump it)")
 
-# ---- base-ground GRID, dumped live from RAM (GeoramaProbe.DumpGroundGrid) = the accurate pond bottom ----
+# ---- base-ground GRID, dumped live from RAM (retired GeoramaProbe) = the accurate pond bottom ----
 # CSV: area,i,j,worldX,worldZ,height,code. Reconstruct the surface by connecting each cell to its +i/+j
 # neighbours into quads. Split at the waterline so the underwater BOWL (the pond bottom the collision
 # gather skips) reads distinctly from the dry land.
@@ -762,53 +762,22 @@ layers.append({'key': 'fishgather',
 print(f"fishing gather replica: {_gath_n} polys of 1024 ({len(_gath)} from s04g01_a, {_gath_grid} grid)"
       + ("  (grid term needs ground_grid.csv — absent)" if not os.path.exists(GRID_CSV) else ""))
 
-# ---- CUSTOM camera collision: our authored version of s04g01_v obj56 (vanilla − removals + additions,
-#      tools/brownboo_camera_collision.py — the future ISO bake reads the same module). ----
-from brownboo_camera_collision import custom_obj56_tris, custom_h01_v_nodes
-_cus = custom_obj56_tris()
-layers.append({'key': 'nc_custom56', 'label': f'CUSTOM obj56 ({len(_cus)}) [CAMERA]',
-               'tris': _cus, 'color': [120, 255, 140], 'alpha': 0.7, 'border': '#6f8', 'on': False,
-               'group': 'Native collision (_a player / _v camera)'})
-print(f"custom obj56: {len(_cus)} tris")
-
 # ---- IWA01 tunnel-rock hull: REPLACES the lumpy obj56 iwa01 selection with a rock-centred circle wall +
 #      native tunnel interior + entrance collars extended along their own taper to meet the circle. ----
-from brownboo_camera_collision import iwa01_ring_tris, iwa01_ring_obj56, custom_obj56_full
+from brownboo_camera_collision import iwa01_ring_tris, iwa01_ring_obj56
 _ibuild = iwa01_ring_tris()
 _iobj56 = iwa01_ring_obj56()
-_ifull  = custom_obj56_full()
 # THE SHIPPED obj56: vanilla obj56 with ONLY the iwa01 rock replaced by the CSG hull (central cylinder
 # left VANILLA) — exactly what iwa01_ring_obj56 bakes into s04g01_v. Default ON so this is what you verify.
 layers.append({'key': 'nc_iwa01', 'label': f'BAKED obj56 ({len(_iobj56)}: vanilla cylinders + rock hull) [CAMERA]',
                'tris': _iobj56, 'color': [120, 255, 200], 'alpha': 0.7, 'border': '#6fc', 'on': True,
                'group': 'Native collision (_a player / _v camera)'})
-# reference only: obj56 with BOTH edits (adds the central-cylinder simplification — the gap-at-bottom). NOT shipped.
-layers.append({'key': 'nc_obj56_full', 'label': f'obj56 both-edits ref ({len(_ifull)}: +cylinder simplify) NOT shipped',
-               'tris': _ifull, 'color': [120, 200, 255], 'alpha': 0.6, 'border': '#6cf', 'on': False,
-               'group': 'Native collision (_a player / _v camera)'})
 layers.append({'key': 'nc_iwa01_build', 'label': f'IWA01 hull only ({len(_ibuild)}: CSG cylinder-tunnel)',
                'tris': _ibuild, 'color': [255, 120, 255], 'alpha': 0.8, 'border': '#f7f', 'on': False,
                'group': 'Native collision (_a player / _v camera)'})
-print(f"obj56 SHIPPED (vanilla cyls + rock hull)={len(_iobj56)}  both-edits ref={len(_ifull)}  hull build={len(_ibuild)} tris")
+print(f"obj56 SHIPPED (vanilla cyls + rock hull)={len(_iobj56)}  hull build={len(_ibuild)} tris")
 
 
-# ---- AUTHORED s04h01_v: the building's full visual mesh as camera collision, kd-split into <=100-tri
-#      nodes (part-LOCAL in the module; shown here world-placed at instance #0's mapinfo placement — a
-#      baked `_v` applies to every instance automatically). One toggle per node for isolate/select work. ----
-_h01_place = next(((pos, rot) for name, pos, rot in placements if name == 's04h01'), None)
-if _h01_place:
-    _pos, _rot = _h01_place
-    for _nn, _ltris in custom_h01_v_nodes():
-        _flat = [p for t in _ltris for p in t]
-        _pl = placeY(_flat, _pos, _rot[1])
-        _wtris = [_pl[k:k + 3] for k in range(0, len(_pl), 3)]
-        layers.append({'key': f'hv_{_nn}', 'label': f's04h01_v {_nn} ({len(_wtris)})',
-                       'tris': _wtris, 'color': [255, 200, 90], 'alpha': 0.7, 'border': '#fc5', 'on': False,
-                       'group': 'Custom s04h01_v (authoring, inst #0)'})
-        _cen, _bb = _bbox_centroid(_wtris)
-        nodelabels.append([_cen, _nn, _bb, f'hv_{_nn}'])
-    print(f"s04h01_v authoring: {sum(len(l['tris']) for l in layers if l['key'].startswith('hv_'))} tris "
-          f"in {sum(1 for l in layers if l['key'].startswith('hv_'))} nodes @ inst #0 {_pos}")
 html = build_html(
     title="Brownboo COMPLETE",
     layers=layers, node_labels=nodelabels, points=fishbox, point_labels=fishlabels,
