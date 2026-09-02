@@ -126,17 +126,23 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(SITE + (uint)i * 4), patched[i]);
         }
 
-        // ── Fishing invalid-cast auto-uncast: fire fast, but only on a SETTLED bobber ────────────────
-        // The engine already rejects bad casts: in the waiting state EdMoveChara calls FishingCheckUkiHook
-        // (bobber/hook outside the fishing rect, or RESTING above water+5 — e.g. deposited on the canal rim
-        // by the vertical probe's ground-lift) and a nonzero verdict auto-uncasts (chara_fishing=5). But it
-        // waits 31 frames (`slti at,st_cnt,0x1f` @0x16C6D0) before consulting it — the bobber sits on land
-        // for a beat. Two-part fix:
-        //   (1) gate 0x1F -> 4: the check runs ~4 frames into the waiting state;
-        //   (2) cave over the function's height-check tail (fishlineUncastGate.bin @0x228E20, entered by a
-        //       `j` over the `lui v0,0x40a0` 5.0-load @0x1AA2D4): the height violation only counts when the
-        //       bobber's Verlet velocity is ~0 (settled). Without this, the early check would uncast LEGIT
-        //       long casts still airborne above water+5 when the waiting state begins.
+        // ── Fishing invalid-cast auto-uncast: vanilla 31-frame timing, settled-gated height check ────
+        // The engine rejects bad casts natively: in the waiting state EdMoveChara calls
+        // FishingCheckUkiHook (bobber/hook outside the 3-axis fishing box @0x01D549D0/0x01D549E0, or
+        // RESTING above water+5) after 31 frames (`slti at,st_cnt,0x1f` @0x16C6D0) and a nonzero verdict
+        // auto-uncasts (chara_fishing=5).
+        // HISTORY: a 31->4 frame acceleration shipped here for a while (fast rim-deposit rejection in
+        // Queens) — REVERTED 2026-09-02 at the user's call: today's cast collision (FishLineClamp z-clamp,
+        // QueensDragCheck, the uki ground gate) already prevents the wall/rim casts it existed for, and
+        // the acceleration rejected legit long casts still mid-arc at frame 4 — the box check has no
+        // settled gate (seen at the Matataki falls; a box flight-gate cave built for that was removed
+        // along with the acceleration).
+        // What still ships:
+        //   - cave over the height-check tail (fishlineUncastGate.bin @0x228E20, entered by a `j` over
+        //     the `lui v0,0x40a0` 5.0-load @0x1AA2D4): the height violation only counts once the bobber's
+        //     Verlet velocity is ~0 (settled) — protects high-bank/boosted casts still airborne at the
+        //     31-frame check.
+        //   - the Queens drag check + uki ground gate routed through the same tail (below).
         // (Cave = tools/stubs/fishline_uncast_gate.s. ISO-baked, so patching hot fishing code is safe.)
         internal static void PatchFishingUncastGate(FileStream fs, Func<uint, long> ElfOff)
         {
@@ -154,7 +160,8 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"fishlineUncastGate.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(UncastGateCaveAddr + (uint)i), U32(b, i));
-            WrU32(fs, ElfOff(GateAddr), 0x28410004);   // slti at,st_cnt,4 — consult the check almost immediately
+            // (GateAddr left VANILLA — the check fires at 31 waiting frames, as shipped by the game.
+            //  The verify above still confirms the site so a re-patch of a stale ISO is caught.)
             // Route the tail through QueensDragCheck @0x229360 (camera_norm_side.s bank) FIRST: in Queens,
             // waiting-state only, a float dragged past the canal wall (|z|>49.5) or inside a bridge-pillar
             // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
