@@ -1,10 +1,11 @@
 # FishingCheckUkiHook SETTLED-GATED height check — cave @0x228E20 (dead CharaChange region; the slot the
 # removed cast-scale cave used to occupy). Two-part patch (IsoPatcher.PatchFishingUncastGate):
 #
-#  (1) EdMoveChara's waiting-state gate `slti at,st_cnt,0x1f` @0x16C6D0 -> 0x04: the game consults
-#      FishingCheckUkiHook (invalid bobber/hook -> auto-uncast, chara_fishing=5) after ~4 frames in the
-#      waiting state instead of 31 — a bobber deposited on the bank (the vertical probe's ground-LIFT when a
-#      cast crosses the canal rim) is rejected almost immediately.
+#  (1) EdMoveChara's waiting-state gate `slti at,st_cnt,0x1f` @0x16C6D0 is left VANILLA (31 frames).
+#      A 31->4 acceleration shipped for a while (fast rim-deposit rejection) but was REVERTED 2026-09-02:
+#      the cast collision (FishLineClamp / QueensDragCheck / uki ground gate) already prevents the casts
+#      it existed for, and at 4 frames the function's UN-gated 3-axis box check rejected legit long casts
+#      still mid-arc (seen at the Matataki falls).
 #  (2) THIS cave replaces the function's height-check tail (entered by `j` over the `lui v0,0x40a0` @0x1AA2D4;
 #      its old mtc1 delay slot is NOP'd). Vanilla tail: hook.y > water+5 OR uki.y > water+5 -> invalid(1).
 #      Firing that early would kill LEGIT long casts (still airborne above water+5 when the waiting state
