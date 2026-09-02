@@ -263,7 +263,7 @@ upstream Vu1/MDS node (candidate #2). Also confirmed: no back-pointer to a sourc
 (only `+0x110` parent, `+0x13c` next, and an undocumented node ptr at `+0x140`).
 
 ### Disasm tooling caveat
-`tools/dcdis.py` is capstone MIPS32 — it **cannot decode PS2 EE vector/quadword ops** (`sq`/`lq`/COP2),
+`tools/analysis/dcdis.py` is capstone MIPS32 — it **cannot decode PS2 EE vector/quadword ops** (`sq`/`lq`/COP2),
 which is exactly what the matrix-copy/pose code uses (shows as `.word (undecoded)`). Static tracing of
 the per-frame `+0x1d0` writer with it is unreliable. `CopyFrame__FP6CFrameP14CDataAlloc2<1>` (0x127700)
 does confirm the runtime tree is a deep copy (node alloc 0x260 + `__as__6CFrameFR6CFrame` 0x128eb0 +

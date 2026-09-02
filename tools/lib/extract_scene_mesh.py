@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""Extract world-space geometry from a Dark Cloud town scene (gedit/*/scene.scn).
+
+Decodes the SCN container -> MDS node blocks -> MDT meshes. Vertex positions are
+plain XYZW floats (stride 16, w=1.0) starting at MDT+0x40; the triangle topology is
+a packed VU1 display-list (GIF tags interleaved, ~9 words/vertex) and is NOT decoded
+here -- for collision we re-triangulate the point cloud ourselves.
+
+Coordinate frame: the extracted verts are already in WORLD space (pond centre = 0,0,
+water surface Y=0), matching the runtime WaterLevel. Validated against Brownboo (s04).
+
+Node naming conventions (Brownboo, likely general):
+  s04g01*  terrain / crater walls        iwa*     rocks (岩) - in-water obstacles
+  s04g03b* shore banks (dock platforms)  s04g04*  boardwalk support posts (Y-15..0)
+  st0*     shore fences                  h01/2/3* buildings (own MDS block, LOCAL
+  obj*     boardwalk planks (instanced)           origin - placed by georama, external)
+
+Buildings/planks sit at local origin: their world placement lives in the georama
+instance table (not in scene.scn), so they need a separate step to place precisely.
+
+Usage: extract_scene_mesh.py gedit/s04/scene.scn [name-prefix]
+"""
+import os
+import struct, re, sys, math
+
+# Extracted Dark Cloud disc dir; required — see .env.sample.
+DC1_DATA_DIR = os.environ.get("DC1_DATA_DIR")
+if not DC1_DATA_DIR: raise SystemExit("Set $DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)")
+
+DAT_DIR = DC1_DATA_DIR
+
+def load_scene(rel):
+    hed = open(f"{DAT_DIR}/data.hed", "rb").read()
+    hd2 = open(f"{DAT_DIR}/data.hd2", "rb").read()
+    dat = open(f"{DAT_DIR}/data.dat", "rb")
+    for i in range(len(hed) // 80):
+        n = hed[i*80:i*80+80].split(b"\x00")[0].decode("latin1", "replace").replace("\\", "/")
+        if n == rel:
+            off, size, _ = struct.unpack_from("<III", hd2, 16 + i*32)
+            dat.seek(off); return dat.read(size)
+    raise SystemExit(f"{rel} not found in data.hed index")
+
+def _isname(scn, b):
+    s = scn[b:b+4]; return len(s) >= 2 and all(32 <= c < 127 for c in s[:2])
+
+def _points_at_mdt(scn, mds, mo):
+    if mo == 0: return True   # a node with no mesh is legal
+    for c in (mo, mds + mo):
+        if 0 <= c < len(scn) - 4 and scn[c:c+3] == b"MDT": return True
+    return False
+
+def _is_mesh_node(scn, mds, b):
+    """Does a 0x70 entry at b look like a MESH-bearing MDS node? meshOff (@+0x28) -> an MDT, and the
+    4x4 matrix (@+0x30) is a valid transform (homogeneous, sane translation, non-zero rotation)."""
+    if b + 0x70 > len(scn): return False
+    mo = struct.unpack_from("<i", scn, b + 0x28)[0]
+    if mo == 0: return False
+    fo = next((c for c in (mo, mds + mo) if 0 <= c < len(scn) - 4 and scn[c:c+3] == b"MDT"), None)
+    if fo is None: return False
+    mat = struct.unpack_from("<16f", scn, b + 0x30)
+    if abs(mat[15] - 1.0) > 1e-3: return False
+    if not all(abs(v) < 100000 for v in mat[12:15]): return False
+    if not (0.1 < sum(mat[i]*mat[i] for i in range(0, 3)) < 1e6): return False   # row0 has real scale
+    return True
+
+def parse_mds(scn, mds):
+    """Return [(name, meshOff, matrix)] for every mesh-bearing node in the block. Rather than locate the
+    (variable-offset) node table, scan the block for entries that look like real mesh nodes — robust to
+    unnamed/mesh-less nodes and odd preambles."""
+    # bound the scan to this block (up to the next MDS\0)
+    nxt = scn.find(b"MDS\x00", mds + 4)
+    end = nxt if nxt != -1 else min(mds + 0x8000, len(scn))
+    out, seen = [], set()
+    # start at the node table (MDS header is 0x10 bytes; table offset lives at +0xC, normally 0x10). Starting
+    # at 0x10 rather than 0x20 catches single-node blocks whose only node sits at the very start of the table
+    # (e.g. Brownboo's pond bottom s04g0117__s1) — the dedup-by-meshOff below prevents any double counting.
+    tbl = struct.unpack_from("<I", scn, mds + 0xC)[0]
+    b = mds + (tbl if 0x10 <= tbl < 0x80 else 0x10)
+    while b + 0x70 <= end:
+        if _is_mesh_node(scn, mds, b):
+            mo = struct.unpack_from("<i", scn, b + 0x28)[0]
+            if mo not in seen:
+                seen.add(mo)
+                name = scn[b+8:b+8+16].split(b"\x00")[0].decode("latin1", "replace")
+                if not all(32 <= c < 127 or c == 0 for c in scn[b+8:b+8+4]): name = ""  # unnamed node
+                mat = struct.unpack_from("<16f", scn, b + 0x30)
+                out.append((name, mo, mat))
+            b += 0x70
+        else:
+            b += 4
+    return out
+
+def read_verts(scn, fo):
+    if scn[fo:fo+3] != b"MDT": return []
+    total = struct.unpack_from("<I", scn, fo+8)[0]
+    vs = []; p = fo + 0x40
+    while p + 16 <= fo + total:
+        x, y, z, w = struct.unpack_from("<4f", scn, p)
+        if abs(w - 1.0) > 1e-3 or not all(abs(v) < 8000 for v in (x, y, z)): break
+        vs.append((x, y, z)); p += 16
+    return vs
+
+def xform(m, v):
+    x, y, z = v
+    return (m[0]*x + m[4]*y + m[8]*z + m[12],
+            m[1]*x + m[5]*y + m[9]*z + m[13],
+            m[2]*x + m[6]*y + m[10]*z + m[14])
+
+def read_tris(scn, fo):
+    """EXACT triangles from a visual MDT's display list — 100% clean, matches the engine's own decoder
+    (CVisualVu1::CreateVUdataFromMDT @0x135aa0). Returns list of (i0,i1,i2) vertex indices.
+
+    Format: 16-u32 MDT header; vertices XYZW at hw[4] (stride 0x10, count hw[3]). Display list at
+    hw[10] = a 4-int preamble whose 3rd int (@hw[10]+8) is the SUBMESH COUNT, then that many submeshes.
+    Each submesh = a 3-int header (primType, vertexCount, materialIdx) followed by vertexCount records;
+    the record's FIRST int is the position index (the rest are uv/normal[/colour] indices).
+    primType 3 = triangle LIST (every 3 records = 1 tri); primType 4 = triangle STRIP (each record
+    after the first two = 1 tri, winding alternates). Submeshes mix list and strip within one mesh.
+
+    RECORD STRIDE (matches the engine: iVar20 in CreateVUdataFromMDT): a mesh with an EXTRA per-vertex
+    attribute block (vertex COLOUR) at hw[8] uses 4-int records; a plain mesh (hw[8] == 0xffffffff) uses
+    3-int records. This is the "variant" the older decoder mis-read as an absurd submesh table — e.g.
+    Brownboo's pond bottom s04g0117__s1 and the obj*/shadow outline meshes. hw[8]>0 ⇒ stride 4.
+    """
+    if scn[fo:fo+3] != b"MDT": return []
+    hw = struct.unpack_from("<16I", scn, fo)
+    dl, vcount = hw[10], hw[3]
+    if dl == 0 or fo + dl + 0x10 > len(scn): return []
+    numsub = struct.unpack_from("<I", scn, fo + dl + 8)[0]
+    if numsub <= 0 or numsub > vcount: return []
+    stride = 4 if (hw[8] != 0xffffffff and hw[8] > 0) else 3   # 4-int records when a colour block is present
+    rb = stride * 4                                            # record size in bytes
+    o = dl + 0x10
+    tris = []
+    for _ in range(numsub):
+        if fo + o + 0xC > len(scn): break
+        prim, vcnt = struct.unpack_from("<ii", scn, fo + o)
+        o += 0xC
+        if vcnt < 0 or fo + o + vcnt * rb > len(scn): break
+        pos = [struct.unpack_from("<i", scn, fo + o + r*rb)[0] for r in range(vcnt)]
+        o += vcnt * rb
+        def ok(a, b, c): return 0 <= a < vcount and 0 <= b < vcount and 0 <= c < vcount and a != b and b != c and a != c
+        if prim == 3:
+            for k in range(0, vcnt - 2, 3):
+                if ok(pos[k], pos[k+1], pos[k+2]): tris.append((pos[k], pos[k+1], pos[k+2]))
+        elif prim == 4:
+            for i in range(vcnt - 2):
+                a, b, c = (pos[i], pos[i+1], pos[i+2]) if i % 2 == 0 else (pos[i+1], pos[i], pos[i+2])
+                if ok(a, b, c): tris.append((a, b, c))
+    return tris
+
+def _filter_long(verts, tris, factor=4.0, floor=40.0):
+    """Drop triangles whose longest edge exceeds factor * median edge (min `floor`). Multi-segment
+    meshes decode with a minority of spurious long triangles connecting distant verts; this removes
+    them without touching normal geometry (single-segment meshes have no long edges to drop)."""
+    if not tris: return tris
+    import math as _m
+    def me(t):
+        a, b, c = (verts[i] for i in t)
+        return max(_m.dist(a, b), _m.dist(b, c), _m.dist(a, c))
+    edges = sorted(me(t) for t in tris)
+    med = edges[len(edges) // 2]
+    thr = max(floor, med * factor)
+    return [t for t in tris if me(t) <= thr]
+
+def extract_mesh(scn, prefix=None, clean=False):
+    """Return {node_name: (world_verts, tris)} — world-space verts + exact triangle indices.
+    The decoder is now exact (see read_tris), so clean/filtering defaults OFF; leave clean=True only
+    if you deliberately want long-edge triangles dropped (e.g. to exclude giant crater/sky spans)."""
+    out = {}
+    for m in re.finditer(rb"MDS\x00", scn):
+        for name, mo, mat in parse_mds(scn, m.start()):
+            if mo == 0 or (prefix and not name.startswith(prefix)): continue
+            fo = next((c for c in (mo, m.start()+mo) if 0 < c < len(scn) and scn[c:c+3] == b"MDT"), None)
+            if not fo: continue
+            wv = [xform(mat, v) for v in read_verts(scn, fo)]
+            tris = _filter_long(wv, read_tris(scn, fo)) if clean else read_tris(scn, fo)
+            out.setdefault(name, [[], []])
+            base = len(out[name][0])
+            out[name][0].extend(wv)
+            out[name][1].extend((a+base, b+base, c+base) for a, b, c in tris)
+    return {k: (v[0], v[1]) for k, v in out.items()}
+
+def extract(scn, prefix=None):
+    """Return {node_name: [world (x,y,z), ...]} for every mesh-bearing node."""
+    out = {}
+    for m in re.finditer(rb"MDS\x00", scn):
+        for name, mo, mat in parse_mds(scn, m.start()):
+            if mo == 0 or (prefix and not name.startswith(prefix)): continue
+            fo = next((c for c in (mo, m.start()+mo) if 0 < c < len(scn) and scn[c:c+3] == b"MDT"), None)
+            if fo: out.setdefault(name, []).extend(xform(mat, v) for v in read_verts(scn, fo))
+    return out
+
+def convex_hull_xz(verts, ylo=-16.0, yhi=3.0, expand=3.0, maxpts=10):
+    """XZ convex hull of the verts in the [ylo,yhi] band, expanded outward, decimated."""
+    pts = sorted(set((round(x, 1), round(z, 1)) for x, y, z in verts if ylo <= y <= yhi))
+    if len(pts) < 3: return pts
+    cr = lambda o, a, b: (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0])
+    lo = []
+    for p in pts:
+        while len(lo) >= 2 and cr(lo[-2], lo[-1], p) <= 0: lo.pop()
+        lo.append(p)
+    up = []
+    for p in reversed(pts):
+        while len(up) >= 2 and cr(up[-2], up[-1], p) <= 0: up.pop()
+        up.append(p)
+    h = lo[:-1] + up[:-1]
+    if len(h) > maxpts:
+        step = len(h) / maxpts; h = [h[int(i*step)] for i in range(maxpts)]
+    cx = sum(p[0] for p in h) / len(h); cz = sum(p[1] for p in h) / len(h)
+    out = []
+    for x, z in h:
+        dx, dz = x - cx, z - cz; d = math.hypot(dx, dz) or 1
+        out.append((x + dx/d*expand, z + dz/d*expand))
+    return out
+
+if __name__ == "__main__":
+    rel = sys.argv[1] if len(sys.argv) > 1 else "gedit/s04/scene.scn"
+    prefix = sys.argv[2] if len(sys.argv) > 2 else None
+    scn = load_scene(rel)
+    for name, wv in sorted(extract(scn, prefix).items()):
+        xs = [p[0] for p in wv]; ys = [p[1] for p in wv]; zs = [p[2] for p in wv]
+        print(f"{name:16} {len(wv):4} verts  X {min(xs):.0f}..{max(xs):.0f}  "
+              f"Y {min(ys):.0f}..{max(ys):.0f}  Z {min(zs):.0f}..{max(zs):.0f}")

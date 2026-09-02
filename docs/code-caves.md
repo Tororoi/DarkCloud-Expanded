@@ -5,7 +5,7 @@ atla state, sidequest data, or injected code.
 
 ## The system (two halves)
 
-**Static:** `tools/find_code_caves.py` parses the ELF (`~/ROMs/dc_extracted/SCUS_971.11`)
+**Static:** `tools/analysis/find_code_caves.py` parses the ELF (`~/ROMs/dc_extracted/SCUS_971.11`)
 symbol table and reports address ranges no symbol claims, classified by segment.
 `--seed <findings file>` writes them as CANDIDATE entries; `--annotate 0xADDR`
 shows the nearest symbols to any address.

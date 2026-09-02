@@ -34,8 +34,13 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 ### Fishing
 
+- **Custom fishing spots — Queens, Brownboo, Yellow Drops** — Three new towns are fishable. Each spot gets a native carved sign and trigger, the vanilla entry/quit menus, bait menu, and catch text, all baked into a patched copy of the player's own ISO so the minigame runs fully natively. Each town has its own fish species pool, plus two vanilla pool tweaks (Matataki: Gummy → Niler; East Harbor: Piccoly → Gobbler).
+- **Queens canal tide** — The canal water level follows time of day (low in the morning, vanilla by afternoon/night, high at dusk); the visible surface, fishing water, and fish depth all track it. At low tide the drained canal floor is walkable and fishable: a ladder (carved from the player's own Moon Factory data) is injected on the canal wall to climb down, with a second sign to initiate fishing on the floor. At other tides the ladder shows a "tide too high" message instead, and a rising tide warps a player caught below to the East Harbor dock. Low tide adds waterfall mist and wading shows an animated ripple.
+- **Yellow Drops west bank** — The bank is reshaped to be wider and the town water raised so the new spot fishes naturally from shore.
+- **Casting & line feel** — The line pays out along the cast direction in normally unfishable areas due to the limitations of the vanilla line geometry (split into above/below-water segments at the bobber), casts into the Queens canal walls stop at the wall instead of clipping through, and the fishing camera centers on the bobber at a per-spot height (low over the canal floor).
+- **Brownboo pond rocks** — The three pond rocks have real collision: casts and fish no longer pass through them.
 - **Fishing quest system** — Refactored fishing quest tracking. Tracks fishing quests for Pike (Norune, area 0), Pao (Matataki Waterfall, area 1), Sam (Area 19), and Devia (Area 3). Supports count quests and size-range quests; monitors quest state byte and fires the Sam post-loop queens-quest trigger after the required number of completions.
-- **Fish steering** — Passive fish-steering loop at Matataki Waterfall and Queens Harbor nudges all fish toward the player every 10 seconds. Mardan Eins ownership adds a separate steering pass for Garayan and Umadakara fish at an interval weighted by bait affinity.
+- **Fish steering** — Passive fish-steering loop at Matataki Waterfall and East Harbor nudges all fish toward the player every 10 seconds. Mardan Eins ownership adds a separate steering pass for Garayan and Umadakara fish at an interval weighted by bait affinity.
 - **Mardan Sword rework** — Detects all Mardan swords from bag and storage (not only equipped). FP multipliers: Eins 1.2×, Twei 1.5×, Arise 2×. Mardan Twei and Arise Mardan trigger a second independent Garayan fish roll. Arise Mardan applies the full size transform: native smoothing, a linear scale to 2× the species max, then a second smoothing pass over the scaled range (hard cap at exactly 2× max).
 - **Smooth native fish size distribution** — Every non-Arise fishing session smooths the size the game rolls, filling the sparse region just below the species max so the distribution ramps into the cap instead of spiking at it. Does not change the max. Arise Mardan sessions include this smoothing internally.
 - **Rerolled slots use the native size formula** — Mardan Twei/Arise slot rerolls now roll size via the game's native slot-init formula (12-draw Irwin-Hall RNG, asymmetric slope, clamped to `[0.5×BaseSize, MaxSize]`) instead of a flat uniform draw, then receive the smoothing/Arise effect like any other slot.
@@ -43,6 +48,9 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 
 ### Towns
 
+- **Town camera overhaul** — The follow camera now resolves town collision natively (baked into the patched ISO's executable): swept sliding along walls with contact friction, pull-in through tight pinches, ceiling ducking, ground clearance, and deadzoned right-stick height control, running against re-authored per-town camera meshes (Queens structures and snake statue, Brownboo's tunnel rock).
+- **Queens snake statue** — Fully climbable: its player collision is now the full detailed visual mesh.
+- **Brownboo cleanup** — The overhead edit-mode view is fixed (crater walls backface-cull, stray corner triangles removed), houses turn see-through when the camera is inside them.
 - **Overhead camera everywhere** — The Georama bird's-eye camera (Select button) now works in every town map, not just the first five, along with the leftover developer fast-run speed while it's active. Exiting the camera safely snaps the player back to the ground.
 
 ### Enemy System

@@ -1,0 +1,1825 @@
+﻿using System;
+using System.Threading;
+using System.Collections.Generic;
+
+namespace Dark_Cloud_Improved_Version
+{
+    public class Dungeon
+    {
+        static byte currentDungeon;
+        static byte currentFloor;
+        static ushort currentWeapon;
+        static int currentAddress;
+        static int prevFloor = 200;
+        static byte prevBackFloor = 0;   // tracks backfloor-flag edges (the floor↔backfloor swap reloads enemies without changing checkFloor)
+        static int currentCharCursor = 0;
+        static int prevCharCursor = 0;
+        static ushort currentGilda = 0;
+        static byte _prevDunMode = 0;   // tracks dungeonMode edges (floor-select rising edge = new dungeon visit)
+        static bool clownOnScreen = false;
+        static bool chronicle2 = false;
+        static bool[] monstersDead = new bool[15];
+        static bool monsterQuestActive = false;
+        static bool eventfloor = false;
+        static bool squareActive = false;
+        static bool dunEscapeConfirm = false;
+        static bool dunEscapeConfirmSpamCheck = false;
+        static bool dunUsedActiveEscape = false;
+        static bool dunUsedEscapeCheck = false;
+        static bool wepMenuOpen = false;
+        static bool PPowdermenuOpen = false;
+        static bool circlePressed = false;
+        static bool hasClearMessageShown = false;
+
+        private static readonly EnemyDefaults[] _bossSpecies = {
+            EnemySpecies.IceArrow, EnemySpecies.Dran, EnemySpecies.IceQueen, EnemySpecies.MasterUtan,
+            EnemySpecies.KingsCurseCoffin, EnemySpecies.MinotaurJoe, EnemySpecies.DarkGenie, EnemySpecies.DarkGenieForm2,
+            EnemySpecies.RightHand, EnemySpecies.LeftHand, EnemySpecies.WineKeg, EnemySpecies.KingsCurse,
+            EnemySpecies.BlackKnight,
+            // Dark Genie (Final Form) + its spawned attack-effect entities.
+            EnemySpecies.DarkGenieFinal, EnemySpecies.DGFinalSummon, EnemySpecies.DGFinalGroundWave,
+            EnemySpecies.DGFinalBeam, EnemySpecies.DGFinalBeamS,
+        };
+        static byte[] wepLevelArray = new byte[10];
+        public static bool monsterQuestMachoActive = false;
+        public static bool monsterQuestGobActive = false;
+        public static bool monsterQuestJakeActive = false;
+        public static bool monsterQuestChiefActive = false;
+        public static bool sambaChallengeQuest = false;
+        public static bool sambaChallengeQuestActive = false;
+        public static bool sambaChallengeQuestCheck = false;
+        public static bool mayorQuest = false;
+        public static bool mayorQuestCheck = false;
+        public static bool mayorQuestActive = false;
+        public static bool hasMiniBoss = false;
+        static bool wasOnBackFloor = false;
+        static List<MiniBoss.MiniBossSnapshot> normalFloorSnapshot = null;
+        static List<MiniBoss.MiniBossSnapshot> backfloorSnapshot = null;
+        public static bool enemiesSpawn = false;
+        public static bool doorIsOpen = false;
+        public static bool magicCircleChanged = false;
+        public static List<byte> excludeFloors;
+
+//THREADS
+        //Runs at the start of each floor
+        public static Thread spawnsCheck;
+        public static Thread backfloorLogThread;   // logs enemy slots after a floor↔backfloor swap (which CheckSpawns misses)
+        public static Thread minibossProcess;
+        public static Thread miniBossMessage;
+
+        //Weapon threads, only 1 should run at a time
+        public static Thread boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
+        public static Thread seventhHeavenThread = new Thread(new ThreadStart(CustomToanEffects.SeventhHeavenEffect));
+        public static Thread chronicleSwordThread = new Thread(new ThreadStart(CustomToanEffects.ChronicleSwordEffect));
+        public static Thread evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
+        public static Thread maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
+        public static Thread sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
+        public static Thread bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
+        public static Thread crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
+        public static Thread tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
+        public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
+        public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
+        public static Thread kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
+        public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
+        public static Thread angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
+        public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
+        public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
+        public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
+        public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
+        public static Thread braveArkThread = new Thread(new ThreadStart(CustomToanEffects.BraveArkEffect));
+        public static Thread tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
+        public static Thread frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.FrozenTunaEffect));
+        public static Thread infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
+        public static Thread mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
+        public static Thread herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
+        public static Thread babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
+        public static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
+        public static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
+        public static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
+        public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
+        public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
+        public static Thread dunEscapeConfirmThread;
+
+        public static Thread cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
+
+        // DEBUG: model + script load-buffer usage. SetupBaseModel loads each roster species' mesh into the
+        // MonstorModelBuffer (CDataAlloc2 @ PS2 0x01F066D0 → 0x21F066D0) and its AI script into MonstorScriptBuffer
+        // (0x21F066E0). From SetDataBuffer's disasm each CDataAlloc2 is { +0x0 bufPtr, +0x8 used, +0xC capacity }
+        // (model cap = 1,690,000). Logs on change so we watch both fill during a floor load and see the last state
+        // before a hang (an over-budget roster overflows one of these). Set false to silence.
+        internal static bool DebugBufferUsage = true;
+        private static uint[] _bufLast;
+        private static void LogBufferUsage()
+        {
+            if (!DebugBufferUsage) return;
+            uint[] w = Memory.ReadUIntBatch(0x21F066D0, 8);   // model struct (4 words) + script struct (4 words)
+            if (w == null || w.Length != 8) return;
+            if (_bufLast != null && w[0] == _bufLast[0] && w[2] == _bufLast[2] && w[3] == _bufLast[3]
+                && w[4] == _bufLast[4] && w[6] == _bufLast[6] && w[7] == _bufLast[7]) return;   // gate on ptr/used/cap of both
+            _bufLast = w;
+            string pct(uint used, uint cap) => cap != 0 ? $"{100.0 * (int)used / (int)cap:F1}%" : "n/a";
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                $"[Buffer] model@0x21F066D0 ptr=0x{w[0]:X8} used={(int)w[2]} cap={(int)w[3]} ({pct(w[2], w[3])})  |  " +
+                $"script@0x21F066E0 ptr=0x{w[4]:X8} used={(int)w[6]} cap={(int)w[7]} ({pct(w[6], w[7])})");
+        }
+
+        public static void InsideDungeonThread()
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Dungeon Thread Activated");
+            elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping));
+            elementSwapThread.Start();
+            if (!cheatCodeThread.IsAlive)
+            {
+                cheatCodeThread = new Thread(new ThreadStart(CheatCodes.InputBuffer.Monitor));
+                cheatCodeThread.Start();
+                Resources.initiateRubyMemeFix();
+            }
+            // Enemies.RedirectEnemyModel(EnemySpecies.Dasher, EnemySpecies.MinotaurJoe);
+            while (true)
+            {
+                // Runs every tick (incl. during floor load) so it can NOP MinotaurJoe's arena-init in the
+                // loaded c16a.stb before the boss spawns. No-op unless a c16a boss is in the roster.
+                BossScriptPatcher.Tick();
+                BossScriptPatcher.ObserveBossFight();   // logs slot lifecycle + global ints during the Ice Queen fight
+                LogBufferUsage();   // DEBUG (DebugBufferUsage): model/script load-buffer used vs capacity — runs during load to catch a hang
+                EnemyRandomizer.SampleBufferUsage();   // DEBUG (DebugBufferSamples): once-per-floor randomized roster + buffer used/cap
+                // Drives "spawn roster resets on floor change": reverts SetSpawnRoster* edits to vanilla once
+                // the player leaves the floor the roster was applied to. No-op unless a roster is staged.
+                SpawnRoster.NotifyInFloor(Player.InDungeonFloor());
+                // Authentic mimic chests: register a chest disguise for each placed roster mimic (no-op off
+                // custom-roster floors; dedups + waits for placement). Engine renders + wakes on open.
+                SpawnRoster.SpawnMimicChestsOnFloor();
+                // Gradient stat normalization: rescale non-native enemies' HP/defense (and optionally damage)
+                // toward the current dungeon's power level. Self-guards to run once per floor; no-op when off.
+                EnemyStatNormalizer.NormalizeStatsForFloor();
+                FasterEnemies.Tick();       // "Faster enemies" (Options toggle): faster enemy movement + animation, with attack-window dwell
+                MiniBoss.MaintainProjectileScale();   // per-tick: keep miniboss projectile damage scaled (per-slot)
+                MiniBoss.MaintainAttackRange();        // per-tick: miniboss attack/engage range via shared-STB nearest-enemy trick
+                if (Player.InDungeonFloor())
+                {
+                    // Evilcise curse applies immediately on equip, even from the pause menu
+                    if (Player.CurrentCharacterNum() == Player.ToanId &&
+                        Player.Weapon.GetCurrentWeaponId() == Items.evilcise &&
+                        !evilciseThread.IsAlive)
+                    {
+                        evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
+                        evilciseThread.Start();
+                    }
+
+                    // Maneater curse likewise applies immediately on equip
+                    if (Player.CurrentCharacterNum() == Player.ToanId &&
+                        Player.Weapon.GetCurrentWeaponId() == Items.maneater &&
+                        !maneaterThread.IsAlive)
+                    {
+                        maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
+                        maneaterThread.Start();
+                    }
+
+                    // Enemies.PollEnemyDynamics();
+                    // Enemies.MonitorFlashTimer();
+                    if (!Player.CheckDunIsPaused() && Player.CheckDunIsWalkingMode())
+                    {
+                        switch (Player.CurrentCharacterNum())
+                        {
+                            //Toan
+                            case Player.ToanId:
+                                if(magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+                                switch (Player.Weapon.GetCurrentWeaponId())
+                                {
+                                    case Items.bonerapier:
+                                        CustomToanEffects.BoneRapierEffect(true);
+
+                                        if (!boneDoorThread.IsAlive)
+                                        {
+                                            boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
+                                            boneDoorThread.Start();
+                                        }
+                                        break;
+                                    case Items.seventhheaven:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!seventhHeavenThread.IsAlive)
+                                        {
+                                            seventhHeavenThread = new Thread(new ThreadStart(CustomToanEffects.SeventhHeavenEffect));
+                                            seventhHeavenThread.Start();
+                                        }
+
+                                        // 7th Heaven also inherits Dark Cloud's Guard Crush (lineage)
+                                        if (!darkCloudThread.IsAlive)
+                                        {
+                                            darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
+                                            darkCloudThread.Start();
+                                        }
+                                        break;
+                                    case Items.chroniclesword:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!chronicleSwordThread.IsAlive)
+                                        {
+                                            chronicleSwordThread = new Thread(new ThreadStart(CustomToanEffects.ChronicleSwordEffect));
+                                            chronicleSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.heavenscloud:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!heavensCloudThread.IsAlive)
+                                        {
+                                            heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
+                                            heavensCloudThread.Start();
+                                        }
+
+                                        // Heaven's Cloud also inherits Moonlit Focus (Tsukikage lineage)
+                                        if (!tsukikageThread.IsAlive)
+                                        {
+                                            tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
+                                            tsukikageThread.Start();
+                                        }
+
+                                        // ...and Quick Draw (Small Sword lineage)
+                                        if (!smallSwordThread.IsAlive)
+                                        {
+                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
+                                            smallSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.evilcise:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!evilciseThread.IsAlive)
+                                        {
+                                            evilciseThread = new Thread(new ThreadStart(CustomToanEffects.EvilciseEffect));
+                                            evilciseThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.maneater:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!maneaterThread.IsAlive)
+                                        {
+                                            maneaterThread = new Thread(new ThreadStart(CustomToanEffects.ManeaterEffect));
+                                            maneaterThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.tsukikage:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!tsukikageThread.IsAlive)
+                                        {
+                                            tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
+                                            tsukikageThread.Start();
+                                        }
+
+                                        // Tsukikage also inherits Quick Draw (Small Sword lineage)
+                                        if (!smallSwordThread.IsAlive)
+                                        {
+                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
+                                            smallSwordThread.Start();
+                                        }
+                                        break;
+
+
+                                    case Items.smallsword:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!smallSwordThread.IsAlive)
+                                        {
+                                            smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
+                                            smallSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.darkcloud:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!darkCloudThread.IsAlive)
+                                        {
+                                            darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
+                                            darkCloudThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.sunsword:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!sunSwordThread.IsAlive)
+                                        {
+                                            sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
+                                            sunSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.bigbang:   // inherits Solar Harvest (Sun Sword lineage) + its own Detonate
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!sunSwordThread.IsAlive)
+                                        {
+                                            sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
+                                            sunSwordThread.Start();
+                                        }
+                                        if (!bigBangThread.IsAlive)
+                                        {
+                                            bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
+                                            bigBangThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.crosshinder:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!crossHinderThread.IsAlive)
+                                        {
+                                            crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
+                                            crossHinderThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.agassword:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!agasSwordThread.IsAlive)
+                                        {
+                                            agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
+                                            agasSwordThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.braveark:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!braveArkThread.IsAlive)
+                                        {
+                                            braveArkThread = new Thread(new ThreadStart(CustomToanEffects.BraveArkEffect));
+                                            braveArkThread.Start();
+                                        }
+                                        break;
+
+                                    // Kitchen Knife is a TOAN sword — its effect gates on ToanId, so registering it under
+                                    // Xiao (where it used to live) made it unreachable: Xiao can never equip a Toan sword,
+                                    // so the thread never started, and the spring blessing could never fire.
+                                    case Items.kitchenknife:
+                                        CustomToanEffects.BoneRapierEffect(false);
+
+                                        if (!kitchenKnifeThread.IsAlive)
+                                        {
+                                            kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
+                                            kitchenKnifeThread.Start();
+                                        }
+                                        break;
+
+                                    default:
+                                        CustomToanEffects.BoneRapierEffect(false);
+                                        break;
+                                }
+                                break;
+
+                            //Xiao
+                            case Player.XiaoId:
+                                // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier sphere).
+                                if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve) CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+                                switch (Player.Weapon.GetCurrentWeaponId())
+                                {
+
+                                    case Items.angelgear:
+                                        if (!angelGearThread.IsAlive)
+                                        {
+                                            angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
+                                            angelGearThread.Start();
+                                        }
+                                        if (!angelGearHaloThread.IsAlive)
+                                        {
+                                            angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
+                                            angelGearHaloThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.supersteve:
+                                        if (!superSteveThread.IsAlive)
+                                        {
+                                            superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
+                                            superSteveThread.Start();
+                                        }
+                                        break;
+
+                                    default:
+                                        break;
+                                }
+                                break;
+
+                            //Goro
+                            case Player.GoroId:
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+                                switch (Player.Weapon.GetCurrentWeaponId())
+                                {
+                                    case Items.tallhammer:
+                                        if (!tallHammerThread.IsAlive)
+                                        {
+                                            tallHammerThread = new Thread(new ThreadStart(CustomGoroEffects.TallHammerEffect));
+                                            tallHammerThread.Start();
+                                        }
+                                        break;
+                                    case Items.frozentuna:
+                                        if (!frozenTunaThread.IsAlive)
+                                        {
+                                            frozenTunaThread = new Thread(new ThreadStart(CustomGoroEffects.FrozenTunaEffect));
+                                            frozenTunaThread.Start();
+                                        }
+                                        break;
+                                    case Items.inferno:
+                                        if (!infernoHammerThread.IsAlive)
+                                        {
+                                            infernoHammerThread = new Thread(new ThreadStart(CustomGoroEffects.InfernoEffect));
+                                            infernoHammerThread.Start();
+                                        }
+                                        break;
+
+                                    default:
+                                        break;
+                                }
+                                break;
+
+                            //Ruby
+                            case Player.RubyId:
+                                CustomToanEffects.BoneRapierEffect(false);
+
+                                switch (Player.Weapon.GetCurrentWeaponId())
+                                {
+                                    case Items.mobiusring:
+                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+                                        if (!mobiusRingThread.IsAlive)
+                                        {
+                                            mobiusRingThread = new Thread(new ThreadStart(CustomRubyEffects.MobiusRingEffect));
+                                            mobiusRingThread.Start();
+                                        }
+                                        break;
+                                    case Items.secretarmlet:
+                                        if (!magicCircleChanged) {
+                                            bool executed = CustomRubyEffects.SecretArmletEnable();
+                                            if(executed) magicCircleChanged = true;
+                                        }
+                                        break;
+                                    default:
+                                        if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+                                        break;
+                                }
+                                break;
+
+                            //Ungaga
+                            case Player.UngagaId:
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+
+                                switch (Player.Weapon.GetCurrentWeaponId())
+                                {
+                                    case Items.herculeswrath:
+                                        if (!herculesWrathThread.IsAlive)
+                                        {
+                                            herculesWrathThread = new Thread(new ThreadStart(CustomUngagaEffects.HerculesWrathEffect));
+                                            herculesWrathThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.babelsspear:
+                                        if (!babelSpearThread.IsAlive)
+                                        {
+                                            babelSpearThread = new Thread(new ThreadStart(CustomUngagaEffects.BabelSpearEffect));
+                                            babelSpearThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.cactus:
+                                        if (!cactusThread.IsAlive)
+                                        {
+                                            cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
+                                            cactusThread.Start();
+                                        }
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                break;
+
+                            //Osmond
+                            case Player.OsmondId:
+                                CustomToanEffects.BoneRapierEffect(false);
+                                if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
+
+                                switch (Player.Weapon.GetCurrentWeaponId())
+                                {
+                                    case Items.supernova:
+                                        if (!supernovaThread.IsAlive)
+                                        {
+                                            supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
+                                            supernovaThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.starbreaker:
+                                        if (!starBreakerThread.IsAlive)
+                                        {
+                                            starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
+                                            starBreakerThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.snail:
+                                        if (!snailThread.IsAlive)
+                                        {
+                                            snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
+                                            snailThread.Start();
+                                        }
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                break;
+                        }
+
+
+                        CheckActiveItems();
+                    }
+
+                    //Check if player is inside the weapon customize menu
+                    if (Player.CheckIsWeaponCustomizeMenu())
+                    {
+                        //The Synthsphere Listener thread
+                        if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Unstarted)
+                        {
+                            Weapons.weaponsMenuListener.Start();
+                        }
+                        else if (Weapons.weaponsMenuListener.ThreadState == ThreadState.Stopped)
+                        {
+                            Weapons.weaponsMenuListener = new Thread(new ThreadStart(Weapons.WeaponListenForSynthSphere));
+                            Weapons.weaponsMenuListener.Start();
+                        }
+                    }
+
+                    //Check if the player has killed all the floor enemies
+                    if (ReusableFunctions.CheckIfAllEnemiesKilled() && !hasClearMessageShown)
+                    {
+                        Dayuppy.DisplayMessage("DUMMY", 0, 0, 4000, true);
+
+                        hasClearMessageShown = true;
+                    }
+
+                    //Get current Dungeon
+                    currentDungeon = Memory.ReadByte(Addresses.checkDungeon);
+
+                    //Define event and boss floors
+                    excludeFloors = GetDungeonEventFloors(currentDungeon);
+
+                    if (currentDungeon == 1 && !wiseOwlSwordThread.IsAlive)
+                    {
+                        wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
+                        wiseOwlSwordThread.Start();
+                    }
+
+                    //Get current Floor
+                    currentFloor = Memory.ReadByte(Addresses.checkFloor);
+
+
+                    //Check if the player has entered a new floor
+                    if (currentFloor != prevFloor)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Floor changed!");
+                        Thread.Sleep(120);  // check if player is still in dungeon(to prevent a new floor process when leaving dungeon)
+                        if (Player.InDungeonFloor())
+                        {
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered a new floor!");
+
+                            doorIsOpen = false;
+                            magicCircleChanged = false;
+                            dunUsedActiveEscape = false;
+                            dunUsedEscapeCheck = false;
+                            hasClearMessageShown = false;
+                            MiniBoss.miniBossRolled = false;
+                            MiniBossLootTables.CancelPendingBoost();
+                            normalFloorSnapshot = null;
+                            backfloorSnapshot = null;
+
+                            // Re-apply the enemy model/AI re-skin cave + hook (the dun overlay reloads
+                            // each floor). No-op unless EnemyModelInjector.Enabled is set.
+                            EnemyModelInjector.Install();
+
+                            // Ungaga's Mirage scene-gate NOP is NOT applied here: PINE writing the dun-overlay
+                            // code crashes PCSX2 (confirmed). It must go through the PNACH instead (PCSX2 applies
+                            // code patches safely). See Mirage.ApplySceneDrawPatch / SceneGateAddr.
+
+                            //Check if player is not on an event floor and call the Mini Boss
+                            if (!excludeFloors.Contains(currentFloor))
+                            {
+                                //Initialize the spawns check
+                                Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp), 1);
+                                spawnsCheck = new Thread(new ThreadStart(CheckSpawns));
+                                spawnsCheck.Start();
+
+                                eventfloor = false;
+                            }
+                            else
+                            {
+                                eventfloor = true;
+                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Player has entered an event floor!");
+                            }
+
+                            FixUngagaDoors(currentDungeon);
+
+                            //Save current weapon
+                            currentWeapon = Player.Weapon.GetCurrentWeaponId();
+
+                            //Once everything is done, we set this so it wont reroll again in same floor
+                            prevFloor = currentFloor;
+                        }
+                    }
+
+                    // Floor <-> backfloor swap reloads enemies but keeps checkFloor the same, so the floor-change
+                    // block above (and CheckSpawns) never fire for it. Detect the backfloor-flag edge and log the
+                    // (re)spawned slots so we can compare backfloor vs normal-floor enemy stats.
+                    byte curBackFloor = Memory.ReadByte(Addresses.dunBackFloorFlag);
+                    if (curBackFloor != prevBackFloor)
+                    {
+                        prevBackFloor = curBackFloor;
+                        if (backfloorLogThread == null || !backfloorLogThread.IsAlive)
+                        {
+                            bool onBackFloor = curBackFloor != 0;
+                            backfloorLogThread = new Thread(() => LogBackfloorSpawns(onBackFloor));
+                            backfloorLogThread.Start();
+                        }
+                    }
+
+                    CheckUngagaSwap();
+                    CheckWepLvlUp();
+                    CheckClown();
+                    CheckCurrentSidequests();
+                    CheckDungeonLeaving();
+                    UpdateMiniBossFloorState();
+                    if (CheckWeaponChange(currentWeapon))
+                    {
+                        ReusableFunctions.ClearRecentDamageAndDamageSource();
+                        currentWeapon = Player.Weapon.GetCurrentWeaponId();
+                    }
+
+
+                }
+                //Used to reset the floor data when going back to dungeon
+                else
+                {
+                    prevFloor = 200;
+                    prevBackFloor = 0;
+                }
+
+                byte dunMode = Memory.ReadByte(Addresses.dungeonMode);
+                // Floor-select opening = a new dungeon visit begins. Revert any randomizer staging left over from the
+                // previous visit (covers escape powder / warp / death / stairs-out exits that keep you ingame and so
+                // bypass the mode==0/1 RestoreSpawnRoster below). Once-per-entry, before staging fresh this visit.
+                if (dunMode == 4 && _prevDunMode != 4)
+                {
+                    SpawnRoster.RestoreSpawnRoster();
+                }
+                _prevDunMode = dunMode;
+                if (dunMode == 4) //Check if in floor selection menu
+                {
+                    FloorSelectionScreen();
+                }
+                else if (dunMode == 7) //Next-floor screen: stage the descent target (checkFloor+1) before it loads
+                {
+                    EnemyRandomizer.StageFloorRoster(currentDungeon, Memory.ReadByte(Addresses.checkFloor) + 1);
+                }
+
+                if (MainMenuThread.userMode == true)
+                {
+                    if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
+                    {
+                        Thread.Sleep(100);
+                        if (Memory.ReadByte(Addresses.mode) == 0 || Memory.ReadByte(Addresses.mode) == 1)
+                        {
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not ingame anymore! Exited from Dungeon!");
+                            Enemies.RestoreRedirectedEnemies();
+                            SpawnRoster.RestoreSpawnRoster();   // revert SetSpawnRoster* edits to vanilla
+                            break;
+                        }
+                    }
+                }
+
+                Thread.Sleep(10);
+            }
+        }
+
+        /// <summary>
+        /// Returns a list with the dungeon key ids for the given dungeon.
+        /// </summary>
+        /// <param name="dungeon">The dungeon id:
+        /// <br>0 = Divine Beast Cave</br>
+        /// <br>1 = Wise Owl Forest</br>
+        /// <br>2 = Shipwreck</br>
+        /// <br>3 = Sun and Moon Temple</br>
+        /// <br>4 = Moon Sea</br>
+        /// <br>5 = Gallery of Time</br>
+        /// <br>6 = Demon Shaft</br></param>
+        /// <returns></returns>
+        public static List<byte> GetDungeonGateKey(byte dungeon)
+        {
+            List<byte> key = new List<byte>();
+
+            switch (dungeon)
+            {
+                //DBC
+                case 0:
+                    key.Add(Items.dranscrest); break;
+                //Wise Owl
+                case 1:
+                    key.Add(Items.shinystone); key.Add(Items.redberry); key.Add(Items.pointychestnut); break;
+                //Shipwreck
+                case 2:
+                    key.Add(Items.hook); break;
+                //Sun&Moon
+                case 3:
+                    key.Add(Items.kingsslate); break;
+                //Moon Sea
+                case 4:
+                    key.Add(Items.gunpowder); break;
+                //Gallery
+                case 5:
+                    key.Add(Items.clockhands); break;
+                //Demon Shaft
+                case 6:
+                    key.Add(Items.blackknightcrest); break;
+                default:
+                    break;
+            }
+            return key;
+        }
+
+        public static byte GetDungeonBackFloorKey(byte dungeon)
+        {
+            switch (dungeon)
+            {
+                //DBC
+                case 0:
+                    return Items.tramoil;
+                //Wise Owl
+                case 1:
+                    return Items.sundew;
+                //Shipwreck
+                case 2:
+                    return Items.flappingfish;
+                //Sun&Moon
+                case 3:
+                    return Items.secretpathkey;
+                //Moon Sea
+                case 4:
+                    return Items.braverylaunch;
+                //Gallery
+                case 5:
+                    return Items.flappingduster;
+                //Demon Shaft
+                case 6:
+                    return Items.crystaleyeball;
+                default:
+                    return byte.MaxValue;
+            }
+        }
+
+        public static byte GetDungeonBossFloor(byte dungeon)
+        {
+            switch (dungeon)
+            {
+                case 0: return 14;   // DBC — Dran
+                case 1: return 17;   // WOF — MasterUtan
+                case 2: return 18;   // SW  — IceQueen
+                case 3: return 18;   // SMT — KingsCurseCoffin
+                case 4: return 15;   // MS  — MinotaurJoe
+                case 5: return 24;   // GoT — DarkGenie
+                case 6: return 100;  // DS
+                default: return byte.MaxValue;
+            }
+        }
+
+        public static List<byte> GetDungeonEventFloors(byte dungeon)
+        {
+            List<byte> floors = new List<byte>();
+
+            switch (dungeon)
+            {
+                //DBC
+                case 0:
+                    floors.Add(3); floors.Add(7); floors.Add(14); break;
+                //Wise Owl
+                case 1:
+                    floors.Add(8); floors.Add(16); break;
+                //Shipwreck
+                case 2:
+                    floors.Add(8); floors.Add(17); break;
+                //Sun&Moon
+                case 3:
+                    floors.Add(8); floors.Add(17); break;
+                //Moon Sea
+                case 4:
+                    floors.Add(7); floors.Add(14); break;
+                //Gallery
+                case 5:
+                    floors.Add(24); break;
+                //Demon Shaft
+                case 6:
+                    floors.Add(99); break;
+                default:
+                    break;
+            }
+            return floors;
+        }
+
+        public static void CheckEnemyKill(int currentEnemyAddress)
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Checking quest...");
+            if (monsterQuestMachoActive)
+            {
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Macho quest active");
+                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
+                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE4406))
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
+                    byte killsleft = Memory.ReadByte(0x21CE4405);
+                    killsleft--;
+                    Memory.WriteByte(0x21CE4405, killsleft);
+
+                    if (killsleft == 0)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
+                        Dayuppy.DisplayMessage("You completed Macho's quest!\nWell done!", 2, 30, 4000);
+                        Memory.WriteByte(0x21CE4402, 2);
+                        monsterQuestMachoActive = false;
+                    }
+                }
+            }
+            if (monsterQuestGobActive)
+            {
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Gob quest active");
+                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
+                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE440B))
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
+                    byte killsleft = Memory.ReadByte(0x21CE440A);
+                    killsleft--;
+                    Memory.WriteByte(0x21CE440A, killsleft);
+
+                    if (killsleft == 0)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
+                        Dayuppy.DisplayMessage("You completed Gob's quest!\nWell done!", 2, 30, 4000);
+                        Memory.WriteByte(0x21CE4407, 2);
+                        monsterQuestGobActive = false;
+                    }
+                }
+            }
+            if (monsterQuestJakeActive)
+            {
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Jake quest active");
+                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
+                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE4410))
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
+                    byte killsleft = Memory.ReadByte(0x21CE440F);
+                    killsleft--;
+                    Memory.WriteByte(0x21CE440F, killsleft);
+
+                    if (killsleft == 0)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
+                        Dayuppy.DisplayMessage("You completed Jake's quest!\nWell done!", 2, 30, 4000);
+                        Memory.WriteByte(0x21CE440C, 2);
+                        monsterQuestJakeActive = false;
+                    }
+                }
+            }
+            if (monsterQuestChiefActive)
+            {
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Chief quest active");
+                int currentEnemyAddress2 = currentEnemyAddress + 0x0000001E;
+                if (Memory.ReadByte(currentEnemyAddress2) == Memory.ReadByte(0x21CE4415))
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest progress +1!");
+                    byte killsleft = Memory.ReadByte(0x21CE4414);
+                    killsleft--;
+                    Memory.WriteByte(0x21CE4414, killsleft);
+
+                    if (killsleft == 0)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Quest complete!!");
+                        Dayuppy.DisplayMessage("You completed Chief Bonka´s quest!\nWell done!", 2, 35, 4000);
+                        Memory.WriteByte(0x21CE4411, 2);
+                        monsterQuestChiefActive = false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check enemy spawns upon entering a dungeon floor
+        /// </summary>
+        public static void CheckSpawns()
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Checking spawns...");
+
+            int ms = 0;
+            byte numEligibleEnemies = 0;
+
+            if(prevFloor == 200)
+            {
+                //Listens for the enemy render address value to change, from 0 or 10 seconds have passed
+                //We use the enemy render value here because enemies spawn after chests
+                while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.RenderStatus)) == 255 && ms < 10000)
+                {
+                    Thread.Sleep(100);
+                    ms += 100;
+                    continue;
+                }
+            }
+            else
+            {
+                //Listens for the enemy hp address value to change, from 0 or 10 seconds have passed
+                //We use the enemy render value here because enemies spawn after chests
+                while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp)) == 1 && ms < 10000)
+                {
+                    Thread.Sleep(100);
+                    ms += 100;
+                    continue;
+                }
+            }
+
+            // The sentinel wrote 1 to Enemy14.hp before enemies spawned.
+            // If the game had already set HP before we wrote the sentinel (or if it timed out),
+            // slot 14's HP is stuck at 1. maxHp was never touched, so restore from it.
+            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.RenderStatus)) > 0)
+            {
+                int e14MaxHp = Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.MaxHp));
+                if (e14MaxHp > 0)
+                    Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(14, EnemySlotOffsets.Hp), e14MaxHp);
+            }
+
+            //Set the flag to true
+            if(Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.RenderStatus)) > 0) enemiesSpawn = true;
+
+            //Get all the current floor enemy ids
+            List<ushort> enemyFloorIds = Enemies.GetFloorEnemiesIds();
+
+            //Count miniboss-eligible enemies on the floor — any real non-boss enemy (flyers now drop, so they qualify too)
+            foreach (ushort enemy in enemyFloorIds)
+            {
+                if (enemy != 0 && !EnemySpecies.BossEnemies.ContainsKey(enemy)) numEligibleEnemies++;
+            }
+
+            //Only roll minibosses if there are more than 3 eligible enemies. Wise Owl floors have 3 key-holders, so
+            //we need >3 to guarantee at least one non-key enemy is free to become a miniboss (avoids a failed roll).
+            // Enemies.DumpAllActiveEnemySlots();  // full slot dump — uncomment for offset research
+            // Enemies.DumpModelScaleTable();       // full model scale dump — uncomment for offset research
+            Enemies.LogEnemySpawns();
+            SpawnRoster.ActivateMimicSlots(); // EXPERIMENT: wake roster-spawned mimics (gate slot+0xD4); custom-roster floors only
+
+            if (numEligibleEnemies > 3)
+            {
+                minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
+                minibossProcess.Start();
+            }
+            else Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Not enough normal enemies in floor!");
+
+            chronicle2 = CustomToanEffects.CheckChronicle2(chronicle2);
+            CustomChests.BasicChestRandomizer(currentDungeon, currentFloor, chronicle2); //Randomize the chest loot (old table-based version)
+            Weapons.StartHeavensCloudReach(); // extend Heaven's Cloud reach (dcol1 frame + swing radii)
+            Weapons.OnReachFloorEntered();    // re-locate the freshly reloaded model on this floor
+
+            CheckSidequests();
+
+            CustomToanEffects.chronicleNewFloor = true;
+            ReusableFunctions.ClearRecentDamageAndDamageSource();
+
+            monsterQuestActive = SideQuestManager.CheckCurrentDungeonQuests(currentDungeon);
+
+            for (int i = 0; i < monstersDead.Length; i++)
+            {
+                monstersDead[i] = false;
+            }
+
+            // Wait for miniboss thread so MiniBoss.miniBossEnemyNumbers is populated before we read/modify slots
+            minibossProcess?.Join(2000);
+            // Enemies.ApplyTestModifications();
+            Enemies.ResetPollState();
+            // Enemies.FixModelRedirectSpawnPositions();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished spawn checking");
+        }
+
+        /// <summary>
+        /// After a floor↔backfloor swap, wait for the old slots to clear and the new enemies to (re)spawn, then dump
+        /// them via LogEnemySpawns. CheckSpawns only runs on a checkFloor change, which a backfloor swap doesn't cause.
+        /// </summary>
+        public static void LogBackfloorSpawns(bool onBackFloor)
+        {
+            Thread.Sleep(800);   // let the swap clear the previous slots before we wait for the new ones
+            int ms = 0;
+            while (Memory.ReadByte(EnemyAddresses.FloorSlots.SlotAddr(0, EnemySlotOffsets.RenderStatus)) == 255 && ms < 10000)
+            {
+                Thread.Sleep(150);
+                ms += 150;
+            }
+            Thread.Sleep(500);   // settle — let the remaining slots populate
+            if (Player.InDungeonFloor())
+                Enemies.LogEnemySpawns(onBackFloor);
+        }
+
+        /// <summary>
+        /// Returns true if the given weapon ID is different to the one the player is currently using
+        /// </summary>
+        /// <param name="weapon">The weapon ID to check</param>
+        public static bool CheckWeaponChange(ushort weapon)
+        {
+            if (Player.Weapon.GetCurrentWeaponId() != weapon) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Process to start the mini boss spawn
+        /// </summary>
+        /// <param name="currentDungeon">The current dungeon ID</param>
+        public static void DoMinibossSpawn(byte currentDungeon)
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Processing mini boss...");
+
+            hasMiniBoss = MiniBoss.MiniBossSpawn(currentDungeon, currentFloor);
+
+            //If the mini boss spawned, start its warning message thread
+            if (hasMiniBoss) {
+                miniBossMessage = new Thread(new ThreadStart(MiniBossMessage));
+                miniBossMessage.Start();
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mini boss has rolled: " + hasMiniBoss);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished mini boss process!");
+
+        }
+
+        /// <summary>
+        /// Displays the mini boss screen message
+        /// </summary>
+        public static void MiniBossMessage()
+        {
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Working on the message...");
+
+            int ms = 0;
+
+            //Wait until we get control, we use the HUD display as a flag
+            while (Memory.ReadByte(Addresses.hideHud) == 1 && ms < 8000)
+            {
+                Thread.Sleep(100);
+                ms += 100;
+                continue;
+            }
+
+            Dayuppy.DisplayMessage("A mysterious enemy lurks\naround. Be careful!", 2, 24, 4000);
+
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Finished message process!");
+        }
+
+        /// <summary>
+        /// Returns true if the bone door opening trigger is active
+        /// </summary>
+        public static bool IsBypassBoneDoor()
+        {
+            return Memory.ReadByte(Addresses.BoneDoorOpenType) == 5 ? true: false;
+        }
+
+        /// <summary>
+        /// Activates or deactivates the door trigger
+        /// </summary>
+        /// <param name="flag">True if to activate the door</param>
+        public static void SetBypassBoneDoor(bool flag)
+        {
+            byte n;
+            if (flag) n = 5;
+            else n = 21;
+            Memory.WriteByte(Addresses.BoneDoorOpenType, n);
+        }
+
+        public static void FixUngagaDoors(byte currentdng)
+        {
+            switch (currentdng)
+            {
+                case 3:
+                    if (Memory.ReadFloat(0x20928670) == 150)
+                    {
+                        Memory.WriteByte(0x20985E0, 30);
+                        Memory.WriteFloat(0x20928670, 50);
+                        Memory.WriteFloat(0x20928928, 50);
+                        Memory.WriteByte(0x20928B14, 30);
+                        Memory.WriteByte(0x20928AE4, 30);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
+                    }
+                    else
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Couldn't fix ungaga doors, or they were fixed already");
+                    }
+                    break;
+
+                case 4:
+                    if (Memory.ReadFloat(0x2092FA08) == 150)
+                    {
+                        Memory.WriteByte(0x2092F978, 30);
+                        Memory.WriteFloat(0x2092FA08, 50);
+                        Memory.WriteFloat(0x2092FCC0, 50);
+                        Memory.WriteByte(0x2092FEAC, 30);
+                        Memory.WriteByte(0x2092FE7C, 30);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
+                    }
+                    else
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Couldn't fix ungaga doors, or they were fixed already");
+                    }
+                    break;
+
+                case 5:
+                    if (Memory.ReadFloat(0x209244AC) == 150)
+                    {
+                        Memory.WriteByte(0x2092441C, 30);
+                        Memory.WriteFloat(0x209244AC, 50);
+                        Memory.WriteFloat(0x20924764, 50);
+                        Memory.WriteByte(0x20924920, 30);
+                        Memory.WriteByte(0x20924950, 30);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
+                    }
+                    else
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Couldn't fix ungaga doors, or they were fixed already");
+                    }
+                    break;
+
+                default:
+                    break;
+
+            }
+        }
+
+        public static void CheckUngagaSwap()
+        {
+            currentCharCursor = Memory.ReadByte(0x202A2DE8); //current char
+
+            if (currentCharCursor != prevCharCursor)
+            {
+                if (currentCharCursor == 4)
+                {
+                    int timer = 0;
+                    while (timer < 10)
+                    {
+                        Thread.Sleep(100);
+                        timer++;
+
+                        if (Memory.ReadByte(0x202A2010) == 3)
+                        {
+                            if (Memory.ReadUShort(0x2193A013) == 12850)
+                            {
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            if (Memory.ReadUShort(0x217E5453) == 12850)
+                            {
+                                break;
+                            }
+                        }
+
+
+                    }
+
+                    if (Memory.ReadByte(0x202A2010) == 3)
+                    {
+                        Memory.WriteByte(0x2193A013, 52);
+                        Memory.WriteByte(0x2193A014, 52);
+                    }
+                    else
+                    {
+                        Memory.WriteByte(0x217E5453, 52);
+                        Memory.WriteByte(0x217E5454, 52);
+                    }
+                }
+            }
+
+            prevCharCursor = currentCharCursor;
+        }
+
+
+
+        public static void CheckClown()
+        {
+            //Check if clown is triggered, then change loot table
+            if (Memory.ReadInt(Addresses.clownCheck) == 30707852 && clownOnScreen == false && eventfloor == false)
+            {
+                CustomChests.ClownRandomizer(chronicle2);
+                clownOnScreen = true;
+            }
+            else
+            {
+                if (clownOnScreen)
+                {
+                    if (Memory.ReadInt(Addresses.clownCheck) != 30707852)
+                    {
+                        clownOnScreen = false;
+                    }
+                }
+            }
+        }
+
+        public static void CheckSidequests()
+        {
+            if (currentDungeon == 4 && currentFloor == 6 && Memory.ReadByte(0x21CE445E) == 1)
+            {
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Yellow drops challenge active");
+                sambaChallengeQuest = true;
+            }
+            else
+            {
+                sambaChallengeQuest = false;
+            }
+
+            if (currentDungeon == 6)
+            {
+                if (Memory.ReadByte(0x21CE4468) == 1) //Mayor quest flag
+                {
+                    if (currentFloor == Memory.ReadByte(0x21CE4469) -1)
+                    {
+                        mayorQuest = true;
+                        //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Mayor quest active in this floor");
+                    }
+                    else
+                    {
+                        mayorQuest = false;
+                    }
+                }
+                else
+                {
+                    mayorQuest = false;
+                }
+            }
+            else
+            {
+                mayorQuest = false;
+            }
+        }
+
+        public static void CheckCurrentSidequests()
+        {
+            if (monsterQuestActive)
+            {
+                if (currentDungeon != 6)
+                {
+                    for (int i = 0; i < monstersDead.Length; i++)
+                    {
+                        currentAddress = 0x21E16BC4 + (i * 0x190);
+
+                        if (Memory.ReadUShort(currentAddress) > 0)
+                        {
+                            monstersDead[i] = false;
+                        }
+                        else
+                        {
+                            if (monstersDead[i] == false)
+                            {
+                                CheckEnemyKill(currentAddress);
+                            }
+
+                            monstersDead[i] = true;
+                        }
+                    }
+                }
+            }
+
+            if (sambaChallengeQuest)
+            {
+                SambaChallengeQuest();
+            }
+
+            if (mayorQuest)
+            {
+                MayorQuest();
+            }
+        }
+
+        public static void SambaChallengeQuest()
+        {
+            ushort currentweaponID = Memory.ReadUShort(0x21EA7590);
+            if (sambaChallengeQuestCheck == false && Memory.ReadByte(0x202A34CC) == 1)
+            {
+                if (Memory.ReadByte(Addresses.hideHud) == 0)
+                {
+                    if (Memory.ReadByte(0x202A3570) == 0 && (currentweaponID == 258 || currentweaponID == 257))
+                    {
+                        Memory.WriteInt(0x21CE205C, 0);
+                        Dayuppy.DisplayMessage("Samba's quest started!\nClear all enemies using only Dagger!\nUsing a throwable also\ncancels the mission.", 4, 40, 8000);
+                        sambaChallengeQuestActive = true;
+
+                        for (int i = 0; i < 8; i++)
+                        {
+                            monstersDead[i] = false;
+                        }
+                    }
+                    else if (Memory.ReadByte(0x202A3570) == 0 && currentweaponID != 258 && currentweaponID != 257)
+                    {
+                        Dayuppy.DisplayMessage("Samba's quest did not start.\nRe-enter with Dagger equipped.", 2, 30, 4000);
+                        sambaChallengeQuestActive = false;
+                    }
+                    sambaChallengeQuestCheck = true;
+                }
+            }
+            else if (sambaChallengeQuestCheck == true && Memory.ReadByte(0x202A34CC) == 0)
+            {
+                sambaChallengeQuestCheck = false;
+                sambaChallengeQuestActive = false;
+            }
+
+            if (sambaChallengeQuestActive)
+            {
+                if ((currentweaponID != 258 && currentweaponID != 257) || Memory.ReadByte(0x21DC4484) == 26 || Memory.ReadByte(0x21DC4484) == 27)
+                {
+                    Thread.Sleep(500);
+                    Dayuppy.DisplayMessage("Samba's quest has been cancelled.\nRe-enter in order to activate it.", 2, 40, 4000);
+                    sambaChallengeQuestActive = false;
+                }
+                byte enemieskilled = 0;
+                for (int i = 0; i < 8; i++)
+                {
+                    currentAddress = 0x21E16BC4 + (i * 0x190);
+
+                    if (Memory.ReadUShort(currentAddress) > 0)
+                    {
+                        monstersDead[i] = false;
+                    }
+                    else
+                    {
+                        monstersDead[i] = true;
+                        enemieskilled++;
+                    }
+                }
+
+                if (enemieskilled == 8)
+                {
+                    Dayuppy.DisplayMessage("Samba's quest completed!\nWell done!", 2, 28, 4000);
+                    Memory.WriteByte(0x21CE4462, 1);
+                    sambaChallengeQuest = false;
+                }
+            }
+        }
+
+        public static void MayorQuest()
+        {
+            if (mayorQuestCheck == false && Memory.ReadByte(0x202A34CC) == 1)
+            {
+                if (Memory.ReadByte(Addresses.hideHud) == 0)
+                {
+                    if (Memory.ReadByte(0x202A3570) == Memory.ReadByte(0x21CE446A)) //check if correct ally for quest
+                    {
+                        Memory.WriteInt(0x21CE205C, 0);
+                        Dayuppy.DisplayMessage("Mayor's quest started!\nClear all enemies.\nCannot change character.\nThrowables are not allowed.", 4, 26, 5000);
+
+                        mayorQuestActive = true;
+
+                        for (int i = 0; i < 8; i++)
+                        {
+                            monstersDead[i] = false;
+                        }
+                    }
+                    else
+                    {
+                        Dayuppy.DisplayMessage("Mayor's quest did not start.\nRe-enter with correct ally.", 2, 30, 4000);
+                        mayorQuestActive = false;
+                    }
+                    mayorQuestCheck = true;
+                }
+            }
+            else if (mayorQuestCheck == true && Memory.ReadByte(0x202A34CC) == 0)
+            {
+                mayorQuestCheck = false;
+                mayorQuestActive = false;
+            }
+
+            if (mayorQuestActive)
+            {
+                if (Memory.ReadByte(0x21DC4484) == 26 || Memory.ReadByte(0x21DC4484) == 27)
+                {
+                    Thread.Sleep(500);
+                    Dayuppy.DisplayMessage("Mayor's quest has been cancelled.\nRe-enter in order to re-attempt it.", 2, 40, 4000);
+                    mayorQuestActive = false;
+                }
+
+                byte enemieskilled = 0;
+                for (int i = 0; i < 8; i++)
+                {
+                    currentAddress = 0x21E16BC4 + (i * 0x190);
+
+                    if (Memory.ReadUShort(currentAddress) > 0)
+                    {
+                        monstersDead[i] = false;
+                    }
+                    else
+                    {
+                        monstersDead[i] = true;
+                        enemieskilled++;
+                    }
+                }
+
+                if (enemieskilled == 8)
+                {
+                    Dayuppy.DisplayMessage("Mayor's quest completed!\nWell done!", 2, 28, 4000);
+                    Memory.WriteByte(0x21CE4468, 2);
+                    mayorQuest = false;
+                }
+            }
+        }
+
+        public static void FloorSelectionScreen()
+        {
+            // "Randomize Enemies": randomize the highlighted floor, before it loads (the menu is pre-load, so
+            // whatever you confirm is already staged). Keeps only ONE floor staged (the cursor's) — moving the cursor
+            // un-stages the previous one. dunEnterFloorCursor == checkFloor == BtEnemyLayout index. Read dungeon+floor
+            // from the DunEnter menu struct (currentDungeon is stale at entry — see Addresses). No-op when off.
+            EnemyRandomizer.StageSelectedFloor(Memory.ReadByte(Addresses.dunEnterDungeon), Memory.ReadByte(Addresses.dunEnterFloorCursor));
+
+            // Exit dungeon from floor selection screen (1 tick for button press and next tick warps to town)
+            if (circlePressed == false)
+            {
+                if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Circle)
+                {
+                    circlePressed = true;
+                }
+            }
+            else
+            {
+                if (Memory.ReadUShort(Addresses.buttonInputs) != (ushort)Button.Circle)
+                {
+                    currentGilda = Memory.ReadUShort(Addresses.gilda);
+                    Memory.WriteUShort(Addresses.dungeonDebugMenu, 170);
+                    Memory.WriteByte(Addresses.dungeonMode, 1);
+                    circlePressed = false;
+                }
+            }
+        }
+
+        public static void CheckActiveItems()
+        {
+            if (Memory.ReadUShort(Addresses.buttonInputs) == (ushort)Button.Square && (Memory.ReadByte(0x21D5676D) > 0 && Memory.ReadInt(0x21D56770) == -1) )
+            {
+                int currentSlot = Memory.ReadInt(0x202A3598);
+                int currentActiveItem = 0x21CDD8AC + (0x2 * currentSlot);
+
+                if (Memory.ReadShort(currentActiveItem) == 175)
+                {
+                    byte animationID = Memory.ReadByte(0x21DC4484);
+                    if (animationID == 0 || animationID == 1 || animationID == 2 || animationID == 18)
+                    {
+                        if (squareActive == false)
+                        {
+                            if (dunEscapeConfirm == false)
+                            {
+                                squareActive = true;
+                                Dayuppy.DisplayMessage("^RAre you sure you want to leave?\n^WPress square to use Escape Powder.", 2, 36, 3000);
+                                dunEscapeConfirmThread = new Thread(() => DunEscapeConfirmTimer());
+                                dunEscapeConfirmThread.Start();
+                                dunEscapeConfirm = true;
+                                dunEscapeConfirmSpamCheck = false;
+                            }
+                            else if (dunEscapeConfirm)
+                            {
+                                if (dunEscapeConfirmSpamCheck == true)
+                                {
+                                    if (Memory.ReadByte(0x202A35EC) == 0)
+                                    {
+                                        squareActive = true;
+                                        dunUsedActiveEscape = true;
+                                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Activated escape powder!");
+                                        Memory.WriteByte(0x202A35EC, 170);
+                                        byte currentPowders = Memory.ReadByte(0x21CDD8B2 + (0x2 * currentSlot));
+                                        currentPowders--;
+                                        Memory.WriteByte(0x21CDD8B2 + (0x2 * currentSlot), currentPowders);
+                                        if (currentPowders == 0)
+                                        {
+                                            Memory.WriteUShort(currentActiveItem, 65535);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (Memory.ReadShort(currentActiveItem) == 177)
+                {
+                    byte animationID = Memory.ReadByte(0x21DC4484);
+                    if (animationID == 0 || animationID == 1 || animationID == 2 || animationID == 18)
+                    {
+                        if (squareActive == false)
+                        {
+                            ushort currentmaxWHP = Player.Weapon.GetCurrentWeaponMaxWhp();
+
+                            int currentChar = Memory.ReadByte(0x21CD9550);
+                            int currentWepNum = Memory.ReadByte(0x21CDD88C + (0x1 * currentChar));
+                            int whp;
+
+                            if (currentChar == 0)
+                            {
+                                whp = Player.Toan.WeaponSlot0.whp + (0xF8 * currentWepNum);
+                            }
+                            else if (currentChar == 1)
+                            {
+                                whp = Player.Xiao.WeaponSlot0.whp + (0xF8 * currentWepNum);
+                            }
+                            else if (currentChar == 2)
+                            {
+                                whp = Player.Goro.WeaponSlot0.whp + (0xF8 * currentWepNum);
+                            }
+                            else if (currentChar == 3)
+                            {
+                                whp = Player.Ruby.WeaponSlot0.whp + (0xF8 * currentWepNum);
+                            }
+                            else if (currentChar == 4)
+                            {
+                                whp = Player.Ungaga.WeaponSlot0.whp + (0xF8 * currentWepNum);
+                            }
+                            else
+                            {
+                                whp = Player.Osmond.WeaponSlot0.whp + (0xF8 * currentWepNum);
+                            }
+                            float currentWHP = Memory.ReadFloat(whp);
+                            if (currentWHP < currentmaxWHP)
+                            {
+                                Memory.WriteFloat(whp, currentmaxWHP);
+                                Dayuppy.DisplayMessage("Used Repair Powder!", 1, 20, 2000);
+                                byte currentPowders = Memory.ReadByte(0x21CDD8B2 + (0x2 * currentSlot));
+                                currentPowders--;
+                                Memory.WriteByte(0x21CDD8B2 + (0x2 * currentSlot), currentPowders);
+                                squareActive = true;
+                                if (currentPowders == 0)
+                                {
+                                    Memory.WriteUShort(currentActiveItem, 65535);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                squareActive = false;
+            }
+        }
+
+        public static void DunEscapeConfirmTimer()
+        {
+            Thread.Sleep(500);
+            dunEscapeConfirmSpamCheck = true;
+            Thread.Sleep(2500);
+            dunEscapeConfirm = false;
+        }
+
+        public static void CheckDungeonLeaving()
+        {
+            if (dunUsedActiveEscape == false && dunUsedEscapeCheck == false)
+            {
+                if (Memory.ReadByte(0x202A35EC) == 171)
+                {
+                    CheckEscapePowders();
+                    dunUsedEscapeCheck = true;
+                }
+            }
+        }
+
+        public static void CheckEscapePowders()
+        {
+            bool hasEscapeP = SideQuestManager.CheckItemQuestReward(175, true, false);
+
+            if (hasEscapeP == false)
+            {
+                if (Memory.ReadByte(0x21CDD8AE) == 175)
+                {
+                    byte currentPowders = Memory.ReadByte(0x21CDD8B4);
+                    currentPowders--;
+                    Memory.WriteByte(0x21CDD8B4, currentPowders);
+                    if (currentPowders == 0)
+                    {
+                        Memory.WriteUShort(0x21CDD8AE, 0);
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Consumed escape powder from active slots");
+                }
+                else if (Memory.ReadByte(0x21CDD8B0) == 175)
+                {
+                    byte currentPowders = Memory.ReadByte(0x21CDD8B6);
+                    currentPowders--;
+                    Memory.WriteByte(0x21CDD8B6, currentPowders);
+                    if (currentPowders == 0)
+                    {
+                        Memory.WriteUShort(0x21CDD8B0, 0);
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Consumed escape powder from active slots");
+
+                }
+                else if (Memory.ReadByte(0x21CDD8B2) == 175)
+                {
+                    byte currentPowders = Memory.ReadByte(0x21CDD8B8);
+                    currentPowders--;
+                    Memory.WriteByte(0x21CDD8B8, currentPowders);
+                    if (currentPowders == 0)
+                    {
+                        Memory.WriteUShort(0x21CDD8B2, 0);
+                    }
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Consumed escape powder from active slots");
+                }
+            }
+        }
+
+        public static void UpdateMiniBossFloorState()
+        {
+            bool onBackFloor = Memory.ReadByte(Addresses.dunBackFloorFlag) != 0;
+
+            if (onBackFloor && !wasOnBackFloor)
+            {
+                // Snapshot the normal floor miniboss state and switch to backfloor context
+                normalFloorSnapshot = MiniBoss.TakeSnapshot();
+                MiniBossLootTables.CancelPendingBoost();
+
+                if (backfloorSnapshot == null)
+                {
+                    // First visit: spawn a fresh backfloor miniboss
+                    minibossProcess = new Thread(() => DoMinibossSpawn(currentDungeon));
+                    minibossProcess.Start();
+                }
+                else if (backfloorSnapshot.Count > 0)
+                {
+                    // Subsequent visit: restore the saved backfloor minibosses
+                    var snap = backfloorSnapshot;
+                    minibossProcess = new Thread(() => { Thread.Sleep(200); MiniBoss.RestoreFromSnapshot(snap, currentDungeon, currentFloor); });
+                    minibossProcess.Start();
+                }
+            }
+            else if (!onBackFloor && wasOnBackFloor)
+            {
+                // Snapshot the backfloor miniboss state and switch back to normal floor context
+                backfloorSnapshot = MiniBoss.TakeSnapshot();
+                MiniBossLootTables.CancelPendingBoost();
+
+                if (normalFloorSnapshot != null && normalFloorSnapshot.Count > 0)
+                {
+                    var snap = normalFloorSnapshot;
+                    minibossProcess = new Thread(() => { Thread.Sleep(200); MiniBoss.RestoreFromSnapshot(snap, currentDungeon, currentFloor); });
+                    minibossProcess.Start();
+                }
+            }
+
+            wasOnBackFloor = onBackFloor;
+        }
+
+        public static void CheckWepLvlUp()
+        {
+            byte menuMode = Memory.ReadByte(0x202A2010);
+            if (menuMode == 2 || menuMode == 1)
+            {
+
+                if (wepMenuOpen == false)
+                {
+                    for (int i = 0; i < wepLevelArray.Length; i++)
+                    {
+                        wepLevelArray[i] = Memory.ReadByte(0x21CDDA5A + (i * 0xF8));
+                    }
+                    wepMenuOpen = true;
+                }
+                else
+                {
+                    if (menuMode == 1)
+                    {
+                        if (Memory.ReadByte(0x21D9EC08) == 6)
+                        {
+                            for (int i = 0; i < wepLevelArray.Length; i++)
+                            {
+                                wepLevelArray[i] = Memory.ReadByte(0x21CDDA5A + (i * 0xF8));
+                            }
+                            PPowdermenuOpen = true;
+                        }
+                        else
+                        {
+                            if (PPowdermenuOpen == true)
+                            {
+                                for (int i = 0; i < wepLevelArray.Length; i++)
+                                {
+                                    if (Memory.ReadByte(0x21CDDA5A + (i * 0xF8)) > wepLevelArray[i])
+                                    {
+                                        CheckSoZEffect(i);
+                                        wepLevelArray[i] = Memory.ReadByte(0x21CDDA5A + (i * 0xF8));
+                                    }
+                                }
+                            }
+                            PPowdermenuOpen = false;
+                        }
+                    }
+                    else if (menuMode == 2)
+                    {
+                        for (int i = 0; i < wepLevelArray.Length; i++)
+                        {
+                            if (Memory.ReadByte(0x21CDDA5A + (i * 0xF8)) > wepLevelArray[i])
+                            {
+                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Weapon(sword) leveled up!");
+                                CheckSoZEffect(i);
+                                wepLevelArray[i] = Memory.ReadByte(0x21CDDA5A + (i * 0xF8));
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                wepMenuOpen = false;
+            }
+        }
+
+        public static void CheckSoZEffect(int wepOffset)
+        {
+            ushort wepID = Memory.ReadUShort(Player.Toan.WeaponSlot0.id + (0xF8 * wepOffset));
+
+            if (wepID == 296)
+            {
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "SoZ leveled up!");
+                byte currentThunder = Memory.ReadByte(Player.Toan.WeaponSlot0.thunder + (0xF8 * wepOffset));
+                ushort storedThunder = (ushort)(Memory.ReadUShort(0x21CE446D) + currentThunder);
+                if (storedThunder > 30000)
+                {
+                    storedThunder = 30000;
+                }
+                Memory.WriteByte(Player.Toan.WeaponSlot0.thunder + (0xF8 * wepOffset), 0);
+                if (Memory.ReadByte(Player.Toan.WeaponSlot0.elementHUD + (0xF8 * wepOffset)) == 2)
+                {
+                    Memory.WriteByte(Player.Toan.WeaponSlot0.elementHUD + (0xF8 * wepOffset), 5);
+                }
+                Memory.WriteUShort(0x21CE446D, storedThunder);
+                ChangeSoZMaxAtt(storedThunder);
+
+            }
+        }
+
+        public static void ChangeSoZMaxAtt(ushort storedThunder)
+        {
+            ushort maxAttack = 199;
+            if (storedThunder > 200)
+            {
+                if (storedThunder > 500)
+                {
+                    if (storedThunder > 1000)
+                    {
+                        if (storedThunder > 2000)
+                        {
+                            maxAttack = 599;
+                            storedThunder -= 2000;
+
+                            ushort attackboost = (ushort)(storedThunder / 20);
+                            maxAttack = (ushort)(maxAttack + attackboost);
+                        }
+                        else
+                        {
+                            maxAttack = 499;
+                            storedThunder -= 1000;
+
+                            ushort attackboost = (ushort)(storedThunder / 10);
+                            maxAttack = (ushort)(maxAttack + attackboost);
+                        }
+                    }
+                    else
+                    {
+                        maxAttack = 399;
+                        storedThunder -= 500;
+
+                        ushort attackboost = (ushort)(storedThunder / 5);
+                        maxAttack = (ushort)(maxAttack + attackboost);
+                    }
+                }
+                else
+                {
+                    maxAttack = 299;
+                    storedThunder -= 200;
+
+                    ushort attackboost = (ushort)(storedThunder / 3);
+                    maxAttack = (ushort)(maxAttack + attackboost);
+                }
+            }
+            else
+            {
+                ushort attackboost = (ushort)(storedThunder / 2);
+                maxAttack = (ushort)(maxAttack + attackboost);
+                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "maxattack: " + maxAttack);
+            }
+            //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "SoZ max attack changed!");
+            Memory.WriteUShort(0x2027B298, maxAttack);
+        }
+
+    }
+}
