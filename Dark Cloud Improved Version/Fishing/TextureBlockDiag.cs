@@ -12,7 +12,7 @@ namespace Dark_Cloud_Improved_Version
     /// </summary>
     internal static class TextureBlockDiag
     {
-        internal static bool Enabled = true;    // re-armed: verifying the BrownbooTextureRelocation park
+        internal static bool Enabled = false;   // stilts investigation CLOSED (PatchStiltsHeal shipped) — re-arm for future block-table forensics
 
         private const long Manager    = 0x21C75870;      // CTextureManager instance
         private const long BlocksOff  = 0x18;            // first block struct
@@ -30,8 +30,7 @@ namespace Dark_Cloud_Improved_Version
 
             int fishTexb = Memory.ReadInt(FishTexB);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[TexBlocks] ===== {tag} ===== fish_texb=0x{fishTexb:X2} (mgr 0x{Manager:X}) " +
-                $"caveFrames={Memory.ReadInt(0x21F80010)} caveBanks={Memory.ReadInt(0x21F80014)}");
+                $"[TexBlocks] ===== {tag} ===== fish_texb=0x{fishTexb:X2} (mgr 0x{Manager:X})");
             for (int n = 0; n < BlockCount; n++)
             {
                 long b = Manager + BlocksOff + n * BlockSize;
