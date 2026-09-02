@@ -68,15 +68,9 @@ namespace Dark_Cloud_Improved_Version
         private static byte[] ItemTblUnk = Memory.ReadByteArray(Addresses.ItemTblUnk, 84);      //Unknown
 
         private static Random random = new Random();
-        public static bool elemChanged = false;
         public static bool elemUp = false;
         public static bool elemDown = false;
         public static bool elemSwitching = false;
-        public static byte[] elemTextureFire = new byte[53552];
-        public static byte[] elemTextureIce = new byte[61008];
-        public static byte[] elemTextureThunder = new byte[73280];
-        public static byte[] elemTextureWind = new byte[73344];
-        public static byte[] elemTextureHoly = new byte[80784];
         public static byte[] elemRGBFire = { 63, 15, 0, 63, 6, 1, 0, 63, 63, 15, 0, 31, 6, 1, 0, 31};
         public static byte[] elemRGBIce = { 25, 50, 63, 63, 2, 5, 6, 63, 25, 50, 63, 31, 2, 5, 6, 31};
         public static byte[] elemRGBThunder = { 63, 63, 25, 63, 6, 6, 2, 63, 63, 63, 25, 31, 6, 6, 2, 31};
@@ -710,28 +704,7 @@ namespace Dark_Cloud_Improved_Version
 
                                                 if (currentCharacter == 3)
                                                 {
-                                                    CheckElements(elementSelected);
-                                                    /*
-                                                    if (elemChanged == false)
-                                                    {
-                                                        elemTextureHoly = Memory.ReadByteArray(0x217FD840, elemTextureHoly.Length);
-                                                        elemChanged = true;
-                                                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Element stored");
-                                                        File.WriteAllBytes(@"c:\DC1Elements\holy.txt", elemTextureHoly);
-                                                        //var elementFile = Properties.Resources.thunder;
-                                                        //string path = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                                                        //var bytes = File.ReadAllBytes(path + @"\thunder.txt");
-                                                        //Memory.WriteByteArray(0x217FD840, bytes);
-
-                                                    }
-                                                    else if (elemChanged == true)
-                                                    {
-                                                        Memory.WriteByteArray(0x217FD840, elemTextureHoly);
-                                                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Element written");
-                                                    }
-                                                    */
                                                     Memory.WriteByte(CodeCaves.Mailbox.Element, 1);
-
                                                 }
 
                                                 Memory.WriteByteArray(0x21E59450, elemRGBs[elementSelected]);
@@ -774,51 +747,6 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 Thread.Sleep(1);
-            }
-        }
-
-        public static void CheckElements(byte currentElem)
-        {
-
-            string path = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-
-            byte[] bytes;
-            int addressPointer = Memory.ReadInt(0x202A2DDC);
-
-            addressPointer += (int)Memory.Pcsx2Base;
-
-            switch (currentElem)
-            {
-                case 0:
-                    bytes = Resources.rubyFireTex;
-                    Memory.WriteByteArray(addressPointer, bytes);
-                    //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Wrote fire texture");
-
-                    break;
-                case 1:
-                    bytes = Resources.rubyIceTex;
-                    Memory.WriteByteArray(addressPointer, bytes);
-                    //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Wrote ice texture");
-
-                    break;
-                case 2:
-                    bytes = Resources.rubyThunderTex;
-                    Memory.WriteByteArray(addressPointer, bytes);
-                    //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Wrote thunder texture");
-
-                    break;
-                case 3:
-                    bytes = Resources.rubyWindTex;
-                    Memory.WriteByteArray(addressPointer, bytes);
-                    //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Wrote wind texture");
-
-                    break;
-                case 4:
-                    bytes = Resources.rubyHolyTex;
-                    Memory.WriteByteArray(addressPointer, bytes);
-                    //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Wrote holy texture");
-
-                    break;
             }
         }
 
@@ -1214,8 +1142,6 @@ namespace Dark_Cloud_Improved_Version
 
         public static void Testing()
         {
-            Resources.initiateRubyMemeFix(); //Load the texture resources to fix the Ruby Meme into memory.
-
             //CheatCodes.InputBuffer.Monitor();
 
             //List<int> results = Memory.StringSearch(0x20000000, 0x22000000, "TIM2");
