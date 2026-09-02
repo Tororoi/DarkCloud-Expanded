@@ -32,8 +32,8 @@ namespace Dark_Cloud_Improved_Version
         private static int maxFishSize = 0;
 
         // Fish steering — per-slot timestamps for heading writes
-        private static readonly DateTime[] _lastSteerTime         = new DateTime[5];
-        private static readonly DateTime[] _lastMatatakiSteerTime = new DateTime[5];
+        private static readonly DateTime[] _lastSteerTime         = new DateTime[6];   // engine hard max 6 slots
+        private static readonly DateTime[] _lastMatatakiSteerTime = new DateTime[6];   // (FishNum patch made 6 the default)
 
         // Cached fishing area ID for the current session. Set on first InitFishingSession call,
         // cleared in ResetSession. Matataki area ID 1 is ambiguous (Waterfall vs Peanut Pond)

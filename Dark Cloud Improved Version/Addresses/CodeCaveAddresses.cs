@@ -293,7 +293,7 @@ namespace Dark_Cloud_Improved_Version
         //   held the old ClsMes catch/menu scratch, now baked into each town's mes by IsoPatcher.) Inside the
         //   CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so the sweeper still shows it clean.
 
-        // ── FREE: 0x21FAE610 .. 0x21FB4000 (MeshCave margin, ~0x59F0 B) ──────────────────────────────────
+        // ── FREE: 0x21FAE614 .. 0x21FB4000 (MeshCave margin, ~0x59EC B) ──────────────────────────────────
         // Formerly the runtime fishing-sign asset/stub/config caves (SignMdsCave/SignImgCave/SignStubCave/
         // SignConfig, used by the retired runtime sign-injection loaders). The sign is
         // now baked into each town's scene.scn, so this whole span is free. Inside the CodeCaveScanner
@@ -327,6 +327,9 @@ namespace Dark_Cloud_Improved_Version
         internal const uint MizuRedrawFramePtrGuest = 0x01FAE608;   // guest (baked into the stub)
         internal const long MizuRedrawTexGroup      = 0x21FAE60C;
         internal const uint MizuRedrawTexGroupGuest = 0x01FAE60C;
+        /// <summary>Water-redraw payload dynamic-return slot (waterOrderGate.bin: COND/SHIM write it,
+        /// RET_THUNK `jr`s through it). EE-side only — C# never touches it.</summary>
+        internal const uint WaterRedrawReturnSlotGuest = 0x01FAE610;
     }
 
 }
