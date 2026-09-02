@@ -29,6 +29,7 @@ STUBS = [
     ('fishline_split_caves.s',   'fishlineSplitCaves.bin',   0x228DC0),
     ('fishline_uncast_gate.s',   'fishlineUncastGate.bin',   0x228E20),
     ('camera_norm_side.s',       'cameraNormSide.bin',       0x228F00),
+    ('stilts_heal.s',            'stiltsHeal.bin',           0x229780),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

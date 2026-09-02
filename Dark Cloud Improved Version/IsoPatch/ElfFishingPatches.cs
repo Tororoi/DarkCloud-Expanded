@@ -206,6 +206,43 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(StepLwc1Addr), J(StepCaveAddr));  WrU32(fs, ElfOff(StepSubAddr), 0);   // j step_cave ; nop
         }
 
+        // ── Brownboo stilts heal cave (v4 — THE fix; v1-v3 post-mortems in memory
+        // fishing-stilts-texture-block) ───────────────────────────────────────────────────────────────
+        // Root cause (clean-walking vs garbled-fishing GS-dump pair, 2026-09-02): the posts above the
+        // water are painted by the WATERSIDE REDRAW — scene geometry re-drawn after DrawWater so poles
+        // show in front of the surface — sampling scene bank 0x01's first atlas (GS 0x1A40, T8 512x512,
+        // CLUT 0x1E40). During fishing, FishingDrawFish (a fish tile) and FishLineDraw's rod/bobber
+        // MGDraws (which carry the c01d_turi fishing player model's PACKET-BAKED texture uploads at
+        // 0x1A40..0x20C0) clobber that atlas between its frame-head upload and the waterside redraw.
+        // Walking paints the posts in scene pass 1, pre-clobber (always clean); the quit menu pauses the
+        // fishing draws (heals). Texture-block parks can never help: the clobbering uploads are baked
+        // into model VIF packets, not block descriptors.
+        // Fix: chain in front of MainDraw's water-block reload site @0x17BB48 — the first call AFTER
+        // FishLineDraw, BEFORE the waterside redraw. PatchWaterRedraw owns that site (it retargets the
+        // vanilla `jal ReloadTexture(0x15)` to its EARLY_STUB @0x17BBA4, which does the canal-wading
+        // early-player draw and the displaced 0x15 bind, exiting via constant `j 0x17BB50`) — so this
+        // cave takes the jal, does the gated ReloadTexture(block 1), and continues into EARLY_STUB.
+        // MUST run AFTER PatchWaterRedraw (guards its jal). v2 proved this exact re-upload mechanically
+        // safe one call earlier; it only failed because that hook preceded the rod/bobber clobber.
+        // Stub: tools/stubs/stilts_heal.s → stiltsHeal.bin.
+        internal static void PatchStiltsHeal(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = 0x00229780;   // dead CharaChange region, past the cameraNormSide bank
+            const uint HookAddr = 0x0017BB48;   // MainDraw water-reload site (vanilla jal ReloadTexture)
+            uint gotImm = RdU32(fs, ElfOff(HookAddr - 4)), got = RdU32(fs, ElfOff(HookAddr));
+            if (gotImm != 0x24060015 || got != 0x0C05EEE9)   // addiu a2,zero,0x15 ; jal EARLY_STUB(0x17BBA4)
+                throw new IOException($"Water-reload site 0x{HookAddr:X} unexpected (got 0x{gotImm:X8}/0x{got:X8}) — PatchWaterRedraw must run first (its EARLY_STUB jal is chained here).");
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin")
+                ?? throw new IOException("Embedded EE function missing: stiltsHeal.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x3C08002A)   // first insn = lui $t0,0x2a
+                throw new IOException($"stiltsHeal.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), Jal(CaveAddr));
+        }
+
         // (A "cast-trajectory scale" cave hooked into the FishLineSetUki/SetHook tails was tried here and
         // REMOVED 2026-08: the throw state (chara_fishing==3) passes the -1 sentinel weight, so the bobber is
         // NOT bone-pinned during the cast — the vanilla throw is ROPE TRANSMISSION (the short taut line slings
