@@ -67,12 +67,15 @@ namespace Dark_Cloud_Improved_Version
                 0x1000001F, 0x00000000, 0x3C0101FB, 0xAC3FE604, 0x72402628, 0x8E5900A0,
                 0x8F390014, 0x0320F809, 0x00000000, 0x72402628, 0x8E5900A0, 0x8F390094,
                 0x0320F809, 0x00000000, 0x3C0101FB, 0x8C3FE604, 0x03E00008, 0x00000000,
-                0x3C0101FB, 0x8C28E600, 0x11000003, 0xAC20E600, 0x0C068DC3, 0x00000000,
+                0x3C0101FB, 0x8C28E600, 0x11000003, 0xAC20E600, 0x0C08A60C, 0x00000000,
                 0x8F829074, 0x14400003, 0x00000000, 0x0805F07A, 0x00000000, 0x0805F0FA,
                 0x00000000, 0x00000000,
             };
-            // ^ the hook cave's draw call (0x0C068DC3) targets the FLUSH_STUB at 0x1A370C (below), which
-            //   appends a VIF FLUSH before jumping into the relocated payload — see patchedB1.
+            // ^ the hook cave's draw call (0x0C08A60C) targets the ORDER-GATE SHIM @0x229830
+            //   (waterOrderGate.bin, tools/stubs/water_order_gate.s): it sets the payload's dynamic
+            //   return slot (0x01FAE610) to the hook cave's continuation 0x1A3870, then falls into the
+            //   FLUSH_STUB at 0x1A370C (below), which appends a VIF FLUSH before jumping into the
+            //   relocated payload — see patchedB1.
 
             // ── the isolated 5th bracket instance: same compaction (call site + relocated `b`), with the
             //    freed 8 words hosting FLUSH_STUB: PkCnt(pkt,0) + PkAddCode(pkt, 0x11000000 VIF-FLUSH) +
@@ -169,7 +172,12 @@ namespace Dark_Cloud_Improved_Version
             };
             uint[] patchedPayload =
             {
-                0x3C0101FB, 0x0805EF31, 0xAC21E600,                         // STUB: set flag, skip to 0x17BCC4
+                0x0808A600, 0x00000000, 0x00000000,                         // STUB: j ORDER-GATE COND @0x229800
+                // ^ was `set flag, skip to 0x17BCC4` (unconditional deferral). The order gate
+                //   (waterOrderGate.bin) defers ONLY while the wading mailbox 0x01FAE608 is armed
+                //   (Queens low tide); otherwise it runs the relocated payload IMMEDIATELY — the
+                //   vanilla position — so DOF towns (the Matataki waterfall) keep vanilla draw order.
+                //   Deferred-sharp-quad-over-blurred-DOF was the "floating water surface" (A/B 2026-09-02).
                 // ── capture-half @0x17BC0C: runs FIRST so water_buff holds the player's UNOBSCURED body
                 //    (mizu is authored OPAQUE — the vanilla "transparency" is entirely the refraction quad,
                 //    so the underwater look must be COMPOSITED: body captured before mizu, quad blends the
@@ -186,7 +194,7 @@ namespace Dark_Cloud_Improved_Version
                 0x00A21024, 0x00431025, 0x0C04BBB0, 0xA3A20424,             // ZMSK on: MGSetGsZBUF(&copy)
                 0x8F8490E8, 0x0C068CD8, 0x8F859100,                         // DrawWaterSurface(pEditGround, NowCamera)
                 0x0C04BBB0, 0x27848BF0,                                     // Z restore: MGSetGsZBUF(&mgZBuffer)
-                0x08068E1C, 0x00000000,                                     // j 0x1A3870 (constant return, NO $ra)
+                0x0808A612, 0x00000000,                                     // j RET_THUNK @0x229848 (jr [0x01FAE610] — dynamic return; was constant j 0x1A3870)
             };
             // Two hard-won rules baked into this array:
             //  1. It ends `j 0x1A3870` (hard jump to the hook cave's continuation), NOT `jr ra`: the payload
@@ -270,6 +278,21 @@ namespace Dark_Cloud_Improved_Version
             if (gotHook2 != VanillaHook2)
                 throw new IOException($"Early-player hook site 0x{Hook2Addr:X} is not vanilla " +
                                       $"(got 0x{gotHook2:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
+
+            // ── ORDER-GATE cave (tools/stubs/water_order_gate.s → waterOrderGate.bin @0x229800): COND
+            //    (payload entry: defer only when the wading mailbox is armed) + SHIM (hook-cave call) +
+            //    RET_THUNK (the payload's dynamic return). See the STUB comment in patchedPayload.
+            const uint OrderGateCaveAddr = 0x00229800;
+            using (var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin")
+                ?? throw new IOException("Embedded EE function missing: waterOrderGate.bin (run tools/stubs/build_ee_stubs.py and rebuild)"))
+            {
+                using var ms = new MemoryStream(); st.CopyTo(ms); byte[] wb = ms.ToArray();
+                if (wb.Length != 88 || U32(wb, 0) != 0x3C0101FB || U32(wb, 0x30) != 0x3C0101FB || U32(wb, 0x48) != 0x3C0101FB)
+                    throw new IOException($"waterOrderGate.bin malformed ({wb.Length} B) or stale — piece offsets moved; reassemble its .s and re-sync the SHIM/RET constants.");
+                for (int i = 0; i < wb.Length; i += 4)
+                    WrU32(fs, ElfOff(OrderGateCaveAddr + (uint)i), U32(wb, i));
+            }
 
             for (int i = 0; i < patchedPayload.Length; i++)
                 WrU32(fs, ElfOff(PayloadStart + (uint)i * 4), patchedPayload[i]);
