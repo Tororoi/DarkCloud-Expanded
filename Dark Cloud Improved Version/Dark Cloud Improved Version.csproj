@@ -25,6 +25,9 @@
     <EmbeddedResource Include="Resources\Font\DarkCloud_Speech-Thin.ttf" />
     <!-- Town-camera collision/controller EE function (assembled from tools/town_camera_collision.s @0x14B838).
          IsoPatcher reads this at patch time; regenerate = reassemble + copy the .bin here + refresh slot indices. -->
+    <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\cameraHeight.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin</LogicalName>
     </EmbeddedResource>

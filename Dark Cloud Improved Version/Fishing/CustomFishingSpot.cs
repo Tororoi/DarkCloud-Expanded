@@ -202,6 +202,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Enabled) return;
 
+            BrownbooTextureRelocation.Tick();   // park the fishing GS texture blocks off the Brownboo scene texture (stilts fix)
             PinFishCamHeight();   // keep the patched SetHeight site fed (per-spot fishing camera height)
             PinYdWaterLevel();    // Yellow Drops: hold the live water level against the camera-window re-derive
 
@@ -637,6 +638,8 @@ namespace Dark_Cloud_Improved_Version
                 (_lineAboveStart, _lineAbove, _lineBelow) = LineConfigSplit(_active);
                 Log($"line config for '{_active.Name}': above x{_lineAboveStart:0.##}→x{_lineAbove:0.##}, below {_lineBelow:0.##} " +
                     $"(tide level {(_active.MapNo == TownMapNo.Queens ? CanalTide.QueensWaterLevel() : _active.Water):0.#})");
+                if (_active.MapNo == TownMapNo.Brownboo)
+                    TextureBlockDiag.Dump("Brownboo fishing-start (post _LOAD_FISHING_DATA)");   // stilts investigation
 
                 // Brownboo: drop the ladder-top platforms from the cpoly (bobber ground-lift guard). Native walls
                 // are KEPT — they contain the fish; the bobber probe never treats a wall as ground.
