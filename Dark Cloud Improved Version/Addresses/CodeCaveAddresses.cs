@@ -165,7 +165,15 @@ namespace Dark_Cloud_Improved_Version
             /// the cave while NOT casting — 1 = the bobber dangles inside the canal region (|z|&lt;60, floor-
             /// spot stances) so the flight wall clamp arms; 0 = bank stance, walls stay off (no line snap).</summary>
             internal const long FishWallLatch = Base + 0x6C;
-            internal const long NextFree = Base + 0x70;
+
+            /// <summary>DIAGNOSTIC (AllySwapPrototype): the overflow branch of <c>Alloc__14CDataAlloc2</c>,
+            /// which normally printf's and infinite-loops, is ELF-patched (PatchAllocOverflowProbe) to first
+            /// stash the offending arena's struct pointer here (+0x70) and the requested end-in-blocks
+            /// (+0x74) before hanging — so a freeze names WHICH CDataAlloc2 overran. Guest form 0x01F10070.</summary>
+            internal const long AllocProbeArena = Base + 0x70;
+            internal const long AllocProbeSize  = Base + 0x74;
+
+            internal const long NextFree = Base + 0x78;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

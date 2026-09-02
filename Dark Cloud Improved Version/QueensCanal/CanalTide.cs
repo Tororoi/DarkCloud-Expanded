@@ -128,13 +128,21 @@ namespace Dark_Cloud_Improved_Version
             // Waterfall mist only at LOW tide (the falls meet the drained canal then); clear it otherwise.
             if (_shownWaterLevel <= LowTideThreshold) WriteSprayTable(_shownWaterLevel); else ClearSprayTable();
 
-            // Write the shown level to the SURFACE mesh (CFrame set-once while stable, re-applied on a fresh
-            // frame) and to the RIPPLE (CEditGround CWater body, pinned every frame — see PinRipple).
-            if (_frame != 0 && (freshFrame || Math.Abs(_shownWaterLevel - _lastMeshLevel) > 0.01f))
+            // Write the shown level to the SURFACE mesh and to the RIPPLE (CEditGround CWater body, pinned
+            // every frame — see PinRipple). This used to be set-once against a mod-side latch, but an
+            // ally-switch EditInit reload rebuilds the scene AT THE SAME ADDRESSES with a vanilla matrix —
+            // the name check passes, the latch says "already written", and the canal sits at vanilla height
+            // (observed live). So verify against the MEMORY itself: one float read per tick, and any reset
+            // by the engine self-heals on the next tick.
+            if (_frame != 0)
             {
-                Memory.WriteFloat(_frame + FrameMatTransY, _shownWaterLevel - MizuBaselineY);
-                Memory.WriteIntFast(_frame + FrameWorldDirty, 0);   // force world-matrix recompute from local
-                _lastMeshLevel = _shownWaterLevel;
+                float wantTransY = _shownWaterLevel - MizuBaselineY;
+                if (freshFrame || Math.Abs(Memory.ReadFloat(_frame + FrameMatTransY) - wantTransY) > 0.01f)
+                {
+                    Memory.WriteFloat(_frame + FrameMatTransY, wantTransY);
+                    Memory.WriteIntFast(_frame + FrameWorldDirty, 0);   // force world-matrix recompute from local
+                    _lastMeshLevel = _shownWaterLevel;
+                }
             }
             bool low = _shownWaterLevel <= LowTideThreshold;
             CanalWading.Arm(low);                       // low tide: early player/cape draw under the water pass
@@ -146,6 +154,20 @@ namespace Dark_Cloud_Improved_Version
             int t = (int)MathF.Round(target);
             if (Math.Abs(_shownWaterLevel - target) < 0.01f && t != _lastBakedLevel)
             { CustomFishingSpot.RebuildFishingScript(); _lastBakedLevel = t; }
+        }
+
+        /// <summary>An in-town EditInit reload (the ally switch) rebuilt Queens from scratch while our caches
+        /// still look valid — the scene re-allocates at the SAME addresses, so the name checks pass. Drop the
+        /// caches: the next tick re-finds the frame (freshFrame → snap under the load's black) and the settled
+        /// level re-bakes the fishing water. The tide LEVEL itself (<c>_shownWaterLevel</c>) carries across.
+        /// Called by AllySwitchPositionRestore the moment it detects the reload.</summary>
+        internal static void OnTownReloaded()
+        {
+            if (Memory.ReadInt(EditLoop.MapNo) != TownMapNo.Queens) return;
+            _frame = 0; _lastMeshLevel = float.NaN; _lastBakedLevel = int.MinValue;
+            _nextFrameScanTick = 0; _loggedLadderGate = false;
+            Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);   // disarm the baked redraw until the frame is re-found
+            Log("town reloaded in place (ally switch) — caches dropped, re-applying tide state");
         }
 
         private static bool FrameStillMizu(long f)
