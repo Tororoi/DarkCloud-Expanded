@@ -13,7 +13,7 @@ without touching the ISO.
 
 ## 1. The command that defines a spot
 
-`_LOAD_FISHING_DATA` — **STB command 999**, handler `0x1969A0`.
+`_LOAD_FISHING_DATA` — **STB command 998**, handler `0x1969A0`.
 
 ```
 _LOAD_FISHING_DATA(areaId, x1, z1, x2, z2, waterLevel, groundLevel)
@@ -48,18 +48,87 @@ into the retail build. Keep custom rectangles modest.
 
 ### The rest of the fishing command set
 
-| id | command | handler | role |
-|---|---|---|---|
-| 999 | `_LOAD_FISHING_DATA` | `0x1969A0` | defines the spot |
-| 998 | `_GOTO_FISHING` | `0x196B30` | starts a session: sets game mode `0xB`, hooks the line to the rod frame |
-| 997 | `_INIT_FISH` | `0x196C00` | re-rolls the fish |
-| 996 | `_EXIT_FISHING` | `0x196C80` | ends the session |
-| 995 | `_SET_FISHING_ESA` | `0x196CB0` | sets the bait |
-| 25 | `_GOTO_FISH_RANKING` | `0x18C1A0` | opens the records menu |
-| 24 | `_GOTO_CHANGE_ESA` | `0x18C1C0` | opens the bait menu |
+> ⚠ **These ids were WRONG in an earlier draft, by exactly one.** The dispatch table's 8-byte entries are
+> `{handler, id}`, not `{id, handler}`. Reading them backwards shifted every command by one slot, which
+> would have had a custom fishing spot calling `_LOAD_MAIN_CHARA` with seven floats. The ids below are
+> confirmed twice: from the corrected table, and from the actual bytecode in Norune's script (whose
+> `-13.0` / `-30.0` arguments match the `WaterLevel` / `GroundLevel` a live capture reported).
+
+| id | command | handler | role | args |
+|---|---|---|---|---|
+| **998** | `_LOAD_FISHING_DATA` | `0x1969A0` | defines the spot | 7: area, x1, z1, x2, z2, water, ground |
+| **997** | `_GOTO_FISHING` | `0x196B30` | starts a session: game mode `0xB`, hooks the line to the rod | 0 |
+| **996** | `_INIT_FISH` | `0x196C00` | re-rolls the fish inside a box | 4: x1, z1, x2, z2 |
+| **995** | `_EXIT_FISHING` | `0x196C80` | ends the session | 0 |
+| **994** | `_SET_FISHING_ESA` | `0x196CB0` | sets the bait | 0 |
+| 999 | `_LOAD_MAIN_CHARA` | `0x196910` | (NOT fishing — this is what 999 really is) | |
 
 Four town scripts declare spots: `gedit\e01\event.stb` (Norune), `gedit\e02\event.stb` (Matataki +
-Peanut Pond), `gedit\e04\event.stb` (Muska Lacka), `gedit\s09\event.stb` (Queens Harbor).
+Peanut Pond), `gedit\e04\event.stb` (Muska Lacka), `gedit\s09\event.stb` (East Harbor).
+
+### How a spot is actually TRIGGERED — the type-3 event point
+
+Confirmed live, after two wrong guesses. It is **not** an NPC (talking runs the dialogue system, never a
+script) and it is **not** the town's init script (the fishing globals read zero at town load).
+
+```
+walk into a type-3 event point
+  -> EdGetEvent sets matchedParam = 3, matchedPoint
+  -> EdMoveChara:  if (matchedParam == 3 && point[0x1C] > 0) label = point[0x1C];
+  -> ScriptLabelRequest (0x21D19708) = label
+  -> the VM runs that label, which holds the _LOAD_FISHING_DATA / _GOTO_FISHING calls
+```
+
+The event-point field at `+0x1C` is **overloaded**: an item id for type 2 (searchable barrels), a
+**script label** for type 3. Norune's fishing sign is a type-3 point naming label **256** — and `0x100`
+is hardcoded in `EdMoveChara` as the fallback, which is why 256 turns up everywhere.
+
+Note the *door* table dumped at town load holds only type-1 interior jumps; type-3 points are
+**part-derived** and appear later (Norune's sits at part-local `(40, 0, 96)`, attached to the lake).
+
+So a custom spot needs exactly two data writes: **a type-3 event point at the water**, and **the fishing
+bytecode at whatever label it names**. No ISO, no code injection.
+
+### The STB VM, and the exact call
+
+12-byte instructions: `{u32 op, u32 a1, u32 a2}`.
+
+| op | meaning |
+|---|---|
+| 3 | PUSH literal. `a1` = type (**1 = int, 2 = float (IEEE bits), 3 = string offset**), `a2` = value |
+| 1 | LOAD var `a1` |
+| 2 | STORE var `a1` |
+| 11 | negate |
+| 21 | **EXT** — call. `a1` = **stack entry count, INCLUDING the command id**. The id is the FIRST entry. |
+| 15 | RET |
+| 23 | YIELD |
+
+Norune's real call, verbatim (label 256, `+0x0E8E0`):
+
+```
+op3  type=1  998           ; _LOAD_FISHING_DATA
+op3  type=1  0             ; area 0
+op1  var5 / var6 / var3 / var4    ; the four rect corners
+op3  type=2  13.0 ; op11   ; -> WaterLevel  = -13
+op3  type=2  30.0 ; op11   ; -> GroundLevel = -30
+op21 argc=8                ; 1 cid + 7 args
+```
+
+and to start the session:
+
+```
+op3  type=1  997           ; _GOTO_FISHING
+op21 argc=1
+```
+
+A custom spot can push the floats directly (negative literals need no `op11`). The live Norune capture
+that confirms all of this:
+
+```
+fishing_rect  (-700.14, -600.12) -> (-500.14, -400.12)   [200 x 200]
+WaterLevel -13   GroundLevel -30   cpoly 197/1024   FishNum 4 (area 0)
+Fish 0x014798D0  == FishSlotOffsets.AreaBase_Norune
+```
 
 ---
 
@@ -119,7 +188,7 @@ Six `CFish` objects are allocated but only `FishNum` are used — 4 for areas 0 
 | 0 — Norune Pond | Gobbler(1), Nonky(2), Gummy(6), Niler(7) | `rnd()` scaled to 0–3 |
 | 1 — Peanut Pond | Gobbler(1) 35%, BakuBaku(4) 35%, Umadakara(9) 10%, Tarton(10) 20% | `rnd()*100` |
 | 2 — Matataki Waterfall | Nonky(2), BakuBaku(4), Gummy(6) — even thirds | `rand()%3` |
-| 3 — Queens Harbor | Bobo(0) 20%, Kaiji(3) 20%, Piccoly(11) 20%, Bon(12) 20%, Hamahama(13) 20% | `rand()%100` |
+| 3 — East Harbor | Bobo(0) 20%, Kaiji(3) 20%, Piccoly(11) 20%, Bon(12) 20%, Hamahama(13) 20% | `rand()%100` |
 | 4 — Muska Lacka Oasis | Negie(14) 40%, Den(15) 30%, Heela(16) 30% | `rand()%100` |
 
 **Areas 2 and 4 additionally roll for rares** before the normal table: `rand() % N == 0` yields
@@ -135,7 +204,7 @@ Mardan Garayan(5), and one in five of *those* is upgraded to Baron Garayan(17).
 | 2 | 35 | |
 | 0 | 50 | worst |
 
-Area 3 also sets `draw_under_water = 0`, which is why Queens Harbor has no underwater camera.
+Area 3 also sets `draw_under_water = 0`, which is why East Harbor has no underwater camera.
 
 ### Species ids are patchable immediates
 
@@ -185,7 +254,7 @@ Each town's Georama models live in `gedit\<town>\scene.scn`, named `<town><lette
 | e02 Matataki | `e02m01`, `e02m02` | 2 — the waterfall and Peanut Pond |
 | e04 Muska Lacka | `e04m01` | 1 — the oasis |
 | e03 (no fishing) | **none** | 0 |
-| s09 Queens Harbor | none — the harbour is fixed geometry | 1 |
+| s09 East Harbor | none — the harbour is fixed geometry | 1 |
 
 Variants are the usual Georama set: `_0/_1/_2` build levels, `_a`, `_c` collision, `_r`, `_k`, `_s`.
 `e01m01_r.mds` is the only one carrying real geometry (~40 KB, texture `e01b15`) — this is Norune's
@@ -309,7 +378,7 @@ is fully collidable and fully picked up by `PickUpPoly`.
 | Muska Lacka e04 | none | oasis = LAKE part |
 | **Moon Factory e05** | **none — no `WATER`, no `WATER_IMG`, no `WATER_SURFACE`** | — |
 | Brownboo s04 | `s04w01` (水面), `s04w02` (波 waves), + others | the `WATER` list also carries stairs — it is really "static object" |
-| Queens Harbor s09 | none listed; `WATER_SURFACE` only | water is in the `s0901/2/3` meshes |
+| East Harbor s09 | none listed; `WATER_SURFACE` only | water is in the `s0901/2/3` meshes |
 
 Inside those meshes the animated surfaces are named frames:
 
@@ -327,7 +396,7 @@ the ones sitting in *water* meshes are the fishing signs:
 |---|---|---|
 | **Matataki e02** | **`e02w11_0.mds`** — `kanban`, `kanban1`, `kanban2` | the fishing signs — inside a **static** water mesh, not Georama |
 | **Muska Lacka e04** | **`e04w01_0.mds`** — `kanban`, `kanban_1`, `kanban_1_1` | the oasis sign — this **is** the LAKE part's water mesh, so it moves with the part |
-| **Queens Harbor s09** | `s0901_c.mds` — 5 `kanban` frames | baked into the harbour's static mesh |
+| **East Harbor s09** | `s0901_c.mds` — 5 `kanban` frames | baked into the harbour's static mesh |
 | Norune e01 | *none* — the pond mesh `e01m01_r.mds` has frames `ike` (池), `item00`, `func_item00` | its sign is unnamed geometry inside the lake part |
 | Queens e03 | only house shop signs + `e03h11_w.mds` (the fountain) | no fishing sign |
 | Moon Factory e05 | **zero `kanban` frames** | no sign anywhere |
@@ -392,6 +461,27 @@ written into e05's table may therefore render untextured or with garbage. This i
 needs live testing before the plan is sound; a fishing spot there works regardless (§4), but the
 animated surface may not.
 
+### SHIPPED: driving the canal ripple with the tide (`CanalTide.PinRipple`)
+
+The `WATER_SURFACE` table above is the **definition** (parsed from the cfg into `*edit_info + 0x17CD0`). It
+is NOT what renders each frame. At load the definitions are copied into **`CEditGround`'s own CWater array**,
+and `DrawWaterSurface__11CEditGround` (`0x1A3360`, called from `MainDraw`) draws THOSE bodies — the animated,
+`WATER_SHAKE`-rippled water you actually see. So the canal has **two** renderings that must be moved together
+for the tide: the scene MESH `mizu__a01` (its CFrame Y, §5 / `CanalTide`) and this CWater render BODY.
+
+- **The live CEditGround is `*(gp-0x6f18)` = guest `*(0x202A28D8)`.** This is the single biggest trap: it is a
+  DIFFERENT global from both `edit_info` (`0x202A27B0`, the *definitions*) and the global `Water[]` BSS object
+  (`0x21D536F0`, drawn by the plain `DrawWaterSurface__Fv`). Reading the render bodies off `edit_info` or the
+  global `Water[]` gives all-zeros/inactive — three separate ripple investigations died on exactly that before
+  the right pointer (`gp-0x6f18`, the one `MainDraw` actually passes to the draw call) was found.
+- **CWater array @ `CEditGround + 0x15040`**, 4 bodies, stride `0x3B0`. Per body: active flag `+0x20` (draws
+  when != 0), pos `+0x40` (**Y at `+0x44`** = the surface height), X/Y/Z follow-camera flags `+0x24/+0x28/+0x2C`.
+  Queens has 3 active: **canal at Y31** (followY=0, so Y is fixed and `+0x44` holds a write), fountain Y113,
+  pool Y5.6 — matching the three `WATER_SURFACE`/`WATER` declarations.
+- **`CanalTide.PinRipple`** writes the canal body's `+0x44` to the shown tide level every frame (identifies the
+  canal body by Y in the tide range; the two pools are excluded). Per-frame because a Queens area transition
+  rebuilds the array back to the mapinfo Y (31). Same day/night levels as the mesh, so ripple + surface track.
+
 The Moon Factory's only animated frame is **`moyou__a01z`** (模様 = "pattern") in `e05g02_c.mds`, plus
 `moyou01/3__cfzappa01` in `e05g06_c.mds`. There is **no** frame named for liquid anywhere in e05 — no
 `mizu`, `taki`, `ike`, `eki` or `abura`. So the yellow liquid is unnamed terrain geometry; `moyou` is
@@ -420,7 +510,7 @@ to be a Georama part rather than static map geometry.
 | Muska Lacka | e04 | **yes** | LAKE part 11 (`e04m01`) | **yes** | in the lake part (`e04w01_0`) | area 4 |
 | Moon Factory | e05 | **yes** — 14 × `BLD_PARTS`, 1 `EDITAREA` | **no water system at all** | n/a | none | — |
 | Brownboo | s04 | **NO** — no `EDITAREA`, no parts; a fixed `GROUND` list | static `WATER` (`s04w01`/`s04w02`) | no | none | — |
-| Queens Harbor | s09 | **NO** — 7 static models | static, in the map mesh | no | baked | area 3 |
+| East Harbor | s09 | **NO** — 7 static models | static, in the map mesh | no | baked | area 3 |
 
 ### Town ↔ folder identification — GET THIS RIGHT
 
@@ -688,7 +778,7 @@ mesh ("MDT" block)
 `meshOffset` is absolute, so it is the **only** fixup a rebuild needs — nothing inside an MDT block
 points outside itself. That is what makes this surgery clean.
 
-Tool: **`tools/mds_surgery.py`** (`list` / `extract`).
+Tool: **`tools/analysis/mds_surgery.py`** (`list` / `extract`).
 
 #### The oasis, dissected
 
@@ -710,7 +800,7 @@ is a yaw of ~48.7° plus a translation of (90, 2, 64) — its position within th
 #### The result
 
 ```
-python3 tools/mds_surgery.py oasis.mds extract kanban --recenter --unrotate -o fishsign.mds
+python3 tools/analysis/mds_surgery.py oasis.mds extract kanban --recenter --unrotate -o fishsign.mds
 ```
 
 **`fishsign.mds` — 2,160 bytes, 1 node, identity matrix, at the origin.** Re-parses cleanly.
@@ -836,7 +926,7 @@ frame:
 
 | town | `e01b24` in its `img.pak`? |
 |---|---|
-| Norune e01, Matataki e02, Muska Lacka e04, Queens Harbor s09 | **yes** |
+| Norune e01, Matataki e02, Muska Lacka e04, East Harbor s09 | **yes** |
 | **Queens e03, Moon Factory e05, Brownboo s04** | **no** |
 
 It is present in exactly the four fishing towns and absent from exactly the three targets. `e01b24`
@@ -871,7 +961,7 @@ The **entry name** is what a mesh's `HB<name>` reference resolves against — *n
 filename. A bank can be called anything; only its entry names matter to the meshes. That is what
 makes this tractable.
 
-Tool: **`tools/img_surgery.py`** (`list` / `extract` / `make`).
+Tool: **`tools/analysis/img_surgery.py`** (`list` / `extract` / `make`).
 
 `e04b01.img` (864,112 B, Muska Lacka's ground bank) holds 16 entries; the last is:
 
@@ -882,7 +972,7 @@ Tool: **`tools/img_surgery.py`** (`list` / `extract` / `make`).
 #### The result
 
 ```
-python3 tools/img_surgery.py e04b01.img make e01b24 -o fishsign.img
+python3 tools/analysis/img_surgery.py e04b01.img make e01b24 -o fishsign.img
 ```
 
 **`fishsign.img` — 17,536 bytes, one entry (`e01b24`), TIM2 payload byte-identical.** A structurally
@@ -923,6 +1013,573 @@ none. The three entries must be injected into the town's loaded message buffer (
 **No `.chr` file anywhere in the game contains a `kanban` frame** (all 1,099 scanned). So the sign
 cannot be brought in as a town character; the loose-`.mds` route above is the only indirection that
 reaches it.
+
+---
+
+## 8b. The script injection — WORKING (Yellow Drops), and the two things that made it work
+
+`CustomFishingSpot.cs` installs a spot with **no ISO change and no injected code**: overwrite an unused
+script label with a `_LOAD_FISHING_DATA` call, and create a type-3 event point pointing at it. The
+engine then does the rest. Proven live in Yellow Drops:
+
+```
+fishing_rect  (-475, -186) -> (-675, -386)     <- ours
+WaterLevel=1  GroundLevel=-15                   <- ours
+cpoly=27/1024  FishNum=4  drawUnderWater=1
+```
+
+Two non-obvious rules had to be learned the hard way. Both cost a full test cycle each.
+
+### A label does NOT begin with an instruction — it begins with a header
+
+After the label's 8-byte gap there are **four 12-byte slots** before the first real instruction:
+
+```
+label 256 @0x83D4:  [27,0,0] [0,0,0] [0,0,0] [0,0,0]   then  PUSH 263 ...
+label 11:           [ 3,0,0] [0,0,0] [0,0,0] [0,0,0]   then  PUSH 1 ...
+label 128:          [ 4,0,0] [0,0,0] [0,0,0] [0,0,0]   then  YIELD ...
+```
+
+The leading value varies per label (27, 10, 4, 1, 3…) and is almost certainly a **local-variable
+count**; the three slots after it are reserved. Code starts at **`codeOffset + 8 + 48`**
+(`TownScript.LabelCodeSkip`). Writing over the header produces a maddening symptom: the event fires,
+`ScriptLabelRequest` is set correctly, **and nothing runs** — because the VM reads your first `PUSH`
+as the frame setup and everything after it as garbage.
+
+### A label that RETURNS is re-entered every frame
+
+Our label ends in `RET`, so the frame after it finishes the player is *still standing in the trigger
+radius* — the point matches again, and `_LOAD_FISHING_DATA` runs again, **re-loading `chara/fishing.pak`
+and allocating six fresh CFish, every frame**. Consecutive dumps caught it red-handed:
+`Fish=0x00FD9790`, then `Fish=0x01552910`. The town crawls.
+
+Norune is immune because **label 256 never returns** — it is a state machine that yields and drives the
+whole session, and a label that has not returned is not re-entered.
+
+Rather than relocate Norune's ~28 KB of branches, the mod gates the trigger from outside: the engine
+only re-runs the label if the point matches, and it only matches while `+0x00` (Enabled) is non-zero.
+So `GuardRetrigger()` clears Enabled the moment the spot loads and restores it once the player walks
+beyond 1.5× the radius (hysteresis, so loitering after a session does not immediately re-fire).
+
+**If you ever DO want a resident fishing script**, the shape to copy is: `_LOAD_FISHING_DATA` →
+`_GOTO_FISHING` → yield-loop → `_EXIT_FISHING` → `RET`. That needs branches, which needs the jump-offset
+convention, which is the next thing to reverse if this outgrows the gate.
+
+### A script that never YIELDs is not an event at all
+
+This is the one that cost the most, because every visible signal said "working". `EdEventInit` does not
+merely *start* a script — it **runs** it:
+
+```c
+lVar4 = EdRunEvent(...);
+if (lVar4 < 1) { simple_event = 1; return 0; }   // ran to completion -> NOT an event
+else           { return 1; }                     // yielded           -> GameMode = 0xE
+```
+
+and `EditLoop` only sets `GameMode = 0xE` (event mode) when that returns non-zero.
+
+A script with no `YIELD` (op 23) finishes inside the init call and is written off as a **`simple_event`**.
+The game never enters event mode → `EventMode()` never runs → and `EventMode()` is *the only consumer of
+the return code*. So `_GOTO_FISHING` sets `0xB`, and nothing on earth ever reads it.
+
+Observed exactly that for three test cycles: the spot loaded, the return code went to `0xB`, `GameMode`
+never left `1`, no fishing. **One `YIELD` at the top of the label fixes it** — the script survives the
+init call, gets promoted to a real event, and its `RET` is then seen by `EdEventMode`.
+
+Tellingly, the label we hijacked (310) *began with a YIELD* in its original bytecode. So do many others.
+
+### The mode chain, for the record
+
+```
+script: _GOTO_FISHING  ->  EventReturnCode (0x21D3D618) = 0xB
+EdEventMode:  if (0 < code) { EdEventFinish(); }  return code;
+EventMode:    case 0xb:  GameMode = 0x10          <- FISHING IS 0x10, NOT 0xB
+```
+
+Two names in the mod were wrong and actively misled the debugging:
+
+- **`FishingAddresses.Active` (0x21D19714) is not a flag anyone sets.** `MoveChara` recomputes it every
+  frame as `DAT_01d19714 = (GameMode == 0x10)`. It is a *mirror* of the mode, so it cannot tell you
+  whether a spot was set up — it read `0` through several perfectly good spot loads.
+- **`GameMode 0xB` is not fishing.** `0xB` is the event return code; `0x10` is the mode.
+
+### Setup is not enough — the SESSION needs more than three commands
+
+With the YIELD in place fishing mode is entered, fish spawn and the menu draws. But the session itself
+is broken until you copy the rest of what Norune's script does. The full Norune sequence:
+
+```
+998 _LOAD_FISHING_DATA(area, rect, water, ground)
+507 _SET_CLIP_POINT(sign.x, sign.y, sign.z, 100.0)
+    var3..var6 = sign.x±50, sign.z±50          # a 100x100 box AROUND THE SIGN
+996 _INIT_FISH(that small box)                 # fish spawn by the sign, not across the whole rect
+140 _NPC_DRAW
+  7 _SET_WORLD_COORD(sign pos, sign rot)
+137 _SET_NPC_POS(-1, 40, 0, 96)                # TELEPORTS the player  (-1 = the player)
+138 _SET_NPC_ROT(-1, 0, 3.14, 0)               # and FACES them at the water
+997 _GOTO_FISHING()
+500 _FADE_IN(60)
+RET
+```
+
+Note `(40, 0, 96)` — that is exactly the part-local position of Norune's fishing event point. **The
+script snaps the player into the fishing stance.** Skip it and the rod misbehaves: Toan stands wherever
+he walked in, facing wherever he was facing, so the cast goes off toward dry land, the bobber never
+reaches water, and the engine rejects it.
+
+⚠ **The command table was off by one until now.** `tools/analysis/stbdis.py` read `/tmp/stbcmds.json`, which had
+been built from the dispatch table with the id/handler pair the wrong way round. It reported `500` as
+`_FADE_OUT` and `997` as `_INIT_FISH`. The true names, rebuilt from the ELF by matching the known pair
+`{handler = 0x1969A0, id = 998}`:
+
+| id | command |  | id | command |
+|---|---|---|---|---|
+| 998 | `_LOAD_FISHING_DATA` | | 500 | **`_FADE_IN`** |
+| 997 | `_GOTO_FISHING` | | 501 | `_FADE_OUT` |
+| 996 | `_INIT_FISH` | | 507 | `_SET_CLIP_POINT` |
+| 995 | `_EXIT_FISHING` | | 137 / 138 | `_SET_NPC_POS` / `_SET_NPC_ROT` |
+
+### Toan has a SECOND MODEL for fishing — `c01d_turi.chr`
+
+The rod is not an effect or an attachment. `_GOTO_FISHING` does:
+
+```c
+SearchFrame(chara->model, "sao");     // 竿 = fishing rod
+... FishLineInit(...)
+```
+
+It resolves the rod **by frame name** on the player's model. Ordinary Toan (`chara/c01d.chr`) has no
+`sao` frame and none of the fishing motions — so with the stock model you get: no rod, no line, no float,
+no bait, and a "cast" that plays whatever animation happens to occupy that motion index in `c01d`'s table
+(in practice, the atla-opening motion).
+
+`chara/c01d_turi.chr` (釣り = fishing, 1.8 MB) is the fishing Toan. Norune swaps the whole model:
+
+```
+enter:  _LOAD_MAIN_CHARA("chara/c01d_turi.chr", "c01d_turi.cfg", 1)
+exit:   _LOAD_MAIN_CHARA("chara/c01d.chr",      "info.cfg",      0)
+```
+
+Both must be done. Skipping the restore would leave the player walking around town with the fishing motion
+table, which breaks every *other* animation the same way.
+
+#### String operands are relative to `codeBase`, not the file
+
+To emit `_LOAD_MAIN_CHARA` we had to push strings, which nothing else here needed. A type-3 (string) push
+carries an offset **relative to the script's code base** (the u32 at header `+0x08`), NOT a file offset:
+Norune's push reads `a2 = 0xED18` while the string sits at file `0xEE00`, and `0xEE00 - 0xED18 = 0xE8`,
+which is exactly its `codeBase`. This matches `load__10CRunScript`, which caches `base + *(base + 8)`.
+
+So `StbWriter.PushString` emits a placeholder and `EmitStrings` lays the bytes down just past the
+generated code, patching each operand to `blobOffset - codeBase`. There is plenty of room — our scripts
+are a few hundred bytes and the labels they replace are thousands — but `WriteScript` still refuses to
+write if the code plus strings would run past the next label's `codeOffset`.
+
+### Loading a main character RESETS its position
+
+`_LOAD_MAIN_CHARA` puts the model back at a default position. Norune therefore re-issues the placement
+*immediately after* the swap, on both paths — and its exit block also runs `_EXIT_FISHING` **after** the
+model restore, not before:
+
+```
+_LOAD_MAIN_CHARA("chara/c01d.chr", "info.cfg", 0)
+_SET_NPC_POS(-1, var0, var1, var2)      # put the player BACK
+_SET_NPC_ROT(-1, var3, var4, var5)
+_NPC_DRAW(1, -1)
+_EXIT_FISHING()
+_FADE_IN(60)
+```
+
+Omit the re-placement and quitting fishing drops the player somewhere else on the map, falling forever.
+
+### The bait needs a MODEL loaded — `_SET_FISHING_ESA` does not load one
+
+`_SET_FISHING_ESA(itemId)` only points the hook at **item frame 0**
+(`FishingLoadEsa: EsaFrame = itemFrames[0]`, where `itemFrames` = `DAT_01d3d42c`). It loads nothing. If no
+one built that frame, the bait is equipped logically and is simply invisible.
+
+Norune's recipe (in label 134, after the menu picks an id):
+
+```
+_LOAD_ITEM_FILE(id)        # 49 — starts a BACKGROUND read (LoadFileBG)
+call_func 400              # waits for it
+_CLEAR_EVENT_BUFF()        # 39
+_ACTIVE_FILE_BUFFER(0, 0)  # 44
+_LOAD_ITEM(0)              # 50 — builds item frame 0
+YIELD
+_SET_FISHING_ESA(id)       # 994
+_GOTO_FISHING()            # 997 — and back to fishing (see the return-code rule above)
+```
+
+`_LOAD_ITEM` returns 0 if `GetReadBGFile` is not ready, and **no load-complete command is exposed to
+scripts** — Norune waits with a script function compiled into its own `.stb` (`call_func 400`), which is
+not reachable from another town's script. So `CustomFishingSpot` spins YIELDs instead, and does the whole
+item load in the ENTRY script (behind the fade, where a pause is free) rather than on the Square press.
+
+### The STB VM, read from `exe()` rather than inferred
+
+Three separate bugs came from guessing at opcode semantics from usage. The interpreter
+(`exe__10CRunScript` @ 0x23E080) settles it:
+
+| op | meaning | operands |
+|---|---|---|
+| 1 | push variable VALUE | `a1` = var index, **`a2` = addressing mode** |
+| 2 | push variable POINTER | `a1` = var index, **`a2` = addressing mode** |
+| 3 | push constant | `a1` = type (1 = int, 2 = float bits, 3 = string), `a2` = value |
+| 4 | POP (`sp -= 8`) — **not** a jump | |
+| 21 | EXT (call) — `sp -= argc * 8`, then dispatch | `a1` = stack entries INCLUDING the command id |
+| 23 | YIELD | |
+
+**The addressing mode is in `a2`, not `a1`.** Mode 1 = direct (`vars[a1]`); 2/4/8/0x10/0x20 are
+indirect/array forms that pop an index first. Emitting `a2 = 0` matches *none* of them, so the
+instruction pushes **nothing** — the stack runs short, `EXT` reads garbage as the command id, and the VM
+derails. That is what froze the game on the first bait-menu attempt.
+
+**A string operand is a POINTER, and type 3 means pointer, not "string".** `case 3` does
+`push_str(this->codeBase + a2)`, and `this->codeBase` is `base + *(base+8)` — hence string offsets are
+relative to the header's `codeBase`, not the file. The same type 3 is what `op 2` pushes for a variable
+address, which is how out-parameters work.
+
+**A label's header declares its local count.** `header[0].op` = number of locals (Norune: label 256 → 27,
+134 → 10, 133 → 1). The labels we hijack declare 0, so any script of ours that touches `var0` must raise
+it or it is reaching outside its frame.
+
+### The bait menu (label 134) — the native `_GOTO_CHANGE_ESA` menu, DONE
+
+`_GOTO_CHANGE_ESA` (command 25) drives the game's **own** use-item menu: it copies a **static** bait-list
+template (`_820`, so we supply nothing), calls `EdSetUseItem`, and sets `menu_mode = 9`. Its one meaningful
+argument is a **pointer** to a script local, which the menu writes the chosen item id into:
+
+```c
+if (*param_1 == 3) {           // arg1's stack type must be 3 = POINTER (not "a string" — an earlier note here was wrong)
+    p_use_item = param_1[1];   // where to write the result
+    ... EdSetUseItem(...); menu_mode = 9;
+}
+```
+
+`PushVarRef(0)` is exactly that pointer — no string offset needed. The complete, working label 134
+(`BuildBaitBytecode`):
+
+```
+YIELD                          # promote to a real event (§8b — a no-YIELD script is never an event)
+_GOTO_CHANGE_ESA(&var0)        # 25 — the use-item menu writes the chosen bait id into var0
+YIELD                          # while menu_mode != 0, EdEventMode runs the menu, not the script; we wake on close
+<bait-load pipeline on var0>   # build the bait's model + hook it — see "The bait needs a MODEL loaded" above
+_GOTO_FISHING()                # 997 — STAY in the session (return-code rule); without it Square would QUIT
+RET
+```
+
+Two things make it correct:
+
+- **The load pipeline must live here, not in the entry script.** `EdInitEventParamSimple` zeroes the
+  item-frame table at the start of every event, so anything the entry script loaded is already gone by the
+  time Square runs. And it waits with a `while (_LOAD_SYNC(&v)) YIELD` loop, **not** a frame count —
+  `_LOAD_ITEM` on an unlanded read builds a frame from an empty buffer and the game jumps through a garbage
+  pointer (crash), so losing the race is fatal, not cosmetic.
+- **`_GOTO_FISHING` at the end**, so `EventMode` takes `case 0xb: GameMode = 0x10` instead of the `default`
+  walking branch. Every fishing sub-script that RETs otherwise ends the session (see below).
+
+### Labels 133 and 134 are hardcoded in the engine
+
+In fishing mode `EdMoveChara` runs a `chara_fishing` state machine that asks for script labels BY NUMBER:
+
+```c
+EdPadDown(0x40) -> chara_fishing = 2            // Cross  = cast (no script)
+EdPadDown(0x20) -> ScriptLabelRequest = 0x85    // Circle = label 133, quit fishing
+EdPadDown(0x80) -> ScriptLabelRequest = 0x86    // Square = label 134, bait menu
+```
+
+Norune has both (133 = a cursor menu, 134 = a menu over bait item ids 166–170/193/197). **A town that
+never had fishing has neither**, so the button requests a label that does not exist, the event never
+starts, and the player is stuck in fishing mode with no way out and no bait selection.
+
+The ids are not negotiable. `CustomFishingSpot` therefore claims spare labels and **rewrites their ids**
+to 133 and 134.
+
+**A fishing sub-script that just RETs will END THE SESSION.** Every one of them runs as an ordinary
+event, so when it returns, `EventMode` switches on its return code — and `default:` is `GameMode = 1`,
+walking. That is precisely how quitting is implemented: label 133 is `_EXIT_FISHING; _FADE_IN(60); RET`
+and the drop back to walking comes *from the default branch*, not from any command. (Our label 133 now
+fronts this with a 2-option Continue/Quit confirm — Continue uses `_SET_RETURN_CODE(11)` to stay in the
+session; see §8c.)
+
+The corollary bit us: the bait label had the same shape, so an early build's Square politely equipped the
+bait and then quit fishing. Any sub-script that means to STAY in the session must end by asking for fishing
+again — `_GOTO_FISHING` (return code `0xB`) — so `EventMode` runs `case 0xb: GameMode = 0x10` instead of
+falling through. The real bait menu (above) ends with exactly that.
+
+### The fishing rectangle can crash the game — size it to the terrain
+
+`_LOAD_FISHING_DATA` gathers the ground collision polys inside the rect into a fixed **1024-poly** stack
+buffer (81920 bytes ÷ 0x50). `PickUpPoly` writes them with **no bounds check**, and the count is only
+tested (`if (0x400 < n)`) *after* the gather — so a rect that collects more than 1024 polys has already
+overrun the stack and corrupted the return address. It **crashes on entry** (black screen, then the
+emulator dies), it does not hang.
+
+Density is entirely terrain-dependent. Yellow Drops' open liquid gives **27** polys in 200×200; Brownboo's
+pond is walled by dense town geometry and a 180×180 rect there blew past 1024 and crashed. There is no way
+to measure the count without a successful load, so for a new spot **start with a small rect (~70×70)**,
+read the `cpoly=N/1024` figure the probe logs on `FISHING SPOT LOADED`, and grow from there. Keep well
+under 1024 — that number is a hard cliff, not a soft limit.
+
+### The fishing model shares one pool with fishing.pak — reset it FIRST
+
+`_LOAD_MAIN_CHARA(path, cfg, 1)` (flag = 1) loads the model into allocator **`0x1d1b360`** — the *same*
+pool `_LOAD_FISHING_DATA` allocates `fishing.pak`, the fish and the bait from. So a session's turi model
+(1.8 MB) plus everything else must all fit that one pool.
+
+Norune loads the model and clears the event buffer *after* it. That only works because Norune's pool
+pointer already sits near the base. **Brownboo has more resident event data, so the pointer is high, and
+model-start + 1.8 MB runs off the end of the pool → crash** — and it is completely rect-independent, which
+is why shrinking the rect never helped (proven: skipping the model reached fishing fine at `cpoly=4`).
+
+Fix: issue `_CLEAR_EVENT_BUFF` (39) *before* the model load, not after. That resets the pool pointer to
+its base so the model loads from the bottom and everything packs tight. Order:
+
+```
+_CLEAR_VILLAGER_BUFF        # free the NPCs
+_CLEAR_EVENT_BUFF          # reset the pool to base  <-- before, not after
+_LOAD_MAIN_CHARA(turi, 1)  # loads from the bottom of the freed pool
+_LOAD_FISHING_DATA         # fishing.pak stacks above it
+```
+
+Diagnosing this is worth a note: a per-spot "skip the model swap" flag isolated it in one test — with the
+swap gone the session reached `GameMode 0x10` and `FISHING SPOT LOADED`, so the crash had to be the model
+load and nothing else.
+
+### Field notes on the event point (each one silently ate an attempt)
+
+| field | rule |
+|---|---|
+| `+0x00` Enabled | **must be non-zero** — `CheckEventPoint` opens with `if (*p == 0) return 0;` |
+| `+0x0C` PartIndex | a **Georama part index**. Cloning a door inherits a valid one; use **-1** for world space |
+| `+0x60` Radius | a **scalar radius**, not a box. At 2000 it masked every door in town and their "!" markers vanished |
+| `+0x1C` | for type 3 this is the **script label** |
+| label choice | never hijack an id < 200 — taking "the last label in the table" grabbed **128** in Yellow Drops and broke the town |
+
+### Still open on this path
+
+- **Queens has no free event-point slot** (50 of 51 used) — needs a different trigger.
+- **Yellow Drops' water level is a guess** (`water: 1`). The trigger sits *outside* the town's declared
+  `WATER_SURFACE` square (±320 about the origin), so the liquid there is not that surface.
+- `FishingAddresses.OverworldState` (`0x21D19708`) is **the same address** as
+  `EventPoints.ScriptLabelRequest`. One of those two names is wrong; worth settling before either is
+  trusted.
+
+---
+
+## 8c. The fishing DIALOGUE system — menus, the no-pole line, the catch bubble
+
+§8b got the *session* working. This section is the **UI** on top of it — everything drawn in a message
+bubble: the entry menu you get on the trigger, the quit menu on Circle, the "you don't have a pole" line,
+and the catch bubble. All of it is reproduced in our own bytecode, because Norune draws it through
+`CALL_FUNC` subroutines compiled into *its* `.stb` that another town's script cannot reach. All of it is
+runtime-only: injected message text + `MesWin` STB commands, no ISO, no code injection.
+
+Companion: [fishing-species-names-records.md](fishing-species-names-records.md) (the `.mes` format + fish
+names); the mod's RE notes live in the `fishing-dialogue-and-mes-format` memory.
+
+### Two message windows: talk (0) and event (1)
+
+`GetMes(win)` = `DAT_01d3d3d0[win]` returns a `ClsMes`. Two windows matter:
+
+| win | global | guest / MMU | used for |
+|---|---|---|---|
+| 0 | `EditMes1` | `0x01D1B550` / `0x21D1B550` | villager talk **and the catch bubble** (msg 2000) |
+| 1 | `EditEventMes1` | `0x01D1E4D0` / `0x21D1E4D0` | **the menus and the no-pole line** (msg 20/21/22) |
+
+The no-pole line looks like a villager dialog box but it is **window 1** — same window as the menu, just
+drawn with no cursor and no tail and a low anchor (pos 8). Don't mistake it for the talk window.
+
+### The text lives in the `.mes` buffer, and custom towns don't have it
+
+The messages the fishing UI shows:
+
+| msg | window | text | present in |
+|---|---|---|---|
+| 20 | 1 (event) | the 4-line entry menu (Fish / Exchange FP / Fishing log / Quit) | vanilla fishing towns only |
+| 21 | 1 (event) | "Seems like you can fish here but you don't have a fishing pole." | " |
+| 22 | 1 (event) | the 2-line quit menu (Continue / Quit) | " |
+| 2000 | 0 (talk) | the catch template — `[fish] ([X]cm) caught! …Record [fish] [W]cm` | " |
+
+Queens/Brownboo/Yellow Drops have **none** of these, so a custom spot shows an empty bubble. The mod fixes
+it by building tiny `.mes` buffers in scratch and **swapping the window's buffer pointer** to them:
+
+- `EnsureMenuTemplate()` writes msg 20/21/22 to `CodeCaves.FishingMenuMes`; on fishing-window open it saves
+  and overwrites `EditEventMes1 + 0x17A0` / `+0x17A8` (window 1's buffer ptr) with our buffer.
+- `EnsureCatchTemplate()` writes msg 2000 to `CodeCaves.FishingCatchMes`; same swap on `EditMes1 + 0x17A0`.
+- `UpdateFishingWindow()` swaps on open, **restores on close**. See §fishing-window below.
+
+`.mes` format (`u16 count`, `u16` SetBuff delta, `count × {u16 id, u16 wordOff}`, then text at byte
+`2*(count+wordOff+1)`, 16-bit glyphs, `0xFF01` terminator, identical text **deduplicated**) is documented
+in [fishing-species-names-records.md](fishing-species-names-records.md). **Fish names are global**
+(`system14e.bin`, available in every town); only the catch *template* and the menu text are town-specific.
+
+### The swap races the menu — wait a full mod tick
+
+`UpdateFishingWindow` runs from `CustomFishingSpot.Tick`, which the mod calls on its **50 ms loop**
+(`TownCharacter`'s `while(true)` ends in `Thread.Sleep(50)` ≈ 3 game frames) — **not per frame**. If the
+menu's `_MES_MAKE` runs before that tick lands, `MakeMesTexture` measures the message off the town's *own*
+event buffer (which has no msg 20), computes a garbage size, and draws a **heavily distorted** bubble
+~25 % of the time. Fix: the entry script does **8 yields (~133 ms, > one 50 ms tick)** before `_MES_MAKE`,
+so the swap is reliably done first.
+
+### The `ClsMes` fields that matter (RE'd from `DrawMesWin` @ `0x153310`)
+
+The message window's behaviour is a handful of fields. Reversing the draw was necessary to make menus,
+the plain bubble, and the cursor all behave:
+
+| field | meaning | draw rule |
+|---|---|---|
+| `+0x58` | **shippo** (tail) flag | `DrawMesWin_sub` (`0x152030`) draws the tail sprite whenever `!= 0`, at a mid-screen anchor. **0 = no tail.** |
+| `+0x94` | **shown** flag | window draws (fades `+0x90` alpha up) only when `!= 0`. **Set to 1 at EVENT START, not by `_MES_MAKE`.** `_MES_CLOSE` sets it 0. |
+| `+0xA4` | **draw speed** = per-char reveal DELAY | **0 = instant**; 1.0 = one letter per frame (typing). |
+| `+0x1740` | **cursor line** | `DrawMesWin` draws the pointer + highlights the matching line only when `>= 0`. **-1 = no cursor.** |
+| `+0x16BC` | **current msgId** | `MakeMesWin`: same id → `GoNextPage`; different id → **rebuild** (`MakeMesTexture`). |
+| `+0x17A0`/`+0x17A8` | buffer ptr / buffer+delta | the swap target (`SetBuff`). |
+
+Two behaviours that cost real debugging cycles:
+
+- **`_MES_MAKE` (192)** → `MakeMesWin(clsMes, msgId)`. On a *new* id it rebuilds the texture but **does NOT
+  set `+0x94`**. So a message is visible only if `+0x94` was already 1 — which the engine sets **when the
+  event goes real**, once. A `_MES_CLOSE` before a following `_MES_MAKE` leaves it built-but-invisible.
+- The window is **only drawn in event mode**. Show a message then let the event end (`RET` → walking) and
+  it renders for a single frame and vanishes. Anything meant to stay on screen must keep yielding inside
+  the event (see the no-pole line).
+
+### The MesWin STB commands
+
+| id | command | handler | args |
+|---|---|---|---|
+| 192 | `_MES_MAKE` | `0x18F9D0` | (win, msgId) |
+| 193 | `_MES_CLOSE` | `0x18FB60` | (win) — sets `+0x94=0`, `+0x16BC=-1` |
+| 195 | `_SET_MES_AUTOSET` | — | (win, x1,y1,x2,y2) — auto-place the bubble avoiding the rect; Norune passes `0,0,0,0` |
+| 196 | `_SET_MES_SHIPPO` | `0x18FDD0` | (win, flag) → `+0x58` |
+| 197 | `_SET_MES_POS` | — | (win, posMode) — menus use **9**, the no-pole line **8**, then **0** to reset |
+| 198 | `_SET_MES_DRAWSPEED` | `0x18FF00` | (win, floatDelay) → `+0xA4` |
+| 199 | `_SET_MES_CURSOR` | `0x18FF70` | (win, line) → `+0x1740`; **-1 disables** |
+| 903 | `_GET_APAD` | — | (&lx, &ly[, &rx, &ry]) analog floats |
+| 1 | `_GET_PADDOWN` | — | (&out) button edge-events; X=`0x20`, dpad UP=`0x1000`, DOWN=`0x4000` |
+| 24 | `_GOTO_FP_CHANGE` | — | () — Exchange FP (native menu, `menu_mode 8`) |
+| 26 | `_GOTO_FISH_RANKING` | — | () — Fishing log (native menu, `menu_mode 10`) |
+| 3 | `_SET_RETURN_CODE` | — | (code) — **11 keeps the session** (see §8b return-code rule) |
+| 707 | `_SITEM_CHECK` | `0x1952D0` | (itemId, &out) — see rod gate below |
+
+### The select menu — `EmitSelectMenu`, reproduced from Norune's subroutines
+
+Norune's menu is three `CALL_FUNC` subroutines (menu-show `cb+19180`, select-loop `cb+16764`, direction
+`cb+16336`). We inline the same logic. Setup, then a per-frame cursor loop:
+
+```
+_SET_MES_SHIPPO(win, 0)            # tail OFF for the whole display
+_SET_MES_DRAWSPEED(win, 0.0)       # instant text
+_MES_MAKE(win, msgId)
+_SET_MES_POS(win, 9)
+_SET_MES_AUTOSET(win, 0,0,0,0)     # <-- this is what anchors the bubble; without it it sits top-left
+sel = 0 ; held = 0
+loop:
+  _SET_MES_CURSOR(win, sel)
+  YIELD
+  _GET_APAD(&scratch, &ly) ; _GET_PADDOWN(&pad)
+  # analog, edge-latched: LY > 0.5 = down, LY < -0.5 = up; move only neutral->pushed, re-arm on return.
+  #   ±0.5 symmetric, no hysteresis — identical to Norune's dir() (a wider deadzone makes double-taps WORSE).
+  # d-pad: pad & 0x4000 = down, pad & 0x1000 = up (already edge events).
+  if !(pad & 0x20 /*X*/): goto loop
+  _SET_MES_CURSOR(win, -1)         # <-- DISABLE the cursor on exit (vanilla does this)
+  _SET_MES_POS(win, 0)
+```
+
+Two mechanisms worth calling out, both learned from vanilla:
+
+- **`_SET_MES_CURSOR(win, -1)` on exit** disables the pointer/highlight, so any plain message shown
+  afterward (the no-pole line) renders as a bubble, not a lingering menu. Norune's select-loop does exactly
+  this before it returns.
+- **Analog feel is a pure threshold/edge match.** The step rate is identical to vanilla (both are event
+  scripts stepped once/frame by `EdEventMode → EdResumeEvent`), and `dir()` is symmetric ±0.5 with no
+  hysteresis. The re-arm requires the stick to return to `|LY| <= 0.5`; a tighter deadzone only makes fast
+  double-taps re-arm *harder*.
+
+The menu leaves the window **open** after a selection. Every dispatch path except the no-pole line calls
+`_MES_CLOSE` before its own transition (fishing / FP / log / quit), so the bubble doesn't render its bare
+frame during a fade. That is safe because `+0x94` is re-raised at the next event start.
+
+### The entry menu (label 400, msg 20) — 4 options
+
+Shown on the trigger's X press, before fishing — Norune's label 11. Choice lands in `var2`:
+
+| sel | option | action |
+|---|---|---|
+| 0 | **Fish** | rod gate → start fishing, or the no-pole line (below) |
+| 1 | **Exchange FP** | `_MES_CLOSE` + `_GOTO_FP_CHANGE` (24) + RET |
+| 2 | **Fishing log** | `_MES_CLOSE` + `_GOTO_FISH_RANKING` (26) + RET |
+| 3 | **Quit fishing** | `_MES_CLOSE` + RET |
+
+FP-exchange and Fishing-log are **native engine menus** (`menu_mode`), the same mechanism as the bait menu
+(§8b). They run after the event returns; the script just requests them and RETs.
+
+### The rod gate + the no-pole line (msg 21)
+
+"Fish" requires the fishing rod, **item 185**. The check is Norune's, verbatim:
+
+```
+_SITEM_CHECK(707, 185, &out)     # out = EdCheckItem(185)  (0x173270 -> SearchItemIndexNo 0x1BD940)
+                                 #   -> -1 if NOT owned, else the inventory index (>= 0)
+if (out < 0):  show msg 21 ; RET        # no pole
+else:          start fishing            # fall through to the §8b session setup
+```
+
+`_SITEM_CHECK` is *not* a boolean — it returns the item's slot index, so the test is `out < 0`, not
+`out == 0` (index 0 is a valid owned slot).
+
+The no-pole display (`EmitShowMessage`), which is why it reads as a plain villager bubble:
+
+```
+_SET_MES_SHIPPO(win, 0)          # NO tail  (setting it 1 here draws a stray triangle mid-screen)
+_MES_MAKE(win, 21)
+_SET_MES_POS(win, 8)             # low, talk-box anchor
+_SET_MES_AUTOSET(win, 0,0,0,0)
+_SET_MES_POS(win, 0)
+loop: YIELD ; _GET_PADDOWN(&pad) ; if !(pad & 0x20): goto loop     # WAIT for X
+_MES_CLOSE(win)
+```
+
+Three non-obvious requirements, each a fix from this work:
+
+1. **Do NOT `_MES_CLOSE` the menu before this.** `+0x94` (shown) is set only at event start; a close would
+   leave msg 21 built-but-invisible. The menu deliberately stays open going in.
+2. **WAIT (yield loop).** Window 1 only draws in event mode; without staying in the event the line flashes
+   one frame and the event ends. The wait also lets the player read it.
+3. **Cursor off, tail off.** The menu already set the cursor to -1 on exit; keep the tail at 0 (flag 1
+   draws the shippo triangle at its mid-screen anchor).
+
+### The quit menu (label 133, msg 22) — 2 options
+
+Circle during fishing → `ScriptLabelRequest = 133` (hardcoded, §8b). Choice in `var8`:
+
+| sel | option | action |
+|---|---|---|
+| 0 | **Continue fishing** | `_MES_CLOSE` + `_SET_RETURN_CODE(11)` + RET → **stays fishing** (the return-code rule) |
+| 1 | **Quit fishing** | `_MES_CLOSE` + fade-out + model restore + `_EXIT_FISHING` (falls through to the §8b exit) |
+
+### The catch bubble (msg 2000)
+
+On a catch, the engine's `chara_fishing` state machine calls `MakeMesWin(EditMes1 /*win 0*/, 2000)`.
+msg 2000 is `[fish] ([X]cm) caught! Fishing Points [Y]/Total Points [Z]/Record [fish] [W]cm`, where
+`[fbfe]` = the fish name (resolved from the **global** system buffer) and `[fbfa/f9/f8]` = the numbers.
+Custom towns lack msg 2000, so the bubble came up empty; injecting a tiny talk-mes buffer with msg 2000
+and swapping `EditMes1 + 0x17A0` on window-open fills it. Because the fish name comes from the global
+buffer, the template is the only town-specific piece.
+
+### `UpdateFishingWindow` — the swap/restore, and villager suspension
+
+`ComputeFishingWindow` returns true while a spot is live (cpoly/water set), while `GameMode == fishing`,
+or while in event mode with `EdEventInfo ∈ {400, 133, 134}` (our labels). On the **open** transition the
+mod swaps both buffers (window 0 catch, window 1 menu) and suspends the town villagers; on **close** it
+restores both buffers and the villager count/draw flags. The restore is guarded — it only writes back if
+our pointer is still installed, so a mid-session town reload (`EditInit` installing a fresh buffer) is not
+clobbered. Villager suspension is a separate concern documented in [[town-event-allocators]] (a leak there
+caused the Brownboo black-screen, see the `town-event-allocators` memory); the buffer swap is independent
+of it.
 
 ---
 

@@ -2,7 +2,7 @@
 
 Where the in-game weapon description text lives, its encoding, and the constraints for
 replacing it (goal: show each weapon's custom-effect ability in its description).
-Decoder/encoder: `tools/mes_decode.py` (a clean dump of the blob is `tools/allmenu.mes.bin`).
+Decoder/encoder: `tools/analysis/mes_decode.py` (a clean dump of the blob is `tools/allmenu.mes.bin`).
 
 ## Where it lives on disc
 

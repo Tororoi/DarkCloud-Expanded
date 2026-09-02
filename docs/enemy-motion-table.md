@@ -20,7 +20,7 @@ notes, from the STB:
 
 Because damage is gated on the hit window, retiming an attack (speeding up its clip) without the
 per-frame step jumping over that window needs the motion's **speed + hit-window** — both here.
-Regenerate via `tools/augment_motion_table.py`.
+Regenerate via `tools/analysis/augment_motion_table.py`.
 
 > **⚠ VESTIGIAL get-ups:** a "get up" row whose frame range strictly overlaps another motion's is a
 > placeholder, not a real animation (e.g. Dasher f10-20 == idle, dragons f30-50 == walk) — playing it shows

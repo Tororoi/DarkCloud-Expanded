@@ -13,7 +13,7 @@ export JAVA_HOME="$BREW/opt/openjdk@21"
 HEADLESS="$(echo "$BREW"/Cellar/ghidra/*/libexec/support/analyzeHeadless | cut -d' ' -f1)"
 PROJ=/tmp/ghidraproj
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DC=/Users/thomascantwell/ROMs/dc_extracted
+DC="${DC1_DATA_DIR:?set DC1_DATA_DIR to your extracted Dark Cloud disc dir (see .env.sample)}"
 IMG="${1:-main}"; NAMES="${2:?function name list (comma-separated)}"
 mkdir -p "$PROJ"
 if [ "$IMG" = "main" ]; then
