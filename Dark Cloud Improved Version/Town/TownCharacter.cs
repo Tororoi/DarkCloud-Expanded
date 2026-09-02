@@ -1049,6 +1049,7 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 TownEditMode.Tick();       //overhead camera + safe exit, every town
+                AllySwapPrototype.Tick();  //PROTOTYPE: in-place ally model swap (R3 → Ungaga), no reload
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
                 CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
                 TownCameraPolyBuffer.Tick(); //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)

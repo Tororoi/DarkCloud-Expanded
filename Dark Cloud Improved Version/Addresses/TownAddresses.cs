@@ -245,6 +245,24 @@ namespace Dark_Cloud_Improved_Version
         /// even though Georama part data exists for six maps (see <see cref="GeoramaTables"/>).</summary>
         internal const long MapNo = 0x202A2518;
 
+        /// <summary>Frames spent in the current area (int). Reset to 0 whenever the area (re)initializes —
+        /// including an <c>EditInit</c> re-run of the SAME town, which is what makes it the reload signal
+        /// the ally-switch position restore keys on. TownCharacter already uses it for its
+        /// "just entered an area" checks.</summary>
+        internal const long AreaFrames = 0x202A2880;
+
+        /// <summary>ELF <c>NextMapNo</c> (byte view). 255 = no transition pending; anything else means the
+        /// player is leaving for another map (TownCharacter's <c>changingLocation</c> reads this). An
+        /// ally-switch <c>EditInit</c> reload of the SAME town never sets it.</summary>
+        internal const long NextMapNo = 0x202A1E90;
+
+        /// <summary>ELF <c>start_event_no</c> (0x2A28C0) — write a label id &gt; 0 here and EditLoop starts
+        /// that event.stb label on its next frame (consumed by <c>RunEvent</c>, which resets it). The Ice
+        /// Queen boss work and the tide-evict design both fire labels this way; it is the sanctioned
+        /// "run this script now" door, unlike <see cref="EventPoints.ScriptLabelRequest"/> which EdMoveChara
+        /// rewrites every frame (a race).</summary>
+        internal const long StartEventNo = 0x202A28C0;
+
         /// <summary>ELF <c>GameMode</c> — the town's top-level state machine.</summary>
         internal const long GameMode = 0x202A1F50;
 

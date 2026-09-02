@@ -40,8 +40,8 @@ namespace Dark_Cloud_Improved_Version
         // stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
         internal static readonly int[] FishingSpareLabelIds   =
             { MenuSubLabelId, FishingLabelId, CanalFishingLabelId, EventPoints.FishingExitLabel,
-              EventPoints.FishingBaitLabel, LadderMsgLabelId, CanalWarpLabelId };   // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict
-        internal static readonly int[] FishingSpareLabelSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300, 0x100 };               // one size per id, same order
+              EventPoints.FishingBaitLabel, LadderMsgLabelId, CanalWarpLabelId, AllySwapLabelId };   // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict, ally-swap
+        internal static readonly int[] FishingSpareLabelSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300, 0x100, 0x600 };               // one size per id, same order
         // ↑ labels 402 (ladder tide-message) + 403 (tide-evict _MAP_JUMP) baked into every fishing town's stb
         //   (unused outside Queens, harmless — like 401); CustomFishingSpot installs them in Queens only.
 

@@ -36,6 +36,11 @@ namespace Dark_Cloud_Improved_Version
         /// player at the Shipwreck dock instead of the Queens-side entry.</summary>
         internal const int DockSpawnEvent = 404;
 
+        /// <summary>In-place ally model swap (AllySwapPrototype): _GET_POSITION/_GET_ROTATION →
+        /// _LOAD_MAIN_CHARA(ally, "info.cfg", 0) → re-place. Fired by writing the id to
+        /// <c>start_event_no</c>; nothing else dispatches it.</summary>
+        internal const int AllySwapLabelId = 405;
+
         /// <summary>Id for the shared menu-select subroutine's label. Nothing dispatches it as an event — it is
         /// only ever reached by CALL_FUNC (vanilla parks the same routine as an anonymous funcdata) — so this
         /// just needs to be an id no town uses and clear of the <see cref="RetiredLabelId"/> range.</summary>

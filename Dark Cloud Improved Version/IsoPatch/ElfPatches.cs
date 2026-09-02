@@ -81,6 +81,8 @@ namespace Dark_Cloud_Improved_Version
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
+            PatchAllyTextureBudget(fs, ElfOff);           // enlarge the town texture buffer so an in-place ally swap's textures fit (grow 0x1d3a080, shrink the over-provisioned 0x1d3a050 by the same amount)
+            PatchAllocOverflowProbe(fs, ElfOff);          // DIAGNOSTIC: CDataAlloc2 overflow → stash the arena ptr to a mailbox before hanging, so a freeze names which buffer overran
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -111,6 +113,85 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(StubAddr + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
+        }
+
+        // ── Ally in-place-swap: enlarge the town character buffers ───────────────────────────────────
+        // In-place ally swapping (AllySwapPrototype) reloads the town character via _LOAD_MAIN_CHARA. Two of
+        // the town's fixed CDataAlloc2 arenas are sized for ONE resident town character and overrun when a
+        // LARGER ally is loaded in place — the overrun is `Alloc__14CDataAlloc2` (0x1278a0) spinning forever
+        // on `if (cap < used+n) { printf; do{}while(true); }` (THE freeze). EditInit builds the whole town
+        // fresh for its target character so it never hits this; our in-place reload can't. The two ceilings,
+        // found by live probe (grow one and the freeze moves to the other):
+        //   • 0x1d3a080 TEXTURE buffer — SetDataBuffer 40000 blk (625K); ~470K resident (scene+villager+Toan
+        //     textures) → ~155K free. A swap's new textures overran it (froze even loading small Ruby).
+        //   • 0x1d3a060 main-char GEOMETRY arena — SetDataBuffer 0x1c138=115000 blk (1796K). Ungaga's parsed
+        //     model reached ~1525K and its shadow MDS (also loaded here via mds_buffer) pushed past 1796K.
+        //
+        // Fix: grow the texture buffer 40000 → 100000 blk (625K→1562K, ~1090K free) and the geometry arena
+        // 115000 → 160000 blk (1796K→2500K, ~975K headroom over Ungaga), and SHRINK the over-provisioned
+        // 0x1d3a050 arena (1216000 blk/19000K, only ~66% used in town) by the COMBINED 105000 blk so the
+        // master-pool total carve is UNCHANGED — nothing carved after 0x1d3a050 (the villager buffer, at a
+        // fixed DataBuffer offset) moves; the arenas between just follow their allocator base pointers. All
+        // three are SetDataBuffer size immediates in EditInit — cold town-init code, safe in-place edits.
+        //
+        // The 0x1d3a080 size was a single `ori a1,zero,0x9c40`; 100000 (0x186A0) needs 17 bits, so the ori
+        // becomes `lui a1,0x1` and the jal's delay-slot nop becomes `ori a1,a1,0x86A0` (the delay slot runs
+        // before SetDataBuffer, so a1 is correct at entry). 0x1d3a060 and 0x1d3a050 already use lui+ori pairs
+        // (immediates edited in place). Sizes: geometry 0x27100=160000; scene 0x10F2B8=1111000 (1216000−105000).
+        internal static void PatchAllyTextureBudget(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint TexSizeVa  = 0x00178534;  // ori a1,zero,0x9c40  (SetDataBuffer(0x1d3a080, 40000) size)
+            const uint TexDelayVa = 0x0017853C;  // nop  (that SetDataBuffer jal's delay slot)
+            const uint GeoLuiVa   = 0x00178570;  // lui v0,0x1          (SetDataBuffer(0x1d3a060, 0x1c138) size hi)
+            const uint GeoOriVa   = 0x00178574;  // ori a1,v0,0xc138    (                                    size lo)
+            const uint SceneLuiVa = 0x001785C4;  // lui v0,0x12         (SetDataBuffer(0x1d3a050, 0x128e00) size hi)
+            const uint SceneOriVa = 0x001785C8;  // ori a1,v0,0x8e00    (                                    size lo)
+
+            // Validate vanilla — refuse on an already-patched or wrong ISO rather than corrupt the layout.
+            if (RdU32(fs, ElfOff(TexSizeVa))  != Ori(a1, zero, 0x9c40) ||
+                RdU32(fs, ElfOff(TexDelayVa)) != 0 ||
+                RdU32(fs, ElfOff(GeoLuiVa))   != Lui(v0, 0x1) ||
+                RdU32(fs, ElfOff(GeoOriVa))   != Ori(a1, v0, 0xc138) ||
+                RdU32(fs, ElfOff(SceneLuiVa)) != Lui(v0, 0x12) ||
+                RdU32(fs, ElfOff(SceneOriVa)) != Ori(a1, v0, 0x8e00))
+                throw new IOException("Ally character-buffer patch sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
+
+            // 0x1d3a080: 40000 → 100000 (0x186A0), as lui a1,0x1 ; <jal> ; ori a1,a1,0x86A0 (delay slot).
+            WrU32(fs, ElfOff(TexSizeVa),  Lui(a1, 0x1));
+            WrU32(fs, ElfOff(TexDelayVa), Ori(a1, a1, 0x86A0));
+            // 0x1d3a060: 115000 → 160000 (0x27100).
+            WrU32(fs, ElfOff(GeoLuiVa),   Lui(v0, 0x2));
+            WrU32(fs, ElfOff(GeoOriVa),   Ori(a1, v0, 0x7100));
+            // 0x1d3a050: 1216000 → 1111000 (0x10F2B8) — reclaim the combined 105000 blk from its unused slack.
+            WrU32(fs, ElfOff(SceneLuiVa), Lui(v0, 0x10));
+            WrU32(fs, ElfOff(SceneOriVa), Ori(a1, v0, 0xF2B8));
+        }
+
+        // ── DIAGNOSTIC: name the arena that overflows on an in-place ally swap ───────────────────────
+        // Alloc__14CDataAlloc2 (0x1278a0) hangs on overflow: `if (cap < used+n) { printf(_744,used); do{}while(true); }`.
+        // The overflow branch (0x1278c0..0x1278d4) holds the arena ptr in a0 and (used+n) in a1 at 0x1278c0,
+        // before it loads the printf format string into a0. Repurpose that cold branch (only reached ON
+        // overflow) to stash a0 → mailbox +0x70 and a1 → +0x74, then fall through to the existing `b self`
+        // hang. The normal alloc path (0x1278dc+) is untouched, so this is safe in a hot function. On a swap
+        // freeze the mod reads +0x70 and reports which CDataAlloc2 (by its struct address) ran out.
+        internal static void PatchAllocOverflowProbe(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint LuiVa  = 0x001278C0;  // lui v0,0x2a          (start of the overflow branch; a0 = arena here)
+            const uint AdrVa  = 0x001278C4;  // addiu a0,v0,-0x7230  (loads the printf format string)
+            const uint MovVa  = 0x001278C8;  // moveq a1,v1
+            const uint JalVa  = 0x001278CC;  // jal printf (0x104698)
+            const uint LoopVa = 0x001278D4;  // b 0x1278d4 (the infinite-loop hang)
+            const long MbArena = 0x01F10070; // guest form of Mailbox.AllocProbeArena (0x21F10070)
+
+            if (RdU32(fs, ElfOff(LuiVa))  != Lui(v0, 0x2a) ||
+                RdU32(fs, ElfOff(JalVa))  != Jal(0x00104698) ||
+                RdU32(fs, ElfOff(LoopVa)) != 0x1000FFFFu)   // b self
+                throw new IOException("Alloc overflow-probe sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
+
+            WrU32(fs, ElfOff(LuiVa), Lui(v0, (uint)(MbArena >> 16)));           // v0 = 0x01F1_0000
+            WrU32(fs, ElfOff(AdrVa), Sw(a0, (int)(MbArena & 0xFFFF), v0));      // [+0x70] = arena ptr (a0)
+            WrU32(fs, ElfOff(MovVa), Sw(a1, (int)((MbArena + 4) & 0xFFFF), v0));// [+0x74] = requested end (a1 = used+n)
+            WrU32(fs, ElfOff(JalVa), 0);                                        // nop out the printf; fall to `b self`
         }
 
         // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
