@@ -9,7 +9,7 @@ import java.io.*;
 
 public class ApplySymbols extends GhidraScript {
     public void run() throws Exception {
-        String symfile = "/Users/thomascantwell/DarkCloud-Enhanced/tools/ghidra/symbols.txt";
+        String symfile = getSourceFile().getParentFile().getAbsolutePath() + File.separator + "symbols.txt";  // next to this script
         FunctionManager fm = currentProgram.getFunctionManager();
         AddressSpace sp = currentProgram.getAddressFactory().getDefaultAddressSpace();
         Memory mem = currentProgram.getMemory();
