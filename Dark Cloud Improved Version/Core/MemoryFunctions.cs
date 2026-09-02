@@ -42,11 +42,8 @@ namespace Dark_Cloud_Improved_Version
                 if (!string.IsNullOrEmpty(xdg))
                 {
                     candidates.Add(Path.Combine(xdg, sockName));
-<<<<<<< HEAD:Dark Cloud Improved Version/MemoryFunctions.cs
                     candidates.Add(Path.Combine(xdg, ".flatpak", "net.pcsx2.PCSX2", "xdg-run", sockName)); // Flatpak
-=======
                     candidates.Add(Path.Combine(xdg, "app", "net.pcsx2.PCSX2", sockName)); // Flatpak
->>>>>>> 6b92868251417b324af92913875853d370371eb3:Dark Cloud Improved Version/Core/MemoryFunctions.cs
                 }
                 candidates.Add(Path.Combine(Path.GetTempPath(), sockName)); // macOS $TMPDIR
                 candidates.Add("/tmp/" + sockName);
