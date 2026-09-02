@@ -202,7 +202,6 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Enabled) return;
 
-            BrownbooTextureRelocation.Tick();   // park the fishing GS texture blocks off the Brownboo scene texture (stilts fix)
             PinFishCamHeight();   // keep the patched SetHeight site fed (per-spot fishing camera height)
             PinYdWaterLevel();    // Yellow Drops: hold the live water level against the camera-window re-derive
 
