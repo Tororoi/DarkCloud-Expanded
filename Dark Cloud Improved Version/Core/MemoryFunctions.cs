@@ -42,6 +42,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!string.IsNullOrEmpty(xdg))
                 {
                     candidates.Add(Path.Combine(xdg, sockName));
+                    candidates.Add(Path.Combine(xdg, ".flatpak", "net.pcsx2.PCSX2", "xdg-run", sockName)); // Flatpak
                     candidates.Add(Path.Combine(xdg, "app", "net.pcsx2.PCSX2", sockName)); // Flatpak
                 }
                 candidates.Add(Path.Combine(Path.GetTempPath(), sockName)); // macOS $TMPDIR
@@ -79,7 +80,7 @@ namespace Dark_Cloud_Improved_Version
             catch (Exception ex)
             {
                 Console.WriteLine("PINE connection failed: " + ex.Message);
-                Console.WriteLine("Ensure PINE is enabled in PCSX2: Settings → Advanced → PINE (slot 28011), then start a game.");
+                Console.WriteLine("Ensure PINE is enabled in PCSX2: Settings → Advanced → PINE (slot 28011), then start the game.");
                 if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     Console.WriteLine("On Linux/macOS the socket should appear as pcsx2.sock in $XDG_RUNTIME_DIR (Linux) or $TMPDIR (macOS) once PINE is on.");
                 return -2;
