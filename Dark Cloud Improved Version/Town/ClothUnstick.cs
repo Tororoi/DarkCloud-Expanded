@@ -43,10 +43,10 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Set false to observe the RAW (unhealed) cloth — used only while bisecting which Queens
         /// bake triggers the explosion. Leave true for normal play.</summary>
-        internal static bool HealEnabled = true;
+        internal static bool HealEnabled = true;   // set false to observe the RAW (unhealed) cloth while bisecting
 
-        /// <summary>Verbose per-decision logging while we work out why the reset isn't landing. Turn off once fixed.</summary>
-        internal static bool Diag = true;
+        /// <summary>Verbose per-decision logging (which gate blocked, post-fire heal state). Off for normal play.</summary>
+        internal static bool Diag = false;
 
         private static int _postFire;   // ticks to keep logging state after a fire (gating diagnosis)
 

@@ -73,22 +73,15 @@ namespace Dark_Cloud_Improved_Version
             PatchFishingCameraHeight(fs, ElfOff);        // fishing camera height 40 -> per-spot data word (canal wades at 5)
             PatchFishingCameraGather(fs, ElfOff);        // fishing camera-collision gather: mask 1 -> 0xffff (see ALL camera walls while fishing)
             PatchFishingUncastGate(fs, ElfOff);          // invalid-cast auto-uncast: 31-frame delay -> 4, height check gated on a SETTLED bobber
-            if (!IsoPatcher.BisectSkipQueensWaterHooks)
-            {
-                PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
-                PatchWaterRedraw(fs, ElfOff);                 // moves the water draw after the character ONLY while the wading mailbox is armed (order-gate cave; unarmed = vanilla order, fixes the Matataki-falls DOF artifact)
-                PatchCapeEarlyDraw(fs, ElfOff);               // AFTER PatchWaterRedraw: EARLY_STUB also draws the cape early (survives falls)
-                PatchCanalEvictFadeHook(fs, ElfOff);          // fully-black fade frame → canal tide-evict map-jump (native, flag-gated)
-                PatchQueensSprayHook(fs, ElfOff);             // MainDraw effect step → spray emitters at the Queens canal waterfalls (table-driven)
-                PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
-            }
+            PatchDrawWaterCompaction(fs, ElfOff);        // frees the cave the water-redraw hook (below) lives in
+            PatchWaterRedraw(fs, ElfOff);                 // moves the water draw after the character ONLY while the wading mailbox is armed (order-gate cave; unarmed = vanilla order, fixes the Matataki-falls DOF artifact)
+            PatchCapeEarlyDraw(fs, ElfOff);               // AFTER PatchWaterRedraw: EARLY_STUB also draws the cape early (survives falls)
+            PatchCanalEvictFadeHook(fs, ElfOff);          // fully-black fade frame → canal tide-evict map-jump (native, flag-gated)
+            PatchQueensSprayHook(fs, ElfOff);             // MainDraw effect step → spray emitters at the Queens canal waterfalls (table-driven)
+            PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
-            if (!IsoPatcher.BisectSkipQueensWaterHooks)
-                PatchStiltsHeal(fs, ElfOff);              // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal) — depends on PatchWaterRedraw
-            PatchAllyTextureBudget(fs, ElfOff);           // enlarge the town texture buffer so an in-place ally swap's textures fit (grow 0x1d3a080, shrink the over-provisioned 0x1d3a050 by the same amount)
-            PatchAllocOverflowProbe(fs, ElfOff);          // DIAGNOSTIC: CDataAlloc2 overflow → stash the arena ptr to a mailbox before hanging, so a freeze names which buffer overran
-            PatchReadInfoBreadcrumb(fs, ElfOff);          // DIAGNOSTIC: ReadInfo cfg-command dispatch → mailbox breadcrumb (proven working: the town-entry load runs through it; the "first-swap regression" was the state-dependent freeze itself)
-            PatchSkipCharShadow(fs, ElfOff);              // mailbox-gated CommandSHADOW_MODEL skip: in-place ally swaps load with no shadow mesh (ArrangeShadowMDT's 1020-edge guard tripping on the in-place context = THE swap freeze, savestates 2+4)
+            PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
+            PatchAllyTextureBudget(fs, ElfOff);           // enlarge the town character buffers so an ally swap's model/textures fit (Ungaga); moves the geometry buffer → ClothUnstick heals the first-Queens-load cloth blowup
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -162,6 +155,13 @@ namespace Dark_Cloud_Improved_Version
                 RdU32(fs, ElfOff(SceneOriVa)) != Ori(a1, v0, 0x8e00))
                 throw new IOException("Ally character-buffer patch sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
 
+            // Buffers carve SEQUENTIALLY from the master pool: texture (0x1d3a080) → geometry (0x1d3a060) →
+            // scene (0x1d3a050). Growing texture therefore pushes the GEOMETRY buffer's base later — and the
+            // town player's CLOTH lives in geometry, so on the FIRST cold load into a far-spawn town (Queens)
+            // it lands on uninitialised boot memory and its Verlet solver blows up (the "missing front cape";
+            // ClothUnstick heals it via the engine's own _INIT_NPC_CLOTH reset). This grow is REQUIRED for
+            // Ungaga's textures to fit, so it stays and the heal covers the cloth (confirmed by a 3-way bisect
+            // of these writes, 2026-09-04).
             // 0x1d3a080: 40000 → 100000 (0x186A0), as lui a1,0x1 ; <jal> ; ori a1,a1,0x86A0 (delay slot).
             WrU32(fs, ElfOff(TexSizeVa),  Lui(a1, 0x1));
             WrU32(fs, ElfOff(TexDelayVa), Ori(a1, a1, 0x86A0));
@@ -171,119 +171,6 @@ namespace Dark_Cloud_Improved_Version
             // 0x1d3a050: 1216000 → 1111000 (0x10F2B8) — reclaim the combined 105000 blk from its unused slack.
             WrU32(fs, ElfOff(SceneLuiVa), Lui(v0, 0x10));
             WrU32(fs, ElfOff(SceneOriVa), Ori(a1, v0, 0xF2B8));
-        }
-
-        // ── DIAGNOSTIC: name the arena that overflows on an in-place ally swap ───────────────────────
-        // Alloc__14CDataAlloc2 (0x1278a0) hangs on overflow: `if (cap < used+n) { printf(_744,used); do{}while(true); }`.
-        // The overflow branch (0x1278c0..0x1278d4) holds the arena ptr in a0 and (used+n) in a1 at 0x1278c0,
-        // before it loads the printf format string into a0. Repurpose that cold branch (only reached ON
-        // overflow) to stash a0 → mailbox +0x70 and a1 → +0x74, then fall through to the existing `b self`
-        // hang. The normal alloc path (0x1278dc+) is untouched, so this is safe in a hot function. On a swap
-        // freeze the mod reads +0x70 and reports which CDataAlloc2 (by its struct address) ran out.
-        internal static void PatchAllocOverflowProbe(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint LuiVa  = 0x001278C0;  // lui v0,0x2a          (start of the overflow branch; a0 = arena here)
-            const uint AdrVa  = 0x001278C4;  // addiu a0,v0,-0x7230  (loads the printf format string)
-            const uint MovVa  = 0x001278C8;  // moveq a1,v1
-            const uint JalVa  = 0x001278CC;  // jal printf (0x104698)
-            const uint LoopVa = 0x001278D4;  // b 0x1278d4 (the infinite-loop hang)
-            const long MbArena = 0x01F10070; // guest form of Mailbox.AllocProbeArena (0x21F10070)
-
-            if (RdU32(fs, ElfOff(LuiVa))  != Lui(v0, 0x2a) ||
-                RdU32(fs, ElfOff(JalVa))  != Jal(0x00104698) ||
-                RdU32(fs, ElfOff(LoopVa)) != 0x1000FFFFu)   // b self
-                throw new IOException("Alloc overflow-probe sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
-
-            WrU32(fs, ElfOff(LuiVa), Lui(v0, (uint)(MbArena >> 16)));           // v0 = 0x01F1_0000
-            WrU32(fs, ElfOff(AdrVa), Sw(a0, (int)(MbArena & 0xFFFF), v0));      // [+0x70] = arena ptr (a0)
-            WrU32(fs, ElfOff(MovVa), Sw(a1, (int)((MbArena + 4) & 0xFFFF), v0));// [+0x74] = requested end (a1 = used+n)
-            WrU32(fs, ElfOff(JalVa), 0);                                        // nop out the printf; fall to `b self`
-
-            // Alloc64__14CDataAlloc2 (0x127900) has the SAME hang; its overflow branch (0x12794c..0x12795c)
-            // holds the arena in s1 ($17) and the size in s0 ($16). Instrument it to the same mailbox.
-            const uint A64LuiVa = 0x0012794C;  // lui v0,0x2a
-            const uint A64AdrVa = 0x00127950;  // addiu a0,v0,-0x7230
-            const uint A64JalVa = 0x00127954;  // jal printf
-            const uint A64LoopVa = 0x0012795C; // b self
-            const int  s0 = 16, s1 = 17;
-            if (RdU32(fs, ElfOff(A64LuiVa))  != Lui(v0, 0x2a) ||
-                RdU32(fs, ElfOff(A64JalVa))  != Jal(0x00104698) ||
-                RdU32(fs, ElfOff(A64LoopVa)) != 0x1000FFFFu)
-                throw new IOException("Alloc64 overflow-probe sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
-            WrU32(fs, ElfOff(A64LuiVa), Lui(v0, (uint)(MbArena >> 16)));
-            WrU32(fs, ElfOff(A64AdrVa), Sw(s1, (int)(MbArena & 0xFFFF), v0));        // [+0x70] = arena ptr (s1)
-            WrU32(fs, ElfOff(A64JalVa), Sw(s0, (int)((MbArena + 4) & 0xFFFF), v0));  // [+0x74] = requested size (s0)
-        }
-
-        // ── DIAGNOSTIC: breadcrumb ReadInfo's cfg-command dispatch ───────────────────────────────────
-        // ReadInfo (0x139d10) runs a character's .chr cfg commands: `v0 = idx@sp+0x107c; (*CommandExe[v0])(args)`
-        // at 0x139f34. The 2nd in-place ally swap freezes INSIDE this loop (geometry loaded, then hung on some
-        // later command). Retarget 0x139f18 (`addiu a0,sp,0x1020`, right before the id load) to a cave that
-        // stashes the command index (loaded into v0 by the delay-slot `lw v0,0x107c(sp)`) to the mailbox, does
-        // the displaced addiu, and returns — so on a freeze the mailbox names the hanging cfg command.
-        internal static void PatchReadInfoBreadcrumb(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint HookVa  = 0x00139F18;   // addiu a0,sp,0x1020   (before `lw v0,0x107c(sp)`)
-            const uint DelayVa = 0x00139F1C;   // lw v0,0x107c(sp)     (delay slot; loads the command index)
-            const uint CaveVa  = 0x00229B00;   // free dead-CharaChange space (past the shipped water caves)
-            const long MbCmd   = 0x01F10078;   // guest form of Mailbox.ReadInfoCmd
-            const int  at = 1;
-
-            if (RdU32(fs, ElfOff(HookVa))  != Addiu(a0, sp, 0x1020) ||
-                RdU32(fs, ElfOff(DelayVa)) != 0x8FA2107Cu)   // lw v0,0x107c(sp)
-                throw new IOException("ReadInfo breadcrumb sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
-
-            // Cave: v0 already = command index (set by the delay slot before we branch here).
-            uint[] cave =
-            {
-                Lui(at, (uint)(MbCmd >> 16)),          // lui at,0x01F1
-                Sw(v0, (int)(MbCmd & 0xFFFF), at),     // sw v0,0x78(at)  ← mailbox = command index
-                Addiu(a0, sp, 0x1020),                 // displaced instruction
-                0x03E00008u,                           // jr ra
-                0,                                     // nop (delay)
-            };
-            for (int i = 0; i < cave.Length; i++) WrU32(fs, ElfOff(CaveVa + (uint)(i * 4)), cave[i]);
-            WrU32(fs, ElfOff(HookVa), Jal(CaveVa));    // addiu a0,sp,0x1020 → jal cave (delay slot loads v0)
-        }
-
-        // ── In-place ally swap: skip the character SHADOW mesh while the swap mailbox is set ─────────
-        // ArrangeShadowMDT (0x126B30) hangs its own way: `if (edgeRecords > 0x3FC) { printf; while(true); }`
-        // — and the printf lands in the kernel's undefined-syscall self-loop (the observed freeze; EPC
-        // 0x126DB0 in savestates 2 AND 4, with the texture table proven CLEAN in 4). In the in-place-swap
-        // context the shadow chain feeds it garbage (why swapped characters never had shadows: the pipeline
-        // half-fails there), so the guard trips state-dependently. Until the in-place shadow path is made
-        // sound, skip CommandSHADOW_MODEL (0x13A190) entirely while the swap mailbox (0x01F1007C) is set:
-        // char+0xC0 stays 0 (Initialize cleared it) → DrawShadow skips → deterministic no-shadow, no crash.
-        // EditInit/town-entry loads run with the mailbox clear → normal shadows everywhere else.
-        internal static void PatchSkipCharShadow(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint FuncVa  = 0x0013A190;   // CommandSHADOW_MODEL entry: addiu sp,sp,-0x30 ; sq ra,0x20(sp)
-            const uint CaveVa  = 0x00229B40;   // dead-CharaChange space, after the ReadInfo breadcrumb cave (0x229B00, 5 words)
-            const long MbSkip  = 0x01F1007C;   // guest form of Mailbox.SkipCharShadow
-            const uint OrigA   = 0x27BDFFD0;   // addiu sp,sp,-0x30
-            const uint OrigB   = 0x7FBF0020;   // sq ra,0x20(sp)  (bytes 20 00 bf 7f little-endian)
-            const int  at = 1, v1 = 3;
-
-            if (RdU32(fs, ElfOff(FuncVa)) != OrigA || RdU32(fs, ElfOff(FuncVa + 4)) != OrigB)
-                throw new IOException("CommandSHADOW_MODEL entry is not vanilla — unmodified Dark Cloud (USA) ISO expected.");
-
-            // Branch offset: bne at +8, delay at +12, SKIP (jr ra) at +32 → offset = (32-12)/4 = 5.
-            uint[] cave =
-            {
-                Lui(at, (uint)(MbSkip >> 16)),                                    // +0  lui at,0x01F1
-                (0x23u << 26) | ((uint)at << 21) | ((uint)v1 << 16) | (uint)(MbSkip & 0xFFFF), // +4  lw v1,0x7C(at)
-                (0x05u << 26) | ((uint)v1 << 21) | ((uint)zero << 16) | 5,        // +8  bne v1,zero,SKIP(+32)
-                0,                                                                // +12 nop (delay)
-                OrigA,                                                            // +16 displaced: addiu sp,sp,-0x30
-                OrigB,                                                            // +20 displaced: sq ra,0x20(sp)
-                J(FuncVa + 8),                                                    // +24 j 0x13A198 (continue)
-                0,                                                                // +28 nop (delay)
-                0x03E00008u,                                                      // +32 SKIP: jr ra (sp/ra untouched)
-                0,                                                                // +36 nop (delay)
-            };
-            for (int i = 0; i < cave.Length; i++) WrU32(fs, ElfOff(CaveVa + (uint)(i * 4)), cave[i]);
-            WrU32(fs, ElfOff(FuncVa),     J(CaveVa));   // entry → j cave
-            WrU32(fs, ElfOff(FuncVa + 4), 0);           // delay slot: nop (both originals live in the cave)
         }
 
         // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
