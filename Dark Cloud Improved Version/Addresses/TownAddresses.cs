@@ -266,6 +266,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>ELF <c>GameMode</c> — the town's top-level state machine.</summary>
         internal const long GameMode = 0x202A1F50;
 
+        /// <summary>ELF <c>MotionStopFlag__10CCharacter</c> (0x2A2478) — global gate on <c>ClothStep</c>
+        /// (0x138E50): cloth only simulates (and only Clears, via <c>_INIT_NPC_CLOTH</c>) while this is 0.
+        /// It's 0 during normal walking.</summary>
+        internal const long MotionStopFlag = 0x202A2478;
+
         internal const int GameModeWalking  = 1;
         internal const int GameModeOverhead = 4;
 
