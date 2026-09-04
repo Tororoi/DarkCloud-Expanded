@@ -5,39 +5,42 @@ patch=1,EE,201F75E0,extended,0C08AF00 //write jal MenuCalcbuf
 patch=1,EE,E1010003,extended,102A2534 //check if not dungeon
 patch=1,EE,201F75E0,extended,0C05DEFC //write jal EditSave
 
-//Ally Switching in Town
+//Ally Switching in Town — the commit at 0x1F7DB4 is now a NOP (was `jal EditInit`, the full town
+//reload). AllySwapPrototype (C#) detects the menu commit and does an IN-PLACE _LOAD_MAIN_CHARA swap
+//instead (no reload → position/town state preserved). The locked-ally `jal coMeSePlay` reject beeps
+//are kept. If this NOP-and-mod-swap is ever backed out, restore 0x0C05E0E0 (jal EditInit) here.
 patch=1,EE,E1040001,extended,01D90470 //cursor on Xiao
 patch=1,EE,E1010002,extended,21CD9551 //if ally amount < 2
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
 patch=1,EE,E1010001,extended,31CD9551 //if ally amount > 1
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+patch=1,EE,201F7DB4,extended,00000000 //write jal EditInit (reload map)
 
 patch=1,EE,E1040002,extended,01D90470 //cursor on Goro
 patch=1,EE,E1010003,extended,21CD9551 //if ally amount < 3
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
 patch=1,EE,E1010002,extended,31CD9551 //if ally amount > 2
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+patch=1,EE,201F7DB4,extended,00000000 //write jal EditInit (reload map)
 
 patch=1,EE,E1040003,extended,01D90470 //cursor on Ruby
 patch=1,EE,E1010004,extended,21CD9551 //if ally amount < 4
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMnuSPlay
 patch=1,EE,E1010003,extended,31CD9551 //if ally amount > 3
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+patch=1,EE,201F7DB4,extended,00000000 //write jal EditInit (reload map)
 
 patch=1,EE,E1040004,extended,01D90470 //cursor on Ungaga
 patch=1,EE,E1010005,extended,21CD9551 //if ally amount < 5
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
 patch=1,EE,E1010004,extended,31CD9551 //if ally amount > 4
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
+patch=1,EE,201F7DB4,extended,00000000 //write jal EditInit (reload map)
 
 patch=1,EE,E1040005,extended,01D90470 //cursor on Osmond
 patch=1,EE,E1010006,extended,21CD9551
 patch=1,EE,201F7DB4,extended,0C08B3BC
 patch=1,EE,E1010005,extended,31CD9551
-patch=1,EE,201F7DB4,extended,0C05E0E0
+patch=1,EE,201F7DB4,extended,00000000
 
 patch=1,EE,E1010000,extended,01D90470 //if cursor on toan
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit
+patch=1,EE,201F7DB4,extended,00000000 //write jal EditInit
 
 patch=1,EE,E1010004,extended,002A2518 //check if factory
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal comseplay

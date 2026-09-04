@@ -173,7 +173,21 @@ namespace Dark_Cloud_Improved_Version
             internal const long AllocProbeArena = Base + 0x70;
             internal const long AllocProbeSize  = Base + 0x74;
 
-            internal const long NextFree = Base + 0x78;
+            /// <summary>DIAGNOSTIC (AllySwapPrototype): PatchReadInfoBreadcrumb makes ReadInfo's cfg-command
+            /// dispatch stash the current command INDEX here before each handler runs, so on a swap freeze
+            /// mid-load the frozen value names which cfg command (MODEL/TEXTURE/CLOTH/SHADOW/MOTION…) hung.
+            /// Guest form 0x01F10078.</summary>
+            internal const long ReadInfoCmd = Base + 0x78;
+
+            /// <summary>AllySwapPrototype: nonzero while an in-place ally swap's load runs — the ELF-patched
+            /// <c>CommandSHADOW_MODEL</c> (PatchSkipCharShadow) early-returns while set, skipping the shadow
+            /// mesh load whose edge-arranger (<c>ArrangeShadowMDT</c>) blows its 1020-record guard on garbage
+            /// input in the in-place context (the guard printf → undefined-syscall kernel spin = THE swap
+            /// freeze, savestates 2+4). Town-entry EditInit loads run with this clear → normal shadows.
+            /// Guest form 0x01F1007C.</summary>
+            internal const long SkipCharShadow = Base + 0x7C;
+
+            internal const long NextFree = Base + 0x80;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
