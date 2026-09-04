@@ -41,6 +41,11 @@ namespace Dark_Cloud_Improved_Version
         /// <c>start_event_no</c>; nothing else dispatches it.</summary>
         internal const int AllySwapLabelId = 405;
 
+        /// <summary>Baked spare that fires <c>_INIT_NPC_CLOTH(-1)</c> to reset the town player's cloth to its
+        /// rest pose (engine <c>Clear__6CCloth</c>). Used by <see cref="ClothUnstick"/> to heal the first-
+        /// Queens-load cloth explosion — the game's own post-teleport cloth reset, not a manual re-seed.</summary>
+        internal const int ClothResetLabelId = 406;
+
         /// <summary>Id for the shared menu-select subroutine's label. Nothing dispatches it as an event — it is
         /// only ever reached by CALL_FUNC (vanilla parks the same routine as an anonymous funcdata) — so this
         /// just needs to be an id no town uses and clear of the <see cref="RetiredLabelId"/> range.</summary>
