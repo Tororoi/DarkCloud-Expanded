@@ -24,13 +24,6 @@ namespace Dark_Cloud_Improved_Version
     {
         internal static bool Enabled = true;
 
-        /// <summary>BISECT: the swap freeze has the SAME fingerprint with or without the texture purge
-        /// (wild jump into data → undefined-syscall kernel spin; regs a0=0xA a1=0x8000 a2=0x1C75520 = the
-        /// texture manager, every crash; emulog: 0xC8-byte copy from NULL). So the purge is neither cause
-        /// nor fix. Default OFF to remove it as a variable while we chase the real texture-manager corrupt
-        /// pointer (differential: mgr header ptrs @0x1C78F88/0x1C7B0B4 zeroed in frozen vs valid in healthy).</summary>
-        internal static bool PurgeEnabled = false;
-
         private const string Tag = "[AllySwap] ";
 
         // Queens LOW TIDE arms the canal-wading early-draw cave on the player's model root (chara+0xBC). The
@@ -80,84 +73,13 @@ namespace Dark_Cloud_Improved_Version
             int map = Memory.ReadInt(EditLoop.MapNo);
             if (map != _lastMap)
             {
-                _lastMap = map; _installedStb = 0; _probedMap = -1;
+                _lastMap = map; _installedStb = 0;
                 _currentAlly = 0; _pendingAlly = -1;   // a fresh town load starts as Toan (entry character)
-                Memory.WriteInt(CodeCaves.Mailbox.SkipCharShadow, 0);   // town loads must run WITH shadows
-                _shadowSkipClearAfter = DateTime.MinValue;
-                _purgePending = DateTime.MinValue;
             }
 
-            ProbeArenas();
-            CheckAllocOverflow();
-            CheckReadInfoBreadcrumb();
             EnsureInstalled();
-
             DetectCommit();
             MaybeFirePending();
-            MaybePurgeBehindBlack();
-            MaybeClearShadowSkip();
-        }
-
-        /// <summary>ELF <c>fade_end</c> (EdFadeInOut's fully-black latch @gp-0x6DF4; the canal-evict native
-        /// hook keys on its store) — 1 once a fade-out has reached full black.</summary>
-        private const long FadeEnd = 0x202A29FC;
-        private static DateTime _purgePending = DateTime.MinValue;
-        private static DateTime _shadowSkipClearAfter = DateTime.MinValue;
-
-        /// <summary>Clear the shadow-skip mailbox once the swap has settled back to walking (earliest 2 s
-        /// after fire, so the load definitely ran under it) — town-entry loads must see it CLEAR so normal
-        /// characters keep their shadows.</summary>
-        private static void MaybeClearShadowSkip()
-        {
-            if (_shadowSkipClearAfter == DateTime.MinValue) return;
-            if (DateTime.UtcNow < _shadowSkipClearAfter) return;
-            if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking &&
-                DateTime.UtcNow < _shadowSkipClearAfter.AddSeconds(13)) return;   // wait for walking, 15 s cap
-            Memory.WriteInt(CodeCaves.Mailbox.SkipCharShadow, 0);
-            _shadowSkipClearAfter = DateTime.MinValue;
-        }
-
-        /// <summary>The swap script fades out, waits for full black, then idles ~20 frames before the load —
-        /// that idle is OUR window: purge the outgoing character's texture entries the moment
-        /// <see cref="FadeEnd"/> reports fully black. Behind black the (transiently texture-less) old model
-        /// is invisible, nothing has moved for other blocks, and the load starts with clean block-8 state.</summary>
-        private static void MaybePurgeBehindBlack()
-        {
-            if (_purgePending == DateTime.MinValue) return;
-            if (DateTime.UtcNow > _purgePending)   // safety: never leave a stale pending purge armed
-            {
-                _purgePending = DateTime.MinValue;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "purge window expired without a black frame — purge skipped");
-                return;
-            }
-            if (Memory.ReadInt(FadeEnd) == 0) return;   // not fully black yet
-            _purgePending = DateTime.MinValue;
-            PurgeCharacterTextures();
-        }
-
-        private static int _lastCfgCmd = -2;
-
-        /// <summary>The .chr cfg-command names, by dispatch index (handler table @0x251470, resolved via the
-        /// symbol table — VERTEX_ANIME..EVENT). The breadcrumb mailbox holds the LAST index dispatched.</summary>
-        private static readonly string[] CfgCmdNames =
-        {
-            "VERTEX_ANIME", "SHADOW_VERTEX_ANIME", "MODEL", "SHADOW_MODEL", "MOTION", "SHADOW_MOTION",
-            "KEY", "KEY_START", "MOTION_END", "CLOTH", "BODY_SIZE", "ALLOC_MDT", "ALLOC_DBUFF",
-            "ALLOC_SHADOW_MDT", "ALLOC_SHADOW_DBUFF", "IMG", "IMG_END", "FOOT", "EVENT",
-        };
-
-        /// <summary>Log the ReadInfo cfg-command breadcrumb (PatchReadInfoBreadcrumb) on change. The load runs
-        /// many commands inside one game frame, so at 50 ms ticks we mostly sample the LAST dispatched — which
-        /// is exactly what matters on a freeze: the value frozen in the mailbox names the hanging command.
-        /// <see cref="MaybeFirePending"/> resets the latch so the post-swap value always logs, even when it
-        /// equals the pre-swap one.</summary>
-        private static void CheckReadInfoBreadcrumb()
-        {
-            int cmd = Memory.ReadInt(CodeCaves.Mailbox.ReadInfoCmd);
-            if (cmd == _lastCfgCmd) return;
-            _lastCfgCmd = cmd;
-            string name = cmd >= 0 && cmd < CfgCmdNames.Length ? CfgCmdNames[cmd] : "?";
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cfg-cmd breadcrumb: [{cmd}] {name}");
         }
 
         /// <summary>In the party menu, a Cross press on an unlocked ally different from the current town
@@ -201,173 +123,12 @@ namespace Dark_Cloud_Improved_Version
             ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
             if (lab == null) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "swap label 405 missing — skipped"); return; }
 
-            Memory.WriteInt(CodeCaves.Mailbox.AllocProbeArena, 0);   // clear the overflow probe for this swap
-            _lastOverflowArena = 0;
-            Memory.WriteInt(CodeCaves.Mailbox.ReadInfoCmd, -1);      // re-arm the breadcrumb so the frozen value always logs
-            _lastCfgCmd = -2;
-            // Arm the behind-black purge. fade_end is a COMPLETION LATCH left at 1 by the PREVIOUS swap's
-            // fade — a level check fired instantly at commit (textures vanished before any black; crash,
-            // savestate 3). CLEAR it now and wait for THIS swap's fade-out to set it fresh (rising edge).
-            Memory.WriteInt(FadeEnd, 0);
-            _purgePending = PurgeEnabled ? DateTime.UtcNow.AddSeconds(5) : DateTime.MinValue;
-            // BISECT: shadow-skip DISABLED (it never actually gated ArrangeShadowMDT, which runs from the
-            // MODEL command's CreateVisual, not CommandSHADOW_MODEL). Leaving the mailbox clear = normal
-            // shadows + CommandSHADOW_MODEL runs. Re-enable only if a dump proves it's needed.
-            _shadowSkipClearAfter = DateTime.MinValue;
             Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
             WriteScript(stb, lab.Off, lab.Off + lab.Size, BuildSwapBytecode(chr, cfg), $"in-place ally swap → {chr}");
             Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
             CanalWading.SuppressForSwap();   // hold the Queens canal early-draw off the model root until the swap event completes (else stale-root draw hangs)
             _currentAlly = ally;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"fired event {AllySwapLabelId} → {name} (texmgr entries {Memory.ReadInt(TexMgr)})");
-        }
-
-        // CTextureManager (0x1C75870): +0 = last-entry index; entries @+0x10F8, stride 0x50, 0xC4 slots
-        // (u16 blockId @+0x00, NUL name @+0x08, native pixel ptr @+0x38, CLUT ptr @+0x48 — the SuperSteve
-        // texture-swap RE). Character textures are registered under BLOCK 8 (EdLoadMainChara →
-        // LoadPackData2(..., texture_block=8, ...)).
-        private const long TexMgr = 0x21C75870;
-        private const long TexEntryBase = TexMgr + 0x10F8;
-        private const int  TexEntryStride = 0x50, TexEntryCount = 0xC4;
-        private const int  CharTexBlockId = 8;
-        private const long CharTexBlockAddr = TexMgr + 0x18 + CharTexBlockId * 0x3C;
-
-        /// <summary>
-        /// THE REPEATED-SWAP FIX. Every _LOAD_MAIN_CHARA registers the character's textures in the global
-        /// CTextureManager with pointers into the texture arena — and the engine's own char-change path
-        /// (the dungeon menu) calls MenuTextureDelete + CleanUpTextureList BEFORE loading the next
-        /// character. Our in-place swap skipped that, so after one swap the manager held STALE entries
-        /// whose pointers dangle into rewound-and-overwritten arena memory; the next load's
-        /// SearchTextureName then walks poison and the game dies on a wild jump (proven by savestate
-        /// forensics: SYSCALL exception, EPC in SearchTextureName, texture-manager pointers in the regs).
-        ///
-        /// Replicates DeleteTextureBlock(mgr, 8) + CleanUpTextureList(mgr) (0x133700 / 0x133A60) as pure
-        /// data writes: reset the block-8 CTextureBlock, Initialize every entry whose blockId == 8, then
-        /// compact live entries down over the holes exactly as CleanUp does (indices 1..0xC2).
-        /// </summary>
-        private static void PurgeCharacterTextures()
-        {
-            byte[] entries = Memory.ReadBytesBatch(TexEntryBase, TexEntryCount * TexEntryStride);
-            if (entries == null) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "texture purge: entry read failed — skipped"); return; }
-
-            // Delete-only, NO compaction. CleanUp's compaction MOVES other blocks' entries, and live code
-            // (scene/villager texture uploads) holds cached pointers/indices into the table — compacting
-            // mid-town scrambled them (garbled textures then a wild-jump crash, savestate slot 2). The
-            // engine itself uses standalone DeleteTextureBlock (holes left in place) outside menus.
-            int deleted = 0;
-            for (int i = 0; i < TexEntryCount; i++)
-            {
-                int off = i * TexEntryStride;
-                if (BitConverter.ToUInt16(entries, off) != CharTexBlockId) continue;
-                InitTextureEntry(entries, off);
-                deleted++;
-            }
-
-            Memory.WriteBytesBatch(TexEntryBase, entries);
-
-            // Do NOT touch the block-8 CTextureBlock struct. It holds the GS-side layout (VRAM base /
-            // upload-chain pointers) that EditInit set up ONCE and the character load REUSES — zeroing it
-            // sent the first draw's texture-upload DMA down a NULL chain (the emulog's
-            // `TLB Miss addr=0x0..0xc4` kernel walk = every purge-era freeze, one frame after the load).
-
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"texture purge: {deleted} block-{CharTexBlockId} entries dropped (block struct untouched)");
-        }
-
-        /// <summary>Initialize__8CTexture (0x130F20) field-for-field: blockId/u16s at +0..+6, name[0] @+8,
-        /// and the pointer/GS fields at +0x28..+0x4C. The name TAIL (+0x09..+0x27) is left as-is, same as
-        /// the engine.</summary>
-        private static void InitTextureEntry(byte[] buf, int off)
-        {
-            for (int o = 0; o < 8; o++) buf[off + o] = 0;         // +0x00..+0x07 (blockId + 3 u16s)
-            buf[off + 8] = 0;                                      // name[0]
-            for (int o = 0x28; o < 0x50; o++) buf[off + o] = 0;    // +0x28..+0x4F (ptrs, sizes, GS addrs)
-        }
-
-        private static int _probedMap = -1;
-        // Every CDataAlloc2 arena SetDataBuffer carves in EditInit (+ the villager pools), so the resident
-        // snapshot shows which SMALL buffer a big character's load would overrun (Ungaga froze right after
-        // its geometry fit the enlarged 0x1D3A060, so the overflow is elsewhere — a motion/dbuff/cloth arena).
-        private static readonly long[] _probeArenas =
-        {
-            0x21D3A050, 0x21D3A060, 0x21D3A070, 0x21D3A080,
-            0x21D1B360, 0x21D1B370, 0x21D1B390, 0x21D1B3A0,
-            0x21D331B0, 0x212AB010, 0x212AB020, 0x212AB030,
-        };
-        private static readonly string[] _probeNames =
-        {
-            "0x1D3A050(19M)", "0x1D3A060(main-char)", "0x1D3A070", "0x1D3A080(texture)",
-            "0x1D1B360(fish/villager)", "0x1D1B370", "0x1D1B390(13000)", "0x1D1B3A0(16000)",
-            "0x1D331B0(8000)", "0x2AB010(100)", "0x2AB020(0x1edc)", "0x2AB030(10)",
-        };
-        private static readonly int[] _probeLastUsed = new int[12];
-
-        /// <summary>
-        /// DIAGNOSTIC: log each CDataAlloc2 arena's used/cap, and re-log any arena whose USED changes — so a
-        /// working Ruby swap reveals which arena a character load actually consumes and by how much (the
-        /// geometry arena 0x1d3a060 reads 0 while walking because it is scratch, reset between loads, so we
-        /// can't assume from the static snapshot). The freeze is <c>Alloc__14CDataAlloc2</c> (0x1278a0)
-        /// spinning on <c>if (cap &lt; used + n) { printf; do{}while(true); }</c>. Struct: [0]=base, [2]=used,
-        /// [3]=cap (0x10-byte BLOCKS). Persistent (post-load) deltas are what matter; a transient mid-load
-        /// spike inside one game frame won't be caught at the 50 ms tick.
-        /// </summary>
-        private static void ProbeArenas()
-        {
-            long stb = TownScript.Base();
-            if (stb == 0) return;
-            int map = Memory.ReadInt(EditLoop.MapNo);
-            bool firstForTown = map != _probedMap;
-
-            for (int i = 0; i < _probeArenas.Length; i++)
-            {
-                int used = Memory.ReadInt(_probeArenas[i] + 8);
-                int cap  = Memory.ReadInt(_probeArenas[i] + 0xC);
-                if (firstForTown || used != _probeLastUsed[i])
-                {
-                    if (firstForTown && i == 0)
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                            $"arena probe (MapNo {map}) — models: c01d 850K/Ruby 455K/Ungaga 1067K/turi 1772K:");
-                    uint bas = Memory.ReadUInt(_probeArenas[i]);
-                    string capStr = cap == -1 ? "UNBOUNDED" : $"{(long)cap * 0x10 / 1024}K";
-                    string tag = used != _probeLastUsed[i] && !firstForTown
-                        ? $" (Δ {(long)(used - _probeLastUsed[i]) * 0x10 / 1024:+#;-#;0}K)" : "";
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                        $"  {_probeNames[i],-26} base=0x{bas:X8} used={(long)used * 0x10 / 1024}K/{capStr} " +
-                        $"(free {(cap == -1 ? "∞" : ((long)(cap - used) * 0x10 / 1024) + "K")}){tag}");
-                    _probeLastUsed[i] = used;
-                }
-            }
-            int texCount = Memory.ReadInt(TexMgr);
-            if (firstForTown || texCount != _lastTexCount)
-            {
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                    $"  texmgr entries = {texCount}" + (firstForTown ? "" : $" (Δ {texCount - _lastTexCount:+#;-#;0})"));
-                _lastTexCount = texCount;
-            }
-            _probedMap = map;
-        }
-
-        private static int _lastTexCount;
-        private static uint _lastOverflowArena;
-
-        /// <summary>Read the Alloc-overflow mailbox (set by PatchAllocOverflowProbe on the exact overflow that
-        /// hangs the game). On a swap freeze this names WHICH CDataAlloc2 ran out — match its struct address
-        /// against the known arenas so we enlarge the right one.</summary>
-        private static void CheckAllocOverflow()
-        {
-            uint arena = Memory.ReadUInt(CodeCaves.Mailbox.AllocProbeArena) & Memory.PhysAddrMask;
-            if (arena == 0 || arena == _lastOverflowArena) return;
-            _lastOverflowArena = arena;
-            uint reqEnd = Memory.ReadUInt(CodeCaves.Mailbox.AllocProbeSize);
-            // Name it if it's one we know (struct addresses are the guest 0x1D3Axxx / 0x1D1Bxxx forms).
-            long guest = arena;
-            string name = "unknown";
-            for (int i = 0; i < _probeArenas.Length; i++)
-                if ((_probeArenas[i] & Memory.PhysAddrMask) == guest) { name = _probeNames[i]; break; }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"*** ALLOC OVERFLOW: arena 0x{guest:X8} ({name}) requested end {(long)reqEnd * 0x10 / 1024}K " +
-                $"({reqEnd} blk) — THIS buffer is the freeze; enlarge it next.");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"fired event {AllySwapLabelId} → {name}");
         }
 
         /// <summary>Confirm the ISO-baked spare label 405 is present and claim it once per town load, so
@@ -394,10 +155,10 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// The swap flow: fade out → wait fully black → ~20-frame idle (the mod's purge window — see
-        /// <see cref="MaybePurgeBehindBlack"/>) → capture pos/rot → load into the persistent main-char slot
-        /// (flag 0) → re-place + idle → fade in. The purge must land before the load and behind black; the
-        /// idle frames give the 50 ms mod tick ample margin.
+        /// The swap flow: yield twice → idle the old model → capture pos/rot (world-coord identity so the
+        /// GET/SET round-trip is exact) → <c>_LOAD_MAIN_CHARA(flag 0)</c> into the persistent main-char slot →
+        /// yield once for the load → re-place at the captured pos/rot → idle the new model. No fade — the swap
+        /// is a single-event in-place model replace.
         /// </summary>
         internal static StbWriter BuildSwapBytecode(string chr, string cfg)
         {

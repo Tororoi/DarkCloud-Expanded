@@ -35,12 +35,6 @@ namespace Dark_Cloud_Improved_Version
     {
         internal const string OutputName  = "Dark Cloud - Expanded.iso";
 
-        // ── BISECTION (temporary) — find which Queens-baked change explodes the town player's cloth on the
-        // first Queens load. Flip ONE true, re-patch, and play with ClothUnstick.HealEnabled=false to see the
-        // RAW cape. Cape correct with a group skipped ⇒ that group is the trigger. All false for normal builds.
-        internal static bool BisectSkipQueensSceneBake = false;   // skip the e03 scene/mapinfo injection (part swaps, canal tune, signs, ladder)
-        internal static bool BisectSkipQueensWaterHooks = false;  // skip the water-draw ELF hooks (order-gate, cape-early-draw, spray, evict-fade)
-
         internal const string BootTexturePak   = "meswin/mes_tex.pak";
         internal const string BrownbooScene  = "gedit/s04/scene.scn";
         internal const string MAPINFO    = "gedit/s04/mapinfo.cfg";
@@ -270,8 +264,6 @@ namespace Dark_Cloud_Improved_Version
             //       ladder renders in e03 exactly as it does in the Moon Factory.
             //   (b) a SECOND kanban placement on the canal floor under the eastern bridge, facing west, so the
             //       low-tide spot has its own sign (reuses the already-injected kanban part + e01b24 texture).
-            if (!BisectSkipQueensSceneBake)
-            {
             progress("Carving + injecting the canal ladder …");
             byte[] ladderMds = CarveLadder(ReadArchive(MoonFactoryScene));   // from the user's ISO (Factory e05a01/hasigo1)
             // Queens north-bank kanban carries the label-400 fishing trigger (QueensTriggerOffset local offset).
@@ -307,7 +299,6 @@ namespace Dark_Cloud_Improved_Version
             e03map = BuildInjectedMapinfo(e03map, 711, 8, 48, 0, QueensAnchorPart, "", "wriplR");     // east ladder rail
             e03map = TuneCanalWater(e03map);                                               // camera-follow, square 64x14 grid, p4=1.0
             Redirect(QueensMapinfo, e03map);
-            }   // BisectSkipQueensSceneBake
 
             // Yellow Drops (s13): no native/injected sign, so inject the same kanban sign at its fishing spot,
             // carrying the baked fishing trigger — makes all three custom towns uniform (sign + native trigger).

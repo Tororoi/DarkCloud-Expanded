@@ -166,28 +166,10 @@ namespace Dark_Cloud_Improved_Version
             /// spot stances) so the flight wall clamp arms; 0 = bank stance, walls stay off (no line snap).</summary>
             internal const long FishWallLatch = Base + 0x6C;
 
-            /// <summary>DIAGNOSTIC (AllySwapPrototype): the overflow branch of <c>Alloc__14CDataAlloc2</c>,
-            /// which normally printf's and infinite-loops, is ELF-patched (PatchAllocOverflowProbe) to first
-            /// stash the offending arena's struct pointer here (+0x70) and the requested end-in-blocks
-            /// (+0x74) before hanging — so a freeze names WHICH CDataAlloc2 overran. Guest form 0x01F10070.</summary>
-            internal const long AllocProbeArena = Base + 0x70;
-            internal const long AllocProbeSize  = Base + 0x74;
-
-            /// <summary>DIAGNOSTIC (AllySwapPrototype): PatchReadInfoBreadcrumb makes ReadInfo's cfg-command
-            /// dispatch stash the current command INDEX here before each handler runs, so on a swap freeze
-            /// mid-load the frozen value names which cfg command (MODEL/TEXTURE/CLOTH/SHADOW/MOTION…) hung.
-            /// Guest form 0x01F10078.</summary>
-            internal const long ReadInfoCmd = Base + 0x78;
-
-            /// <summary>AllySwapPrototype: nonzero while an in-place ally swap's load runs — the ELF-patched
-            /// <c>CommandSHADOW_MODEL</c> (PatchSkipCharShadow) early-returns while set, skipping the shadow
-            /// mesh load whose edge-arranger (<c>ArrangeShadowMDT</c>) blows its 1020-record guard on garbage
-            /// input in the in-place context (the guard printf → undefined-syscall kernel spin = THE swap
-            /// freeze, savestates 2+4). Town-entry EditInit loads run with this clear → normal shadows.
-            /// Guest form 0x01F1007C.</summary>
-            internal const long SkipCharShadow = Base + 0x7C;
-
-            internal const long NextFree = Base + 0x80;
+            // 0x70..0x7C: retired freeze-hunt diagnostic mailboxes (Alloc-overflow probe, ReadInfo breadcrumb,
+            // shadow-skip). The freeze was the Queens canal-wading early-draw (see CanalWading.SuppressForSwap);
+            // those ELF hooks + their mod-side readers were removed 2026-09.
+            internal const long NextFree = Base + 0x70;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
