@@ -1052,7 +1052,6 @@ namespace Dark_Cloud_Improved_Version
                 AllySwapPrototype.Tick();  //PROTOTYPE: in-place ally model swap (R3 → Ungaga), no reload
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
                 CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
-                ClothUnstick.Tick();       //re-seed exploded cloth particles (fresh-load "missing front cape")
                 TownCameraPolyBuffer.Tick(); //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)
 
                 Thread.Sleep(50); //resets the code loop in 50ms intervals. Sleep is required, otherwise CPU usage will skyrocket

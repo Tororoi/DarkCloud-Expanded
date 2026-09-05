@@ -20,7 +20,6 @@ namespace Dark_Cloud_Improved_Version
         internal const int MapJump       = 15;      // (mapNo1Based[, eventNo])
         internal const int FadeIn        = 500;     // (frames) — 500 is FADE_IN, not FADE_OUT
         internal const int SetWorldCoord = 7;       // (x, y, z, rx, ry, rz)
-        internal const int InitNpcCloth  = 143;     // (charaId) — charaId -1 = the player (DAT_01d3d21c); resets its cloth to rest pose (engine Clear__6CCloth)
         internal const int SetNpcMotion  = 133;     // (charaId, motionIdx) — charaId -1 = the player; motion 0 = idle
         internal const int SetNpcPos     = 137;     // (charaId, x, y, z)   charaId -1 = the player
         internal const int SetNpcRot     = 138;     // (charaId, rx, ry, rz)
