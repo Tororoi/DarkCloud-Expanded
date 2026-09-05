@@ -120,8 +120,56 @@ Motion source refs are `model · scene #id` as shown in the viewer.
 
 ---
 
-## Ruby — TBD
-## Goro — TBD
+## Ruby — cataloged 2026-09-05
+
+**Base model:** `c05a · gedit\e03` ("c05a simple", the small town NPC) **+ inject a shadow** (it has none;
+borrow `e223c05a`'s or the dungeon body's shadow mesh). She has no `p` model, so this + shadow injection is
+the route. Motions transplanted from `c05a · dun\mainchara`, `e228c05a · e03`, `e223c05a · e03`.
+
+Source refs: `c05a·dun #0 idle · #1 run · #2 walk · #31 dmg-out (605-625) · #34/35 get-item (575-600)`;
+`e228c05a·e03 #0 mid-air-float-loop (10-30) · #14 jump (285-315) · #15 jump-loop (320-330)`;
+`e223c05a·e03 #5 pat/knock (100-112)`.
+
+### Town slots
+| Town slot | Source clip | Notes |
+|---|---|---|
+| 0 idle | `c05a·dun #0` | |
+| 1 run | `c05a·dun #1` | |
+| 2 walk | `c05a·dun #2` | |
+| 3 push-door | `e223c05a·e03 #5` (pat/knock) | |
+| 4 pull-door | `e223c05a·e03 #5` | |
+| 5 item get | `c05a·dun #34` | |
+| 6 item get (loop) | `c05a·dun #35` | |
+| 7 damage | — | skip |
+| 8 fall | `e228c05a·e03 #0` (mid-air float loop) | Ruby *floats* — **smoothly blend pose to/from idle** |
+| 9 land | (part of the float — settle to idle) | |
+
+### Refusal / "no"
+`c05a·dun #31` (dmg-out — reads as a head-shake).
+
+### Ladders (Ruby floats)
+- **Down:** `e228c05a·e03 #14` (jump 285-315) played to **frame 299**, then continue 299→315, then `#15` (holds
+  the end pose) as she descends — **clamp her x/z to the frame-299 position** (as the source motion does), then
+  transition to idle at the bottom. *scripted seq with position clamp + frame anchor.*
+- **Up:** a "float up" using `e228c05a·e03 #0` (the mid-air float) — she floats up the ladder.
+
+### Custom clips / behaviors
+- Fall/up-ladder: `#0` float with **smooth idle blend** in and out.
+- Down-ladder: `#14`→`#15` with the frame-299 x/z clamp.
+- **Shadow injection** into `c05a simple` (it has no `SHADOW_MODEL`).
+- Verify `c05a · gedit\e03` (simple) cutscene safety (it's a town NPC; likely lighter risk than `e223c05a`).
+
+---
+
+## Goro — TBD  (base = `c06p`, cutscene-safe; already has run/walk)
+
+**Model investigation (2026-09-05):** the Matataki (e02) treehouse/QTE/ladder-jump cutscenes are performed by
+*other* characters, **not Goro** — e02's jump/climb/combat models (`e123`, `e129`, `e131`) use villager rigs
+(`p23a`/`p24a`), a bearded-elder rig, and an object model (`e14a`), none matching Goro's `c06` skeleton, so their
+motions can't transplant to him. Goro's own models (`c06a`/`c06b`/`c06p`) have **no jump or climb** motion.
+- **Ladder climb source = `c06d02s · dun\d02\stair_mos`** — a motion-only pack (1 clip, frames 10-130) that DOES
+  ride Goro's rig (his dungeon stair-climb). That's his usable climb.
+- Fall/land: likely from his own motions (e.g. a reversed knockback + get-up, à la Ungaga) — TBD in viewer.
 ## Osmond — cataloged 2026-09-05
 
 **Base model:** `c18p · e05` (`#0 idle · #1 run · #2 walk · #3 talk`). Idle/walk fine as-is; **run = just speed up
