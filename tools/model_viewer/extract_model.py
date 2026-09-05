@@ -59,6 +59,30 @@ CHAR_MAP = [('c01', 'Toan'), ('c04', 'Xiao'), ('c05', 'Ruby'),
             ('c06', 'Goro'), ('c10', 'Ungaga'), ('c18', 'Osmond')]
 CHAR_ORDER = [n for _, n in CHAR_MAP]
 
+# ---- explicit motion-only packs the enumeration filter would otherwise drop (their `*d02s` basename
+#      is on the effect-model exclude list). These are the dungeon STAIR-CLIMB overlays: no `.mds`, so
+#      they borrow the character's canonical rig via their `.mot` node indices (same as c01dhashigo).
+#      (char, chr subpath, rank). c01d02s is intentionally omitted (no usable motion). ----
+EXTRA_MOTION_PACKS = [
+    ('Goro', 'dun\\d02\\stair_mos\\c06d02s.chr', 1),   # borrows c06b rig (60 nodes; mot max w0 57)
+    ('Xiao', 'dun\\d02\\stair_mos\\c04d02s.chr', 1),   # borrows c04b rig (79 nodes; mot max w0 78)
+]
+
+# ---- e02 Matataki event-cast models (NOT the six allies: villagers / elder / object model). Own an
+#      `.mds`, so full models; grouped last for the user to eyeball. e100 / e127_01 ship no `.mds`
+#      (motion-only, no known rig) -> nothing to render, skipped with a note. ----
+E02_GROUP = 'Matataki e02'
+E02_STEMS = ['e100', 'e120', 'e121', 'e122', 'e123', 'e124', 'e125', 'e126',
+             'e127', 'e127_01', 'e128', 'e129', 'e131']
+GROUP_ORDER = CHAR_ORDER + [E02_GROUP]
+
+# ---- Goro's cutscene models from his House (s01) and the Spirit Tree (s03). Each bundles Toan + Goro
+#      with a cfg per character; we force the `c06` cfg so the GORO body/motion is the one shown. All
+#      carry their own c06 `.mds`; grouped under Goro as event models. (stem, folder). ----
+GORO_EXTRA = [('e101', 'gedit\\s01\\chara'), ('e101eb', 'gedit\\s01\\chara'),
+              ('e102', 'gedit\\s01\\chara'), ('e103', 'gedit\\s01\\chara'),
+              ('e105', 'gedit\\s01\\chara'), ('e130', 'gedit\\s03\\chara')]
+
 
 def _stem(hedname):
     return hedname.replace('/', '\\').rsplit('\\', 1)[-1].lower()[:-4]      # basename, no .chr
@@ -143,7 +167,37 @@ def enumerate_models(dc_dir=None):
         seen[h] = spec
         order.append(spec)
     dat.close()
-    order.sort(key=lambda s: (CHAR_ORDER.index(s['char']), s['rank'], s['stem'], s['folder']))
+
+    # explicit extras (excluded by filter) — verify each motion-only pack's max w0 fits its ref rig
+    for char, sub, rank in EXTRA_MOTION_PACKS:
+        try:
+            _, pack = load_pack(sub)
+        except Exception as e:
+            sys.stderr.write(f"  SKIP extra {sub}: {e}\n"); continue
+        cfg = find_cfg(pack)
+        mot_name = parse_cfg(cfg.payload)[1] if cfg else None
+        rec = pack.find(mot_name) if mot_name else None
+        if rec is None:
+            rec = next((r for r in pack.records if r.name.lower().endswith('.mot')), None)
+        maxw0 = max((t.w0 for t in Mot.from_record(rec).tracks), default=-1) if rec else -1
+        nbase = len(get_base_skeleton(char)[0])
+        if maxw0 >= nbase:
+            sys.stderr.write(f"  SKIP extra {sub}: max w0 {maxw0} >= ref rig {nbase} nodes\n"); continue
+        order.append({'char': char, 'stem': _stem(sub), 'folder': _folder(sub), 'sub': sub,
+                      'size': 0, 'dups': [], 'rank': rank})
+
+    # Goro cutscene models (s01 House / s03 Spirit Tree): force the c06 cfg so Goro's body renders
+    for st, folder in GORO_EXTRA:
+        order.append({'char': 'Goro', 'stem': st, 'folder': folder, 'sub': f'{folder}\\{st}.chr',
+                      'size': 0, 'dups': [], 'rank': 2, 'cfg_prefer': 'c06'})
+
+    # e02 Matataki cast -> a trailing group of their own (build_model skips the two motion-only ones)
+    for st in E02_STEMS:
+        sub = f'gedit\\e02\\chara\\{st}.chr'
+        order.append({'char': E02_GROUP, 'stem': st, 'folder': 'gedit\\e02\\chara', 'sub': sub,
+                      'size': 0, 'dups': [], 'rank': 0})
+
+    order.sort(key=lambda s: (GROUP_ORDER.index(s['char']), s['rank'], s['stem'], s['folder']))
     return order
 
 
@@ -255,7 +309,14 @@ def mat_to_quat(R):
 
 
 # ---------------------------------------------------------------- cfg parsing
-def find_cfg(pack):
+def find_cfg(pack, prefer=None):
+    """First `.cfg` record, or — when `prefer` is given — the first whose name contains that substring.
+    Bundled multi-character `.chr`s ship one cfg per character (e.g. e101c01d.cfg + e101c06a.cfg); pass
+    prefer='c06' to select Goro's cfg (its MODEL/MOTION/KEY lines then drive the build)."""
+    if prefer:
+        for r in pack.records:
+            if r.name.lower().endswith('.cfg') and prefer in r.name.lower():
+                return r
     for r in pack.records:
         if r.name.lower().endswith('.cfg'):
             return r
@@ -514,7 +575,7 @@ def get_base_skeleton(char):
 def build_model(spec, kf_stride=1, tri_keep=1.0, skeleton_only=False):
     label, sub = make_label(spec), spec['sub']
     name, pack = load_pack(sub)
-    cfg = find_cfg(pack)
+    cfg = find_cfg(pack, spec.get('cfg_prefer'))
     if cfg is None:
         raise ValueError('no cfg')
     mds_name, mot_name, motions = parse_cfg(cfg.payload)
@@ -523,6 +584,8 @@ def build_model(spec, kf_stride=1, tri_keep=1.0, skeleton_only=False):
         mds_rec = next((r for r in pack.records if r.name.lower().endswith('.mds')), None)
 
     if mds_rec is None:                                    # motion-only pack -> borrow the base rig
+        if spec['char'] not in BASE_BODY:
+            raise ValueError('motion-only pack with no base rig (skipped)')
         nodes, base_meshes, base_mds = get_base_skeleton(spec['char'])
         mds_rec_name = base_mds + ' (borrowed)'
         full_meshes = [] if skeleton_only else base_meshes
@@ -610,7 +673,7 @@ def _model_bytes(m):
     return len(json.dumps(m, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))
 
 
-def bake_html(budget_mb=13.0):
+def bake_html(budget_mb=15.5):
     specs = enumerate_models()
     print(f"Enumerated {len(specs)} unique character models (deduped by content hash). Building...")
 
@@ -629,32 +692,50 @@ def bake_html(budget_mb=13.0):
         tpl = f.read()
     budget = int(budget_mb * 1024 * 1024) - len(tpl.encode('utf-8')) - 4096   # data budget
 
-    # ---- escalating decimation to fit the budget (coordinator's priority order) ----
-    def is_toan_event(sp):
-        return sp['char'] == 'Toan' and sp['rank'] == 2
+    # ---- escalating decimation to fit the budget, in the coordinator's priority order ----
+    # tier 0 = e02 Matataki (decimate first — confirmed NOT the target, reference only),
+    # tier 1 = Toan cutscene variants, tier 2 = other event/cutscene models (incl. the new Goro
+    # cutscenes), tier 3 = PROTECTED: every ally PRIMARY body (rank 0 town/field + rank 1 dungeon,
+    # incl. the stair packs) — never decimated, never dropped. Dropping (last resort) hits tier 0
+    # then 1 then 2; tier 3 is untouchable.
+    def tier(sp):
+        if sp['char'] == E02_GROUP:
+            return 0
+        if sp['rank'] != 2:
+            return 3                                   # ally primary bodies + stair packs
+        return 1 if sp['char'] == 'Toan' else 2        # cutscene/event variants
+
+    def cap(sp):
+        return 0 if tier(sp) == 3 else (len(LEVELS) - 1)
+
     reduced, dropped = [], []
     full_total = sum(nbytes)
     while sum(nbytes) > budget:
-        # reduce the biggest model that still has headroom; non-Toan/non-event capped at level 3
-        cand, best = -1, -1
-        for i, sp in enumerate(used_specs):
-            cap = len(LEVELS) - 1 if is_toan_event(sp) else 3
-            if levels[i] < cap and nbytes[i] > best:
-                best, cand = nbytes[i], i
-        if cand < 0:                                   # everything at its cap -> drop the biggest Toan cutscene
-            di, best = -1, -1
+        chosen = -1
+        for T in (0, 1, 2):                            # exhaust a whole tier before touching the next
+            best = -1
             for i, sp in enumerate(used_specs):
-                if is_toan_event(sp) and nbytes[i] > best:
-                    best, di = nbytes[i], i
+                if tier(sp) == T and levels[i] < cap(sp) and nbytes[i] > best:
+                    best, chosen = nbytes[i], i
+            if chosen >= 0:
+                break
+        if chosen < 0:                                 # nothing left to decimate -> drop (never tier 3)
+            di, best = -1, -1
+            for pref in (0, 1, 2):
+                for i, sp in enumerate(used_specs):
+                    if tier(sp) == pref and nbytes[i] > best:
+                        best, di = nbytes[i], i
+                if di >= 0:
+                    break
             if di < 0:
                 break
             dropped.append(models[di]['label'])
             for lst in (models, used_specs, levels, nbytes):
                 del lst[di]
             continue
-        levels[cand] += 1
-        models[cand] = build_model(used_specs[cand], *LEVELS[levels[cand]])
-        nbytes[cand] = _model_bytes(models[cand])
+        levels[chosen] += 1
+        models[chosen] = build_model(used_specs[chosen], *LEVELS[levels[chosen]])
+        nbytes[chosen] = _model_bytes(models[chosen])
     for i, lv in enumerate(levels):
         if lv > 0:
             reduced.append((models[i]['label'], lv))
@@ -671,8 +752,7 @@ def bake_html(budget_mb=13.0):
         if m['group'] != cur:
             cur = m['group']; print(f"  == {cur} ==")
         s = m['_stats']
-        tag = ['town/field', 'dungeon', 'event'][s['rank']]
-        extra = f"  [L{levels[models.index(m)]}]" if False else ''
+        tag = 'cast' if m['group'] == E02_GROUP else ['town/field', 'dungeon', 'event'][s['rank']]
         print(f"    {m['label']:52} {tag:10} meshes={s['meshes']:2} verts={s['verts']:5} "
               f"tris={s['tris']:5} tracks={s['tracks']:3} motions={s['motions']:2}"
               f"{'  SKEL-ONLY' if m['skelOnly'] else ''}")
@@ -703,5 +783,5 @@ if __name__ == '__main__':
     if len(sys.argv) > 2 and sys.argv[1] == '--dump':
         dump_model(sys.argv[2])
     else:
-        budget = float(sys.argv[1]) if len(sys.argv) > 1 else 13.0
+        budget = float(sys.argv[1]) if len(sys.argv) > 1 else 15.5
         bake_html(budget)
