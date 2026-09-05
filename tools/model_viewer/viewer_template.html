@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dark Cloud Model Viewer</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --ink:#1b1d21; --muted:#5c626b; --line:#d7dbe0;
+    --accent:#3563e9; --accent-ink:#ffffff; --field:#eef0f3; --grid:#c7ccd3;
+    --canvas-top:#e9ecf1; --canvas-bot:#cdd3db;
+  }
+  :root[data-theme="dark"]{
+    --bg:#14161a; --panel:#1c1f25; --ink:#e8eaed; --muted:#9aa1ab; --line:#2c313a;
+    --accent:#5b82ff; --accent-ink:#0b0d10; --field:#252a32; --grid:#3a4048;
+    --canvas-top:#20242b; --canvas-bot:#0e1013;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#14161a; --panel:#1c1f25; --ink:#e8eaed; --muted:#9aa1ab; --line:#2c313a;
+      --accent:#5b82ff; --accent-ink:#0b0d10; --field:#252a32; --grid:#3a4048;
+      --canvas-top:#20242b; --canvas-bot:#0e1013;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex;overflow:hidden}
+  #panel{width:290px;min-width:290px;height:100%;background:var(--panel);border-right:1px solid var(--line);
+    padding:14px 14px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+  #panel h1{font-size:14px;margin:0 0 2px;letter-spacing:.2px}
+  #panel .sub{color:var(--muted);font-size:11px;margin-top:-6px}
+  .group{display:flex;flex-direction:column;gap:6px}
+  label.cap{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  select,input[type=range]{width:100%}
+  select{background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+    padding:7px 8px;font-size:13px;appearance:none}
+  select:focus,button:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .row{display:flex;gap:8px;align-items:center}
+  button{background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+    padding:7px 10px;font-size:12px;cursor:pointer;flex:1}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+  button:active{transform:translateY(1px)}
+  .readout{background:var(--field);border:1px solid var(--line);border-radius:6px;padding:9px 10px;
+    font-size:12px;line-height:1.6}
+  .readout b{font-weight:600}
+  .kv{display:flex;justify-content:space-between;gap:8px}
+  .kv span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+  .toggles{display:flex;flex-wrap:wrap;gap:6px}
+  .toggles label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer}
+  .val{font-variant-numeric:tabular-nums;color:var(--muted);font-size:11px}
+  #stage{flex:1;position:relative;height:100%}
+  canvas{display:block;width:100%;height:100%;
+    background:linear-gradient(180deg,var(--canvas-top),var(--canvas-bot))}
+  #hint{position:absolute;left:12px;bottom:10px;color:var(--muted);font-size:11px;
+    background:color-mix(in srgb,var(--panel) 78%,transparent);padding:4px 8px;border-radius:6px;
+    border:1px solid var(--line);pointer-events:none}
+  .foot{margin-top:auto;color:var(--muted);font-size:10.5px;border-top:1px solid var(--line);padding-top:8px}
+  code{background:var(--field);padding:1px 4px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <div>
+    <h1>Dark Cloud Model Viewer</h1>
+    <div class="sub">skeletal FK preview &mdash; ambient light, no textures</div>
+  </div>
+
+  <div class="group">
+    <label class="cap" for="model">Model</label>
+    <select id="model"></select>
+  </div>
+
+  <div class="group">
+    <label class="cap" for="motion">Motion (KEY)</label>
+    <select id="motion"></select>
+  </div>
+
+  <div class="group">
+    <div class="row">
+      <button id="play" class="primary">Pause</button>
+      <button id="reset">Reset view</button>
+    </div>
+    <div class="row">
+      <label class="cap" for="frame" style="min-width:46px">Frame</label>
+      <input id="frame" type="range" min="0" max="1" step="0.01" value="0">
+    </div>
+    <div class="row">
+      <label class="cap" for="speed" style="min-width:46px">Speed</label>
+      <input id="speed" type="range" min="0" max="1.5" step="0.01" value="0.3">
+      <span id="speedval" class="val">0.30</span>
+    </div>
+    <div class="toggles">
+      <label><input type="checkbox" id="cbMesh" checked> mesh</label>
+      <label><input type="checkbox" id="cbSkel"> skeleton</label>
+      <label><input type="checkbox" id="cbGrid" checked> grid</label>
+      <label><input type="checkbox" id="cbSpin"> spin</label>
+    </div>
+  </div>
+
+  <div class="readout" id="readout"></div>
+
+  <div class="foot">
+    Skeleton + per-node rigid meshes cracked from <code>.mds</code>; big body mesh nearest-bone
+    auto-skinned. Motion via <code>.mot</code> FK. Tool, not a shipping asset.
+  </div>
+</div>
+
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <div id="hint">drag = orbit &nbsp;&middot;&nbsp; wheel = zoom &nbsp;&middot;&nbsp; right-drag = pan</div>
+</div>
+
+<script>
+/*__MODEL_DATA__*/
+</script>
+
+<script>
+"use strict";
+// ============================================================ base64 -> typed arrays
+function b64bytes(s){
+  const bin = atob(s); const n = bin.length; const u = new Uint8Array(n);
+  for (let i=0;i<n;i++) u[i]=bin.charCodeAt(i);
+  return u;
+}
+function i16(s){ const u=b64bytes(s); return new Int16Array(u.buffer, u.byteOffset, u.byteLength>>1); }
+function u16(s){ const u=b64bytes(s); return new Uint16Array(u.buffer, u.byteOffset, u.byteLength>>1); }
+function u8(s){ return b64bytes(s); }
+
+// ============================================================ 4x4 math
+// FK / model space: ROW-VECTOR convention, matrices flat row-major (m[r*4+c]); point p' = p * M.
+function matMulRow(a,b){ // returns a*b (both row-major)
+  const o=new Float32Array(16);
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    let s=0; for(let k=0;k<4;k++) s+=a[r*4+k]*b[k*4+c]; o[r*4+c]=s;
+  }
+  return o;
+}
+function rtMat(R,tx,ty,tz){ // R = 9 floats row-major 3x3
+  return new Float32Array([R[0],R[1],R[2],0, R[3],R[4],R[5],0, R[6],R[7],R[8],0, tx,ty,tz,1]);
+}
+function quatMat(w,x,y,z){ // -> 3x3 row-major (transpose convention, matches stored bind rot)
+  return [1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w),
+          2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w),
+          2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)];
+}
+function xformRow(m,x,y,z,out,oi){ // p(row) * m ; writes 3 floats into out[oi..]
+  out[oi]  = x*m[0]+y*m[4]+z*m[8]+m[12];
+  out[oi+1]= x*m[1]+y*m[5]+z*m[9]+m[13];
+  out[oi+2]= x*m[2]+y*m[6]+z*m[10]+m[14];
+}
+// Camera: standard COLUMN-VECTOR / column-major GL matrices.
+function perspective(fovy,asp,n,f){
+  const t=1/Math.tan(fovy/2), o=new Float32Array(16);
+  o[0]=t/asp; o[5]=t; o[10]=(f+n)/(n-f); o[11]=-1; o[14]=2*f*n/(n-f); return o;
+}
+function mul4(a,b){ // column-major a*b
+  const o=new Float32Array(16);
+  for(let c=0;c<4;c++)for(let r=0;r<4;r++){
+    let s=0; for(let k=0;k<4;k++) s+=a[k*4+r]*b[c*4+k]; o[c*4+r]=s;
+  }
+  return o;
+}
+function lookAt(ex,ey,ez, cx,cy,cz, ux,uy,uz){
+  let zx=ex-cx, zy=ey-cy, zz=ez-cz; let zl=Math.hypot(zx,zy,zz)||1; zx/=zl;zy/=zl;zz/=zl;
+  let xx=uy*zz-uz*zy, xy=uz*zx-ux*zz, xz=ux*zy-uy*zx; let xl=Math.hypot(xx,xy,xz)||1; xx/=xl;xy/=xl;xz/=xl;
+  let yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  return new Float32Array([xx,yx,zx,0, xy,yy,zy,0, xz,yz,zz,0,
+    -(xx*ex+xy*ey+xz*ez), -(yx*ex+yy*ey+yz*ez), -(zx*ex+zy*ey+zz*ez), 1]);
+}
+
+// ============================================================ WebGL setup
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', {antialias:true, alpha:false}) ||
+           canvas.getContext('experimental-webgl');
+if(!gl){ document.getElementById('stage').innerHTML =
+  '<p style="padding:20px">WebGL is not available in this browser.</p>'; }
+
+function sh(type,src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function prog(vs,fs){ const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,vs)); gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p; }
+
+// mesh program: per-vertex position + flat normal, two-sided lambert + ambient, single neutral material
+const MESH_P = prog(`
+  attribute vec3 aPos; attribute vec3 aNrm;
+  uniform mat4 uVP; varying vec3 vN;
+  void main(){ vN=aNrm; gl_Position = uVP * vec4(aPos,1.0); }`,`
+  precision mediump float; varying vec3 vN;
+  uniform vec3 uLight; uniform vec3 uColor;
+  void main(){
+    vec3 n=normalize(vN);
+    float d=abs(dot(n, normalize(uLight)));           // two-sided so winding never darkens a face
+    float shade=0.32 + 0.68*d;                        // ambient + directional
+    gl_FragColor=vec4(uColor*shade,1.0);
+  }`);
+const MESH_uVP=gl.getUniformLocation(MESH_P,'uVP'), MESH_uL=gl.getUniformLocation(MESH_P,'uLight'),
+      MESH_uC=gl.getUniformLocation(MESH_P,'uColor'),
+      MESH_aP=gl.getAttribLocation(MESH_P,'aPos'), MESH_aN=gl.getAttribLocation(MESH_P,'aNrm');
+
+// line program: grid + skeleton bones
+const LINE_P = prog(`
+  attribute vec3 aPos; uniform mat4 uVP; void main(){ gl_Position=uVP*vec4(aPos,1.0); }`,`
+  precision mediump float; uniform vec4 uColor; void main(){ gl_FragColor=uColor; }`);
+const LINE_uVP=gl.getUniformLocation(LINE_P,'uVP'), LINE_uC=gl.getUniformLocation(LINE_P,'uColor'),
+      LINE_aP=gl.getAttribLocation(LINE_P,'aPos');
+
+const meshVBO=gl.createBuffer(), lineVBO=gl.createBuffer(), gridVBO=gl.createBuffer();
+
+// static ground grid
+let gridN=0;
+(function buildGrid(){
+  const g=[], R=60, step=10;
+  for(let i=-R;i<=R;i+=step){ g.push(-R,0,i, R,0,i); g.push(i,0,-R, i,0,R); }
+  gridN=g.length/3;
+  gl.bindBuffer(gl.ARRAY_BUFFER,gridVBO); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(g),gl.STATIC_DRAW);
+})();
+
+// ============================================================ model decode
+function decodeModel(m){
+  if(m._dec) return m._dec;
+  const psc=m.posScale;
+  const nodes=m.nodes.map(n=>({name:n.n, parent:n.p, t:n.t, q:n.q}));
+  // meshes
+  const meshes=m.meshes.map(me=>{
+    const nv=me.nv, nt=me.nt;
+    const b0=u16(me.b0), b1=u16(me.b1), w0=u8(me.w0);
+    const p0=i16(me.p0), p1=i16(me.p1), tri=u16(me.tri);
+    const P0=new Float32Array(nv*3), P1=new Float32Array(nv*3);
+    for(let i=0;i<nv*3;i++){ P0[i]=p0[i]/psc; P1[i]=p1[i]/psc; }
+    const W0=new Float32Array(nv); for(let i=0;i<nv;i++) W0[i]=w0[i]/255;
+    return {nv,nt,b0,b1,w0:W0,p0:P0,p1:P1,tri,
+            skinned:new Float32Array(nv*3),
+            drawPos:new Float32Array(nt*9), drawNrm:new Float32Array(nt*9)};
+  });
+  // tracks -> node channels
+  const rot={}, trans={};
+  for(const t of m.tracks){
+    const f=u16(t.f), v=i16(t.v), nk=t.nk;
+    const scale = t.chan===0 ? m.quatScale : psc;
+    const V=new Float32Array(nk*4); for(let i=0;i<nk*4;i++) V[i]=v[i]/scale;
+    (t.chan===0?rot:trans)[t.node]={f,v:V,nk};
+  }
+  // bind-pose world (for skeleton draw + framing) via FK at "no track" fallback
+  const world=new Float32Array(nodes.length*16);
+  const dec={nodes,meshes,rot,trans,world,psc};
+  computePose(dec,-1);  // -1 => pure bind pose
+  // framing: bbox of bind skinned mesh
+  let miny=1e9,maxy=-1e9, cx=0,cz=0, rad=1;
+  skinAll(dec);
+  for(const me of dec.meshes){ for(let i=0;i<me.nv*3;i+=3){
+    const y=me.skinned[i+1]; if(y<miny)miny=y; if(y>maxy)maxy=y;
+    const dx=me.skinned[i], dz=me.skinned[i+2]; const r=Math.hypot(dx,dz); if(r>rad)rad=r;
+  }}
+  if(miny>maxy){                                    // skeleton-only (no meshes): frame from joints
+    miny=1e9; maxy=-1e9; rad=1;
+    for(let i=0;i<nodes.length;i++){ const y=world[i*16+13]; if(y<miny)miny=y; if(y>maxy)maxy=y;
+      const r=Math.hypot(world[i*16+12],world[i*16+14]); if(r>rad)rad=r; }
+  }
+  if(miny>maxy){ miny=0; maxy=16; }
+  dec.midY=(miny+maxy)/2; dec.height=Math.max(maxy-miny,4); dec.radius=Math.max(rad, dec.height*0.5);
+  m._dec=dec; return dec;
+}
+
+// slerp helper (in place-ish)
+function slerp(f0,v0,f1,v1,f, out){
+  let t=(f1===f0)?0:(f-f0)/(f1-f0); if(t<0)t=0; if(t>1)t=1;
+  let w0=v0[0],x0=v0[1],y0=v0[2],z0=v0[3];
+  let w1=v1[0],x1=v1[1],y1=v1[2],z1=v1[3];
+  let d=w0*w1+x0*x1+y0*y1+z0*z1;
+  if(d<0){ w1=-w1;x1=-x1;y1=-y1;z1=-z1; d=-d; }
+  let a,b;
+  if(d>0.9995){ a=1-t; b=t; }
+  else{ const th=Math.acos(d), s=Math.sin(th); a=Math.sin((1-t)*th)/s; b=Math.sin(t*th)/s; }
+  let w=a*w0+b*w1, x=a*x0+b*x1, y=a*y0+b*y1, z=a*z0+b*z1;
+  const n=Math.hypot(w,x,y,z)||1; out[0]=w/n;out[1]=x/n;out[2]=y/n;out[3]=z/n;
+}
+function sampleQ(tr,f,out){
+  const F=tr.f, V=tr.v, nk=tr.nk;
+  if(f<=F[0]){ out[0]=V[0];out[1]=V[1];out[2]=V[2];out[3]=V[3]; return; }
+  if(f>=F[nk-1]){ const o=(nk-1)*4; out[0]=V[o];out[1]=V[o+1];out[2]=V[o+2];out[3]=V[o+3]; return; }
+  let lo=0,hi=nk-1;
+  while(hi-lo>1){ const mid=(lo+hi)>>1; if(F[mid]<=f) lo=mid; else hi=mid; }
+  slerp(F[lo], V.subarray(lo*4,lo*4+4), F[hi], V.subarray(hi*4,hi*4+4), f, out);
+}
+const _tv=[0,0,0];
+function sampleV(tr,f){
+  const F=tr.f, V=tr.v, nk=tr.nk;
+  if(f<=F[0]){ _tv[0]=V[0];_tv[1]=V[1];_tv[2]=V[2]; return _tv; }
+  if(f>=F[nk-1]){ const o=(nk-1)*4; _tv[0]=V[o];_tv[1]=V[o+1];_tv[2]=V[o+2]; return _tv; }
+  let lo=0,hi=nk-1;
+  while(hi-lo>1){ const mid=(lo+hi)>>1; if(F[mid]<=f) lo=mid; else hi=mid; }
+  let t=(f-F[lo])/(F[hi]-F[lo]); const a=lo*4,b=hi*4;
+  _tv[0]=V[a]+(V[b]-V[a])*t; _tv[1]=V[a+1]+(V[b+1]-V[a+1])*t; _tv[2]=V[a+2]+(V[b+2]-V[a+2])*t;
+  return _tv;
+}
+
+const _q=[1,0,0,0];
+function computePose(dec,f){ // f<0 => bind pose (use node bind q/t only)
+  const nodes=dec.nodes, W=dec.world;
+  for(let i=0;i<nodes.length;i++){
+    const n=nodes[i];
+    let R;
+    if(f>=0 && dec.rot[i]){ sampleQ(dec.rot[i],f,_q); R=quatMat(_q[0],_q[1],_q[2],_q[3]); }
+    else { R=quatMat(n.q[0],n.q[1],n.q[2],n.q[3]); }
+    let tx=n.t[0],ty=n.t[1],tz=n.t[2];
+    if(f>=0 && dec.trans[i]){ const v=sampleV(dec.trans[i],f); tx=v[0];ty=v[1];tz=v[2]; }
+    const L=rtMat(R,tx,ty,tz);
+    if(n.parent<0){ W.set(L,i*16); }
+    else{ const w=matMulRow(L, W.subarray(n.parent*16,n.parent*16+16)); W.set(w,i*16); }
+  }
+}
+function skinAll(dec){
+  const W=dec.world;
+  for(const me of dec.meshes){
+    const S=me.skinned, b0=me.b0,b1=me.b1,w0=me.w0,p0=me.p0,p1=me.p1, nv=me.nv;
+    const t0=new Float32Array(3), t1=new Float32Array(3);
+    for(let i=0;i<nv;i++){
+      const m0=W.subarray(b0[i]*16,b0[i]*16+16);
+      xformRow(m0,p0[i*3],p0[i*3+1],p0[i*3+2],t0,0);
+      const w=w0[i];
+      if(w>0.999){ S[i*3]=t0[0];S[i*3+1]=t0[1];S[i*3+2]=t0[2]; }
+      else{
+        const m1=W.subarray(b1[i]*16,b1[i]*16+16);
+        xformRow(m1,p1[i*3],p1[i*3+1],p1[i*3+2],t1,0);
+        S[i*3]  =t0[0]*w+t1[0]*(1-w);
+        S[i*3+1]=t0[1]*w+t1[1]*(1-w);
+        S[i*3+2]=t0[2]*w+t1[2]*(1-w);
+      }
+    }
+  }
+}
+function buildDrawArrays(dec){ // expand tris -> flat non-indexed with per-face flat normal
+  for(const me of dec.meshes){
+    const S=me.skinned, tri=me.tri, DP=me.drawPos, DN=me.drawNrm, nt=me.nt;
+    for(let t=0;t<nt;t++){
+      const a=tri[t*3]*3,b=tri[t*3+1]*3,c=tri[t*3+2]*3;
+      const ax=S[a],ay=S[a+1],az=S[a+2], bx=S[b],by=S[b+1],bz=S[b+2], cx=S[c],cy=S[c+1],cz=S[c+2];
+      let nx=(by-ay)*(cz-az)-(bz-az)*(cy-ay);
+      let ny=(bz-az)*(cx-ax)-(bx-ax)*(cz-az);
+      let nz=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax);
+      const nl=Math.hypot(nx,ny,nz)||1; nx/=nl;ny/=nl;nz/=nl;
+      const o=t*9;
+      DP[o]=ax;DP[o+1]=ay;DP[o+2]=az; DP[o+3]=bx;DP[o+4]=by;DP[o+5]=bz; DP[o+6]=cx;DP[o+7]=cy;DP[o+8]=cz;
+      DN[o]=nx;DN[o+1]=ny;DN[o+2]=nz; DN[o+3]=nx;DN[o+4]=ny;DN[o+5]=nz; DN[o+6]=nx;DN[o+7]=ny;DN[o+8]=nz;
+    }
+  }
+}
+function buildSkeletonLines(dec){
+  const nodes=dec.nodes, W=dec.world, out=[];
+  for(let i=0;i<nodes.length;i++){
+    const p=nodes[i].parent; if(p<0) continue;
+    out.push(W[i*16+12],W[i*16+13],W[i*16+14], W[p*16+12],W[p*16+13],W[p*16+14]);
+  }
+  return new Float32Array(out);
+}
+
+// ============================================================ camera / interaction
+const cam={yaw:0.6, pitch:0.32, dist:44, panx:0, pany:0};
+let dragging=0, lastx=0, lasty=0;
+canvas.addEventListener('mousedown',e=>{ dragging=(e.button===2||e.shiftKey)?2:1; lastx=e.clientX;lasty=e.clientY; e.preventDefault(); });
+window.addEventListener('mouseup',()=>dragging=0);
+window.addEventListener('mousemove',e=>{
+  if(!dragging) return; const dx=e.clientX-lastx, dy=e.clientY-lasty; lastx=e.clientX;lasty=e.clientY;
+  if(dragging===1){ cam.yaw-=dx*0.01; cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch+dy*0.01)); }
+  else{ cam.panx-=dx*cam.dist*0.0016; cam.pany+=dy*cam.dist*0.0016; }
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{ cam.dist=Math.max(8,Math.min(160,cam.dist*(1+Math.sign(e.deltaY)*0.1))); e.preventDefault(); },{passive:false});
+
+// ============================================================ app state
+let curModel=null, curDec=null, curMotion=null, frame=0, playing=true, spin=false;
+const el=id=>document.getElementById(id);
+
+function fillModels(){
+  const sel=el('model'); let og=null, curg=null;
+  MODELS.forEach((m,i)=>{
+    if(m.group!==curg){ curg=m.group; og=document.createElement('optgroup'); og.label=curg; sel.appendChild(og); }
+    const o=document.createElement('option'); o.value=i; o.textContent=m.label;
+    (og||sel).appendChild(o);
+  });
+  sel.onchange=()=>selectModel(+sel.value);
+}
+function fillMotions(){
+  const sel=el('motion'); sel.innerHTML='';
+  curModel.motions.forEach((mo,i)=>{
+    const o=document.createElement('option'); o.value=i;
+    const g=mo.gloss?(' — '+mo.gloss):''; const nm=mo.name||('KEY '+mo.id);
+    o.textContent=`#${mo.id}  ${nm}${g}  [${mo.start}–${mo.end}]`;
+    sel.appendChild(o);
+  });
+  sel.onchange=()=>selectMotion(+sel.value);
+}
+function selectModel(i){
+  curModel=MODELS[i]; curDec=decodeModel(curModel);
+  cam.dist=Math.max(20, curDec.height*2.6); cam.panx=0; cam.pany=0;
+  el('model').value=i;
+  const skelOnly = !curDec.meshes.length;
+  el('cbMesh').checked = !skelOnly;
+  if(skelOnly) el('cbSkel').checked = true;
+  fillMotions();
+  // default to run (id 1) if present else first
+  let def=curModel.motions.findIndex(mo=>mo.gloss==='run'); if(def<0) def=0;
+  el('motion').value=def; selectMotion(def);
+}
+function selectMotion(i){
+  curMotion=curModel.motions[i]; frame=curMotion.start;
+  el('frame').min=curMotion.start; el('frame').max=curMotion.end;
+  el('frame').step=Math.max(0.01,(curMotion.end-curMotion.start)/400);
+  el('speed').value=Math.min(1.5,curMotion.speed); el('speedval').textContent=curMotion.speed.toFixed(2);
+  playing=true; el('play').textContent='Pause';
+}
+function updateReadout(){
+  if(!curModel||!curMotion) return;
+  const s=curModel._stats;
+  el('readout').innerHTML =
+    `<div class="kv"><span><b>${curModel.group} · ${curModel.code}</b></span><span>${curModel.folder}</span></div>`+
+    `<div class="kv"><span>motion</span><span>#${curMotion.id} ${curMotion.name||''} ${curMotion.gloss?('('+curMotion.gloss+')'):''}</span></div>`+
+    `<div class="kv"><span>frame</span><span>${frame.toFixed(1)} / ${curMotion.start}–${curMotion.end}</span></div>`+
+    `<div class="kv"><span>nodes / meshes</span><span>${s.nodes} / ${s.meshes}${curModel.skelOnly?' (skeleton-only)':''}</span></div>`+
+    `<div class="kv"><span>verts / tris</span><span>${s.verts} / ${s.tris}</span></div>`+
+    `<div class="kv"><span>motions</span><span>${s.motions}</span></div>`;
+}
+
+// ============================================================ render loop
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=canvas.clientWidth*dpr, h=canvas.clientHeight*dpr;
+  if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+}
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/16.667, 3); last=now;
+  requestAnimationFrame(loop);
+  if(!curDec){ return; }
+  // advance frame
+  const spd=parseFloat(el('speed').value);
+  if(playing && curMotion){
+    frame += spd*dt;
+    if(frame>curMotion.end || frame<curMotion.start){
+      const span=curMotion.end-curMotion.start;
+      frame = span>0 ? (curMotion.start + ((frame-curMotion.start)%span+span)%span) : curMotion.start;
+    }
+    el('frame').value=frame;
+  }
+  if(spin) cam.yaw+=0.004*dt;
+
+  // pose + skin
+  computePose(curDec, frame);
+  skinAll(curDec);
+  buildDrawArrays(curDec);
+
+  render();
+  updateReadout();
+}
+function render(){
+  resize();
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+
+  const asp=canvas.width/canvas.height;
+  const P=perspective(45*Math.PI/180, asp||1, 0.5, 600);
+  const midY=curDec.midY;
+  const tx=cam.panx, ty=midY+cam.pany, tz=0;
+  const ex=tx+cam.dist*Math.cos(cam.pitch)*Math.sin(cam.yaw);
+  const ey=ty+cam.dist*Math.sin(cam.pitch);
+  const ez=tz+cam.dist*Math.cos(cam.pitch)*Math.cos(cam.yaw);
+  const V=lookAt(ex,ey,ez, tx,ty,tz, 0,1,0);
+  const VP=mul4(P,V);
+
+  const dark = matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+  const themeAttr=document.documentElement.getAttribute('data-theme');
+  const isDark = themeAttr? themeAttr==='dark' : dark;
+
+  // grid
+  if(el('cbGrid').checked){
+    gl.useProgram(LINE_P); gl.uniformMatrix4fv(LINE_uVP,false,VP);
+    gl.uniform4f(LINE_uC, isDark?0.32:0.55, isDark?0.36:0.58, isDark?0.42:0.62, 1.0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,gridVBO);
+    gl.enableVertexAttribArray(LINE_aP); gl.vertexAttribPointer(LINE_aP,3,gl.FLOAT,false,0,0);
+    gl.drawArrays(gl.LINES,0,gridN);
+  }
+  // mesh
+  if(el('cbMesh').checked){
+    gl.useProgram(MESH_P); gl.uniformMatrix4fv(MESH_uVP,false,VP);
+    gl.uniform3f(MESH_uL, 0.4,0.85,0.35);
+    gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
+    gl.disable(gl.CULL_FACE);                 // two-sided lambert; winding is unreliable across parts
+    for(const me of curDec.meshes){
+      gl.bindBuffer(gl.ARRAY_BUFFER,meshVBO);
+      const n=me.nt*9;
+      gl.bufferData(gl.ARRAY_BUFFER, (me.nt*18)*4, gl.DYNAMIC_DRAW);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, me.drawPos);
+      gl.bufferSubData(gl.ARRAY_BUFFER, n*4, me.drawNrm);
+      gl.enableVertexAttribArray(MESH_aP); gl.vertexAttribPointer(MESH_aP,3,gl.FLOAT,false,0,0);
+      gl.enableVertexAttribArray(MESH_aN); gl.vertexAttribPointer(MESH_aN,3,gl.FLOAT,false,0,n*4);
+      gl.drawArrays(gl.TRIANGLES,0,me.nt*3);
+    }
+  }
+  // skeleton
+  if(el('cbSkel').checked){
+    const L=buildSkeletonLines(curDec);
+    gl.useProgram(LINE_P); gl.uniformMatrix4fv(LINE_uVP,false,VP);
+    gl.uniform4f(LINE_uC, 0.95,0.35,0.25,1.0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,lineVBO); gl.bufferData(gl.ARRAY_BUFFER,L,gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(LINE_aP); gl.vertexAttribPointer(LINE_aP,3,gl.FLOAT,false,0,0);
+    gl.disable(gl.DEPTH_TEST); gl.drawArrays(gl.LINES,0,L.length/3); gl.enable(gl.DEPTH_TEST);
+  }
+}
+
+// ============================================================ controls wiring
+el('play').onclick=()=>{ playing=!playing; el('play').textContent=playing?'Pause':'Play'; };
+el('reset').onclick=()=>{ cam.yaw=0.6;cam.pitch=0.32;cam.panx=0;cam.pany=0; cam.dist=Math.max(20,curDec.height*2.6); };
+el('frame').oninput=()=>{ frame=parseFloat(el('frame').value); playing=false; el('play').textContent='Play'; };
+el('speed').oninput=()=>{ el('speedval').textContent=parseFloat(el('speed').value).toFixed(2); };
+el('cbSpin').onchange=()=>spin=el('cbSpin').checked;
+
+// go
+if(gl){
+  fillModels();
+  selectModel(0);
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

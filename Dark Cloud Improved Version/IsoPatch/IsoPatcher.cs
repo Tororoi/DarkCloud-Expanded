@@ -140,6 +140,11 @@ namespace Dark_Cloud_Improved_Version
             progress("Baking town camera collision …");
             BakeStructureCollision(outIso, progress);
 
+            // Battle-run transplant — graft the polished battle run onto the lighter ally-swap models (scene
+            // data only; ELF CRC unaffected). Runs AFTER the collision bake so it appends past its tail redirects.
+            progress("Transplanting battle-run animations …");
+            BakeMotionTransplants(outIso, progress);
+
             progress("Publishing pnach to PCSX2 …");
             ReshipPnach(crc);
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
@@ -196,6 +201,61 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Collision bake failed (exit {code}).\n{so}\n{se}");
             foreach (string line in so.Split('\n'))
                 if (line.Contains("redirected") || line.Contains("camera nodes") || line.Contains("DONE"))
+                    progress(line.Trim());
+        }
+
+        // ── battle-run transplant (post-step; Python, mirrors BakeStructureCollision) ────────────────────
+        // The ally swap loads lighter town models chosen for size/shadow/cloth, not run quality — e.g. Ungaga's
+        // e323_2c10a plays a poor event-scene run even sped up. This grafts the polished run from the character's
+        // big DUNGEON BATTLE model (too large to swap in whole) onto the town model's motion file: it reads BOTH
+        // models from the user's OWN ISO, splices only the run window's keyframes per-joint-by-NAME (the rigs
+        // share the core body nodes but the town/event model inserts extra joints, so a positional copy garbles
+        // the arms — tools/lib/mot_codec.splice_motion_by_joint, game_data/docs/mot-format.md §5), and redirects
+        // the grown town .chr into the free DATA.DAT tail. Scene/model data only — the ELF CRC is untouched.
+        // Same repo/python resolution + subprocess contract as BakeStructureCollision. TODO: port to pure C#.
+        static void BakeMotionTransplants(string outIso, Action<string> progress)
+        {
+            string repo = Environment.GetEnvironmentVariable("DC_REPO");
+            if (string.IsNullOrEmpty(repo))
+                repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+            string script = Path.Combine(repo, "tools", "iso_patch", "transplant_battle_run.py");
+            if (!File.Exists(script))
+            {
+                progress($"⚠ run-transplant tool not found at {script} — battle run NOT grafted (set DC_REPO).");
+                return;
+            }
+            string py = Environment.GetEnvironmentVariable("DC_PYTHON");
+            if (string.IsNullOrEmpty(py)) py = "python3";
+            var psi = new ProcessStartInfo
+            {
+                FileName = py,
+                WorkingDirectory = repo,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add(script);
+            psi.ArgumentList.Add("--iso");
+            psi.ArgumentList.Add(outIso);
+
+            string so, se; int code;
+            try
+            {
+                using var p = Process.Start(psi) ?? throw new IOException($"Process.Start returned null for '{py}'.");
+                so = p.StandardOutput.ReadToEnd();
+                se = p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                code = p.ExitCode;
+            }
+            catch (Exception e)
+            {
+                throw new IOException($"Could not run the run-transplant tool ('{py}'). Is Python installed / on PATH? "
+                                      + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
+            }
+            if (code != 0)
+                throw new IOException($"Battle-run transplant failed (exit {code}).\n{so}\n{se}");
+            foreach (string line in so.Split('\n'))
+                if (line.Contains("redirected") || line.Contains("grafted") || line.Contains("DONE"))
                     progress(line.Trim());
         }
 
@@ -343,6 +403,22 @@ namespace Dark_Cloud_Improved_Version
                 Redirect($"gedit/{code}/{code}_1.mes",
                          AppendMes(ReadArchive($"gedit/{code}/{code}_1.mes"),
                                    (20, menu20), (21, menu21), (22, menu22), (LadderMsgId, ladderMsg)));
+            }
+
+            // 5.5) Ungaga run animation: speed up the ally-swap model's run to match his battle run. The swap
+            //      loads e323_2c10a.chr — the only Ungaga model with BOTH cloth and a real run (c10p had cloth
+            //      but its run KEY reused the walk frames; the NPC c10a had a real run but no cloth). That event
+            //      model's run KEY plays at 0.30, visibly slower/less energetic than his battle model c10b's run
+            //      (0.55). In-place ASCII edit of the run KEY's speed in the model's info.cfg — same 4 bytes
+            //      ("0.30"→"0.55"), no relocation, DATA.DAT-only so the ELF CRC is untouched. See AllySwapPrototype.
+            progress("Tuning Ungaga's run speed …");
+            {
+                long uslot = hd2Base + (long)ArchiveFind(hed, "gedit/e04/chara/e323_2c10a.chr") * 32;
+                long uAt = datIso + RdU32(fs, uslot) + 0xAB4E4;   // the "0.30" in `KEY\t60,\t80,\t0.30,\t//走り` (run)
+                byte[] cur = Rd(fs, uAt, 4);
+                if (cur[0] != '0' || cur[1] != '.' || cur[2] != '3' || cur[3] != '0')
+                    throw new IOException("Ungaga run-speed site is not vanilla (expected \"0.30\") — unmodified Dark Cloud (USA) ISO expected.");
+                Wr(fs, uAt, new byte[] { (byte)'0', (byte)'.', (byte)'5', (byte)'5' });
             }
 
             // 6) ELF boot-cave + CRC

@@ -81,7 +81,7 @@ namespace Dark_Cloud_Improved_Version
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
-            PatchAllyTextureBudget(fs, ElfOff);           // enlarge the town character buffers so an ally swap's model/textures fit (Ungaga); moves the geometry buffer → ClothUnstick heals the first-Queens-load cloth blowup
+            // (ally-swap buffer grow removed — every ally now fits the vanilla arenas; see the note below)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
             uint crc = 0;
@@ -114,64 +114,17 @@ namespace Dark_Cloud_Improved_Version
             WrU32(fs, ElfOff(HookAddr), Jal(StubAddr));   // store → jal stub; delay slot `clear $s4` runs first (harmless loop init)
         }
 
-        // ── Ally in-place-swap: enlarge the town character buffers ───────────────────────────────────
-        // In-place ally swapping (AllySwapPrototype) reloads the town character via _LOAD_MAIN_CHARA. Two of
-        // the town's fixed CDataAlloc2 arenas are sized for ONE resident town character and overrun when a
-        // LARGER ally is loaded in place — the overrun is `Alloc__14CDataAlloc2` (0x1278a0) spinning forever
-        // on `if (cap < used+n) { printf; do{}while(true); }` (THE freeze). EditInit builds the whole town
-        // fresh for its target character so it never hits this; our in-place reload can't. The two ceilings,
-        // found by live probe (grow one and the freeze moves to the other):
-        //   • 0x1d3a080 TEXTURE buffer — SetDataBuffer 40000 blk (625K); ~470K resident (scene+villager+Toan
-        //     textures) → ~155K free. A swap's new textures overran it (froze even loading small Ruby).
-        //   • 0x1d3a060 main-char GEOMETRY arena — SetDataBuffer 0x1c138=115000 blk (1796K). Ungaga's parsed
-        //     model reached ~1525K and its shadow MDS (also loaded here via mds_buffer) pushed past 1796K.
-        //
-        // Fix: grow the texture buffer 40000 → 100000 blk (625K→1562K, ~1090K free) and the geometry arena
-        // 115000 → 160000 blk (1796K→2500K, ~975K headroom over Ungaga), and SHRINK the over-provisioned
-        // 0x1d3a050 arena (1216000 blk/19000K, only ~66% used in town) by the COMBINED 105000 blk so the
-        // master-pool total carve is UNCHANGED — nothing carved after 0x1d3a050 (the villager buffer, at a
-        // fixed DataBuffer offset) moves; the arenas between just follow their allocator base pointers. All
-        // three are SetDataBuffer size immediates in EditInit — cold town-init code, safe in-place edits.
-        //
-        // The 0x1d3a080 size was a single `ori a1,zero,0x9c40`; 100000 (0x186A0) needs 17 bits, so the ori
-        // becomes `lui a1,0x1` and the jal's delay-slot nop becomes `ori a1,a1,0x86A0` (the delay slot runs
-        // before SetDataBuffer, so a1 is correct at entry). 0x1d3a060 and 0x1d3a050 already use lui+ori pairs
-        // (immediates edited in place). Sizes: geometry 0x27100=160000; scene 0x10F2B8=1111000 (1216000−105000).
-        internal static void PatchAllyTextureBudget(FileStream fs, Func<uint, long> ElfOff)
-        {
-            const uint TexSizeVa  = 0x00178534;  // ori a1,zero,0x9c40  (SetDataBuffer(0x1d3a080, 40000) size)
-            const uint TexDelayVa = 0x0017853C;  // nop  (that SetDataBuffer jal's delay slot)
-            const uint GeoLuiVa   = 0x00178570;  // lui v0,0x1          (SetDataBuffer(0x1d3a060, 0x1c138) size hi)
-            const uint GeoOriVa   = 0x00178574;  // ori a1,v0,0xc138    (                                    size lo)
-            const uint SceneLuiVa = 0x001785C4;  // lui v0,0x12         (SetDataBuffer(0x1d3a050, 0x128e00) size hi)
-            const uint SceneOriVa = 0x001785C8;  // ori a1,v0,0x8e00    (                                    size lo)
-
-            // Validate vanilla — refuse on an already-patched or wrong ISO rather than corrupt the layout.
-            if (RdU32(fs, ElfOff(TexSizeVa))  != Ori(a1, zero, 0x9c40) ||
-                RdU32(fs, ElfOff(TexDelayVa)) != 0 ||
-                RdU32(fs, ElfOff(GeoLuiVa))   != Lui(v0, 0x1) ||
-                RdU32(fs, ElfOff(GeoOriVa))   != Ori(a1, v0, 0xc138) ||
-                RdU32(fs, ElfOff(SceneLuiVa)) != Lui(v0, 0x12) ||
-                RdU32(fs, ElfOff(SceneOriVa)) != Ori(a1, v0, 0x8e00))
-                throw new IOException("Ally character-buffer patch sites are not vanilla — unmodified Dark Cloud (USA) ISO expected.");
-
-            // Buffers carve SEQUENTIALLY from the master pool: texture (0x1d3a080) → geometry (0x1d3a060) →
-            // scene (0x1d3a050). Growing texture therefore pushes the GEOMETRY buffer's base later — and the
-            // town player's CLOTH lives in geometry, so on the FIRST cold load into a far-spawn town (Queens)
-            // it lands on uninitialised boot memory and its Verlet solver blows up (the "missing front cape";
-            // ClothUnstick heals it via the engine's own _INIT_NPC_CLOTH reset). This grow is REQUIRED for
-            // Ungaga's textures to fit, so it stays and the heal covers the cloth (confirmed by a 3-way bisect
-            // of these writes, 2026-09-04).
-            // 0x1d3a080: 40000 → 100000 (0x186A0), as lui a1,0x1 ; <jal> ; ori a1,a1,0x86A0 (delay slot).
-            WrU32(fs, ElfOff(TexSizeVa),  Lui(a1, 0x1));
-            WrU32(fs, ElfOff(TexDelayVa), Ori(a1, a1, 0x86A0));
-            // 0x1d3a060: 115000 → 160000 (0x27100).
-            WrU32(fs, ElfOff(GeoLuiVa),   Lui(v0, 0x2));
-            WrU32(fs, ElfOff(GeoOriVa),   Ori(a1, v0, 0x7100));
-            // 0x1d3a050: 1216000 → 1111000 (0x10F2B8) — reclaim the combined 105000 blk from its unused slack.
-            WrU32(fs, ElfOff(SceneLuiVa), Lui(v0, 0x10));
-            WrU32(fs, ElfOff(SceneOriVa), Ori(a1, v0, 0xF2B8));
-        }
+        // ── Ally in-place-swap buffer grow: REMOVED 2026-09-04 ───────────────────────────────────────
+        // PatchAllyTextureBudget grew the town TEXTURE arena (0x1d3a080) + GEOMETRY arena (0x1d3a060) and
+        // shrank the scene arena (0x1d3a050) so Ungaga's oversized cloth-less NPC model (c10a, 1.05MB) would
+        // fit an in-place _LOAD_MAIN_CHARA. It had a nasty side effect: growing the TEXTURE arena pushed the
+        // GEOMETRY arena's base later, and the town player's CLOTH lives in geometry — so on the first cold
+        // Queens load it INTERMITTENTLY landed on uninitialised boot memory and its Verlet solver blew up
+        // (Toan's "missing front cape"). Switching Ungaga to his 479KB PLAYER model c10p (which also gives him
+        // real cloth) dropped every ally under Toan's 850KB, so all fit the VANILLA arenas — the grow became
+        // unnecessary and removing it returned the cloth buffer to its benign vanilla home, fixing Toan's cape
+        // (confirmed clean across cold boots 2026-09-04). Recover from git if a future ally ever exceeds vanilla.
+        // See [[ccloth-particle-layout]], [[town-ally-switch-reload]].
 
         // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
         // MainDraw @0x17c5a0 is `jal EditEffectStep2` (0x166de0) — the point where the Matataki-spray branch and
