@@ -73,14 +73,20 @@ namespace Dark_Cloud_Improved_Version
         private const int OzRevStartFlyIndex = 15;  // reversed #17 — the descend-to-land
         private const int OzStowIndex       = 16;   // reversed #16 — stow the backpack
         private const float HeliRiseSpeed    = 0.5f;   // units/frame ascent (a LIFT, not a jump)
-        private const float HeliDescendSpeed = 0.20f;  // units/frame settle onto the ledge
+        private const float HeliDescendSpeed = 0.125f; // units/frame settle — MUST make the descend phase (Hover/this)
+                                                       // outlast rev-start-fly (32 engine frames @0.5x) so the spin ramp-down completes
         private const float HeliForwardSpeed = 0.30f;  // units/frame drift over the ledge at hover height
         private const float OzLandSpeed      = 0.30f;  // e403 land clip at its authored pace (overlaps the descent via LandLead)
         private const int   OzLandFrames     = 50;     // ≈ 15 anim frames / OzLandSpeed — the sequence ends WITH the land clip
         private const float HeliHover        = 4f;     // rise this far above the ledge before settling
         private const int   HeliDeployFrames = 112;    // propeller-out at 0.5x ≈ 1.9 s
-        private const int   HeliStartFrames  = 40;     // start-fly beat before the ascent
-        private const int   HeliStowFrames   = 90;     // let most of the stow play before handing back
+        private const float HeliFlightSpeed  = 0.5f;   // playback override for start-fly/fly-loop/rev-start-fly — SAME for all
+                                                       // three so the hub spin's engine-frame rate is continuous across switches
+        private const int   HeliStartFrames  = 30;     // start-fly to COMPLETION and not a frame more: window 240-255 spans
+                                                       // 15 clip frames @0.5x = 30 engine frames. Slack here FREEZES the hub
+                                                       // at the ramp's end pose (play-once hold) = visible still-blade frames
+                                                       // before the loop takes over; cutting early snaps mid-ramp instead.
+        private const int   HeliStowFrames   = 116;    // stow = 56 anim frames @0.5x = 112 engine frames + slack — the event must NOT end before the put-away finishes
         private const int   HeliMaxRise      = 400;    // ascent frame cap (Brownboo stilts ≈ 190 units)
         // Pre-jump alignment (both directions): walk to the mount point turning to FACE the ladder, then a few
         // backwards walk-steps to line up, then the ready crouch LOOPING for ~0.25 s, then launch.
@@ -499,6 +505,10 @@ namespace Dark_Cloud_Improved_Version
                 int Tup = Math.Min(Math.Max((int)((h - LandMargin + HeliHover) / HeliRiseSpeed), MinFrames), HeliMaxRise);
                 float fwdDist = (float)Math.Sqrt((tgt[0] - ax) * (tgt[0] - ax) + (tgt[2] - az) * (tgt[2] - az));
                 int Tf = Math.Max((int)(fwdDist / HeliForwardSpeed), 8);
+                // PHASE LOCK: the descend hand-off is only seamless if the fly-loop's spin phase is deterministic
+                // when we switch — pad the flight to a whole number of loop periods (10 engine frames each at the
+                // 0.5x override of the 10-clip-frame loop). The pad rides the forward phase (a beat of hover).
+                Tf += (10 - (Tup + Tf) % 10) % 10;
                 int Tdown = Math.Max((int)(HeliHover / HeliDescendSpeed), 8);
                 WriteScript(stb, lab.Off, lab.Off + lab.Size,
                             BuildOsmondHeliBytecode(px, py, pz, yaw0, face, ax, az, Ta,
@@ -537,10 +547,10 @@ namespace Dark_Cloud_Improved_Version
 
             SetMotion(w, OzPropellerIndex, 0.5f);             // deploy the backpack (once, sped)
             EmitYieldLoop(w, HeliDeployFrames);
-            SetMotion(w, OzStartFlyIndex);                    // spin-up beat
+            SetMotion(w, OzStartFlyIndex, HeliFlightSpeed);   // spin-up — plays FULLY (ramp ends at full rate, aligned)
             EmitYieldLoop(w, HeliStartFrames);
 
-            SetMotion(w, OzFlyLoopIndex, -1f, 0);             // fly-loop, LOOPING through the whole flight
+            SetMotion(w, OzFlyLoopIndex, HeliFlightSpeed, 0); // fly-loop, LOOPING through the whole flight
             SetLocalInt(w, 0, tup);                           // ── phase 1: STRAIGHT UP at the base point ──
             int rise = w.Mark();
             AddToLocal(w, 2, () => w.PushFloat(HeliRiseSpeed));
@@ -556,7 +566,7 @@ namespace Dark_Cloud_Improved_Version
             w.Yield();
             EmitDecAndLoop(w, fwd);
 
-            SetMotion(w, OzRevStartFlyIndex);                 // descend-to-land pose
+            SetMotion(w, OzRevStartFlyIndex, HeliFlightSpeed);   // descend — plays FULLY (spin ramps down inside it)
             SetLocalInt(w, 0, tdown);
             int fall = w.Mark();
             AddToLocal(w, 2, () => w.PushFloat(-HeliDescendSpeed));

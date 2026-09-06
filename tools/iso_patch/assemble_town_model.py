@@ -13,7 +13,7 @@ the user's own ISO at patch time. Run AFTER the collision bake so the tail high-
 
   python3 tools/iso_patch/assemble_town_model.py [--iso "/path/Dark Cloud - Expanded.iso"] [--test]
 """
-import os, sys, struct, re
+import os, sys, struct, re, math
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
@@ -72,6 +72,41 @@ CHARS = {
     # (hand-out pose, sampled hold); fall/land = e403c18a #10/#11 (jump-down seq's fall-loop + land).
     "Osmond": dict(
         base="gedit/e05/chara/c18p.chr",
+        # MESH-NODE GRAFT: c18p's rig LACKS the helicopter propeller assembly, so the heli clips below
+        # animated nothing visible. Append the 13 propeller nodes from the s13 flight model — the mast
+        # chain backpack->bone4->bone5->bone6->tukene1 plus three blade arms (obj41/42/43, obj38/39/40,
+        # obj35/36/37) — with their rigid MDT chunks and .bbp bind rows, and hold them at e402c18a's
+        # idle pose (frame 15; == the folded/stowed BIND pose, verified) outside the heli-clip windows.
+        # Textures: the blades map the same 'c18a01' atlas the backpack shell already renders with;
+        # c18p's copy differs from s13's only by requantization noise (mean 10/255) -> no TIM2 append.
+        mesh_graft=dict(
+            src="gedit/s13/chara/e402c18a.chr",
+            pose_frame=15,          # inside e402c18a's idle KEY 10-20 (blades stowed there)
+            nodes=["bone4", "bone5", "bone6", "tukene1", "obj41", "obj42", "obj43",
+                   "obj38", "obj39", "obj40", "obj35", "obj36", "obj37"],
+            # SYNTHETIC SPIN: e402c18a never rotates the assembly (blades static in every flight
+            # window; vanilla's visible spin is the un-ported VERTEX_ANIME stream), so rotation
+            # keyframes are authored on the hub `tukene1` (bind rotation = identity; the three blade
+            # arms spread 120 deg in its local X-Z plane at y~0.485 -> spin axis = local +Y, the mast
+            # direction). rate=72 deg/clip-frame: at TownLadder's 0.5x playback override that's
+            # 36 deg/engine-frame = 6 rev/s — the intended fast read (36 deg/f netted only ~1.2 rev/s).
+            # 720 deg across the 10-frame loop == 0 mod 360 -> still a seamless wrap; 72-deg steps
+            # stay < 90 for the engine's quaternion blend.
+            # PHASE CONTINUITY (handoff_advance): the three windows play back-to-back at TownLadder's
+            # 0.5x override (one ENGINE frame = 0.5 clip frames = 36 deg at rate 72), and the C# also
+            # phase-locks the flight to whole loop periods, so every window hand-off must ADVANCE the
+            # displayed rotation by exactly one engine step or the propeller visibly stalls for a
+            # frame. The loop is therefore phase-shifted +36 deg (rampup ends ==0, loop starts at 36)
+            # and the rampdown is a 4-DOF cubic starting one step PAST the loop's final ==0 phase:
+            # theta(275)=36, theta'(275)=rate, theta'(290)=0, theta(290)==0 mod 360.
+            # handoff_advance MUST match rate * TownLadder HeliFlightSpeed (72 * 0.5 = 36).
+            spin=dict(
+                node="tukene1", axis=(0.0, 1.0, 0.0), rate=72.0, handoff_advance=36.0,
+                rampup=(240, 255),      # start-fly: ease-in 0 -> rate, whole turns (2 @ 72 deg/f)
+                loop=(260, 270),        # fly-loop: full rate, phase +handoff; rate*len == 0 mod 360
+                rampdown=(275, 290),    # rev-startfly: ease-out rate -> 0, from +handoff to rest
+            ),
+        ),
         slots=[
             dict(idx=0, frames=(10, 20),   speed=0.10, name="idle",        src=None),   # EXACT original (cutscene)
             # run in its OWN window (base's 30-50 copied to 130-150): the engine's run↔walk foot-phase blend
@@ -124,6 +159,298 @@ def _cfg_motions(pack):
     m = re.search(rb'SHADOW_MOTION[ \t]+"([^"]+)"', t); sh_mot = m.group(1).decode('latin1') if m else None
     sh_mds = grab(rb'SHADOW_MODEL')
     return cfg, body_mot, body_mds, sh_mot, sh_mds
+
+
+def _cfg_bbp(cfg_payload):
+    """The body MOTION 0 line's .bbp filename (2nd quoted arg of `MOTION 0, "x.mot", "x.bbp", ...`)."""
+    m = re.search(rb'MOTION[ \t]+0,[ \t]*"[^"]+",[ \t]*"([^"]+)"', cfg_payload)
+    return m.group(1).decode('latin1') if m else None
+
+
+def _quat_mul(a, b):
+    """Hamilton product, scalar-first (w,x,y,z) — the .mot chan-0 storage order."""
+    aw, ax, ay, az = a; bw, bx, by, bz = b
+    return (aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw)
+
+
+def _quat_to_mat(q):
+    """quat -> 3x3, the engine convention (mot-format.md §10.2; reproduces the stored bind 3x3)."""
+    w, x, y, z = q
+    return ((1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
+            (2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)),
+            (2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)))
+
+
+def _mat_to_quat(R):
+    """EXACT inverse of _quat_to_mat (Shepperd, signs per mot-format.md §10.2 / extract_model.py)."""
+    (m00, m01, m02), (m10, m11, m12), (m20, m21, m22) = R
+    tr = m00 + m11 + m22
+    if tr > 0:
+        s = math.sqrt(tr + 1.0) * 2
+        return (0.25 * s, (m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s)
+    if m00 >= m11 and m00 >= m22:
+        s = math.sqrt(1.0 + m00 - m11 - m22) * 2
+        return ((m21 - m12) / s, 0.25 * s, (m01 + m10) / s, (m02 + m20) / s)
+    if m11 >= m22:
+        s = math.sqrt(1.0 + m11 - m00 - m22) * 2
+        return ((m02 - m20) / s, (m01 + m10) / s, 0.25 * s, (m12 + m21) / s)
+    s = math.sqrt(1.0 + m22 - m00 - m11) * 2
+    return ((m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, 0.25 * s)
+
+
+def _mds_bind(pl, i):
+    """(parent, 3x3 bind rows, bind translation) of node i in a .mds payload."""
+    p = 0x18 + i * 0x70
+    par = struct.unpack_from('<i', pl, p + 0x24)[0]
+    M = struct.unpack_from('<16f', pl, p + 0x28)
+    return par, (M[0:3], M[4:7], M[8:11]), list(M[12:15])
+
+
+def _fold_spans(windows, lo, hi):
+    """Complement of the graft windows within [lo,hi] — the frame spans where grafted nodes must hold
+    the folded pose."""
+    spans, cur = [], lo
+    for a, b in sorted(windows):
+        if cur < a:
+            spans.append((cur, a - 1))
+        cur = max(cur, b + 1)
+    if cur <= hi:
+        spans.append((cur, hi))
+    return spans
+
+
+def _graft_mesh_nodes(base, sp, mg, windows, maxframe):
+    """MESH-NODE GRAFT: append the named CFrame nodes (+ their rigid MDT mesh chunks + .bbp bind rows)
+    from the source rig onto the base body .mds, then give the base body .mot one track per source
+    blade channel, anchored to the source's stowed pose (frame mg['pose_frame']) across every frame
+    span OUTSIDE the graft `windows`. Runs BEFORE the motion grafts: splice_motion_by_joint only
+    writes dest tracks that EXIST, so creating the tracks here is what lets the heli clips land their
+    blade keyframes into the windows by name. The anchors matter even when the stowed pose equals the
+    bind pose — once a node has a track, the engine clamps to its nearest keyframe and the bind-matrix
+    fallback is gone.
+
+    .mds layout (mot-format.md §10, re-verified on c18p/e402c18a): count @+0x08, node table @0x18
+    stride 0x70 {name@+0x00, MESH offset@+0x20 (ABSOLUTE within the payload, 0 = no geometry),
+    parent index@+0x24, bind matrix@+0x28, id@+0x68, 0x70@+0x6C}; the LAST record's two trailing
+    words physically OVERLAP the first MDT chunk, which starts at 0x18+count*0x70-8. Appending K
+    nodes therefore shifts the whole mesh block by K*0x70 — every existing nonzero mesh offset is
+    rebased by that delta (all other existing record/mesh bytes stay identical) and the grafted
+    nodes' chunks are appended verbatim after the block. .bbp = count x 64-byte per-node bind rows
+    (no header; same-named nodes carry byte-identical rows in both rigs) -> extended with the source
+    rows of the grafted nodes. The shadow rig is a blob mesh without these nodes and is untouched
+    (guarded)."""
+    scfg, sbmot, sbmds, _, _ = _cfg_motions(sp)
+    cfg, bmot, bmds, _smot, smds = _cfg_motions(base)
+    names = mg["nodes"]
+    bp = base.find(bmds).payload
+    spl = sp.find(sbmds).payload
+    bnames = mc.read_mds_frames(bp)
+    snames = mc.read_mds_frames(spl)
+    nb, K = len(bnames), len(names)
+    dup = [n for n in names if n in bnames]
+    if dup:
+        raise SystemExit(f"mesh_graft: nodes already in base rig: {dup}")
+    missing = [n for n in names if n not in snames]
+    if missing:
+        raise SystemExit(f"mesh_graft: nodes not in source rig: {missing}")
+    if smds:
+        clash = [n for n in names if n in mc.read_mds_frames(base.find(smds).payload)]
+        if clash:
+            raise SystemExit(f"mesh_graft: base SHADOW rig carries {clash} — mirroring unsupported")
+    mesh0 = 0x18 + nb * 0x70 - 8                     # first MDT (overlaps last record's tail words)
+    firsts = [struct.unpack_from('<I', bp, 0x18 + i * 0x70 + 0x20)[0] for i in range(nb)]
+    if min(o for o in firsts if o) != mesh0 or bp[mesh0:mesh0 + 4] != b'MDT\x00':
+        raise SystemExit("mesh_graft: base .mds table/mesh-overlap layout not as expected")
+    delta = K * 0x70
+    new_index = {n: nb + k for k, n in enumerate(names)}
+    # --- node table: complete the old last record, bump count, rebase existing mesh offsets ---
+    table = bytearray(bp[:mesh0]) + struct.pack('<II', nb, 0x70)
+    struct.pack_into('<I', table, 0x08, nb + K)
+    for i in range(nb):
+        off = struct.unpack_from('<I', table, 0x18 + i * 0x70 + 0x20)[0]
+        if off:
+            struct.pack_into('<I', table, 0x18 + i * 0x70 + 0x20, off + delta)
+    # --- grafted records (parents remapped by NAME) + their MDT chunks (appended past the block) ---
+    mblock = bp[mesh0:]
+    p_start = 0x18 + (nb + K) * 0x70 - 8 + len(mblock)
+    recs, chunks = bytearray(), bytearray()
+    for k, n in enumerate(names):
+        si = snames.index(n)
+        rec = bytearray(spl[0x18 + si * 0x70:0x18 + si * 0x70 + 0x68])
+        spar = struct.unpack_from('<i', rec, 0x24)[0]
+        pname = snames[spar] if spar >= 0 else None
+        if pname in bnames:
+            npar = bnames.index(pname)
+        elif pname in new_index:
+            npar = new_index[pname]
+        else:
+            raise SystemExit(f"mesh_graft: node {n} parent {pname!r} resolves to neither base nor grafted set")
+        if npar >= nb + k:
+            raise SystemExit(f"mesh_graft: node {n} parent {pname!r} would come AFTER it — reorder `nodes`")
+        struct.pack_into('<i', rec, 0x24, npar)
+        smo = struct.unpack_from('<I', rec, 0x20)[0]
+        if smo:
+            if spl[smo:smo + 4] != b'MDT\x00':
+                raise SystemExit(f"mesh_graft: node {n} mesh @0x{smo:X} is not an MDT chunk")
+            csz = struct.unpack_from('<I', spl, smo + 8)[0]
+            struct.pack_into('<I', rec, 0x20, p_start + len(chunks))
+            chunks += spl[smo:smo + csz]
+            chunks += b'\x00' * (-len(chunks) % 16)
+        recs += rec + struct.pack('<II', nb + k + 1, 0x70)
+    recs = recs[:-8]                                 # new last record: tail words = first mesh bytes (overlap)
+    base.replace_payload(bmds, bytes(table) + bytes(recs) + mblock + bytes(chunks))
+    # --- .bbp: append the source's 64-byte bind rows for the grafted nodes ---
+    bbp, sbbp = _cfg_bbp(cfg.payload), _cfg_bbp(scfg.payload)
+    bb, sb = base.find(bbp).payload, sp.find(sbbp).payload
+    if len(bb) != nb * 64 or len(sb) != len(snames) * 64:
+        raise SystemExit("mesh_graft: .bbp is not count*64 bytes — layout assumption broken")
+    add = b''.join(sb[snames.index(n) * 64:(snames.index(n) + 1) * 64] for n in names)
+    base.replace_payload(bbp, bb + add)
+    # --- body .mot: one new track per source blade channel, folded anchors outside the windows ---
+    sm = mc.Mot.from_record(sp.find(sbmot))
+    dm = mc.Mot.from_record(base.find(bmot))
+    spans = _fold_spans(windows, 1, maxframe)
+    spin = mg.get("spin")
+    if spin and spin["node"] not in new_index:
+        raise SystemExit(f"mesh_graft.spin: node {spin['node']!r} is not in the grafted set")
+    by_node = {}
+    for st in sm.tracks:
+        nname = snames[st.w0] if st.w0 < len(snames) else None
+        if nname in new_index:
+            by_node.setdefault(nname, []).append(st)
+    created = []
+    for n in names:                                  # per node, ascending new w0 (keeps .mot track order)
+        for st in by_node.get(n, []):
+            v = _sample_track(st, mg["pose_frame"])
+            if v is None:
+                continue
+            kfs = [mc.Keyframe(struct.pack('<4I4f', f, 0, 0, 0, *v))
+                   for lo, hi in spans for f in sorted({lo, hi})]
+            dm.tracks.append(mc.Track(new_index[n], st.w1, st.w2, st.w3, st.w6, st.w7, kfs))
+            created.append((n, st.w2))
+        if spin and n == spin["node"] and not any(st.w2 == 0 for st in by_node.get(n, [])):
+            # the spin hub has NO source rotation track (it holds bind) — synthesize an anchor-only
+            # chan-0 track at the bind orientation so _apply_spin (after the motion grafts) can fill
+            # the flight windows; once a track exists the bind fallback is gone, so the anchors keep
+            # the hub at rest everywhere else.
+            si = snames.index(n)
+            qb = _mat_to_quat(_mds_bind(spl, si)[1])
+            kfs = [mc.Keyframe(struct.pack('<4I4f', f, 0, 0, 0, *qb))
+                   for lo, hi in spans for f in sorted({lo, hi})]
+            dm.tracks.append(mc.Track(new_index[n], 0, 0, 0x20, mc.TAG_W6, mc.TAG_W7, kfs))
+            created.append((n, 0))
+    base.replace_payload(bmot, dm.rebuild()[dm.data_off:])
+    return dict(nodes=K, mesh_bytes=len(chunks), bbp_bytes=len(add), tracks=created,
+                delta=delta, spans=spans)
+
+
+def _apply_spin(base, mg):
+    """SYNTHETIC SPIN: author chan-0 keyframes on the mesh-graft's hub node so the whole propeller
+    subtree rotates about the hub's LOCAL spin axis. The source rig never rotates the assembly (its
+    visible spin is VERTEX_ANIME, which we don't port), so the rotation is synthesized:
+
+      rampup   ease-in cubic θ(t)=at³+bt² (θ'(0)=0, θ'(n)=rate, total = whole turns — a,b solved),
+      loop     full `rate` (deg/clip-frame, config; default 360/len) with keyframes every frame —
+               rate*len must be ≡ 0 mod 360 so the loop wraps seamlessly (validated),
+      rampdown the mirrored ease-out (starts at rate, ends at rest on a whole turn).
+
+    Keyframes are q_axis(θ) ⊗ q_bind, so θ≡0 (mod 360°) equals the bind orientation — which is what
+    the fold anchors hold — making the ramp-end boundaries and every clip hand-off continuous. Steps
+    must stay < 90° (rate < 90 enforced, ramp steps checked) with a sign-continuity pass (consistent
+    hemisphere), safe for the engine's nlerp-style blend. MUST run AFTER the motion grafts: slot
+    machinery (_reverse_window in particular) mirrors every track's keys inside its window and would
+    corrupt pre-baked spin."""
+    spin = mg["spin"]
+    _cfg, bmot, bmds, _smot, _smds = _cfg_motions(base)
+    pl = base.find(bmds).payload
+    frames = mc.read_mds_frames(pl)
+    w0 = frames.index(spin["node"])
+    dm = mc.Mot.from_record(base.find(bmot))
+    t = dm.track_by(w0, 0)
+    if t is None:
+        raise SystemExit(f"spin: hub {spin['node']} chan-0 track missing (mesh graft creates it)")
+    lo_l, hi_l = spin["loop"]
+    rate = spin.get("rate", 360.0 / (hi_l - lo_l))   # deg/clip-frame at full speed
+    if rate <= 0 or rate >= 90.0:
+        raise SystemExit(f"spin: rate {rate} deg/frame outside (0,90) — quaternion steps would flip")
+    if abs((rate * (hi_l - lo_l)) % 360.0) > 1e-6 and abs((rate * (hi_l - lo_l)) % 360.0 - 360.0) > 1e-6:
+        raise SystemExit(f"spin: rate*looplen = {rate * (hi_l - lo_l)} deg is not a whole number of "
+                         f"turns — the loop wrap would pop")
+    def ramp(n):
+        """θ(t)=at³+bt² with θ'(0)=0, θ'(n)=rate, θ(n)=T (whole turns, ~2/3·rate·n for a monotone
+        ease). Returns (θ(t), T)."""
+        T = 360.0 * max(1, round(rate * n * 2.0 / 3.0 / 360.0))
+        a = (rate * n - 2 * T) / n ** 3
+        b = (3 * T - rate * n) / n ** 2
+        return (lambda x: a * x ** 3 + b * x ** 2), T
+    h = spin.get("handoff_advance", 0.0)             # deg the DISPLAYED rotation advances per engine
+                                                     # frame (= rate * playback multiplier); phases the
+                                                     # windows so hand-offs keep spinning (0 = none)
+    if h and not (0.0 < h < 90.0):
+        raise SystemExit(f"spin: handoff_advance {h} outside (0,90)")
+    keys = {}                                        # frame -> θ in degrees
+    if spin.get("rampup"):
+        lo, hi = spin["rampup"]
+        f, _T = ramp(hi - lo)
+        for fr in range(lo, hi + 1):
+            keys[fr] = f(fr - lo)                    # ends ≡ 0 mod 360 (rest phase)
+    for fr in range(lo_l, hi_l + 1):
+        keys[fr] = h + (fr - lo_l) * rate            # loop phase-shifted +h: first displayed frame is
+                                                     # one engine step past the rampup's final ≡0
+    if spin.get("rampdown"):
+        lo, hi = spin["rampdown"]
+        n = hi - lo
+        # 4-DOF cubic θ(t)=c3t³+c2t²+c1t+c0 pinned by θ(0)=h (one engine step past the loop's final
+        # ≡0 displayed phase — the C# phase-locks flight to whole loop periods), θ'(0)=rate,
+        # θ'(n)=0, θ(n)=T ≡ 0 mod 360. Whole-turn totals are tried nearest the ease target first;
+        # keep the first that is monotone with every clip-frame step < 90°.
+        sol, tried = None, []
+        for T in sorted((k * 360.0 for k in range(1, 9)),
+                        key=lambda T: abs(T - (h + rate * n * 2.0 / 3.0))):
+            D = T - h - rate * n
+            c3 = (-rate * n - 2 * D) / n ** 3
+            c2 = (D - c3 * n ** 3) / n ** 2
+            def th(x, c3=c3, c2=c2): return c3 * x ** 3 + c2 * x ** 2 + rate * x + h
+            def dth(x, c3=c3, c2=c2): return 3 * c3 * x * x + 2 * c2 * x + rate
+            crit = [x for x in ([-c2 / (3 * c3)] if c3 else []) if 0 < x < n]
+            mono = all(dth(x) > -1e-9 for x in crit + [0, n])
+            maxstep = max(th(k + 1) - th(k) for k in range(n))
+            tried.append((T, mono, round(maxstep, 2)))
+            if mono and maxstep < 90.0:
+                sol = th
+                break
+        if sol is None:
+            raise SystemExit(f"spin: no whole-turn rampdown cubic satisfies θ(0)={h}, θ'(0)={rate}, "
+                             f"θ'(n)=0 monotone with steps < 90° — tried (T, monotone, maxstep): {tried}")
+        for fr in range(lo, hi + 1):
+            keys[fr] = sol(fr - lo)
+    if any(k.frame in keys for k in t.keyframes):
+        raise SystemExit("spin: a spin window collides with existing hub keys (fold anchors?)")
+    ordered = sorted(keys.items())
+    for (fa, da), (fb, db) in zip(ordered, ordered[1:]):
+        if fb == fa + 1 and abs(db - da) >= 90.0:
+            raise SystemExit(f"spin: step {da:.1f}->{db:.1f} deg at frame {fb} is >= 90 — "
+                             f"quaternion interpolation would take the short way round")
+    ax = spin.get("axis", (0.0, 1.0, 0.0))
+    qb = _mat_to_quat(_mds_bind(pl, w0)[1])
+    for fr, deg in sorted(keys.items()):
+        th = math.radians(deg)
+        s = math.sin(th / 2)
+        q = _quat_mul((math.cos(th / 2), ax[0] * s, ax[1] * s, ax[2] * s), qb)
+        t.keyframes.append(mc.Keyframe(struct.pack('<4I4f', fr, 0, 0, 0, *q)))
+    t.keyframes.sort(key=lambda k: k.frame)
+    prev = None                                      # hemisphere continuity for the engine's nlerp
+    for k in t.keyframes:
+        v = k.value
+        if prev is not None and sum(a * b for a, b in zip(prev, v)) < 0:
+            struct.pack_into('<4f', k.raw, 0x10, *[-x for x in v])
+            v = k.value
+        prev = v
+    base.replace_payload(bmot, dm.rebuild()[dm.data_off:])
+    return dict(node=spin["node"], w0=w0, keys=len(keys), rate=rate)
 
 
 def _graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo, dhi):
@@ -258,6 +585,12 @@ def assemble(base_bytes, read_src, char):
             src_cache[name] = mc.Pack.parse(read_src(name))
         return src_cache[name]
     grafts = 0
+    mg = char.get("mesh_graft")
+    mg_rep = None
+    if mg:                                           # mesh-node graft FIRST: motion grafts then remap
+        windows = [tuple(s["frames"]) for s in char["slots"] if s.get("src") == mg["src"]]
+        maxframe = max(s["frames"][1] for s in char["slots"])
+        mg_rep = _graft_mesh_nodes(base, src(mg["src"]), mg, windows, maxframe)
     for s in char["slots"]:
         if s.get("hold") is not None:                # static held pose sampled from the BASE's own motion
             dlo, dhi = s["frames"]
@@ -269,6 +602,11 @@ def assemble(base_bytes, read_src, char):
             continue
         sp = src(s["src"])
         scfg, sbmot, sbmds, ssmot, ssmds = _cfg_motions(sp)
+        if mg and s["src"] != mg["src"]:             # only the mesh-graft source may drive the new nodes
+            clash = set(mg["nodes"]) & set(mc.read_mds_frames(sp.find(sbmds).payload))
+            if clash:
+                raise SystemExit(f"slot {s['name']}: source rig carries grafted nodes {sorted(clash)} "
+                                 f"but its window is outside the fold-span model")
         wlo, whi = s["win"]; dlo, dhi = s["frames"]
         _graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi)               # body
         _seal_graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi)          # edge keyframes (loop-clean)
@@ -282,12 +620,17 @@ def assemble(base_bytes, read_src, char):
             _reverse_window(base, bmot, dlo, dhi)
             if smot: _reverse_window(base, smot, dlo, dhi)
         grafts += 1
+    if mg and mg.get("spin"):                        # AFTER the grafts/reverse bakes (they mirror windows)
+        mg_rep["spin"] = _apply_spin(base, mg)
     base.replace_payload(cfg.name, _rewrite_keys(cfg.payload, char["slots"]))
     new_chr = base.rebuild()
     # guard: re-parse + confirm 10 KEYs
     chk = mc.Pack.parse(new_chr)
     _, keys = _cfg_motions(chk)[0], re.findall(rb'KEY[ \t]+\d+,', _cfg_motions(chk)[0].payload)
-    return new_chr, dict(grafts=grafts, keys=len(keys), size=len(new_chr))
+    rep = dict(grafts=grafts, keys=len(keys), size=len(new_chr))
+    if mg_rep:
+        rep["mesh_graft"] = mg_rep
+    return new_chr, rep
 
 
 # ---------------------------------------------------------------- ISO install (tail redirect)
@@ -332,6 +675,174 @@ def run(iso, chars=CHARS, log=print):
         log("DONE (town-model assembly)")
 
 
+def _verify_mesh_graft(base_bytes, new_chr, ch):
+    """Deep-check a mesh-node graft: node counts/parents, byte-identity of every original record and
+    mesh chunk (mesh offsets rebased by exactly delta), .bbp extension, blade tracks per heli clip,
+    folded anchors outside the windows, shadow untouched, pack round-trip."""
+    mg = ch["mesh_graft"]
+    old, new = mc.Pack.parse(base_bytes), mc.Pack.parse(new_chr)
+    cfg, bmot, bmds, smot, smds = _cfg_motions(new)
+    opl, npl = old.find(bmds).payload, new.find(bmds).payload
+    onames, nnames = mc.read_mds_frames(opl), mc.read_mds_frames(npl)
+    nb, K = len(onames), len(mg["nodes"])
+    delta = K * 0x70
+    assert len(nnames) == nb + K, f"node count {len(nnames)} != {nb + K}"
+    assert struct.unpack_from('<I', npl, 0x08)[0] == nb + K, "header count not updated"
+    assert nnames[nb:] == mg["nodes"], "grafted node order/names wrong"
+    for i in range(nb):                                    # original records byte-identical (offset rebased)
+        o = opl[0x18 + i * 0x70:0x18 + i * 0x70 + 0x68]
+        n = npl[0x18 + i * 0x70:0x18 + i * 0x70 + 0x68]
+        omo = struct.unpack_from('<I', o, 0x20)[0]
+        nmo = struct.unpack_from('<I', n, 0x20)[0]
+        assert o[:0x20] == n[:0x20] and o[0x24:] == n[0x24:], f"node {i} {onames[i]} record changed"
+        assert nmo == (omo + delta if omo else 0), f"node {i} mesh offset not rebased by 0x{delta:X}"
+        if omo:
+            sz = struct.unpack_from('<I', opl, omo + 8)[0]
+            assert opl[omo:omo + sz] == npl[nmo:nmo + sz], f"node {i} {onames[i]} mesh chunk changed"
+    mesh_bytes = 0
+    for i in range(nb, nb + K):                            # grafted records: valid parents + real chunks
+        par = struct.unpack_from('<i', npl, 0x18 + i * 0x70 + 0x24)[0]
+        assert 0 <= par < i, f"grafted node {nnames[i]} parent {par} invalid"
+        mo = struct.unpack_from('<I', npl, 0x18 + i * 0x70 + 0x20)[0]
+        if mo:
+            assert npl[mo:mo + 4] == b'MDT\x00', f"grafted node {nnames[i]} mesh not an MDT"
+            mesh_bytes += struct.unpack_from('<I', npl, mo + 8)[0]
+    bbp = _cfg_bbp(cfg.payload)
+    obb, nbb = old.find(bbp).payload, new.find(bbp).payload
+    assert len(nbb) == (nb + K) * 64 and nbb[:len(obb)] == obb, ".bbp not extended in place"
+    # blade tracks: folded anchors outside windows, grafted keys inside each heli clip
+    m = mc.Mot.from_record(new.find(bmot))
+    blade = [t for t in m.tracks if t.w0 >= nb]
+    assert blade and all(t.w0 < nb + K for t in blade), "blade track w0 out of range"
+    windows = [tuple(s["frames"]) for s in ch["slots"] if s.get("src") == mg["src"]]
+    maxframe = max(s["frames"][1] for s in ch["slots"])
+    spans = _fold_spans(windows, 1, maxframe)
+    for t in blade:
+        vals = {kf.frame: kf.value for kf in t.keyframes}
+        def _same(a, b):                              # chan-0: ±q is the same rotation (double cover)
+            return (abs(sum(x * y for x, y in zip(a, b))) > 1.0 - 1e-6) if t.w2 == 0 else a == b
+        for lo, hi in spans:
+            assert lo in vals and hi in vals, f"blade w0={t.w0} chan{t.w2} missing fold anchor {lo}/{hi}"
+            assert _same(vals[lo], vals[hi]) and _same(vals[lo], vals[spans[0][0]]), \
+                f"blade w0={t.w0} fold anchors not constant"
+    per_clip = {}
+    for s in ch["slots"]:
+        if s.get("src") != mg["src"]:
+            continue
+        dlo, dhi = s["frames"]
+        per_clip[s["name"]] = sum(1 for t in blade if any(dlo <= kf.frame <= dhi for kf in t.keyframes))
+    assert all(v for v in per_clip.values()), f"a heli clip landed no blade tracks: {per_clip}"
+    # shadow rig/motion untouched by the mesh graft (blob shadow has no blade nodes)
+    assert new.find(smds).raw == old.find(smds).raw, "shadow .mds changed"
+    shn = len(mc.read_mds_frames(new.find(smds).payload))
+    assert all(t.w0 < shn for t in mc.Mot.from_record(new.find(smot)).tracks), "shadow .mot got blade tracks"
+    assert mc.Pack.parse(new_chr).rebuild() == new_chr, "pack round-trip failed"
+    print(f"   mesh_graft OK: {nb}->{nb + K} nodes, +{mesh_bytes} mesh B, fold spans {spans}")
+    print(f"   blade tracks: {len(blade)}; per heli clip: {per_clip}")
+    if mg.get("spin"):
+        _verify_spin(npl, nnames, m, mg, nb, K)
+
+
+def _verify_spin(npl, nnames, m, mg, nb, K):
+    """FK the propeller under the synthesized spin: in hub-LOCAL coordinates every subtree leaf must
+    trace a circle about the spin axis at constant angular velocity across the loop window, wrap
+    seamlessly, and the window boundaries must hand off continuously (hub at rest orientation mod
+    360 at the ramp ends)."""
+    spin = mg["spin"]
+    hub = nnames.index(spin["node"])
+    trk = {(t.w0, t.w2): t for t in m.tracks}
+
+    def world(i, f):
+        par, B, tr = _mds_bind(npl, i)
+        q = _sample_track(trk[(i, 0)], f) if (i, 0) in trk else None
+        R = _quat_to_mat(q) if q else B
+        v = _sample_track(trk[(i, 2)], f) if (i, 2) in trk else None
+        t3 = list(v[:3]) if v else tr
+        if par < 0:
+            return [list(r) for r in R], t3
+        PR, PT = world(par, f)
+        return ([[sum(R[r][k] * PR[k][c] for k in range(3)) for c in range(3)] for r in range(3)],
+                [sum(t3[k] * PR[k][c] for k in range(3)) + PT[c] for c in range(3)])
+
+    kids = {}
+    for i in range(nb, nb + K):
+        kids.setdefault(_mds_bind(npl, i)[0], []).append(i)
+    desc, stack = [], [hub]
+    while stack:
+        for c in kids.get(stack.pop(), []):
+            desc.append(c); stack.append(c)
+    tips = [i for i in desc if i not in kids]
+    ax = spin.get("axis", (0.0, 1.0, 0.0))
+    u = (1.0, 0.0, 0.0) if abs(ax[0]) < 0.9 else (0.0, 0.0, 1.0)   # basis perpendicular to the axis
+    u = [u[i] - ax[i] * sum(a * b for a, b in zip(u, ax)) for i in range(3)]
+    un = math.sqrt(sum(x * x for x in u)); u = [x / un for x in u]
+    v = [ax[1] * u[2] - ax[2] * u[1], ax[2] * u[0] - ax[0] * u[2], ax[0] * u[1] - ax[1] * u[0]]
+    lo, hi = spin["loop"]
+    rate = spin.get("rate", 360.0 / (hi - lo))
+    hub_par, hub_bind, _t = _mds_bind(npl, hub)
+    for tip in tips:
+        loc = []
+        for f in range(lo, hi + 1):
+            # hub REST frame = bind local rotation x parent world (the hub frame WITHOUT the spin
+            # track) — expressing the tip in the spinning hub's own frame would cancel the spin.
+            PR, _pt = world(hub_par, f)
+            RR = [[sum(hub_bind[r][k] * PR[k][c] for k in range(3)) for c in range(3)] for r in range(3)]
+            _hr, HP = world(hub, f)
+            _, TP = world(tip, f)
+            rel = [TP[k] - HP[k] for k in range(3)]
+            loc.append([sum(rel[k] * RR[c][k] for k in range(3)) for c in range(3)])   # rest-frame local
+        axial = [sum(p[k] * ax[k] for k in range(3)) for p in loc]
+        rad, ang = [], []
+        for p in loc:
+            x = sum(p[k] * u[k] for k in range(3)); z = sum(p[k] * v[k] for k in range(3))
+            rad.append(math.hypot(x, z)); ang.append(math.degrees(math.atan2(z, x)))
+        steps = [(ang[i + 1] - ang[i]) % 360.0 for i in range(len(ang) - 1)]
+        steps = [s - 360.0 if s > 180.0 else s for s in steps]
+        wrap = math.sqrt(sum((a - b) ** 2 for a, b in zip(loc[0], loc[-1])))
+        assert max(axial) - min(axial) < 0.02, f"tip {nnames[tip]} wobbles along the axis"
+        assert max(rad) - min(rad) < 0.02, f"tip {nnames[tip]} radius varies {min(rad):.3f}..{max(rad):.3f}"
+        assert all(abs(abs(s) - rate) < 0.5 for s in steps), f"tip {nnames[tip]} angular velocity uneven: {steps}"
+        assert wrap < 1e-3, f"tip {nnames[tip]} loop wrap discontinuous ({wrap:.4f})"
+        print(f"   spin tip {nnames[tip]}: r={sum(rad)/len(rad):.3f} (dev {max(rad)-min(rad):.5f}), "
+              f"step {min(abs(s) for s in steps):.2f}..{max(abs(s) for s in steps):.2f} deg/f, wrap err {wrap:.2e}")
+    # boundary continuity: ramps start/end at the rest orientation (mod 360)
+    ht = trk[(hub, 0)]
+    qb = _mat_to_quat(_mds_bind(npl, hub)[1])
+    for label, fa in [("rampup start", spin["rampup"][0]), ("rampdown end", spin["rampdown"][1])]:
+        d = abs(sum(a * b for a, b in zip(_sample_track(ht, fa), qb)))
+        assert d > 1.0 - 1e-6, f"spin boundary {label} != rest: |dot|={d:.6f}"
+    h = spin.get("handoff_advance", 0.0)
+    if h:
+        # DISPLAYED-sequence hand-offs: simulate playback at the override (one engine frame advances
+        # h/rate clip frames) straight through both window switches — every displayed step must keep
+        # advancing by ~h degrees, the switch steps and loop steps exactly so; a stall reads 0.
+        sc = h / rate                                # engine step in clip frames (0.5 at HeliFlightSpeed)
+        def qang(a, b):
+            return math.degrees(2 * math.acos(min(1.0, abs(sum(x * y for x, y in zip(a, b))))))
+        up_end, dn_lo = spin["rampup"][1], spin["rampdown"][0]
+        # loop's last displayed frame before the switch sits one step BEFORE the window end (the C#
+        # phase-locks flight to whole loop periods, so its phase is the loop-start phase - h ≡ 0)
+        seqs = [("rampup->loop", [up_end - sc * (3 - i) for i in range(4)] + [lo + sc * i for i in range(4)],
+                 range(0, 3), range(4, 7)),          # ramp-side steps, loop-side steps
+                ("loop->rampdown", [hi - sc * (4 - i) for i in range(4)] + [dn_lo + sc * i for i in range(4)],
+                 range(4, 7), range(0, 3))]
+        for label, seq, rampside, loopside in seqs:
+            qs = [_sample_track(ht, f) for f in seq]
+            steps = [round(qang(a, b), 2) for a, b in zip(qs, qs[1:])]
+            print(f"   spin hand-off {label}: displayed Δ deg/engine-frame = {steps} (switch step = {steps[3]})")
+            assert all(s > 1.0 for s in steps), f"{label}: zero-step (stall) in {steps}"
+            assert abs(steps[3] - h) < 0.05, f"{label}: switch step {steps[3]} != {h}"
+            assert all(abs(steps[i] - h) < 0.05 for i in loopside), f"{label}: loop-side steps off {h}: {steps}"
+            assert all(abs(steps[i] - h) < 2.0 for i in rampside), \
+                f"{label}: ramp-side step >2° from {h} next to the switch: {steps}"
+    steps_all = [k.frame for k in ht.keyframes]
+    for i in range(len(steps_all) - 1):     # nlerp safety: adjacent keys < 90 deg apart
+        d = abs(sum(a * b for a, b in zip(_sample_track(ht, steps_all[i]), _sample_track(ht, steps_all[i + 1]))))
+        assert d > math.cos(math.radians(45.1)), "adjacent hub keys >= 90 deg apart"
+    print(f"   spin OK: hub {spin['node']} w0={hub}, {len(ht.keyframes)} keys, rate {rate:.1f} deg/f"
+          + (f", hand-offs advance {h:.0f} deg/engine-frame" if h else ", ramps end at rest"))
+
+
 def _test():
     """Assemble from the extracted disc (mot_codec.load_pack) and verify KEY table + grafted frames."""
     for who, ch in CHARS.items():
@@ -339,6 +850,8 @@ def _test():
         def read_src(name): return mc.read_subfile(name.replace('/', '\\'))[2]
         new_chr, rep = assemble(base_bytes, read_src, ch)
         print(f"{who}: {rep}")
+        if ch.get("mesh_graft"):
+            _verify_mesh_graft(base_bytes, new_chr, ch)
         chk = mc.Pack.parse(new_chr)
         cfg = _cfg_motions(chk)[0]
         keys = re.findall(rb'KEY[ \t]+(\d+),[ \t]*(\d+),[ \t]*([\d.]+),?[ \t]*//([^\r\n]*)', cfg.payload)
