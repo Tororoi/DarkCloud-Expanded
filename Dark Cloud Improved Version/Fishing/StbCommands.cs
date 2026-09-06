@@ -27,6 +27,13 @@ namespace Dark_Cloud_Improved_Version
         internal const int GetNpcRot     = 139;     // (charaId, &rx, &ry, &rz) — reads rotation into locals
         internal const int NpcDraw       = 140;     // (flag, charaId)
 
+        // Camera (ids read from the ELF dispatch table @file 0x169d58, {handler,id} pairs, anchor {0x1969A0,998}):
+        internal const int ResetCamera        = 433;   // () — deferred: consumed on event END, restores the follow cam
+        internal const int SyncCameraRefChara = 434;   // (charaId[, offX, offY, offZ]) — camera look-at TRACKS the character each frame until reset
+        internal const int SetCameraPos       = 422;   // (x, y, z) — follow OFF + the camera GLIDES to this position (SetNextPos easing)
+        internal const int SetFollowCamera    = 417;   // (charaId, dist, height, angle, ease) — follow-cam takeover; WORKS IN TOWN (the vanilla ladder system-event #1 uses it: dist 30·h/50, height h=50, angle ladderYaw−π, ease 8)
+        internal const int ResetCameraAngle   = 436;   // (angle) — how the ladder system event releases its camera (it passes π)
+
         // The bait model pipeline. _SET_FISHING_ESA only points the hook at ITEM FRAME 0 — it does not load
         // anything. The frame has to be built first, and _LOAD_ITEM_FILE is a BACKGROUND (async) read.
         internal const int LoadItemFile     = 49;   // (itemId) — starts an async load of the item's chr + img

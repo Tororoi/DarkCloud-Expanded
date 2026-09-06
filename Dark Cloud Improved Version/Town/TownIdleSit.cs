@@ -53,6 +53,10 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadByte(Addresses.mode) != 2 || AllySwapPrototype.CurrentAlly != XiaoAlly) { Disarm(); return; }
             if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) { Disarm(); return; }
 
+            // A ladder refusal is playing through the same mailbox — stay off it (writing the sit index here
+            // would cut the shake short). Reset local state WITHOUT writing: TownLadder owns the release.
+            if (TownLadder.RefusalPlaying) { _idleTicks = 0; _armed = false; return; }
+
             uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(chara)) { Disarm(); return; }
             int m = Memory.ReadInt(Memory.ToMmu(chara) + MotionId);

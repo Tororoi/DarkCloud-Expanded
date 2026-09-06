@@ -168,12 +168,15 @@ namespace Dark_Cloud_Improved_Version
             if (RdU32(fs, ElfOff(HookAddr)) != Sw(s0, 0xc68, s2))   // 0xAE500C68
                 throw new IOException($"Idle-motion hook site 0x{HookAddr:X} is not vanilla `sw s0,0xc68(s2)` — unmodified Dark Cloud (USA) ISO expected.");
 
+            uint mbFlagsGuest = (uint)(CodeCaves.Mailbox.IdleMotionFlags - 0x20000000);   // 0x01F10080 — same upper half as the index mailbox
             uint[] cave = {
                 Move(v0, s0),                                          // v0 = motion (default: as the engine computed)
-                Bne(s0, zero, 4), 0,                                   // motion != 0 (run/walk) → keep it; branch to the store. delay = nop
-                Lui(at, mbGuest >> 16), Lw(at, (int)(mbGuest & 0xFFFF), at),  // idle: at = *IdleMotionOverride
-                Move(v0, at),                                          // v0 = mailbox (0 → still idle, i.e. unchanged)
-                Jr(ra), Sw(v0, 0xc68, s2),                             // return to 0x16a6b0; delay slot stores the result to char+0xc68
+                Bne(s0, zero, 5), 0,                                   // motion != 0 (run/walk) → keep it; branch to the store. delay = nop
+                Lui(at, mbGuest >> 16),
+                Lw(v0, (int)(mbGuest & 0xFFFF), at),                   // idle: v0 = *IdleMotionOverride (0 → still idle)
+                Lw(at, (int)(mbFlagsGuest & 0xFFFF), at),              // at = *IdleMotionFlags (bit1 = play once + hold last frame)
+                Sw(at, 0xc64, s2),                                     // re-write char+0xc64 (the hook's delay slot zeroed it) — 0 = vanilla loop
+                Jr(ra), Sw(v0, 0xc68, s2),                             // return to 0x16a6b0; delay slot stores the motion id to char+0xc68
             };
             for (int i = 0; i < cave.Length; i++)
                 WrU32(fs, ElfOff(CaveAddr + (uint)(i * 4)), cave[i]);

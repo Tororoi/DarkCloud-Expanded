@@ -86,6 +86,11 @@ namespace Dark_Cloud_Improved_Version
             EnsureInstalled();
             DetectCommit();
             MaybeFirePending();
+
+            // Player "!" event-mark height: the cat's mesh is long/low, so the vanilla mark (char Y + height
+            // field + 3.0) clips into it. The ElfPatches exclamation cave adds this float to the mark's Y.
+            // Re-asserted per tick (survives resets); 0 = bit-exact vanilla for everyone else. TUNABLE.
+            Memory.WriteFloat(CodeCaves.Mailbox.ExclamationYBoost, _currentAlly == 1 ? 4.0f : 0f);
         }
 
         /// <summary>In the party menu, a Cross press on an unlocked ally different from the current town

@@ -76,7 +76,8 @@ namespace Dark_Cloud_Improved_Version
         ///   +0x48 line distp below   +0x50-0x5F camera E_prev (EXTERNAL — off-limits)
         ///   +0x60 canal evict  +0x64 camera rest H  +0x68 cam gather count  +0x6C fish wall latch
         ///   +0x70 idle-motion override  +0x74 block ladder  +0x78 refusal requested  +0x7C "!" Y boost
-        ///   +0x80.. FREE (<see cref="NextFree"/> is authoritative — this prose is a courtesy copy)
+        ///   +0x80 idle-motion flags (bit1 = play-once)
+        ///   +0x84.. FREE (<see cref="NextFree"/> is authoritative — this prose is a courtesy copy)
         /// </summary>
         internal static class Mailbox
         {
@@ -217,8 +218,18 @@ namespace Dark_Cloud_Improved_Version
             /// the ally-swap logic: seed 0.0 for Toan, the cat's clearance for the cat.</summary>
             internal const long ExclamationYBoost = Base + 0x7C;
 
+            /// <summary>Motion FLAGS the idle-motion cave writes to char+0xc64 alongside an override
+            /// (<see cref="IdleMotionOverride"/>). CCharacter::Step reads +0xc64 as native playback flags —
+            /// bit0 (1) = freeze, bit1 (2) = PLAY ONCE then hold the LAST frame (the engine's own one-shot,
+            /// used by the land animation), bit2 (4) = restart from the clip start (self-clearing). 0 = loop
+            /// (vanilla). Only applied while an override index is armed; run/walk frames keep the vanilla
+            /// zeroing. Contract: the mod arms flags WITH the index and zeroes BOTH on release — a stray
+            /// (index=0, flags=2) combo freezes idle on its last frame. Cave reads GUEST 0x01F10080; mod
+            /// writes MMU 0x21F10080. Sit = 0 (loops); refusal = 2 (one shake, hold neutral).</summary>
+            internal const long IdleMotionFlags = Base + 0x80;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x80;
+            internal const long NextFree = Base + 0x84;
         }
 
         // ── ELF-BAKED CAVES — the dead CharaChange region ────────────────────────────────────────────
@@ -248,7 +259,7 @@ namespace Dark_Cloud_Improved_Version
         ///   0x229800  WaterOrderGate       88 B → 0x229858   waterOrderGate.bin
         ///   0x229880  LadderRefusal        52 B → 0x2298B4   hand-built (PatchLadderRefusal)
         ///   0x2298C0  ExclamationHeight    24 B → 0x2298D8   hand-built (PatchExclamationHeight)
-        ///   0x229900  IdleMotionOverride   32 B → 0x229920   hand-built (PatchIdleMotionOverride)
+        ///   0x229900  IdleMotionOverride   36 B → 0x229924   hand-built (PatchIdleMotionOverride)
         ///   0x229940  FREE → 0x22A210 (region end, ~0x8D0 B)
         /// </summary>
         internal static class ElfCave
@@ -278,7 +289,7 @@ namespace Dark_Cloud_Improved_Version
             internal const uint WaterOrderGate     = 0x00229800;   // 88 B → 0x229858
             internal const uint LadderRefusal      = 0x00229880;   // 52 B → 0x2298B4
             internal const uint ExclamationHeight  = 0x002298C0;   // 24 B → 0x2298D8
-            internal const uint IdleMotionOverride = 0x00229900;   // 32 B → 0x229920
+            internal const uint IdleMotionOverride = 0x00229900;   // 36 B → 0x229924
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>

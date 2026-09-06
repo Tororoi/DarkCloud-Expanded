@@ -44,9 +44,22 @@ CHARS = {
             # and shared by both item slots. The town engine loops the armed KEY window, so 30-40 cycles cleanly.
             dict(idx=5, frames=(30, 40),  speed=0.10, name="sit",      src="gedit/s86/chara/c04cat.chr", win=(30, 40)),
             dict(idx=6, frames=(30, 40),  speed=0.10, name="sit-loop", src=None),   # reuse the grafted sit, full 30-40
-            dict(idx=7, frames=(10, 20),  speed=0.10, name="damage(skip)", src=None),
+            # slot 7 (damage — never triggered in town) repurposed as the ladder REFUSAL: e613c04cat's head-shake
+            # sequence #6 no [115-135] / #7 hold [140-150] / #8 return [155-165], grafted whole into fresh frames
+            # past the land clip. TownLadder plays it via the idle-motion cave when a blocked mount raises
+            # RefusalRequested (one pass, then back to idle).
+            dict(idx=7, frames=(228, 278), speed=0.30, name="refuse(shake)", src="dun/d01/event/e613c04cat.chr", win=(115, 165)),
             dict(idx=8, frames=(205, 214), speed=0.50, name="fall(leap)", src="gedit/s86/chara/c04cat.chr", win=(205, 214)),
             dict(idx=9, frames=(215, 227), speed=0.36, name="land",  src="gedit/s86/chara/c04cat.chr",   win=(215, 227)),
+            # CHOREOGRAPHY-ONLY slots (the engine drives 0-9; these are played by TownLadder's jump script via
+            # _SET_NPC_MOTION, which accepts any KEY index — the docs/town-swap-animation-map.md up-ladder plan):
+            # 10 = s86 #3 "ready" crouch; 11 = e04c04cat #5 float/hop-up, fast, NO root offset (the door slot's
+            # copy of this clip is z-shifted for the door teleport — unusable mid-flight).
+            dict(idx=10, frames=(95, 105),  speed=0.40, name="jump-ready", src="gedit/s86/chara/c04cat.chr", win=(95, 105)),
+            dict(idx=11, frames=(285, 294), speed=0.60, name="float-up",   src="gedit/e01/chara/e04c04cat.chr", win=(160, 169)),
+            # 12 = the base's own walk (60-80) copied to fresh frames and REVERSED — the backwards steps of the
+            # ladder-jump alignment (the engine can't play a clip backwards; speed overrides are gated positive).
+            dict(idx=12, frames=(300, 320), speed=0.30, name="walk-back",  src="gedit/e01/chara/c04pcat.chr", win=(60, 80), reverse=True),
         ],
     ),
 }
@@ -83,6 +96,20 @@ def _graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo
     sframes = mc.read_mds_frames(src_pack.find(src_mds).payload)
     mc.splice_motion_by_joint(dst, src, sframes, dframes, slo, shi, dlo, dhi)
     dst_pack.replace_payload(dst_mot, dst.rebuild()[dst.data_off:])
+
+
+def _reverse_window(pack, mot_name, dlo, dhi):
+    """Mirror the keyframes inside [dlo,dhi] (frame -> dlo+dhi-frame, re-sorted ascending) — bakes a clip that
+    plays BACKWARDS (the engine cannot: both motion-speed override paths are gated positive)."""
+    m = mc.Mot.from_record(pack.find(mot_name))
+    for t in m.tracks:
+        win = [kf for kf in t.keyframes if dlo <= kf.frame <= dhi]
+        if not win:
+            continue
+        for kf in win:
+            kf.frame = dlo + dhi - kf.frame
+        t.keyframes.sort(key=lambda k: k.frame)
+    pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
 
 
 def _apply_root_offset(pack, mot_name, dlo, dhi, off):
@@ -134,6 +161,9 @@ def assemble(base_bytes, read_src, char):
         if s.get("root_offset"):                                                      # pull the reach back (door)
             _apply_root_offset(base, bmot, dlo, dhi, s["root_offset"])
             if smot: _apply_root_offset(base, smot, dlo, dhi, s["root_offset"])
+        if s.get("reverse"):                                                          # bake a backwards-playing clip
+            _reverse_window(base, bmot, dlo, dhi)
+            if smot: _reverse_window(base, smot, dlo, dhi)
         grafts += 1
     base.replace_payload(cfg.name, _rewrite_keys(cfg.payload, char["slots"]))
     new_chr = base.rebuild()

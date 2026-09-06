@@ -52,7 +52,7 @@ namespace Dark_Cloud_Improved_Version
         // now baked as its OWN label into every walkable town below, decoupled from fishing (so ally-swap changes
         // can never regress the fishing labels, and vice-versa). Fishing towns get 405 PLUS the fishing pool in a
         // single table-grow (SpareLabelsFor); every other town gets 405 alone.
-        internal const int AllySwapSpareSize = 0x600;
+        internal const int AllySwapSpareSize = 0xC00;   // grown 0x600→0xC00 for the Xiao ladder-jump script (align walk + back-up + ready + arc); appended LAST so fishing label offsets are unchanged
         internal static readonly string[] AllySwapTownStbPaths =
         {
             "gedit/e01/event.stb", "gedit/e02/event.stb", "gedit/e03/event.stb", "gedit/e04/event.stb",
