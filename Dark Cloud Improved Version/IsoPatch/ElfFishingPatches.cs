@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         // (Cave = tools/stubs/fishline_uncast_gate.s. ISO-baked, so patching hot fishing code is safe.)
         internal static void PatchFishingUncastGate(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint UncastGateCaveAddr = 0x00228E20;                       // dead CharaChange region (ex cast-scale slot)
+            const uint UncastGateCaveAddr = CodeCaves.ElfCave.FishLineUncastGate;   // registry: CodeCaveAddresses.ElfCave
             const uint GateAddr = 0x0016C6D0;                       // EdMoveChara: slti at,st_cnt,0x1f (check delay)
             const uint LuiAddr = 0x001AA2D4, MtcAddr = 0x001AA2D8;   // CheckUkiHook tail: lui v0,0x40a0 ; mtc1 v0,f1
             uint gotG = RdU32(fs, ElfOff(GateAddr)), gotL = RdU32(fs, ElfOff(LuiAddr)), gotM = RdU32(fs, ElfOff(MtcAddr));
@@ -167,7 +167,7 @@ namespace Dark_Cloud_Improved_Version
             // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
             // settled-height cave below, unmodified. (Wall-stopped rest positions 48 / arch face 25 stay
             // fishable — the drag thresholds sit deliberately beyond them.)
-            WrU32(fs, ElfOff(LuiAddr), J(0x002294C0)); // height tail -> drag check -> settled-gated cave (v10 addr)
+            WrU32(fs, ElfOff(LuiAddr), J(CodeCaves.ElfCave.CamBankSettledCave)); // height tail -> drag check -> settled-gated cave (in the cameraNormSide bank)
             WrU32(fs, ElfOff(MtcAddr), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
             // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @0x229440, camera_norm_side.s) ──
             // FishLineStep's uki ground probe lifts the bobber onto ANY floor poly at its (x,z) — bridge
@@ -180,7 +180,7 @@ namespace Dark_Cloud_Improved_Version
             uint gotUG = RdU32(fs, ElfOff(UkiGroundLuiAddr)), gotUGd = RdU32(fs, ElfOff(UkiGroundMtcAddr));
             if (gotUG != 0x3C023F80 || gotUGd != 0x44820800)
                 throw new IOException($"Uki ground-lift site not vanilla (got 0x{gotUG:X8}/0x{gotUGd:X8}).");
-            WrU32(fs, ElfOff(UkiGroundLuiAddr), J(0x00229690));  // ground store head -> overhead-floor-gated bank sub (v10 addr)
+            WrU32(fs, ElfOff(UkiGroundLuiAddr), J(CodeCaves.ElfCave.CamBankUkiGroundSub));  // ground store head -> overhead-floor-gated bank sub (in the cameraNormSide bank)
             WrU32(fs, ElfOff(UkiGroundMtcAddr), 0);               // displaced mtc1 -> nop (sub redoes the store)
         }
 
@@ -195,7 +195,7 @@ namespace Dark_Cloud_Improved_Version
         // cold-patch which touches the DIFFERENT anchor-load instructions). See the feasibility doc.
         internal static void PatchFishLineSplit(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = 0x00228DC0, StepCaveAddr = 0x00228DEC;   // init_cave / step_cave (one bin)
+            const uint StubAddr = CodeCaves.ElfCave.FishLineSplit, StepCaveAddr = CodeCaves.ElfCave.FishLineSplitStep;   // init_cave / step_cave (ONE bin — registry: CodeCaveAddresses.ElfCave)
             const uint InitLwc1Addr = 0x001A9CAC, InitSubAddr = 0x001A9CB0;  // FishLineInit: lwc1 f0,distp ; sub.S f0,f1,f0
             const uint StepLwc1Addr = 0x001AA7C8, StepSubAddr = 0x001AA7CC;  // FishLineStep: lwc1 f1,distp ; sub.S f2,f0,f1
             if (RdU32(fs, ElfOff(InitLwc1Addr)) != 0xC78087B4 || RdU32(fs, ElfOff(InitSubAddr)) != 0x46000801 ||
@@ -234,7 +234,7 @@ namespace Dark_Cloud_Improved_Version
         // Stub: tools/stubs/stilts_heal.s → stiltsHeal.bin.
         internal static void PatchStiltsHeal(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = 0x00229780;   // dead CharaChange region, past the cameraNormSide bank
+            const uint CaveAddr = CodeCaves.ElfCave.StiltsHeal;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x0017BB48;   // MainDraw water-reload site (vanilla jal ReloadTexture)
             uint gotImm = RdU32(fs, ElfOff(HookAddr - 4)), got = RdU32(fs, ElfOff(HookAddr));
             if (gotImm != 0x24060015 || got != 0x0C05EEE9)   // addiu a2,zero,0x15 ; jal EARLY_STUB(0x17BBA4)

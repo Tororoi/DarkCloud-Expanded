@@ -161,15 +161,46 @@ Source refs: `c05a·dun #0 idle · #1 run · #2 walk · #31 dmg-out (605-625) ·
 
 ---
 
-## Goro — TBD  (base = `c06p`, cutscene-safe; already has run/walk)
+## Goro — cataloged 2026-09-05
 
-**Model investigation (2026-09-05):** the Matataki (e02) treehouse/QTE/ladder-jump cutscenes are performed by
-*other* characters, **not Goro** — e02's jump/climb/combat models (`e123`, `e129`, `e131`) use villager rigs
-(`p23a`/`p24a`), a bearded-elder rig, and an object model (`e14a`), none matching Goro's `c06` skeleton, so their
-motions can't transplant to him. Goro's own models (`c06a`/`c06b`/`c06p`) have **no jump or climb** motion.
-- **Ladder climb source = `c06d02s · dun\d02\stair_mos`** — a motion-only pack (1 clip, frames 10-130) that DOES
-  ride Goro's rig (his dungeon stair-climb). That's his usable climb.
-- Fall/land: likely from his own motions (e.g. a reversed knockback + get-up, à la Ungaga) — TBD in viewer.
+**Base model:** `c06p` (cutscene-safe, has idle/walk/run). Extra clips from `c06b · dun\mainchara` and
+**`e102 · gedit\s01\chara`** (a Goro's-House cutscene model on the c06 rig — his real jump/leap set; there is NO
+Matataki-e02 Goro, those are other characters).
+
+`e102c06a.cfg`: `#0 idle · #1 walk · #2 run · #3 pant · #4 jump-R-kick · #5 jump-L-kick · #6 peek-down`.
+`c06b·dun`: `#31 dmg-out (605-…) · #34/35 get-item`.
+
+### Town slots
+| Town slot | Source clip | Notes |
+|---|---|---|
+| 0 idle | `c06p #0` | |
+| 1 run | `c06p` run | |
+| 2 walk | `c06p` walk | |
+| 3 push-door | `c06p` **idle** | "just idle for opening doors" |
+| 4 pull-door | `c06p` **idle** | |
+| 5 item get | `c06b·dun #34` | |
+| 6 item get (loop) | `c06b·dun #35` | |
+| 7 damage | — | skip |
+| 8 fall | `e102 #6` | user's visual read (label = "peek-down"; **verify look when baking**) |
+| 9 land | `e102 #3` | user's visual read (label = "pant"; **verify**) |
+
+### Refusal / "no"
+`c06b·dun #31` (dmg-out).
+
+### Doors
+Just idle (`c06p #0`).
+
+### Ladders
+- **Down:** `e102 #4` (jump) → `#6` (fall) → `#3` (land). *scripted seq.*
+- **Up:** `e102 #4`/`#5` **alternating** (right-/left-foot jumps) — the same climb sequence he uses in s01. *scripted seq.*
+
+### Custom / notes
+- `e102` (65-node c06 rig) → transplant its `#3/#4/#5/#6` into `c06p` (same c06 rig — verify node match).
+- Confirm the `#6`/`#3` clips actually read as fall/land in-game (labels suggest otherwise).
+
+---
+
+## STATUS: all six allies cataloged (2026-09-05). Next = BUILD.
 ## Osmond — cataloged 2026-09-05
 
 **Base model:** `c18p · e05` (`#0 idle · #1 run · #2 walk · #3 talk`). Idle/walk fine as-is; **run = just speed up

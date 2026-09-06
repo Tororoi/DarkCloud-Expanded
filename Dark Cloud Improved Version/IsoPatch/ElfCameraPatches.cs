@@ -271,7 +271,7 @@ namespace Dark_Cloud_Improved_Version
             // ref-side flip was tried first and pulled the camera inside closed shells' far walls).
             uint[] normSide = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraNormSide.bin", 0x3C0A01F1);
             for (int i = 0; i < normSide.Length; i++)
-                WrU32(fs, ElfOff(0x00228F00 + (uint)(i * 4)), normSide[i]);
+                WrU32(fs, ElfOff(CodeCaves.ElfCave.CameraNormSideBank + (uint)(i * 4)), normSide[i]);
             // ── FISHING LINE CANAL CLAMP (cave @0x229100 in the bank above, camera_norm_side.s) ──
             // Wraps EdMoveChara's single FishLineStep call: after the real Verlet step, in QUEENS ONLY,
             // the rope tail (bobber point[18], hang-down line, uki/hook clusters — pos AND old_p, so the
@@ -280,7 +280,7 @@ namespace Dark_Cloud_Improved_Version
             // opposite the rod is clamped, so reel-in is never obstructed. The cast button always works
             // (v1 rejected the cast at the button — bad feel, and its facing ray over-rejected).
             Guard(0x0016D314, 0x0C06A8D0, "fishing line-clamp hook (jal FishLineStep)");
-            WrU32(fs, ElfOff(0x0016D314), 0x0C08A440);   // jal 0x229100 (FishLineClamp wrapper)
+            WrU32(fs, ElfOff(0x0016D314), MipsAsm.Jal(CodeCaves.ElfCave.CamBankFishLineClamp));   // jal 0x229100 (FishLineClamp wrapper in the cameraNormSide bank)
             Guard(0x0027D090, 0x00000000, "world-height cave (ex-autorotate area, zero words in vanilla)");
             uint[] heightFn = LoadWordsResource("Dark_Cloud_Improved_Version.Resources.isoPatch.cameraHeight.bin", 0x27BDFFE0);
             // REACQUISITION GATE (word 3 of the sub, 2026-08, HEIGHT-ONLY since the recovery fix): when

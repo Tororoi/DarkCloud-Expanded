@@ -23,7 +23,8 @@ namespace Dark_Cloud_Improved_Version
     /// clonable. The room came from three places: capping the AI stubs at 32 slots, trimming the node pool
     /// 128→96 bones (Osmond's 84 is the real max), and packing the decoy tables out of a 0x10000 hole.
     ///
-    ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (0x3C is the next free)
+    ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (its NextFree marks the
+    ///               next unclaimed slot — do not trust any prose copy of it)
     ///   0x01F10040  Town-camera scratch: stick ease @+0x00, E_prev quad @+0x10 (16B) — written per frame
     ///               by the ISO-baked camera function (boot-zeroed; moved here off its code page, 2026-08)
     ///   0x01F10100  AI stubs      32 × 0x400                       → ends 0x01F18100
@@ -51,6 +52,11 @@ namespace Dark_Cloud_Improved_Version
     ///                             ^ 0x5F00 clear of the band top (0x01FB4300)
     ///
     ///   0x01400000  EnemyModelInjector param/code block — a SEPARATE region, deep in main BSS.
+    ///
+    /// A SECOND, unrelated band lives in the ELF's own dead code: the CharaChange screen's functions
+    /// (0x228BB0–0x22A210, never reachable in this mod) hold the ISO-baked caves — see <see cref="ElfCave"/>.
+    /// Unlike the heap band above, that is CODE space: direct j/jal into it is legal, the scanner does not
+    /// track it, and THIS FILE is its only registry.
     /// </summary>
     internal static class CodeCaves
     {
@@ -65,8 +71,12 @@ namespace Dark_Cloud_Improved_Version
         ///   +0x00 eventpoint   +0x04 sun/moon    +0x08 nearNPC     +0x0C xiaoFlag
         ///   +0x10 nearNPC(2)   +0x14 insideMayor +0x18 element     +0x1C clock
         ///   +0x20 pnachActive  +0x24 PINE probe (MemoryFunctions)  +0x28 option1   +0x2C option2
-        ///   +0x30 option3      +0x34 option4     +0x38 MIRAGE scene gate
-        ///   +0x3C.. FREE
+        ///   +0x30 option3      +0x34 option4     +0x38 MIRAGE scene gate           +0x3C fish cam height
+        ///   +0x40 camera stick (EXTERNAL — off-limits)             +0x44 cape char ptr
+        ///   +0x48 line distp below   +0x50-0x5F camera E_prev (EXTERNAL — off-limits)
+        ///   +0x60 canal evict  +0x64 camera rest H  +0x68 cam gather count  +0x6C fish wall latch
+        ///   +0x70 idle-motion override  +0x74 block ladder  +0x78 refusal requested  +0x7C "!" Y boost
+        ///   +0x80.. FREE (<see cref="NextFree"/> is authoritative — this prose is a courtesy copy)
         /// </summary>
         internal static class Mailbox
         {
@@ -166,10 +176,113 @@ namespace Dark_Cloud_Improved_Version
             /// spot stances) so the flight wall clamp arms; 0 = bank stance, walls stay off (no line snap).</summary>
             internal const long FishWallLatch = Base + 0x6C;
 
-            // 0x70..0x7C: retired freeze-hunt diagnostic mailboxes (Alloc-overflow probe, ReadInfo breadcrumb,
-            // shadow-skip). The freeze was the Queens canal-wading early-draw (see CanalWading.SuppressForSwap);
-            // those ELF hooks + their mod-side readers were removed 2026-09.
-            internal const long NextFree = Base + 0x70;
+            /// <summary>Town-character idle-motion override (the swapped-in cat's idle→sit). The ELF cave
+            /// <c>ElfPatches.PatchIdleMotionOverride</c> intercepts EdMoveChara's grounded LOCOMOTION store
+            /// <c>*(char+0xc68) = motion</c> (0 = idle / 1 = run / 2 = walk, @0x16a6a8): when the motion the
+            /// engine computed is 0 (idle) AND this word is non-zero, the cave stores THIS value instead (e.g.
+            /// the sit motion index), so an idle town character plays the override animation. Run/walk (1/2) and
+            /// a 0 here pass through unchanged — vanilla. The cave reads the GUEST form 0x01F10070; the mod
+            /// writes MMU 0x21F10070 (= guest + 0x20000000). 0 = off. Owned by the mod's idle→sit timer logic.</summary>
+            internal const long IdleMotionOverride = Base + 0x70;
+
+            /// <summary>Town ladder-mount block (the swapped-in non-Toan ally must never climb — the mount
+            /// loads a Toan-rigged climb overlay onto a foreign model → crash). The ELF cave
+            /// <c>ElfPatches.PatchLadderRefusal</c> redirects EdMoveChara's single ladder-mount call
+            /// (<c>jal EdInitHashigo</c> @0x16c0fc) plus the climbing-flag set (<c>li s8,1</c> @0x16c104) to a
+            /// cave: when this word is 0 it mounts exactly as vanilla (calls EdInitHashigo + sets the climbing
+            /// flag s8=1 → DAT_01d1970c); when non-zero it SKIPS both (no mount, s8 stays -1 = not climbing) and
+            /// raises <see cref="RefusalRequested"/>. The cave reads the GUEST form 0x01F10074; the mod writes MMU
+            /// 0x21F10074 (= guest + 0x20000000). 0 = off (vanilla ladders). Set once per town by the swap logic.</summary>
+            internal const long BlockLadder = Base + 0x74;
+
+            /// <summary>Ladder-refusal request (one-shot). The <c>PatchLadderRefusal</c> cave sets this to 1 when
+            /// (and only when) a mount was actually attempted-and-blocked — i.e. under the SAME PadDown(Cross)
+            /// press condition that would have mounted in vanilla, so it fires once per Cross press, not every
+            /// frame the ally merely stands by the ladder. The mod polls MMU 0x21F10078, plays the shake-head
+            /// refusal, then clears it back to 0. Only <see cref="BlockLadder"/> being non-zero can raise it.</summary>
+            internal const long RefusalRequested = Base + 0x78;
+
+            // 0x70-0x7C were retired freeze-hunt diagnostic mailboxes (alloc probe / breadcrumb / shadow-skip);
+            // those ELF hooks + their mod-side readers were removed 2026-09, and the slots were RECLAIMED by the
+            // town-swap behavior mailboxes above/below (0x70 idle, 0x74/0x78 ladder, 0x7C "!" boost).
+
+            /// <summary>Player "!" event-trigger mark HEIGHT boost (float). A swapped-in ally with different
+            /// proportions (the cat) sits lower, so the exclamation mark pokes through its mesh. The ELF cave
+            /// <c>ElfPatches.PatchExclamationHeight</c> redirects the PLAYER mark's final Y store in
+            /// <c>EdDrawSysCursor</c> (<c>swc1 f0,0x94(sp)</c> @0x17cf5c, the store of
+            /// <c>fStack_c + *(Chara+0xb4) + 3.0 + sinf(a)*0.5</c>) to a cave that adds THIS word to the Y before
+            /// storing it — so the mark rides `vanilla Y + boost`. The cave reads the GUEST form 0x01F1007C; the
+            /// mod writes MMU 0x21F1007C (= guest + 0x20000000). 0.0 = vanilla (bit-exact for real positions);
+            /// a positive float lifts the cat's mark clear. NPC cursors (the earlier loop) are untouched. Owned by
+            /// the ally-swap logic: seed 0.0 for Toan, the cat's clearance for the cat.</summary>
+            internal const long ExclamationYBoost = Base + 0x7C;
+
+            /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
+            internal const long NextFree = Base + 0x80;
+        }
+
+        // ── ELF-BAKED CAVES — the dead CharaChange region ────────────────────────────────────────────
+        /// <summary>
+        /// Every ISO-baked cave in the ELF's dead CharaChange code (0x228BB0–0x22A210 — the dungeon
+        /// character-change screen this mod never reaches; see memory element-switch-menu). These are CODE
+        /// addresses (guest form) patched into SCUS_971.11 at ISO-patch time: a direct j/jal into them is
+        /// legal (unlike the heap caves above, which crash the recompiler if executed). The scanner does NOT
+        /// sweep ELF space — THIS TABLE is the only thing standing between two patches and a silent overlap.
+        ///
+        /// ⚠ THE FAILURE MODE IS REAL: PatchIdleMotionOverride was first placed at 0x228E00 — inside
+        /// fishlineSplitCaves.bin (0x228DC0+88B → 0x228E18) — and every Queens fishing session hung on a
+        /// black screen. It byte-verified cleanly because the check ran on a VANILLA ELF, where the fishline
+        /// bin doesn't exist yet. So: claim <see cref="NextFree"/>, keep this table in ADDRESS ORDER with the
+        /// cave's SIZE and END, and never place a cave from a patch-local literal or by eyeballing a vanilla
+        /// dump. Bin-backed sizes are the .bin file's byte size (Resources/isoPatch); hand-built sizes are
+        /// the instruction-word count × 4.
+        ///
+        ///   0x228BB0  CanalEvictFadeHook   64 B → 0x228BF0   canalEvictFadeHook.bin
+        ///   0x228C00  QueensSpray         180 B → 0x228CB4   queensSprayCave.bin
+        ///   0x228D00  SprayBiasShim        60 B → 0x228D3C   sprayBiasShim.bin
+        ///   0x228D40  CapeEarlyDraw       124 B → 0x228DBC   capeEarlyDraw.bin
+        ///   0x228DC0  FishLineSplit        88 B → 0x228E18   fishlineSplitCaves.bin (step entry @+0x2C)
+        ///   0x228E20  FishLineUncastGate  148 B → 0x228EB4   fishlineUncastGate.bin
+        ///   0x228F00  CameraNormSideBank 2128 B → 0x229750   cameraNormSide.bin (multi-entry, see below)
+        ///   0x229780  StiltsHeal           88 B → 0x2297D8   stiltsHeal.bin
+        ///   0x229800  WaterOrderGate       88 B → 0x229858   waterOrderGate.bin
+        ///   0x229880  LadderRefusal        52 B → 0x2298B4   hand-built (PatchLadderRefusal)
+        ///   0x2298C0  ExclamationHeight    24 B → 0x2298D8   hand-built (PatchExclamationHeight)
+        ///   0x229900  IdleMotionOverride   32 B → 0x229920   hand-built (PatchIdleMotionOverride)
+        ///   0x229940  FREE → 0x22A210 (region end, ~0x8D0 B)
+        /// </summary>
+        internal static class ElfCave
+        {
+            internal const uint RegionStart = 0x00228BB0;
+            internal const uint RegionEnd   = 0x0022A210;
+
+            internal const uint CanalEvictFadeHook = 0x00228BB0;   // 64 B → 0x228BF0
+            internal const uint QueensSpray        = 0x00228C00;   // 180 B → 0x228CB4
+            internal const uint SprayBiasShim      = 0x00228D00;   // 60 B → 0x228D3C
+            internal const uint CapeEarlyDraw      = 0x00228D40;   // 124 B → 0x228DBC
+            internal const uint FishLineSplit      = 0x00228DC0;   // 88 B → 0x228E18 (init entry; ONE bin, two caves)
+            internal const uint FishLineSplitStep  = 0x00228DEC;   //   the step cave inside it (@+0x2C)
+            internal const uint FishLineUncastGate = 0x00228E20;   // 148 B → 0x228EB4
+
+            /// <summary>ONE 2128-byte bin (cameraNormSide.bin / camera_norm_side.s) with several entry points —
+            /// the whole span 0x228F00–0x229750 is occupied, not just the labeled words: gather-count export
+            /// @0x228F00, winding-agnostic normal SubA @0x228F40 / SubB @0x229000, FishLineClamp wrapper
+            /// @0x229100 (jal'd from 0x16D314), the v10 settled-gated bobber cave @0x2294C0, and the
+            /// uki ground-store bank sub @0x229690. Keep entry offsets in sync with the .s when reassembling.</summary>
+            internal const uint CameraNormSideBank = 0x00228F00;   // 2128 B → 0x229750
+            internal const uint CamBankFishLineClamp = 0x00229100;
+            internal const uint CamBankSettledCave   = 0x002294C0;
+            internal const uint CamBankUkiGroundSub  = 0x00229690;
+
+            internal const uint StiltsHeal         = 0x00229780;   // 88 B → 0x2297D8
+            internal const uint WaterOrderGate     = 0x00229800;   // 88 B → 0x229858
+            internal const uint LadderRefusal      = 0x00229880;   // 52 B → 0x2298B4
+            internal const uint ExclamationHeight  = 0x002298C0;   // 24 B → 0x2298D8
+            internal const uint IdleMotionOverride = 0x00229900;   // 32 B → 0x229920
+
+            /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
+            /// (address order, size, end) so the next placement can see it.</summary>
+            internal const uint NextFree = 0x00229940;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

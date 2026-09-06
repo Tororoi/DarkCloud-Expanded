@@ -282,7 +282,7 @@ namespace Dark_Cloud_Improved_Version
             // ── ORDER-GATE cave (tools/stubs/water_order_gate.s → waterOrderGate.bin @0x229800): COND
             //    (payload entry: defer only when the wading mailbox is armed) + SHIM (hook-cave call) +
             //    RET_THUNK (the payload's dynamic return). See the STUB comment in patchedPayload.
-            const uint OrderGateCaveAddr = 0x00229800;
+            const uint OrderGateCaveAddr = CodeCaves.ElfCave.WaterOrderGate;   // registry: CodeCaveAddresses.ElfCave
             using (var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin")
                 ?? throw new IOException("Embedded EE function missing: waterOrderGate.bin (run tools/stubs/build_ee_stubs.py and rebuild)"))
@@ -312,7 +312,7 @@ namespace Dark_Cloud_Improved_Version
         // too. MUST run AFTER PatchWaterRedraw (which writes the `jal MGDraw` this replaces).
         internal static void PatchCapeEarlyDraw(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = 0x00228D40;   // dead CharaChange space, past the spray-bias shim (0x228D00, 60 B)
+            const uint StubAddr = CodeCaves.ElfCave.CapeEarlyDraw;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x0017BBD0;   // EARLY_STUB `jal MGDraw` (patchedGate[23], set by PatchWaterRedraw)
             if (RdU32(fs, ElfOff(HookAddr)) != 0x0C04BB60)   // = jal MGDraw (0x0012ED80)
                 throw new IOException($"Cape early-draw hook site 0x{HookAddr:X} is not `jal MGDraw` — PatchWaterRedraw must run first / unmodified ISO expected.");

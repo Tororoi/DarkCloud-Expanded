@@ -55,6 +55,10 @@ namespace Dark_Cloud_Improved_Version
         private static bool _prevCross;
         private static int  _pendingAlly = -1;   // ally cursor committed in the menu, awaiting walking-resume
         private static int  _currentAlly;        // who the town character currently is (0=Toan on town load)
+
+        /// <summary>Who the town character currently is (0=Toan..5=Osmond). Read by per-ally behavior tickers
+        /// (e.g. <see cref="TownIdleSit"/>) that must only act for a specific swapped-in model.</summary>
+        internal static int CurrentAlly => _currentAlly;
         private static long _installedStb;       // stb base label 405 was written into (0 = not this town)
         private static int  _lastMap = -1;
 
@@ -146,9 +150,28 @@ namespace Dark_Cloud_Improved_Version
             if (labelCount <= 0 || labelCount > 4096 || tbl <= 0) return;   // stb not built yet
 
             ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
-            if (lab == null) return;   // ISO not re-patched with the 405 spare yet — nothing to do
+            if (lab == null)
+            {
+                // Only the 3 fishing towns get the baked 405 spare (it rides the fishing ExtendStb pool). Every
+                // OTHER town (Matataki, Norune, …) has none — so hijack one of that town's native spare labels
+                // (the 301-310 whitelist, offline-verified never dispatched in ANY town) and renumber its slot to
+                // 405 below. This makes the swap work in any town with no per-town baking — the "global" path.
+                BuildHijackPool(stb, labelCount, tbl);
+                int need = 0;
+                foreach (var al in Allies) need = Math.Max(need, ScriptByteSize(BuildSwapBytecode(al.chr, al.cfg)));
+                foreach (var cand in _hijackPool)
+                    if (!cand.Used && cand.Size >= need) { lab = cand; cand.Used = true; break; }
+                if (lab == null)
+                {
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        $"no native spare label >= {need}B in this town — swap unavailable here");
+                    return;
+                }
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    $"no baked 405 — hijacked native spare slot {lab.Slot} (id {lab.Id}, {lab.Size}B) → label 405");
+            }
 
-            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
+            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);   // baked: 405→405 (no-op); hijacked: renumber 30x→405
             var (chr, cfg, _) = Allies[0];
             WriteScript(stb, lab.Off, lab.Off + lab.Size, BuildSwapBytecode(chr, cfg), "in-place ally swap (default)");
             _installedStb = stb;

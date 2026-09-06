@@ -40,18 +40,53 @@ namespace Dark_Cloud_Improved_Version
         // stance) — baked in every town (unused in Brownboo/Yellow Drops, harmless).
         internal static readonly int[] FishingSpareLabelIds   =
             { MenuSubLabelId, FishingLabelId, CanalFishingLabelId, EventPoints.FishingExitLabel,
-              EventPoints.FishingBaitLabel, LadderMsgLabelId, CanalWarpLabelId, AllySwapLabelId };   // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict, ally-swap
-        internal static readonly int[] FishingSpareLabelSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300, 0x100, 0x600 };               // one size per id, same order
+              EventPoints.FishingBaitLabel, LadderMsgLabelId, CanalWarpLabelId };   // menu, enter, canal-enter, quit, bait, ladder-msg, tide-evict
+        internal static readonly int[] FishingSpareLabelSizes = { 0x800, 0xA00, 0xA00, 0x500, 0x300, 0x300, 0x100 };               // one size per id, same order
         // ↑ labels 402 (ladder tide-message) + 403 (tide-evict _MAP_JUMP) baked into every fishing town's stb
         //   (unused outside Queens, harmless — like 401); CustomFishingSpot installs them in Queens only.
 
-        internal static byte[] ExtendStb(byte[] stb)
+        // ── ally-swap spare label: DEDICATED, not part of the fishing pool ──
+        // AllySwapLabelId (405) is what the in-place town ally swap (AllySwapPrototype) fires. It used to ride the
+        // fishing pool, so it only existed in the 3 fishing towns — the swap silently did nothing everywhere else
+        // (Norune/Spirit Tree have NO native spare, so even the runtime hijack fallback can't rescue them). It is
+        // now baked as its OWN label into every walkable town below, decoupled from fishing (so ally-swap changes
+        // can never regress the fishing labels, and vice-versa). Fishing towns get 405 PLUS the fishing pool in a
+        // single table-grow (SpareLabelsFor); every other town gets 405 alone.
+        internal const int AllySwapSpareSize = 0x600;
+        internal static readonly string[] AllySwapTownStbPaths =
+        {
+            "gedit/e01/event.stb", "gedit/e02/event.stb", "gedit/e03/event.stb", "gedit/e04/event.stb",
+            "gedit/s01/event.stb", "gedit/s03/event.stb", "gedit/s04/event.stb", "gedit/s09/event.stb",
+            "gedit/s13/event.stb",
+        };
+
+        /// <summary>Spare-label ids+sizes to bake into a town's event.stb: always the ally-swap 405, plus the
+        /// fishing pool for the three custom fishing towns (baked in ONE table relocation per town).</summary>
+        internal static (int[] ids, int[] sizes) SpareLabelsFor(string stbName)
+        {
+            if (Array.IndexOf(FishingTownStbPaths, stbName) < 0)
+                return (new[] { AllySwapLabelId }, new[] { AllySwapSpareSize });
+            // Fishing towns: APPEND 405 AFTER the fishing pool. 405 was the LAST entry of the old combined
+            // FishingSpareLabelIds, so appending keeps every fishing label at its master codeOffset — the baked
+            // table is byte-identical to master. (Prepending shifted them all by 0x600 and hung the fishing enter.)
+            return (Append(FishingSpareLabelIds, AllySwapLabelId), Append(FishingSpareLabelSizes, AllySwapSpareSize));
+        }
+
+        private static int[] Append(int[] head, int tail)
+        {
+            var r = new int[head.Length + 1];
+            Array.Copy(head, r, head.Length);
+            r[head.Length] = tail;
+            return r;
+        }
+
+        internal static byte[] ExtendStb(byte[] stb, int[] ids, int[] sizes)
         {
             uint codeBase = U32(stb, 0x08);                               // header: CodeBase @0x08
             uint tbl = U32(stb, 0x0C), cnt = U32(stb, 0x10);           // header: LabelTable @0x0C, LabelCount @0x10
             int origEnd = stb.Length;
-            int spares = FishingSpareLabelSizes.Length;
-            int total = 0; foreach (int s in FishingSpareLabelSizes) total += s;
+            int spares = sizes.Length;
+            int total = 0; foreach (int s in sizes) total += s;
             int newTblOff = origEnd + total;                          // terminator points here; code fills [origEnd, newTblOff)
             var outb = new byte[newTblOff + (int)(cnt + spares + 1) * 8];
             Array.Copy(stb, outb, origEnd);                            // original STB verbatim (appended space stays 0)
@@ -60,13 +95,13 @@ namespace Dark_Cloud_Improved_Version
             int codeOff = origEnd;
             for (int k = 0; k < spares; k++)                           // new spares -> point into the appended code space
             {
-                U32(outb, p, (uint)FishingSpareLabelIds[k]);                    // FINAL id — the mod claims it by number
+                U32(outb, p, (uint)ids[k]);                             // FINAL id — the mod claims it by number
                 U32(outb, p + 4, (uint)codeOff);                        // codeOffset is ABSOLUTE (runtime uses stb+off)
                 // gap[+0] = entry PC as a codeBase-relative offset to the first instruction
                 // (codeOff + LabelCodeSkip 0x38 - codeBase); every real label carries this, WriteScript
                 // never sets it, so a zero-filled baked label runs from the wrong PC and returns instantly.
                 U32(outb, codeOff, (uint)(codeOff + 0x38 - (int)codeBase));
-                codeOff += FishingSpareLabelSizes[k];
+                codeOff += sizes[k];
                 p += 8;
             }
             U32(outb, p, FishingTerminatorLabelId);                                  // terminator label: makes the last spare's size computable
