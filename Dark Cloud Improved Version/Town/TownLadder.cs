@@ -56,10 +56,32 @@ namespace Dark_Cloud_Improved_Version
         private const float DownHop      = 1.5f;   // small up-kick starting a down-jump
         private const float LandMargin   = 1.0f;   // end the arc this far ABOVE the target → engine lands her natively
         private const int   MinFrames = 20, MaxFrames = 90;
-        private const int   ReadyIndex     = 10;   // choreography slot: s86 #3 crouch/ready
-        private const int   FloatUpIndex   = 11;   // choreography slot: e04c04cat #5 float/hop-up, fast (ascent)
+        private const int   ReadyIndex     = 11;   // choreography slot: s86 #3 crouch/ready (10 = double-door now)
+        private const int   FloatUpIndex   = 12;   // choreography slot: e04c04cat #5 float/hop-up, fast (ascent)
         private const int   WalkIndex      = 2;    // town walk — the align walk-in
-        private const int   WalkBackIndex  = 12;   // choreography slot: the walk clip baked REVERSED — backwards steps
+        private const int   WalkBackIndex  = 13;   // choreography slot: the walk clip baked REVERSED — backwards steps
+
+        // ── Osmond (ally 5) — catalog: down = jump-down dive → fall-loop → native land; up = HELICOPTER
+        // backpack: propeller-out → start-fly → fly-loop ascent → reversed start-fly (descend) → reversed
+        // propeller (stow) standing ON the ledge. Slots baked by assemble_town_model.py (11-16).
+        private const int OsmondAlly        = 5;
+        private const int OzJumpDownIndex   = 11;   // e403 #9 dive (launch; play-once holds the dive pose)
+        private const int OzFallLoopIndex   = 8;    // town fall slot = e403 #10 fall-loop (LOOPS in flight)
+        private const int OzPropellerIndex  = 12;   // e402 #16 propeller-out (deploy)
+        private const int OzStartFlyIndex   = 13;   // e402 #17 start-fly
+        private const int OzFlyLoopIndex    = 14;   // e402 #18 fly-loop (LOOPS during ascent)
+        private const int OzRevStartFlyIndex = 15;  // reversed #17 — the descend-to-land
+        private const int OzStowIndex       = 16;   // reversed #16 — stow the backpack
+        private const float HeliRiseSpeed    = 0.5f;   // units/frame ascent (a LIFT, not a jump)
+        private const float HeliDescendSpeed = 0.20f;  // units/frame settle onto the ledge
+        private const float HeliForwardSpeed = 0.30f;  // units/frame drift over the ledge at hover height
+        private const float OzLandSpeed      = 0.30f;  // e403 land clip at its authored pace (overlaps the descent via LandLead)
+        private const int   OzLandFrames     = 50;     // ≈ 15 anim frames / OzLandSpeed — the sequence ends WITH the land clip
+        private const float HeliHover        = 4f;     // rise this far above the ledge before settling
+        private const int   HeliDeployFrames = 112;    // propeller-out at 0.5x ≈ 1.9 s
+        private const int   HeliStartFrames  = 40;     // start-fly beat before the ascent
+        private const int   HeliStowFrames   = 90;     // let most of the stow play before handing back
+        private const int   HeliMaxRise      = 400;    // ascent frame cap (Brownboo stilts ≈ 190 units)
         // Pre-jump alignment (both directions): walk to the mount point turning to FACE the ladder, then a few
         // backwards walk-steps to line up, then the ready crouch LOOPING for ~0.25 s, then launch.
         private const float WalkSpeed  = 0.30f;   // align walk, units/frame
@@ -123,12 +145,16 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(RefusalRequested) != 0)
             {
                 Memory.WriteInt(RefusalRequested, 0);
-                if (AllySwapPrototype.CurrentAlly == XiaoAlly && _jumpPhase == 0)
+                int ally = AllySwapPrototype.CurrentAlly;
+                if (_jumpPhase == 0 && (ally == XiaoAlly || ally == OsmondAlly))
                 {
-                    if (TryFireJump()) return;                         // Xiao JUMPS the ladder
-                    _refusalLeft = RefusalTicks;                       // bad ladder data → shake-head fallback
-                    Memory.WriteInt(IdleMotionFlags, PlayOnceFlag);    // flags BEFORE index (the cave reads both per frame)
-                    Memory.WriteInt(IdleMotionMailbox, RefusalIndex);
+                    if (ally == XiaoAlly ? TryFireJump() : TryFireOsmond()) return;   // ladder sequence fired
+                    if (ally == XiaoAlly)
+                    {
+                        _refusalLeft = RefusalTicks;                       // bad ladder data → shake-head fallback
+                        Memory.WriteInt(IdleMotionFlags, PlayOnceFlag);    // flags BEFORE index (the cave reads both per frame)
+                        Memory.WriteInt(IdleMotionMailbox, RefusalIndex);
+                    }
                 }
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "ladder press blocked (non-Toan)");
             }
@@ -148,7 +174,7 @@ namespace Dark_Cloud_Improved_Version
                 if (!walking) { _jumpPhase = 2; _jumpTicks = 0; }
                 else if (_jumpTicks > 20) { _jumpPhase = 0; }    // event never started (~1 s) — give up
             }
-            else if (walking || _jumpTicks > 160)                 // event done (or 8 s safety cap — align+back+arc)
+            else if (walking || _jumpTicks > 300)                 // event done (or 15 s safety cap — heli ascents run long)
             {
                 _jumpPhase = 0;
             }
@@ -263,6 +289,17 @@ namespace Dark_Cloud_Improved_Version
             internal float DxB, DzB;                    // per-frame back-up deltas
             internal float Vx, Vy0, Vz;                 // arc velocities
             internal float LadderYaw, Release;
+            // clip parametrization (Xiao defaults; Osmond's down-jump overrides)
+            internal int ReadyHoldF = ReadyHold;        // 0 = skip the pre-launch crouch entirely
+            internal int LaunchIdx  = LeapIndex;        // down-launch pose (play-once)
+            internal int AirIdx     = LeapIndex;        // pose from the zenith on
+            internal int AirFlags   = PlayOnceFlag;     // Osmond's fall-loop wants 0 (looping)
+            // SCRIPTED landing (0 = hand back airborne and let the engine land natively, Xiao's way): the arc
+            // is solved to GROUND level, then snap to the target, play LandIdx once, hold LandFrames, Ret
+            // grounded. Used by Osmond — the native land won't trigger off a ~1-unit engine drop.
+            internal int LandIdx = 0, LandFrames = 0, LandLead = 0;   // LandLead: start the land clip this many frames BEFORE touchdown
+            internal float LandSpeed = -1f;
+            internal float TgtX, TgtY, TgtZ;
         }
 
         private static float WrapAngle(float a)
@@ -302,21 +339,7 @@ namespace Dark_Cloud_Improved_Version
             SetLocalFloat(w, 1, p.Px); SetLocalFloat(w, 2, p.Py); SetLocalFloat(w, 3, p.Pz);
             SetLocalFloat(w, 5, p.Yaw0);
 
-            // ── ALIGN: walk to the mount point, turning to the ladder facing ──
-            SetMotion(w, WalkIndex, -1f, 0);                  // walk, LOOPING
-            SetLocalInt(w, 0, p.Ta);
-            int alignLoop = w.Mark();
-            AddToLocal(w, 1, () => w.PushFloat(p.DxA));
-            AddToLocal(w, 3, () => w.PushFloat(p.DzA));
-            AddToLocal(w, 5, () => w.PushFloat(p.DYaw));
-            w.PushInt(StbCommands.SetNpcRot); w.PushInt(-1);
-            w.PushFloat(0f); w.PushVarFloat(5); w.PushFloat(0f); w.Ext(5);
-            EmitNpcPosFromLocals(w);
-            w.Yield();
-            EmitDecAndLoop(w, alignLoop);
-
-            w.PushInt(StbCommands.SetNpcRot); w.PushInt(-1);  // snap the exact final facing
-            w.PushFloat(0f); w.PushFloat(p.Face); w.PushFloat(0f); w.Ext(5);
+            EmitAlignWalk(w, p.Ta, p.DxA, p.DzA, p.DYaw, p.Face);
 
             // ── BACK-UP (up-jumps only): backwards walk-steps off the mount point (facing held, REVERSED
             // walk clip). Down-jumps skip this — the cat lines up her leap at the BOTTOM, not on a ledge edge.
@@ -332,12 +355,15 @@ namespace Dark_Cloud_Improved_Version
                 EmitDecAndLoop(w, backLoop);
             }
 
-            // ── READY: crouch looping for the hold ──
-            SetMotion(w, ReadyIndex, -1f, 0);                 // LOOPING (not play-once)
-            EmitYieldLoop(w, ReadyHold);
+            // ── READY: crouch looping for the hold (skipped when the launch clip has its own wind-up) ──
+            if (p.ReadyHoldF > 0)
+            {
+                SetMotion(w, ReadyIndex, -1f, 0);             // LOOPING (not play-once)
+                EmitYieldLoop(w, p.ReadyHoldF);
+            }
 
             // ── LAUNCH + ARC ──
-            SetMotion(w, p.Up ? FloatUpIndex : LeapIndex);
+            SetMotion(w, p.Up ? FloatUpIndex : p.LaunchIdx);
             SetLocalInt(w, 0, p.T);
             SetLocalFloat(w, 4, p.Vy0);
 
@@ -347,19 +373,203 @@ namespace Dark_Cloud_Improved_Version
             AddToLocal(w, 3, () => w.PushFloat(p.Vz));         // z += vz
             w.PushVarRefFloat(4); w.PushVarFloat(4); w.PushFloat(Gravity); w.Sub(); w.Store(); w.Pop();   // vy -= g
 
-            // Past the zenith (vy < 0) the pose is the LEAP — same-id re-sets are no-ops, so this is one switch.
+            // Past the zenith (vy < 0) the pose switches to the AIR clip — same-id re-sets are no-ops.
             w.PushVarFloat(4); w.PushFloat(0f); w.Cmp(StbWriter.CmpLt);
             int noSwitch = w.MarkForward();
             w.BrFalse(noSwitch);
-            SetMotion(w, LeapIndex);
+            SetMotion(w, p.AirIdx, -1f, p.AirFlags);
             w.PlaceMark(noSwitch);
+
+            if (p.LandIdx > 0 && p.LandLead > 0)
+            {
+                // Start the land clip just BEFORE touchdown so its contact frames line up with the arrival
+                // instead of playing after he has already stopped.
+                w.PushVar(0); w.PushInt(p.LandLead); w.Cmp(StbWriter.CmpLe);
+                int noLand = w.MarkForward();
+                w.BrFalse(noLand);
+                SetMotion(w, p.LandIdx, p.LandSpeed);
+                w.PlaceMark(noLand);
+            }
 
             EmitNpcPosFromLocals(w);
             w.Yield();
             EmitDecAndLoop(w, loop);
 
+            if (p.LandIdx > 0)
+            {
+                w.PushInt(StbCommands.SetNpcPos); w.PushInt(-1);   // snap exactly onto the ground
+                w.PushFloat(p.TgtX); w.PushFloat(p.TgtY); w.PushFloat(p.TgtZ); w.Ext(5);
+                SetMotion(w, p.LandIdx, p.LandSpeed);               // land clip, play-once
+                EmitYieldLoop(w, p.LandFrames);
+            }
+
             // Release relative to HER facing so the follow cam takes over at the ladder-cam angle (zero swing).
             w.PushInt(StbCommands.ResetCameraAngle); w.PushFloat(p.Release); w.Ext(2);
+            w.Ret();
+            return w;
+        }
+
+        /// <summary>The Toan-style align walk: walk (looping) to the mount point over Ta frames while turning
+        /// to the ladder facing, then snap the exact facing. Locals 1/3/5 = x/z/yaw (already initialized).</summary>
+        private static void EmitAlignWalk(StbWriter w, int ta, float dxA, float dzA, float dYaw, float face)
+        {
+            SetMotion(w, WalkIndex, -1f, 0);                  // walk, LOOPING
+            SetLocalInt(w, 0, ta);
+            int alignLoop = w.Mark();
+            AddToLocal(w, 1, () => w.PushFloat(dxA));
+            AddToLocal(w, 3, () => w.PushFloat(dzA));
+            AddToLocal(w, 5, () => w.PushFloat(dYaw));
+            w.PushInt(StbCommands.SetNpcRot); w.PushInt(-1);
+            w.PushFloat(0f); w.PushVarFloat(5); w.PushFloat(0f); w.Ext(5);
+            EmitNpcPosFromLocals(w);
+            w.Yield();
+            EmitDecAndLoop(w, alignLoop);
+
+            w.PushInt(StbCommands.SetNpcRot); w.PushInt(-1);  // snap the exact final facing
+            w.PushFloat(0f); w.PushFloat(face); w.PushFloat(0f); w.Ext(5);
+        }
+
+        /// <summary>Osmond's ladder. DOWN reuses the ballistic builder with his clips (dive launch → looping
+        /// fall → native land). UP is the HELICOPTER: align → deploy propeller → start-fly → fly-loop ascent
+        /// (straight-line rise + horizontal drift to the top point) → hover, reversed start-fly descend →
+        /// land ON the ledge exactly → stow the backpack → hand back grounded (no native fall).</summary>
+        private static bool TryFireOsmond()
+        {
+            int type = Memory.ReadInt(LadderParam);
+            if (type != 4 && type != 5) return false;
+
+            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(chara)) return false;
+            long c = Memory.ToMmu(chara);
+            float px = Memory.ReadFloat(c + EditLoop.CharaPosition);
+            float py = Memory.ReadFloat(c + EditLoop.CharaPosition + 4);
+            float pz = Memory.ReadFloat(c + EditLoop.CharaPosition + 8);
+
+            float[] a = ReadVec(LadderParam + 0x10), b = ReadVec(LadderParam + 0x20);
+            float da = Dist2(a, px, pz), db = Dist2(b, px, pz);
+            float[] tgt   = da >= db ? a : b;
+            float[] mount = da >= db ? b : a;
+            float h = tgt[1] + LandMargin - py;
+            if (Math.Abs(h) < 2f || Math.Abs(h) > 500f) return false;
+
+            float ladderYaw = Memory.ReadFloat(LadderParam + 0x34);
+            float yaw0 = Memory.ReadFloat(c + EditLoop.CharaRotation + 4);
+            float face = h < 0
+                ? (float)Math.Atan2(tgt[0] - mount[0], tgt[2] - mount[2])
+                : ladderYaw;
+            float ax = mount[0], az = mount[2];
+            float alignDist = (float)Math.Sqrt(Dist2(mount, px, pz));
+            int Ta = Math.Min(Math.Max((int)(alignDist / WalkSpeed), AlignMin), AlignMax);
+            float release = WrapAngle(ladderYaw + (float)Math.PI - face);
+
+            long stb = TownScript.Base();
+            int labelCount = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
+            ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
+            if (lab == null || lab.Size <= 0) return false;
+            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
+
+            if (h < 0)
+            {
+                float hd = tgt[1] - py;                 // solve to GROUND level — the landing is scripted
+                float vy0 = DownHop;
+                int T = (int)((vy0 + Math.Sqrt(vy0 * vy0 + 2f * Gravity * -hd)) / Gravity);
+                T = Math.Min(Math.Max(T, MinFrames), MaxFrames);
+                var plan = new JumpPlan
+                {
+                    Up = false,
+                    Px = px, Py = py, Pz = pz, Yaw0 = yaw0, Face = face,
+                    Ax = ax, Az = az, Ta = Ta, Tb = 0,
+                    DxA = (ax - px) / Ta, DzA = (az - pz) / Ta, DYaw = WrapAngle(face - yaw0) / Ta,
+                    Vx = (tgt[0] - ax) / T, Vy0 = vy0, Vz = (tgt[2] - az) / T, T = T,
+                    LadderYaw = ladderYaw, Release = release,
+                    ReadyHoldF = 0,                     // the dive clip carries its own wind-up
+                    LaunchIdx = OzJumpDownIndex,
+                    AirIdx = OzFallLoopIndex, AirFlags = 0,   // fall-loop LOOPS through the descent
+                    LandIdx = 9, LandSpeed = OzLandSpeed, LandLead = Math.Min(12, T / 3),
+                    LandFrames = Math.Max(OzLandFrames - Math.Min(12, T / 3), 8),   // land starts pre-touchdown; hold = the clip's remainder, then control returns
+                    TgtX = tgt[0], TgtY = tgt[1], TgtZ = tgt[2],
+                };
+                WriteScript(stb, lab.Off, lab.Off + lab.Size, BuildJumpBytecode(plan),
+                            $"osmond dive (down, align {Ta}f + arc {T}f + land)");
+            }
+            else
+            {
+                // Straight UP from the base point to hover height, THEN forward over the ledge, THEN settle.
+                int Tup = Math.Min(Math.Max((int)((h - LandMargin + HeliHover) / HeliRiseSpeed), MinFrames), HeliMaxRise);
+                float fwdDist = (float)Math.Sqrt((tgt[0] - ax) * (tgt[0] - ax) + (tgt[2] - az) * (tgt[2] - az));
+                int Tf = Math.Max((int)(fwdDist / HeliForwardSpeed), 8);
+                int Tdown = Math.Max((int)(HeliHover / HeliDescendSpeed), 8);
+                WriteScript(stb, lab.Off, lab.Off + lab.Size,
+                            BuildOsmondHeliBytecode(px, py, pz, yaw0, face, ax, az, Ta,
+                                                    (ax - px) / Ta, (az - pz) / Ta, WrapAngle(face - yaw0) / Ta,
+                                                    Tup, (tgt[0] - ax) / Tf, (tgt[2] - az) / Tf, Tf, Tdown,
+                                                    tgt[0], tgt[1], tgt[2], ladderYaw, release),
+                            $"osmond heli (up, align {Ta}f + rise {Tup}f + fwd {Tf}f)");
+            }
+            Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
+            _jumpPhase = 1; _jumpTicks = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"osmond {(h < 0 ? "DIVE down" : "HELI up")} type={type} Ta={Ta} h={h:F1} " +
+                $"ladderYaw={ladderYaw:F2} face={face:F2} release={release:F2} target=({tgt[0]:F1},{tgt[1]:F1},{tgt[2]:F1})");
+            return true;
+        }
+
+        private static StbWriter BuildOsmondHeliBytecode(float px, float py, float pz, float yaw0, float face,
+                                                         float ax, float az, int ta,
+                                                         float dxA, float dzA, float dYaw,
+                                                         int tup, float dxF, float dzF, int tf, int tdown,
+                                                         float tx, float ty, float tz,
+                                                         float ladderYaw, float release)
+        {
+            var w = new StbWriter();
+            w.UseLocals(6);
+            w.Yield(); w.Yield();
+            EmitWorldCoordReset(w);
+
+            w.PushInt(StbCommands.SetFollowCamera); w.PushInt(-1);
+            w.PushFloat(CamDist); w.PushFloat(CamHeight);
+            w.PushFloat(ladderYaw - (float)Math.PI); w.PushFloat(CamEase); w.Ext(6);
+
+            SetLocalFloat(w, 1, px); SetLocalFloat(w, 2, py); SetLocalFloat(w, 3, pz);
+            SetLocalFloat(w, 5, yaw0);
+            EmitAlignWalk(w, ta, dxA, dzA, dYaw, face);
+
+            SetMotion(w, OzPropellerIndex, 0.5f);             // deploy the backpack (once, sped)
+            EmitYieldLoop(w, HeliDeployFrames);
+            SetMotion(w, OzStartFlyIndex);                    // spin-up beat
+            EmitYieldLoop(w, HeliStartFrames);
+
+            SetMotion(w, OzFlyLoopIndex, -1f, 0);             // fly-loop, LOOPING through the whole flight
+            SetLocalInt(w, 0, tup);                           // ── phase 1: STRAIGHT UP at the base point ──
+            int rise = w.Mark();
+            AddToLocal(w, 2, () => w.PushFloat(HeliRiseSpeed));
+            EmitNpcPosFromLocals(w);
+            w.Yield();
+            EmitDecAndLoop(w, rise);
+
+            SetLocalInt(w, 0, tf);                            // ── phase 2: FORWARD over the ledge, holding hover ──
+            int fwd = w.Mark();
+            AddToLocal(w, 1, () => w.PushFloat(dxF));
+            AddToLocal(w, 3, () => w.PushFloat(dzF));
+            EmitNpcPosFromLocals(w);
+            w.Yield();
+            EmitDecAndLoop(w, fwd);
+
+            SetMotion(w, OzRevStartFlyIndex);                 // descend-to-land pose
+            SetLocalInt(w, 0, tdown);
+            int fall = w.Mark();
+            AddToLocal(w, 2, () => w.PushFloat(-HeliDescendSpeed));
+            EmitNpcPosFromLocals(w);
+            w.Yield();
+            EmitDecAndLoop(w, fall);
+
+            w.PushInt(StbCommands.SetNpcPos); w.PushInt(-1);  // snap exactly onto the ledge (grounded — no native fall)
+            w.PushFloat(tx); w.PushFloat(ty); w.PushFloat(tz); w.Ext(5);
+            SetMotion(w, OzStowIndex, 0.5f);                  // stow the backpack
+            EmitYieldLoop(w, HeliStowFrames);
+
+            w.PushInt(StbCommands.ResetCameraAngle); w.PushFloat(release); w.Ext(2);
             w.Ret();
             return w;
         }

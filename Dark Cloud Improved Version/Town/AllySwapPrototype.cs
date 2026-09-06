@@ -85,12 +85,38 @@ namespace Dark_Cloud_Improved_Version
 
             EnsureInstalled();
             DetectCommit();
+            RestoreAllyAfterFishing();
             MaybeFirePending();
 
             // Player "!" event-mark height: the cat's mesh is long/low, so the vanilla mark (char Y + height
             // field + 3.0) clips into it. The ElfPatches exclamation cave adds this float to the mark's Y.
             // Re-asserted per tick (survives resets); 0 = bit-exact vanilla for everyone else. TUNABLE.
             Memory.WriteFloat(CodeCaves.Mailbox.ExclamationYBoost, _currentAlly == 1 ? 4.0f : 0f);
+        }
+
+        // EdLoadMainChara's chr-path buffer (guest 0x29AA08 — the same bytes the pnach's "not toan" conditional
+        // sniffs at +6). Every _LOAD_MAIN_CHARA copies its path here, so it always names the LOADED model.
+        private const long LoadedChrPathBuf = 0x2029AA08;
+
+        /// <summary>Any fishing session swaps the player to the fishing model and its QUIT script restores
+        /// TOAN's <c>chara/c01d.chr</c> — hardcoded, in vanilla towns' label-256 scripts and the mod's exit
+        /// script alike. If an ALLY was the town character, the player comes back as Toan while the mod still
+        /// treats them as the ally (idle-sit, ladder jump, BlockLadder). Detect the mismatch — walking, ally
+        /// selected, but the loaded model is exactly <c>chara/c01d.chr</c> (the fishing model
+        /// <c>c01d_turi.chr</c> differs at +8, ally paths at +0) — and queue the in-place swap back to the
+        /// ally; MaybeFirePending fires it with the full canal-wading suppression, same as a menu commit.</summary>
+        private static void RestoreAllyAfterFishing()
+        {
+            if (_currentAlly == 0 || _pendingAlly >= 0 || _installedStb == 0) return;
+            if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return;
+            if (Memory.ReadInt(LoadedChrPathBuf) != 0x72616863 ||        // "char"
+                Memory.ReadInt(LoadedChrPathBuf + 4) != 0x30632f61 ||    // "a/c0"
+                Memory.ReadInt(LoadedChrPathBuf + 8) != 0x632e6431 ||    // "1d.c"
+                (Memory.ReadInt(LoadedChrPathBuf + 12) & 0xFFFFFF) != 0x007268)   // "hr\0"
+                return;
+            _pendingAlly = _currentAlly;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"fishing quit restored Toan over {Allies[_currentAlly].name} — re-swapping in place");
         }
 
         /// <summary>In the party menu, a Cross press on an unlocked ally different from the current town

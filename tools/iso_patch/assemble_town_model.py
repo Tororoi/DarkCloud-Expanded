@@ -51,15 +51,52 @@ CHARS = {
             dict(idx=7, frames=(228, 278), speed=0.30, name="refuse(shake)", src="dun/d01/event/e613c04cat.chr", win=(115, 165)),
             dict(idx=8, frames=(205, 214), speed=0.50, name="fall(leap)", src="gedit/s86/chara/c04cat.chr", win=(205, 214)),
             dict(idx=9, frames=(215, 227), speed=0.36, name="land",  src="gedit/s86/chara/c04cat.chr",   win=(215, 227)),
-            # CHOREOGRAPHY-ONLY slots (the engine drives 0-9; these are played by TownLadder's jump script via
+            # idx 10 = DOUBLE-DOOR (両開き): Toan's c01d has an 11th KEY the door system plays at double doors —
+            # every ally build must fill it or double-doors play nothing (or worse, a choreography clip).
+            dict(idx=10, frames=(150, 159), speed=0.20, name="door3(dbl)", src=None),   # reuse the grafted door clip
+            # CHOREOGRAPHY-ONLY slots (the engine drives 0-10; these are played by TownLadder's jump script via
             # _SET_NPC_MOTION, which accepts any KEY index — the docs/town-swap-animation-map.md up-ladder plan):
-            # 10 = s86 #3 "ready" crouch; 11 = e04c04cat #5 float/hop-up, fast, NO root offset (the door slot's
+            # 11 = s86 #3 "ready" crouch; 12 = e04c04cat #5 float/hop-up, fast, NO root offset (the door slot's
             # copy of this clip is z-shifted for the door teleport — unusable mid-flight).
-            dict(idx=10, frames=(95, 105),  speed=0.40, name="jump-ready", src="gedit/s86/chara/c04cat.chr", win=(95, 105)),
-            dict(idx=11, frames=(285, 294), speed=0.60, name="float-up",   src="gedit/e01/chara/e04c04cat.chr", win=(160, 169)),
-            # 12 = the base's own walk (60-80) copied to fresh frames and REVERSED — the backwards steps of the
+            dict(idx=11, frames=(95, 105),  speed=0.40, name="jump-ready", src="gedit/s86/chara/c04cat.chr", win=(95, 105)),
+            dict(idx=12, frames=(285, 294), speed=0.60, name="float-up",   src="gedit/e01/chara/e04c04cat.chr", win=(160, 169)),
+            # 13 = the base's own walk (60-80) copied to fresh frames and REVERSED — the backwards steps of the
             # ladder-jump alignment (the engine can't play a clip backwards; speed overrides are gated positive).
-            dict(idx=12, frames=(300, 320), speed=0.30, name="walk-back",  src="gedit/e01/chara/c04pcat.chr", win=(60, 80), reverse=True),
+            dict(idx=13, frames=(300, 320), speed=0.30, name="walk-back",  src="gedit/e01/chara/c04pcat.chr", win=(60, 80), reverse=True),
+        ],
+    ),
+    # Osmond (docs/town-swap-animation-map.md "Osmond — cataloged 2026-09-05"): base c18p (4 KEYs; body frames
+    # 1..80). CUTSCENE CONSTRAINT: the replayable s13/s2201 talk-to-Osmond scene plays idx 0 and 3 — their
+    # KEY values (frames+speed) are reproduced EXACTLY. Doors reuse the talk clip (the user's resolved call);
+    # run = the same #1 clip at a bumped KEY speed (no better run exists); item-get = talk held at frame 69
+    # (hand-out pose, sampled hold); fall/land = e403c18a #10/#11 (jump-down seq's fall-loop + land).
+    "Osmond": dict(
+        base="gedit/e05/chara/c18p.chr",
+        slots=[
+            dict(idx=0, frames=(10, 20),   speed=0.10, name="idle",        src=None),   # EXACT original (cutscene)
+            # run in its OWN window (base's 30-50 copied to 130-150): the engine's run↔walk foot-phase blend
+            # (ids 1/2 hard-case) breaks when both ids share one window at different speeds — the "walk plays
+            # faster than run" inversion. Toan's own c01d runs/walks from separate windows.
+            dict(idx=1, frames=(130, 150), speed=0.75, name="run(sped)",   src="gedit/e05/chara/c18p.chr", win=(30, 50)),
+            dict(idx=2, frames=(30, 50),   speed=0.20, name="walk",        src=None),   # eased from the 0.30 original (read fast in-game)
+            dict(idx=3, frames=(60, 80),   speed=0.20, name="door(talk)",  src=None),   # EXACT original (cutscene)
+            dict(idx=4, frames=(60, 80),   speed=0.30, name="door2(talk)", src=None),   # pull-door: Toan's door cadence
+            dict(idx=5, frames=(90, 92),   speed=0.10, name="item(hold69)", hold=69),   # talk hand-out pose, held
+            dict(idx=6, frames=(90, 92),   speed=0.10, name="item-loop",   src=None),   # same held pose
+            dict(idx=7, frames=(10, 20),   speed=0.10, name="damage(skip)", src=None),
+            dict(idx=8, frames=(100, 108), speed=0.30, name="fall",        src="gedit/e05/chara/e403c18a.chr", win=(210, 218)),
+            dict(idx=9, frames=(110, 125), speed=0.30, name="land",        src="gedit/e05/chara/e403c18a.chr", win=(220, 235)),
+            dict(idx=10, frames=(60, 80),  speed=0.30, name="door3(dbl)",  src=None),   # double-door (両開き) = talk clip
+            # CHOREOGRAPHY (TownLadder's Osmond sequences, played via _SET_NPC_MOTION):
+            # down-ladder launch = e403 #9 jump-down dive; up-ladder = the helicopter backpack set from
+            # e402c18a·s13 (#16 propeller-out / #17 start-fly / #18 fly-loop) + the REVERSED pair for the
+            # top-of-ladder landing (descend + stow), per the catalog.
+            dict(idx=11, frames=(155, 175), speed=0.30, name="jump-down",    src="gedit/e05/chara/e403c18a.chr", win=(185, 205)),
+            dict(idx=12, frames=(180, 235), speed=0.25, name="propeller",    src="gedit/s13/chara/e402c18a.chr", win=(280, 335)),
+            dict(idx=13, frames=(240, 255), speed=0.25, name="start-fly",    src="gedit/s13/chara/e402c18a.chr", win=(345, 360)),
+            dict(idx=14, frames=(260, 270), speed=0.20, name="fly-loop",     src="gedit/s13/chara/e402c18a.chr", win=(360, 370)),
+            dict(idx=15, frames=(275, 290), speed=0.25, name="rev-startfly", src="gedit/s13/chara/e402c18a.chr", win=(345, 360), reverse=True),
+            dict(idx=16, frames=(295, 350), speed=0.30, name="rev-propeller(stow)", src="gedit/s13/chara/e402c18a.chr", win=(280, 335), reverse=True),
         ],
     ),
 }
@@ -96,6 +133,78 @@ def _graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo
     sframes = mc.read_mds_frames(src_pack.find(src_mds).payload)
     mc.splice_motion_by_joint(dst, src, sframes, dframes, slo, shi, dlo, dhi)
     dst_pack.replace_payload(dst_mot, dst.rebuild()[dst.data_off:])
+
+
+def _sample_track(t, frame):
+    """The track's interpolated value at `frame`: lerp for translations, sign-corrected nlerp for rotation
+    quaternions (visually equivalent to the engine's blend at keyframe-neighbor angular gaps)."""
+    import math
+    prev = max((k for k in t.keyframes if k.frame <= frame), key=lambda k: k.frame, default=None)
+    nxt = min((k for k in t.keyframes if k.frame >= frame), key=lambda k: k.frame, default=None)
+    if prev is None and nxt is None: return None
+    if prev is None: return nxt.value
+    if nxt is None or nxt.frame == prev.frame: return prev.value
+    u = (frame - prev.frame) / (nxt.frame - prev.frame)
+    a, b = prev.value, nxt.value
+    if t.w2 == 0:                                     # quaternion
+        if sum(x * y for x, y in zip(a, b)) < 0: b = tuple(-x for x in b)
+        v = [ax + (bx - ax) * u for ax, bx in zip(a, b)]
+        n = math.sqrt(sum(x * x for x in v)) or 1.0
+        return tuple(x / n for x in v)
+    return tuple(ax + (bx - ax) * u for ax, bx in zip(a, b))
+
+
+def _bake_hold(pack, mot_name, src_frame, dlo, dhi):
+    """Bake a STATIC held pose: sample every track at `src_frame` and write sealed keyframes at dlo AND dhi
+    with that value (only ~1/5 of tracks keyframe any given source frame — the rest interpolate, so a plain
+    window graft of a single frame would leave most joints drifting toward neighboring clips)."""
+    m = mc.Mot.from_record(pack.find(mot_name))
+    for t in m.tracks:
+        v = _sample_track(t, src_frame)
+        if v is None or not t.keyframes:
+            continue
+        t.keyframes[:] = [k for k in t.keyframes if not (dlo <= k.frame <= dhi)]
+        for f in (dlo, dhi):
+            kf = t.keyframes[0].copy()
+            kf.frame = f
+            struct.pack_into('<4f', kf.raw, 0x10, *v)
+            t.keyframes.append(kf)
+        t.keyframes.sort(key=lambda k: k.frame)
+    pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
+
+
+def _seal_graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo, dhi):
+    """Guarantee every grafted track has explicit keyframes AT the window edges (dlo/dhi), valued by sampling
+    the SOURCE at slo/shi. Sparse tracks (no kf exactly on an edge) otherwise interpolate across into the
+    NEIGHBORING clips — a pop at loop wraps (Osmond's fall-loop) and pose bleed at clip starts (the old
+    Ruby arm-raise). Runs after every graft, before reverse/root_offset."""
+    dframes = mc.read_mds_frames(dst_pack.find(dst_mds).payload)
+    sframes = mc.read_mds_frames(src_pack.find(src_mds).payload)
+    remap = {i: dframes.index(n) for i, n in enumerate(sframes) if n in dframes}
+    dm = mc.Mot.from_record(dst_pack.find(dst_mot))
+    sm = mc.Mot.from_record(src_pack.find(src_mot))
+    dtracks = {(t.w0, t.w2): t for t in dm.tracks}
+    changed = False
+    for st in sm.tracks:
+        if st.w0 not in remap:
+            continue
+        dt = dtracks.get((remap[st.w0], st.w2))
+        if dt is None or not dt.keyframes:
+            continue
+        for sf, df in ((slo, dlo), (shi, dhi)):
+            if any(k.frame == df for k in dt.keyframes):
+                continue
+            v = _sample_track(st, sf)
+            if v is None:
+                continue
+            kf = dt.keyframes[0].copy()
+            kf.frame = df
+            struct.pack_into('<4f', kf.raw, 0x10, *v)
+            dt.keyframes.append(kf)
+            dt.keyframes.sort(key=lambda k: k.frame)
+            changed = True
+    if changed:
+        dst_pack.replace_payload(dst_mot, dm.rebuild()[dm.data_off:])
 
 
 def _reverse_window(pack, mot_name, dlo, dhi):
@@ -150,14 +259,22 @@ def assemble(base_bytes, read_src, char):
         return src_cache[name]
     grafts = 0
     for s in char["slots"]:
+        if s.get("hold") is not None:                # static held pose sampled from the BASE's own motion
+            dlo, dhi = s["frames"]
+            _bake_hold(base, bmot, s["hold"], dlo, dhi)
+            if smot: _bake_hold(base, smot, s["hold"], dlo, dhi)
+            grafts += 1
+            continue
         if not s.get("src"):
             continue
         sp = src(s["src"])
         scfg, sbmot, sbmds, ssmot, ssmds = _cfg_motions(sp)
         wlo, whi = s["win"]; dlo, dhi = s["frames"]
         _graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi)               # body
+        _seal_graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi)          # edge keyframes (loop-clean)
         if smot and ssmot:                                                            # shadow (keep body+shadow in sync)
             _graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi)
+            _seal_graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi)
         if s.get("root_offset"):                                                      # pull the reach back (door)
             _apply_root_offset(base, bmot, dlo, dhi, s["root_offset"])
             if smot: _apply_root_offset(base, smot, dlo, dhi, s["root_offset"])
