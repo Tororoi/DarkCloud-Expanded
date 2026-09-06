@@ -67,7 +67,16 @@ namespace Dark_Cloud_Improved_Version
                 if (typ == 1 && fsz > 0 && va <= DETOUR_VA && DETOUR_VA < va + fsz) { pOff = off; pVa = va; break; }
             }
             if (pOff < 0) throw new IOException("No PT_LOAD covers the patch site — wrong ISO/version.");
-            long ElfOff(uint va) => elfIso + pOff + (va - pVa);
+            // va → ISO file offset. Two segments: the mod's own cave segment (the hijacked phdr3, guest
+            // [ElfCave.RegionStart, ElfCave.RegionEnd) ↔ file [SegmentFileOff, +size)), else the main
+            // phdr0 linear map. HijackPhdr3CaveSegment (below) creates the former BEFORE any cave write.
+            long ElfOff(uint va) =>
+                (va >= CodeCaves.ElfCave.RegionStart && va < CodeCaves.ElfCave.RegionEnd)
+                    ? elfIso + CodeCaves.ElfCave.SegmentFileOff + (va - CodeCaves.ElfCave.RegionStart)
+                    : elfIso + pOff + (va - pVa);
+
+            // Create the cave segment FIRST — every ElfCave-targeted write below lands in its file span.
+            HijackPhdr3CaveSegment(fs, elfIso, phoff, phent, phnum, elf.Size);
 
             byte[] cave = BuildCave();
             if (RdU32(fs, ElfOff(DETOUR_VA)) != Jal(LoadFile) || RdU32(fs, ElfOff(DETOUR_VA + 4)) != 0)
@@ -106,10 +115,65 @@ namespace Dark_Cloud_Improved_Version
             return crc;
         }
 
+        // ── The ELF cave SEGMENT: hijack the degenerate phdr3 into a real PT_LOAD ────────────────────
+        // SCUS_971.11 ships 4 program headers; phdr3 is a DEGENERATE placeholder (PT_LOAD, filesz=0,
+        // MEMSZ=0 — it loads and reserves nothing). Rewrite it to load file span
+        // [ElfCave.SegmentFileOff, +0x2000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
+        // dead .reldun debug data BEYOND every phdr's file extent (phdr0 loads only 0x100..0x1a2480;
+        // phdr1-3 have filesz=0), so PCSX2 never reads it — and RE tooling uses the PRISTINE extracted
+        // ELF, so clobbering it in the PATCHED ISO loses nothing. The guest band is inside the mod's
+        // scanner-proven clean heap tail (see CodeCaveAddresses ElfCave doc). The loader writes the bytes
+        // at BOOT — cold, before any recompilation — so direct j/jal into the caves is safe.
+        // The whole span is ZERO-FILLED here (deterministic content between the caves; the debug garbage
+        // would otherwise persist), so this MUST run before any ElfCave-targeted cave write.
+        internal static void HijackPhdr3CaveSegment(FileStream fs, long elfIso, uint phoff, ushort phent, ushort phnum, uint elfSize)
+        {
+            const uint SegVa   = CodeCaves.ElfCave.RegionStart;
+            const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
+            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x2000
+
+            if (phnum != 4)
+                throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");
+            if (elfSize < SegOff + SegSize)
+                throw new IOException($"ELF too small (0x{elfSize:X}) for the cave segment span 0x{SegOff:X}..0x{SegOff + SegSize:X}.");
+            // The span must lie beyond every phdr's FILE extent (it holds dead debug data, loaded by nobody).
+            for (int i = 0; i < phnum; i++)
+            {
+                byte[] p = Rd(fs, elfIso + phoff + i * phent, 32);
+                uint off = U32(p, 4), fsz = U32(p, 16);
+                if (i != 3 && off + fsz > SegOff)
+                    throw new IOException($"phdr{i} file extent 0x{off:X}+0x{fsz:X} reaches the cave segment span @0x{SegOff:X} — unexpected ELF layout.");
+            }
+
+            long p3 = elfIso + phoff + 3 * phent;
+            byte[] ph3 = Rd(fs, p3, 32);
+            // vanilla phdr3, all 32 bytes exactly: type=1 off=0x1a2480 vaddr=paddr=0x1f06b00 filesz=0 memsz=0 flags=6 align=0x10
+            byte[] vanilla =
+            {
+                0x01,0x00,0x00,0x00, 0x80,0x24,0x1A,0x00, 0x00,0x6B,0xF0,0x01, 0x00,0x6B,0xF0,0x01,
+                0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 0x06,0x00,0x00,0x00, 0x10,0x00,0x00,0x00,
+            };
+            for (int i = 0; i < 32; i++)
+                if (ph3[i] != vanilla[i])
+                    throw new IOException($"phdr3 is not the vanilla degenerate placeholder (byte {i}: got 0x{ph3[i]:X2}) — unmodified Dark Cloud (USA) ISO expected.");
+
+            // (SegOff % 0x80 == 0 and SegVa % 0x80 == 0, satisfying p_align.)
+            WrU32(fs, p3 + 0,  1);         // p_type   = PT_LOAD
+            WrU32(fs, p3 + 4,  SegOff);    // p_offset
+            WrU32(fs, p3 + 8,  SegVa);     // p_vaddr
+            WrU32(fs, p3 + 12, SegVa);     // p_paddr
+            WrU32(fs, p3 + 16, SegSize);   // p_filesz
+            WrU32(fs, p3 + 20, SegSize);   // p_memsz
+            WrU32(fs, p3 + 24, 7);         // p_flags  = RWX
+            WrU32(fs, p3 + 28, 0x80);      // p_align
+
+            Wr(fs, elfIso + SegOff, new byte[SegSize]);   // zero-fill the whole span
+        }
+
         // ── Canal tide-evict: hook the fully-black fade frame natively ───────────────────────────────
         // EdFadeInOut sets fade_end=1 (`sw $v1,-0x6df4($gp)` @0x189970) the instant a fade-OUT reaches full
-        // black. Retarget that store to our stub in the dead CharaChange region (reclaimable ELF code — a jal
-        // there is legal; heap caves crash the recompiler): the stub does the store, then if CanalTide raised
+        // black. Retarget that store to our stub in the mod's ELF cave segment (loader-loaded at boot, so a jal
+        // there is legal; runtime-written heap caves crash the recompiler): the stub does the store, then if CanalTide raised
         // the evict flag (mailbox 0x01F10040) it requests the _MAP_JUMP to the East Harbor dock (NextMapNo=19,
         // arrival StartEventNo=404, return code 8) and clears the flag. Frame-perfect — the mod no longer polls
         // the fade; it only sets the flag when the player is caught in the draining canal.
@@ -148,8 +212,8 @@ namespace Dark_Cloud_Improved_Version
         //   0x16a6a8  sw s0,0xc68(s2)   ; *(char+0xc68) = motion   (s0 = 0 idle / 1 run / 2 walk, s2 = char)
         // guarded by `if ((chara_mode & 6)==0 && chara_fishing < 2)` — the plain locomotion store, NOT the
         // airborne fall/land writes (which store the constants 8 and 9) nor the fishing-state writes. Redirect
-        // it to a tiny cave in the dead CharaChange region (reclaimable ELF code — a jal there is legal; heap
-        // caves crash the recompiler): the cave keeps run/walk as-is, and when the motion is idle (0) it stores
+        // it to a tiny cave in the mod's ELF cave segment (loader-loaded at boot — a jal there is legal; runtime-
+        // written heap caves crash the recompiler): the cave keeps run/walk as-is, and when the motion is idle (0) it stores
         // the IdleMotionOverride mailbox (guest 0x01F10070) instead — so a non-zero mailbox (the mod's sit index)
         // makes an idle town character sit, while a zero mailbox leaves vanilla idle untouched. The jal's delay
         // slot is the following `sw zero,0xc64(s2)` (kept — order-independent), and the cave returns via `jr $ra`
@@ -159,8 +223,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x0016A6A8;   // EdMoveChara grounded locomotion store `sw s0,0xc68(s2)`
-            // NOT 0x228E00 — that sat inside the fishline-split bin (0x228DC0+88B → 0x228E18) and clobbered the
-            // rope step-cave's tail → every Queens fishing session hung on entry. The dead-CharaChange region map
+            // NOT a hand-picked literal — a first placement sat inside the fishline-split bin and clobbered the
+            // rope step-cave's tail → every Queens fishing session hung on entry. The ELF cave-segment map
             // lives in CodeCaveAddresses.ElfCave — place new caves from THERE, never from a patch-local literal.
             const uint CaveAddr = CodeCaves.ElfCave.IdleMotionOverride;
             uint mbGuest = (uint)(CodeCaves.Mailbox.IdleMotionOverride - 0x20000000);   // 0x01F10070 (guest form the cave reads)
@@ -192,8 +256,8 @@ namespace Dark_Cloud_Improved_Version
         //   0x16c104  li  s8,0x1                     ; climbing flag → stored to DAT_01d1970c @0x16c268
         // (s8's not-climbing default is -1, set by `moveq s8,s6` @0x16bf18 with s6=-1; the vanilla no-press path
         // simply skips 0x16c104, leaving s8=-1.) Both must be skipped TOGETHER or the game thinks it is climbing
-        // with no setup and hangs. Redirect the `jal EdInitHashigo` to a cave in the dead CharaChange region
-        // (reclaimable ELF code — a jal there is legal; heap caves crash the recompiler): it reads BlockLadder,
+        // with no setup and hangs. Redirect the `jal EdInitHashigo` to a cave in the mod's ELF cave segment
+        // (loader-loaded at boot — a jal there is legal; runtime-written heap caves crash the recompiler): it reads BlockLadder,
         // and when it is 0 it replicates vanilla exactly (calls EdInitHashigo with a0/a1 still set, then sets the
         // climbing flag s8=1), returning past the `li s8,1` to 0x16c108. When BlockLadder != 0 it raises the
         // RefusalRequested mailbox and returns to 0x16c108 WITHOUT the mount and WITHOUT touching s8 (so the
@@ -240,8 +304,8 @@ namespace Dark_Cloud_Improved_Version
         //   0x17cf60  lwc1  f1,-0x6e54(gp); f1 = a_1906   (bob-angle reload — the jal's delay slot)
         //   0x17cf68  add.S f1,f1,f0     ; a_1906 += delta  ← still needs f1 = a_1906
         // A swapped-in ally with different proportions (the cat) sits lower, so the mark pokes through its mesh.
-        // Redirect the store to a cave in the dead CharaChange region (reclaimable ELF code — a jal there is legal;
-        // heap caves crash the recompiler): it adds *ExclamationYBoost (guest 0x01F1007C, EE-writable) to the Y and
+        // Redirect the store to a cave in the mod's ELF cave segment (loader-loaded at boot — a jal there is legal;
+        // runtime-written heap caves crash the recompiler): it adds *ExclamationYBoost (guest 0x01F1007C, EE-writable) to the Y and
         // then performs the displaced store, so the mark rides `vanilla Y + boost`. A 0.0 boost reproduces vanilla
         // bit-exactly for any real position (x + 0.0 == x). This is the PLAYER mark ONLY — the NPC-cursor loop
         // earlier in the function (the `DAT_01d25c44 + 2.0 / offset_1876` store `swc1 f0,0x0(s3)` @0x17cd28) is
@@ -275,8 +339,8 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Queens waterfall spray hook ──────────────────────────────────────────────────────────────
         // MainDraw @0x17c5a0 is `jal EditEffectStep2` (0x166de0) — the point where the Matataki-spray branch and
-        // the non-Matataki path converge, right before DrawEffect. Redirect it to the queensSprayCave (in the dead
-        // CharaChange region, after the fade hook), which spawns EffectWaterSpray emitters from CanalTide's table
+        // the non-Matataki path converge, right before DrawEffect. Redirect it to the queensSprayCave (in the mod's
+        // ELF cave segment, after the fade hook), which spawns EffectWaterSpray emitters from CanalTide's table
         // then tail-calls EditEffectStep2. Its delay slot is a nop (nothing displaced), so the redirect is a clean
         // one-word swap. (Stub = tools/stubs/queens_spray_cave.s → Resources/isoPatch/queensSprayCave.bin.)
         internal static void PatchQueensSprayHook(FileStream fs, Func<uint, long> ElfOff)

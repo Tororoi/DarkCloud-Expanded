@@ -1,5 +1,5 @@
-# Canal tide-evict fade hook — lives in the dead CharaChange region @0x228BB0 (reclaimed ELF code space, so a
-# jal from EdFadeInOut is legal — heap caves crash the recompiler). Replaces EdFadeInOut's `sw $v1,-0x6df4($gp)`
+# Canal tide-evict fade hook — lives in the mod's ELF cave segment @0x1FB0000 (ElfCave.CanalEvictFadeHook;
+# loader-loaded at boot, so a jal from EdFadeInOut is legal — runtime-written heap caves crash the recompiler). Replaces EdFadeInOut's `sw $v1,-0x6df4($gp)`
 # (fade_end=1) @0x189970: does that store, then if the canal-evict flag (mailbox 0x01F10040) is set, requests
 # the map-jump to East Harbor dock (NextMapNo=19 @0x2a1e90, StartEventNo=404 @0x2a2524, _MAP_JUMP return code
 # DAT_01d3d618=8 @0x1d3d618) and clears the flag — so it fires exactly on the fully-black frame, natively.

@@ -21,16 +21,22 @@ from mips_asm import assemble
 DEST = os.path.join(HERE, '..', '..', 'Dark Cloud Improved Version', 'Resources', 'isoPatch')
 
 # (source .s in tools/, dest .bin in Resources/isoPatch/, assemble base VA)
+# The 0x1FB0xxx stubs live in the mod's own ELF PT_LOAD segment (the hijacked phdr3 —
+# CodeCaveAddresses.ElfCave is the registry; ElfPatches.HijackPhdr3CaveSegment creates it). Their
+# bases MUST match the ElfCave constants, and the segment start must stay 16KB-aligned: its host
+# pages may hold NO runtime-written data (PINE writes to a compiled page SIGBUS PCSX2 — see the
+# ElfCave doc's page-isolation rule). ⚠ The old home 0x228BB0..0x22A210 is LIVE dungeon code
+# (CharaChangeLoop/Key/Draw, called from the dun.bin overlay) — never assemble anything there again.
 STUBS = [
-    ('canal_evict_fade_hook.s',  'canalEvictFadeHook.bin',   0x228BB0),
-    ('queens_spray_cave.s',      'queensSprayCave.bin',      0x228C00),
-    ('spray_bias_shim.s',        'sprayBiasShim.bin',        0x228D00),
-    ('cape_early_draw.s',        'capeEarlyDraw.bin',        0x228D40),
-    ('fishline_split_caves.s',   'fishlineSplitCaves.bin',   0x228DC0),
-    ('fishline_uncast_gate.s',   'fishlineUncastGate.bin',   0x228E20),
-    ('camera_norm_side.s',       'cameraNormSide.bin',       0x228F00),
-    ('stilts_heal.s',            'stiltsHeal.bin',           0x229780),
-    ('water_order_gate.s',       'waterOrderGate.bin',       0x229800),
+    ('canal_evict_fade_hook.s',  'canalEvictFadeHook.bin',   0x1FB0000),
+    ('queens_spray_cave.s',      'queensSprayCave.bin',      0x1FB0050),
+    ('spray_bias_shim.s',        'sprayBiasShim.bin',        0x1FB0150),
+    ('cape_early_draw.s',        'capeEarlyDraw.bin',        0x1FB0190),
+    ('fishline_split_caves.s',   'fishlineSplitCaves.bin',   0x1FB0210),
+    ('fishline_uncast_gate.s',   'fishlineUncastGate.bin',   0x1FB0270),
+    ('camera_norm_side.s',       'cameraNormSide.bin',       0x1FB0350),
+    ('stilts_heal.s',            'stiltsHeal.bin',           0x1FB0BD0),
+    ('water_order_gate.s',       'waterOrderGate.bin',       0x1FB0C50),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

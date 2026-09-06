@@ -30,13 +30,13 @@ swc1  $f0, 0x24($sp)          # ref.y
 lwc1  $f0, 0x278($v1)
 swc1  $f0, 0x28($sp)          # ref.z
 sw    $zero, 0x2c($sp)        # ref.w := 0 — the quad is the LOS cast's `from` endpoint
-# Gather-count export (tools/camera_norm_side.s entry @0x228F00): stores s8 = the TRUE per-frame CCPoly
+# Gather-count export (tools/camera_norm_side.s entry @0x1FB0350): stores s8 = the TRUE per-frame CCPoly
 # count to Mailbox.CamGatherCount (the WorkBuffer `used` field is the 2000-unit Alloc reservation, not a
 # fill level — probes must read the mailbox word). The winding-agnostic normal handling is PER-CONTACT in
 # SubA/SubB (see the slide/corner sites below), NOT a buffer-wide pass — v1's ref-side buffer flip pulled
 # the camera inside closed shells' far walls. ⚠ these 2 words consume the cave's LAST free space — code
 # ends flush at 0x14C220 (set2DSprite_Start); it cannot grow again.
-jal   0x228f00                # gather-count export (cameraNormSide.bin entry)
+jal   0x1fb0350               # gather-count export (cameraNormSide.bin entry, ElfCave.CameraNormSideBank)
 nop
 lwc1  $f12, 0x2dc($v1)        # RENDERED angle (angS) — the pipeline basis (bisect step 3). Was angT (0x2d8):
                               #   the sweep then protected the TARGET's path while the rendered eye lagged on an
@@ -221,12 +221,12 @@ nop
 mov.s $f5, $f6                # duck: clamp height down under the ceiling
 cclampok:
 # ground clamp: eye stays MIN_GROUND_CLEAR above the ground under the camera (stick-down floor guard).
-# GATED (SubC @0x2290C0, camera_norm_side.s bank): a "floor" more than GUARD_MAX above the REF's plane is
+# GATED (SubC @0x1FB0510, camera_norm_side.s bank): a "floor" more than GUARD_MAX above the REF's plane is
 # a rim/mesa towering over the player, not a floor — vanilla has NO eye-floor hoist at all, and hoisting
 # there was the warp-arrival pan (inherited angle hangs the eye over Brownboo's crater rim -> hoist ~150 ->
 # descent rate-cap grinds it down for seconds). SubC returns f6 = (groundY − ref.y), or -1000 (inert) when
 # the floor is beyond GUARD_MAX. 3-word-for-3-word swap: the MIN_GROUND_CLEAR lui below is tunable slot 168.
-jal   0x2290c0                # SubC: f6 = gated (groundY − ref.y)   (reads sp+0x5c / sp+0x24)
+jal   0x1fb0510               # SubC: f6 = gated (groundY − ref.y)   (reads sp+0x5c / sp+0x24)
 nop
 nop
 lui   $t0, 0x40c0             # MIN_GROUND_CLEAR = 6
@@ -404,11 +404,11 @@ sll   $t1, $v0, 6
 sll   $t2, $v0, 4
 addu  $t1, $t1, $t2
 addu  $t1, $s5, $t1           # hit poly base
-# N̂ prep -> SubA @0x228F40 (cameraNormSide.bin): load+normalize the hit poly's normal AND flip it to
+# N̂ prep -> SubA @0x1FB0390 (cameraNormSide.bin): load+normalize the hit poly's normal AND flip it to
 # E_prev's side of the hit plane — per-contact winding-agnostic (see camera_norm_side.s v2 header; the
 # gather-time ref-side flip v1 pulled the camera INSIDE closed shells' far walls). 19 words kept as
 # jal+nops so every tunable slot index downstream is unchanged.
-jal   0x228f40                # SubA: f4/f5/f6 = N̂ on E_prev's side (t1=poly, sp+0x40=hit point)
+jal   0x1fb0390               # SubA: f4/f5/f6 = N̂ on E_prev's side (t1=poly, sp+0x40=hit point)
 nop
 nop
 nop
@@ -660,10 +660,10 @@ sll   $t1, $v0, 6
 sll   $t2, $v0, 4
 addu  $t1, $t1, $t2
 addu  $t1, $s5, $t1           # verify-hit poly
-# N̂2 prep -> SubB @0x229000 (cameraNormSide.bin): load+normalize the verify-hit normal, flipped to
+# N̂2 prep -> SubB @0x1FB0450 (cameraNormSide.bin): load+normalize the verify-hit normal, flipped to
 # E_prev's side (per-contact winding-agnostic, same as SubA; preserves the f0/f2/f4-f6 spills).
 # 17 words kept as jal+nops so downstream slot indices are unchanged.
-jal   0x229000                # SubB: f7/f8/f9 = N̂2 on E_prev's side
+jal   0x1fb0450               # SubB: f7/f8/f9 = N̂2 on E_prev's side
 nop
 nop
 nop

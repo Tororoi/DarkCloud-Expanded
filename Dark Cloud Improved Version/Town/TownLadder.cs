@@ -194,14 +194,16 @@ namespace Dark_Cloud_Improved_Version
                 ? (float)Math.Atan2(tgt[0] - mount[0], tgt[2] - mount[2])
                 : ladderYaw;
 
-            // Alignment plan: walk (turning) to the mount point, then BackDist backwards along -facing → the
-            // arc launches from that backed-up start S.
+            // Alignment plan: walk (turning) to the mount point. UP-jumps then take BackDist backwards steps
+            // along -facing (cat lining up a leap at the BOTTOM); DOWN-jumps launch straight off the mount
+            // point — backing away from a ledge edge reads wrong, so no back-up at the TOP.
             float ax = mount[0], az = mount[2];                                  // align point (keep her ground y)
             float fsin = (float)Math.Sin(face), fcos = (float)Math.Cos(face);
-            float sx = ax - fsin * BackDist, sz = az - fcos * BackDist;          // arc start after the back-up
+            float back = h > 0 ? BackDist : 0f;
+            float sx = ax - fsin * back, sz = az - fcos * back;                  // arc start (== mount for down)
             float alignDist = (float)Math.Sqrt(Dist2(mount, px, pz));
             int Ta = Math.Min(Math.Max((int)(alignDist / WalkSpeed), AlignMin), AlignMax);
-            int Tb = (int)Math.Ceiling(BackDist / BackSpeed);
+            int Tb = back > 0f ? (int)Math.Ceiling(back / BackSpeed) : 0;
 
             // Ballistic solve (per-frame units, 60 fps): shared gravity; DOWN = small hop then fall to the base.
             // UP = peak ApexOver ABOVE the ledge, then drop onto it, so the leap→land transition reads clearly.
@@ -316,15 +318,19 @@ namespace Dark_Cloud_Improved_Version
             w.PushInt(StbCommands.SetNpcRot); w.PushInt(-1);  // snap the exact final facing
             w.PushFloat(0f); w.PushFloat(p.Face); w.PushFloat(0f); w.Ext(5);
 
-            // ── BACK-UP: a few backwards walk-steps off the mount point (facing held, REVERSED walk clip) ──
-            SetMotion(w, WalkBackIndex, -1f, 0);              // looping
-            SetLocalInt(w, 0, p.Tb);
-            int backLoop = w.Mark();
-            AddToLocal(w, 1, () => w.PushFloat(p.DxB));
-            AddToLocal(w, 3, () => w.PushFloat(p.DzB));
-            EmitNpcPosFromLocals(w);
-            w.Yield();
-            EmitDecAndLoop(w, backLoop);
+            // ── BACK-UP (up-jumps only): backwards walk-steps off the mount point (facing held, REVERSED
+            // walk clip). Down-jumps skip this — the cat lines up her leap at the BOTTOM, not on a ledge edge.
+            if (p.Tb > 0)
+            {
+                SetMotion(w, WalkBackIndex, -1f, 0);          // looping
+                SetLocalInt(w, 0, p.Tb);
+                int backLoop = w.Mark();
+                AddToLocal(w, 1, () => w.PushFloat(p.DxB));
+                AddToLocal(w, 3, () => w.PushFloat(p.DzB));
+                EmitNpcPosFromLocals(w);
+                w.Yield();
+                EmitDecAndLoop(w, backLoop);
+            }
 
             // ── READY: crouch looping for the hold ──
             SetMotion(w, ReadyIndex, -1f, 0);                 // LOOPING (not play-once)

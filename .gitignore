@@ -351,6 +351,7 @@ SCUS_971.11
 # them); publishing needs runtime ISO-extraction rather than bundling these.
 # Custom, distributable resources stay tracked (the font); authored collision is frozen Python data in tools/.
 game_data
+dc_extracted
 
 
 # Local env values for dev tools/diagnostics (copy of .env.sample); never commit

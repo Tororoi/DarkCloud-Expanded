@@ -61,8 +61,8 @@ patch=1,EE,21988C23,extended,362E3009 //fix run animation
 
 //Handling event cutscenes, talk dialogues etc.
 patch=1,EE,E1453063,extended,1029AA0E //check if not toan
-patch=1,EE,2016C0A4,extended,24020008 //disable stairs
-patch=1,EE,2016C0B0,extended,24020008 //disable stairs
+patch=1,EE,2016C0A4,extended,24020004 //stairs stay ENABLED for allies (was 24020008 "disable stairs": it broke the ladder type-compare so non-Toan got no "!" and no press; the ISO's ladder-refusal cave now guards non-Toan mounts properly via the BlockLadder mailbox, so these write the vanilla words. Kept in place - not deleted - so the E1453063 conditional's line count stays correct.)
+patch=1,EE,2016C0B0,extended,24020005 //stairs stay ENABLED for allies (vanilla word, see above)
 patch=1,EE,2017A24C,extended,00000000 //disable cutscenes
 patch=1,EE,2017A27C,extended,00000000 //disable cutscenes
 patch=1,EE,E1050003,extended,002A2518 //check if muska lacka

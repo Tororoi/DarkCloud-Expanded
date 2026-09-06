@@ -138,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
         // settled gate (seen at the Matataki falls; a box flight-gate cave built for that was removed
         // along with the acceleration).
         // What still ships:
-        //   - cave over the height-check tail (fishlineUncastGate.bin @0x228E20, entered by a `j` over
+        //   - cave over the height-check tail (fishlineUncastGate.bin @ElfCave.FishLineUncastGate, entered by a `j` over
         //     the `lui v0,0x40a0` 5.0-load @0x1AA2D4): the height violation only counts once the bobber's
         //     Verlet velocity is ~0 (settled) — protects high-bank/boosted casts still airborne at the
         //     31-frame check.
@@ -162,14 +162,14 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(UncastGateCaveAddr + (uint)i), U32(b, i));
             // (GateAddr left VANILLA — the check fires at 31 waiting frames, as shipped by the game.
             //  The verify above still confirms the site so a re-patch of a stale ISO is caught.)
-            // Route the tail through QueensDragCheck @0x229360 (camera_norm_side.s bank) FIRST: in Queens,
+            // Route the tail through QueensDragCheck (@ElfCave.CamBankSettledCave, camera_norm_side.s bank) FIRST: in Queens,
             // waiting-state only, a float dragged past the canal wall (|z|>49.5) or inside a bridge-pillar
             // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
             // settled-height cave below, unmodified. (Wall-stopped rest positions 48 / arch face 25 stay
             // fishable — the drag thresholds sit deliberately beyond them.)
             WrU32(fs, ElfOff(LuiAddr), J(CodeCaves.ElfCave.CamBankSettledCave)); // height tail -> drag check -> settled-gated cave (in the cameraNormSide bank)
             WrU32(fs, ElfOff(MtcAddr), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
-            // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @0x229440, camera_norm_side.s) ──
+            // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @ElfCave.CamBankUkiGroundSub, camera_norm_side.s) ──
             // FishLineStep's uki ground probe lifts the bobber onto ANY floor poly at its (x,z) — bridge
             // decks and pipe tops included (they're walkable, so they're in the fishing cpoly gather).
             // Probe-proven teleports: y 24.5 -> 70.2 onto a bridge deck (while the pillar box held x),
@@ -189,7 +189,7 @@ namespace Dark_Cloud_Improved_Version
         // in both FishLineInit's layout loop and FishLineStep's constraint solve). Split it at the bobber anchor
         // (index 18) into distpAbove (= the existing distp; rod→bobber = cast reach, LineScale still tunes it) and
         // distpBelow (mailbox @0x01F10048; bobber→hook = hook depth, mod-tuned). Each `lwc1` → `j <cave>` and its
-        // following `sub.S` → nop; the cave (fishlineSplitCaves.bin, init@0x228DC0 / step@0x228DEC) selects the
+        // following `sub.S` → nop; the cave (fishlineSplitCaves.bin, ElfCave.FishLineSplit init / +0x2C step) selects the
         // rest length on the loop index s0 (<=18 above, else below), does the displaced sub.S, and jumps back.
         // Baked into the ELF (safe: on disc before FishLineStep is ever JIT'd, unlike the runtime FishLineShallow
         // cold-patch which touches the DIFFERENT anchor-load instructions). See the feasibility doc.

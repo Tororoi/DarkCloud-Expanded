@@ -4,7 +4,7 @@
 # above/aerial, s0 >= 19 -> below/hang. One cave per loop. Each is reached by replacing the loop's
 # `lwc1 f,-0x784c(gp)` with `j <cave>` and the FOLLOWING `sub.S` with `nop`; the cave does the select, the
 # displaced sub.S, and j's back to the instruction after it. $t0/$t1 are dead here (a jal precedes each load).
-# Assembled at 0x228DC0 (dead CharaChange, after capeEarlyDraw @0x228DBC).
+# Assembled at 0x1FB0210 (the mod's ELF cave segment, after capeEarlyDraw ending @0x1FB020C).
 
 # ── initCave (FishLineInit @0x1a9cac): loads distp->f0, then `sub.S f0,f1,f0`; return to 0x1a9cb4 ──
 init_cave:

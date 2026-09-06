@@ -67,11 +67,13 @@ namespace Dark_Cloud_Improved_Version
                 0x1000001F, 0x00000000, 0x3C0101FB, 0xAC3FE604, 0x72402628, 0x8E5900A0,
                 0x8F390014, 0x0320F809, 0x00000000, 0x72402628, 0x8E5900A0, 0x8F390094,
                 0x0320F809, 0x00000000, 0x3C0101FB, 0x8C3FE604, 0x03E00008, 0x00000000,
-                0x3C0101FB, 0x8C28E600, 0x11000003, 0xAC20E600, 0x0C08A60C, 0x00000000,
+                0x3C0101FB, 0x8C28E600, 0x11000003, 0xAC20E600,
+                0x0C000000u | ((CodeCaves.ElfCave.WaterOrderGate + 0x30) >> 2),   // jal ORDER-GATE SHIM (+0x30 in waterOrderGate.bin)
+                0x00000000,
                 0x8F829074, 0x14400003, 0x00000000, 0x0805F07A, 0x00000000, 0x0805F0FA,
                 0x00000000, 0x00000000,
             };
-            // ^ the hook cave's draw call (0x0C08A60C) targets the ORDER-GATE SHIM @0x229830
+            // ^ the hook cave's draw call targets the ORDER-GATE SHIM at WaterOrderGate+0x30
             //   (waterOrderGate.bin, tools/stubs/water_order_gate.s): it sets the payload's dynamic
             //   return slot (0x01FAE610) to the hook cave's continuation 0x1A3870, then falls into the
             //   FLUSH_STUB at 0x1A370C (below), which appends a VIF FLUSH before jumping into the
@@ -172,7 +174,8 @@ namespace Dark_Cloud_Improved_Version
             };
             uint[] patchedPayload =
             {
-                0x0808A600, 0x00000000, 0x00000000,                         // STUB: j ORDER-GATE COND @0x229800
+                0x08000000u | (CodeCaves.ElfCave.WaterOrderGate >> 2),
+                0x00000000, 0x00000000,                                     // STUB: j ORDER-GATE COND (waterOrderGate.bin entry)
                 // ^ was `set flag, skip to 0x17BCC4` (unconditional deferral). The order gate
                 //   (waterOrderGate.bin) defers ONLY while the wading mailbox 0x01FAE608 is armed
                 //   (Queens low tide); otherwise it runs the relocated payload IMMEDIATELY — the
@@ -194,7 +197,8 @@ namespace Dark_Cloud_Improved_Version
                 0x00A21024, 0x00431025, 0x0C04BBB0, 0xA3A20424,             // ZMSK on: MGSetGsZBUF(&copy)
                 0x8F8490E8, 0x0C068CD8, 0x8F859100,                         // DrawWaterSurface(pEditGround, NowCamera)
                 0x0C04BBB0, 0x27848BF0,                                     // Z restore: MGSetGsZBUF(&mgZBuffer)
-                0x0808A612, 0x00000000,                                     // j RET_THUNK @0x229848 (jr [0x01FAE610] — dynamic return; was constant j 0x1A3870)
+                0x08000000u | ((CodeCaves.ElfCave.WaterOrderGate + 0x48) >> 2),
+                0x00000000,                                                 // j RET_THUNK (WaterOrderGate+0x48: jr [0x01FAE610] — dynamic return; was constant j 0x1A3870)
             };
             // Two hard-won rules baked into this array:
             //  1. It ends `j 0x1A3870` (hard jump to the hook cave's continuation), NOT `jr ra`: the payload
@@ -279,7 +283,7 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Early-player hook site 0x{Hook2Addr:X} is not vanilla " +
                                       $"(got 0x{gotHook2:X8}) — is this an unmodified Dark Cloud (USA) ISO?");
 
-            // ── ORDER-GATE cave (tools/stubs/water_order_gate.s → waterOrderGate.bin @0x229800): COND
+            // ── ORDER-GATE cave (tools/stubs/water_order_gate.s → waterOrderGate.bin @ElfCave.WaterOrderGate): COND
             //    (payload entry: defer only when the wading mailbox is armed) + SHIM (hook-cave call) +
             //    RET_THUNK (the payload's dynamic return). See the STUB comment in patchedPayload.
             const uint OrderGateCaveAddr = CodeCaves.ElfCave.WaterOrderGate;   // registry: CodeCaveAddresses.ElfCave

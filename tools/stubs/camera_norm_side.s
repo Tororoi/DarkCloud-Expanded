@@ -1,10 +1,11 @@
-# Camera-cave auxiliary bank @0x228F00 (dead CharaChange region, past fishlineUncastGate 0x228E20+148B).
+# Camera-cave auxiliary bank @0x1FB0350 (the mod's ELF cave segment — CodeCaveAddresses.ElfCave.CameraNormSideBank
+# — past fishlineUncastGate 0x1FB0270+148B).
 # Assembles via tools/mips_asm.py to Resources/isoPatch/cameraNormSide.bin (embedded; written by
 # IsoPatcher.PatchNativeCameraPostPass alongside the main camera cave). FIXED LAYOUT (the cave jals
 # hardcode these VAs — keep the nop padding intact):
-#   0x228F00  entry: export the true gather count, return        (cave entry `jal 0x228F00`)
-#   0x228F40  SubA: slide-site  normalize N (ONE-SIDED v3)        (cave slide  `jal 0x228F40`)
-#   0x229000  SubB: corner-site normalize N2 (ONE-SIDED v3)       (cave corner `jal 0x229000`)
+#   0x1FB0350  entry: export the true gather count, return        (cave entry `jal 0x1FB0350`)
+#   0x1FB0390  SubA: slide-site  normalize N (ONE-SIDED v3)        (cave slide  `jal 0x1FB0390`)
+#   0x1FB0450  SubB: corner-site normalize N2 (ONE-SIDED v3)       (cave corner `jal 0x1FB0450`)
 #
 # WINDING-AGNOSTIC, PER-CONTACT (v2 — the v1 gather-time "flip every normal to the REF's side" pass was
 # WRONG for closed shells: the eye orbits THROUGH the far half of e.g. Brownboo's 75-radius cylinder, whose
@@ -18,7 +19,7 @@
 #
 # ⚠ EE rules: nop after mtc1 and FP compares; sqrt.s/c.OLT.s hand-encoded (.word, ft-operand forms).
 
-# ===== entry @0x228F00: gather-count export ==================================================
+# ===== entry @0x1FB0350: gather-count export ==================================================
 # in: $s8 = poly count. The WorkBuffer `used` field is the 2000-unit per-frame Alloc RESERVATION,
 # not a fill level — this word (Mailbox.CamGatherCount @0x01F10068) is the real count.
 lui   $t2, 0x1f1
@@ -38,7 +39,7 @@ nop
 nop
 nop
 
-# ===== SubA @0x228F40: slide-site normal prep ================================================
+# ===== SubA @0x1FB0390: slide-site normal prep ================================================
 # in:  $t1 = hit CCPoly base (+0x30 N, unnormalized), sp+0x40 = hit point P (quad)
 # out: f4/f5/f6 = N̂, flipped so it faces E_prev's side of the hit plane (the side the sweep came from)
 # scratch: f7/f8/f10, $t2/$t3 (all dead at the call site; the cave re-materializes t0-t3 after)
@@ -95,7 +96,7 @@ nop
 nop
 nop
 
-# ===== SubB @0x229000: corner-verify-site normal prep ========================================
+# ===== SubB @0x1FB0450: corner-verify-site normal prep ========================================
 # in:  $t1 = verify-hit CCPoly base, sp+0x40 = hit point P
 # out: f7/f8/f9 = N̂2, flipped to E_prev's side
 # scratch: f3/f10/f11, $t2/$t3 — MUST NOT touch f0(d')/f2(h')/f4/f5/f6 (the restored spills)
@@ -147,13 +148,13 @@ nop
 jr    $ra
 nop
 
-# ===== SubC @0x2290C0: GATED ground-clamp difference (called by the cave's height section) ====
+# ===== SubC @0x1FB0510: GATED ground-clamp difference (called by the cave's height section) ====
 # in:  sp+0x5c = groundY (eye-down ray hit; 0 = miss), sp+0x24 = ref.y
 # out: f6 = groundY − ref.y, or -1000.0 (guard inert) when the "floor" is more than GUARD_MAX
 #      above the ref's plane — that's a rim/mesa towering over the player, not a floor. Vanilla
 #      has no eye-floor hoist at all; hoisting onto Brownboo's crater rim was the warp-arrival
 #      pan (see town_camera_collision.s ground clamp). Scratch: f7, $t0 (the call site's own).
-# 2 pad nops first: SubB's jr ends @0x2290B4; SubC must start exactly @0x2290C0.
+# 2 pad nops first: SubB's jr ends @0x1FB0504; SubC must start exactly @0x1FB0510.
 nop
 nop
 lwc1  $f6, 0x5c($sp)          # groundY
@@ -173,7 +174,7 @@ scret:
 jr    $ra
 nop
 
-# ===== FishLineClamp @0x229100 (v4): Queens canal cast physics ================================
+# ===== FishLineClamp @0x1FB0550 (v4): Queens canal cast physics ===============================
 # Wraps the single FishLineStep call site (EdMoveChara @0x16D314). After the real Verlet step, in
 # QUEENS during the CAST FLIGHT (chara_fishing == 3):
 #  • CANAL-WALL z clamp (|z| <= 48): LOW TIDE ONLY (water < 15 — the user call: wall-hit behavior is
@@ -182,10 +183,10 @@ nop
 #    bank-cast bobber (starting at the rod, z=-70) into the band = the "line lengthens immediately".
 #  • BRIDGE BOXES (all tides): the REAL bridges are obj40/obj44 — arched walkable crossings at
 #    x 774..826 and -74..-22 (v3's 187/590/1089 bands were the waterfall/pipe gates — wrong).
-#    Table @0x2294C0: per box (xa,xb,za,zb,ylo,yhi) — 2 bridges x { legs S (z -41..-29, y<50),
+#    Table @0x1FB0B40: per box (xa,xb,za,zb,ylo,yhi) — 2 bridges x { legs S (z -41..-29, y<50),
 #    legs N (z 29..41, y<50), arch/deck (|z|<28, y 52..86) }; the under-arch passage stays open.
 #    Inside a box -> push out along the least-penetration HORIZONTAL axis, pos AND old = stop dead.
-# R5900: c.lt.s .word-encoded; nop after mtc1/compares. 1 pad nop (SubC ends @0x2290F8).
+# R5900: c.lt.s .word-encoded; nop after mtc1/compares. 1 pad nop (SubC ends @0x1FB0548).
 nop
 addiu $sp, $sp, -0x10
 sw    $ra, 0x8($sp)
@@ -319,8 +320,8 @@ swc1  $f11, 0x8($t6)
 mov.s $f8, $f11
 flc_boxes:
 lwc1  $f2, 0x4($t5)           # pos.y (f1 = pos.x already loaded by the speed gate)
-lui   $t2, 0x22
-ori   $t2, $t2, 0x96f0        # box table @0x2296A0 (bank end)
+lui   $t2, 0x1fb
+ori   $t2, $t2, 0x0b40        # box table @0x1FB0B40 (bank end)
 addiu $t4, $zero, 4
 flc_bx:
 lwc1  $f5, 0x0($t2)           # xa
@@ -446,20 +447,20 @@ nop
 jr    $ra
 nop
 
-# ---- pad: QueensDragCheck fixed @0x2294C0 (moved from 0x229460 — flc v10 grew) ----
+# ---- pad: QueensDragCheck fixed @0x1FB0910 (ElfCave.CamBankSettledCave) ----
 nop
 nop
 nop
 nop
 nop
-# ===== QueensDragCheck @0x2294C0 (v4 logic; relocated): waiting-state drag -> UNCAST ==========
+# ===== QueensDragCheck @0x1FB0910 (v4 logic; relocated): waiting-state drag -> UNCAST ==========
 # Entered via the CheckUkiHook tail `j` @0x1AA2D4 (IsoPatcher routes it here); falls through into
-# the settled-height cave @0x228E20 unmodified. Gates: chara_fishing == 4 and Queens. Fires when the
+# the settled-height cave @0x1FB0270 unmodified. Gates: chara_fishing == 4 and Queens. Fires when the
 # floating uki is dragged past the canal wall (|z| > 49.5 — a wall-rest at 48 stays fishable), into
 # a bridge box (table above, 1.5 horizontal inset so face-rest positions stay), or when the LINE
 # PIERCES a bridge: rod (point[0]) standing ON a deck (y > 50, x in that bridge's band) with the uki
 # under the bridge footprint (x in band, y < 50) — casting off the bridge's side (uki x outside the
-# band) stays legit. 16 pad words: table ends @0x229420; dragcheck stays fixed @0x229460.
+# band) stays legit. 16 pad words keep the fixed layout (dragcheck body @0x1FB0950).
 nop
 nop
 nop
@@ -500,8 +501,8 @@ lwc1  $f8, 0x18($sp)          # uki.z
 lui   $t3, 0x3fc0             # 1.5 inset
 mtc1  $t3, $f4
 nop
-lui   $t0, 0x22
-ori   $t0, $t0, 0x96f0        # box table @0x2296A0
+lui   $t0, 0x1fb
+ori   $t0, $t0, 0x0b40        # box table @0x1FB0B40
 addiu $t3, $zero, 4
 qdc_bx:
 lwc1  $f5, 0x0($t0)           # xa
@@ -556,8 +557,8 @@ nop
 nop
 bc1f  qdc_pass
 nop
-lui   $t0, 0x22
-ori   $t0, $t0, 0x96f0
+lui   $t0, 0x1fb
+ori   $t0, $t0, 0x0b40
 addiu $t3, $zero, 2           # bridge bands from leg rows: W @+0x00, E @+0x30 (xa,xb)
 qdc_lp:
 lwc1  $f5, 0x0($t0)           # xa
@@ -593,7 +594,7 @@ addiu $t3, $t3, -1
 bne   $t3, $zero, qdc_lp
 nop
 qdc_pass:
-j     0x00228e20              # fall through: the settled-height uncast cave, unmodified
+j     0x01fb0270              # fall through: the settled-height uncast cave (ElfCave.FishLineUncastGate), unmodified
 nop
 qdc_uncast:
 addiu $v0, $zero, 1           # invalid -> native auto-uncast (chara_fishing = 5)
@@ -636,7 +637,7 @@ ug_skip:
 j     0x001aa54c
 nop
 
-# ---- box table @0x2296F0 (bank end; 4 rows of xa,xb,za,zb,ylo,yhi) ----
+# ---- box table @0x1FB0B40 (bank end; 4 rows of xa,xb,za,zb,ylo,yhi) ----
 # rows 0-3: USER-AUTHORED bridge-support legs (obj44 W / obj40 E) — also the line-pierce band rows
 #           (that loop reads rows 0 and 2 for the two bridges' x-bands, stride 0x30).
 # (the v7 waterfall-gate rows were removed — those "pillars" are WATERFALLS, fine to cast through)
