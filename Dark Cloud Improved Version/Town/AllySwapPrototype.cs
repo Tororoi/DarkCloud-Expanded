@@ -142,8 +142,12 @@ namespace Dark_Cloud_Improved_Version
                 if (cursor >= 0 && cursor < Allies.Length && unlocked && cursor != _currentAlly)
                 {
                     _pendingAlly = cursor;
+                    // AUTO-CLOSE immediately (confirm chime plays via the pnach's a0=1 patch on this press)
+                    // and PRE-ARM the swap so the engine consumes it on the first walking frame.
+                    Memory.WriteInt(Addresses.selectedMenu, 0x1C);
+                    FirePending();
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                        $"commit: {Allies[cursor].name} (cursor {cursor}) queued — swaps when the menu closes");
+                        $"commit: {Allies[cursor].name} (cursor {cursor}) — menu closing, swap pre-armed");
                 }
             }
             _prevCross = cross;
@@ -156,6 +160,17 @@ namespace Dark_Cloud_Improved_Version
             if (_pendingAlly < 0) return;
             if (Memory.ReadByte(Addresses.selectedMenu) == AlliesMenuPage) return;   // menu still open
             if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return;
+            FirePending();
+        }
+
+        /// <summary>Write + arm the swap event NOW, gates already satisfied (or deliberately bypassed:
+        /// the menu-close PRE-ARM below stages StartEventNo while the exit animation plays, so the engine
+        /// consumes it on the FIRST walking frame and the model load overlaps the close instead of starting
+        /// only after it — if anything clears the pre-arm, VerifyFired's requeue recovers via the normal
+        /// walking-gated path).</summary>
+        private static void FirePending()
+        {
+            if (_pendingAlly < 0) return;
             if (_installedStb == 0) return;
 
             int ally = _pendingAlly;

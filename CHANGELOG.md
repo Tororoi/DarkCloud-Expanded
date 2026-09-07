@@ -52,6 +52,9 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Queens snake statue** — Fully climbable: its player collision is now the full detailed visual mesh.
 - **Brownboo cleanup** — The overhead edit-mode view is fixed (crater walls backface-cull, stray corner triangles removed), houses turn see-through when the camera is inside them.
 - **Overhead camera everywhere** — The Georama bird's-eye camera (Select button) now works in every town map, not just the first five, along with the leftover developer fast-run speed while it's active. Exiting the camera safely snaps the player back to the ground.
+- **Play as any ally in town** — Committing an ally in the town party menu now swaps your character **in place**: no reload, no respawn at the entrance, and town state (position, time, events) is untouched. Works in every walkable town. Fishing as an ally works too — the session runs normally and the ally is restored automatically afterward.
+- **Full town animation sets for all five allies** — Each ally has a complete, hand-built town moveset: proper idle/run/walk, door opening, item pickup, ledge falls and landings, and a "no" refusal animation. Highlights: Xiao's cat form sits down when idle and gets battle-quality movement; Goro, Ruby, and Ungaga run with their dungeon-quality run animations; Ruby finally casts a shadow in town.
+- **Per-ally ladder behavior** — Each ally handles ladders with their own animations: **Xiao** leaps up or down in one cat-like bound, **Goro** reproduces his treehouse cutscene climb (four quick hops up; crouch-and-spring jump down), **Ruby** floats up or down the ladder, **Osmond** dives off ledges and rides his helicopter backpack up (propeller deploy, spin, and stow included), and **Ungaga** flatly refuses at both ends. Refusals play in full — arms crossed, head shake — before control returns.
 
 ### Enemy System
 
