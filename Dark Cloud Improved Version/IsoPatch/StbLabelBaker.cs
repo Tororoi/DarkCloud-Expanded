@@ -52,7 +52,7 @@ namespace Dark_Cloud_Improved_Version
         // now baked as its OWN label into every walkable town below, decoupled from fishing (so ally-swap changes
         // can never regress the fishing labels, and vice-versa). Fishing towns get 405 PLUS the fishing pool in a
         // single table-grow (SpareLabelsFor); every other town gets 405 alone.
-        internal const int AllySwapSpareSize = 0xC00;   // grown 0x600→0xC00 for the Xiao ladder-jump script (align walk + back-up + ready + arc); appended LAST so fishing label offsets are unchanged
+        internal const int AllySwapSpareSize = 0x1800;  // grown 0x600→0xC00→0x1200→0x1800: Goro's zigzag climb overflowed 0xC00 (the label then FIRED ITS STALE CONTENT — see TownLadder's size guard), his dramatic-final-hop climb (4864B) overflowed 0x1200; headroom for Ungaga/Ruby. Appended LAST so fishing label offsets are unchanged
         internal static readonly string[] AllySwapTownStbPaths =
         {
             "gedit/e01/event.stb", "gedit/e02/event.stb", "gedit/e03/event.stb", "gedit/e04/event.stb",

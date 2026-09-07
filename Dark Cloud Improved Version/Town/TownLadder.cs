@@ -88,6 +88,45 @@ namespace Dark_Cloud_Improved_Version
                                                        // before the loop takes over; cutting early snaps mid-ramp instead.
         private const int   HeliStowFrames   = 116;    // stow = 56 anim frames @0.5x = 112 engine frames + slack — the event must NOT end before the put-away finishes
         private const int   HeliMaxRise      = 400;    // ascent frame cap (Brownboo stilts ≈ 190 units)
+
+        // ── Goro (ally 2) — the VANILLA treehouse climb, decoded from gedit/s01/event.stb: mount hop (e102 #3)
+        // then ALTERNATING jump clips #4/#5 chained while a slow LINEAR rise runs (~0.117 u/f in the cutscene).
+        // Down = jump off (#4) → fall-loop (#6) → scripted land (#3). Slots baked by assemble_town_model.py.
+        private const int GoroAlly          = 2;
+        private const int GrItemFall        = 8;    // town fall slot = e101 #3 falling (loops)
+        private const int GrLandHop         = 9;    // town land slot = e101 #4 — a CROUCH: standing → bent over
+        private const int GrHopA            = 11;   // e102 #4 — climb jump A
+        private const int GrHopB            = 12;   // e102 #5 — climb jump B
+        private const int GrRevLand         = 13;   // e101 #4 baked REVERSED: bent over → standing
+        // VANILLA CLIMB MODEL (event-102 treehouse climb, fully RE'd from s01 event.stb + the ASQ engine):
+        // the climb is BALLISTIC LEAPS — per-frame scripted arcs at the UNTOUCHED vanilla gravity (0.15),
+        // alternating jump-kick clips RESTARTED each hop (one-shot + id change), constant facing, hop SE 361
+        // per launch. Vanilla's 31-tick hop fits its 23.75u tree leaps; on a short ladder hop that duration
+        // leaves a long post-crest fall (~13u back down) before each relaunch — jerky. Fix: each hop's TICK
+        // COUNT is solved (not gravity) so the arc CRESTS LATE (~80% in) and settles under a unit.
+        private const int   GoroClimbHops   = 4;      // the cutscene takes exactly 4 jumps up — always 4 quick hops
+        private const int   GoroHopMaxT     = 31;     // vanilla hop duration (ticks incl. launch) = the cap
+        private const int   GoroHopMinT     = 12;     // floor so short climbs don't become instant
+        private const float GoroHopEndFall  = 0.5f;   // fall-speed at hop end the tick-solve targets (≈0.8u settle)
+        private const float GoroHopG        = 0.15f;  // per-tick² hop gravity — vanilla, both directions
+        private const int   GoroHopSe       = 361;    // the vanilla hop sound
+        private const int   GoroKickFrames  = 20;     // the kick windows are 20 anim frames → speed = frames/ticks
+        // The FINAL hop is the dramatic one: a taller arc overshooting the ledge, the kick paced to fill the
+        // WHOLE arc (completing right where the land crouch takes over — at 1.2x it read as FLAILING; the
+        // authored clip rate is 0.3), then the land crouch leading the touchdown.
+        private const float GoroFinalOver      = 15f;   // final apex ≈ this far ABOVE the ledge
+        private const float GoroFinalKickMax   = 1.0f;  // playback cap for tiny arcs
+        private const int   GoroFinalLandLead  = 8;     // land crouch starts this many ticks before touchdown
+        // Down-jump. The land clip is a one-way crouch (standing → bent over), so it can't loop as a pump —
+        // the windup is REVERSED once (rise) then FORWARD once (sink into the crouch, continuous at the
+        // standing seam), launch straight into the falling loop, a HIGH hop, and the crouch ONCE on impact.
+        private const float GoroDownHop     = 2.1f;   // up-kick velocity: apex = v²/2g ≈ 15u above the ledge
+        private const int   GoroLandCycleF  = 40;     // one land-clip play = 10 anim frames @0.25 KEY speed
+        // Windup playback: faster than the impact crouch so it reads as a JUMP gather — the rise is brisk and
+        // the forward sink is snappier still (plus a 2-frame beat at full crouch before the launch).
+        private const int   GoroLandClipF     = 10;     // the crouch clip's anim-frame length
+        private const float GoroWindRevSpeed  = 0.40f;  // reversed rise → 25 engine frames
+        private const float GoroWindFwdSpeed  = 0.80f;  // forward sink → ~13 engine frames
         // Pre-jump alignment (both directions): walk to the mount point turning to FACE the ladder, then a few
         // backwards walk-steps to line up, then the ready crouch LOOPING for ~0.25 s, then launch.
         private const float WalkSpeed  = 0.30f;   // align walk, units/frame
@@ -152,12 +191,18 @@ namespace Dark_Cloud_Improved_Version
             {
                 Memory.WriteInt(RefusalRequested, 0);
                 int ally = AllySwapPrototype.CurrentAlly;
-                if (_jumpPhase == 0 && (ally == XiaoAlly || ally == OsmondAlly))
+                if (_jumpPhase == 0 && (ally == XiaoAlly || ally == OsmondAlly || ally == GoroAlly))
                 {
-                    if (ally == XiaoAlly ? TryFireJump() : TryFireOsmond()) return;   // ladder sequence fired
-                    if (ally == XiaoAlly)
+                    bool fired = ally switch
                     {
-                        _refusalLeft = RefusalTicks;                       // bad ladder data → shake-head fallback
+                        XiaoAlly => TryFireJump(),
+                        OsmondAlly => TryFireOsmond(),
+                        _ => TryFireGoro(),
+                    };
+                    if (fired) return;
+                    if (ally == XiaoAlly || ally == GoroAlly)              // both have a refusal clip in slot 7
+                    {
+                        _refusalLeft = ally == XiaoAlly ? RefusalTicks : 28;   // Goro's "no" = 30f @0.5 ≈ 60 engine frames
                         Memory.WriteInt(IdleMotionFlags, PlayOnceFlag);    // flags BEFORE index (the cave reads both per frame)
                         Memory.WriteInt(IdleMotionMailbox, RefusalIndex);
                     }
@@ -273,8 +318,8 @@ namespace Dark_Cloud_Improved_Version
             };
 
             Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
-            WriteScript(stb, lab.Off, lab.Off + lab.Size, BuildJumpBytecode(plan),
-                        $"ladder jump ({(plan.Up ? "up" : "down")}, align {Ta}f + back {Tb}f + arc {T}f)");
+            if (!WriteLadderScript(stb, lab, BuildJumpBytecode(plan),
+                        $"ladder jump ({(plan.Up ? "up" : "down")}, align {Ta}f + back {Tb}f + arc {T}f)")) return false;
             Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
             _jumpPhase = 1; _jumpTicks = 0;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
@@ -296,14 +341,25 @@ namespace Dark_Cloud_Improved_Version
             internal float Vx, Vy0, Vz;                 // arc velocities
             internal float LadderYaw, Release;
             // clip parametrization (Xiao defaults; Osmond's down-jump overrides)
-            internal int ReadyHoldF = ReadyHold;        // 0 = skip the pre-launch crouch entirely
-            internal int LaunchIdx  = LeapIndex;        // down-launch pose (play-once)
+            internal int ReadyHoldF = ReadyHold;        // 0 = skip the pre-launch windup entirely
+            internal int ReadyIdx   = ReadyIndex;       // windup clip (Xiao: looping crouch)
+            internal float ReadySpeed = -1f;
+            internal int ReadyFlags = 0;                // 0=loop; Goro's one-way crouch plays ONCE (PlayOnceFlag)
+            internal int Ready2Idx  = 0, Ready2F = 0;   // optional PRE-windup clip (played once, before ReadyIdx)
+            internal float Ready2Speed = -1f;
+            internal int LaunchIdx  = LeapIndex;        // down-launch pose
+            internal int LaunchFlags = PlayOnceFlag;    // Goro launches straight into his LOOPING fall clip (0)
+            internal float LaunchSpeed = -1f;           // launch clip playback (-1 = KEY speed)
+            internal int LaunchF    = 0;                // >0: switch to AirIdx after this many ARC frames (lets a
+                                                        // launch clip play out) instead of at the zenith (vy<0)
             internal int AirIdx     = LeapIndex;        // pose from the zenith on
             internal int AirFlags   = PlayOnceFlag;     // Osmond's fall-loop wants 0 (looping)
             // SCRIPTED landing (0 = hand back airborne and let the engine land natively, Xiao's way): the arc
             // is solved to GROUND level, then snap to the target, play LandIdx once, hold LandFrames, Ret
             // grounded. Used by Osmond — the native land won't trigger off a ~1-unit engine drop.
             internal int LandIdx = 0, LandFrames = 0, LandLead = 0;   // LandLead: start the land clip this many frames BEFORE touchdown
+            internal int LandFlags = PlayOnceFlag;      // 0 = the land clip LOOPS through LandFrames (Goro's 2 cycles)
+            internal float G = Gravity;                 // arc gravity (Goro's vanilla descent uses 0.15)
             internal float LandSpeed = -1f;
             internal float TgtX, TgtY, TgtZ;
         }
@@ -313,6 +369,21 @@ namespace Dark_Cloud_Improved_Version
             while (a > Math.PI) a -= (float)(2 * Math.PI);
             while (a < -Math.PI) a += (float)(2 * Math.PI);
             return a;
+        }
+
+        /// <summary>Write a ladder script into label 405 ONLY if it fits. WriteScript refuses oversized
+        /// scripts with just a log — and firing the label then runs its STALE content (the previous script's
+        /// baked absolute positions → teleports). Returns false so the caller can fall back to the refusal.</summary>
+        private static bool WriteLadderScript(long stb, ScriptLabel lab, StbWriter w, string what)
+        {
+            if (ScriptByteSize(w) > lab.Size)
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    $"script '{what}' needs {ScriptByteSize(w)}B > label {lab.Size}B — NOT firing (refusal instead)");
+                return false;
+            }
+            WriteScript(stb, lab.Off, lab.Off + lab.Size, w, what);
+            return true;
         }
 
         private static float[] ReadVec(long addr) => new[]
@@ -361,15 +432,22 @@ namespace Dark_Cloud_Improved_Version
                 EmitDecAndLoop(w, backLoop);
             }
 
-            // ── READY: crouch looping for the hold (skipped when the launch clip has its own wind-up) ──
+            // ── READY: optional pre-windup clip once, then the windup clip (skipped when the launch clip has
+            // its own wind-up) ──
+            if (p.Ready2F > 0)
+            {
+                SetMotion(w, p.Ready2Idx, p.Ready2Speed);     // play-once, holds its end pose into ReadyIdx
+                EmitYieldLoop(w, p.Ready2F);
+            }
             if (p.ReadyHoldF > 0)
             {
-                SetMotion(w, ReadyIndex, -1f, 0);             // LOOPING (not play-once)
+                SetMotion(w, p.ReadyIdx, p.ReadySpeed, p.ReadyFlags);
                 EmitYieldLoop(w, p.ReadyHoldF);
             }
 
             // ── LAUNCH + ARC ──
-            SetMotion(w, p.Up ? FloatUpIndex : p.LaunchIdx);
+            SetMotion(w, p.Up ? FloatUpIndex : p.LaunchIdx, p.Up ? -1f : p.LaunchSpeed,
+                      p.Up ? PlayOnceFlag : p.LaunchFlags);
             SetLocalInt(w, 0, p.T);
             SetLocalFloat(w, 4, p.Vy0);
 
@@ -377,10 +455,13 @@ namespace Dark_Cloud_Improved_Version
             AddToLocal(w, 1, () => w.PushFloat(p.Vx));         // x += vx
             AddToLocal(w, 2, () => w.PushVarFloat(4));         // y += vy
             AddToLocal(w, 3, () => w.PushFloat(p.Vz));         // z += vz
-            w.PushVarRefFloat(4); w.PushVarFloat(4); w.PushFloat(Gravity); w.Sub(); w.Store(); w.Pop();   // vy -= g
+            w.PushVarRefFloat(4); w.PushVarFloat(4); w.PushFloat(p.G); w.Sub(); w.Store(); w.Pop();   // vy -= g
 
-            // Past the zenith (vy < 0) the pose switches to the AIR clip — same-id re-sets are no-ops.
-            w.PushVarFloat(4); w.PushFloat(0f); w.Cmp(StbWriter.CmpLt);
+            // The pose switches to the AIR clip past the zenith (vy < 0) — or, when LaunchF is set, only once
+            // the launch clip has had its frames (Goro's reversed-land crouch-off needs to finish playing;
+            // the zenith is ~10 ticks in). Same-id re-sets are no-ops.
+            if (p.LaunchF > 0) { w.PushVar(0); w.PushInt(p.T - p.LaunchF); w.Cmp(StbWriter.CmpLe); }
+            else               { w.PushVarFloat(4); w.PushFloat(0f); w.Cmp(StbWriter.CmpLt); }
             int noSwitch = w.MarkForward();
             w.BrFalse(noSwitch);
             SetMotion(w, p.AirIdx, -1f, p.AirFlags);
@@ -393,7 +474,7 @@ namespace Dark_Cloud_Improved_Version
                 w.PushVar(0); w.PushInt(p.LandLead); w.Cmp(StbWriter.CmpLe);
                 int noLand = w.MarkForward();
                 w.BrFalse(noLand);
-                SetMotion(w, p.LandIdx, p.LandSpeed);
+                SetMotion(w, p.LandIdx, p.LandSpeed, p.LandFlags);
                 w.PlaceMark(noLand);
             }
 
@@ -405,7 +486,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 w.PushInt(StbCommands.SetNpcPos); w.PushInt(-1);   // snap exactly onto the ground
                 w.PushFloat(p.TgtX); w.PushFloat(p.TgtY); w.PushFloat(p.TgtZ); w.Ext(5);
-                SetMotion(w, p.LandIdx, p.LandSpeed);               // land clip, play-once
+                SetMotion(w, p.LandIdx, p.LandSpeed, p.LandFlags);  // land clip (same-id re-set = no-op if LandLead already started it)
                 EmitYieldLoop(w, p.LandFrames);
             }
 
@@ -496,8 +577,8 @@ namespace Dark_Cloud_Improved_Version
                     LandFrames = Math.Max(OzLandFrames - Math.Min(12, T / 3), 8),   // land starts pre-touchdown; hold = the clip's remainder, then control returns
                     TgtX = tgt[0], TgtY = tgt[1], TgtZ = tgt[2],
                 };
-                WriteScript(stb, lab.Off, lab.Off + lab.Size, BuildJumpBytecode(plan),
-                            $"osmond dive (down, align {Ta}f + arc {T}f + land)");
+                if (!WriteLadderScript(stb, lab, BuildJumpBytecode(plan),
+                            $"osmond dive (down, align {Ta}f + arc {T}f + land)")) return false;
             }
             else
             {
@@ -510,12 +591,12 @@ namespace Dark_Cloud_Improved_Version
                 // 0.5x override of the 10-clip-frame loop). The pad rides the forward phase (a beat of hover).
                 Tf += (10 - (Tup + Tf) % 10) % 10;
                 int Tdown = Math.Max((int)(HeliHover / HeliDescendSpeed), 8);
-                WriteScript(stb, lab.Off, lab.Off + lab.Size,
+                if (!WriteLadderScript(stb, lab,
                             BuildOsmondHeliBytecode(px, py, pz, yaw0, face, ax, az, Ta,
                                                     (ax - px) / Ta, (az - pz) / Ta, WrapAngle(face - yaw0) / Ta,
                                                     Tup, (tgt[0] - ax) / Tf, (tgt[2] - az) / Tf, Tf, Tdown,
                                                     tgt[0], tgt[1], tgt[2], ladderYaw, release),
-                            $"osmond heli (up, align {Ta}f + rise {Tup}f + fwd {Tf}f)");
+                            $"osmond heli (up, align {Ta}f + rise {Tup}f + fwd {Tf}f)")) return false;
             }
             Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
             _jumpPhase = 1; _jumpTicks = 0;
@@ -523,6 +604,186 @@ namespace Dark_Cloud_Improved_Version
                 $"osmond {(h < 0 ? "DIVE down" : "HELI up")} type={type} Ta={Ta} h={h:F1} " +
                 $"ladderYaw={ladderYaw:F2} face={face:F2} release={release:F2} target=({tgt[0]:F1},{tgt[1]:F1},{tgt[2]:F1})");
             return true;
+        }
+
+        /// <summary>Goro's ladder. DOWN = the ballistic builder with his clips (jump-off launch → looping fall
+        /// → scripted land hop). UP = the VANILLA climb: align → mount hop → slow LINEAR rise while the two jump
+        /// clips ALTERNATE (the cutscene's _ASQ chain) → a small ballistic hop onto the ledge → land hop.</summary>
+        private static bool TryFireGoro()
+        {
+            int type = Memory.ReadInt(LadderParam);
+            if (type != 4 && type != 5) return false;
+
+            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(chara)) return false;
+            long c = Memory.ToMmu(chara);
+            float px = Memory.ReadFloat(c + EditLoop.CharaPosition);
+            float py = Memory.ReadFloat(c + EditLoop.CharaPosition + 4);
+            float pz = Memory.ReadFloat(c + EditLoop.CharaPosition + 8);
+
+            float[] a = ReadVec(LadderParam + 0x10), b = ReadVec(LadderParam + 0x20);
+            float da = Dist2(a, px, pz), db = Dist2(b, px, pz);
+            float[] tgt   = da >= db ? a : b;
+            float[] mount = da >= db ? b : a;
+            float h = tgt[1] + LandMargin - py;
+            if (Math.Abs(h) < 2f || Math.Abs(h) > 500f) return false;
+
+            float ladderYaw = Memory.ReadFloat(LadderParam + 0x34);
+            float yaw0 = Memory.ReadFloat(c + EditLoop.CharaRotation + 4);
+            float face = h < 0
+                ? (float)Math.Atan2(tgt[0] - mount[0], tgt[2] - mount[2])
+                : ladderYaw;
+            float ax = mount[0], az = mount[2];
+            float alignDist = (float)Math.Sqrt(Dist2(mount, px, pz));
+            int Ta = Math.Min(Math.Max((int)(alignDist / WalkSpeed), AlignMin), AlignMax);
+            float release = WrapAngle(ladderYaw + (float)Math.PI - face);
+
+            long stb = TownScript.Base();
+            int labelCount = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
+            ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
+            if (lab == null || lab.Size <= 0) return false;
+            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
+
+            if (h < 0)
+            {
+                float hd = tgt[1] - py;
+                float vy0 = GoroDownHop;
+                int T = (int)((vy0 + Math.Sqrt(vy0 * vy0 + 2f * GoroHopG * -hd)) / GoroHopG);   // vanilla descent g=0.15
+                T = Math.Min(Math.Max(T, MinFrames), MaxFrames);
+                int lead = Math.Min(12, T / 3);
+                var plan = new JumpPlan
+                {
+                    Up = false,
+                    Px = px, Py = py, Pz = pz, Yaw0 = yaw0, Face = face,
+                    Ax = ax, Az = az, Ta = Ta, Tb = 0,
+                    DxA = (ax - px) / Ta, DzA = (az - pz) / Ta, DYaw = WrapAngle(face - yaw0) / Ta,
+                    Vx = (tgt[0] - ax) / T, Vy0 = vy0, Vz = (tgt[2] - az) / T, T = T, G = GoroHopG,
+                    LadderYaw = ladderYaw, Release = release,
+                    Ready2Idx = GrRevLand, Ready2Speed = GoroWindRevSpeed,           // windup 1: brisk rise once
+                    Ready2F = (int)(GoroLandClipF / GoroWindRevSpeed),
+                    ReadyIdx = GrLandHop, ReadySpeed = GoroWindFwdSpeed,             // windup 2: snappy sink once
+                    ReadyHoldF = (int)(GoroLandClipF / GoroWindFwdSpeed) + 2,        // +2f beat at full crouch
+                    ReadyFlags = PlayOnceFlag,
+                    LaunchIdx = GrItemFall, LaunchFlags = 0,          // straight into the LOOPING fall as he leaves
+                    AirIdx = GrItemFall, AirFlags = 0,                // (same clip past the zenith — a no-op re-set)
+                    LandIdx = GrLandHop,                              // impact: the crouch ONCE (absorb the hit)
+                    LandLead = lead, LandFrames = Math.Max(GoroLandCycleF - lead, 8),
+                    TgtX = tgt[0], TgtY = tgt[1], TgtZ = tgt[2],
+                };
+                if (!WriteLadderScript(stb, lab, BuildJumpBytecode(plan),
+                            $"goro jump-down (windup {2 * GoroLandCycleF}f + arc {T}f + land)")) return false;
+            }
+            else
+            {
+                // Vanilla hop model, per the cutscene rewatch: exactly 4 quick ballistic hops STRAIGHT UP at
+                // the ladder plane (no lateral, no drift — drifting toward the ledge point clipped the wall);
+                // the LAST hop carries onto the ledge. Vanilla gravity throughout; the hop TICK COUNT N is
+                // solved per climb so each arc CRESTS LATE — smallest N whose end fall-speed
+                // g(N+1)/2 − dy/N reaches GoroHopEndFall (monotonic in N) — then v0 is the EXACT discrete
+                // solution of the script's integrator (y+=vy then vy-=g over N ticks): gain = N·v0 − g·N(N−1)/2 = dy.
+                float climbH = h - LandMargin;
+                float dy = climbH / GoroClimbHops;
+                int N = GoroHopMinT;
+                while (N < GoroHopMaxT && GoroHopG * (N + 1) / 2f - dy / N < GoroHopEndFall) N++;
+                float v0y = dy / N + GoroHopG * (N - 1) / 2f;
+                // Each hop occupies the full VANILLA 31-tick slot: the arc runs its N ticks, then he DWELLS on
+                // the rung for the remainder — same overall cadence as the cutscene (launch speed is already
+                // gentler than the down-jump's fall; it was the back-to-back chaining that read as too fast).
+                // The kick clip paces across the whole slot so the pose flows through the dwell.
+                float kickSpeed = (float)GoroKickFrames / GoroHopMaxT;       // ≈0.65 — the vanilla playback rate
+                if (!WriteLadderScript(stb, lab,
+                            BuildGoroClimbBytecode(px, py, pz, yaw0, face, ax, az, Ta,
+                                                   (ax - px) / Ta, (az - pz) / Ta, WrapAngle(face - yaw0) / Ta,
+                                                   GoroClimbHops, N, v0y, kickSpeed,
+                                                   tgt[0], tgt[1], tgt[2], ladderYaw, release),
+                            $"goro climb (align {Ta}f + {GoroClimbHops} hops of {dy:F1}u @{N}t)")) return false;
+            }
+            Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
+            _jumpPhase = 1; _jumpTicks = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"goro {(h < 0 ? "JUMP down" : "CLIMB up")} type={type} Ta={Ta} h={h:F1} face={face:F2} release={release:F2}");
+            return true;
+        }
+
+        private static StbWriter BuildGoroClimbBytecode(float px, float py, float pz, float yaw0, float face,
+                                                        float ax, float az, int ta,
+                                                        float dxA, float dzA, float dYaw,
+                                                        int nHops, int nTicks, float v0y, float kickSpeed,
+                                                        float tx, float ty, float tz,
+                                                        float ladderYaw, float release)
+        {
+            // Locals: 0=tick counter, 1=x, 2=y, 3=z, 4=vy, 5=yaw (align only). Hops are UNROLLED in C#
+            // (alternation + last-hop carry decided at build time); each hop is an nTicks per-frame arc loop —
+            // the vanilla 0x5bc4 hop helper's shape.
+            var w = new StbWriter();
+            w.UseLocals(7);
+            w.Yield(); w.Yield();
+            EmitWorldCoordReset(w);
+
+            w.PushInt(StbCommands.SetFollowCamera); w.PushInt(-1);
+            w.PushFloat(CamDist); w.PushFloat(CamHeight);
+            w.PushFloat(ladderYaw - (float)Math.PI); w.PushFloat(CamEase); w.Ext(6);
+
+            SetLocalFloat(w, 1, px); SetLocalFloat(w, 2, py); SetLocalFloat(w, 3, pz);
+            SetLocalFloat(w, 5, yaw0);
+            EmitAlignWalk(w, ta, dxA, dzA, dYaw, face);       // (vanilla runs in at 0.5 — our align walk suffices)
+
+            // Arc segment emitter: `ticks` per-frame steps of y+=vy; vy-=g (vy carries across segments in
+            // local 4), plus optional constant horizontal drift.
+            void Arc(int ticks, float hx, float hz)
+            {
+                if (ticks <= 0) return;
+                SetLocalInt(w, 0, ticks);
+                int m = w.Mark();
+                AddToLocal(w, 2, () => w.PushVarFloat(4));    // y += vy
+                w.PushVarRefFloat(4); w.PushVarFloat(4); w.PushFloat(GoroHopG); w.Sub(); w.Store(); w.Pop();   // vy -= g
+                if (hx != 0f) AddToLocal(w, 1, () => w.PushFloat(hx));
+                if (hz != 0f) AddToLocal(w, 3, () => w.PushFloat(hz));
+                EmitNpcPosFromLocals(w);
+                w.Yield();
+                EmitDecAndLoop(w, m);
+            }
+
+            // Hops UNROLLED in C# so the kick clips ALTERNATE with certainty. Hops 1..n−1 rise straight up
+            // one rung, cresting late, each filling the vanilla 31-tick slot (arc + dwell on the rung).
+            for (int i = 0; i < nHops - 1; i++)
+            {
+                int clip = (i % 2 == 0) ? GrHopA : GrHopB;    // A,B,A,B — alternating id CHANGE restarts each (vanilla)
+                w.PushInt(StbCommands.PlaySe); w.PushInt(GoroHopSe); w.Ext(2);   // hop SE per launch
+                SetMotion(w, clip, kickSpeed);                // one-shot, paced across the full hop slot
+                SetLocalFloat(w, 4, v0y);                     // vy = launch velocity
+                Arc(nTicks, 0f, 0f);
+                if (nTicks < GoroHopMaxT)                     // dwell on the rung — fills the vanilla hop slot
+                    EmitYieldLoop(w, GoroHopMaxT - nTicks);
+            }
+
+            // FINAL hop — the dramatic one: a taller arc (apex ≈ GoroFinalOver above the ledge), the kick
+            // played to COMPLETION (its end pose then HOLDS through the descent — no fall clip, it looked
+            // wrong here), the land crouch leading the touchdown, horizontal carry onto the ledge point.
+            float dyF = (ty - py) / nHops;                    // this hop's net rise (same rung spacing)
+            float v0L = (float)Math.Sqrt(2f * GoroHopG * (dyF + GoroFinalOver));
+            int NL = 0;                                       // discrete tick count until the arc falls back to +dyF
+            for (float yy = 0f, vv = v0L; (vv > 0f || yy > dyF) && NL < 90; NL++) { yy += vv; vv -= GoroHopG; }
+            int segC = Math.Min(GoroFinalLandLead, NL);       // tail: land crouch already playing
+            // Kick paced to complete EXACTLY at the land handoff — spans the arc, no whip, no frozen gap.
+            float finKick = Math.Min(GoroFinalKickMax, (float)GoroKickFrames / Math.Max(NL - segC, 1));
+            float fx = (tx - ax) / NL, fz = (tz - az) / NL;
+            int finClip = ((nHops - 1) % 2 == 0) ? GrHopA : GrHopB;
+            w.PushInt(StbCommands.PlaySe); w.PushInt(GoroHopSe); w.Ext(2);
+            SetMotion(w, finClip, finKick);
+            SetLocalFloat(w, 4, v0L);
+            Arc(NL - segC, fx, fz);
+            if (segC > 0) { SetMotion(w, GrLandHop); Arc(segC, fx, fz); }
+
+            w.PushInt(StbCommands.SetNpcPos); w.PushInt(-1);  // snap exactly onto the ledge point
+            w.PushFloat(tx); w.PushFloat(ty); w.PushFloat(tz); w.Ext(5);
+            SetMotion(w, GrLandHop);                          // no-op if the lead already started it
+            EmitYieldLoop(w, 50);
+
+            w.PushInt(StbCommands.ResetCameraAngle); w.PushFloat(release); w.Ext(2);
+            w.Ret();
+            return w;
         }
 
         private static StbWriter BuildOsmondHeliBytecode(float px, float py, float pz, float yaw0, float face,

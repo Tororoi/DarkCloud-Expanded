@@ -134,13 +134,56 @@ CHARS = {
             dict(idx=16, frames=(295, 350), speed=0.30, name="rev-propeller(stow)", src="gedit/s13/chara/e402c18a.chr", win=(280, 335), reverse=True),
         ],
     ),
+    # Goro (user catalog + the VANILLA treehouse climb decoded from gedit/s01/event.stb): base c06p has real
+    # separate run (60-80) / walk (30-50) windows — kept EXACT. Doors = idle per the catalog ("just idle").
+    # Item-get = dungeon c06b #34/#35; refusal "no" = dungeon #31 (played via the idle-motion cave, slot 7).
+    # Ladder clips (e102 · s01, Goro-rig): fall #6, land/mount-hop #3, and the ALTERNATING climb jumps #4/#5 —
+    # the exact clips the vanilla cutscene chains (_ASQ_MOTION_PLAY 3 → NEXT 4 → PLAY 5 over a slow linear rise).
+    "Goro": dict(
+        base="gedit/s01/chara/c06p.chr",
+        # ROOT MOTION (opt-in): recover source root/hip channels the town .mot never carried — a
+        # source track active in a graft window with no matching dest track is otherwise dropped.
+        # Creation anchors the rest of the timeline at the dest node's BIND value (what the engine
+        # held with no track), so grafted root offsets can't leak into idle/walk. Data notes
+        # (verified): the climb bounce is null69 (hip) chan-2 y/z — name-matched, it grafts even
+        # without this; the vanilla zigzag's lateral x is NOT baked in e102's clips (x == -0.000 in
+        # both hop windows — the cutscene's ASQ path supplies it), so TownLadder must keep steering
+        # x. What creation recovers: c06b's item/refusal hip ROTATION (null69 chan-0), item-node
+        # rotation, null71_1 micro root translation (body+shadow), and e102's 4 static dcol keys.
+        root_motion=True,
+        slots=[
+            dict(idx=0,  frames=(10, 20),   speed=0.15, name="idle",        src=None),   # EXACT original
+            dict(idx=1,  frames=(60, 80),   speed=0.40, name="run",         src=None),   # EXACT original
+            dict(idx=2,  frames=(30, 50),   speed=0.25, name="walk",        src=None),   # EXACT original
+            dict(idx=3,  frames=(10, 20),   speed=0.15, name="door(idle)",  src=None),   # catalog: just idle
+            dict(idx=4,  frames=(10, 20),   speed=0.15, name="door2(idle)", src=None),
+            dict(idx=5,  frames=(90, 100),  speed=0.30, name="item",        src="dun/mainchara/c06b.chr", win=(515, 525)),
+            dict(idx=6,  frames=(105, 115), speed=0.30, name="item-loop",   src="dun/mainchara/c06b.chr", win=(530, 540)),
+            dict(idx=7,  frames=(120, 149), speed=0.50, name="refuse(no)",  src="dun/mainchara/c06b.chr", win=(421, 450)),
+            # fall/land = the VANILLA DESCENT's own clips (event 101, e101c06a): #3 falling 75-95, #4 slow-stand
+            # landing 95-105 — the RE showed the original picks (e102 #6/#3) were actually peer-down/panting.
+            dict(idx=8,  frames=(155, 175), speed=0.30, name="fall",        src="gedit/s01/chara/e101.chr", win=(75, 95),  src_cfg="e101c06a.cfg"),
+            dict(idx=9,  frames=(180, 190), speed=0.25, name="land(stand)", src="gedit/s01/chara/e101.chr", win=(95, 105), src_cfg="e101c06a.cfg"),
+            dict(idx=10, frames=(10, 20),   speed=0.15, name="door3(idle)", src=None),
+            # CHOREOGRAPHY (TownLadder's Goro climb): the vanilla alternating ladder jump-kicks (e102 #4/#5).
+            dict(idx=11, frames=(195, 215), speed=0.30, name="climb-hopA",  src="gedit/s01/chara/e102.chr", win=(90, 110), src_cfg="e102c06a.cfg"),
+            dict(idx=12, frames=(220, 240), speed=0.30, name="climb-hopB",  src="gedit/s01/chara/e102.chr", win=(110, 130), src_cfg="e102c06a.cfg"),
+            # #4 (the standing→bent-over crouch, slot 9) baked REVERSED = bent→standing. The jump-down windup
+            # plays this then the forward crouch (continuous at the standing seam) before launching.
+            dict(idx=13, frames=(245, 255), speed=0.25, name="rev-land",    src="gedit/s01/chara/e101.chr", win=(95, 105), src_cfg="e101c06a.cfg", reverse=True),
+        ],
+    ),
 }
 
 
-def _cfg_motions(pack):
+def _cfg_motions(pack, prefer=None):
     """Return (cfg_record, body_mot, body_mds, shadow_mot, shadow_mds) from a .chr's main cfg (the one whose
-    payload holds MODEL/MOTION/KEY)."""
+    payload holds MODEL/MOTION/KEY). Dual-bundled event models (e101/e102 carry Toan AND Goro) need `prefer`
+    = the exact cfg record name (e.g. 'e101c06a.cfg') — the first-match heuristic picks whichever cfg comes
+    first in the pack."""
     cand = [r for r in pack.records if r.name.lower().endswith('.cfg')]
+    if prefer:
+        cand = [r for r in cand if r.name.lower() == prefer.lower()] + [r for r in cand if r.name.lower() != prefer.lower()]
     cfg = None
     for r in cand:
         if b'KEY_START' in r.payload and b'MOTION' in r.payload:
@@ -453,13 +496,63 @@ def _apply_spin(base, mg):
     return dict(node=spin["node"], w0=w0, keys=len(keys), rate=rate)
 
 
-def _graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo, dhi):
+def _alias_root(sframes, dframes):
+    """Same-character rigs sometimes differ ONLY in the ROOT node's name (c06p 'c06a_1_1_3_4' vs e102
+    'c06a_1_1_3') — a by-NAME remap then drops root tracks (splice_motion_by_joint already maps node
+    0->0 positionally, but _seal_graft's remap is name-only). Both roots are node 0: alias src[0] to
+    dst[0]'s name when neither name exists in the other rig. GATED under a character's `root_motion`
+    flag — ungated it shifted Osmond's approved build (his e402/e403 root names differ from c18p's)."""
+    if sframes and dframes and sframes[0] != dframes[0] \
+            and sframes[0] not in dframes and dframes[0] not in sframes:
+        return [dframes[0]] + list(sframes[1:])
+    return sframes
+
+
+def _create_missing_tracks(dst, src, sframes, dframes, slo, shi, dpl, spans):
+    """MISSING-TRACK CREATION (root-motion recovery): a source track with keys in the graft window
+    whose remapped (w0, w2) has no destination track is silently dropped by splice_motion_by_joint —
+    for Goro that loses the ladder/item clips' baked root & hip channels, which his town .mot never
+    carried. Create the destination track FIRST: rest anchors at both edges of every non-grafted span
+    (`spans`), valued at the DEST node's BIND for that channel — bind translation row for chan 2,
+    bind-rotation quaternion for chan 0 — i.e. exactly what the engine held while no track existed,
+    so the grafted values cannot leak into idle/walk (the engine clamps a track past its outer keys).
+    The splice that follows lands the window keys; _seal_graft seals the window edges. New tracks are
+    inserted keeping (w0, w2) ascending. Returns [(node name, w0, chan), ...]."""
+    remap = mc.build_joint_remap(sframes, dframes)
+    have = {(t.w0, t.w2) for t in dst.tracks}
+    created = []
+    for st in src.tracks:
+        if not st.frames_in(slo, shi):
+            continue
+        dw = remap.get(st.w0)
+        if dw is None or (dw, st.w2) in have:
+            continue
+        _par, B, tr = _mds_bind(dpl, dw)
+        v = _mat_to_quat(B) if st.w2 == 0 else (tr[0], tr[1], tr[2], 0.0)
+        kfs = [mc.Keyframe(struct.pack('<4I4f', f, 0, 0, 0, *v))
+               for lo, hi in spans for f in sorted({lo, hi})]
+        nt = mc.Track(dw, st.w1, st.w2, st.w3, st.w6, st.w7, kfs)
+        at = next((i for i, t in enumerate(dst.tracks) if (t.w0, t.w2) > (dw, st.w2)), len(dst.tracks))
+        dst.tracks.insert(at, nt)
+        have.add((dw, st.w2))
+        created.append((dframes[dw], dw, st.w2))
+    return created
+
+
+def _graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo, dhi,
+           root_motion=False, spans=None):
     dst = mc.Mot.from_record(dst_pack.find(dst_mot))
     src = mc.Mot.from_record(src_pack.find(src_mot))
     dframes = mc.read_mds_frames(dst_pack.find(dst_mds).payload)
     sframes = mc.read_mds_frames(src_pack.find(src_mds).payload)
+    created = []
+    if root_motion:                                  # opt-in: root alias + missing-track creation
+        sframes = _alias_root(sframes, dframes)
+        created = _create_missing_tracks(dst, src, sframes, dframes, slo, shi,
+                                         dst_pack.find(dst_mds).payload, spans)
     mc.splice_motion_by_joint(dst, src, sframes, dframes, slo, shi, dlo, dhi)
     dst_pack.replace_payload(dst_mot, dst.rebuild()[dst.data_off:])
+    return created
 
 
 def _sample_track(t, frame):
@@ -500,13 +593,16 @@ def _bake_hold(pack, mot_name, src_frame, dlo, dhi):
     pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
 
 
-def _seal_graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo, dhi):
+def _seal_graft(dst_pack, dst_mot, dst_mds, src_pack, src_mot, src_mds, slo, shi, dlo, dhi,
+                root_motion=False):
     """Guarantee every grafted track has explicit keyframes AT the window edges (dlo/dhi), valued by sampling
     the SOURCE at slo/shi. Sparse tracks (no kf exactly on an edge) otherwise interpolate across into the
     NEIGHBORING clips — a pop at loop wraps (Osmond's fall-loop) and pose bleed at clip starts (the old
     Ruby arm-raise). Runs after every graft, before reverse/root_offset."""
     dframes = mc.read_mds_frames(dst_pack.find(dst_mds).payload)
     sframes = mc.read_mds_frames(src_pack.find(src_mds).payload)
+    if root_motion:
+        sframes = _alias_root(sframes, dframes)
     remap = {i: dframes.index(n) for i, n in enumerate(sframes) if n in dframes}
     dm = mc.Mot.from_record(dst_pack.find(dst_mot))
     sm = mc.Mot.from_record(src_pack.find(src_mot))
@@ -591,6 +687,11 @@ def assemble(base_bytes, read_src, char):
         windows = [tuple(s["frames"]) for s in char["slots"] if s.get("src") == mg["src"]]
         maxframe = max(s["frames"][1] for s in char["slots"])
         mg_rep = _graft_mesh_nodes(base, src(mg["src"]), mg, windows, maxframe)
+    rm = bool(char.get("root_motion"))               # opt-in root alias + missing-track creation
+    rm_spans, rm_created = None, {"body": [], "shadow": []}
+    if rm:
+        owned = [tuple(s["frames"]) for s in char["slots"] if s.get("src") or s.get("hold") is not None]
+        rm_spans = _fold_spans(owned, 1, max(s["frames"][1] for s in char["slots"]))
     for s in char["slots"]:
         if s.get("hold") is not None:                # static held pose sampled from the BASE's own motion
             dlo, dhi = s["frames"]
@@ -601,18 +702,20 @@ def assemble(base_bytes, read_src, char):
         if not s.get("src"):
             continue
         sp = src(s["src"])
-        scfg, sbmot, sbmds, ssmot, ssmds = _cfg_motions(sp)
+        scfg, sbmot, sbmds, ssmot, ssmds = _cfg_motions(sp, prefer=s.get("src_cfg"))
         if mg and s["src"] != mg["src"]:             # only the mesh-graft source may drive the new nodes
             clash = set(mg["nodes"]) & set(mc.read_mds_frames(sp.find(sbmds).payload))
             if clash:
                 raise SystemExit(f"slot {s['name']}: source rig carries grafted nodes {sorted(clash)} "
                                  f"but its window is outside the fold-span model")
         wlo, whi = s["win"]; dlo, dhi = s["frames"]
-        _graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi)               # body
-        _seal_graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi)          # edge keyframes (loop-clean)
+        rm_created["body"] += _graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi,
+                                     root_motion=rm, spans=rm_spans)                  # body
+        _seal_graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi, root_motion=rm)
         if smot and ssmot:                                                            # shadow (keep body+shadow in sync)
-            _graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi)
-            _seal_graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi)
+            rm_created["shadow"] += _graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi,
+                                           root_motion=rm, spans=rm_spans)
+            _seal_graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi, root_motion=rm)
         if s.get("root_offset"):                                                      # pull the reach back (door)
             _apply_root_offset(base, bmot, dlo, dhi, s["root_offset"])
             if smot: _apply_root_offset(base, smot, dlo, dhi, s["root_offset"])
@@ -630,6 +733,8 @@ def assemble(base_bytes, read_src, char):
     rep = dict(grafts=grafts, keys=len(keys), size=len(new_chr))
     if mg_rep:
         rep["mesh_graft"] = mg_rep
+    if rm:
+        rep["root_tracks"] = rm_created
     return new_chr, rep
 
 
@@ -843,15 +948,79 @@ def _verify_spin(npl, nnames, m, mg, nb, K):
           + (f", hand-offs advance {h:.0f} deg/engine-frame" if h else ", ramps end at rest"))
 
 
+def _verify_root_motion(base_bytes, new_chr, ch):
+    """Deep-check the root-motion opt-in: created tracks exist only where sources demanded them, rest
+    anchors reproduce the dest BIND outside every grafted window, and the climb windows carry the
+    hip root motion. Prints the climb x/y envelopes (the zigzag/bounce numbers)."""
+    old, new = mc.Pack.parse(base_bytes), mc.Pack.parse(new_chr)
+    _cfg, bmot, bmds, smot, smds = _cfg_motions(new)
+    owned = [tuple(s["frames"]) for s in ch["slots"] if s.get("src") or s.get("hold") is not None]
+    spans = _fold_spans(owned, 1, max(s["frames"][1] for s in ch["slots"]))
+    for tag, motn, mdsn in [("body", bmot, bmds), ("shadow", smot, smds)]:
+        if not motn:
+            continue
+        om = mc.Mot.from_record(old.find(motn))
+        nm2 = mc.Mot.from_record(new.find(motn))
+        pl = new.find(mdsn).payload
+        frames = mc.read_mds_frames(pl)
+        have = {(t.w0, t.w2) for t in om.tracks}
+        created = [t for t in nm2.tracks if (t.w0, t.w2) not in have]
+        assert all(t.w0 < len(frames) for t in nm2.tracks), f"{tag}: track w0 out of rig range"
+        for t in created:
+            _p, B, tr = _mds_bind(pl, t.w0)
+            rest = _mat_to_quat(B) if t.w2 == 0 else (tr[0], tr[1], tr[2], 0.0)
+            vals = {k.frame for k in t.keyframes}
+            for lo, hi in spans:                       # anchors present at every non-grafted span edge
+                assert lo in vals and hi in vals, \
+                    f"{tag} {frames[t.w0]} c{t.w2}: missing rest anchor {lo}/{hi}"
+            for k in t.keyframes:                      # every key OUTSIDE grafted windows == bind rest
+                if any(lo <= k.frame <= hi for lo, hi in owned):
+                    continue
+                if t.w2 == 0:
+                    ok = abs(sum(a * b for a, b in zip(k.value, rest))) > 1.0 - 1e-6
+                else:
+                    ok = all(abs(a - b) < 1e-5 for a, b in zip(k.value, rest))
+                assert ok, f"{tag} {frames[t.w0]} c{t.w2} @f{k.frame}: rest anchor != bind {rest}"
+        print(f"   root_motion {tag}: created {[(frames[t.w0], t.w0, 'c%d' % t.w2) for t in created]}"
+              f" — rest anchors == bind at {len(spans)} spans")
+    # climb windows: hip (null69) root motion present; print the zigzag/bounce envelopes
+    bm = mc.Mot.from_record(new.find(bmot))
+    frames = mc.read_mds_frames(new.find(bmds).payload)
+    hip = next(t for t in bm.tracks if frames[t.w0] == 'null69' and t.w2 == 2)
+    for label, lo, hi in [("climb-hopA 185-205", 185, 205), ("climb-hopB 210-230", 210, 230),
+                          ("climb both 185-230", 185, 230)]:
+        w = hip.frames_in(lo, hi)
+        assert len(w) >= 10, f"{label}: hip chan-2 carries only {len(w)} keys"
+        xs = [k.value[0] for k in w]; ys = [k.value[1] for k in w]; zs = [k.value[2] for k in w]
+        print(f"   climb hip(null69) c2 {label}: keys={len(w)} x[{min(xs):.3f},{max(xs):.3f}] "
+              f"y[{min(ys):.2f},{max(ys):.2f}] z[{min(zs):.2f},{max(zs):.2f}]")
+        assert max(ys) - min(ys) > 1.0, f"{label}: no bounce amplitude in y"
+    assert mc.Pack.parse(new_chr).rebuild() == new_chr, "pack round-trip failed"
+
+
+# APPROVED builds (field-validated): --test fails loudly if a change drifts them. Update these pins
+# only when a new build for that character is deliberately approved.
+APPROVED = {"Xiao": (710113, "05730e1400570707"), "Osmond": (802653, "1601dd1548c93cac")}
+
+
 def _test():
     """Assemble from the extracted disc (mot_codec.load_pack) and verify KEY table + grafted frames."""
+    import hashlib
     for who, ch in CHARS.items():
         base_bytes = mc.read_subfile(ch["base"].replace('/', '\\'))[2]
         def read_src(name): return mc.read_subfile(name.replace('/', '\\'))[2]
         new_chr, rep = assemble(base_bytes, read_src, ch)
         print(f"{who}: {rep}")
+        if who in APPROVED:
+            size, sha = APPROVED[who]
+            got = hashlib.sha256(new_chr).hexdigest()[:16]
+            assert (len(new_chr), got) == (size, sha), \
+                f"{who} drifted from the APPROVED build: {len(new_chr)} B sha {got} != {size} B sha {sha}"
+            print(f"   APPROVED build byte-identical: {size:,} B sha {sha}")
         if ch.get("mesh_graft"):
             _verify_mesh_graft(base_bytes, new_chr, ch)
+        if ch.get("root_motion"):
+            _verify_root_motion(base_bytes, new_chr, ch)
         chk = mc.Pack.parse(new_chr)
         cfg = _cfg_motions(chk)[0]
         keys = re.findall(rb'KEY[ \t]+(\d+),[ \t]*(\d+),[ \t]*([\d.]+),?[ \t]*//([^\r\n]*)', cfg.payload)
