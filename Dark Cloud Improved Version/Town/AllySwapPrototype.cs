@@ -115,32 +115,24 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Any fishing session swaps the player to the fishing model and its QUIT script restores
         /// TOAN's <c>chara/c01d.chr</c> — hardcoded, in vanilla towns' label-256 scripts and the mod's exit
-        /// script alike. If an ALLY was the town character, the player comes back as Toan while the mod still
-        /// treats them as the ally (idle-sit, ladder jump, BlockLadder). Detect the mismatch — walking, ally
-        /// selected, but the loaded model is exactly <c>chara/c01d.chr</c> (the fishing model
-        /// <c>c01d_turi.chr</c> differs at +8, ally paths at +0) — and queue the in-place swap back to the
-        /// ally; MaybeFirePending fires it with the full canal-wading suppression, same as a menu commit.</summary>
+        /// script alike. If an ALLY was the town character, the player comes back as Toan while the mod
+        /// still treats them as the ally (idle-sit, ladders, BlockLadder — Toan doing Ruby's float, etc.).
+        /// Detection = the SESSION-END EDGE: a real session ran while an ally was active (_sawFishing, from
+        /// the engine's fishing-active byte) and has now ended — queue the in-place re-swap; MaybeFirePending
+        /// fires it once the quit script finishes and walking resumes. (An earlier version matched Toan's
+        /// path in the loaded-model buffer instead — the quit script's later loads overwrite that buffer,
+        /// so it never matched, and menu-page loads could false-positive it.)</summary>
         private static void RestoreAllyAfterFishing()
         {
-            // Gated on a REAL session (_sawFishing): the c01d path-buffer check alone misfires — menu
-            // visits/page rotation can load Toan-adjacent data through the same loader, and the restore
-            // then re-fired the swap every ~2s (periodic flicker + lag) with no fishing involved.
             if (!_sawFishing) return;
-            if (_currentAlly == 0 || _pendingAlly >= 0 || _firedAlly >= 0 || _installedStb == 0) return;
-            if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return;
-            if (Memory.ReadInt(LoadedChrPathBuf) != 0x72616863 ||        // "char"
-                Memory.ReadInt(LoadedChrPathBuf + 4) != 0x30632f61 ||    // "a/c0"
-                Memory.ReadInt(LoadedChrPathBuf + 8) != 0x632e6431 ||    // "1d.c"
-                (Memory.ReadInt(LoadedChrPathBuf + 12) & 0xFFFFFF) != 0x007268)   // "hr\0"
-                return;
+            if (Memory.ReadByte(FishingAddresses.Active) == 1) return;      // session still running
             _sawFishing = false;
+            if (_currentAlly == 0 || _pendingAlly >= 0 || _firedAlly >= 0 || _installedStb == 0) return;
             _pendingAlly = _currentAlly;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"fishing quit restored Toan over {Allies[_currentAlly].name} — re-swapping in place");
+                $"fishing session ended — re-swapping {Allies[_currentAlly].name} back in place");
         }
 
-        /// <summary>In the party menu, a Cross press on an unlocked ally different from the current town
-        /// character queues an in-place swap (fired once the menu closes — the event needs walking mode).</summary>
         private static void DetectCommit()
         {
             bool inMenu = Memory.ReadByte(Addresses.selectedMenu) == AlliesMenuPage;
@@ -174,8 +166,6 @@ namespace Dark_Cloud_Improved_Version
             _prevCross = cross;
         }
 
-        /// <summary>Once a swap is queued and the menu has closed back to walking, write the selected ally's
-        /// script into label 405 and fire it.</summary>
         private static void MaybeFirePending()
         {
             if (_pendingAlly < 0) return;
