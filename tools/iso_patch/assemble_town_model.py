@@ -173,6 +173,33 @@ CHARS = {
             dict(idx=13, frames=(245, 255), speed=0.25, name="rev-land",    src="gedit/s01/chara/e101.chr", win=(95, 105), src_cfg="e101c06a.cfg", reverse=True),
         ],
     ),
+    # Ungaga — catalog docs/town-swap-animation-map.md (adapted from the c10p plan onto e323_2c10a, the
+    # shipped swap model: cloth + native run window + shadow). Slots 0-4 keep e323's own windows (3/4 = his
+    # talk clips = the door anims), so the e04 recruitment cutscene stays mostly intact; the battle run is
+    # grafted INTO the native 60-80 window (retiring transplant_battle_run's Ungaga row). New clips go in
+    # fresh windows past his 226-frame timeline. LADDERS: none — he refuses at BOTH ends (slot 7 NG pose).
+    "Ungaga": dict(
+        base="gedit/e04/chara/e323_2c10a.chr",
+        root_motion=True,
+        slots=[
+            dict(idx=0,  frames=(10, 20),   speed=0.10, name="idle",        src=None),
+            dict(idx=1,  frames=(60, 80),   speed=0.55, name="run",         src="dun/mainchara/c10b.chr", win=(60, 80)),
+            dict(idx=2,  frames=(30, 50),   speed=0.27, name="walk",        src=None),
+            # doors: the chest-hand talk gesture (more visible than the subtle 95-105 talk), pulled back
+            # off the door by a root offset (applies once — 4/10 share the window).
+            dict(idx=3,  frames=(115, 131), speed=0.20, name="door(chest)", src=None, root_offset=(0.0, 0.0, -2.5)),
+            dict(idx=4,  frames=(115, 131), speed=0.20, name="door2",       src=None),
+            dict(idx=5,  frames=(240, 250), speed=0.30, name="item",        src="dun/mainchara/c10b.chr", win=(630, 640)),
+            dict(idx=6,  frames=(255, 265), speed=0.30, name="item-loop",   src="dun/mainchara/c10b.chr", win=(643, 653)),
+            dict(idx=7,  frames=(270, 310), speed=0.22, name="refuse(NG)",  src="dun/mainchara/c10b.chr", win=(490, 530)),
+            # fall/land per the catalog: damage-big REVERSED = falling forward; land = a 2f settle.
+            # fall = STATIC frame 297 of c10b's damage-big (a 1-frame KEY @speed 0 — vanilla precedent:
+            # c10b's own "26投げ停止 186,186,0.0"). No animation, just the falling pose.
+            dict(idx=8,  frames=(315, 315), speed=0.0,  name="fall(297)",   src="dun/mainchara/c10b.chr", win=(297, 297)),
+            dict(idx=9,  frames=(357, 359), speed=0.20, name="land(rev)",   src="dun/mainchara/c10b.chr", win=(295, 297), reverse=True),
+            dict(idx=10, frames=(115, 131), speed=0.20, name="door3",      src=None),
+        ],
+    ),
     # Ruby — catalog docs/town-swap-animation-map.md. Base = c05a "simple" (the e03 town NPC: only
     # idle/walk/run and NO shadow) + SHADOW INJECTION from the dungeon model (c05s set; its rig names are
     # identical to e223c05s's). All locomotion grafted from dun c05a (same windows the town model uses, and
@@ -789,39 +816,45 @@ def assemble(base_bytes, read_src, char):
         owned = [tuple(s["frames"]) for s in char["slots"] if s.get("src") or s.get("hold") is not None]
         rm_spans = _fold_spans(owned, 1, max(s["frames"][1] for s in char["slots"]))
     for s in char["slots"]:
-        if s.get("hold") is not None:                # static held pose sampled from the BASE's own motion
-            dlo, dhi = s["frames"]
+        dlo, dhi = s["frames"]
+        touched = False
+        if s.get("src"):
+            sp = src(s["src"])
+            scfg, sbmot, sbmds, ssmot, ssmds = _cfg_motions(sp, prefer=s.get("src_cfg"))
+            if mg and s["src"] != mg["src"]:         # only the mesh-graft source may drive the new nodes
+                clash = set(mg["nodes"]) & set(mc.read_mds_frames(sp.find(sbmds).payload))
+                if clash:
+                    raise SystemExit(f"slot {s['name']}: source rig carries grafted nodes {sorted(clash)} "
+                                     f"but its window is outside the fold-span model")
+            wlo, whi = s["win"]
+            rm_created["body"] += _graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi,
+                                         root_motion=rm, spans=rm_spans)              # body
+            _seal_graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi, root_motion=rm)
+            if smot and ssmot:                                                        # shadow (keep body+shadow in sync)
+                rm_created["shadow"] += _graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi,
+                                               root_motion=rm, spans=rm_spans)
+                _seal_graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi, root_motion=rm)
+            touched = True
+        # post-ops apply to grafted AND kept (src=None) windows alike — a native window can be offset/
+        # reversed/frozen/held in place (Ungaga's native talk-door gets a root_offset pull-back).
+        if s.get("hold") is not None:                # static held pose sampled from the (post-graft) timeline
             _bake_hold(base, bmot, s["hold"], dlo, dhi)
             if smot: _bake_hold(base, smot, s["hold"], dlo, dhi)
-            grafts += 1
-            continue
-        if not s.get("src"):
-            continue
-        sp = src(s["src"])
-        scfg, sbmot, sbmds, ssmot, ssmds = _cfg_motions(sp, prefer=s.get("src_cfg"))
-        if mg and s["src"] != mg["src"]:             # only the mesh-graft source may drive the new nodes
-            clash = set(mg["nodes"]) & set(mc.read_mds_frames(sp.find(sbmds).payload))
-            if clash:
-                raise SystemExit(f"slot {s['name']}: source rig carries grafted nodes {sorted(clash)} "
-                                 f"but its window is outside the fold-span model")
-        wlo, whi = s["win"]; dlo, dhi = s["frames"]
-        rm_created["body"] += _graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi,
-                                     root_motion=rm, spans=rm_spans)                  # body
-        _seal_graft(base, bmot, bmds, sp, sbmot, sbmds, wlo, whi, dlo, dhi, root_motion=rm)
-        if smot and ssmot:                                                            # shadow (keep body+shadow in sync)
-            rm_created["shadow"] += _graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi,
-                                           root_motion=rm, spans=rm_spans)
-            _seal_graft(base, smot, smds, sp, ssmot, ssmds, wlo, whi, dlo, dhi, root_motion=rm)
+            touched = True
         if s.get("root_offset"):                                                      # pull the reach back (door)
             _apply_root_offset(base, bmot, dlo, dhi, s["root_offset"])
             if smot: _apply_root_offset(base, smot, dlo, dhi, s["root_offset"])
+            touched = True
         if s.get("reverse"):                                                          # bake a backwards-playing clip
             _reverse_window(base, bmot, dlo, dhi)
             if smot: _reverse_window(base, smot, dlo, dhi)
+            touched = True
         if s.get("root_freeze") is not None:                                          # kill baked root travel
             _freeze_roots(base, bmot, s["root_freeze"], dlo, dhi)
             if smot: _freeze_roots(base, smot, s["root_freeze"], dlo, dhi)
-        grafts += 1
+            touched = True
+        if touched:
+            grafts += 1
     if mg and mg.get("spin"):                        # AFTER the grafts/reverse bakes (they mirror windows)
         mg_rep["spin"] = _apply_spin(base, mg)
     base.replace_payload(cfg.name, _rewrite_keys(cfg.payload, char["slots"]))

@@ -45,10 +45,6 @@ namespace Dark_Cloud_Improved_Version
         private const int RefusalTicks   = 62;   // ≈3.1 s — covers the 2.8 s clip; the hold hides the slack
 
         private static int _refusalLeft;   // >0 = refusal playing (holds the idle-motion mailbox)
-        private static int _rubyDbgTick;   // TEMP: Ruby run-bug diagnostic cadence
-        private static int _rubyDbgTable;  // TEMP: full motion-table dump cadence
-        private static uint _rubyTableAddr; // TEMP: cached motion_info guest addr (from the periodic sample)
-        private static bool _rubyEntryBad;  // TEMP: last watch verdict (edge-triggered logging)
 
         // ── Xiao's ladder JUMP ──────────────────────────────────────────────────────────────────────
         // Live event-param buffer EdGetEvent refreshes while the player stands on an event point (and
@@ -154,6 +150,11 @@ namespace Dark_Cloud_Improved_Version
         private const int   RbRampF         = 8;      // rise-speed ramp: 8f @0.25 then 8f @0.35 before cruise
         private const int   RubyRefuseTicks = 36;     // slot-7 dmg-out: 20f @0.2 ≈ 100 engine frames ≈ 1.8 s
 
+        // ── Ungaga (ally 4) — NO ladder sequences by design: he REFUSES at both ends ("he doesn't like
+        // ladders"). Slot 7 = c10b #29 NG pose, 40f @0.22 ≈ 182 engine frames ≈ 3 s.
+        private const int UngagaAlly          = 4;
+        private const int UngagaRefuseTicks   = 62;
+
         // Pre-jump alignment (both directions): walk to the mount point turning to FACE the ladder, then a few
         // backwards walk-steps to line up, then the ready crouch LOOPING for ~0.25 s, then launch.
         private const float WalkSpeed  = 0.30f;   // align walk, units/frame
@@ -194,92 +195,6 @@ namespace Dark_Cloud_Improved_Version
             // it stays correct across swaps and emulator resets; the cave is town-only so its value is inert elsewhere.
             Memory.WriteInt(BlockLadder, AllySwapPrototype.CurrentAlly != 0 ? 1 : 0);
 
-            // TEMP DIAGNOSTIC (Ruby run bug): per-tick WATCH on motion_info[1] — log the exact moment it
-            // flips away from the parsed {60,80,0.40} (and back), with game state for correlation.
-            if (AllySwapPrototype.CurrentAlly == RubyAlly && _rubyTableAddr != 0)
-            {
-                long e1 = Memory.ToMmu(_rubyTableAddr) + 0x10;
-                int s0 = Memory.ReadInt(e1), s1 = Memory.ReadInt(e1 + 4);
-                float s2 = Memory.ReadFloat(e1 + 8);
-                bool bad = s1 != 80;                      // parsed value is end=80; anything else = corrupted
-                if (bad != _rubyEntryBad)
-                {
-                    _rubyEntryBad = bad;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                        $"[RubyDbg] ENTRY1 {(bad ? "CORRUPTED" : "restored")} -> [{s0}..{s1}]@{s2:F2} " +
-                        $"gameMode={Memory.ReadInt(EditLoop.GameMode)} mapEvt={Memory.ReadInt(EditLoop.StartEventNo)}");
-                    if (bad)
-                    {
-                        // The engine's cfg-parse globals persist after a parse: config_file @0x2A24DC is
-                        // the LAST cfg text ReadInfo consumed — the misparse writes through motion_info
-                        // @0x2A24B0, so dumping both names the culprit file directly.
-                        uint cf = Memory.ReadUInt(0x202A24DC) & Memory.PhysAddrMask;
-                        int cfSize = Memory.ReadInt(0x202A24E0);
-                        uint miG = Memory.ReadUInt(0x202A24B0);
-                        int keyNo = Memory.ReadInt(0x202A24AC);
-                        string text = "?";
-                        if (Memory.IsValidGuest(cf) && cfSize > 0)
-                        {
-                            var bytes = new byte[Math.Min(cfSize, 640)];
-                            for (int k = 0; k < bytes.Length; k++) bytes[k] = Memory.ReadByte(Memory.ToMmu(cf) + k);
-                            var sb2 = new System.Text.StringBuilder();
-                            for (int row = 0x0C0; row < Math.Min(bytes.Length, 0x180); row += 16)
-                            {
-                                sb2.Append($"  +{row:X3}: ");
-                                for (int k = row; k < row + 16 && k < bytes.Length; k++) sb2.Append($"{bytes[k]:X2} ");
-                                sb2.Append("  ");
-                                for (int k = row; k < row + 16 && k < bytes.Length; k++)
-                                    sb2.Append(bytes[k] >= 0x20 && bytes[k] < 0x7F ? (char)bytes[k] : '.');
-                                sb2.Append('\n');
-                            }
-                            text = sb2.ToString();
-                        }
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[RubyDbg] last-parsed cfg @0x{cf:X8} size={cfSize} motion_info=0x{miG:X8} key_no={keyNo}\n{text}");
-                    }
-                }
-            }
-            if (AllySwapPrototype.CurrentAlly == RubyAlly && ++_rubyDbgTick >= 30)
-            {
-                _rubyDbgTick = 0;
-                uint ch = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
-                if (Memory.IsValidGuest(ch))
-                {
-                    long cc = Memory.ToMmu(ch);
-                    int id = Memory.ReadInt(cc + 0xc68);
-                    int flags = Memory.ReadInt(cc + 0xc64);
-                    float spd = Memory.ReadFloat(cc + 0xc60);
-                    int mode = Memory.ReadInt(cc + 0xc70);
-                    uint st = Memory.ReadUInt(cc + 0xc20) & Memory.PhysAddrMask;
-                    if (Memory.IsValidGuest(st))
-                    {
-                        long s = Memory.ToMmu(st);
-                        float frame = Memory.ReadFloat(s + 0x10);
-                        int cur = Memory.ReadInt(s + 0x24);
-                        int prev = Memory.ReadInt(s + 0x28);
-                        uint mi = Memory.ReadUInt(s + 0x64) & Memory.PhysAddrMask;
-                        if (Memory.IsValidGuest(mi)) _rubyTableAddr = mi;   // arm the per-tick entry1 watch
-                        string entry = "?";
-                        if (Memory.IsValidGuest(mi) && cur >= 0 && cur < 32)
-                        {
-                            long e = Memory.ToMmu(mi) + cur * 0x10;
-                            entry = $"[{Memory.ReadInt(e)}..{Memory.ReadInt(e + 4)}]@{Memory.ReadFloat(e + 8):F2}";
-                        }
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                            $"[RubyDbg] id={id} flags={flags:X} spdOvr={spd:F2} mode={mode} frame={frame:F1} idx={cur} prev={prev} win={entry}");
-                        if (++_rubyDbgTable >= 4 && Memory.IsValidGuest(mi))
-                        {
-                            _rubyDbgTable = 0;
-                            var sb = new System.Text.StringBuilder($"[RubyDbg] TABLE@0x{mi:X8} ");
-                            long tb = Memory.ToMmu(mi);
-                            for (int k = 0; k < 14; k++)
-                                sb.Append($"{k}:[{Memory.ReadInt(tb + k * 0x10)}..{Memory.ReadInt(tb + k * 0x10 + 4)}]@{Memory.ReadFloat(tb + k * 0x10 + 8):F2} ");
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb.ToString());
-                        }
-                    }
-                }
-            }
-
             // Refusal playback: the engine plays the shake once and HOLDS its last frame (PlayOnceFlag). Release
             // when the countdown runs out, the player moves (motion left idle/override — don't let a re-idle
             // replay the shake), or an event takes over walking.
@@ -304,20 +219,26 @@ namespace Dark_Cloud_Improved_Version
             {
                 Memory.WriteInt(RefusalRequested, 0);
                 int ally = AllySwapPrototype.CurrentAlly;
-                if (_jumpPhase == 0 && (ally == XiaoAlly || ally == OsmondAlly || ally == GoroAlly || ally == RubyAlly))
+                if (_jumpPhase == 0 && ally >= XiaoAlly && ally <= OsmondAlly)
                 {
                     bool fired = ally switch
                     {
                         XiaoAlly => TryFireJump(),
                         OsmondAlly => TryFireOsmond(),
                         RubyAlly => TryFireRuby(),
-                        _ => TryFireGoro(),
+                        GoroAlly => TryFireGoro(),
+                        _ => false,                        // Ungaga: never climbs — refusal both ends
                     };
                     if (fired) return;
-                    if (ally == XiaoAlly || ally == GoroAlly || ally == RubyAlly)    // refusal clip in slot 7
+                    if (ally is XiaoAlly or GoroAlly or RubyAlly or UngagaAlly)      // refusal clip in slot 7
                     {
+                        // Refusal runs as a real EVENT (label 405): movement is locked until the clip finishes,
+                        // and the event's clean idle hand-back restarts the pose (fixes held prop nodes — the
+                        // staff-slide). Mailbox one-shot kept only as a fallback if the label is unavailable.
+                        if (TryFireRefusal(ally)) return;
                         _refusalLeft = ally == XiaoAlly ? RefusalTicks
                                      : ally == RubyAlly ? RubyRefuseTicks
+                                     : ally == UngagaAlly ? UngagaRefuseTicks
                                      : 28;                                 // Goro's "no" = 30f @0.5 ≈ 60 engine frames
                         Memory.WriteInt(IdleMotionFlags, PlayOnceFlag);    // flags BEFORE index (the cave reads both per frame)
                         Memory.WriteInt(IdleMotionMailbox, RefusalIndex);
@@ -819,6 +740,35 @@ namespace Dark_Cloud_Improved_Version
             _jumpPhase = 1; _jumpTicks = 0;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"goro {(h < 0 ? "JUMP down" : "CLIMB up")} type={type} Ta={Ta} h={h:F1} face={face:F2} release={release:F2}");
+            return true;
+        }
+
+        /// <summary>Play the slot-7 refusal as a label-405 EVENT: the engine locks player movement for the
+        /// event's duration (the "shake" can't be walked out of), and the closing idle SetMotion is an id
+        /// CHANGE that re-poses every node — including props the clip's hold had displaced (Ungaga's staff).</summary>
+        private static bool TryFireRefusal(int ally)
+        {
+            long stb = TownScript.Base();
+            int labelCount = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
+            ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
+            if (lab == null || lab.Size <= 0) return false;
+            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
+            int frames = ally == XiaoAlly ? 175      // no/hold/return ≈ 2.8 s
+                       : ally == GoroAlly ? 65       // 30f @0.5
+                       : ally == RubyAlly ? 105      // dmg-out 20f @0.2
+                       : 190;                        // Ungaga NG pose 40f @0.22
+            var w = new StbWriter();
+            w.UseLocals(1);
+            w.Yield(); w.Yield();
+            SetMotion(w, RefusalIndex);              // play-once, holds the last frame through the yield
+            EmitYieldLoop(w, frames);
+            SetMotion(w, 0, -1f, 0);                 // clean id change back to idle re-poses everything
+            w.Ret();
+            if (!WriteLadderScript(stb, lab, w, $"refusal (ally {ally}, {frames}f)")) return false;
+            Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
+            _jumpPhase = 1; _jumpTicks = 0;          // gates re-presses through the event lifecycle
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"refusal event fired (ally {ally})");
             return true;
         }
 

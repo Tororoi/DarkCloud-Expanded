@@ -39,15 +39,11 @@ DEFAULT_ISO = os.path.expanduser("~/ROMs/Patched ISOs/Dark Cloud - Expanded.iso"
 #     index 1 (Ruby's e223c05a is idle0/walk1/poses...), a run KEY must be INSERTED as the 2nd KEY in `cfg`
 #     (idle stays 0, run becomes 1, walk shifts to 2). Omit when the dest already has run at index 1 (Ungaga).
 TRANSPLANTS = [
-    dict(name="Ungaga run",
-         src_chr="dun/mainchara/c10b.chr", dst_chr="gedit/e04/chara/e323_2c10a.chr",
-         grafts=[
-             dict(src_mot="c10a.mot", src_mds="c10a.mds", dst_mot="e323_2c10a.mot", dst_mds="e323_2c10a.mds", window=(60, 80, 60, 80)),
-             dict(src_mot="c10s.mot", src_mds="c10s.mds", dst_mot="e323_2c10s.mot", dst_mds="e323_2c10s.mds", window=(60, 80, 60, 80)),  # shadow
-         ]),
-    # (Ruby's e223c05a transplant retired 2026-09-06: her swap model is now c05a-simple, fully rebuilt by
-    # assemble_town_model.py — dun run baked at KEY idx1 + injected shadow — so e223c05a is no longer loaded.)
+    # (Ungaga's e323 run transplant retired 2026-09-07: assemble_town_model.py now owns his full town build
+    # including the battle-run graft. Ruby's e223 row retired 2026-09-06 for the same reason. The runner
+    # handles an empty list as a no-op.)
 ]
+
 
 
 def _seal_window(dst_mot, dlo, dhi):

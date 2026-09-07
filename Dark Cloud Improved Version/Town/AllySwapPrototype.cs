@@ -41,7 +41,7 @@ namespace Dark_Cloud_Improved_Version
             ("gedit/e01/chara/c04pcat.chr", "info.cfg", "Xiao"),
             ("gedit/s01/chara/c06p.chr",    "info.cfg", "Goro"),
             ("gedit/e03/chara/c05a.chr",    "info.cfg", "Ruby"),   // c05a "simple" REBUILT by assemble_town_model.py: full town slot set (dun locomotion at run=idx1, e223 pat-doors, e228 float/jump) + an INJECTED dun c05s shadow (the vanilla simple model has none — that missing shadow and its swapped run/walk were why we detoured through e223c05a; both fixed in the bake now). 769KB < Toan 850KB.
-            ("gedit/e04/chara/e323_2c10a.chr", "e323_2c10a.cfg", "Ungaga"),   // Ungaga event model (e04 recruitment). SAME cloth as c10p (ungg1/ungg2.clo) AND a REAL run: motion idx1 = frames 60-80, vs c10p's run KEY that reused walk's 30-50 frames (→ "run looked like a walk"). 685KB < Toan's 850KB so no buffer grow (keeps Toan's cape fixed). cfg is per-model (e323_2c10a.cfg), NOT info.cfg. [c10p was cloth-but-no-run; c10a was run-but-no-cloth; this event model has both.]
+            ("gedit/e04/chara/e323_2c10a.chr", "e323_2c10a.cfg", "Ungaga"),   // e323_2 REBUILT by assemble_town_model.py: full 11-slot town set (native idle/walk/chest-talk doors + c10b battle run/item/NG-refusal + static-297 fall). 797KB < Toan 850,624B. NO ladder sequences by design — TownLadder refuses at both ends. cfg is per-model (e323_2c10a.cfg), NOT info.cfg.
             ("gedit/e05/chara/c18p.chr",    "info.cfg", "Osmond"),
         };
 
@@ -54,6 +54,9 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool _prevCross;
         private static int  _pendingAlly = -1;   // ally cursor committed in the menu, awaiting walking-resume
+        private static int  _firedAlly = -1;     // fired, awaiting VERIFICATION (the event actually running)
+        private static int  _fireVerifyTicks;
+        private static bool _fireSawEvent;
         private static int  _currentAlly;        // who the town character currently is (0=Toan on town load)
 
         /// <summary>Who the town character currently is (0=Toan..5=Osmond). Read by per-ally behavior tickers
@@ -80,18 +83,23 @@ namespace Dark_Cloud_Improved_Version
             if (map != _lastMap)
             {
                 _lastMap = map; _installedStb = 0;
-                _currentAlly = 0; _pendingAlly = -1;   // a fresh town load starts as Toan (entry character)
+                _currentAlly = 0; _pendingAlly = -1; _firedAlly = -1;   // a fresh town load starts as Toan
             }
 
             EnsureInstalled();
             DetectCommit();
             RestoreAllyAfterFishing();
             MaybeFirePending();
+            VerifyFired();
 
-            // Player "!" event-mark height: the cat's mesh is long/low, so the vanilla mark (char Y + height
-            // field + 3.0) clips into it. The ElfPatches exclamation cave adds this float to the mark's Y.
-            // Re-asserted per tick (survives resets); 0 = bit-exact vanilla for everyone else. TUNABLE.
-            Memory.WriteFloat(CodeCaves.Mailbox.ExclamationYBoost, _currentAlly == 1 ? 4.0f : 0f);
+            // Player "!" event-mark height: some ally meshes put the vanilla mark (char Y + height + 3.0)
+            // inside the model. The ElfPatches exclamation cave adds this float to the mark's Y.
+            // Re-asserted per tick (survives resets); 0 = bit-exact vanilla for Toan/Goro/Osmond. TUNABLE.
+            Memory.WriteFloat(CodeCaves.Mailbox.ExclamationYBoost,
+                _currentAlly == 1 ? 4.0f      // Xiao: long/low cat mesh
+              : _currentAlly == 3 ? 2.5f      // Ruby: slightly above her head
+              : _currentAlly == 4 ? 9.0f      // Ungaga: tall — the mark sat inside his head
+              : 0f);
         }
 
         // EdLoadMainChara's chr-path buffer (guest 0x29AA08 — the same bytes the pnach's "not toan" conditional
@@ -107,7 +115,7 @@ namespace Dark_Cloud_Improved_Version
         /// ally; MaybeFirePending fires it with the full canal-wading suppression, same as a menu commit.</summary>
         private static void RestoreAllyAfterFishing()
         {
-            if (_currentAlly == 0 || _pendingAlly >= 0 || _installedStb == 0) return;
+            if (_currentAlly == 0 || _pendingAlly >= 0 || _firedAlly >= 0 || _installedStb == 0) return;
             if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return;
             if (Memory.ReadInt(LoadedChrPathBuf) != 0x72616863 ||        // "char"
                 Memory.ReadInt(LoadedChrPathBuf + 4) != 0x30632f61 ||    // "a/c0"
@@ -164,8 +172,36 @@ namespace Dark_Cloud_Improved_Version
             WriteScript(stb, lab.Off, lab.Off + lab.Size, BuildSwapBytecode(chr, cfg), $"in-place ally swap → {chr}");
             Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
             CanalWading.SuppressForSwap();   // hold the Queens canal early-draw off the model root until the swap event completes (else stale-root draw hangs)
-            _currentAlly = ally;
+            _firedAlly = ally; _fireVerifyTicks = 0; _fireSawEvent = false;   // commit only once VERIFIED
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"fired event {AllySwapLabelId} → {name}");
+        }
+
+        /// <summary>A fired swap counts only when the swap EVENT actually ran. Standing on an event trigger
+        /// can swallow the StartEventNo write — the swap silently never runs; committing _currentAlly
+        /// optimistically then blocked re-selecting that ally forever (the "different from current" gate).
+        /// Verification = the game left walking (the event started) and came back: commit. Still walking
+        /// after ~2s with no event: the write was swallowed — REQUEUE, so it retries until the player steps
+        /// off the trigger and it goes through.</summary>
+        private static void VerifyFired()
+        {
+            if (_firedAlly < 0) return;
+            if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking)
+            {
+                _fireSawEvent = true;                          // the event is running
+                return;
+            }
+            if (_fireSawEvent)                                 // ran and returned to walking — done
+            {
+                _currentAlly = _firedAlly; _firedAlly = -1;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "swap verified (event completed)");
+                return;
+            }
+            if (++_fireVerifyTicks > 40)                       // ~2s of walking, event never started
+            {
+                _pendingAlly = _firedAlly; _firedAlly = -1;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    "swap event never ran (event trigger?) — requeued");
+            }
         }
 
         /// <summary>Confirm the ISO-baked spare label 405 is present and claim it once per town load, so
