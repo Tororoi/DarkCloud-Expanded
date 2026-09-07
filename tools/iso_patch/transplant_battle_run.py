@@ -45,13 +45,8 @@ TRANSPLANTS = [
              dict(src_mot="c10a.mot", src_mds="c10a.mds", dst_mot="e323_2c10a.mot", dst_mds="e323_2c10a.mds", window=(60, 80, 60, 80)),
              dict(src_mot="c10s.mot", src_mds="c10s.mds", dst_mot="e323_2c10s.mot", dst_mds="e323_2c10s.mds", window=(60, 80, 60, 80)),  # shadow
          ]),
-    dict(name="Ruby run",
-         src_chr="dun/mainchara/c05a.chr", dst_chr="gedit/e03/chara/e223c05a.chr",
-         grafts=[
-             dict(src_mot="c05a.mot", src_mds="c05a.mds", dst_mot="e223c05a.mot", dst_mds="e223c05a.mds", window=(60, 80, 60, 80)),
-             dict(src_mot="c05s.mot", src_mds="c05s.mds", dst_mot="e223c05s.mot", dst_mds="e223c05s.mds", window=(60, 80, 60, 80)),  # shadow
-         ],
-         cfg="info.cfg", insert_run_key=b'KEY\t60,\t80,\t0.55,\t//run\r\n'),
+    # (Ruby's e223c05a transplant retired 2026-09-06: her swap model is now c05a-simple, fully rebuilt by
+    # assemble_town_model.py — dun run baked at KEY idx1 + injected shadow — so e223c05a is no longer loaded.)
 ]
 
 

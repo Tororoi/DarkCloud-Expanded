@@ -40,7 +40,7 @@ namespace Dark_Cloud_Improved_Version
             ("chara/c01d.chr",             "info.cfg", "Toan"),
             ("gedit/e01/chara/c04pcat.chr", "info.cfg", "Xiao"),
             ("gedit/s01/chara/c06p.chr",    "info.cfg", "Goro"),
-            ("gedit/e03/chara/e223c05a.chr", "info.cfg", "Ruby"),   // e223c05a = Ruby event model that HAS a shadow (e223c05s.mds); the old c05a had NONE (no shadow on swap) AND had run/walk swapped (run at KEY idx2, so the town — which hard-plays idx1=run — showed her WALK clip when running: the "shoe-clip"). e223c05a has no run of its own, so IsoPatch's battle-run transplant grafts her dungeon run (dun c05a) at KEY idx1 (see transplant_battle_run.py). 746KB < Toan 850KB.
+            ("gedit/e03/chara/c05a.chr",    "info.cfg", "Ruby"),   // c05a "simple" REBUILT by assemble_town_model.py: full town slot set (dun locomotion at run=idx1, e223 pat-doors, e228 float/jump) + an INJECTED dun c05s shadow (the vanilla simple model has none — that missing shadow and its swapped run/walk were why we detoured through e223c05a; both fixed in the bake now). 769KB < Toan 850KB.
             ("gedit/e04/chara/e323_2c10a.chr", "e323_2c10a.cfg", "Ungaga"),   // Ungaga event model (e04 recruitment). SAME cloth as c10p (ungg1/ungg2.clo) AND a REAL run: motion idx1 = frames 60-80, vs c10p's run KEY that reused walk's 30-50 frames (→ "run looked like a walk"). 685KB < Toan's 850KB so no buffer grow (keeps Toan's cape fixed). cfg is per-model (e323_2c10a.cfg), NOT info.cfg. [c10p was cloth-but-no-run; c10a was run-but-no-cloth; this event model has both.]
             ("gedit/e05/chara/c18p.chr",    "info.cfg", "Osmond"),
         };

@@ -173,6 +173,39 @@ CHARS = {
             dict(idx=13, frames=(245, 255), speed=0.25, name="rev-land",    src="gedit/s01/chara/e101.chr", win=(95, 105), src_cfg="e101c06a.cfg", reverse=True),
         ],
     ),
+    # Ruby — catalog docs/town-swap-animation-map.md. Base = c05a "simple" (the e03 town NPC: only
+    # idle/walk/run and NO shadow) + SHADOW INJECTION from the dungeon model (c05s set; its rig names are
+    # identical to e223c05s's). All locomotion grafted from dun c05a (same windows the town model uses, and
+    # it keeps body+shadow authored together); doors = e223's pat/knock; float/jump = e228 (her Norune-intro
+    # event model). e228's jump BAKES the cutscene's 43u leap in root/hip translation and its loop HOLDS the
+    # leap end offset -> root_freeze pins both to rest values (11=own window start, 12=the float's rest @175).
+    "Ruby": dict(
+        base="gedit/e03/chara/c05a.chr",
+        root_motion=True,                             # town mot has NO tracks for several deformer nodes -> create
+        # (The garble/freeze saga was the legacy pnach "fix animation" hack text-editing her cfg in RAM —
+        # removed from A5C05C78.pnach 2026-09-07. Shadow donor = e223c05a's set: town-proven, rig names
+        # identical to dun c05s, small enough to copy unstripped.)
+        shadow_inject=dict(src="gedit/e03/chara/e223c05a.chr",
+                           model="e223c05s.mds", mot="e223c05s.mot", bbp="e223c05s.bbp", wgt="e223c05s.wgt"),
+        slots=[
+            dict(idx=0,  frames=(10, 20),   speed=0.15, name="idle",        src="dun/mainchara/c05a.chr", win=(10, 20)),
+            dict(idx=1,  frames=(60, 80),   speed=0.55, name="run",         src="dun/mainchara/c05a.chr", win=(60, 80)),
+            dict(idx=2,  frames=(30, 50),   speed=0.25, name="walk",        src="dun/mainchara/c05a.chr", win=(30, 50)),
+            # root_offset -z = pull her BACK off the door (the pat clip reaches forward). TUNABLE.
+            dict(idx=3,  frames=(90, 102),  speed=0.15, name="door(pat)",   src="gedit/e03/chara/e223c05a.chr", win=(100, 112), root_offset=(0.0, 0.0, -3.0)),
+            dict(idx=4,  frames=(90, 102),  speed=0.15, name="door2(pat)",  src=None),   # same window as #3
+            dict(idx=5,  frames=(120, 130), speed=0.30, name="item",        src="dun/mainchara/c05a.chr", win=(575, 585)),
+            dict(idx=6,  frames=(135, 145), speed=0.30, name="item-loop",   src="dun/mainchara/c05a.chr", win=(590, 600)),
+            dict(idx=7,  frames=(150, 170), speed=0.20, name="refuse(no)",  src="dun/mainchara/c05a.chr", win=(605, 625)),
+            dict(idx=8,  frames=(175, 195), speed=0.10, name="fall(float)", src="gedit/e03/chara/e228c05a.chr", win=(10, 30)),
+            dict(idx=9,  frames=(10, 20),   speed=0.15, name="land(idle)",  src=None),   # settle to idle
+            dict(idx=10, frames=(90, 102),  speed=0.15, name="door3(pat)",  src=None),
+            # CHOREOGRAPHY (TownLadder): her ladder jump-down + mid-air hold, root travel frozen (e228's
+            # jump BAKES the cutscene's 43u leap; the loop HOLDS the leap end offset).
+            dict(idx=11, frames=(200, 230), speed=0.20, name="jump",        src="gedit/e03/chara/e228c05a.chr", win=(285, 315), root_freeze=200),
+            dict(idx=12, frames=(235, 245), speed=0.10, name="jump-loop",   src="gedit/e03/chara/e228c05a.chr", win=(320, 330), root_freeze=175),
+        ],
+    ),
 }
 
 
@@ -659,6 +692,61 @@ def _apply_root_offset(pack, mot_name, dlo, dhi, off):
     pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
 
 
+def _inject_shadow(base, donor, inj):
+    """Give a shadow-less base a shadow: copy the donor's shadow set (mds/bbp/wgt/mot) into the pack and
+    declare it in the cfg (SHADOW_VERTEX_ANIME + SHADOW_MODEL after the MODEL line + a real SHADOW_MOTION).
+    The copied .mot is stripped to frames <= inj['keep'] (each track keeps >=1 key so later splices find
+    it) — every authored window is spliced by the slot grafts afterwards, the strip just drops the donor's
+    unused clip bulk (Ruby: dun c05s.mot 470KB -> ~70KB). Built for Ruby's c05a-simple (its cfg says
+    SHADOW_MOTION \"\", \"\", \"\")."""
+    for key in ('model', 'bbp', 'wgt', 'mot'):
+        r = donor.find(inj[key])
+        if r is None:
+            raise SystemExit(f"shadow_inject: donor lacks {inj[key]}")
+        if base.find(r.name):
+            raise SystemExit(f"shadow_inject: base already has {r.name}")
+        base.records.append(mc.Record(r.name, r.data_off, r.size, r.stride, r.raw))
+    keep = inj.get('keep')
+    if keep:
+        m = mc.Mot.from_record(base.find(inj['mot']))
+        for t in m.tracks:
+            kept = [k for k in t.keyframes if k.frame <= keep]
+            t.keyframes[:] = kept or t.keyframes[:1]
+        base.replace_payload(inj['mot'], m.rebuild()[m.data_off:])
+    cfg = _cfg_motions(base)[0]
+    pl = cfg.payload
+    # canonical vanilla line order: VERTEX_ANIME / SHADOW_VERTEX_ANIME ... MODEL / SHADOW_MODEL
+    va = pl.find(b'\r\n', pl.find(b'VERTEX_ANIME')) + 2
+    pl = pl[:va] + b'SHADOW_VERTEX_ANIME 1\r\n' + pl[va:]
+    eol = pl.find(b'\r\n', pl.find(b'MODEL ')) + 2                # after the MODEL line ("MODEL " with the
+    pl = (pl[:eol]                                                # space so SHADOW_MODEL can't match first)
+          + b'SHADOW_MODEL "%s"\r\n' % inj['model'].encode('latin1') + pl[eol:])
+    pl = re.sub(rb'SHADOW_MOTION[^\r\n]*',
+                b'SHADOW_MOTION "%s", "%s", "%s"' % tuple(inj[k].encode('latin1') for k in ('mot', 'bbp', 'wgt')),
+                pl, count=1)
+    base.replace_payload(cfg.name, pl)
+
+
+def _freeze_roots(pack, mot_name, ref_frame, dlo, dhi):
+    """Freeze TRANSLATION inside [dlo,dhi]: every chan-2 track with keys in the window gets all of them set
+    to its own value sampled at dst frame `ref_frame` — kills baked root/hip travel (Ruby's e228 jump bakes
+    the cutscene's 43u leap; its loop HOLDS the leap end offset) so the script owns world motion. The
+    reference window must already be on the assembled timeline (list the reference slot first)."""
+    m = mc.Mot.from_record(pack.find(mot_name))
+    for t in m.tracks:
+        if t.w2 != 2:
+            continue
+        win = [k for k in t.keyframes if dlo <= k.frame <= dhi]
+        if not win:
+            continue
+        v = _sample_track(t, ref_frame)
+        if v is None:
+            continue
+        for kf in win:
+            struct.pack_into('<4f', kf.raw, 0x10, *v)
+    pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
+
+
 def _rewrite_keys(cfg_payload, slots):
     """Replace the KEY_START..MOTION_END block's KEY lines with one KEY per slot (slot order = index)."""
     lines = b"".join(
@@ -674,6 +762,14 @@ def _rewrite_keys(cfg_payload, slots):
 def assemble(base_bytes, read_src, char):
     """read_src(name)->bytes reads any .chr from the ISO. Returns (new_base_chr, report)."""
     base = mc.Pack.parse(base_bytes)
+    pad = char.get("pad_bbp")
+    if pad:                                          # shift the RUNTIME arena layout: the engine's motion
+        cfg0 = _cfg_motions(base)                    # buffer allocs bbp first, so padding the bbp record
+        bbp = _cfg_bbp(cfg0[0].payload)              # moves every track + the KEY table by the same amount
+        base.replace_payload(bbp, base.find(bbp).payload + b'\x00' * pad)   # (trailing bytes are never read)
+    inj = char.get("shadow_inject")
+    if inj:                                          # shadow FIRST so the graft loop sees smot/smds
+        _inject_shadow(base, mc.Pack.parse(read_src(inj["src"])), inj)
     cfg, bmot, bmds, smot, smds = _cfg_motions(base)
     src_cache = {}
     def src(name):
@@ -722,6 +818,9 @@ def assemble(base_bytes, read_src, char):
         if s.get("reverse"):                                                          # bake a backwards-playing clip
             _reverse_window(base, bmot, dlo, dhi)
             if smot: _reverse_window(base, smot, dlo, dhi)
+        if s.get("root_freeze") is not None:                                          # kill baked root travel
+            _freeze_roots(base, bmot, s["root_freeze"], dlo, dhi)
+            if smot: _freeze_roots(base, smot, s["root_freeze"], dlo, dhi)
         grafts += 1
     if mg and mg.get("spin"):                        # AFTER the grafts/reverse bakes (they mirror windows)
         mg_rep["spin"] = _apply_spin(base, mg)
@@ -957,7 +1056,7 @@ def _verify_root_motion(base_bytes, new_chr, ch):
     owned = [tuple(s["frames"]) for s in ch["slots"] if s.get("src") or s.get("hold") is not None]
     spans = _fold_spans(owned, 1, max(s["frames"][1] for s in ch["slots"]))
     for tag, motn, mdsn in [("body", bmot, bmds), ("shadow", smot, smds)]:
-        if not motn:
+        if not motn or old.find(motn) is None:        # injected shadow: no old-base counterpart to diff
             continue
         om = mc.Mot.from_record(old.find(motn))
         nm2 = mc.Mot.from_record(new.find(motn))
@@ -983,24 +1082,27 @@ def _verify_root_motion(base_bytes, new_chr, ch):
                 assert ok, f"{tag} {frames[t.w0]} c{t.w2} @f{k.frame}: rest anchor != bind {rest}"
         print(f"   root_motion {tag}: created {[(frames[t.w0], t.w0, 'c%d' % t.w2) for t in created]}"
               f" — rest anchors == bind at {len(spans)} spans")
-    # climb windows: hip (null69) root motion present; print the zigzag/bounce envelopes
+    # Goro-only deep check — climb windows: hip (null69) root motion present; print the bounce envelopes
     bm = mc.Mot.from_record(new.find(bmot))
     frames = mc.read_mds_frames(new.find(bmds).payload)
-    hip = next(t for t in bm.tracks if frames[t.w0] == 'null69' and t.w2 == 2)
-    for label, lo, hi in [("climb-hopA 185-205", 185, 205), ("climb-hopB 210-230", 210, 230),
-                          ("climb both 185-230", 185, 230)]:
-        w = hip.frames_in(lo, hi)
-        assert len(w) >= 10, f"{label}: hip chan-2 carries only {len(w)} keys"
-        xs = [k.value[0] for k in w]; ys = [k.value[1] for k in w]; zs = [k.value[2] for k in w]
-        print(f"   climb hip(null69) c2 {label}: keys={len(w)} x[{min(xs):.3f},{max(xs):.3f}] "
-              f"y[{min(ys):.2f},{max(ys):.2f}] z[{min(zs):.2f},{max(zs):.2f}]")
-        assert max(ys) - min(ys) > 1.0, f"{label}: no bounce amplitude in y"
+    hip = next((t for t in bm.tracks if frames[t.w0] == 'null69' and t.w2 == 2), None)
+    if hip is not None:
+        for label, lo, hi in [("climb-hopA 185-205", 185, 205), ("climb-hopB 210-230", 210, 230),
+                              ("climb both 185-230", 185, 230)]:
+            w = hip.frames_in(lo, hi)
+            assert len(w) >= 10, f"{label}: hip chan-2 carries only {len(w)} keys"
+            xs = [k.value[0] for k in w]; ys = [k.value[1] for k in w]; zs = [k.value[2] for k in w]
+            print(f"   climb hip(null69) c2 {label}: keys={len(w)} x[{min(xs):.3f},{max(xs):.3f}] "
+                  f"y[{min(ys):.2f},{max(ys):.2f}] z[{min(zs):.2f},{max(zs):.2f}]")
+            assert max(ys) - min(ys) > 1.0, f"{label}: no bounce amplitude in y"
     assert mc.Pack.parse(new_chr).rebuild() == new_chr, "pack round-trip failed"
 
 
 # APPROVED builds (field-validated): --test fails loudly if a change drifts them. Update these pins
 # only when a new build for that character is deliberately approved.
-APPROVED = {"Xiao": (710113, "05730e1400570707"), "Osmond": (802653, "1601dd1548c93cac")}
+# (re-pinned 2026-09-06: replace_payload now pads strides to 16 like vanilla — the unaligned-cfg fix
+# that solved Ruby's garbled load; Xiao/Osmond gained pad bytes only.)
+APPROVED = {"Xiao": (710128, "3d82e365d04aa51a"), "Osmond": (802656, "c39758570722762a")}
 
 
 def _test():

@@ -45,6 +45,10 @@ namespace Dark_Cloud_Improved_Version
         private const int RefusalTicks   = 62;   // ≈3.1 s — covers the 2.8 s clip; the hold hides the slack
 
         private static int _refusalLeft;   // >0 = refusal playing (holds the idle-motion mailbox)
+        private static int _rubyDbgTick;   // TEMP: Ruby run-bug diagnostic cadence
+        private static int _rubyDbgTable;  // TEMP: full motion-table dump cadence
+        private static uint _rubyTableAddr; // TEMP: cached motion_info guest addr (from the periodic sample)
+        private static bool _rubyEntryBad;  // TEMP: last watch verdict (edge-triggered logging)
 
         // ── Xiao's ladder JUMP ──────────────────────────────────────────────────────────────────────
         // Live event-param buffer EdGetEvent refreshes while the player stands on an event point (and
@@ -127,6 +131,29 @@ namespace Dark_Cloud_Improved_Version
         private const int   GoroLandClipF     = 10;     // the crouch clip's anim-frame length
         private const float GoroWindRevSpeed  = 0.40f;  // reversed rise → 25 engine frames
         private const float GoroWindFwdSpeed  = 0.80f;  // forward sink → ~13 engine frames
+        // ── Ruby (ally 3) — she FLOATS (catalog). UP: the mid-air float loop rising straight up the ladder
+        // line, a drift over the ledge at hover height, a slow settle, idle. DOWN: her e228 jump clip (the
+        // bake FREEZES its root travel — the cutscene's 43u leap) into the mid-air hold loop, on a floaty
+        // low-gravity arc, ending LandMargin above the base so the engine lands her natively (its airborne
+        // branch = fall slot 8 the float, land slot 9 the idle settle — the catalog's "settle to idle").
+        private const int RubyAlly          = 3;
+        private const int RbFloatIndex      = 8;      // town fall slot = e228 #0 mid-air float (LOOPS)
+        private const int RbJumpIndex       = 11;     // e228 #14 jump (root frozen at bake)
+        private const int RbJumpLoopIndex   = 12;     // e228 #15 mid-air hold (LOOPS, pinned at float rest)
+        private const float RbRiseSpeed     = 0.35f;  // units/frame float ascent — SAME as the descent
+        private const float RbForwardSpeed  = 0.30f;  // drift over the ledge at hover height
+        private const float RbSettleSpeed   = 0.15f;  // gentle drop onto the ledge
+        private const float RbDescendSpeed  = 0.35f;  // down-ladder main descent — a controlled float, no gravity
+        private const float RbHover         = 3f;     // rise this far above the ledge before the drift
+        private const int   RbMaxRise       = 500;    // ascent frame cap
+        // Idle→float transition softener: enter the float loop at a crawl while lifting gently off the
+        // ground, then let it play at its authored pace — reads as her gathering into the hover.
+        private const float RbEntrySpeed    = 0.03f;  // float-loop playback during the entry beat
+        private const int   RbEntryF        = 24;     // entry beat length (frames)
+        private const float RbEntryLift     = 0.08f;  // units/frame gentle lift during the beat (~2u total)
+        private const int   RbRampF         = 8;      // rise-speed ramp: 8f @0.25 then 8f @0.35 before cruise
+        private const int   RubyRefuseTicks = 36;     // slot-7 dmg-out: 20f @0.2 ≈ 100 engine frames ≈ 1.8 s
+
         // Pre-jump alignment (both directions): walk to the mount point turning to FACE the ladder, then a few
         // backwards walk-steps to line up, then the ready crouch LOOPING for ~0.25 s, then launch.
         private const float WalkSpeed  = 0.30f;   // align walk, units/frame
@@ -167,6 +194,92 @@ namespace Dark_Cloud_Improved_Version
             // it stays correct across swaps and emulator resets; the cave is town-only so its value is inert elsewhere.
             Memory.WriteInt(BlockLadder, AllySwapPrototype.CurrentAlly != 0 ? 1 : 0);
 
+            // TEMP DIAGNOSTIC (Ruby run bug): per-tick WATCH on motion_info[1] — log the exact moment it
+            // flips away from the parsed {60,80,0.40} (and back), with game state for correlation.
+            if (AllySwapPrototype.CurrentAlly == RubyAlly && _rubyTableAddr != 0)
+            {
+                long e1 = Memory.ToMmu(_rubyTableAddr) + 0x10;
+                int s0 = Memory.ReadInt(e1), s1 = Memory.ReadInt(e1 + 4);
+                float s2 = Memory.ReadFloat(e1 + 8);
+                bool bad = s1 != 80;                      // parsed value is end=80; anything else = corrupted
+                if (bad != _rubyEntryBad)
+                {
+                    _rubyEntryBad = bad;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                        $"[RubyDbg] ENTRY1 {(bad ? "CORRUPTED" : "restored")} -> [{s0}..{s1}]@{s2:F2} " +
+                        $"gameMode={Memory.ReadInt(EditLoop.GameMode)} mapEvt={Memory.ReadInt(EditLoop.StartEventNo)}");
+                    if (bad)
+                    {
+                        // The engine's cfg-parse globals persist after a parse: config_file @0x2A24DC is
+                        // the LAST cfg text ReadInfo consumed — the misparse writes through motion_info
+                        // @0x2A24B0, so dumping both names the culprit file directly.
+                        uint cf = Memory.ReadUInt(0x202A24DC) & Memory.PhysAddrMask;
+                        int cfSize = Memory.ReadInt(0x202A24E0);
+                        uint miG = Memory.ReadUInt(0x202A24B0);
+                        int keyNo = Memory.ReadInt(0x202A24AC);
+                        string text = "?";
+                        if (Memory.IsValidGuest(cf) && cfSize > 0)
+                        {
+                            var bytes = new byte[Math.Min(cfSize, 640)];
+                            for (int k = 0; k < bytes.Length; k++) bytes[k] = Memory.ReadByte(Memory.ToMmu(cf) + k);
+                            var sb2 = new System.Text.StringBuilder();
+                            for (int row = 0x0C0; row < Math.Min(bytes.Length, 0x180); row += 16)
+                            {
+                                sb2.Append($"  +{row:X3}: ");
+                                for (int k = row; k < row + 16 && k < bytes.Length; k++) sb2.Append($"{bytes[k]:X2} ");
+                                sb2.Append("  ");
+                                for (int k = row; k < row + 16 && k < bytes.Length; k++)
+                                    sb2.Append(bytes[k] >= 0x20 && bytes[k] < 0x7F ? (char)bytes[k] : '.');
+                                sb2.Append('\n');
+                            }
+                            text = sb2.ToString();
+                        }
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"[RubyDbg] last-parsed cfg @0x{cf:X8} size={cfSize} motion_info=0x{miG:X8} key_no={keyNo}\n{text}");
+                    }
+                }
+            }
+            if (AllySwapPrototype.CurrentAlly == RubyAlly && ++_rubyDbgTick >= 30)
+            {
+                _rubyDbgTick = 0;
+                uint ch = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+                if (Memory.IsValidGuest(ch))
+                {
+                    long cc = Memory.ToMmu(ch);
+                    int id = Memory.ReadInt(cc + 0xc68);
+                    int flags = Memory.ReadInt(cc + 0xc64);
+                    float spd = Memory.ReadFloat(cc + 0xc60);
+                    int mode = Memory.ReadInt(cc + 0xc70);
+                    uint st = Memory.ReadUInt(cc + 0xc20) & Memory.PhysAddrMask;
+                    if (Memory.IsValidGuest(st))
+                    {
+                        long s = Memory.ToMmu(st);
+                        float frame = Memory.ReadFloat(s + 0x10);
+                        int cur = Memory.ReadInt(s + 0x24);
+                        int prev = Memory.ReadInt(s + 0x28);
+                        uint mi = Memory.ReadUInt(s + 0x64) & Memory.PhysAddrMask;
+                        if (Memory.IsValidGuest(mi)) _rubyTableAddr = mi;   // arm the per-tick entry1 watch
+                        string entry = "?";
+                        if (Memory.IsValidGuest(mi) && cur >= 0 && cur < 32)
+                        {
+                            long e = Memory.ToMmu(mi) + cur * 0x10;
+                            entry = $"[{Memory.ReadInt(e)}..{Memory.ReadInt(e + 4)}]@{Memory.ReadFloat(e + 8):F2}";
+                        }
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
+                            $"[RubyDbg] id={id} flags={flags:X} spdOvr={spd:F2} mode={mode} frame={frame:F1} idx={cur} prev={prev} win={entry}");
+                        if (++_rubyDbgTable >= 4 && Memory.IsValidGuest(mi))
+                        {
+                            _rubyDbgTable = 0;
+                            var sb = new System.Text.StringBuilder($"[RubyDbg] TABLE@0x{mi:X8} ");
+                            long tb = Memory.ToMmu(mi);
+                            for (int k = 0; k < 14; k++)
+                                sb.Append($"{k}:[{Memory.ReadInt(tb + k * 0x10)}..{Memory.ReadInt(tb + k * 0x10 + 4)}]@{Memory.ReadFloat(tb + k * 0x10 + 8):F2} ");
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + sb.ToString());
+                        }
+                    }
+                }
+            }
+
             // Refusal playback: the engine plays the shake once and HOLDS its last frame (PlayOnceFlag). Release
             // when the countdown runs out, the player moves (motion left idle/override — don't let a re-idle
             // replay the shake), or an event takes over walking.
@@ -191,18 +304,21 @@ namespace Dark_Cloud_Improved_Version
             {
                 Memory.WriteInt(RefusalRequested, 0);
                 int ally = AllySwapPrototype.CurrentAlly;
-                if (_jumpPhase == 0 && (ally == XiaoAlly || ally == OsmondAlly || ally == GoroAlly))
+                if (_jumpPhase == 0 && (ally == XiaoAlly || ally == OsmondAlly || ally == GoroAlly || ally == RubyAlly))
                 {
                     bool fired = ally switch
                     {
                         XiaoAlly => TryFireJump(),
                         OsmondAlly => TryFireOsmond(),
+                        RubyAlly => TryFireRuby(),
                         _ => TryFireGoro(),
                     };
                     if (fired) return;
-                    if (ally == XiaoAlly || ally == GoroAlly)              // both have a refusal clip in slot 7
+                    if (ally == XiaoAlly || ally == GoroAlly || ally == RubyAlly)    // refusal clip in slot 7
                     {
-                        _refusalLeft = ally == XiaoAlly ? RefusalTicks : 28;   // Goro's "no" = 30f @0.5 ≈ 60 engine frames
+                        _refusalLeft = ally == XiaoAlly ? RefusalTicks
+                                     : ally == RubyAlly ? RubyRefuseTicks
+                                     : 28;                                 // Goro's "no" = 30f @0.5 ≈ 60 engine frames
                         Memory.WriteInt(IdleMotionFlags, PlayOnceFlag);    // flags BEFORE index (the cave reads both per frame)
                         Memory.WriteInt(IdleMotionMailbox, RefusalIndex);
                     }
@@ -704,6 +820,151 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"goro {(h < 0 ? "JUMP down" : "CLIMB up")} type={type} Ta={Ta} h={h:F1} face={face:F2} release={release:F2}");
             return true;
+        }
+
+        /// <summary>Ruby's ladder. DOWN = a floaty low-gravity arc: the jump clip launches, the mid-air hold
+        /// loop takes the tail, and the arc ends LandMargin above the base for the engine's native landing
+        /// (float → idle settle). UP = the FLOAT: rise straight up the ladder line in the float loop, drift
+        /// over the ledge at hover height, settle down onto it, idle.</summary>
+        private static bool TryFireRuby()
+        {
+            int type = Memory.ReadInt(LadderParam);
+            if (type != 4 && type != 5) return false;
+
+            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(chara)) return false;
+            long c = Memory.ToMmu(chara);
+            float px = Memory.ReadFloat(c + EditLoop.CharaPosition);
+            float py = Memory.ReadFloat(c + EditLoop.CharaPosition + 4);
+            float pz = Memory.ReadFloat(c + EditLoop.CharaPosition + 8);
+
+            float[] a = ReadVec(LadderParam + 0x10), b = ReadVec(LadderParam + 0x20);
+            float da = Dist2(a, px, pz), db = Dist2(b, px, pz);
+            float[] tgt   = da >= db ? a : b;
+            float[] mount = da >= db ? b : a;
+            float h = tgt[1] + LandMargin - py;
+            if (Math.Abs(h) < 2f || Math.Abs(h) > 500f) return false;
+
+            float ladderYaw = Memory.ReadFloat(LadderParam + 0x34);
+            float yaw0 = Memory.ReadFloat(c + EditLoop.CharaRotation + 4);
+            float face = h < 0
+                ? (float)Math.Atan2(tgt[0] - mount[0], tgt[2] - mount[2])
+                : ladderYaw;
+            float ax = mount[0], az = mount[2];
+            float alignDist = (float)Math.Sqrt(Dist2(mount, px, pz));
+            int Ta = Math.Min(Math.Max((int)(alignDist / WalkSpeed), AlignMin), AlignMax);
+            float release = WrapAngle(ladderYaw + (float)Math.PI - face);
+
+            long stb = TownScript.Base();
+            int labelCount = Memory.ReadInt(stb + TownScript.LabelCount);
+            int tbl = Memory.ReadInt(stb + TownScript.LabelTable);
+            ScriptLabel lab = FindLabelById(stb, labelCount, tbl, AllySwapLabelId);
+            if (lab == null || lab.Size <= 0) return false;
+            Memory.WriteInt(stb + lab.Entry, AllySwapLabelId);
+
+            float fwdDist = (float)Math.Sqrt((tgt[0] - ax) * (tgt[0] - ax) + (tgt[2] - az) * (tgt[2] - az));
+            int Tf = Math.Max((int)(fwdDist / RbForwardSpeed), 8);
+            if (h < 0)
+            {
+                // Pure controlled FLOAT down — no ballistics: lift-off beat, drift out over the edge, glide
+                // straight down to just above the base, settle the last bit, idle. Mirrors the ascent.
+                float drop = py + RbEntryF * RbEntryLift - (tgt[1] + RbHover);
+                int Tv = Math.Max((int)(drop / RbDescendSpeed), 4);   // constant speed, no duration clamp
+                int Tdown = Math.Max((int)(RbHover / RbSettleSpeed), 8);
+                if (!WriteLadderScript(stb, lab,
+                            BuildRubyFloatBytecode(px, py, pz, yaw0, face, ax, az, Ta,
+                                                   (ax - px) / Ta, (az - pz) / Ta, WrapAngle(face - yaw0) / Ta,
+                                                   false, Tv, (tgt[0] - ax) / Tf, (tgt[2] - az) / Tf, Tf, Tdown,
+                                                   tgt[0], tgt[1], tgt[2], ladderYaw, release),
+                            $"ruby float-down (align {Ta}f + fwd {Tf}f + glide {Tv}f)")) return false;
+            }
+            else
+            {
+                float preRise = RbEntryF * RbSettleSpeed + RbRampF * 0.25f;   // beat + ramp climb
+                // NO duration clamp: constant float speed — longer ladders simply take longer.
+                int Tup = Math.Max((int)((h - LandMargin + RbHover - preRise) / RbRiseSpeed), 4);
+                int Tdown = Math.Max((int)(RbHover / RbSettleSpeed), 8);
+                if (!WriteLadderScript(stb, lab,
+                            BuildRubyFloatBytecode(px, py, pz, yaw0, face, ax, az, Ta,
+                                                   (ax - px) / Ta, (az - pz) / Ta, WrapAngle(face - yaw0) / Ta,
+                                                   true, Tup, (tgt[0] - ax) / Tf, (tgt[2] - az) / Tf, Tf, Tdown,
+                                                   tgt[0], tgt[1], tgt[2], ladderYaw, release),
+                            $"ruby float-up (align {Ta}f + rise {Tup}f + fwd {Tf}f)")) return false;
+            }
+            Memory.WriteInt(EditLoop.StartEventNo, AllySwapLabelId);
+            _jumpPhase = 1; _jumpTicks = 0;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"ruby {(h < 0 ? "FLOAT down" : "FLOAT up")} type={type} Ta={Ta} h={h:F1} face={face:F2} release={release:F2}");
+            return true;
+        }
+
+        /// <summary>Ruby's float flight, both directions: align walk → ENTRY BEAT (float loop at a crawl,
+        /// gentle lift off the ground — the softened idle→float transition) → UP: rise, drift over the
+        /// ledge, settle DOWN onto it / DOWN: drift out over the edge, glide straight down, settle → snap,
+        /// idle. Same shape as Osmond's heli minus the deploy/stow phases.</summary>
+        private static StbWriter BuildRubyFloatBytecode(float px, float py, float pz, float yaw0, float face,
+                                                        float ax, float az, int ta,
+                                                        float dxA, float dzA, float dYaw,
+                                                        bool up, int tvert, float dxF, float dzF, int tf, int tdown,
+                                                        float tx, float ty, float tz,
+                                                        float ladderYaw, float release)
+        {
+            var w = new StbWriter();
+            w.UseLocals(6);
+            w.Yield(); w.Yield();
+            EmitWorldCoordReset(w);
+
+            w.PushInt(StbCommands.SetFollowCamera); w.PushInt(-1);
+            w.PushFloat(CamDist); w.PushFloat(CamHeight);
+            w.PushFloat(ladderYaw - (float)Math.PI); w.PushFloat(CamEase); w.Ext(6);
+
+            SetLocalFloat(w, 1, px); SetLocalFloat(w, 2, py); SetLocalFloat(w, 3, pz);
+            SetLocalFloat(w, 5, yaw0);
+            EmitAlignWalk(w, ta, dxA, dzA, dYaw, face);
+
+            void Drift(int ticks, float dx, float dy, float dz)
+            {
+                if (ticks <= 0) return;
+                SetLocalInt(w, 0, ticks);
+                int m = w.Mark();
+                if (dx != 0f) AddToLocal(w, 1, () => w.PushFloat(dx));
+                if (dy != 0f) AddToLocal(w, 2, () => w.PushFloat(dy));
+                if (dz != 0f) AddToLocal(w, 3, () => w.PushFloat(dz));
+                EmitNpcPosFromLocals(w);
+                w.Yield();
+                EmitDecAndLoop(w, m);
+            }
+
+            SetMotion(w, RbFloatIndex, RbEntrySpeed, 0);      // ENTRY BEAT: float loop at a crawl...
+            if (up)
+            {
+                // ...already RISING gently through the transition (no dead hover before the climb —
+                // mirrors how the down sequence blends motion through its settle), then RAMP the climb
+                // speed instead of stepping to it (0.15 → 0.25 → 0.35 → 0.45 reads as her accelerating).
+                Drift(RbEntryF, 0f, RbSettleSpeed, 0f);
+                SetMotion(w, RbFloatIndex, -1f, 0);           // same id — only the speed changes (no restart)
+                Drift(RbRampF, 0f, 0.25f, 0f);
+                Drift(tvert, 0f, RbRiseSpeed, 0f);            // cruise up the ladder line
+                Drift(tf, dxF, 0f, dzF);                      // drift forward over the ledge at hover height
+                Drift(tdown, 0f, -RbSettleSpeed, 0f);         // settle gently onto the ledge
+            }
+            else
+            {
+                Drift(RbEntryF, 0f, RbEntryLift, 0f);         // ...with a gentle lift off the edge
+                SetMotion(w, RbFloatIndex, -1f, 0);
+                Drift(tf, dxF, 0f, dzF);                      // drift out over the edge
+                Drift(tvert, 0f, -RbDescendSpeed, 0f);        // glide straight down to just above the base
+                Drift(tdown, 0f, -RbSettleSpeed, 0f);         // settle the last stretch
+            }
+
+            w.PushInt(StbCommands.SetNpcPos); w.PushInt(-1);  // snap exactly onto the target point (grounded)
+            w.PushFloat(tx); w.PushFloat(ty); w.PushFloat(tz); w.Ext(5);
+            SetMotion(w, 0, -1f, 0);                          // idle — the settle
+            EmitYieldLoop(w, 20);
+
+            w.PushInt(StbCommands.ResetCameraAngle); w.PushFloat(release); w.Ext(2);
+            w.Ret();
+            return w;
         }
 
         private static StbWriter BuildGoroClimbBytecode(float px, float py, float pz, float yaw0, float face,

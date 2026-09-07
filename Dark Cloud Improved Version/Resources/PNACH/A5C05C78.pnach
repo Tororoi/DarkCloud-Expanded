@@ -46,17 +46,10 @@ patch=1,EE,E1010004,extended,002A2518 //check if factory
 patch=1,EE,201F7DB4,extended,0C08B3BC //write jal comseplay
 
 
-patch=1,EE,E1066135,extended,01909B63 //check if ruby enabled
-patch=1,EE,E1053130,extended,01909B65 //check if ruby enabled
-patch=1,EE,21909C4D,extended,2C303609 //fix animation
-patch=1,EE,21909C51,extended,2C303809 //fix animation
-patch=1,EE,21909C55,extended,342E3009 //fix animation
-patch=1,EE,21909C6F,extended,2C303309 //fix animation
-patch=1,EE,21909C73,extended,2C303509 //fix animation
-
-patch=1,EE,E1023063,extended,01988BE1 //check if xiao enabled
-patch=1,EE,E1016334,extended,01988BE3 //check if xiao enabled
-patch=1,EE,21988C23,extended,362E3009 //fix run animation
+//(removed 2026-09-07: legacy Ruby/Xiao "fix animation" hacks that TEXT-EDITED the old vanilla cfgs'
+//KEY lines in RAM (swapping c05a's run/walk order, retuning speeds). The town models are now REBUILT
+//at ISO-patch time with correct KEY tables, and the fixed RAM addresses these wrote to landed MID-LINE
+//in the longer rebuilt cfgs — Ruby's run parsed as [60..60]@80 = the frozen-midair-run saga.)
 
 
 //Handling event cutscenes, talk dialogues etc.

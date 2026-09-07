@@ -105,14 +105,20 @@ class Pack:
 
     def replace_payload(self, name, new_payload):
         """Swap a record's payload; fix its size/stride header words. No absolute offsets in a pack,
-        so every following record is untouched (they chain by their own stride)."""
+        so every following record is untouched (they chain by their own stride).
+
+        The stride is padded to 16 BYTES like every vanilla record (zero pad after the payload):
+        the NEXT record's alignment depends on this one's stride, and a following .mds is DMA'd
+        (VIF wants qwords) — an unaligned mesh record renders as garbled shards. This bit Ruby's
+        c05a.chr, the one base whose cfg (the only arbitrary-length record) sits FIRST, ahead of
+        the .mds; the other bases keep their cfg last, which hid the bug."""
         r = self.find(name)
         if r is None:
             raise KeyError(name)
         head = bytearray(r.raw[:r.data_off])
-        new_stride = r.data_off + len(new_payload)
+        new_stride = (r.data_off + len(new_payload) + 15) & ~15
         struct.pack_into('<II', head, 0x44, len(new_payload), new_stride)   # size @0x44, stride @0x48
-        r.raw = bytes(head) + new_payload
+        r.raw = bytes(head) + new_payload + b'\x00' * (new_stride - r.data_off - len(new_payload))
         r.size = len(new_payload)
         r.stride = new_stride
 
