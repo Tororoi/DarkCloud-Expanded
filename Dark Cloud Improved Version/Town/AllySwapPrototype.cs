@@ -98,7 +98,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.ExclamationYBoost,
                 _currentAlly == 1 ? 4.0f      // Xiao: long/low cat mesh
               : _currentAlly == 3 ? 2.5f      // Ruby: slightly above her head
-              : _currentAlly == 4 ? 9.0f      // Ungaga: tall — the mark sat inside his head
+              : _currentAlly == 4 ? 6.0f      // Ungaga: tall — the mark sat inside his head
               : 0f);
         }
 

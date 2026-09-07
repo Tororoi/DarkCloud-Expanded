@@ -191,11 +191,12 @@ CHARS = {
             dict(idx=4,  frames=(115, 131), speed=0.20, name="door2",       src=None),
             dict(idx=5,  frames=(240, 250), speed=0.30, name="item",        src="dun/mainchara/c10b.chr", win=(630, 640)),
             dict(idx=6,  frames=(255, 265), speed=0.30, name="item-loop",   src="dun/mainchara/c10b.chr", win=(643, 653)),
-            dict(idx=7,  frames=(270, 310), speed=0.22, name="refuse(NG)",  src="dun/mainchara/c10b.chr", win=(490, 530)),
+            dict(idx=7,  frames=(270, 310), speed=0.22, name="refuse(NG)",  src="dun/mainchara/c10b.chr", win=(490, 530),
+                 pin_nodes=dict(nodes=["kon_1", "r_handa"], ref=15)),   # staff rides the hand at its idle grip
             # fall/land per the catalog: damage-big REVERSED = falling forward; land = a 2f settle.
             # fall = STATIC frame 297 of c10b's damage-big (a 1-frame KEY @speed 0 — vanilla precedent:
             # c10b's own "26投げ停止 186,186,0.0"). No animation, just the falling pose.
-            dict(idx=8,  frames=(315, 315), speed=0.0,  name="fall(297)",   src="dun/mainchara/c10b.chr", win=(297, 297)),
+            dict(idx=8,  frames=(315, 315), speed=0.0,  name="fall(296)",   src="dun/mainchara/c10b.chr", win=(296, 296)),
             dict(idx=9,  frames=(357, 359), speed=0.20, name="land(rev)",   src="dun/mainchara/c10b.chr", win=(295, 297), reverse=True),
             dict(idx=10, frames=(115, 131), speed=0.20, name="door3",      src=None),
         ],
@@ -774,6 +775,30 @@ def _freeze_roots(pack, mot_name, ref_frame, dlo, dhi):
     pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
 
 
+def _pin_nodes(pack, mot_name, mds_name, nodes, ref, dlo, dhi):
+    """Pin NAMED nodes to their `ref`-frame pose across [dlo,dhi]: drop their window keys and seal the
+    edges with the sampled value (rotation AND translation). For a held prop that the clip's source rig
+    animated under a different name (Ungaga's staff kon_1 vs c10b's weapon): without keys in the window
+    the engine clamps the node toward its NEAREST timeline keys (his kon-pose grip at 226) — the staff
+    'slides in his hand'. Pinned to the idle grip it rides the hand rigidly."""
+    m = mc.Mot.from_record(pack.find(mot_name))
+    frames = mc.read_mds_frames(pack.find(mds_name).payload)
+    for t in m.tracks:
+        if t.w0 >= len(frames) or frames[t.w0] not in nodes:
+            continue
+        v = _sample_track(t, ref)
+        if v is None:
+            continue
+        t.keyframes[:] = [k for k in t.keyframes if not (dlo <= k.frame <= dhi)]
+        for f in (dlo, dhi):
+            kf = t.keyframes[0].copy()
+            kf.frame = f
+            struct.pack_into('<4f', kf.raw, 0x10, *v)
+            t.keyframes.append(kf)
+        t.keyframes.sort(key=lambda k: k.frame)
+    pack.replace_payload(mot_name, m.rebuild()[m.data_off:])
+
+
 def _rewrite_keys(cfg_payload, slots):
     """Replace the KEY_START..MOTION_END block's KEY lines with one KEY per slot (slot order = index)."""
     lines = b"".join(
@@ -852,6 +877,10 @@ def assemble(base_bytes, read_src, char):
         if s.get("root_freeze") is not None:                                          # kill baked root travel
             _freeze_roots(base, bmot, s["root_freeze"], dlo, dhi)
             if smot: _freeze_roots(base, smot, s["root_freeze"], dlo, dhi)
+            touched = True
+        if s.get("pin_nodes"):                                                        # pin props to a ref pose
+            pn = s["pin_nodes"]
+            _pin_nodes(base, bmot, bmds, pn["nodes"], pn["ref"], dlo, dhi)
             touched = True
         if touched:
             grafts += 1
