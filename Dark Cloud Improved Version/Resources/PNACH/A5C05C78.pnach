@@ -58,6 +58,26 @@ patch=1,EE,E1020004,extended,002A2518 //factory: keep the vanilla reject
 patch=1,EE,201F7DB0,extended,24040002
 patch=1,EE,201F7DB4,extended,0C08B3BC
 
+//Town ally-commit SPREAD animation: the dungeon commit's states 4/5 grow the portrait wheel's radius
+//every frame (DrawCharaSelect: chara_r_long += counter) = the allies spreading off-screen. The mod
+//enters state 4 on a town commit; these NOP the dungeon-only loaders inside states 4/5 when NOT in a
+//dungeon (BtMenuLoadChara/BtMenuLoad2 would load into dungeon buffers, LockOffTargte even jals into
+//the dungeon OVERLAY = crash in town). ExitBattleMenu stays — it is the clean teardown.
+patch=1,EE,E1060003,extended,102A2534 //not in dungeon -> NOP the 6 loader calls
+patch=1,EE,201F74B4,extended,00000000
+patch=1,EE,201F74BC,extended,00000000
+patch=1,EE,201F74C4,extended,00000000
+patch=1,EE,201F74D0,extended,00000000
+patch=1,EE,201F7528,extended,00000000
+patch=1,EE,201F7530,extended,00000000
+patch=1,EE,E1060003,extended,002A2534 //in dungeon -> vanilla words
+patch=1,EE,201F74B4,extended,0C083A58
+patch=1,EE,201F74BC,extended,0C04FBB0
+patch=1,EE,201F74C4,extended,0C04FB30
+patch=1,EE,201F74D0,extended,0C083A2C
+patch=1,EE,201F7528,extended,0C083A80
+patch=1,EE,201F7530,extended,0C76FF38
+
 
 //(removed 2026-09-07: legacy Ruby/Xiao "fix animation" hacks that TEXT-EDITED the old vanilla cfgs'
 //KEY lines in RAM (swapping c05a's run/walk order, retuning speeds). The town models are now REBUILT

@@ -57,6 +57,8 @@ namespace Dark_Cloud_Improved_Version
         private static int  _firedAlly = -1;     // fired, awaiting VERIFICATION (the event actually running)
         private static int  _fireVerifyTicks;
         private static bool _fireSawEvent;
+        private static int  _flagClearTicks;     // >0 = clear the stale party-page flag after the spread
+        private static bool _sawFishing;         // a REAL fishing session ran while an ally was active
         private static int  _currentAlly;        // who the town character currently is (0=Toan on town load)
 
         /// <summary>Who the town character currently is (0=Toan..5=Osmond). Read by per-ally behavior tickers
@@ -83,11 +85,16 @@ namespace Dark_Cloud_Improved_Version
             if (map != _lastMap)
             {
                 _lastMap = map; _installedStb = 0;
-                _currentAlly = 0; _pendingAlly = -1; _firedAlly = -1;   // a fresh town load starts as Toan
+                _currentAlly = 0; _pendingAlly = -1; _firedAlly = -1; _sawFishing = false;   // fresh town = Toan
             }
 
             EnsureInstalled();
             DetectCommit();
+            if (_currentAlly != 0 && Memory.ReadByte(FishingAddresses.Active) == 1)
+                _sawFishing = true;              // arm the post-fishing ally restore (see below)
+            if (_flagClearTicks > 0 && --_flagClearTicks == 0 &&
+                Memory.ReadByte(Addresses.selectedMenu) == AlliesMenuPage)
+                Memory.WriteInt(Addresses.selectedMenu, 0);   // un-park the stale flag (menu is long gone)
             RestoreAllyAfterFishing();
             MaybeFirePending();
             VerifyFired();
@@ -115,6 +122,10 @@ namespace Dark_Cloud_Improved_Version
         /// ally; MaybeFirePending fires it with the full canal-wading suppression, same as a menu commit.</summary>
         private static void RestoreAllyAfterFishing()
         {
+            // Gated on a REAL session (_sawFishing): the c01d path-buffer check alone misfires — menu
+            // visits/page rotation can load Toan-adjacent data through the same loader, and the restore
+            // then re-fired the swap every ~2s (periodic flicker + lag) with no fishing involved.
+            if (!_sawFishing) return;
             if (_currentAlly == 0 || _pendingAlly >= 0 || _firedAlly >= 0 || _installedStb == 0) return;
             if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return;
             if (Memory.ReadInt(LoadedChrPathBuf) != 0x72616863 ||        // "char"
@@ -122,6 +133,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.ReadInt(LoadedChrPathBuf + 8) != 0x632e6431 ||    // "1d.c"
                 (Memory.ReadInt(LoadedChrPathBuf + 12) & 0xFFFFFF) != 0x007268)   // "hr\0"
                 return;
+            _sawFishing = false;
             _pendingAlly = _currentAlly;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"fishing quit restored Toan over {Allies[_currentAlly].name} — re-swapping in place");
@@ -142,12 +154,21 @@ namespace Dark_Cloud_Improved_Version
                 if (cursor >= 0 && cursor < Allies.Length && unlocked && cursor != _currentAlly)
                 {
                     _pendingAlly = cursor;
-                    // AUTO-CLOSE immediately (confirm chime plays via the pnach's a0=1 patch on this press)
-                    // and PRE-ARM the swap so the engine consumes it on the first walking frame.
-                    Memory.WriteInt(Addresses.selectedMenu, 0x1C);
-                    FirePending();
+                    // THE DUNGEON COMMIT, exactly: enter page state 4 — DrawCharaSelect's state-4/5 branch
+                    // grows the portrait wheel's radius by the frame counter every frame (the allies SPREAD
+                    // off-screen, ~40 frames across states 4→5), then state 5's ExitBattleMenu tears down.
+                    // The dungeon-only loaders inside those states are NOP'd town-side by the pnach.
+                    // The confirm chime plays via the pnach's a0=1 patch on this press.
+                    Memory.WriteInt(0x21D90478, 0);                     // commit frame counter
+                    Memory.WriteByte(0x21D90473, 4);                    // page sub-state 4: the spread
+                    // NO pre-arm here: an armed StartEventNo gets consumed MID-MENU, hijacking the game
+                    // mode — the menu loop stops pumping and the spread freezes. And the spread route's
+                    // ExitBattleMenu never resets BattleMenuFlag (it stays parked at the party-page value,
+                    // which would block MaybeFirePending forever) — so clear it once the spread + teardown
+                    // have safely finished (~40 frames), letting the normal fire path proceed.
+                    _flagClearTicks = 15;                               // ≈45 frames at the 20 Hz tick
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                        $"commit: {Allies[cursor].name} (cursor {cursor}) — menu closing, swap pre-armed");
+                        $"commit: {Allies[cursor].name} (cursor {cursor}) — dungeon spread close");
                 }
             }
             _prevCross = cross;
