@@ -197,7 +197,7 @@ CHARS = {
             # fall = STATIC frame 297 of c10b's damage-big (a 1-frame KEY @speed 0 — vanilla precedent:
             # c10b's own "26投げ停止 186,186,0.0"). No animation, just the falling pose.
             dict(idx=8,  frames=(315, 315), speed=0.0,  name="fall(296)",   src="dun/mainchara/c10b.chr", win=(296, 296)),
-            dict(idx=9,  frames=(357, 359), speed=0.20, name="land(rev)",   src="dun/mainchara/c10b.chr", win=(295, 297), reverse=True),
+            dict(idx=9,  frames=(357, 358), speed=0.20, name="land(rev)",   src="dun/mainchara/c10b.chr", win=(295, 296), reverse=True),   # 296->295, continuous from the static-296 fall
             dict(idx=10, frames=(115, 131), speed=0.20, name="door3",      src=None),
         ],
     ),
