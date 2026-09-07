@@ -345,6 +345,9 @@ SCUS_971.11
 # Claude Code local settings
 .claude/
 
+# metadata
+.DS_Store
+
 # ── Game-derived data (never distribute) ────────────────────────────────────────────
 # ALL extracted / game-derived files live under game_data/, grouped by feature: fishsign/, priscleen/,
 # RubyMemeFix/, brownboo/, menu/. The mod loads a few runtime assets from there (the .csproj sources
