@@ -134,14 +134,13 @@ namespace Dark_Cloud_Improved_Version
         // branch = fall slot 8 the float, land slot 9 the idle settle — the catalog's "settle to idle").
         private const int RubyAlly          = 3;
         private const int RbFloatIndex      = 8;      // town fall slot = e228 #0 mid-air float (LOOPS)
-        private const int RbJumpIndex       = 11;     // e228 #14 jump (root frozen at bake)
-        private const int RbJumpLoopIndex   = 12;     // e228 #15 mid-air hold (LOOPS, pinned at float rest)
+        // (Baked but currently unused: Ruby slots 11/12 = e228's jump + mid-air hold, root travel frozen —
+        // the ladder design settled on pure float loops. Kept in the bake for future choreography.)
         private const float RbRiseSpeed     = 0.35f;  // units/frame float ascent — SAME as the descent
         private const float RbForwardSpeed  = 0.30f;  // drift over the ledge at hover height
         private const float RbSettleSpeed   = 0.15f;  // gentle drop onto the ledge
         private const float RbDescendSpeed  = 0.35f;  // down-ladder main descent — a controlled float, no gravity
         private const float RbHover         = 3f;     // rise this far above the ledge before the drift
-        private const int   RbMaxRise       = 500;    // ascent frame cap
         // Idle→float transition softener: enter the float loop at a crawl while lifting gently off the
         // ground, then let it play at its authored pace — reads as her gathering into the hover.
         private const float RbEntrySpeed    = 0.03f;  // float-loop playback during the entry beat

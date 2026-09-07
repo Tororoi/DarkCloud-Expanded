@@ -7,6 +7,16 @@ character's own models. Clips come from several source models per character; the
 verified-**cutscene-safe** base model per ally and transplant the chosen clips into the right slots
 (same-rig, by joint name — the tool in `tools/iso_patch/transplant_battle_run.py`).
 
+
+> **SHIPPED STATUS (2026-09-07, branch feat/stable-town-ally-switch):** all five allies are built by
+> `tools/iso_patch/assemble_town_model.py` (its `CHARS` table is the authoritative slot list — this doc is
+> the planning catalog and some designs evolved in play-testing). Deltas from the plans below:
+> **Ungaga** rebased from c10p onto e323_2c10a (cloth + native run window + shadow); ladders are REFUSALS at
+> both ends (no fall-down joke), fall = static frame 296, land = 296→295, doors = his chest-hand talk.
+> **Ruby** kept the shadow injection (e223c05s donor) but ladders became pure float loops both directions;
+> the e228 jump clips are baked but unused. **Refusals** run as label-405 events (movement locked, clean
+> idle hand-back). `transplant_battle_run.py` is fully retired (empty TRANSPLANTS).
+
 ## Town motion slots (what the town system plays)
 
 `chara\c01d.chr` (Toan's town model) — the indices the town engine actually plays:
