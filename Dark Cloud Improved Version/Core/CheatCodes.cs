@@ -12,22 +12,28 @@ namespace Dark_Cloud_Improved_Version
         {
             public static int index = 0;
             public static bool firstDebugCheatActive = false;
-            
+
             public static ushort previousInputs = 0;
             public static Button[] inputBuffer = new Button[10];
             public readonly Button[] empty = new Button[] {Button.None, Button.None, Button.None, Button.None, Button.None, Button.None, Button.None, Button.None, Button.None, Button.None};
             public static Button[] cheatGodmode = new Button[] { Button.DPad_Down, Button.DPad_Up, Button.Square, Button.Circle, Button.Select, Button.DPad_Right, Button.DPad_Left, Button.Circle, Button.Square, Button.R1 };
-            
+
             public static Button[] cheatBrokenDagger = new Button[] { Button.Triangle, Button.L1, Button.R2, Button.Cross, Button.DPad_Left, Button.DPad_Up, Button.L2, Button.Circle, Button.DPad_Right, Button.Select };
-            
+
+            // The broken-dagger cheat with the ABILITY FLAGS halfword zeroed (bytes [4..5], = 0x36E2 in the
+            // maxed one: Drain/Steal/Durable/…). For ability testing: attaching the maxed dagger to a weapon
+            // with a native ability can CANCEL it via the engine's opposing-pair sanitizer (Drain+Heal is a
+            // pair — CheckWeaponOptionStatus zeroes both), e.g. it strips the Angel Shooter's Heal.
+            public static Button[] cheatCleanDagger = new Button[] { Button.Triangle, Button.L1, Button.R2, Button.Cross, Button.DPad_Left, Button.DPad_Up, Button.L2, Button.Circle, Button.DPad_Right, Button.Square };
+
             public static Button[] cheatPowerupPowders = new Button[] { Button.L2, Button.DPad_Down, Button.Select, Button.Square, Button.Triangle, Button.R2, Button.DPad_Up, Button.DPad_Right, Button.L1, Button.Cross };
-            
+
             public static Button[] cheatMaxMoney = new Button[] { Button.R2, Button.DPad_Left, Button.L3, Button.Cross, Button.DPad_Up, Button.Select, Button.R1, Button.Triangle, Button.Square, Button.DPad_Down };
-            
+
             public static Button[] cheatDebugMenusPart1 = new Button[] { Button.Select, Button.R3, Button.DPad_Down, Button.Triangle, Button.DPad_Up, Button.Cross, Button.Select, Button.L3, Button.R1, Button.L1 };
-            
+
             public static Button[] cheatDebugMenusPart2 = new Button[] { Button.Circle, Button.L1, Button.DPad_Right, Button.DPad_Left, Button.R3, Button.R1, Button.Square, Button.Cross, Button.Select, Button.Cross };
-            
+
             public static Button[] cheatUnlockFloors = new Button[] { Button.R3, Button.Triangle, Button.DPad_Up, Button.Select, Button.L2, Button.R2, Button.DPad_Left, Button.Select, Button.Circle, Button.R1 };
 
             public static List<Button> inputs = new List<Button>();
@@ -39,7 +45,7 @@ namespace Dark_Cloud_Improved_Version
                 while (1 == 1)
                 {
                     Thread.Sleep(50);
-               
+
                     if (Player.CheckDunIsPaused() == true)
                     {
                         if (Memory.ReadUShort(Addresses.buttonInputs) != 0)
@@ -67,6 +73,12 @@ namespace Dark_Cloud_Improved_Version
                         if (CheckSequence(cheatBrokenDagger))
                         {
                             SpawnBrokenDagger();
+                            Memory.WriteByte(0x21CE446C, 1);
+                        }
+
+                        if (CheckSequence(cheatCleanDagger))
+                        {
+                            SpawnCleanDagger();
                             Memory.WriteByte(0x21CE446C, 1);
                         }
 
@@ -104,7 +116,7 @@ namespace Dark_Cloud_Improved_Version
                             Memory.WriteByte(0x21CE446C, 1);
                         }
                     }
-                    
+
 
                     Button softResetList = Button.L1 | Button.L2 | Button.R1 | Button.R2 | Button.Select | Button.Start; //All at once
 
@@ -124,7 +136,7 @@ namespace Dark_Cloud_Improved_Version
 
             public static void Add(Button button)
             {
-                //inputBuffer[index] = button;                         
+                //inputBuffer[index] = button;
 
                 if (inputs.Count == 10)
                 {
@@ -150,13 +162,13 @@ namespace Dark_Cloud_Improved_Version
             {
                 Button[] tmp = { };
 
-                
+
                 if (inputs.SequenceEqual(cheatCodeArray)) //Matched sequence
                 {
                     inputs.Clear();
                     return true;
                 }
-                
+
 
                 return false;
             }
@@ -182,6 +194,20 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Cheat: Broken Dagger");
                 Dayuppy.DisplayMessage("^BCheater!!\n Broken Dagger acquired!^W", 2, 30, 3000);
                 if (Player.Inventory.GetBagAttachmentsFirstAvailableSlot() != -1) Memory.WriteByteArray(Addresses.firstBagAttachment + (0x20 * Player.Inventory.GetBagAttachmentsFirstAvailableSlot()), attachmentValues);
+            }
+
+            /// <summary>Max-stat broken dagger with ZERO ability flags — same record as SpawnBrokenDagger
+            /// with bytes [4..5] (the ability halfword) cleared, so attaching it never triggers the
+            /// opposing-pair sanitizer against a weapon's native abilities (Heal testing etc.).</summary>
+            private static void SpawnCleanDagger()
+            {
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Cheat: Clean Broken Dagger (no abilities)");
+                Dayuppy.DisplayMessage("^BCheater!!\n Clean Broken Dagger\n (no abilities) acquired!^W", 2, 30, 3000);
+                int slot = Player.Inventory.GetBagAttachmentsFirstAvailableSlot();
+                if (slot == -1) return;
+                var clean = (byte[])attachmentValues.Clone();
+                clean[4] = 0; clean[5] = 0;                 // ability flags halfword -> none
+                Memory.WriteByteArray(Addresses.firstBagAttachment + (0x20 * slot), clean);
             }
 
             private static void SpawnPowerupPowders()
@@ -279,7 +305,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                 }
                 Thread.Sleep(50);
-            }         
+            }
         }
 
         public static void InitializeBD() //set custom values for the broken dagger attachment
