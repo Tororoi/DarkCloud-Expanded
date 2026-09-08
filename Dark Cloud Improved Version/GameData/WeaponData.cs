@@ -157,7 +157,7 @@ namespace Dark_Cloud_Improved_Version
             new WeaponData { Id = 308, Code = "c04w09", Name = "Divine Beast Title",        Dcol1 = null   , CommenuCombatScale = 1.000f,
                              MesEntry = 233, ModDescription = "Having this gives you\nthe title of Divine\nBeast." },
             new WeaponData { Id = 309, Code = "c04w10", Name = "Angel Shooter",             Dcol1 = null   , CommenuCombatScale = 1.000f,
-                             MesEntry = 234, ModDescription = "Guardian Grace: while\nguarding, each heal\ntick restores 4 HP." },
+                             MesEntry = 234, ModDescription = "Angel's slingshot.Looks\ncute but ultra powerful." },
             new WeaponData { Id = 310, Code = "c04w11", Name = "Flamingo",                  Dcol1 = null   , CommenuCombatScale = 1.000f,
                              MesEntry = 470, ModDescription = "Unique slingshot\nshaped like a bird." },
             new WeaponData { Id = 311, Code = "c04w12", Name = "Matador",                   Dcol1 = null   , CommenuCombatScale = 1.000f,
@@ -165,7 +165,7 @@ namespace Dark_Cloud_Improved_Version
             new WeaponData { Id = 312, Code = "c04w13", Name = "Super Steve",               Dcol1 = null   , CommenuCombatScale = 1.000f,
                              MesEntry = 484, ModDescription = "Powerful mysterious\nSlingshot, Steve." },
             new WeaponData { Id = 313, Code = "c04w14", Name = "Angel Gear",                Dcol1 = null   , CommenuCombatScale = 1.000f,
-                             MesEntry = 485, ModDescription = "Blesses allies, slowly\nhealing them. Guarding\nheals Xiao 8 HP a tick." },
+                             MesEntry = 485, ModDescription = "Blesses allies,\nslowly healing them." },
         };
 
         private static readonly Dictionary<int, WeaponData> ById;

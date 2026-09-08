@@ -6,7 +6,8 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// Angel Shooter "Guardian Grace" — while Xiao guards with a Guardian weapon, each native heal tick
     /// is amplified and celebrated. Roadmap PR 2; design in game_data/docs/angelshooter-guard-heal-re.md,
-    /// reshaped per user direction 2026-09-08.
+    /// v4 per user direction 2026-09-08 (returning to the v2 proc shape after trying continuous rates):
+    /// ONE proc every 4 seconds carrying the heal, the sparkle, the flash and the chime together.
     ///
     /// MECHANISM — ride the VANILLA cadence, amplify the amount: the dungeon overlay's per-frame loop
     /// (dun 0x1DB8240) increments a heal-tick counter (main BSS 0x2A3684) and every 240 frames grants
@@ -14,26 +15,26 @@ namespace Dark_Cloud_Improved_Version
     /// record's +0xEE). We never touch the counter: while the guard channel is open we WATCH it, and
     /// when it wraps (a native heal just fired) we top the heal up to the ability total — +3 for the
     /// Angel Shooter (4 HP per proc) and +7 for the Angel Gear inheritance (8 HP per proc) — and fire
-    /// the visuals at that same moment. Same average rate as the old 1-HP/s floor design, but one
-    /// sparkle every 4 s instead of a constant shimmer.
+    /// the full presentation at that same moment.
     ///
-    /// GATING: everything (bonus AND visuals) requires the live HEAL flag — a weapon whose Heal was
-    /// stripped (e.g. the Drain/Heal opposing-pair sanitizer after attaching a Drain item) gets
+    /// GATING: everything (bonus AND presentation) requires the live HEAL flag — a weapon whose Heal
+    /// was stripped (e.g. the Drain/Heal opposing-pair sanitizer after attaching a Drain item) gets
     /// NOTHING, matching the native tick which gates on the same flag. Ability weapons only
     /// (Angel Shooter 309 / Angel Gear 313); other Heal-sphere weapons keep the plain vanilla tick.
+    /// At full HP the native tick heals nothing, so the proc (bonus + presentation) is skipped too.
     ///
-    /// VISUALS on each proc, per weapon:
+    /// PRESENTATION on each proc, per weapon (sparkle + flash + chime together):
     ///  · ANGEL SHOOTER — the healing-spring moment relocated onto Xiao: CHealEffect sparkle
     ///    (@0x21EC4B40, fabricated with Set's own distributions), gentle white flash, heal chime
     ///    (SE 0x1B8 via SeSeq). Vanilla source for all three: HealingWater 0x1AF980 (same sparkle,
     ///    SndSePlay(0x1B8), speed-60 flash).
     ///  · ANGEL GEAR — the character-change moment: the GOLDEN materialize burst (NewChangeFx
-    ///    @0x1EB3AD0 — a resident CCharacter playing an effect model; arm motion 6 + raise the
-    ///    active flag and the engine steps it, anchors it to the ACTIVE character's pos/rot every
-    ///    draw, and self-clears the flag at animation end), a gold-tinted flash, and the change
-    ///    jingle (SE 0xF). Vanilla source: the dungeon state-0x122 materialize handler (dun
-    ///    0x1DB6940), which arms exactly these fields (+0x2F0=1.0 frame, +0xC60=-1 speed,
-    ///    +0xC64=6 motion, +0xC68=0) then SndSePlay(0xF) + a speed-90 white flash.
+    ///    @0x1EB3AD0 — arm motion 6 + raise the gate; the engine steps it, anchors it to the ACTIVE
+    ///    character every draw, self-clears at motion end), a warm gold-white flash, and the change
+    ///    jingle (SE 0xF). Vanilla source: the dungeon state-0x122 materialize handler (dun 0x1DB6940).
+    /// The flash is a single half-sine pulse (unitAmbientAnime 0x1DC1050: color = RGB*sin+64,
+    /// Speed = pulse length in frames); 60 frames matches the sparkle burst's life, so the glow
+    /// ramps in to peak mid-burst and eases out as the last sparkles fade.
     /// </summary>
     internal static class GuardianGrace
     {
@@ -45,6 +46,10 @@ namespace Dark_Cloud_Improved_Version
         private const long HealTickCounter = 0x202A3684;   // dun overlay heal-tick counter (gp-0x616C)
         private const int  HealFlagOffset  = 0xEE;         // WEAPON_HAVE live ability flags (halfword)
         private const int  HealFlagBit     = 0x800;        // HEAL — the same bit the native tick gates on
+
+        // Bonus HP added on top of the native +1: proc totals 4 (Angel Shooter) / 8 (Angel Gear).
+        private const int  ShooterBonus = 3;
+        private const int  GearBonus    = 7;
 
         // CHealEffect single instance + field offsets (Set/Step 0x1B2900/0x1B2B00, decompiled).
         private const long Fx           = 0x21EC4B40;
@@ -59,20 +64,6 @@ namespace Dark_Cloud_Improved_Version
         private const int  FxActive     = 0x510;           // 1 = playing; Step self-clears at burst end
         private const int  FxParticles  = 32;
 
-        // Gentle pulse on proc — deliberately softer/dimmer than the stock cyan charge flash.
-        // The engine flash (dun unitAmbientAnime 0x1DC1050) is a HALF-SINE envelope: each frame
-        // color = RGB*sin(Phase)+64 and Phase += π/Speed, so Speed IS the pulse length in frames.
-        // 60 matches the sparkle burst's life (CHealEffect phase step 0.05236 ≈ π/60): the glow
-        // ramps in to peak mid-burst and eases out as the last sparkles fade. Angel Gear's pulse is
-        // gold-tinted to match its golden change burst, same gentle amplitude.
-        private const float FlashWhite = 110f, FlashSpeed = 60f;
-        private const float FlashGoldR = 150f, FlashGoldG = 118f, FlashGoldB = 40f;
-        private const int   FlashCount = 1;
-
-        // Proc chime via the engine's own SE sequencer (see SeSeq). 90 frames (1.5 s) of slot life
-        // gives the one-shot room to ring out before the sequencer's auto-stop.
-        private const ushort ChimeFrames = 90;
-
         // NewChangeFx — the golden character-change materialize burst (resident CCharacter playing an
         // effect model, dungeon-resident: init'd by dun GameInit, textures in the floor's block).
         // Arm the four fields, raise the flag; the engine's effect stepper runs Step__CCharacter on
@@ -85,6 +76,18 @@ namespace Dark_Cloud_Improved_Version
         private const int  ChangeFxMotion  = 0xC64;        // motion id — 6 = the change burst
         private const int  ChangeFxMotArg  = 0xC68;        // cleared by the vanilla arm
         private const long ChangeFxActive  = 0x202A3518;   // step+draw gate (gp-0x62D8); engine self-clears
+
+        // Per-proc flash — gentle amplitude, one 60-frame half-sine synced to the sparkle's life.
+        // Angel Shooter flashes white; Angel Gear a warm gold-white (midway between white and the
+        // old too-golden 150/118/40).
+        private const float WhiteR = 110f, WhiteG = 110f, WhiteB = 110f;
+        private const float WarmR  = 130f, WarmG  = 114f, WarmB  = 75f;
+        private const float FlashSpeed = 60f;
+        private const int   FlashCount = 1;
+
+        // Slot life for the one-shot chimes through the SE sequencer (see SeSeq): 90 frames (1.5 s)
+        // gives them room to ring out before the sequencer's auto-stop.
+        private const ushort ChimeFrames = 90;
 
         private const int  FastTickMs = 50, IdleTickMs = 250;
 
@@ -109,11 +112,11 @@ namespace Dark_Cloud_Improved_Version
                     if (Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId)
                     {
                         sleep = FastTickMs;
-                        int weaponId = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
-                        int bonus = weaponId == Items.angelshooter ? 3
-                                  : weaponId == Items.angelgear   ? 7 : 0;
+                        int weaponId  = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
+                        bool gear     = weaponId == Items.angelgear;
+                        bool ability  = gear || weaponId == Items.angelshooter;
                         bool healFlag = (Memory.ReadUShort(WeaponHave.BattleWeaponRecord + HealFlagOffset) & HealFlagBit) != 0;
-                        bool open = bonus > 0 && healFlag
+                        bool open = ability && healFlag
                                  && !Player.CheckDunIsPausedOrMenu()
                                  && Player.Xiao.GetHp() > 0
                                  && GuardWatch.IsGuarding();
@@ -124,33 +127,31 @@ namespace Dark_Cloud_Improved_Version
                             {
                                 prevCounter = c;   // channel just opened mid-cycle — no retroactive proc
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                                    $"channel open ({(weaponId == Items.angelgear ? "Angel Gear +8" : "Angel Shooter +4")})");
+                                    "channel open (" + (gear ? "Angel Gear 8 HP" : "Angel Shooter 4 HP") + " per proc)");
                             }
                             else if (c < prevCounter - 60)     // wrap: the native +1 just fired
                             {
                                 ushort hp = Player.Xiao.GetHp(), max = Player.Xiao.GetMaxHp();
                                 if (hp < max)
                                 {
-                                    Player.Xiao.SetHp((ushort)Math.Min(hp + bonus, max));
-                                    if (weaponId == Items.angelgear)
+                                    Player.Xiao.SetHp((ushort)Math.Min(hp + (gear ? GearBonus : ShooterBonus), max));
+                                    if (gear)
                                     {
                                         FabricateChangeBurst();
-                                        Player.FlashActiveCharacter(FlashGoldR, FlashGoldG, FlashGoldB,
-                                                                    FlashSpeed, FlashCount);
+                                        Player.FlashActiveCharacter(WarmR, WarmG, WarmB, FlashSpeed, FlashCount);
                                         SeSeq.Play(SeSeq.ChangeJingle, ChimeFrames);
                                     }
                                     else
                                     {
                                         FabricateBurst();
-                                        Player.FlashActiveCharacter(FlashWhite, FlashWhite, FlashWhite,
-                                                                    FlashSpeed, FlashCount);
+                                        Player.FlashActiveCharacter(WhiteR, WhiteG, WhiteB, FlashSpeed, FlashCount);
                                         SeSeq.Play(SeSeq.HealChime, ChimeFrames);
                                     }
                                 }
                             }
                             prevCounter = c;
 
-                            if (Memory.ReadInt(Fx + FxActive) == 1)   // follow her while a burst plays
+                            if (Memory.ReadInt(Fx + FxActive) == 1)   // follow her while the spring burst plays
                                 WriteFxPos();
                         }
                         else if (prevCounter >= 0)
