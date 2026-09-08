@@ -38,6 +38,49 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool _loggedArm;                // one log line per low-tide arming
         private static uint _lastClothSig;             // signature of the player cloth chain last tick (stability gate for the cape early-draw)
+
+        // Suppress the early-draw across a PLAYER-MODEL SWAP (the in-place ally switch). The cave MGDraws
+        // the model root (chara+0xBC) every frame; an in-place _LOAD_MAIN_CHARA frees/rebuilds that root
+        // (Initialize__10CMainChara then LoadPackData2), so drawing the stale/half-built root mid-load feeds
+        // the GS a bad packet and hangs. This ONLY bites at Queens LOW TIDE — the one time the early-draw is
+        // armed — the observed "swap froze when morning came in Queens" freeze (medium/high-tide swaps, draw
+        // disarmed, never froze). The fishing swap doesn't need this: it reloads into the SAME slot so the
+        // root address stays valid — which is why the old code's "the body root swaps atomically" held for
+        // fishing but NOT for the ally swap, where Initialize invalidates the root.
+        //
+        // EVENT-DRIVEN, not a flat timer: the swap runs as a REAL (yielding) STB event, so GameMode leaves
+        // "walking" for event-mode while the character loads and returns to walking once it's fully built.
+        // Suppress exactly for that span (+ a couple settle ticks) so the wading look returns the instant the
+        // swap finishes (a flat 3 s window was very visible at the canal floor). A short floor catches the
+        // event actually starting (and bails if a fast event finished before we saw it leave walking); a hard
+        // cap guarantees we never strand the draw off if GameMode never transitions.
+        private const int SwapStartTimeoutMs = 400;    // phase-1: no event-mode seen within this → assume already done, re-arm
+        private const int SwapWatchMaxMs     = 5000;   // hard safety cap on total suppression
+        private const int SwapSettleTicks    = 2;      // extra ticks after GameMode returns to walking, before re-arming
+        private static int      _swapPhase;            // 0 = idle, 1 = fired/awaiting event start, 2 = event running
+        private static DateTime _swapFiredAt;
+        private static int      _swapSettle;
+
+        /// <summary>Called by AllySwapPrototype the moment it fires an in-place ally swap: hold the canal
+        /// early-draw off the model root until the swap event completes.</summary>
+        internal static void SuppressForSwap() { _swapPhase = 1; _swapFiredAt = DateTime.UtcNow; _swapSettle = 0; }
+
+        private static bool SwapInProgress()
+        {
+            if (_swapPhase == 0) return false;
+            var elapsed = DateTime.UtcNow - _swapFiredAt;
+            if (elapsed.TotalMilliseconds > SwapWatchMaxMs) { _swapPhase = 0; return false; }   // hard cap
+            bool walking = Memory.ReadInt(EditLoop.GameMode) == EditLoop.GameModeWalking;
+            if (_swapPhase == 1)
+            {
+                if (!walking) { _swapPhase = 2; _swapSettle = 0; return true; }                 // event started (left walking)
+                if (elapsed.TotalMilliseconds > SwapStartTimeoutMs) { _swapPhase = 0; return false; }  // never left walking → assume done
+                return true;                                                                    // brief floor until we see it start
+            }
+            if (!walking) { _swapSettle = 0; return true; }                                     // phase 2: still loading
+            if (++_swapSettle < SwapSettleTicks) return true;                                    // settle a couple ticks after it lands
+            _swapPhase = 0; return false;                                                        // done → re-arm next tick
+        }
         private static int  _capeStableTicks;          // consecutive ticks the cloth chain has been valid+unchanged
         private static bool _loggedCapeGate;           // one log line when the cape is gated off mid-swap
 
@@ -49,6 +92,16 @@ namespace Dark_Cloud_Improved_Version
         /// medium/high tide and whenever the player pointer is unreadable.</summary>
         internal static void Arm(bool low)
         {
+            if (SwapInProgress())
+            {
+                // A player-model swap is in flight — keep the cave OFF the (rebuilding) model root, or it
+                // draws a stale/half-built root and hangs. Force-disarm both mailboxes; make the cape
+                // re-settle after. Arm re-arms with the fresh root once the swap event completes.
+                Memory.WriteInt(CodeCaves.MizuRedrawFramePtr, 0);
+                Memory.WriteInt(CodeCaves.Mailbox.CapeCharPtr, 0);
+                _capeStableTicks = 0;
+                return;
+            }
             bool armed = false;
             if (low)
             {

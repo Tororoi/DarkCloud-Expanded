@@ -1049,6 +1049,9 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 TownEditMode.Tick();       //overhead camera + safe exit, every town
+                AllySwapPrototype.Tick();  //PROTOTYPE: in-place ally model swap (R3 → Ungaga), no reload
+                TownIdleSit.Tick();        //idle→sit for the swapped-in cat (arms the ElfPatches idle-motion cave)
+                TownLadder.Tick();         //block ladder mounts for non-Toan allies (Toan-rigged climb → crash)
                 CustomFishingSpot.Tick();  //inject a fishing spot into Queens / Brownboo / Yellow Drops
                 CanalTide.Tick();          //Queens canal water + ripple rise/fall with the day-night clock
                 TownCameraPolyBuffer.Tick(); //relocate+enlarge the camera gather arena (fixes the 400-poly overrun)

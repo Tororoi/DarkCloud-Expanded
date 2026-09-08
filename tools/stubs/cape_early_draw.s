@@ -1,4 +1,4 @@
-# Cape early-draw cave — dead CharaChange region (jal-legal). Reached by redirecting the low-tide refraction
+# Cape early-draw cave — the mod's ELF cave segment (jal-legal), @0x1FB0190 (ElfCave.CapeEarlyDraw). Reached by redirecting the low-tide refraction
 # EARLY_STUB's `jal MGDraw` (@0x17BBD0, inside PatchWaterRedraw's patchedGate) here. On entry $a0 = the player's
 # model root (the EARLY_STUB loaded it from FramePtr @0x01FAE608). We do the DISPLACED MGDraw(body) first, then
 # walk the player's cloth list and Draw__6CCloth each piece — so the CAPE is drawn EARLY too (before the water/

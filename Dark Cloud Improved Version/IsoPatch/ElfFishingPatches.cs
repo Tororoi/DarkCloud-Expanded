@@ -138,7 +138,7 @@ namespace Dark_Cloud_Improved_Version
         // settled gate (seen at the Matataki falls; a box flight-gate cave built for that was removed
         // along with the acceleration).
         // What still ships:
-        //   - cave over the height-check tail (fishlineUncastGate.bin @0x228E20, entered by a `j` over
+        //   - cave over the height-check tail (fishlineUncastGate.bin @ElfCave.FishLineUncastGate, entered by a `j` over
         //     the `lui v0,0x40a0` 5.0-load @0x1AA2D4): the height violation only counts once the bobber's
         //     Verlet velocity is ~0 (settled) — protects high-bank/boosted casts still airborne at the
         //     31-frame check.
@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         // (Cave = tools/stubs/fishline_uncast_gate.s. ISO-baked, so patching hot fishing code is safe.)
         internal static void PatchFishingUncastGate(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint UncastGateCaveAddr = 0x00228E20;                       // dead CharaChange region (ex cast-scale slot)
+            const uint UncastGateCaveAddr = CodeCaves.ElfCave.FishLineUncastGate;   // registry: CodeCaveAddresses.ElfCave
             const uint GateAddr = 0x0016C6D0;                       // EdMoveChara: slti at,st_cnt,0x1f (check delay)
             const uint LuiAddr = 0x001AA2D4, MtcAddr = 0x001AA2D8;   // CheckUkiHook tail: lui v0,0x40a0 ; mtc1 v0,f1
             uint gotG = RdU32(fs, ElfOff(GateAddr)), gotL = RdU32(fs, ElfOff(LuiAddr)), gotM = RdU32(fs, ElfOff(MtcAddr));
@@ -162,14 +162,14 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(UncastGateCaveAddr + (uint)i), U32(b, i));
             // (GateAddr left VANILLA — the check fires at 31 waiting frames, as shipped by the game.
             //  The verify above still confirms the site so a re-patch of a stale ISO is caught.)
-            // Route the tail through QueensDragCheck @0x229360 (camera_norm_side.s bank) FIRST: in Queens,
+            // Route the tail through QueensDragCheck (@ElfCave.CamBankSettledCave, camera_norm_side.s bank) FIRST: in Queens,
             // waiting-state only, a float dragged past the canal wall (|z|>49.5) or inside a bridge-pillar
             // box returns invalid -> native auto-uncast; otherwise it falls through (j) into the
             // settled-height cave below, unmodified. (Wall-stopped rest positions 48 / arch face 25 stay
             // fishable — the drag thresholds sit deliberately beyond them.)
-            WrU32(fs, ElfOff(LuiAddr), J(0x002294C0)); // height tail -> drag check -> settled-gated cave (v10 addr)
+            WrU32(fs, ElfOff(LuiAddr), J(CodeCaves.ElfCave.CamBankSettledCave)); // height tail -> drag check -> settled-gated cave (in the cameraNormSide bank)
             WrU32(fs, ElfOff(MtcAddr), 0);             // displaced mtc1 -> nop (the cave rebuilds f1 itself)
-            // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @0x229440, camera_norm_side.s) ──
+            // ── QUEENS BOBBER GROUND-LIFT GATE (QueensUkiGroundGate @ElfCave.CamBankUkiGroundSub, camera_norm_side.s) ──
             // FishLineStep's uki ground probe lifts the bobber onto ANY floor poly at its (x,z) — bridge
             // decks and pipe tops included (they're walkable, so they're in the fishing cpoly gather).
             // Probe-proven teleports: y 24.5 -> 70.2 onto a bridge deck (while the pillar box held x),
@@ -180,7 +180,7 @@ namespace Dark_Cloud_Improved_Version
             uint gotUG = RdU32(fs, ElfOff(UkiGroundLuiAddr)), gotUGd = RdU32(fs, ElfOff(UkiGroundMtcAddr));
             if (gotUG != 0x3C023F80 || gotUGd != 0x44820800)
                 throw new IOException($"Uki ground-lift site not vanilla (got 0x{gotUG:X8}/0x{gotUGd:X8}).");
-            WrU32(fs, ElfOff(UkiGroundLuiAddr), J(0x00229690));  // ground store head -> overhead-floor-gated bank sub (v10 addr)
+            WrU32(fs, ElfOff(UkiGroundLuiAddr), J(CodeCaves.ElfCave.CamBankUkiGroundSub));  // ground store head -> overhead-floor-gated bank sub (in the cameraNormSide bank)
             WrU32(fs, ElfOff(UkiGroundMtcAddr), 0);               // displaced mtc1 -> nop (sub redoes the store)
         }
 
@@ -189,13 +189,13 @@ namespace Dark_Cloud_Improved_Version
         // in both FishLineInit's layout loop and FishLineStep's constraint solve). Split it at the bobber anchor
         // (index 18) into distpAbove (= the existing distp; rod→bobber = cast reach, LineScale still tunes it) and
         // distpBelow (mailbox @0x01F10048; bobber→hook = hook depth, mod-tuned). Each `lwc1` → `j <cave>` and its
-        // following `sub.S` → nop; the cave (fishlineSplitCaves.bin, init@0x228DC0 / step@0x228DEC) selects the
+        // following `sub.S` → nop; the cave (fishlineSplitCaves.bin, ElfCave.FishLineSplit init / +0x2C step) selects the
         // rest length on the loop index s0 (<=18 above, else below), does the displaced sub.S, and jumps back.
         // Baked into the ELF (safe: on disc before FishLineStep is ever JIT'd, unlike the runtime FishLineShallow
         // cold-patch which touches the DIFFERENT anchor-load instructions). See the feasibility doc.
         internal static void PatchFishLineSplit(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint StubAddr = 0x00228DC0, StepCaveAddr = 0x00228DEC;   // init_cave / step_cave (one bin)
+            const uint StubAddr = CodeCaves.ElfCave.FishLineSplit, StepCaveAddr = CodeCaves.ElfCave.FishLineSplitStep;   // init_cave / step_cave (ONE bin — registry: CodeCaveAddresses.ElfCave)
             const uint InitLwc1Addr = 0x001A9CAC, InitSubAddr = 0x001A9CB0;  // FishLineInit: lwc1 f0,distp ; sub.S f0,f1,f0
             const uint StepLwc1Addr = 0x001AA7C8, StepSubAddr = 0x001AA7CC;  // FishLineStep: lwc1 f1,distp ; sub.S f2,f0,f1
             if (RdU32(fs, ElfOff(InitLwc1Addr)) != 0xC78087B4 || RdU32(fs, ElfOff(InitSubAddr)) != 0x46000801 ||
@@ -234,7 +234,7 @@ namespace Dark_Cloud_Improved_Version
         // Stub: tools/stubs/stilts_heal.s → stiltsHeal.bin.
         internal static void PatchStiltsHeal(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = 0x00229780;   // dead CharaChange region, past the cameraNormSide bank
+            const uint CaveAddr = CodeCaves.ElfCave.StiltsHeal;   // registry: CodeCaveAddresses.ElfCave
             const uint HookAddr = 0x0017BB48;   // MainDraw water-reload site (vanilla jal ReloadTexture)
             uint gotImm = RdU32(fs, ElfOff(HookAddr - 4)), got = RdU32(fs, ElfOff(HookAddr));
             if (gotImm != 0x24060015 || got != 0x0C05EEE9)   // addiu a2,zero,0x15 ; jal EARLY_STUB(0x17BBA4)

@@ -1,5 +1,5 @@
-# FishingCheckUkiHook SETTLED-GATED height check — cave @0x228E20 (dead CharaChange region; the slot the
-# removed cast-scale cave used to occupy). Two-part patch (IsoPatcher.PatchFishingUncastGate):
+# FishingCheckUkiHook SETTLED-GATED height check — cave @0x1FB0270 (the mod's ELF cave segment,
+# ElfCave.FishLineUncastGate). Two-part patch (IsoPatcher.PatchFishingUncastGate):
 #
 #  (1) EdMoveChara's waiting-state gate `slti at,st_cnt,0x1f` @0x16C6D0 is left VANILLA (31 frames).
 #      A 31->4 acceleration shipped for a while (fast rim-deposit rejection) but was REVERTED 2026-09-02:

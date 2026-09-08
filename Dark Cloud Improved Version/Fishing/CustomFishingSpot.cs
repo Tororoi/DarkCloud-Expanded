@@ -178,12 +178,15 @@ namespace Dark_Cloud_Improved_Version
                     return (ShortLineStart, ExtendedCastAbove, below);   // Yellow Drops: same extended pay-out cast as Queens
                 return (1f, ls, below);
             }
-            // Low tide: you stand ON the canal floor at the water's edge — a near-VANILLA cast reaches fine.
-            // Every other tide: you cast DOWN from the north bank onto the deep column — that's where the
-            // extended pay-out cast is needed.
+            // Low tide: you stand ON the canal floor at the water's edge — a near-VANILLA cast reaches fine,
+            // but the water is SHALLOW, so hang + fish depth are pinned (BelowForDepth/ApplyFishDepth).
+            // Every other tide: you cast DOWN from the north bank onto the deep column — extended pay-out cast,
+            // and the water is DEEP ENOUGH that hang AND fish depth are simply VANILLA (the legacy
+            // Below(20, 1.35) mapping made the hook hang shallower than the vanilla-depth fish → the
+            // hook/fish depth mismatch at medium/high tide).
             return CanalTide.QueensLowTide()
                 ? (ShortLineStart, 1f,                BelowForDepth(QueensFishDepthLow))
-                : (ShortLineStart, ExtendedCastAbove, Below(QueensAnchorNormal, QueensLineNormal));
+                : (ShortLineStart, ExtendedCastAbove, FishLineShallow.VanillaDistp);
         }
         private static float _lineAboveStart = 1f;                             // session-resolved reeled/pre-cast aerial scale
         private static float _lineAbove = 1f;                                  // session-resolved aerial TARGET scale
@@ -662,7 +665,10 @@ namespace Dark_Cloud_Improved_Version
                 uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
                 bool fishPlaced = Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0;
 
-                if (fishPlaced && !_shallowFishApplied && _active.HasFishDepth)
+                // Queens medium/high tide: the water is deep enough for VANILLA fish depths (and the hang is
+                // vanilla too, see LineConfigSplit) — the spot's pinned FishDepth is a LOW-tide shallow fit.
+                bool vanillaDepthTide = _active.MapNo == TownMapNo.Queens && !CanalTide.QueensLowTide();
+                if (fishPlaced && !_shallowFishApplied && _active.HasFishDepth && !vanillaDepthTide)
                 { FishingCollision.ApplyFishDepth(_active.FishDepth); _shallowFishApplied = true; }
 
                 // Fish freeze their cpoly COUNT at _INIT_FISH — BEFORE our one-shot append grew the buffer, so

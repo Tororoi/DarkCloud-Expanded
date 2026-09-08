@@ -1,4 +1,4 @@
-# Queens waterfall spray cave — lives in the dead CharaChange region (reclaimed ELF code, jal-legal). Hooked in
+# Queens waterfall spray cave — lives in the mod's ELF cave segment (loader-loaded, jal-legal), @0x1FB0050. Hooked in
 # at MainDraw @0x17c5a0, REPLACING `jal EditEffectStep2` (0x166de0) — the convergence of the Matataki-spray and
 # non-Matataki paths, right before DrawEffect. Delay slot is a nop, $ra = 0x17c5a8 on entry.
 #

@@ -23,7 +23,8 @@ namespace Dark_Cloud_Improved_Version
     /// clonable. The room came from three places: capping the AI stubs at 32 slots, trimming the node pool
     /// 128→96 bones (Osmond's 84 is the real max), and packing the decoy tables out of a 0x10000 hole.
     ///
-    ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (0x3C is the next free)
+    ///   0x01F10000  PNACH mailbox — 4-byte flag slots, see <see cref="Mailbox"/> (its NextFree marks the
+    ///               next unclaimed slot — do not trust any prose copy of it)
     ///   0x01F10040  Town-camera scratch: stick ease @+0x00, E_prev quad @+0x10 (16B) — written per frame
     ///               by the ISO-baked camera function (boot-zeroed; moved here off its code page, 2026-08)
     ///   0x01F10100  AI stubs      32 × 0x400                       → ends 0x01F18100
@@ -51,6 +52,17 @@ namespace Dark_Cloud_Improved_Version
     ///                             ^ 0x5F00 clear of the band top (0x01FB4300)
     ///
     ///   0x01400000  EnemyModelInjector param/code block — a SEPARATE region, deep in main BSS.
+    ///
+    /// A SECOND band holds the ISO-baked ELF caves: a mod-created PT_LOAD segment at guest
+    /// 0x01FB0000–0x01FB2000 (the hijacked phdr3 — see <see cref="ElfCave"/>). Loader-loaded at boot,
+    /// so direct j/jal into it is legal; the scanner's heap-tail claim already covers it, and THIS FILE
+    /// is its only registry. (The caves USED to live in 0x228BB0–0x22A210, believed-dead CharaChange
+    /// code — which turned out to be the LIVE dungeon character-change screen. Never again.)
+    /// ⚠ PAGE-ISOLATION RULE: the segment's HOST PAGES (16KB granularity — Apple Silicon; 4KB on Intel)
+    /// must contain NO runtime-written data. Once any cave on a page executes, PCSX2 compiles and
+    /// WRITE-PROTECTS that page; the next PINE write to any address sharing it SIGBUSes the PINE server
+    /// thread — a hard crash. This happened: the segment's first home 0x01FAE700 shared its page with
+    /// the live water-redraw mailboxes @0x01FAE600-610 → PINE SIGBUS at 0x1FAE60C every Queens session.
     /// </summary>
     internal static class CodeCaves
     {
@@ -65,8 +77,13 @@ namespace Dark_Cloud_Improved_Version
         ///   +0x00 eventpoint   +0x04 sun/moon    +0x08 nearNPC     +0x0C xiaoFlag
         ///   +0x10 nearNPC(2)   +0x14 insideMayor +0x18 element     +0x1C clock
         ///   +0x20 pnachActive  +0x24 PINE probe (MemoryFunctions)  +0x28 option1   +0x2C option2
-        ///   +0x30 option3      +0x34 option4     +0x38 MIRAGE scene gate
-        ///   +0x3C.. FREE
+        ///   +0x30 option3      +0x34 option4     +0x38 MIRAGE scene gate           +0x3C fish cam height
+        ///   +0x40 camera stick (EXTERNAL — off-limits)             +0x44 cape char ptr
+        ///   +0x48 line distp below   +0x50-0x5F camera E_prev (EXTERNAL — off-limits)
+        ///   +0x60 canal evict  +0x64 camera rest H  +0x68 cam gather count  +0x6C fish wall latch
+        ///   +0x70 idle-motion override  +0x74 block ladder  +0x78 refusal requested  +0x7C "!" Y boost
+        ///   +0x80 idle-motion flags (bit1 = play-once)
+        ///   +0x84.. FREE (<see cref="NextFree"/> is authoritative — this prose is a courtesy copy)
         /// </summary>
         internal static class Mailbox
         {
@@ -109,8 +126,8 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>Canal tide-evict flag. CanalTide writes 1 the instant the tide turns while the player is
             /// caught in the drained Queens canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook,
-            /// stub @0x228BB0) reads it on the exact fully-black frame and requests the _MAP_JUMP to the East
-            /// Harbor dock, then clears it. So the mod only maintains the flag — native code owns the timing.</summary>
+            /// stub @<see cref="ElfCave.CanalEvictFadeHook"/>) reads it on the exact fully-black frame and requests
+            /// the _MAP_JUMP to the East Harbor dock, then clears it. So the mod only maintains the flag — native code owns the timing.</summary>
             /// <summary>⚠ RESERVED — NOT a mailbox slot. The ISO-baked town-camera collision function
             /// (tools/stubs/town_camera_collision.s, hooked into EdMoveChara) uses guest 0x01F10040 as its
             /// smoothed right-stick scratch (one float, rewritten every camera frame) and 0x01F10050–5F
@@ -138,8 +155,8 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>Canal tide-evict flag (relocated from 0x40 — see <see cref="CameraStick"/> for why).
             /// CanalTide writes 1 the instant the tide turns while the player is caught in the drained Queens
-            /// canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook, stub @0x228BB0) reads it
-            /// on the exact fully-black frame, requests the _MAP_JUMP to the East Harbor dock, then clears it.
+            /// canal; the EdFadeInOut fade-hook (IsoPatcher.PatchCanalEvictFadeHook, stub @<see cref="ElfCave.CanalEvictFadeHook"/>)
+            /// reads it on the exact fully-black frame, requests the _MAP_JUMP to the East Harbor dock, then clears it.
             /// The fade-hook bakes the guest form 0x01F10060 (tools/stubs/canal_evict_fade_hook.s) — keep in sync.</summary>
             internal const long CanalEvict = Base + 0x60;
 
@@ -165,7 +182,149 @@ namespace Dark_Cloud_Improved_Version
             /// the cave while NOT casting — 1 = the bobber dangles inside the canal region (|z|&lt;60, floor-
             /// spot stances) so the flight wall clamp arms; 0 = bank stance, walls stay off (no line snap).</summary>
             internal const long FishWallLatch = Base + 0x6C;
-            internal const long NextFree = Base + 0x70;
+
+            /// <summary>Town-character idle-motion override (the swapped-in cat's idle→sit). The ELF cave
+            /// <c>ElfPatches.PatchIdleMotionOverride</c> intercepts EdMoveChara's grounded LOCOMOTION store
+            /// <c>*(char+0xc68) = motion</c> (0 = idle / 1 = run / 2 = walk, @0x16a6a8): when the motion the
+            /// engine computed is 0 (idle) AND this word is non-zero, the cave stores THIS value instead (e.g.
+            /// the sit motion index), so an idle town character plays the override animation. Run/walk (1/2) and
+            /// a 0 here pass through unchanged — vanilla. The cave reads the GUEST form 0x01F10070; the mod
+            /// writes MMU 0x21F10070 (= guest + 0x20000000). 0 = off. Owned by the mod's idle→sit timer logic.</summary>
+            internal const long IdleMotionOverride = Base + 0x70;
+
+            /// <summary>Town ladder-mount block (the swapped-in non-Toan ally must never climb — the mount
+            /// loads a Toan-rigged climb overlay onto a foreign model → crash). The ELF cave
+            /// <c>ElfPatches.PatchLadderRefusal</c> redirects EdMoveChara's single ladder-mount call
+            /// (<c>jal EdInitHashigo</c> @0x16c0fc) plus the climbing-flag set (<c>li s8,1</c> @0x16c104) to a
+            /// cave: when this word is 0 it mounts exactly as vanilla (calls EdInitHashigo + sets the climbing
+            /// flag s8=1 → DAT_01d1970c); when non-zero it SKIPS both (no mount, s8 stays -1 = not climbing) and
+            /// raises <see cref="RefusalRequested"/>. The cave reads the GUEST form 0x01F10074; the mod writes MMU
+            /// 0x21F10074 (= guest + 0x20000000). 0 = off (vanilla ladders). Set once per town by the swap logic.</summary>
+            internal const long BlockLadder = Base + 0x74;
+
+            /// <summary>Ladder-refusal request (one-shot). The <c>PatchLadderRefusal</c> cave sets this to 1 when
+            /// (and only when) a mount was actually attempted-and-blocked — i.e. under the SAME PadDown(Cross)
+            /// press condition that would have mounted in vanilla, so it fires once per Cross press, not every
+            /// frame the ally merely stands by the ladder. The mod polls MMU 0x21F10078, plays the shake-head
+            /// refusal, then clears it back to 0. Only <see cref="BlockLadder"/> being non-zero can raise it.</summary>
+            internal const long RefusalRequested = Base + 0x78;
+
+            // 0x70-0x7C were retired freeze-hunt diagnostic mailboxes (alloc probe / breadcrumb / shadow-skip);
+            // those ELF hooks + their mod-side readers were removed 2026-09, and the slots were RECLAIMED by the
+            // town-swap behavior mailboxes above/below (0x70 idle, 0x74/0x78 ladder, 0x7C "!" boost).
+
+            /// <summary>Player "!" event-trigger mark HEIGHT boost (float). A swapped-in ally with different
+            /// proportions (the cat) sits lower, so the exclamation mark pokes through its mesh. The ELF cave
+            /// <c>ElfPatches.PatchExclamationHeight</c> redirects the PLAYER mark's final Y store in
+            /// <c>EdDrawSysCursor</c> (<c>swc1 f0,0x94(sp)</c> @0x17cf5c, the store of
+            /// <c>fStack_c + *(Chara+0xb4) + 3.0 + sinf(a)*0.5</c>) to a cave that adds THIS word to the Y before
+            /// storing it — so the mark rides `vanilla Y + boost`. The cave reads the GUEST form 0x01F1007C; the
+            /// mod writes MMU 0x21F1007C (= guest + 0x20000000). 0.0 = vanilla (bit-exact for real positions);
+            /// a positive float lifts the cat's mark clear. NPC cursors (the earlier loop) are untouched. Owned by
+            /// the ally-swap logic: seed 0.0 for Toan, the cat's clearance for the cat.</summary>
+            internal const long ExclamationYBoost = Base + 0x7C;
+
+            /// <summary>Motion FLAGS the idle-motion cave writes to char+0xc64 alongside an override
+            /// (<see cref="IdleMotionOverride"/>). CCharacter::Step reads +0xc64 as native playback flags —
+            /// bit0 (1) = freeze, bit1 (2) = PLAY ONCE then hold the LAST frame (the engine's own one-shot,
+            /// used by the land animation), bit2 (4) = restart from the clip start (self-clearing). 0 = loop
+            /// (vanilla). Only applied while an override index is armed; run/walk frames keep the vanilla
+            /// zeroing. Contract: the mod arms flags WITH the index and zeroes BOTH on release — a stray
+            /// (index=0, flags=2) combo freezes idle on its last frame. Cave reads GUEST 0x01F10080; mod
+            /// writes MMU 0x21F10080. Sit = 0 (loops); refusal = 2 (one shake, hold neutral).</summary>
+            internal const long IdleMotionFlags = Base + 0x80;
+
+            /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
+            internal const long NextFree = Base + 0x84;
+        }
+
+        // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
+        /// <summary>
+        /// Every ISO-baked cave in the ELF. They live in a NEW loadable segment the ISO patcher creates by
+        /// rewriting SCUS_971.11's degenerate 4th program header (phdr3: PT_LOAD filesz=0 memsz=0 — a linker
+        /// placeholder) to load file span 0x2AF000..0x2B1000 (dead .reldun debug data past every phdr's file
+        /// extent — PCSX2 never reads it) at guest 0x01FB0000..0x01FB2000 (see ElfPatches.HijackPhdr3CaveSegment).
+        /// The guest band sits inside the scanner-proven-clean heap tail (0x1F10000..0x1FB4300, ModReserved),
+        /// below FishLineShallow.BobberPtr @0x01FB4000. The bytes are loaded by the ELF LOADER at boot — cold,
+        /// before any recompilation — so a direct j/jal into them is legal (unlike runtime-written heap
+        /// caves, which crash the recompiler; docs/cave-code-execution.md).
+        ///
+        /// ⚠ PAGE ISOLATION IS LOAD-BEARING. The segment starts 16KB-ALIGNED, and its host pages
+        /// [0x1FB0000, 0x1FB4000) (16KB granularity — Apple Silicon; 4KB on Intel) must NEVER hold
+        /// runtime-written data: once any cave on a page executes, PCSX2 compiles + WRITE-PROTECTS the
+        /// page, and the app's next PINE write to anything sharing it SIGBUSes the PINE server thread —
+        /// a hard crash. This happened (2026-09): the segment's first home 0x01FAE700 shared its 4KB page
+        /// with the live mizu mailboxes @0x01FAE600-610; QueensSpray ran every Queens frame, and the next
+        /// MizuRedrawTexGroup write faulted at 0x1FAE60C. So 0x1FB2000..0x1FB4000 is reserved for future
+        /// SEGMENT growth or ISO-baked read-only data ONLY — never hand it out as a runtime mailbox/cave.
+        /// The nearest runtime-written words: BobberPtr @0x01FB4000 (its own 4KB and 16KB page) above,
+        /// the mizu mailboxes / MeshCave margin below 0x01FAE614.
+        ///
+        /// ⚠ THE OLD HOME 0x228BB0–0x22A210 IS LIVE DUNGEON CODE — NEVER PLACE ANYTHING THERE AGAIN.
+        /// It was believed dead ("the CharaChange screen this mod never reaches"), but it is the dungeon
+        /// SELECT quick-menu's character-change screen: CharaChangeLoop @0x228BB0 / CharaChangeKey @0x228E90 /
+        /// CharaChangeDraw @0x229740, CALLED FROM THE dun.bin OVERLAY (file offset 0x1DD0) — which is why
+        /// main-ELF-only xref analysis mislabeled it unreachable. The caves overwrote it and broke the
+        /// dungeon SELECT menu (2026-09). The region must stay byte-for-byte VANILLA.
+        ///
+        /// ⚠ THE OVERLAP FAILURE MODE IS ALSO REAL: PatchIdleMotionOverride was first placed at what is now
+        /// FishLineSplit+0x40 — inside fishlineSplitCaves.bin — and every Queens fishing session hung on a
+        /// black screen. It byte-verified cleanly because the check ran on a VANILLA ELF, where the fishline
+        /// bin doesn't exist yet. So: claim <see cref="NextFree"/>, keep this table in ADDRESS ORDER with the
+        /// cave's SIZE and END, and never place a cave from a patch-local literal. Bin-backed sizes are the
+        /// .bin file's byte size (Resources/isoPatch); hand-built sizes are the instruction-word count × 4.
+        ///
+        ///   0x1FB0000  CanalEvictFadeHook   64 B → 0x1FB0040   canalEvictFadeHook.bin
+        ///   0x1FB0050  QueensSpray         180 B → 0x1FB0104   queensSprayCave.bin
+        ///   0x1FB0150  SprayBiasShim        60 B → 0x1FB018C   sprayBiasShim.bin
+        ///   0x1FB0190  CapeEarlyDraw       124 B → 0x1FB020C   capeEarlyDraw.bin
+        ///   0x1FB0210  FishLineSplit        88 B → 0x1FB0268   fishlineSplitCaves.bin (step entry @+0x2C)
+        ///   0x1FB0270  FishLineUncastGate  148 B → 0x1FB0304   fishlineUncastGate.bin
+        ///   0x1FB0350  CameraNormSideBank 2128 B → 0x1FB0BA0   cameraNormSide.bin (multi-entry, see below)
+        ///   0x1FB0BD0  StiltsHeal           88 B → 0x1FB0C28   stiltsHeal.bin
+        ///   0x1FB0C50  WaterOrderGate       88 B → 0x1FB0CA8   waterOrderGate.bin
+        ///   0x1FB0CD0  LadderRefusal        52 B → 0x1FB0D04   hand-built (PatchLadderRefusal)
+        ///   0x1FB0D10  ExclamationHeight    24 B → 0x1FB0D28   hand-built (PatchExclamationHeight)
+        ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
+        ///   0x1FB0D90  FREE → 0x1FB2000 (segment end, ~0x1270 B)
+        /// </summary>
+        internal static class ElfCave
+        {
+            /// <summary>Guest bounds of the hijacked-phdr3 segment; RegionEnd − RegionStart is its p_filesz/p_memsz.
+            /// RegionStart must stay 16KB-aligned (page isolation — see the class doc) and 0x80-aligned (p_align).</summary>
+            internal const uint RegionStart = 0x01FB0000;
+            internal const uint RegionEnd   = 0x01FB2000;
+            /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
+            /// time; formerly .reldun debug bytes — outside every phdr's file extent, never read at runtime).</summary>
+            internal const uint SegmentFileOff = 0x002AF000;
+
+            internal const uint CanalEvictFadeHook = 0x01FB0000;   // 64 B → 0x1FB0040
+            internal const uint QueensSpray        = 0x01FB0050;   // 180 B → 0x1FB0104
+            internal const uint SprayBiasShim      = 0x01FB0150;   // 60 B → 0x1FB018C
+            internal const uint CapeEarlyDraw      = 0x01FB0190;   // 124 B → 0x1FB020C
+            internal const uint FishLineSplit      = 0x01FB0210;   // 88 B → 0x1FB0268 (init entry; ONE bin, two caves)
+            internal const uint FishLineSplitStep  = 0x01FB023C;   //   the step cave inside it (@+0x2C)
+            internal const uint FishLineUncastGate = 0x01FB0270;   // 148 B → 0x1FB0304
+
+            /// <summary>ONE 2128-byte bin (cameraNormSide.bin / camera_norm_side.s) with several entry points —
+            /// the whole span 0x1FB0350–0x1FB0BA0 is occupied, not just the labeled words: gather-count export
+            /// @0x1FB0350, winding-agnostic normal SubA @0x1FB0390 / SubB @0x1FB0450, FishLineClamp wrapper
+            /// @0x1FB0550 (jal'd from 0x16D314), the v10 settled-gated bobber cave @0x1FB0910, and the
+            /// uki ground-store bank sub @0x1FB0AE0. Keep entry offsets in sync with the .s when reassembling.</summary>
+            internal const uint CameraNormSideBank = 0x01FB0350;   // 2128 B → 0x1FB0BA0
+            internal const uint CamBankFishLineClamp = 0x01FB0550;
+            internal const uint CamBankSettledCave   = 0x01FB0910;
+            internal const uint CamBankUkiGroundSub  = 0x01FB0AE0;
+
+            internal const uint StiltsHeal         = 0x01FB0BD0;   // 88 B → 0x1FB0C28
+            internal const uint WaterOrderGate     = 0x01FB0C50;   // 88 B → 0x1FB0CA8
+            internal const uint LadderRefusal      = 0x01FB0CD0;   // 52 B → 0x1FB0D04
+            internal const uint ExclamationHeight  = 0x01FB0D10;   // 24 B → 0x1FB0D28
+            internal const uint IdleMotionOverride = 0x01FB0D50;   // 36 B → 0x1FB0D74
+
+            /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
+            /// (address order, size, end) so the next placement can see it.</summary>
+            internal const uint NextFree = 0x01FB0D90;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -293,11 +452,16 @@ namespace Dark_Cloud_Improved_Version
         //   held the old ClsMes catch/menu scratch, now baked into each town's mes by IsoPatcher.) Inside the
         //   CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so the sweeper still shows it clean.
 
-        // ── FREE: 0x21FAE614 .. 0x21FB4000 (MeshCave margin, ~0x59EC B) ──────────────────────────────────
-        // Formerly the runtime fishing-sign asset/stub/config caves (SignMdsCave/SignImgCave/SignStubCave/
-        // SignConfig, used by the retired runtime sign-injection loaders). The sign is
-        // now baked into each town's scene.scn, so this whole span is free. Inside the CodeCaveScanner
-        // ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean and reusable.
+        // ── 0x21FB0000 .. 0x21FB2000: the ELF-baked cave SEGMENT (<see cref="ElfCave"/>) ─────────────────
+        // Loader-loaded CODE from the hijacked phdr3 — no runtime writes belong here, or ANYWHERE on its
+        // 16KB host pages 0x21FB0000..0x21FB4000 (page isolation — a PINE write to a page holding compiled
+        // code SIGBUSes PCSX2's PINE thread; see the ElfCave doc). 0x21FB2000..0x21FB4000 is therefore
+        // reserved for future segment growth / ISO-baked read-only data ONLY.
+        //
+        // ── FREE: 0x21FAE614 .. 0x21FB0000 (~0x19EC B) ───────────────────────────────────────────────────
+        // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
+        // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
+        // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.
 
         /// <summary>Town water "submerged tint" redraw — see <c>IsoPatcher.PatchWaterRedraw</c> /
         /// <c>PatchDrawWaterCompaction</c>. The redraw CODE lives baked inside MainDraw/DrawWater's own

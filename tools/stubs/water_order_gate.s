@@ -1,4 +1,4 @@
-# Water-redraw ORDER GATE (2026-09-02) — dead CharaChange region, @0x229800.
+# Water-redraw ORDER GATE (2026-09-02) — the mod's ELF cave segment, @0x1FB0C50 (ElfCave.WaterOrderGate).
 #
 # WHY: PatchWaterRedraw defers the water refraction pass (fb capture + DrawWaterSurface) from its
 # vanilla mid-frame position to AFTER EdDrawCharacter, so the capture contains the player (the Queens

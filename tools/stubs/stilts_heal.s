@@ -1,4 +1,4 @@
-# Brownboo stilts heal (v4, 2026-09-02) — dead CharaChange region (jal-legal), @0x229780.
+# Brownboo stilts heal (v4, 2026-09-02) — the mod's ELF cave segment (jal-legal), @0x1FB0BD0 (ElfCave.StiltsHeal).
 #
 # ROOT CAUSE (settled from the clean-walking vs garbled-fishing GS-dump pair, same visit): the posts
 # above the water are painted by the WATERSIDE REDRAW — scene geometry re-drawn AFTER DrawWater so poles

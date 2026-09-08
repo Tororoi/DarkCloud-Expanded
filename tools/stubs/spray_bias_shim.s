@@ -1,4 +1,4 @@
-# Spray velocity-bias shim — dead CharaChange region (jal-legal). Hooked into EffectWaterSpray @0x165184,
+# Spray velocity-bias shim — the mod's ELF cave segment (jal-legal), @0x1FB0150 (ElfCave.SprayBiasShim). Hooked into EffectWaterSpray @0x165184,
 # REPLACING its final `jal EnterEffect` (0x164980). At that point the CEffectParam is fully built: a0 = the
 # CEffectGroup, a1 = &CEffectParam (sp+0x60), and its initial velocity is at a1+0x30/0x34/0x38 (vx,vy,vz —
 # SetEffect copies +0x18 halfword=byte 0x30 into the particle, Step integrates pos += vel). We ADD the global

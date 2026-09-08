@@ -5,61 +5,90 @@ patch=1,EE,201F75E0,extended,0C08AF00 //write jal MenuCalcbuf
 patch=1,EE,E1010003,extended,102A2534 //check if not dungeon
 patch=1,EE,201F75E0,extended,0C05DEFC //write jal EditSave
 
-//Ally Switching in Town
-patch=1,EE,E1040001,extended,01D90470 //cursor on Xiao
-patch=1,EE,E1010002,extended,21CD9551 //if ally amount < 2
-patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
-patch=1,EE,E1010001,extended,31CD9551 //if ally amount > 1
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
-
-patch=1,EE,E1040002,extended,01D90470 //cursor on Goro
-patch=1,EE,E1010003,extended,21CD9551 //if ally amount < 3
-patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
-patch=1,EE,E1010002,extended,31CD9551 //if ally amount > 2
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
-
-patch=1,EE,E1040003,extended,01D90470 //cursor on Ruby
-patch=1,EE,E1010004,extended,21CD9551 //if ally amount < 4
-patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMnuSPlay
-patch=1,EE,E1010003,extended,31CD9551 //if ally amount > 3
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
-
-patch=1,EE,E1040004,extended,01D90470 //cursor on Ungaga
-patch=1,EE,E1010005,extended,21CD9551 //if ally amount < 5
-patch=1,EE,201F7DB4,extended,0C08B3BC //write jal coMeSePlay
-patch=1,EE,E1010004,extended,31CD9551 //if ally amount > 4
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit (reload map)
-
-patch=1,EE,E1040005,extended,01D90470 //cursor on Osmond
-patch=1,EE,E1010006,extended,21CD9551
+//Ally Switching in Town — vanilla's town commit is a REJECT beep: `li a0,2` @0x1F7DB0 +
+//`jal ComMenuSePlay` @0x1F7DB4 (the dungeon path at BtlMenuMode==0 does the real switch; town falls to
+//the reject branch). For UNLOCKED allies we patch a0 to 1 = the dungeon's CONFIRM chime (same one its
+//commit plays) and AllySwapPrototype (C#) does the in-place _LOAD_MAIN_CHARA swap + dungeon-timed menu
+//close. Locked allies and the factory keep the vanilla reject.
+patch=1,EE,E1060001,extended,01D90470 //cursor on Xiao
+patch=1,EE,E1020002,extended,21CD9551 //if ally amount < 2 -> reject
+patch=1,EE,201F7DB0,extended,24040002
 patch=1,EE,201F7DB4,extended,0C08B3BC
-patch=1,EE,E1010005,extended,31CD9551
-patch=1,EE,201F7DB4,extended,0C05E0E0
+patch=1,EE,E1020001,extended,31CD9551 //if ally amount > 1 -> confirm chime
+patch=1,EE,201F7DB0,extended,24040001
+patch=1,EE,201F7DB4,extended,0C08B3BC
 
-patch=1,EE,E1010000,extended,01D90470 //if cursor on toan
-patch=1,EE,201F7DB4,extended,0C05E0E0 //write jal EditInit
+patch=1,EE,E1060002,extended,01D90470 //cursor on Goro
+patch=1,EE,E1020003,extended,21CD9551
+patch=1,EE,201F7DB0,extended,24040002
+patch=1,EE,201F7DB4,extended,0C08B3BC
+patch=1,EE,E1020002,extended,31CD9551
+patch=1,EE,201F7DB0,extended,24040001
+patch=1,EE,201F7DB4,extended,0C08B3BC
 
-patch=1,EE,E1010004,extended,002A2518 //check if factory
-patch=1,EE,201F7DB4,extended,0C08B3BC //write jal comseplay
+patch=1,EE,E1060003,extended,01D90470 //cursor on Ruby
+patch=1,EE,E1020004,extended,21CD9551
+patch=1,EE,201F7DB0,extended,24040002
+patch=1,EE,201F7DB4,extended,0C08B3BC
+patch=1,EE,E1020003,extended,31CD9551
+patch=1,EE,201F7DB0,extended,24040001
+patch=1,EE,201F7DB4,extended,0C08B3BC
+
+patch=1,EE,E1060004,extended,01D90470 //cursor on Ungaga
+patch=1,EE,E1020005,extended,21CD9551
+patch=1,EE,201F7DB0,extended,24040002
+patch=1,EE,201F7DB4,extended,0C08B3BC
+patch=1,EE,E1020004,extended,31CD9551
+patch=1,EE,201F7DB0,extended,24040001
+patch=1,EE,201F7DB4,extended,0C08B3BC
+
+patch=1,EE,E1060005,extended,01D90470 //cursor on Osmond
+patch=1,EE,E1020006,extended,21CD9551
+patch=1,EE,201F7DB0,extended,24040002
+patch=1,EE,201F7DB4,extended,0C08B3BC
+patch=1,EE,E1020005,extended,31CD9551
+patch=1,EE,201F7DB0,extended,24040001
+patch=1,EE,201F7DB4,extended,0C08B3BC
+
+patch=1,EE,E1020000,extended,01D90470 //cursor on Toan -> confirm (swap back)
+patch=1,EE,201F7DB0,extended,24040001
+patch=1,EE,201F7DB4,extended,0C08B3BC
+
+patch=1,EE,E1020004,extended,002A2518 //factory: keep the vanilla reject
+patch=1,EE,201F7DB0,extended,24040002
+patch=1,EE,201F7DB4,extended,0C08B3BC
+
+//Town ally-commit SPREAD animation: the dungeon commit's states 4/5 grow the portrait wheel's radius
+//every frame (DrawCharaSelect: chara_r_long += counter) = the allies spreading off-screen. The mod
+//enters state 4 on a town commit; these NOP the dungeon-only loaders inside states 4/5 when NOT in a
+//dungeon (BtMenuLoadChara/BtMenuLoad2 would load into dungeon buffers, LockOffTargte even jals into
+//the dungeon OVERLAY = crash in town). ExitBattleMenu stays — it is the clean teardown.
+patch=1,EE,E1060003,extended,102A2534 //not in dungeon -> NOP the 6 loader calls
+patch=1,EE,201F74B4,extended,00000000
+patch=1,EE,201F74BC,extended,00000000
+patch=1,EE,201F74C4,extended,00000000
+patch=1,EE,201F74D0,extended,00000000
+patch=1,EE,201F7528,extended,00000000
+patch=1,EE,201F7530,extended,00000000
+patch=1,EE,E1060003,extended,002A2534 //in dungeon -> vanilla words
+patch=1,EE,201F74B4,extended,0C083A58
+patch=1,EE,201F74BC,extended,0C04FBB0
+patch=1,EE,201F74C4,extended,0C04FB30
+patch=1,EE,201F74D0,extended,0C083A2C
+patch=1,EE,201F7528,extended,0C083A80
+patch=1,EE,201F7530,extended,0C76FF38
 
 
-patch=1,EE,E1066135,extended,01909B63 //check if ruby enabled
-patch=1,EE,E1053130,extended,01909B65 //check if ruby enabled
-patch=1,EE,21909C4D,extended,2C303609 //fix animation
-patch=1,EE,21909C51,extended,2C303809 //fix animation
-patch=1,EE,21909C55,extended,342E3009 //fix animation
-patch=1,EE,21909C6F,extended,2C303309 //fix animation
-patch=1,EE,21909C73,extended,2C303509 //fix animation
-
-patch=1,EE,E1023063,extended,01988BE1 //check if xiao enabled
-patch=1,EE,E1016334,extended,01988BE3 //check if xiao enabled
-patch=1,EE,21988C23,extended,362E3009 //fix run animation
+//(removed 2026-09-07: legacy Ruby/Xiao "fix animation" hacks that TEXT-EDITED the old vanilla cfgs'
+//KEY lines in RAM (swapping c05a's run/walk order, retuning speeds). The town models are now REBUILT
+//at ISO-patch time with correct KEY tables, and the fixed RAM addresses these wrote to landed MID-LINE
+//in the longer rebuilt cfgs — Ruby's run parsed as [60..60]@80 = the frozen-midair-run saga.)
 
 
 //Handling event cutscenes, talk dialogues etc.
 patch=1,EE,E1453063,extended,1029AA0E //check if not toan
-patch=1,EE,2016C0A4,extended,24020008 //disable stairs
-patch=1,EE,2016C0B0,extended,24020008 //disable stairs
+patch=1,EE,2016C0A4,extended,24020004 //stairs stay ENABLED for allies (was 24020008 "disable stairs": it broke the ladder type-compare so non-Toan got no "!" and no press; the ISO's ladder-refusal cave now guards non-Toan mounts properly via the BlockLadder mailbox, so these write the vanilla words. Kept in place - not deleted - so the E1453063 conditional's line count stays correct.)
+patch=1,EE,2016C0B0,extended,24020005 //stairs stay ENABLED for allies (vanilla word, see above)
 patch=1,EE,2017A24C,extended,00000000 //disable cutscenes
 patch=1,EE,2017A27C,extended,00000000 //disable cutscenes
 patch=1,EE,E1050003,extended,002A2518 //check if muska lacka
