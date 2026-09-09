@@ -71,8 +71,6 @@ namespace Dark_Cloud_Improved_Version
         private const float ClaimRadius  = 100f;   // claim a closing shot inside this range of Xiao
         private const float PouchHeight  = 7.5f;   // copy root height above her feet (8.5 read slightly high at 2x)
         private const float PropAhead    = 12f;    // copy root this far out from her, along the orbit bearing
-        private const float OrbitRate    = 0.15f;  // rad per tick the copy may swing at most (180° in ~1.1 s)
-        private const float OrbitEase    = 0.25f;  // ...closing this fraction of the remaining angle per tick (ease-out)
         private const float CaptureRadius = 7f;    // a faced shot this close to the pouch is caught (+ 2 ticks of travel)
         private const float HomingRange  = 40f;    // faced shot is homed into the pouch from this range
         private const float HomingGain   = 0.35f;  // per-tick blend of its direction toward the pouch
@@ -121,7 +119,6 @@ namespace Dark_Cloud_Improved_Version
         private static bool  _jingled;                          // once per appearance
         private static int   _pullTick = -1;                    // -1 idle; else ticks into the fire cycle
         private static int   _pendingWait;                      // ticks the head of the queue has waited to fire
-        private static float _orbit;                            // copy bearing relative to her facing (rad)
         private static bool  _comboLatch;
 
         internal static void Start()
@@ -194,14 +191,13 @@ namespace Dark_Cloud_Improved_Version
                     if (armed) ClaimClosingShots(pack, xx, xh, xy);
 
                     // ORBIT: the copy circles her to face the nearest closing shot, else the nearest
-                    // enemy, else straight ahead — and its fire target during a cycle. Rate-limited
-                    // so it visibly swings round instead of snapping.
+                    // enemy, else straight ahead — and its fire target during a cycle. This tick only
+                    // sets the wanted bearing; the prop's own frame-rate thread swings to it smoothly.
                     Claim faced = null;
                     if (SlingshotProp.Active)
                     {
                         if (ChooseBearing(pack, xx, xh, xy, yaw, out float want, out faced))
-                            _orbit = Approach(_orbit, Wrap(want - yaw), OrbitRate);
-                        SlingshotProp.SetOrbit(_orbit);
+                            SlingshotProp.OrbitTarget = Wrap(want - yaw);
                         SlingshotProp.Maintain(_alpha);
                     }
                     GetPouch(xx, xh, xy, yaw, out float px, out float ph, out float py);
@@ -409,24 +405,12 @@ namespace Dark_Cloud_Improved_Version
             return a;
         }
 
-        /// <summary>Eased, rate-capped turn: a fraction of the remaining angle per tick, never more
-        /// than <paramref name="rate"/>, landing exactly when within a hair.</summary>
-        private static float Approach(float cur, float target, float rate)
-        {
-            float d = Wrap(target - cur);
-            if (Math.Abs(d) < 0.01f) return target;
-            float step = d * OrbitEase;
-            if (step > rate) step = rate; else if (step < -rate) step = -rate;
-            if (Math.Abs(step) < 0.02f) step = Math.Sign(d) * Math.Min(0.02f, Math.Abs(d));
-            return Wrap(cur + step);
-        }
-
         /// <summary>The pouch in world space: the copy's pouch bone once it has been drawn, else the
         /// analytic copy root (her position + the orbit offset).</summary>
         private static void GetPouch(float xx, float xh, float xy, float yaw, out float px, out float ph, out float py)
         {
             if (SlingshotProp.Active && SlingshotProp.PouchWorld(out px, out ph, out py)) return;
-            float b = yaw + _orbit;
+            float b = yaw + SlingshotProp.Orbit;
             px = xx + (float)Math.Sin(b) * PropAhead; ph = xh + PouchHeight; py = xy + (float)Math.Cos(b) * PropAhead;
         }
 
@@ -543,7 +527,7 @@ namespace Dark_Cloud_Improved_Version
             _alpha = 0f;
             _pullTick = -1;
             _pendingWait = 0;
-            _orbit = 0f;
+            SlingshotProp.OrbitTarget = 0f;
         }
 
         private static void WriteVec(long addr, float a, float b, float c)

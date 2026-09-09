@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
 {
@@ -62,6 +63,12 @@ namespace Dark_Cloud_Improved_Version
         private static uint  _liveRoot, _playerRoot;     // for change detection
         private static int   _nodeCount, _key = -1, _lastDiag;
         private static float _scale, _up, _ahead, _pull, _orbit;
+        private static volatile float _orbitTarget;      // wanted bearing (rad, relative to her facing)
+        private static Thread _orbitThread;
+        // Orbit smoothing runs at frame rate on its own thread (a 20 Hz step read as a staircase):
+        // each frame closes OrbitEase of the remaining angle, at most OrbitRate rad (≈ 180° in 0.3 s).
+        private const int   OrbitTickMs = 16;
+        private const float OrbitEase   = 0.18f, OrbitRate = 0.20f;   // user: 0.2 (2026-09-09)
         private static uint  _pouchGuest;                // the copy's pouch bone (null24)
 
         /// <param name="pull">pouch draw travel in weapon units at x1 (authored ≈ 4.2); ≤ 0 = authored</param>
@@ -69,16 +76,56 @@ namespace Dark_Cloud_Improved_Version
         {
             if (Active) return true;
             _scale = scale; _up = up; _ahead = ahead; _pull = pull;
+            _orbit = _orbitTarget;                            // appear on the wanted bearing, no swing-in
             if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
+            if (_orbitThread == null || !_orbitThread.IsAlive)
+            { _orbitThread = new Thread(OrbitLoop) { IsBackground = true, Name = "SlingshotOrbit" }; _orbitThread.Start(); }
             _key = KeyIdle;
             Active = true;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon copy up (x{scale}, slot {Slot}); her slingshot untouched");
             return true;
         }
 
-        /// <summary>Orbit bearing (radians) relative to her facing: the copy sits <c>ahead</c> units
-        /// out along it and faces along it. 0 = straight in front of her.</summary>
-        internal static void SetOrbit(float rel) => _orbit = rel;
+        /// <summary>Wanted orbit bearing (radians) relative to her facing: the copy sits <c>ahead</c>
+        /// units out along it and faces along it. 0 = straight in front of her. The orbit thread
+        /// eases the live bearing (<see cref="Orbit"/>) toward it at frame rate.</summary>
+        internal static float OrbitTarget { get => _orbitTarget; set => _orbitTarget = value; }
+        internal static float Orbit => _orbit;
+
+        private static float Wrap(float a)
+        {
+            const float twoPi = 2f * (float)Math.PI;
+            while (a >  (float)Math.PI) a -= twoPi;
+            while (a <= -(float)Math.PI) a += twoPi;
+            return a;
+        }
+
+        /// <summary>Frame-rate orbit: ease the live bearing toward the target and re-place the copy
+        /// (Draw re-seeds the root from these slot fields every frame, so per-frame writes are smooth).</summary>
+        private static void OrbitLoop()
+        {
+            while (true)
+            {
+                try
+                {
+                    if (!Active) { Thread.Sleep(100); continue; }
+                    float d = Wrap(_orbitTarget - _orbit);
+                    if (Math.Abs(d) > 0.003f)
+                    {
+                        float step = d * OrbitEase;
+                        if (step > OrbitRate) step = OrbitRate; else if (step < -OrbitRate) step = -OrbitRate;
+                        if (Math.Abs(step) < 0.01f) step = Math.Sign(d) * Math.Min(0.01f, Math.Abs(d));
+                        _orbit = Wrap(_orbit + step);
+                        long s = SlotAddr();
+                        Memory.WriteFloat(s + CCharacter.CharPos,     (float)Math.Sin(_orbit) * _ahead);
+                        Memory.WriteFloat(s + CCharacter.CharPos + 8, (float)Math.Cos(_orbit) * _ahead);
+                        Memory.WriteFloat(s + CCharacter.CharRotY,    _orbit);
+                    }
+                }
+                catch (Exception e) { Console.WriteLine(Tag + "orbit tick failed: " + e.Message); }
+                Thread.Sleep(OrbitTickMs);
+            }
+        }
 
         /// <summary>The copy's pouch bone in world space, from its cached world matrix (valid once
         /// the copy has been drawn). False while unset or when the cache looks stale.</summary>
@@ -172,6 +219,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 2);            // restore vanilla gates
             Active = false;
+            _orbit = 0f;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "weapon copy down");
         }
 
@@ -415,9 +463,11 @@ namespace Dark_Cloud_Improved_Version
             }
             // NO LOOSE REST, EVER (user 2026-09-09): the authored draw (240→250) leaves from the slack
             // rest pose and the snap settles back into it (255→261). On the copy, the draw is re-pathed
-            // to run straight from the taut catch pose (IdleFrame) to full draw with an ease that is
-            // slowest at both ends and fastest through the fork plane, and everything after the snap's
-            // forward peak holds the catch pose. Both end poses are the authored (scaled) ones.
+            // to run straight from the taut catch pose (IdleFrame) to full draw as an IMPACT: cubic
+            // ease-out, so the caught shot shoves the pouch back at once (~half the travel in the first
+            // three frames) and it slows as the elastic loads — a smoothstep read as a 1-2 frame delay
+            // after the catch (user 2026-09-09). Everything after the snap's forward peak holds the
+            // catch pose. Both end poses are the authored (scaled) ones.
             if (iIdle >= 0 && iDrawn >= 0)
             {
                 int oi = iIdle * TrackKeySize + 0x10, od = iDrawn * TrackKeySize + 0x10;
@@ -430,7 +480,8 @@ namespace Dark_Cloud_Improved_Version
                     if (f >= PullWinStart && f < DrawnFrame)
                     {
                         float t = (f - PullWinStart) / (float)(DrawnFrame - PullWinStart);
-                        float e = t * t * (3f - 2f * t);                    // smoothstep
+                        float u = 1f - t;
+                        float e = 1f - u * u * u;                           // cubic ease-out (impact)
                         BitConverter.GetBytes(ix + (dx - ix) * e).CopyTo(kb, o);
                         BitConverter.GetBytes(iy + (dy - iy) * e).CopyTo(kb, o + 4);
                         BitConverter.GetBytes(iz + (dz - iz) * e).CopyTo(kb, o + 8);
