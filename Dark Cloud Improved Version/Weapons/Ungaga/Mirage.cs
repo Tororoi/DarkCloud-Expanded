@@ -384,14 +384,19 @@ namespace Dark_Cloud_Improved_Version
                         // town overlay at those addresses is never touched.
                         // 1 = decoy up & running (NOP scene+step gates); 3 = decoy up but PAUSED (NOP scene only →
                         // clone still drawn but frozen); 2 = dungeon, no decoy (restore vanilla).
-                        Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? (paused ? 3 : 1) : 2);
+                        // Guardian Reflector's slingshot prop shares this gate flag (and slot 3 /
+                        // WeaponCave): while its prop is up, IT drives the flag — stand down.
+                        // (Mirage and Angel Gear can never be wielded simultaneously.)
+                        if (!SlingshotProp.Active)
+                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? (paused ? 3 : 1) : 2);
                         sleep = FastTickMs;
                     }
                     else
                     {
                         guardLatched = false;
                         if (_decoyActive || CharacterClone.IsActive) EndDecoy();   // left the floor
-                        Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
+                        if (!SlingshotProp.Active)
+                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }
                 catch (Exception e) { Console.WriteLine("[Mirage] tick failed: " + e.Message); }
