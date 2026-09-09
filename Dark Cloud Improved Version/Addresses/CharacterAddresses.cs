@@ -270,6 +270,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BoneMtxEntry  = 0x40;  //   per-bone stride
         internal const int  MotionSkinList = 0x08; // → MotionProc2 (software-skinning) list; +0x04 = the rigid list
         internal const int  FrameInfPtr   = 0x60;  // → FRAME_INF, the per-bone SKINNING matrix buffer
+        internal const int  MotionInfoPtr = 0x64;  // → MOTION_INFO (the cfg KEY table: {int start, int end, float speed, pad} × 0x10);
+                                                   //   Step__10CCharacter 0x138530 reads the key HERE (GetMotionParam → channel)
+        internal const int  StateFrame    = 0x10;  // MOTION_STATE float — the LIVE motion frame (CCharacter +0x2F0 is NOT it)
+        internal const int  StateSpeed    = 0x18;  // MOTION_STATE float — 1.0 on restart, 0 on stop
+        internal const int  StateKeyIdx   = 0x24;  // MOTION_STATE int — current KEY ordinal (+0x28 = previous)
         internal const int  FrameInfEntry = 0xD0;  //   per-bone stride
     }
 

@@ -44,6 +44,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int KeyDraw      = 11;
         internal const int KeyHold      = 12;
         internal const int KeyShoot     = 13;
+        internal const int KeyIdle      = 14;   // a dummy KEY (1,1,1.0) rewritten on the COPY's own table as a hold
+        private  const int IdleFrame    = 254;  // end of the snap: pouch forward and taut (253 = the forward peak)
+        private  const int KeyTableSize = 0x200; // 32 KEY entries {int start, int end, float speed, pad}
         // The authored release is 4 frames at play-rate 0.7 — too snappy at 4x — so the copy's
         // motion-speed override slows it while that key plays (-1 = the KEY rate).
         private const float ShootRate   = 0.3f;
@@ -58,17 +61,41 @@ namespace Dark_Cloud_Improved_Version
         private static uint  _rootGuest;                 // copied tree root (guest)
         private static uint  _liveRoot, _playerRoot;     // for change detection
         private static int   _nodeCount, _key = -1, _lastDiag;
-        private static float _scale, _up, _behind;
+        private static float _scale, _up, _ahead, _pull, _orbit;
+        private static uint  _pouchGuest;                // the copy's pouch bone (null24)
 
-        internal static bool Spawn(float scale, float up, float behind)
+        /// <param name="pull">pouch draw travel in weapon units at x1 (authored ≈ 4.2); ≤ 0 = authored</param>
+        internal static bool Spawn(float scale, float up, float ahead, float pull)
         {
             if (Active) return true;
-            _scale = scale; _up = up; _behind = behind;
+            _scale = scale; _up = up; _ahead = ahead; _pull = pull;
             if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
-            _key = KeyGuardLoop;
+            _key = KeyIdle;
             Active = true;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon copy up (x{scale}, slot {Slot}); her slingshot untouched");
             return true;
+        }
+
+        /// <summary>Orbit bearing (radians) relative to her facing: the copy sits <c>ahead</c> units
+        /// out along it and faces along it. 0 = straight in front of her.</summary>
+        internal static void SetOrbit(float rel) => _orbit = rel;
+
+        /// <summary>The copy's pouch bone in world space, from its cached world matrix (valid once
+        /// the copy has been drawn). False while unset or when the cache looks stale.</summary>
+        internal static bool PouchWorld(out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            if (!Active || !Memory.IsValidGuest(_pouchGuest)) return false;
+            long n = Memory.ToMmu(_pouchGuest), r = Memory.ToMmu(_rootGuest);
+            x = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x30);
+            h = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x34);
+            y = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x38);
+            float rx = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x30);
+            float rh = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x34);
+            float ry = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x38);
+            if (float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y) || (x == 0f && h == 0f && y == 0f)) return false;
+            float d = (x - rx) * (x - rx) + (h - rh) * (h - rh) + (y - ry) * (y - ry);
+            return d < 60f * 60f;                              // pouch sits within the copy, else stale
         }
 
         /// <summary>Play one of the weapon's own keys on the COPY (restart flag set).</summary>
@@ -96,12 +123,15 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
             long s = SlotAddr();
-            // Placement = constants in her space (root is parented to her model root).
-            Memory.WriteFloat(s + CCharacter.CharPos,     0f);
+            // Placement in HER space (root parented to her model root): `ahead` units out along the
+            // orbit bearing and facing along it. +Z = her forward, yaw about +Y — the same R_y that
+            // maps her forward to (sin yaw, cos yaw) in the world, so model (sin o, ·, cos o) lands
+            // on world bearing yaw+o. The grip orientation is baked below the root.
+            Memory.WriteFloat(s + CCharacter.CharPos,     (float)Math.Sin(_orbit) * _ahead);
             Memory.WriteFloat(s + CCharacter.CharPos + 4, _up);
-            Memory.WriteFloat(s + CCharacter.CharPos + 8, -_behind);
-            Memory.WriteFloat(s + CCharacter.CharRot,     0f);   // orientation is baked below the root
-            Memory.WriteFloat(s + CCharacter.CharRotY,    0f);
+            Memory.WriteFloat(s + CCharacter.CharPos + 8, (float)Math.Cos(_orbit) * _ahead);
+            Memory.WriteFloat(s + CCharacter.CharRot,     0f);
+            Memory.WriteFloat(s + CCharacter.CharRotY,    _orbit);
             Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
             Memory.WriteFloat(s + ObjScale,     _scale);
             Memory.WriteFloat(s + ObjScale + 4, _scale);
@@ -124,7 +154,8 @@ namespace Dark_Cloud_Improved_Version
             if (Environment.TickCount - _lastDiag > 1000)
             {
                 _lastDiag = Environment.TickCount;
-                Console.WriteLine(Tag + $"DIAG copy motionId={Memory.ReadInt(s + CCharacter.MotionId)} frame={Memory.ReadFloat(s + 0x2F0):F1} " +
+                Console.WriteLine(Tag + $"DIAG copy motionId={Memory.ReadInt(s + CCharacter.MotionId)} " +
+                    $"key={Memory.ReadInt(CodeCaves.MotionCave + MotionType.StateKeyIdx)} frame={Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1} " +
                     $"rootW=({Memory.ReadFloat(r + 0x180):F0},{Memory.ReadFloat(r + 0x184):F0},{Memory.ReadFloat(r + 0x188):F0}) " +
                     $"xiao=({Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos):F0},{Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8):F0})");
             }
@@ -221,7 +252,15 @@ namespace Dark_Cloud_Improved_Version
             }
             Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);
             _rootGuest = caveG + rootOff;
-            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, parent = player root 0x{_playerRoot:X}");
+            // The pouch bone by NAME (every c04w## .mds orders pati2, chn30, jnt30_1, eff30, null24, mesh).
+            _pouchGuest = _rootGuest + 4 * (uint)CFrameVu1.NodeStride;
+            for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
+            {
+                int e = o + CFrameVu1.Name, len = 0;
+                while (len < 0x20 && block[e + len] != 0) len++;
+                if (System.Text.Encoding.ASCII.GetString(block, e, len) == "null24") { _pouchGuest = caveG + (uint)o; break; }
+            }
+            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, pouch 0x{_pouchGuest:X}, parent = player root 0x{_playerRoot:X}");
             return true;
         }
 
@@ -230,7 +269,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool CopyMesh()
         {
             long cave = CodeCaves.MeshCave; long caveGuest = CodeCaves.MeshCave - 0x20000000;
-            long caveEnd = CodeCaves.MeshCave + CodeCaves.MeshCaveSize;
+            long caveEnd = TrackCave;                       // top TrackCaveSize bytes hold the cloned track list
             int copied = 0;
             for (int i = 0; i < _nodeCount; i++)
             {
@@ -269,6 +308,144 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        // ── Pull length: the copy's OWN keyframes ──────────────────────────────────────────────
+        // MOTION_TYPE +0x04 = head of the .mot track list built by CreateAnimeDataEX (0x149090):
+        // Mot_List nodes {+0 node idx, +4 w1, +8 type (0 rot quat / 1 scale / 2 translate),
+        // +0xC key count, +0x10 → keys (0x20 each: u32 frame @0, f32x4 value @0x10), +0x14 next}.
+        // Every slingshot .mot is ONE translate track on the pouch bone `null24` (46 keys). The
+        // list is SHARED with the live weapon, so to shorten only the copy's draw we clone the
+        // nodes + that track into the top of the MeshCave and scale the draw-window deltas about
+        // the guard rest (frame 240 == the guard-loop pose, cfg KEY 11 240-251 / 13 251-255,
+        // settle to 261). Scaling about the rest keeps the direction and the release overshoot.
+        private const int  MotListHead   = 0x04;
+        private const int  TrackNodeSize = 0x18;
+        private const int  TrackKeySize  = 0x20;
+        private const int  MaxTracks     = 8;
+        private const uint PullWinStart  = 240, PullWinEnd = 261;   // inclusive, .mot frame numbers
+        private const uint DrawEnd       = 251;                     // travel measured over the draw
+        private const uint DrawnFrame    = 250;                     // full draw (KEY 12 holds here)
+        private const int  TrackCaveSize = 0x1000;
+        private static long TrackCave      => CodeCaves.MeshCave + CodeCaves.MeshCaveSize - TrackCaveSize;
+        private static uint TrackCaveGuest => (uint)(CodeCaves.MeshCaveGuest + CodeCaves.MeshCaveSize - TrackCaveSize);
+        private static long KeyTableCave      => TrackCave + 0x800;          // top half of the TrackCave (tracks use < 0x800)
+        private static uint KeyTableCaveGuest => TrackCaveGuest + 0x800;
+
+        /// <summary>Clone the weapon's track list into the TrackCave with every translate track's
+        /// draw window rescaled to <see cref="_pull"/> units of travel. Returns the new head (guest) or 0.</summary>
+        private static uint CloneTracks(uint head)
+        {
+            var nodes = new System.Collections.Generic.List<byte[]>();
+            for (uint p = head; Memory.IsValidGuest(p) && nodes.Count < MaxTracks;)
+            {
+                byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), TrackNodeSize);
+                if (n == null) break;
+                nodes.Add(n);
+                p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
+            }
+            if (nodes.Count == 0) return 0;
+            long cave = TrackCave; uint caveG = TrackCaveGuest; long caveEnd = KeyTableCave;
+            long keyCave = cave + A16(nodes.Count * TrackNodeSize);
+            uint keyCaveG = caveG + (uint)A16(nodes.Count * TrackNodeSize);
+            string info = "";
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                byte[] n = nodes[i];
+                int type = BitConverter.ToInt32(n, 0x08), count = BitConverter.ToInt32(n, 0x0C);
+                uint keys = (uint)BitConverter.ToInt32(n, 0x10) & Memory.PhysAddrMask;
+                if (type == 2 && count > 0 && count < 512 && Memory.IsValidGuest(keys) && keyCave + count * TrackKeySize <= caveEnd)
+                {
+                    byte[] kb = Memory.ReadBytesBatch(Memory.ToMmu(keys), count * TrackKeySize);
+                    if (kb != null)
+                    {
+                        float travel = ScalePull(kb, count, out float k);
+                        Memory.WriteBytesBatch(keyCave, kb);
+                        BitConverter.GetBytes(keyCaveG).CopyTo(n, 0x10);
+                        info += $" [n{BitConverter.ToInt32(n, 0)} t2 x{count} travel {travel:F2} → k {k:F2}]";
+                        int used = A16(count * TrackKeySize);
+                        keyCave += used; keyCaveG += (uint)used;
+                    }
+                }
+                BitConverter.GetBytes(i + 1 < nodes.Count ? caveG + (uint)((i + 1) * TrackNodeSize) : 0u).CopyTo(n, 0x14);
+                Memory.WriteBytesBatch(cave + i * TrackNodeSize, n);
+            }
+            Console.WriteLine(Tag + $"tracks cloned ({nodes.Count}) → 0x{caveG:X}, pull {_pull:F2}:{info}");
+            return caveG;
+        }
+
+        /// <summary>Rescale one translate track's [PullWinStart..PullWinEnd] keys about the rest
+        /// pose (last key at or before PullWinStart) so the draw travels <see cref="_pull"/> units.
+        /// Returns the authored travel; k = applied factor.</summary>
+        private static float ScalePull(byte[] kb, int count, out float k)
+        {
+            float rx = 0, ry = 0, rz = 0; bool haveRest = false;
+            for (int i = 0; i < count; i++)
+            {
+                uint f = BitConverter.ToUInt32(kb, i * TrackKeySize);
+                if (f > PullWinStart) break;
+                rx = BitConverter.ToSingle(kb, i * TrackKeySize + 0x10);
+                ry = BitConverter.ToSingle(kb, i * TrackKeySize + 0x14);
+                rz = BitConverter.ToSingle(kb, i * TrackKeySize + 0x18);
+                haveRest = true;
+            }
+            k = 1f;
+            if (!haveRest) return 0f;
+            float travel = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                uint f = BitConverter.ToUInt32(kb, i * TrackKeySize);
+                if (f < PullWinStart || f > DrawEnd) continue;
+                float dx = BitConverter.ToSingle(kb, i * TrackKeySize + 0x10) - rx;
+                float dy = BitConverter.ToSingle(kb, i * TrackKeySize + 0x14) - ry;
+                float dz = BitConverter.ToSingle(kb, i * TrackKeySize + 0x18) - rz;
+                travel = Math.Max(travel, (float)Math.Sqrt(dx * dx + dy * dy + dz * dz));
+            }
+            if (travel < 0.01f) return travel;
+            k = _pull / travel;
+            int iIdle = -1, iDrawn = -1;
+            for (int i = 0; i < count; i++)
+            {
+                uint f = BitConverter.ToUInt32(kb, i * TrackKeySize);
+                if (f < PullWinStart || f > PullWinEnd) continue;
+                int o = i * TrackKeySize + 0x10;
+                BitConverter.GetBytes(rx + (BitConverter.ToSingle(kb, o)     - rx) * k).CopyTo(kb, o);
+                BitConverter.GetBytes(ry + (BitConverter.ToSingle(kb, o + 4) - ry) * k).CopyTo(kb, o + 4);
+                BitConverter.GetBytes(rz + (BitConverter.ToSingle(kb, o + 8) - rz) * k).CopyTo(kb, o + 8);
+                if (f == IdleFrame) iIdle = i;
+                if (f == DrawnFrame) iDrawn = i;
+            }
+            // NO LOOSE REST, EVER (user 2026-09-09): the authored draw (240→250) leaves from the slack
+            // rest pose and the snap settles back into it (255→261). On the copy, the draw is re-pathed
+            // to run straight from the taut catch pose (IdleFrame) to full draw with an ease that is
+            // slowest at both ends and fastest through the fork plane, and everything after the snap's
+            // forward peak holds the catch pose. Both end poses are the authored (scaled) ones.
+            if (iIdle >= 0 && iDrawn >= 0)
+            {
+                int oi = iIdle * TrackKeySize + 0x10, od = iDrawn * TrackKeySize + 0x10;
+                float ix = BitConverter.ToSingle(kb, oi), iy = BitConverter.ToSingle(kb, oi + 4), iz = BitConverter.ToSingle(kb, oi + 8);
+                float dx = BitConverter.ToSingle(kb, od), dy = BitConverter.ToSingle(kb, od + 4), dz = BitConverter.ToSingle(kb, od + 8);
+                for (int i = 0; i < count; i++)
+                {
+                    uint f = BitConverter.ToUInt32(kb, i * TrackKeySize);
+                    int o = i * TrackKeySize + 0x10;
+                    if (f >= PullWinStart && f < DrawnFrame)
+                    {
+                        float t = (f - PullWinStart) / (float)(DrawnFrame - PullWinStart);
+                        float e = t * t * (3f - 2f * t);                    // smoothstep
+                        BitConverter.GetBytes(ix + (dx - ix) * e).CopyTo(kb, o);
+                        BitConverter.GetBytes(iy + (dy - iy) * e).CopyTo(kb, o + 4);
+                        BitConverter.GetBytes(iz + (dz - iz) * e).CopyTo(kb, o + 8);
+                    }
+                    else if (f > IdleFrame && f <= PullWinEnd)
+                    {
+                        BitConverter.GetBytes(ix).CopyTo(kb, o);
+                        BitConverter.GetBytes(iy).CopyTo(kb, o + 4);
+                        BitConverter.GetBytes(iz).CopyTo(kb, o + 8);
+                    }
+                }
+            }
+            return travel;
+        }
+
         /// <summary>Slot 3 from the WEAPON's own CCharacter (its draw/motion config), re-aimed at the
         /// copied tree, with its channel cloned (own FrameInf/BoneMtx) and the skin list kept.</summary>
         private static bool RegisterSlot()
@@ -283,14 +460,14 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharaTint + 8);
             BitConverter.GetBytes(1.0f).CopyTo(buf, CCharacter.DimFactor);
             BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.NpcOpacity);
-            BitConverter.GetBytes(KeyGuardLoop).CopyTo(buf, CCharacter.MotionId);
+            BitConverter.GetBytes(KeyIdle).CopyTo(buf, CCharacter.MotionId);
             BitConverter.GetBytes(CharacterMotion.MotionSpeedUseKey).CopyTo(buf, CharacterMotion.MotionSpeedOffset);
             BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, CCharacter.MotionFlags) | (uint)CCharacter.MotionRestart)
                 .CopyTo(buf, CCharacter.MotionFlags);
 
             int fiSize = (_nodeCount + 1) * MotionType.FrameInfEntry;
             int bmSize = (_nodeCount + 1) * MotionType.BoneMtxEntry;
-            uint fiOld = 0, fiNew = 0, bmOld = 0, bmNew = 0;
+            uint fiOld = 0, fiNew = 0, bmOld = 0, bmNew = 0, trkOld = 0, trkNew = 0, ktOld = 0, ktNew = 0;
             int chans = 0;
             for (int s = 0; s < CCharacter.MotionSlots; s++)
             {
@@ -319,12 +496,43 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (bmNew != 0) BitConverter.GetBytes(bmNew).CopyTo(mstr, MotionType.BoneMtxPtr);
                 }
+                // IDLE POSE: the KEY table (CommandKEY 0x13A660 entries) hangs off the CHANNEL at +0x64 —
+                // that is where Step__10CCharacter reads it (NOT CCharacter +0x344, which only mirrors it).
+                // It is shared with the live weapon, so the copy gets a CLONE with dummy KEY 14 rewritten
+                // as a one-frame hold at IdleFrame — the end of the snap, pouch forward and taut, "in
+                // position to catch" — instead of the loose guard-loop pose (user 2026-09-09).
+                uint mi = (uint)BitConverter.ToInt32(mstr, MotionType.MotionInfoPtr) & Memory.PhysAddrMask;
+                if (Memory.IsValidGuest(mi))
+                {
+                    if (ktNew == 0)
+                    {
+                        byte[] kt = Memory.ReadBytesBatch(Memory.ToMmu(mi), KeyTableSize);
+                        if (kt != null)
+                        {
+                            BitConverter.GetBytes(IdleFrame).CopyTo(kt, KeyIdle * 0x10);
+                            BitConverter.GetBytes(IdleFrame).CopyTo(kt, KeyIdle * 0x10 + 4);
+                            BitConverter.GetBytes(0f).CopyTo(kt, KeyIdle * 0x10 + 8);
+                            Memory.WriteBytesBatch(KeyTableCave, kt);
+                            ktOld = mi; ktNew = KeyTableCaveGuest;
+                        }
+                    }
+                    if (ktNew != 0 && mi == ktOld) BitConverter.GetBytes(ktNew).CopyTo(mstr, MotionType.MotionInfoPtr);
+                }
+                uint head = (uint)BitConverter.ToInt32(mstr, MotListHead) & Memory.PhysAddrMask;
+                if (_pull > 0f && Memory.IsValidGuest(head))
+                {
+                    if (trkNew == 0) { uint nh = CloneTracks(head); if (nh != 0) { trkOld = head; trkNew = nh; } }
+                    if (trkNew != 0 && head == trkOld) BitConverter.GetBytes(trkNew).CopyTo(mstr, MotListHead);
+                }
                 long cloneChan = CodeCaves.MotionCave + (long)s * MotionStructSize;
                 Memory.WriteBytesBatch(cloneChan, mstr);
                 BitConverter.GetBytes((uint)(CodeCaves.MotionCaveGuest + s * MotionStructSize)).CopyTo(buf, po);
                 chans++;
             }
             if (chans == 0) { Console.WriteLine(Tag + "weapon has no motion channel?"); return false; }
+            if (ktNew == 0) { Console.WriteLine(Tag + "weapon KEY table unreadable"); return false; }
+            if (((uint)BitConverter.ToInt32(buf, CCharacter.MotionList) & Memory.PhysAddrMask) == ktOld)
+                BitConverter.GetBytes(ktNew).CopyTo(buf, CCharacter.MotionList);      // keep the mirror consistent
 
             Memory.WriteBytesBatch(CodeCaves.ClothStub, new byte[16]);
             long slot = SlotAddr();

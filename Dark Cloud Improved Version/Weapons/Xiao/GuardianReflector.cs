@@ -6,20 +6,20 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// Angel Gear "Guardian Reflector" (roadmap PR 7; pool RE in game_data/docs/angelgear-reflector-re.md).
-    /// While Xiao guards with the Angel Gear, a GIANT SLINGSHOT — Angel Gear's silhouette rising
-    /// UPRIGHT at her back like wings — materializes for the whole guard hold (transparent → solid
-    /// over 0.25 s, folding away over 0.5 s on release).
+    /// While Xiao guards with the Angel Gear, a GIANT COPY of her slingshot stands IN FRONT of her
+    /// for the whole guard hold (transparent → solid over 0.25 s, folding away over 0.5 s on
+    /// release). It ORBITS her to face, in priority: the nearest enemy shot closing on her (even
+    /// when an enemy is nearer), else the nearest enemy, else straight ahead — and, while it fires,
+    /// the enemy it is about to shoot.
     ///
-    /// ABSORB &amp; RE-FIRE (v4, user design 2026-09-08): a claimed enemy projectile is DISARMED
-    /// (latch held — it cannot hurt anyone) but otherwise LEFT ALONE: it flies into Xiao and the
-    /// engine ends it on contact, exactly as built — that contact is the ABSORB, marked by a dull
-    /// white flash on her. The wings then AUTO-FIRE A FRESH SHOT of the same species from the pouch
-    /// at the targeted enemy (nearest living enemy; the shot's arrival line reversed when none).
-    /// Absorbed shots queue invisibly and fire one after another. This ends the losing fight
-    /// against the engine's contact-kill (steering shots around her never reliably saved them) —
-    /// nothing has to survive; everything is re-created at the wings via the same pure-data spawn
-    /// the engine's own Set uses. Fresh shots are latched harmless for now — real reflected DAMAGE
-    /// (pellet-style CollisionData with the shot's element) is the next stage.
+    /// INTERCEPT &amp; RE-FIRE (user design 2026-09-08): every closing shot is claimed (latch held —
+    /// it cannot hurt anyone). The one the slingshot faces is homed gently into the POUCH and
+    /// caught there (quiet vanish); any other reaches her body and is absorbed there instead (dull
+    /// white flash). Each caught shot is then RE-CREATED from the pouch — the weapon copy plays its
+    /// own draw/hold/shoot keys — at the NEAREST living enemy (the arrival line reversed when none),
+    /// via the same pure-data spawn the engine's own Set uses. Fresh shots are latched harmless for
+    /// now — real reflected DAMAGE (pellet-style CollisionData with the shot's element) is a later
+    /// stage, as are the melee shield (aggro like the Mirage decoy, one hit = 4 s cooldown).
     ///
     /// LEVERS (see the RE doc): enemy shots are CSHOT_EFFECT sub-shots in the pack at
     /// *NowShotEffect; a sub-shot spawn is pure data (Set 0x1ADD60 decompiled — phase 1 skips the
@@ -69,8 +69,15 @@ namespace Dark_Cloud_Improved_Version
 
         // ── tuning ──
         private const float ClaimRadius  = 100f;   // claim a closing shot inside this range of Xiao
-        private const float PouchHeight  = 8.5f;   // pouch = above Xiao...
-        private const float PouchBehind  = 8f;     // ...and slightly behind her
+        private const float PouchHeight  = 7.5f;   // copy root height above her feet (8.5 read slightly high at 2x)
+        private const float PropAhead    = 12f;    // copy root this far out from her, along the orbit bearing
+        private const float OrbitRate    = 0.15f;  // rad per tick the copy may swing at most (180° in ~1.1 s)
+        private const float OrbitEase    = 0.25f;  // ...closing this fraction of the remaining angle per tick (ease-out)
+        private const float CaptureRadius = 7f;    // a faced shot this close to the pouch is caught (+ 2 ticks of travel)
+        private const float HomingRange  = 40f;    // faced shot is homed into the pouch from this range
+        private const float HomingGain   = 0.35f;  // per-tick blend of its direction toward the pouch
+        private const int   FireWaitMax  = 20;     // ticks a caught shot waits for the sky to clear before firing anyway
+        private const float PullLength   = 2.5f;   // pouch draw travel, weapon units at x1 (authored 4.2)
         private const float PropScale    = 2f;     // giant factor for the slingshot copy (4 read too big)
         private const int   FadeInTicks  = 5;      // transparency → solid over 0.25 s (guard begins)
         private const int   FadeOutTicks = 10;     // solid → transparent over 0.5 s (guard released)
@@ -79,20 +86,20 @@ namespace Dark_Cloud_Improved_Version
         private const byte  LatchHold    = 0x7F;
         private const int   FreshTimers  = 240;    // wait/life given to a fresh shot (4 s of flight)
         private const float AbsorbNear   = 8f;     // quiet-kill a claimed shot inside this range of her body
-        private const float ClearAhead   = 18f;    // fresh shots spawn this far along the aim (outside her contact zone)
+        private const float ClearMin     = 4f;     // fresh shots leave at least this far down the aim from the pouch
+        private const float PastHer      = 10f;    // ...and, when the aim runs back through her, this far past her body
         // Fire-cycle timing (50 ms ticks): the authored draw is 10 frames (~3 ticks) — 4 keeps it
         // readable; hold at full draw; a short gap after the snap before the next volley.
-        private const int   DrawTicks    = 4;
+        private const int   DrawTicks    = 5;      // 10 frames at KEY rate 0.7 ≈ 4.8 ticks: let the draw complete
         private const int   HoldTicks    = 3;
         private const int   ShootTicks   = 4;
 
         // Dull white absorb flash on Xiao (half-sine, 0.25 s — see unitAmbientAnime notes).
         private const float AbsorbWhite = 90f, AbsorbFlashFrames = 15f;
 
-        // Targeting: lock-on globals (main BSS lockOnTargetFlag/No — slot index into the enemy
-        // arrays) and the aim lift — vanilla pellets fly flat at body height, not at the feet.
-        private const long  LockOnFlag     = 0x202A3588;
-        private const long  LockOnTargetNo = 0x202A3584;
+        // Targeting: nearest living enemy (lock-on deliberately ignored — lockOnTargetFlag/No live at
+        // 0x2A3588/0x2A3584 if ever wanted) and the aim lift — vanilla pellets fly flat at body
+        // height, not at the feet.
         private const float AimLift        = 7f;
 
         private const int  FastTickMs = 50, IdleTickMs = 250;
@@ -112,8 +119,10 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<Claim> _pending = new();   // absorbed, awaiting re-fire
         private static float _alpha;                            // prop opacity 0..1
         private static bool  _jingled;                          // once per appearance
-        private static int   _pullTick = -1;
-        private static bool  _comboLatch;                    // -1 idle; 0..PullTicks = elastic draw
+        private static int   _pullTick = -1;                    // -1 idle; else ticks into the fire cycle
+        private static int   _pendingWait;                      // ticks the head of the queue has waited to fire
+        private static float _orbit;                            // copy bearing relative to her facing (rad)
+        private static bool  _comboLatch;
 
         internal static void Start()
         {
@@ -164,11 +173,11 @@ namespace Dark_Cloud_Improved_Version
                     }
                     _comboLatch = combo;
 
-                    // THE WINGS FOLLOW THE GUARD: up for the whole hold, folding away on release.
+                    // THE SHIELD FOLLOWS THE GUARD: up for the whole hold, folding away on release.
                     if (armed)
                     {
                         if (!SlingshotProp.Active
-                            && SlingshotProp.Spawn(PropScale, PouchHeight, PouchBehind))
+                            && SlingshotProp.Spawn(PropScale, PouchHeight, PropAhead, PullLength))
                         { _alpha = 0f; _jingled = false; }
                         if (SlingshotProp.Active)
                         {
@@ -182,16 +191,35 @@ namespace Dark_Cloud_Improved_Version
                         _alpha = Math.Max(0f, _alpha - 1f / FadeOutTicks);
                         if (_alpha <= 0f) SlingshotProp.Despawn();
                     }
-                    if (SlingshotProp.Active) SlingshotProp.Maintain(_alpha);
-
                     if (armed) ClaimClosingShots(pack, xx, xh, xy);
-                    SustainClaims(pack, armed, xx, xh, xy);
+
+                    // ORBIT: the copy circles her to face the nearest closing shot, else the nearest
+                    // enemy, else straight ahead — and its fire target during a cycle. Rate-limited
+                    // so it visibly swings round instead of snapping.
+                    Claim faced = null;
+                    if (SlingshotProp.Active)
+                    {
+                        if (ChooseBearing(pack, xx, xh, xy, yaw, out float want, out faced))
+                            _orbit = Approach(_orbit, Wrap(want - yaw), OrbitRate);
+                        SlingshotProp.SetOrbit(_orbit);
+                        SlingshotProp.Maintain(_alpha);
+                    }
+                    GetPouch(xx, xh, xy, yaw, out float px, out float ph, out float py);
+
+                    SustainClaims(pack, armed, xx, xh, xy, px, ph, py, faced);
 
                     // Fire cycle = the weapon's OWN keys (c04w##.cfg): 11 draw → 12 hold → 13 shoot
-                    // (the fresh projectile leaves on the shoot key) → back to its guard-loop key.
+                    // (the fresh projectile leaves on the shoot key) → back to the copy's idle hold (KEY 14).
+                    // It begins once nothing else is inbound (or the queue has waited FireWaitMax
+                    // ticks), giving the copy time to turn onto its target first.
                     if (armed && SlingshotProp.Active && _alpha >= 1f && (_pending.Count > 0 || _pullTick >= 0))
                     {
-                        if (_pullTick < 0 && _pending.Count > 0) { SlingshotProp.SetMotion(SlingshotProp.KeyDraw); _pullTick = 0; }
+                        if (_pullTick < 0)
+                        {
+                            _pendingWait++;
+                            if (_claimed.Count == 0 || _pendingWait > FireWaitMax)
+                            { SlingshotProp.SetMotion(SlingshotProp.KeyDraw); _pullTick = 0; _pendingWait = 0; }
+                        }
                         if (_pullTick >= 0)
                         {
                             _pullTick++;
@@ -199,20 +227,21 @@ namespace Dark_Cloud_Improved_Version
                             if (_pullTick == DrawTicks + HoldTicks)
                             {
                                 SlingshotProp.SetMotion(SlingshotProp.KeyShoot);
-                                FirePending(pack, xx, xh, xy, yaw);
+                                FirePending(pack, xx, xh, xy, px, ph, py);
                             }
                             if (_pullTick >= DrawTicks + HoldTicks + ShootTicks)
                             {
-                                SlingshotProp.SetMotion(SlingshotProp.KeyGuardLoop);
+                                SlingshotProp.SetMotion(SlingshotProp.KeyIdle);
                                 _pullTick = -1;
                             }
                         }
                     }
                     else if (_pullTick >= 0)
                     {
-                        SlingshotProp.SetMotion(SlingshotProp.KeyGuardLoop);
+                        SlingshotProp.SetMotion(SlingshotProp.KeyIdle);
                         _pullTick = -1;
                     }
+                    if (_pending.Count == 0) _pendingWait = 0;
                     if (!armed) _pending.Clear();
                 }
                 catch (Exception e)
@@ -276,30 +305,56 @@ namespace Dark_Cloud_Improved_Version
             return false;
         }
 
-        /// <summary>Keep every claimed shot harmless, and make the absorb QUIET: the instant one is
-        /// about to touch her (or its impact chain starts), clear its active flag ourselves — the
-        /// shot simply vanishes into her, no explosion animation — then flash Xiao dull white and
-        /// queue its re-fire. (One tick of travel is added to the kill range so a fast shot can't
-        /// slip past between our 50 ms ticks and detonate on her.)</summary>
-        private static void SustainClaims(long pack, bool armed, float xx, float xh, float xy)
+        /// <summary>Keep every claimed shot harmless and end each one QUIETLY ourselves (active
+        /// flag cleared — no impact animation): the shot the copy is FACING is homed gently into the
+        /// pouch and caught there; any other vanishes into her body with the dull white flash. Either
+        /// way it queues for re-fire. (Two/three ticks of travel pad the catch/kill ranges so a fast
+        /// shot can't slip through between 50 ms ticks and detonate on her.)</summary>
+        private static void SustainClaims(long pack, bool armed, float xx, float xh, float xy,
+                                          float px, float ph, float py, Claim faced)
         {
+            bool solid = armed && SlingshotProp.Active && _alpha >= 1f;
             for (int q = _claimed.Count - 1; q >= 0; q--)
             {
                 var c = _claimed[q];
                 long inst = pack + c.Slot * SlotStride;
-                bool gone = Memory.ReadUShort(inst + OffActive + c.Idx * 2) == 0;
+                bool gone = Memory.ReadUShort(inst + OffActive + c.Idx * 2) == 0, caught = false;
                 if (!gone)
                 {
                     long obj = inst + OffObj + c.Idx * ObjStride;
-                    float dx = xx - Memory.ReadFloat(obj + ObjPos);
-                    float dh = xh - Memory.ReadFloat(obj + ObjPos + 4);
-                    float dy = xy - Memory.ReadFloat(obj + ObjPos + 8);
-                    float kill = AbsorbNear + c.Speed * 3f;
-                    if (dx * dx + dh * dh + dy * dy < kill * kill
-                        || Memory.ReadUShort(inst + OffPhase + c.Idx * 2) > 1)
+                    float sx = Memory.ReadFloat(obj + ObjPos), sh = Memory.ReadFloat(obj + ObjPos + 4), sy = Memory.ReadFloat(obj + ObjPos + 8);
+                    float bx = xx - sx, bh = xh - sh, by = xy - sy;          // shot → her body
+                    float qx = px - sx, qh = ph - sh, qy = py - sy;          // shot → the pouch
+                    float dq = qx * qx + qh * qh + qy * qy;
+                    float catchR = CaptureRadius + c.Speed * 2f, kill = AbsorbNear + c.Speed * 3f;
+                    if (solid && dq < catchR * catchR)
                     {
-                        Memory.WriteUShort(inst + OffActive + c.Idx * 2, 0);   // quiet vanish
+                        Memory.WriteUShort(inst + OffActive + c.Idx * 2, 0);   // into the pouch
+                        gone = true; caught = true;
+                    }
+                    else if (bx * bx + bh * bh + by * by < kill * kill
+                             || Memory.ReadUShort(inst + OffPhase + c.Idx * 2) > 1)
+                    {
+                        Memory.WriteUShort(inst + OffActive + c.Idx * 2, 0);   // quiet vanish into her
                         gone = true;
+                    }
+                    else if (solid && c == faced && dq < HomingRange * HomingRange)
+                    {
+                        long dirA = inst + OffDir + c.Idx * 0x10;
+                        float vx = Memory.ReadFloat(dirA), vh = Memory.ReadFloat(dirA + 4), vy = Memory.ReadFloat(dirA + 8);
+                        float vl = (float)Math.Sqrt(vx * vx + vh * vh + vy * vy), ql = (float)Math.Sqrt(dq);
+                        if (vl > 1e-3f && ql > 1e-3f)
+                        {
+                            float nx = vx / vl * (1f - HomingGain) + qx / ql * HomingGain;
+                            float nh = vh / vl * (1f - HomingGain) + qh / ql * HomingGain;
+                            float ny = vy / vl * (1f - HomingGain) + qy / ql * HomingGain;
+                            float nl = (float)Math.Sqrt(nx * nx + nh * nh + ny * ny);
+                            if (nl > 1e-3f)
+                            {
+                                WriteVec(dirA, nx / nl * vl, nh / nl * vl, ny / nl * vl);   // speed kept
+                                FaceAlong(obj, nx, nh, ny);
+                            }
+                        }
                     }
                 }
                 if (gone)
@@ -308,9 +363,10 @@ namespace Dark_Cloud_Improved_Version
                     if (armed && _pending.Count < PendingMax)
                     {
                         _pending.Add(c);
-                        Player.FlashActiveCharacter(AbsorbWhite, AbsorbWhite, AbsorbWhite, AbsorbFlashFrames, 1);
+                        if (!caught) Player.FlashActiveCharacter(AbsorbWhite, AbsorbWhite, AbsorbWhite, AbsorbFlashFrames, 1);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                            $"absorbed slot{c.Slot}#{c.Idx} (pending {_pending.Count})");
+                            (caught ? $"caught slot{c.Slot}#{c.Idx} in the pouch" : $"absorbed slot{c.Slot}#{c.Idx} into her")
+                            + $" (pending {_pending.Count})");
                     }
                     continue;
                 }
@@ -318,12 +374,68 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        // ──────────────────────────────── re-fire from the wings ────────────────────────────────
+        /// <summary>Where the copy should face — a world bearing in her convention (atan2(dx, dy),
+        /// forward = (sin, cos)). Fire target while a cycle runs or a caught shot waits with a clear
+        /// sky; else the nearest closing shot (also returned, for homing); else the nearest enemy;
+        /// else her own facing. False = nothing to face, hold the current bearing.</summary>
+        private static bool ChooseBearing(long pack, float xx, float xh, float xy, float yaw, out float want, out Claim faced)
+        {
+            want = yaw; faced = null;
+            if (_pullTick >= 0 || (_pending.Count > 0 && _claimed.Count == 0))
+            {
+                if (PickTarget(xx, xh, xy, out float ex, out _, out float ey))
+                { want = (float)Math.Atan2(ex - xx, ey - xy); return true; }
+                return false;
+            }
+            float best = float.MaxValue;
+            foreach (var c in _claimed)
+            {
+                long obj = pack + c.Slot * SlotStride + OffObj + c.Idx * ObjStride;
+                float sx = Memory.ReadFloat(obj + ObjPos), sy = Memory.ReadFloat(obj + ObjPos + 8);
+                float d = (sx - xx) * (sx - xx) + (sy - xy) * (sy - xy);
+                if (d < best) { best = d; faced = c; want = (float)Math.Atan2(sx - xx, sy - xy); }
+            }
+            if (faced != null) return true;
+            if (PickTarget(xx, xh, xy, out float nx, out _, out float ny))
+            { want = (float)Math.Atan2(nx - xx, ny - xy); return true; }
+            return true;                                                // nothing around: straight ahead
+        }
+
+        private static float Wrap(float a)
+        {
+            const float twoPi = 2f * (float)Math.PI;
+            while (a >  (float)Math.PI) a -= twoPi;
+            while (a <= -(float)Math.PI) a += twoPi;
+            return a;
+        }
+
+        /// <summary>Eased, rate-capped turn: a fraction of the remaining angle per tick, never more
+        /// than <paramref name="rate"/>, landing exactly when within a hair.</summary>
+        private static float Approach(float cur, float target, float rate)
+        {
+            float d = Wrap(target - cur);
+            if (Math.Abs(d) < 0.01f) return target;
+            float step = d * OrbitEase;
+            if (step > rate) step = rate; else if (step < -rate) step = -rate;
+            if (Math.Abs(step) < 0.02f) step = Math.Sign(d) * Math.Min(0.02f, Math.Abs(d));
+            return Wrap(cur + step);
+        }
+
+        /// <summary>The pouch in world space: the copy's pouch bone once it has been drawn, else the
+        /// analytic copy root (her position + the orbit offset).</summary>
+        private static void GetPouch(float xx, float xh, float xy, float yaw, out float px, out float ph, out float py)
+        {
+            if (SlingshotProp.Active && SlingshotProp.PouchWorld(out px, out ph, out py)) return;
+            float b = yaw + _orbit;
+            px = xx + (float)Math.Sin(b) * PropAhead; ph = xh + PouchHeight; py = xy + (float)Math.Cos(b) * PropAhead;
+        }
+
+        // ─────────────────────────────── re-fire from the pouch ────────────────────────────────
 
         /// <summary>Spawn a FRESH shot of the absorbed species from the pouch at the targeted enemy —
         /// the same pure-data spawn Set performs for muzzle-less shots (phase 1 direct), reusing the
         /// free sub-shot's own frame objects. Latched harmless until the damage stage lands.</summary>
-        private static void FirePending(long pack, float xx, float xh, float xy, float yaw)
+        private static void FirePending(long pack, float xx, float xh, float xy, float px, float ph, float py)
         {
             if (_pending.Count == 0) return;
             var c = _pending[0];
@@ -342,11 +454,10 @@ namespace Dark_Cloud_Improved_Version
             long obj  = inst + OffObj + j * ObjStride;
             long dirA = inst + OffDir + j * 0x10;
 
-            // The pouch, in world space (rides her position + facing like the prop does).
-            float fx = (float)Math.Sin(yaw), fy = (float)Math.Cos(yaw);
-            float poX = xx - fx * PouchBehind, poH = xh + PouchHeight, poY = xy - fy * PouchBehind;
+            // The pouch, in world space (the copy's own pouch bone).
+            float poX = px, poH = ph, poY = py;
 
-            // Aim: the enemy Xiao is LOCKED ONTO when there is one, else the nearest living enemy —
+            // Aim: the nearest living enemy (lock-on ignored) —
             // at pellet height above its feet (her vanilla shots fly flat at body height, not into
             // the ground) — else the absorbed arrival line reversed.
             float ax = c.RetX, ah = c.RetH, ay = c.RetY;
@@ -359,10 +470,15 @@ namespace Dark_Cloud_Improved_Version
             }
             float v = c.Speed * ReturnBoost;
 
-            // Spawn CLEAR of her contact zone — a fresh shot born at the pouch dies on her
-            // immediately (the same contact-kill the absorb uses), so it leaves from a point
-            // down the aim line instead, past her body.
-            float spX = poX + ax * ClearAhead, spH = poH + ah * ClearAhead, spY = poY + ay * ClearAhead;
+            // Spawn CLEAR of her contact zone — a fresh shot born inside it dies on her at once (the
+            // same contact-kill the absorb uses). The pouch is out in front, so a short lead is
+            // normally enough; when the aim runs back through her (target behind), the shot leaves
+            // from just past her body instead.
+            float tx = xx - poX, th = xh - poH, ty = xy - poY;
+            float along = tx * ax + th * ah + ty * ay;
+            float perp2 = tx * tx + th * th + ty * ty - along * along;
+            float lead = along > 0f && perp2 < (AbsorbNear + 4f) * (AbsorbNear + 4f) ? along + PastHer : ClearMin;
+            float spX = poX + ax * lead, spH = poH + ah * lead, spY = poY + ay * lead;
 
             // ── the Set replica (fields in Set's own order; active LAST) ──
             int flyMot = (short)Memory.ReadUShort(cfg + 0x4E);
@@ -404,15 +520,8 @@ namespace Dark_Cloud_Improved_Version
         private static bool PickTarget(float px, float ph, float py, out float ex, out float eh, out float ey)
         {
             ex = eh = ey = 0f;
-            // The lock-on target first (same slot index space as the enemy arrays).
-            int locked = Memory.ReadInt(LockOnFlag) != 0 ? Memory.ReadInt(LockOnTargetNo) : -1;
-            if (locked >= 0 && locked < EnemyAddresses.FloorSlots.Count
-                && Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(locked, EnemySlotOffsets.Hp)) > 0)
-            {
-                long lp = EnemyAddresses.CharObjects.PosAddr(locked);
-                ex = Memory.ReadFloat(lp); eh = Memory.ReadFloat(lp + 4); ey = Memory.ReadFloat(lp + 8);
-                if (ex != 0f || eh != 0f || ey != 0f) return true;
-            }
+            // Nearest living enemy, regardless of lock-on (user: the slingshot always fires at the
+            // nearest enemy).
             float best = float.MaxValue;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
@@ -433,6 +542,8 @@ namespace Dark_Cloud_Improved_Version
             _pending.Clear();
             _alpha = 0f;
             _pullTick = -1;
+            _pendingWait = 0;
+            _orbit = 0f;
         }
 
         private static void WriteVec(long addr, float a, float b, float c)
