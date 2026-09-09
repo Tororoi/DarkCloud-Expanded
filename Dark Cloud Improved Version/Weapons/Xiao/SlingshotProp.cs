@@ -70,6 +70,13 @@ namespace Dark_Cloud_Improved_Version
         private const int   OrbitTickMs = 16;
         private const float OrbitEase   = 0.18f, OrbitRate = 0.20f;   // user: 0.2 (2026-09-09)
         private static uint  _pouchGuest;                // the copy's pouch bone (null24)
+        private static uint  _shotNodeGuest;             // extra geometry-less child of the root: the shot-target point
+        private static uint  _muzzleGuest;               // the copy's eff30 — where Xiao's own pellets spawn (BattleActionPlay_Jinn: SearchFrame "eff30", zero offset)
+        private static float _idleX, _idleY, _idleZ;     // the pouch's idle local translation (scaled), from ScalePull
+        // checkCollision (0x1AB740) raises the "player" point by the per-character body value before its
+        // sphere test (table @0x26AFE0: Toan 16, XIAO 14, Goro 16, Ruby 16, Ungaga 18, Osmond 15), so the
+        // point enemy shots must be aimed at is the POUCH lowered by this much.
+        private const float PlayerBodyLift = 14f;
 
         /// <param name="pull">pouch draw travel in weapon units at x1 (authored ≈ 4.2); ≤ 0 = authored</param>
         internal static bool Spawn(float scale, float up, float ahead, float pull)
@@ -78,6 +85,7 @@ namespace Dark_Cloud_Improved_Version
             _scale = scale; _up = up; _ahead = ahead; _pull = pull;
             _orbit = _orbitTarget;                            // appear on the wanted bearing, no swing-in
             if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
+            PlaceShotNode();
             if (_orbitThread == null || !_orbitThread.IsAlive)
             { _orbitThread = new Thread(OrbitLoop) { IsBackground = true, Name = "SlingshotOrbit" }; _orbitThread.Start(); }
             _key = KeyIdle;
@@ -125,6 +133,53 @@ namespace Dark_Cloud_Improved_Version
                 catch (Exception e) { Console.WriteLine(Tag + "orbit tick failed: " + e.Message); }
                 Thread.Sleep(OrbitTickMs);
             }
+        }
+
+        /// <summary>GUEST address of the copy's pouch-node world translation row (x, h, y, w) — a live vec4 the
+        /// engine rewrites every draw; 0 when down. What the shot-vs-player pointer aims at.</summary>
+        internal static uint PouchWorldGuest => Active && Memory.IsValidGuest(_pouchGuest) ? _pouchGuest + (uint)(CFrameVu1.WorldMatrix + 0x30) : 0u;
+
+        /// <summary>GUEST address of the shot-target node's world translation row: a live vec4 the engine
+        /// refreshes every draw = pouch − (0, PlayerBodyLift, 0). 0 when down.</summary>
+        internal static uint ShotTargetGuest => Active && Memory.IsValidGuest(_shotNodeGuest) ? _shotNodeGuest + (uint)(CFrameVu1.WorldMatrix + 0x30) : 0u;
+
+        /// <summary>World position of a copied node's cached world matrix (false until drawn / unset).</summary>
+        private static bool NodeWorld(uint node, out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            if (!Active || !Memory.IsValidGuest(node)) return false;
+            long n = Memory.ToMmu(node);
+            x = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x30);
+            h = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x34);
+            y = Memory.ReadFloat(n + CFrameVu1.WorldMatrix + 0x38);
+            return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(x == 0f && h == 0f && y == 0f);
+        }
+
+        /// <summary>The copy's eff30 in world space — the fork's muzzle, where her own pellets leave from.</summary>
+        internal static bool MuzzleWorld(out float x, out float h, out float y) => NodeWorld(_muzzleGuest, out x, out h, out y);
+
+        /// <summary>Her LIVE slingshot's eff30 / null24 world heights (same node layout as the copy, so the
+        /// same offsets from the root), for comparing the copy's placement against the real weapon.</summary>
+        internal static bool LiveHeights(out float muzzleH, out float pouchH)
+        {
+            muzzleH = pouchH = 0f;
+            if (!Active || !Memory.IsValidGuest(_liveRoot) || !Memory.IsValidGuest(_muzzleGuest) || !Memory.IsValidGuest(_pouchGuest)) return false;
+            uint lm = _liveRoot + (_muzzleGuest - _rootGuest), lp = _liveRoot + (_pouchGuest - _rootGuest);
+            muzzleH = Memory.ReadFloat(Memory.ToMmu(lm) + CFrameVu1.WorldMatrix + 0x34);
+            pouchH  = Memory.ReadFloat(Memory.ToMmu(lp) + CFrameVu1.WorldMatrix + 0x34);
+            return true;
+        }
+
+        /// <summary>The copy's ROOT (grip) in world space from its cached world matrix; false until drawn.</summary>
+        internal static bool RootWorld(out float x, out float h, out float y)
+        {
+            x = h = y = 0f;
+            if (!Active || !Memory.IsValidGuest(_rootGuest)) return false;
+            long r = Memory.ToMmu(_rootGuest);
+            x = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x30);
+            h = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x34);
+            y = Memory.ReadFloat(r + CFrameVu1.WorldMatrix + 0x38);
+            return !(float.IsNaN(x) || float.IsNaN(h) || float.IsNaN(y)) && !(x == 0f && h == 0f && y == 0f);
         }
 
         /// <summary>The copy's pouch bone in world space, from its cached world matrix (valid once
@@ -201,7 +256,11 @@ namespace Dark_Cloud_Improved_Version
             if (Environment.TickCount - _lastDiag > 1000)
             {
                 _lastDiag = Environment.TickCount;
-                Console.WriteLine(Tag + $"DIAG copy motionId={Memory.ReadInt(s + CCharacter.MotionId)} " +
+                float feet = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
+                string heights = "";
+                if (LiveHeights(out float lmH, out float lpH) && MuzzleWorld(out _, out float cmH, out _) && PouchWorld(out _, out float cpH, out _))
+                    heights = $"HEIGHTS above her feet — live muzzle {lmH - feet:F1} pouch {lpH - feet:F1} | copy muzzle {cmH - feet:F1} pouch {cpH - feet:F1}  ";
+                Console.WriteLine(Tag + heights + $"DIAG copy motionId={Memory.ReadInt(s + CCharacter.MotionId)} " +
                     $"key={Memory.ReadInt(CodeCaves.MotionCave + MotionType.StateKeyIdx)} frame={Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1} " +
                     $"rootW=({Memory.ReadFloat(r + 0x180):F0},{Memory.ReadFloat(r + 0x184):F0},{Memory.ReadFloat(r + 0x188):F0}) " +
                     $"xiao=({Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos):F0},{Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8):F0})");
@@ -306,9 +365,40 @@ namespace Dark_Cloud_Improved_Version
             {
                 int e = o + CFrameVu1.Name, len = 0;
                 while (len < 0x20 && block[e + len] != 0) len++;
-                if (System.Text.Encoding.ASCII.GetString(block, e, len) == "null24") { _pouchGuest = caveG + (uint)o; break; }
+                string nm = System.Text.Encoding.ASCII.GetString(block, e, len);
+                if (nm == "null24") _pouchGuest = caveG + (uint)o;
+                if (nm == "eff30")  _muzzleGuest = caveG + (uint)o;
             }
-            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, pouch 0x{_pouchGuest:X}, parent = player root 0x{_playerRoot:X}");
+            // SHOT-TARGET NODE: one extra child of the root with no geometry, never animated (no track
+            // names it), whose world position the engine recomputes every draw like any bone. Its local
+            // offset is set by PlaceShotNode once the idle pouch pose is known.
+            if (_nodeCount < MaxNodes)
+            {
+                int extra = _nodeCount * CFrameVu1.NodeStride;
+                byte[] grown = new byte[extra + CFrameVu1.NodeStride];
+                Array.Copy(block, grown, extra);
+                Array.Copy(block, (int)(_pouchGuest - caveG), grown, extra, CFrameVu1.NodeStride);   // template = the pouch bone
+                block = grown;
+                uint me = caveG + (uint)extra;
+                Array.Clear(block, extra + CFrameVu1.Name, 0x20);
+                System.Text.Encoding.ASCII.GetBytes("shotpt").CopyTo(block, extra + CFrameVu1.Name);
+                BitConverter.GetBytes(_rootGuest).CopyTo(block, extra + CFrameVu1.Parent);
+                BitConverter.GetBytes(0).CopyTo(block, extra + CFrameVu1.RootChild);
+                BitConverter.GetBytes(BitConverter.ToUInt32(block, (int)rootOff + CFrameVu1.RootChild)).CopyTo(block, extra + CFrameVu1.RootSibling);
+                BitConverter.GetBytes(me).CopyTo(block, (int)rootOff + CFrameVu1.RootChild);          // first child of the root
+                BitConverter.GetBytes(0).CopyTo(block, extra + CFrameVu1.GeomPtr);
+                BitConverter.GetBytes(0).CopyTo(block, extra + CFrameVu1.WorldCacheA);
+                BitConverter.GetBytes(0).CopyTo(block, extra + CFrameVu1.WorldCacheB);
+                BitConverter.GetBytes(0).CopyTo(block, extra + CFrameVu1.DirtyTrs);
+                for (int r0 = 0; r0 < 4; r0++)                                                     // local = identity
+                    for (int c0 = 0; c0 < 4; c0++)
+                        BitConverter.GetBytes(r0 == c0 ? 1f : 0f).CopyTo(block, extra + CFrameVu1.LocalMatrix + r0 * 0x10 + c0 * 4);
+                _shotNodeGuest = me;
+                _nodeCount++;
+            }
+            else _shotNodeGuest = 0;
+            Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);      // re-write: the grown block + the root's new first child
+            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, pouch 0x{_pouchGuest:X}, shot node 0x{_shotNodeGuest:X}, parent = player root 0x{_playerRoot:X}");
             return true;
         }
 
@@ -377,6 +467,10 @@ namespace Dark_Cloud_Improved_Version
         private static uint TrackCaveGuest => (uint)(CodeCaves.MeshCaveGuest + CodeCaves.MeshCaveSize - TrackCaveSize);
         private static long KeyTableCave      => TrackCave + 0x800;          // top half of the TrackCave (tracks use < 0x800)
         private static uint KeyTableCaveGuest => TrackCaveGuest + 0x800;
+        /// <summary>20 × vec4 (x, height, y, w) — the shield ring's per-enemy "where the player is" positions,
+        /// referenced by the AI redirect pointer table (16-byte aligned: sceVu0CopyVector copies a quadword).</summary>
+        internal static long RingTable      => TrackCave + 0xC00;
+        internal static uint RingTableGuest => TrackCaveGuest + 0xC00;
 
         /// <summary>Clone the weapon's track list into the TrackCave with every translate track's
         /// draw window rescaled to <see cref="_pull"/> units of travel. Returns the new head (guest) or 0.</summary>
@@ -473,6 +567,7 @@ namespace Dark_Cloud_Improved_Version
                 int oi = iIdle * TrackKeySize + 0x10, od = iDrawn * TrackKeySize + 0x10;
                 float ix = BitConverter.ToSingle(kb, oi), iy = BitConverter.ToSingle(kb, oi + 4), iz = BitConverter.ToSingle(kb, oi + 8);
                 float dx = BitConverter.ToSingle(kb, od), dy = BitConverter.ToSingle(kb, od + 4), dz = BitConverter.ToSingle(kb, od + 8);
+                _idleX = ix; _idleY = iy; _idleZ = iz;
                 for (int i = 0; i < count; i++)
                 {
                     uint f = BitConverter.ToUInt32(kb, i * TrackKeySize);
@@ -495,6 +590,35 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
             return travel;
+        }
+
+        /// <summary>Put the shot-target node where the engine's raised test point lands on the pouch:
+        /// pouch position in ROOT space (chain of the copy's local matrices, row-vector convention
+        /// p' = p·L, with the pouch bone at its idle translation) minus PlayerBodyLift/scale in Y (the
+        /// root's rotation is yaw only, so root Y is world up; its scale multiplies child offsets).</summary>
+        private static void PlaceShotNode()
+        {
+            if (!Memory.IsValidGuest(_shotNodeGuest) || !Memory.IsValidGuest(_pouchGuest)) return;
+            float[] p = { _idleX, _idleY, _idleZ, 1f };
+            uint n = _pouchGuest;
+            for (int guard = 0; guard < 8 && n != _rootGuest && Memory.IsValidGuest(n); guard++)
+            {
+                long a = Memory.ToMmu(n);
+                float[] m = new float[16];
+                for (int k = 0; k < 16; k++) m[k] = Memory.ReadFloat(a + CFrameVu1.LocalMatrix + k * 4);
+                if (n == _pouchGuest) { m[12] = _idleX; m[13] = _idleY; m[14] = _idleZ; p = new[] { 0f, 0f, 0f, 1f }; }
+                float[] q = new float[4];
+                for (int c = 0; c < 4; c++) q[c] = p[0] * m[c] + p[1] * m[4 + c] + p[2] * m[8 + c] + p[3] * m[12 + c];
+                p = q;
+                n = (uint)Memory.ReadInt(a + CFrameVu1.Parent) & Memory.PhysAddrMask;
+            }
+            float tx = p[0], ty = p[1] - PlayerBodyLift / Math.Max(0.01f, _scale), tz = p[2];
+            long s = Memory.ToMmu(_shotNodeGuest);
+            Memory.WriteFloat(s + CFrameVu1.LocalTransX, tx);
+            Memory.WriteFloat(s + CFrameVu1.LocalTransY, ty);
+            Memory.WriteFloat(s + CFrameVu1.LocalTransZ, tz);
+            Memory.WriteInt(s + CFrameVu1.WorldCacheA, 0);
+            Console.WriteLine(Tag + $"shot-target node placed at root-space ({tx:F2},{ty:F2},{tz:F2}) = pouch ({p[0]:F2},{p[1]:F2},{p[2]:F2}) lowered {PlayerBodyLift}/{_scale}");
         }
 
         /// <summary>Slot 3 from the WEAPON's own CCharacter (its draw/motion config), re-aimed at the

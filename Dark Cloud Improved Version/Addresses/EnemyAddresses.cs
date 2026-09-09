@@ -517,17 +517,17 @@ namespace Dark_Cloud_Improved_Version
         internal const int AiSpeedParam      = 0x0F0; // float — REQUESTED motion speed; _SET_MOTION writes −1.0 (= use the motion's own KEY speed) here, matching the −1.0 seen at spawn.
         internal const int MotionCommitFlag  = 0x0F4; // halfword — commit gate (-0x1b3c). CMonstorUnit::Step (ELF 0x1dd890) commits the requested motion (0xEC) into the render object's player ONLY when this is nonzero; the engine sets it when the current clip finishes. Writing 1 forces an immediate motion switch (interrupt).
 
-        // ── Species data pointer (regular enemies) ───────────────────────────
-        // +0x0FC: PS2-native pointer to a per-species data block, set at spawn and SHARED by all
-        // live slots of the same species (slots of species 3 → 0x010A5260, species 6 → 0x011D94B0, etc.;
-        // changes with the species). This is the regular-enemy analog of the boss SpeciesDataPtr (0x04C),
-        // which is 0 for non-bosses. Confirmed (savestate analysis 2026-06-09) NOT read by the per-frame
-        // DrawMonstor / Step / MoveChara / CheckDmg paths, so its exact role is unconfirmed (likely a
-        // spawn/despawn or stat/asset reference). Add 0x20000000 for the PCSX2 address.
-        // NOTE: the rendered MODEL/animation is NOT driven by this nor by any FloorSlot field — the
-        // engine draws each enemy from a separate CCharacter "render object" at
-        // (MonstorUnit + slot*0x3510 + 0x1FCD0), i.e. the ModelScaleOffsets region (see below).
-        internal const int SpeciesParamPtr   = 0x0FC; // int   — per-species data block ptr (PS2-native); shared by same-species slots; not read per-frame
+        // ── Lock-on target (regular enemies) — RESOLVED 2026-09-09 (was "SpeciesParamPtr", role unconfirmed) ──
+        // +0x0FC: PS2-native pointer to the enemy's LOCK-ON FRAME — the CFrame node named by the STB's
+        // `_STATUS_SET_LOCKON_TRG("lockon", w, h)` (handler 0x1E3710: SearchFrame on the species model →
+        // unit+slot*400+0x1E4CC; w/h → ReticleWidth/Height below). Same-species slots share the model, hence
+        // the shared pointer that puzzled the 2026-06-09 savestate analysis. +0x100: that frame's WORLD position
+        // (vec4 x, h, y, w), refreshed by DrawMonstor (GetWorldPosition) every draw. setTargetCursor (dun
+        // 0x1DC07A0) copies it to the lock-on aim point global 0x1DC4500 — the point Xiao's pellets fly at
+        // (BattleActionPlay_Jinn); with no lock-on frame the aim point is the enemy origin raised by 8.
+        internal const int LockOnFrame       = 0x0FC; // int   — lock-on CFrame ptr (PS2-native); 0 = species set none
+        internal const int LockOnPoint       = 0x100; // vec4  — lock-on frame WORLD position, engine-refreshed every draw
+        internal const float LockOnFallbackLift = 8f; // aim = origin + this when there is no lock-on frame
 
         // ── World Position ────────────────────────────────────────────────────
         internal const int LocationX         = 0x100; // float — world X position; updated each frame as enemy moves

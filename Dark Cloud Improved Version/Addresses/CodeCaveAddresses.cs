@@ -234,8 +234,26 @@ namespace Dark_Cloud_Improved_Version
             /// writes MMU 0x21F10080. Sit = 0 (loops); refusal = 2 (one shake, hold neutral).</summary>
             internal const long IdleMotionFlags = Base + 0x80;
 
+            /// <summary>ENEMY-VS-PLAYER BLOCK ADDEND (float). <c>CMonstorUnit::MoveCheck2</c> (0x1DCDD0) stops an
+            /// enemy's scripted movement when its next position is within (its move radius +0x1E414 + 6.0) of
+            /// the player; the 6.0 is a per-site immediate (`lui $v1,0x40c0; mtc1 $v1,$f1` @0x1DCFD0).
+            /// GuardianReflector.ArmBlockPatch rewrites those two words (cold) to load THIS word instead, so the
+            /// block distance becomes data: 6.0 = vanilla, RingRadius while Angel Gear's shield is up (enemies
+            /// and their scripted lunges stop at the slingshot). Cave reads GUEST 0x01F10084. ⚠ Read every
+            /// enemy step in every dungeon once armed — must never be 0/garbage; seeded 6.0 at arm.</summary>
+            internal const long ShieldBlockAddend = Base + 0x84;
+
+            /// <summary>SHOT-VS-PLAYER TARGET POINTER. <c>checkCollision</c> (0x1AB740) is every shot's "did I hit
+            /// the player" test; it loads her position global with `lui $v0,0x1ea; addiu $a1,$v0,0x1d30` @0x1AB828.
+            /// GuardianReflector.ArmShotPatch rewrites those two words (cold) to `lui $a1,HI; lw $a1,LO($a1)` — a
+            /// POINTER read from this word: 0x01EA1D30 (vanilla) or, while Angel Gear's shield is solid, the copy's
+            /// pouch-node world translation (engine-refreshed every draw) — so enemy shots collide with the POUCH
+            /// natively, no per-frame writes. Cave reads GUEST 0x01F10088. ⚠ Read by every enemy shot every frame
+            /// once armed — must always hold a valid vec4 address; seeded to the player global at arm.</summary>
+            internal const long ShotHitTarget = Base + 0x88;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x84;
+            internal const long NextFree = Base + 0x8C;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────

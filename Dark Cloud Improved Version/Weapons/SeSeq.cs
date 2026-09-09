@@ -28,6 +28,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Character-change jingle — played by the dungeon state-0x122 (materialize) handler
         /// (dun 0x1DB6940) alongside the golden NewChangeFx burst and a speed-90 white flash.</summary>
         internal const ushort ChangeJingle = 0xF;
+        /// <summary>The WEAPON-BREAK sound: BattleSubWeaponDmg (0x1B5D90) plays SndSePlay(0xE0) the frame a weapon's
+        /// WHP reaches 0 (its only user in the ELF). The break has no particle effect — just this and a message panel.</summary>
+        internal const ushort WeaponBreak = 0xE0;
 
         /// <summary>Queue a sound effect through the engine's SE sequencer pool. Returns false if
         /// every slot is busy (vanishingly rare — vanilla barely uses the pool) — then no sound,

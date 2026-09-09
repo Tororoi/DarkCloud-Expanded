@@ -17,7 +17,13 @@ public class DumpDecompAt extends GhidraScript {
         for (String s : addrs) {
             Address addr = currentProgram.getAddressFactory().getAddress(s.trim());
             Function f = getFunctionContaining(addr);
-            if (f == null) { pw.println("==== no function at " + s + " ===="); continue; }
+            if (f == null) {
+                // Not analysed as a function (sparse dun overlay analysis) — define it here and decompile.
+                disassemble(addr);
+                f = createFunction(addr, null);
+                if (f == null) { pw.println("==== no function at " + s + " (create failed) ===="); continue; }
+                pw.println("(function created at " + s + ")");
+            }
             pw.println("==== " + f.getName() + " @ " + f.getEntryPoint() + " (contains " + s.trim() + ") ====");
             DecompileResults r = di.decompileFunction(f, 120, monitor);
             pw.println(r.getDecompiledFunction() != null ? r.getDecompiledFunction().getC() : "DECOMP FAILED");

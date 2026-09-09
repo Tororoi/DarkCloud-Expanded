@@ -47,7 +47,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
         private const int  OffLife    = 0xA010;    // + i*4
         private const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58
-        private const int  OffA060    = 0xA060;    // + i*2, short — Set writes 0xFFFF
+        private const int  OffA060    = 0xA060;    // + i*2, short — Set writes 0xFFFF; SetUserID2 (0x1AE400) then stamps the FIRING ENEMY SLOT
         private const int  OffDamage  = 0xA070;    // + i*4
         private const int  OffA0B0    = 0xA0B0;    // + i*4 — Set: -1
         private const int  OffA0D0    = 0xA0D0;    // + i*4 — Set: -1.0f
@@ -75,6 +75,67 @@ namespace Dark_Cloud_Improved_Version
         private const float HomingRange  = 40f;    // faced shot is homed into the pouch from this range
         private const float HomingGain   = 0.35f;  // per-tick blend of its direction toward the pouch
         private const int   FireWaitMax  = 20;     // ticks a caught shot waits for the sky to clear before firing anyway
+        // SHIELD RING (user design 2026-09-09): enemies keep Xiao's CENTER as their target, but each one
+        // "sees" her at the point on a ring of the slingshot's radius along its own approach line — so it
+        // walks straight at her and stops/attacks on reaching the slingshot. Pure data: the Mirage redirect
+        // caves make _GET_POSITION/_GET_DISTANCE read a per-slot POINTER (CodeCaves.PtrTable); the ring
+        // points each live enemy's pointer at its own ring position. Enemies already inside the ring see her
+        // real position (they are past the shield). Released → every pointer back to the live player.
+        private const float RingRadius   = PropAhead + 2f;   // the slingshot's reach plus its own thickness
+        private const int   RingSlots    = 20;               // per-slot entries managed (Mirage manages the same 20)
+        // MELEE HIT ON THE SLINGSHOT (user 2026-09-09): enemy swings are CCollisionData spheres in the
+        // NowColData pool, planted by CMonstorUnit::CheckDmg (0x1D9F10) only during an attack's damage
+        // window (mask +0x48 bit 1 = hurts the player, owner +0x58 = slot*5+200). The player is hit
+        // when CheckHitUser (0x1B5920) finds an open entry (+0x70 == +0x74) whose horizontal distance
+        // ≤ its radius and whose vertical band overlaps hers. A guarded hit (BtCheckDamageProc, dun
+        // 0x1DBAFD0) then CONSUMES the entry, plants a hit-mark (MyHitPointMark @0x1EC4940, 16 × 0x20:
+        // pos vec4, +0x10 life 0x10, +0x14 timer 0, +0x18 active 1 — entry 0 for guards) and plays
+        // SndSePlay(0xA2), the guard clink. The slingshot does the same at frame rate against its own
+        // volume, then dispels and cools down.
+        private const long   NowColDataPtr = 0x202A35E0;
+        private const int    ColEntries = 96, ColStride = 0xA0, ColActiveOff = 0x3C00;
+        private const int    ColRadius = 0x3C, ColMask = 0x48, ColOwner = 0x58, ColGateA = 0x70, ColGateB = 0x74;
+        // Set's 2nd arg → entry +0x38: 0 for MELEE/contact planters (CheckDmg, player swings, bombs, status
+        // powders) and 1.0f for PROJECTILE/effect planters (CSHOT_EFFECT impacts, MACHINGUN, FIREBAR, thrown
+        // items) — the discriminator that keeps a shot detonating near the slingshot from reading as a swing.
+        private const int    ColClass = 0x38;
+        private const int    ColColIdx = 0x60;
+        // RULE (user 2026-09-09): melee is melee — any melee-class player-hurting sphere on the slingshot
+        // dispels it. Shots are shots — a pool shot whose BODY reaches the slingshot is caught there and
+        // re-fired (see CatchAtProp), and a shot's impact sphere landing on it is swallowed, never a hit.
+        private const uint   HurtsPlayerMask = 1;
+        private const long   HitMarkPool = 0x21EC4940;
+        private const int    HitMarkLife = 0x10;
+        private const ushort GuardClinkSe = 0xA2;
+        private const float  PropHitRadius = 6f, PropHitHeight = 14f, PropHitBelow = 2f;   // the copy's volume about its root
+        private const int    HitFadeTicks = 3;             // dispel: solid → gone in 0.15 s
+        private const double CooldownSeconds = 4.0;
+        private const int    HitWatchMs = 16;
+        // PHYSICAL BLOCK (user 2026-09-09: a collision circle, not a per-frame clamp). CMonstorUnit::MoveCheck2
+        // (0x1DCDD0, called from Step for every enemy) zeroes an enemy's scripted movement (dir +0x1E430 /
+        // speed +0x1E450) when its next position is within (its move radius +0x1E414 + 6.0) of the player
+        // and it is heading toward her — the ONLY enemy-vs-player body block in the engine (MoveChecMonster
+        // is enemy-vs-enemy; MoveCheck is the player-vs-enemy side). The 6.0 is a per-site immediate:
+        //   0x1DCFD0  lui  $v1,0x40c0     →  lui  $v1,HI(Mailbox.ShieldBlockAddend)
+        //   0x1DCFD4  mtc1 $v1,$f1        →  lwc1 $f1,LO(Mailbox.ShieldBlockAddend)($v1)
+        // Two words, applied ONCE while cold (menu/town — writing hot EE code crashes the recompiler);
+        // from then on the block distance is a DATA word: 6.0 vanilla, RingRadius while the shield is up.
+        private const long   BlockPatchAddr = 0x201DCFD0;
+        private static readonly uint[] BlockPristine = { 0x3C0340C0u, 0x44830800u };
+        private static readonly uint[] BlockPatched  = { 0x3C030000u | (uint)((CodeCaves.Mailbox.ShieldBlockAddend - 0x20000000) >> 16),
+                                                          0xC4610000u | (uint)((CodeCaves.Mailbox.ShieldBlockAddend - 0x20000000) & 0xFFFF) };
+        private const float  VanillaBlockAddend = 6f;
+        // ENGINE-SIDE CATCH (user 2026-09-09: no per-tick collision checks). checkCollision (0x1AB740) is every
+        // shot's hit-the-player test; its player-position load (`lui $v0,0x1ea; addiu $a1,$v0,0x1d30` @0x1AB828,
+        // $v0 dead after) becomes a POINTER read of Mailbox.ShotHitTarget. Solid shield → pointer = the copy's
+        // shot-target node (pouch lowered by her 14-unit body lift, engine-refreshed every draw) → shots hit the POUCH natively at frame
+        // rate; claimed (latched) shots plant nothing there and simply end — their death near the pouch is
+        // the catch. Shield down → pointer = the player global (vanilla).
+        private const long   ShotPatchAddr = 0x201AB828;
+        private static readonly uint[] ShotPristine = { 0x3C0201EAu, 0x24451D30u };
+        private static readonly uint[] ShotPatched  = { 0x3C050000u | (uint)((CodeCaves.Mailbox.ShotHitTarget - 0x20000000) >> 16),
+                                                         0x8CA50000u | (uint)((CodeCaves.Mailbox.ShotHitTarget - 0x20000000) & 0xFFFF) };
+        private const float  EngineCatchNear = 20f;      // a claimed shot that died within this of the pouch was caught there
         private const float PullLength   = 2.5f;   // pouch draw travel, weapon units at x1 (authored 4.2)
         private const float PropScale    = 2f;     // giant factor for the slingshot copy (4 read too big)
         private const int   FadeInTicks  = 5;      // transparency → solid over 0.25 s (guard begins)
@@ -95,10 +156,10 @@ namespace Dark_Cloud_Improved_Version
         // Dull white absorb flash on Xiao (half-sine, 0.25 s — see unitAmbientAnime notes).
         private const float AbsorbWhite = 90f, AbsorbFlashFrames = 15f;
 
-        // Targeting: nearest living enemy (lock-on deliberately ignored — lockOnTargetFlag/No live at
-        // 0x2A3588/0x2A3584 if ever wanted) and the aim lift — vanilla pellets fly flat at body
-        // height, not at the feet.
-        private const float AimLift        = 7f;
+        // Targeting: nearest living enemy (lock-on selection deliberately ignored), aimed EXACTLY where
+        // Xiao's own pellets go — the enemy's lock-on frame world position (FloorSlots LockOnPoint,
+        // engine-refreshed every draw; setTargetCursor copies it to the aim global 0x1DC4500), or its
+        // origin raised 8 when the species set no lock-on frame.
 
         private const int  FastTickMs = 50, IdleTickMs = 250;
 
@@ -110,6 +171,7 @@ namespace Dark_Cloud_Improved_Version
             public int    Damage;
             public ushort Owner, Attr2;
             public byte   SndFlag, Reload;
+            public float  LastX, LastH, LastY;         // where it was last seen (to judge an engine-side death)
         }
 
         private static Thread _thread;
@@ -119,6 +181,13 @@ namespace Dark_Cloud_Improved_Version
         private static bool  _jingled;                          // once per appearance
         private static int   _pullTick = -1;                    // -1 idle; else ticks into the fire cycle
         private static int   _pendingWait;                      // ticks the head of the queue has waited to fire
+        private static bool  _ringWarned, _blockArmed, _blockWarned, _shotArmed, _shotWarned, _shotRedirected;
+        private static Thread _hitThread;
+        private static volatile bool _hitFlag;                  // set by the hit watch, consumed by the loop
+        private static bool  _dispelling;                       // hit → fast fade-out in progress
+        private static DateTime _cooldownUntil;                 // no respawn before this
+        /// <summary>The shield ring owns the AI redirect pointer table (Mirage's table writer stands down).</summary>
+        internal static bool RingActive { get; private set; }
         private static bool  _comboLatch;
 
         internal static void Start()
@@ -126,6 +195,8 @@ namespace Dark_Cloud_Improved_Version
             if (_thread != null && _thread.IsAlive) return;
             _thread = new Thread(Loop) { IsBackground = true, Name = "GuardianReflector" };
             _thread.Start();
+            if (_hitThread == null || !_hitThread.IsAlive)
+            { _hitThread = new Thread(HitWatch) { IsBackground = true, Name = "SlingshotHitWatch" }; _hitThread.Start(); }
         }
 
         private static void Loop()
@@ -136,6 +207,8 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     bool inDun = Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId;
+                    if (!_blockArmed && !Player.InDungeonFloor()) ArmBlockPatch();
+                    if (!_shotArmed && !Player.InDungeonFloor()) ArmShotPatch();
                     if (inDun) sleep = FastTickMs;
                     bool armed = inDun
                               && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.angelgear
@@ -170,10 +243,28 @@ namespace Dark_Cloud_Improved_Version
                     }
                     _comboLatch = combo;
 
-                    // THE SHIELD FOLLOWS THE GUARD: up for the whole hold, folding away on release.
-                    if (armed)
+                    // A MELEE HIT dispels the shield: fast fade-out, then a cooldown before it can return.
+                    if (_hitFlag)
                     {
-                        if (!SlingshotProp.Active
+                        _hitFlag = false;
+                        if (SlingshotProp.Active && !_dispelling)
+                        {
+                            _dispelling = true;
+                            _cooldownUntil = DateTime.UtcNow.AddSeconds(CooldownSeconds);
+                            SeSeq.Play(SeSeq.WeaponBreak, 60);                 // the game's own weapon-break sound (WHP → 0)
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slingshot struck — dispelled (weapon-break SE), back in {CooldownSeconds:0.#} s");
+                        }
+                    }
+
+                    // THE SHIELD FOLLOWS THE GUARD: up for the whole hold, folding away on release.
+                    if (_dispelling)
+                    {
+                        _alpha = Math.Max(0f, _alpha - 1f / HitFadeTicks);
+                        if (_alpha <= 0f || !SlingshotProp.Active) { SlingshotProp.Despawn(); _dispelling = false; }
+                    }
+                    else if (armed)
+                    {
+                        if (!SlingshotProp.Active && DateTime.UtcNow >= _cooldownUntil
                             && SlingshotProp.Spawn(PropScale, PouchHeight, PropAhead, PullLength))
                         { _alpha = 0f; _jingled = false; }
                         if (SlingshotProp.Active)
@@ -188,7 +279,10 @@ namespace Dark_Cloud_Improved_Version
                         _alpha = Math.Max(0f, _alpha - 1f / FadeOutTicks);
                         if (_alpha <= 0f) SlingshotProp.Despawn();
                     }
-                    if (armed) ClaimClosingShots(pack, xx, xh, xy);
+                    // Shots are only intercepted while the SHIELD is up (not while it is broken / cooling
+                    // down / folding): with no slingshot they reach her exactly as vanilla.
+                    bool shieldUp = armed && SlingshotProp.Active && !_dispelling;
+                    if (shieldUp) ClaimClosingShots(pack, xx, xh, xy);
 
                     // ORBIT: the copy circles her to face the nearest closing shot, else the nearest
                     // enemy, else straight ahead — and its fire target during a cycle. This tick only
@@ -201,8 +295,10 @@ namespace Dark_Cloud_Improved_Version
                         SlingshotProp.Maintain(_alpha);
                     }
                     GetPouch(xx, xh, xy, yaw, out float px, out float ph, out float py);
+                    RedirectShots(shieldUp && _alpha >= 1f);
+                    if (SlingshotProp.Active) UpdateRing(xx, xh, xy); else ReleaseRing();
 
-                    SustainClaims(pack, armed, xx, xh, xy, px, ph, py, faced);
+                    SustainClaims(pack, shieldUp, xx, xh, xy, px, ph, py, faced);
 
                     // Fire cycle = the weapon's OWN keys (c04w##.cfg): 11 draw → 12 hold → 13 shoot
                     // (the fresh projectile leaves on the shoot key) → back to the copy's idle hold (KEY 14).
@@ -306,19 +402,35 @@ namespace Dark_Cloud_Improved_Version
         /// pouch and caught there; any other vanishes into her body with the dull white flash. Either
         /// way it queues for re-fire. (Two/three ticks of travel pad the catch/kill ranges so a fast
         /// shot can't slip through between 50 ms ticks and detonate on her.)</summary>
-        private static void SustainClaims(long pack, bool armed, float xx, float xh, float xy,
+        private static void SustainClaims(long pack, bool shieldUp, float xx, float xh, float xy,
                                           float px, float ph, float py, Claim faced)
         {
-            bool solid = armed && SlingshotProp.Active && _alpha >= 1f;
+            if (!shieldUp)
+            {
+                // Shield down (broken, cooling, folding, or guard released): every claimed shot goes
+                // LIVE again at once (latch → 0; left alone it would stay harmless for its 127-frame
+                // countdown) and nothing waits to be fired.
+                if (_claimed.Count > 0 || _pending.Count > 0)
+                {
+                    foreach (var c in _claimed)
+                        Memory.WriteByte(pack + c.Slot * SlotStride + OffLatch + c.Idx, 0);
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        $"shield down — released {_claimed.Count} claimed, dropped {_pending.Count} pending");
+                    _claimed.Clear(); _pending.Clear();
+                }
+                return;
+            }
+            bool armed = true, solid = SlingshotProp.Active && _alpha >= 1f;
             for (int q = _claimed.Count - 1; q >= 0; q--)
             {
                 var c = _claimed[q];
                 long inst = pack + c.Slot * SlotStride;
-                bool gone = Memory.ReadUShort(inst + OffActive + c.Idx * 2) == 0, caught = false;
+                bool gone = Memory.ReadUShort(inst + OffActive + c.Idx * 2) == 0, caught = false, byEngine = gone;
                 if (!gone)
                 {
                     long obj = inst + OffObj + c.Idx * ObjStride;
                     float sx = Memory.ReadFloat(obj + ObjPos), sh = Memory.ReadFloat(obj + ObjPos + 4), sy = Memory.ReadFloat(obj + ObjPos + 8);
+                    c.LastX = sx; c.LastH = sh; c.LastY = sy;
                     float bx = xx - sx, bh = xh - sh, by = xy - sy;          // shot → her body
                     float qx = px - sx, qh = ph - sh, qy = py - sy;          // shot → the pouch
                     float dq = qx * qx + qh * qh + qy * qy;
@@ -356,13 +468,26 @@ namespace Dark_Cloud_Improved_Version
                 if (gone)
                 {
                     _claimed.RemoveAt(q);
+                    string how = caught ? "caught in the pouch" : "absorbed into her";
+                    if (byEngine)
+                    {
+                        // The engine ended it (it hit "the player" — i.e. the POUCH while redirected — a wall,
+                        // or expired): judge by where we last saw it.
+                        float qx = px - c.LastX, qh = ph - c.LastH, qy = py - c.LastY;
+                        float ex = xx - c.LastX, eh = xh - c.LastH, ey = xy - c.LastY;
+                        if (qx * qx + qh * qh + qy * qy < EngineCatchNear * EngineCatchNear) { caught = true; how = "caught at the pouch (engine)"; }
+                        else if (ex * ex + eh * eh + ey * ey < (AbsorbNear + c.Speed * 3f) * (AbsorbNear + c.Speed * 3f)) how = "ended on her";
+                        else
+                        {
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lost slot{c.Slot}#{c.Idx} (wall/expired) — not re-fired");
+                            continue;
+                        }
+                    }
                     if (armed && _pending.Count < PendingMax)
                     {
                         _pending.Add(c);
                         if (!caught) Player.FlashActiveCharacter(AbsorbWhite, AbsorbWhite, AbsorbWhite, AbsorbFlashFrames, 1);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                            (caught ? $"caught slot{c.Slot}#{c.Idx} in the pouch" : $"absorbed slot{c.Slot}#{c.Idx} into her")
-                            + $" (pending {_pending.Count})");
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{how}: slot{c.Slot}#{c.Idx} (pending {_pending.Count})");
                     }
                     continue;
                 }
@@ -438,8 +563,9 @@ namespace Dark_Cloud_Improved_Version
             long obj  = inst + OffObj + j * ObjStride;
             long dirA = inst + OffDir + j * 0x10;
 
-            // The pouch, in world space (the copy's own pouch bone).
+            // Leave from the fork's MUZZLE (the copy's eff30 — where her own pellets spawn), else the pouch.
             float poX = px, poH = ph, poY = py;
+            if (SlingshotProp.MuzzleWorld(out float mx, out float mh, out float my)) { poX = mx; poH = mh; poY = my; }
 
             // Aim: the nearest living enemy (lock-on ignored) —
             // at pellet height above its feet (her vanilla shots fly flat at body height, not into
@@ -447,7 +573,7 @@ namespace Dark_Cloud_Improved_Version
             float ax = c.RetX, ah = c.RetH, ay = c.RetY;
             if (PickTarget(poX, poH, poY, out float ex, out float eh, out float ey))
             {
-                ax = ex - poX; ah = (eh + AimLift) - poH; ay = ey - poY;
+                ax = ex - poX; ah = eh - poH; ay = ey - poY;
                 float al = (float)Math.Sqrt(ax * ax + ah * ah + ay * ay);
                 if (al < 1f) { ax = c.RetX; ah = c.RetH; ay = c.RetY; }
                 else { ax /= al; ah /= al; ay /= al; }
@@ -500,12 +626,11 @@ namespace Dark_Cloud_Improved_Version
                 $"re-fired slot{c.Slot}#{j} at " + (ah == c.RetH && ax == c.RetX ? "return line" : "nearest enemy"));
         }
 
-        /// <summary>Nearest living enemy's live position (the STB-visible CCharacter array).</summary>
+        /// <summary>Nearest living enemy's AIM POINT: its lock-on frame's world position when the
+        /// species set one (what Xiao's own shots fly at), else its origin raised by 8.</summary>
         private static bool PickTarget(float px, float ph, float py, out float ex, out float eh, out float ey)
         {
             ex = eh = ey = 0f;
-            // Nearest living enemy, regardless of lock-on (user: the slingshot always fires at the
-            // nearest enemy).
             float best = float.MaxValue;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
@@ -513,14 +638,226 @@ namespace Dark_Cloud_Improved_Version
                 long p = EnemyAddresses.CharObjects.PosAddr(s);
                 float cx = Memory.ReadFloat(p), ch = Memory.ReadFloat(p + 4), cy = Memory.ReadFloat(p + 8);
                 if (cx == 0f && ch == 0f && cy == 0f) continue;
-                float d = (cx - px) * (cx - px) + (ch - ph) * (ch - ph) + (cy - py) * (cy - py);
-                if (d < best) { best = d; ex = cx; eh = ch; ey = cy; }
+                float d = (cx - px) * (cx - px) + (cy - py) * (cy - py);
+                if (d >= best) continue;
+                best = d;
+                ex = cx; eh = ch + EnemySlotOffsets.LockOnFallbackLift; ey = cy;
+                if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LockOnFrame)) != 0)
+                {
+                    long lp = EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.LockOnPoint);
+                    float lx = Memory.ReadFloat(lp), lh = Memory.ReadFloat(lp + 4), ly = Memory.ReadFloat(lp + 8);
+                    if (!(lx == 0f && lh == 0f && ly == 0f) && Math.Abs(lh - ch) < 200f) { ex = lx; eh = lh; ey = ly; }
+                }
             }
             return best < float.MaxValue;
         }
 
+        // ───────────────────────────────────── shield ring ─────────────────────────────────────
+
+        /// <summary>Per tick while the slingshot is up: every live enemy farther than RingRadius gets a
+        /// pointer to its own ring position (her center + RingRadius along the line to it); nearer ones,
+        /// and empty slots, read the live player. Positions are written BEFORE the pointers.</summary>
+        private static void UpdateRing(float xx, float xh, float xy)
+        {
+            if (!Mirage.Armed)
+            {
+                if (!_ringWarned) { _ringWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "redirect caves not armed — shield ring inactive (arms at the next town visit)"); }
+                return;
+            }
+            var ring = new byte[RingSlots * 16];
+            var ptrs = new byte[RingSlots * CodeCaves.PtrStride];
+            int ringed = 0;
+            for (int s = 0; s < RingSlots; s++)
+            {
+                uint ptr = StbExternCmd.PlayerPosGuest;
+                if (s < EnemyAddresses.FloorSlots.Count && IsLiveEnemy(s))
+                {
+                    long p = EnemyAddresses.CharObjects.PosAddr(s);
+                    float dx = Memory.ReadFloat(p) - xx, dy = Memory.ReadFloat(p + 8) - xy;
+                    float d = (float)Math.Sqrt(dx * dx + dy * dy);
+                    if (d > RingRadius)
+                    {
+                        BitConverter.GetBytes(xx + dx / d * RingRadius).CopyTo(ring, s * 16);
+                        BitConverter.GetBytes(xh).CopyTo(ring, s * 16 + 4);
+                        BitConverter.GetBytes(xy + dy / d * RingRadius).CopyTo(ring, s * 16 + 8);
+                        BitConverter.GetBytes(1f).CopyTo(ring, s * 16 + 12);
+                        ptr = SlingshotProp.RingTableGuest + (uint)(s * 16);
+                        ringed++;
+                    }
+                }
+                BitConverter.GetBytes(ptr).CopyTo(ptrs, s * CodeCaves.PtrStride);
+            }
+            bool first = !RingActive;
+            RingActive = true;                                   // Mirage's writer stands down from here
+            if (first && _blockArmed) Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, RingRadius);   // bodies stop at the ring
+            Memory.WriteBytesBatch(SlingshotProp.RingTable, ring);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
+            if (first) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"shield ring up (R={RingRadius:F1}, {ringed} enemies ringed)");
+        }
+
+        /// <summary>Every managed pointer back to the live player; Mirage's writer resumes.</summary>
+        private static void ReleaseRing()
+        {
+            if (!RingActive) return;
+            var ptrs = new byte[RingSlots * CodeCaves.PtrStride];
+            for (int s = 0; s < RingSlots; s++) BitConverter.GetBytes(StbExternCmd.PlayerPosGuest).CopyTo(ptrs, s * CodeCaves.PtrStride);
+            Memory.WriteBytesBatch(CodeCaves.PtrTable, ptrs);
+            if (_blockArmed) Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);
+            RingActive = false;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shield ring released");
+        }
+
+        private static bool IsLiveEnemy(int s)
+        {
+            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+            if (id == 0 || id == 0xFFFF) return false;
+            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
+        }
+
+        // ───────────────────────────────── physical block patch ─────────────────────────────────
+
+        /// <summary>Make MoveCheck2's enemy-block addend a data word (see the constants above). Cold only:
+        /// called from the main-menu entry and retried from the loop while not on a dungeon floor.
+        /// Idempotent; refuses (log once) if the words are neither vanilla nor ours.</summary>
+        internal static void ArmBlockPatch()
+        {
+            if (_blockArmed) return;
+            try
+            {
+                uint w0 = (uint)Memory.ReadInt(BlockPatchAddr), w1 = (uint)Memory.ReadInt(BlockPatchAddr + 4);
+                if (w0 == BlockPatched[0] && w1 == BlockPatched[1])
+                {
+                    Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);   // stale value from a dead session
+                    _blockArmed = true;
+                    return;
+                }
+                if (w0 != BlockPristine[0] || w1 != BlockPristine[1])
+                {
+                    if (!_blockWarned) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        $"MoveCheck2 @0x{BlockPatchAddr:X8} is not vanilla ({w0:X8} {w1:X8}) — shield block not armed");
+                    _blockWarned = true;
+                    return;
+                }
+                Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);   // data first...
+                Memory.WriteUInt(BlockPatchAddr,     BlockPatched[0]);                           // ...then lui (a half-applied pair is harmless this way round)
+                Memory.WriteUInt(BlockPatchAddr + 4, BlockPatched[1]);
+                _blockArmed = true;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shield block armed: MoveCheck2 addend → data word (6.0 vanilla)");
+            }
+            catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "block patch failed: " + e.Message); }
+        }
+
+        /// <summary>Make checkCollision's player-position load a pointer read (see the constants). Cold only.</summary>
+        internal static void ArmShotPatch()
+        {
+            if (_shotArmed) return;
+            try
+            {
+                uint w0 = (uint)Memory.ReadInt(ShotPatchAddr), w1 = (uint)Memory.ReadInt(ShotPatchAddr + 4);
+                if (w0 == ShotPatched[0] && w1 == ShotPatched[1])
+                {
+                    Memory.WriteUInt(CodeCaves.Mailbox.ShotHitTarget, StbExternCmd.PlayerPosGuest);
+                    _shotArmed = true;
+                    return;
+                }
+                if (w0 != ShotPristine[0] || w1 != ShotPristine[1])
+                {
+                    if (!_shotWarned) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        $"checkCollision @0x{ShotPatchAddr:X8} is not vanilla ({w0:X8} {w1:X8}) — engine-side catch not armed");
+                    _shotWarned = true;
+                    return;
+                }
+                Memory.WriteUInt(CodeCaves.Mailbox.ShotHitTarget, StbExternCmd.PlayerPosGuest);   // pointer first...
+                Memory.WriteUInt(ShotPatchAddr,     ShotPatched[0]);                               // ...then lui $a1
+                Memory.WriteUInt(ShotPatchAddr + 4, ShotPatched[1]);                               // ...then lw $a1
+                _shotArmed = true;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "engine-side catch armed: checkCollision reads the shot target through a pointer");
+            }
+            catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shot patch failed: " + e.Message); }
+        }
+
+        /// <summary>Aim every enemy shot's hit-the-player test at the pouch while the shield is solid, back
+        /// at her when it is not. Two writes per transition, nothing per frame.</summary>
+        private static void RedirectShots(bool solid)
+        {
+            if (!_shotArmed) return;
+            uint target = solid ? SlingshotProp.ShotTargetGuest : 0u;
+            bool want = target != 0;
+            if (want == _shotRedirected) return;
+            Memory.WriteUInt(CodeCaves.Mailbox.ShotHitTarget, want ? target : StbExternCmd.PlayerPosGuest);
+            _shotRedirected = want;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (want ? $"shots now collide with the pouch (0x{target:X})" : "shots collide with her again"));
+        }
+
+        // ─────────────────────────────────── melee hit watch ───────────────────────────────────
+
+        /// <summary>Frame-rate scan of the melee pool while the shield is solid: an open, player-hurting
+        /// sphere overlapping the slingshot's volume is a HIT — consume the entry (it has spent itself
+        /// on the shield, exactly as a guarded hit does), plant the engine's own hit-mark at the sphere,
+        /// play the guard clink, and flag the loop to dispel.</summary>
+        private static void HitWatch()
+        {
+            var hm = new byte[0x20];
+            while (true)
+            {
+                int sleep = HitWatchMs;
+                try
+                {
+                    bool quiet = _dispelling;                       // fading out: still eat the swing that broke it, silently
+                    if (!SlingshotProp.Active || (_alpha < 1f && !quiet)) { Thread.Sleep(50); continue; }
+                    long pool = Memory.ReadInt(NowColDataPtr);
+                    if (pool <= 0) { Thread.Sleep(50); continue; }
+                    pool += 0x20000000;
+                    if (!SlingshotProp.RootWorld(out float rx, out float rh, out float ry)) { Thread.Sleep(50); continue; }
+                    byte[] flags = Memory.ReadBytesBatch(pool + ColActiveOff, ColEntries * 4);
+                    if (flags == null) { Thread.Sleep(50); continue; }
+                    for (int i = 0; i < ColEntries; i++)
+                    {
+                        if (BitConverter.ToInt32(flags, i * 4) == 0) continue;
+                        byte[] e = Memory.ReadBytesBatch(pool + i * ColStride, ColStride);
+                        if (e == null) continue;
+                        if ((BitConverter.ToUInt32(e, ColMask) & HurtsPlayerMask) == 0) continue;
+                        if (BitConverter.ToInt32(e, ColGateA) != BitConverter.ToInt32(e, ColGateB)) continue;
+                        float ex = BitConverter.ToSingle(e, 0), eh = BitConverter.ToSingle(e, 4), ey = BitConverter.ToSingle(e, 8);
+                        float r  = BitConverter.ToSingle(e, ColRadius);
+                        float dx = ex - rx, dy = ey - ry;
+                        if (dx * dx + dy * dy > (r + PropHitRadius) * (r + PropHitRadius)) continue;
+                        if (eh + r < rh - PropHitBelow || eh - r > rh + PropHitHeight) continue;
+
+                        Memory.WriteInt(pool + ColActiveOff + i * 4, 0);            // spent itself on the shield
+                        if (BitConverter.ToSingle(e, ColClass) != 0f)
+                        {
+                            // A SHOT's impact sphere landing on the slingshot: swallowed, never a hit.
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"swallowed a shot impact on the slingshot (entry {i}, r={r:F1})");
+                            continue;
+                        }
+                        if (quiet) continue;                                        // no second spark/clink while dispelling
+                        Array.Clear(hm, 0, hm.Length);
+                        Array.Copy(e, 0, hm, 0, 16);                                // hit-mark at the sphere's center
+                        BitConverter.GetBytes(HitMarkLife).CopyTo(hm, 0x10);
+                        BitConverter.GetBytes(0).CopyTo(hm, 0x14);
+                        BitConverter.GetBytes(1).CopyTo(hm, 0x18);                  // active last
+                        Memory.WriteBytesBatch(HitMarkPool, hm);
+                        SeSeq.Play(GuardClinkSe, 30);
+                        int owner = BitConverter.ToInt32(e, ColOwner), col = BitConverter.ToInt32(e, ColColIdx);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                            $"melee hit on the slingshot: entry {i} col {col}, r={r:F1}, owner {(owner >= 200 ? "slot " + (owner - 200) / 5 : owner.ToString())}");
+                        _hitFlag = true;
+                        sleep = 200;                                                // debounce: one hit is enough
+                        break;
+                    }
+                }
+                catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "hit watch failed: " + e.Message); sleep = 500; }
+                Thread.Sleep(sleep);
+            }
+        }
+
         private static void HardReset()
         {
+            ReleaseRing();
+            _dispelling = false;
+            _hitFlag = false;
+            RedirectShots(false);
             if (SlingshotProp.Active) SlingshotProp.Despawn();
             _claimed.Clear();
             _pending.Clear();
