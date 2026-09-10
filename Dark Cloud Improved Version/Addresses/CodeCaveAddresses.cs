@@ -252,8 +252,18 @@ namespace Dark_Cloud_Improved_Version
             /// once armed — must always hold a valid vec4 address; seeded to the player global at arm.</summary>
             internal const long ShotHitTarget = Base + 0x88;
 
+            /// <summary>Angel Gear shield: who drives <see cref="ShieldGaugeRate"/>. 0 = nobody — the pnach re-seeds
+            /// the rate to 1.5 (vanilla) every frame; 1 = the app (shield up / broken) owns it. Guest 0x01F1008C.</summary>
+            internal const long ShieldGaugeOwner = Base + 0x8C;
+            /// <summary>Xiao's ATTACK-GAUGE REFILL MULTIPLIER (float). The ISO's dun.bin patch (DunPatches) makes the
+            /// overlay refill `gauge += max(1, speed/30) × THIS` instead of the immediate 1.5 (@0x1DB8090/94).
+            /// 1.5 = vanilla, 0 = hold (the shield's HP bar), small = slow refill after a break. Guest 0x01F10090.
+            /// ⚠ LIVES HERE, NOT IN THE ELF CAVE SEGMENT: a PINE write into a page holding executed cave code
+            /// SIGBUSes PCSX2 (2026-09-09 crash when the word was at 0x01FB0D90). The mailbox page holds no code.</summary>
+            internal const long ShieldGaugeRate = Base + 0x90;
+
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x8C;
+            internal const long NextFree = Base + 0x94;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -339,15 +349,10 @@ namespace Dark_Cloud_Improved_Version
             internal const uint LadderRefusal      = 0x01FB0CD0;   // 52 B → 0x1FB0D04
             internal const uint ExclamationHeight  = 0x01FB0D10;   // 24 B → 0x1FB0D28
             internal const uint IdleMotionOverride = 0x01FB0D50;   // 36 B → 0x1FB0D74
-            /// <summary>Xiao's ATTACK-GAUGE REFILL MULTIPLIER (float, ISO-baked 1.5 = vanilla). The dun.bin patch
-            /// (<see cref="DunPatches"/>) makes the overlay's refill `gauge += max(1, speed/30) × THIS` instead of
-            /// the immediate 1.5 (@0x1DB8090/94). Angel Gear's shield writes 0 to hold the bar as its HP and a small
-            /// value so the engine refills it over the cooldown. Valid without the app running (baked).</summary>
-            internal const uint ShieldGaugeRate    = 0x01FB0D90;   // 4 B → 0x1FB0D94
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB0DA0;
+            internal const uint NextFree = 0x01FB0D90;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

@@ -113,10 +113,11 @@ namespace Dark_Cloud_Improved_Version
         // SHIELD HP ON THE ATTACK GAUGE (user 2026-09-09): the bottom-left speed bar (float 0x1DC44C8, 0..100;
         // Xiao's shot needs 100 and zeroes it; a hit on her resets it to 100; MainDraw fills 128 px from it and
         // flashes at 100) shows the slingshot's HP: 5 hits, −20 each. The ISO's dun.bin patch (DunPatches)
-        // makes Xiao's refill multiplier the ELF-cave word ElfCave.ShieldGaugeRate (baked 1.5): 0 holds the
-        // bar while the shield stands; after a break a small value lets the ENGINE refill it over
-        // CooldownSeconds (no per-tick writes); a full bar = the slingshot may respawn.
-        private const long   GaugeRateWord = 0x20000000L + CodeCaves.ElfCave.ShieldGaugeRate;
+        // makes Xiao's refill multiplier the MAILBOX word ShieldGaugeRate (pnach-seeded 1.5 while nobody owns
+        // it): the app takes ownership (ShieldGaugeOwner = 1) only while the shield is up or broken, writing 0
+        // to hold the bar and a small value so the ENGINE refills it over CooldownSeconds (no per-tick
+        // writes); a full bar = the slingshot may respawn. Ownership is released otherwise (self-healing).
+        private const long   GaugeRateWord = CodeCaves.Mailbox.ShieldGaugeRate;
         private const long   GaugeAddr = 0x21DC44C8;
         private const int    ShieldHits = 5;
         private const float  GaugePerHit = 100f / ShieldHits;
@@ -201,6 +202,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool  _cooling;                          // broken: waiting for the bar to refill
         private static bool  _gaugeLive;                        // PNACH present → the gauge is ours to drive
         private static float _rateWritten = float.NaN;
+        private static int   _ownerWritten = -1;
         /// <summary>The shield ring owns the AI redirect pointer table (Mirage's table writer stands down).</summary>
         internal static bool RingActive { get; private set; }
         private static bool  _comboLatch;
@@ -208,7 +210,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void Start()
         {
             if (_thread != null && _thread.IsAlive) return;
-            try { Memory.WriteFloat(GaugeRateWord, VanillaXiaoRefillMul); _rateWritten = VanillaXiaoRefillMul; }   // belt and braces: the ISO bakes 1.5 there
+            try { Memory.WriteFloat(GaugeRateWord, VanillaXiaoRefillMul); Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 0); _rateWritten = VanillaXiaoRefillMul; _ownerWritten = 0; }   // vanilla until a shield stands
             catch (Exception e) { Console.WriteLine(Tag + "gauge seed failed: " + e.Message); }
             _thread = new Thread(Loop) { IsBackground = true, Name = "GuardianReflector" };
             _thread.Start();
@@ -764,11 +766,14 @@ namespace Dark_Cloud_Improved_Version
 
         // ─────────────────────────────────── attack gauge ───────────────────────────────────────
 
+        /// <summary>Own the multiplier word while driving it (0 / slow refill); hand it back to the pnach's
+        /// per-frame 1.5 seed otherwise, so the game is vanilla whenever the app is not actively shielding.</summary>
         private static void SetGaugeRate(float k)
         {
-            if (k == _rateWritten) return;
-            Memory.WriteFloat(GaugeRateWord, k);
-            _rateWritten = k;
+            int owner = k == VanillaXiaoRefillMul ? 0 : 1;
+            if (owner == 1 && _ownerWritten != 1) { Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 1); _ownerWritten = 1; }
+            if (k != _rateWritten) { Memory.WriteFloat(GaugeRateWord, k); _rateWritten = k; }
+            if (owner == 0 && _ownerWritten != 0) { Memory.WriteInt(CodeCaves.Mailbox.ShieldGaugeOwner, 0); _ownerWritten = 0; }
         }
 
         /// <summary>Multiplier that makes the engine's own refill — max(1, speed/30) per frame — fill the bar

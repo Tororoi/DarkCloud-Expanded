@@ -9,8 +9,9 @@ namespace Dark_Cloud_Improved_Version
     /// <see cref="LoadBase"/> every dungeon). Why the ISO and not runtime writes or the pnach: overlay code is
     /// HOT every frame (a PINE write to it crashes the recompiler — the ABS floor-load lesson) and reloads with
     /// every dungeon, and a pnach per-frame write must be gated because the town overlay shares these addresses.
-    /// A baked word changes only this file, needs no gating and no app, and any data a patched load points at
-    /// lives in the ELF cave segment with its default baked in (runtime-tunable through PINE).
+    /// A baked word changes only this file and needs no gating. Data a patched load points at lives in the
+    /// MAILBOX page (0x01F10000): a PINE write into a page holding executed code SIGBUSes PCSX2, and the ELF
+    /// cave segment is such a page (2026-09-09 crash). The pnach seeds the defaults whenever the app is idle.
     /// File offset of a word = record start + (RAM address − LoadBase): the overlay is a flat image.
     /// </summary>
     internal static class DunPatches
@@ -26,9 +27,9 @@ namespace Dark_Cloud_Improved_Version
             // (user 2026-09-09). Guardian Grace watches the counter wrap, so its sparkles/chime follow.
             new(0x01DB8234, 0x284200F0, 0x284200B4, "heal-ability cadence 4 s → 3 s"),
             // Xiao's attack-gauge refill multiplier (motionDrive: `lui v0,0x3fc0; mtc1 v0,f0`, v0 dead after)
-            // → `lui v0,HI; lwc1 f0,LO(v0)` of the baked cave word ElfCave.ShieldGaugeRate (1.5 = vanilla).
-            new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (CodeCaves.ElfCave.ShieldGaugeRate >> 16),     "gauge refill multiplier → cave word (lui)"),
-            new(0x01DB8094, 0x44820000, 0xC4400000u | (CodeCaves.ElfCave.ShieldGaugeRate & 0xFFFF),  "gauge refill multiplier → cave word (lwc1 f0)"),
+            // → `lui v0,HI; lwc1 f0,LO(v0)` of Mailbox.ShieldGaugeRate (pnach-seeded 1.5 = vanilla while idle).
+            new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) >> 16),    "gauge refill multiplier → mailbox word (lui)"),
+            new(0x01DB8094, 0x44820000, 0xC4400000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) & 0xFFFF), "gauge refill multiplier → mailbox word (lwc1 f0)"),
         };
 
         /// <summary>The patched form of the first gauge word — what the runtime checks to know the patch is live.</summary>

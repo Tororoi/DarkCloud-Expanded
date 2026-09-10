@@ -387,6 +387,13 @@ patch=1,EE,201C4714,extended,3C034370 //  dist gate -> 240.0
 patch=1,EE,20162FB4,extended,3C024180 //  distortion amplitude -> 16.0
 patch=1,EE,201622A4,extended,3C034000 //  wave speed -> 2.0
 
+//Xiao Angel Gear shield — attack-gauge refill multiplier DEFAULT. The ISO's dun.bin patch (IsoPatch/DunPatches.cs)
+//makes Xiao's gauge refill read data word 0x01F10090 (1.5 = vanilla) instead of its immediate 1.5. While
+//0x01F1008C == 0 (the app is not driving the shield) PCSX2 re-seeds it to 1.5 every frame, so the game is vanilla
+//with the app closed; the app sets 0x01F1008C = 1 and writes 0 / a slow-refill value while the shield is up / broken.
+patch=1,EE,E1010000,extended,01F1008C //if nobody owns the word (apply next 1)
+patch=1,EE,21F10090,extended,3FC00000 //  refill multiplier = 1.5
+
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
 patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag

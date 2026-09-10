@@ -107,7 +107,6 @@ namespace Dark_Cloud_Improved_Version
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
-            PatchShieldGaugeRateWord(fs, ElfOff);         // Xiao's gauge refill multiplier data word (1.5 baked; the dun.bin patch reads it — DunPatches)
             // (ally-swap buffer grow removed — every ally now fits the vanilla arenas; see the note below)
 
             byte[] pelf = Rd(fs, elfIso, (int)elf.Size);
@@ -316,11 +315,6 @@ namespace Dark_Cloud_Improved_Version
         // 0.5*sin, consumed at 0x17cf50) and $at (dead here; also clobbered by the later SetPosition call), never
         // f0/f1. $ra is stack-saved at entry (`sq ra,0x60(sp)`), so the jal's $ra clobber is safe.
         // (Cave hand-built via the MipsAsm encoders + the local Lwc1/Swc1/AddS, like PatchIdleMotionOverride.)
-        /// <summary>Bake the vanilla 1.5 into <see cref="CodeCaves.ElfCave.ShieldGaugeRate"/> so the dun.bin
-        /// refill patch (DunPatches) is behavior-identical to stock until the mod drives the word.</summary>
-        internal static void PatchShieldGaugeRateWord(FileStream fs, Func<uint, long> ElfOff)
-            => WrU32(fs, ElfOff(CodeCaves.ElfCave.ShieldGaugeRate), BitConverter.ToUInt32(BitConverter.GetBytes(1.5f), 0));
-
         internal static void PatchExclamationHeight(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x0017CF5C;   // EdDrawSysCursor PLAYER-mark final Y store `swc1 f0,0x94(sp)`
