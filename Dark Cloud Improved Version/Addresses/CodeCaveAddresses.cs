@@ -339,10 +339,15 @@ namespace Dark_Cloud_Improved_Version
             internal const uint LadderRefusal      = 0x01FB0CD0;   // 52 B → 0x1FB0D04
             internal const uint ExclamationHeight  = 0x01FB0D10;   // 24 B → 0x1FB0D28
             internal const uint IdleMotionOverride = 0x01FB0D50;   // 36 B → 0x1FB0D74
+            /// <summary>Xiao's ATTACK-GAUGE REFILL MULTIPLIER (float, ISO-baked 1.5 = vanilla). The dun.bin patch
+            /// (<see cref="DunPatches"/>) makes the overlay's refill `gauge += max(1, speed/30) × THIS` instead of
+            /// the immediate 1.5 (@0x1DB8090/94). Angel Gear's shield writes 0 to hold the bar as its HP and a small
+            /// value so the engine refills it over the cooldown. Valid without the app running (baked).</summary>
+            internal const uint ShieldGaugeRate    = 0x01FB0D90;   // 4 B → 0x1FB0D94
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB0D90;
+            internal const uint NextFree = 0x01FB0DA0;
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

@@ -109,7 +109,18 @@ namespace Dark_Cloud_Improved_Version
         private const ushort GuardClinkSe = 0xA2;
         private const float  PropHitRadius = 6f, PropHitHeight = 14f, PropHitBelow = 2f;   // the copy's volume about its root
         private const int    HitFadeTicks = 3;             // dispel: solid → gone in 0.15 s
-        private const double CooldownSeconds = 4.0;
+        private const double CooldownSeconds = 4.0;       // the bar refills from 0 to full over this after a break
+        // SHIELD HP ON THE ATTACK GAUGE (user 2026-09-09): the bottom-left speed bar (float 0x1DC44C8, 0..100;
+        // Xiao's shot needs 100 and zeroes it; a hit on her resets it to 100; MainDraw fills 128 px from it and
+        // flashes at 100) shows the slingshot's HP: 5 hits, −20 each. The ISO's dun.bin patch (DunPatches)
+        // makes Xiao's refill multiplier the ELF-cave word ElfCave.ShieldGaugeRate (baked 1.5): 0 holds the
+        // bar while the shield stands; after a break a small value lets the ENGINE refill it over
+        // CooldownSeconds (no per-tick writes); a full bar = the slingshot may respawn.
+        private const long   GaugeRateWord = 0x20000000L + CodeCaves.ElfCave.ShieldGaugeRate;
+        private const long   GaugeAddr = 0x21DC44C8;
+        private const int    ShieldHits = 5;
+        private const float  GaugePerHit = 100f / ShieldHits;
+        private const float  VanillaXiaoRefillMul = 1.5f;
         private const int    HitWatchMs = 16;
         // PHYSICAL BLOCK (user 2026-09-09: a collision circle, not a per-frame clamp). CMonstorUnit::MoveCheck2
         // (0x1DCDD0, called from Step for every enemy) zeroes an enemy's scripted movement (dir +0x1E430 /
@@ -185,7 +196,11 @@ namespace Dark_Cloud_Improved_Version
         private static Thread _hitThread;
         private static volatile bool _hitFlag;                  // set by the hit watch, consumed by the loop
         private static bool  _dispelling;                       // hit → fast fade-out in progress
-        private static DateTime _cooldownUntil;                 // no respawn before this
+        private static DateTime _cooldownUntil;                 // no-PNACH fallback: no respawn before this
+        private static int   _shieldHp;                         // hits left on the standing shield
+        private static bool  _cooling;                          // broken: waiting for the bar to refill
+        private static bool  _gaugeLive;                        // PNACH present → the gauge is ours to drive
+        private static float _rateWritten = float.NaN;
         /// <summary>The shield ring owns the AI redirect pointer table (Mirage's table writer stands down).</summary>
         internal static bool RingActive { get; private set; }
         private static bool  _comboLatch;
@@ -193,6 +208,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void Start()
         {
             if (_thread != null && _thread.IsAlive) return;
+            try { Memory.WriteFloat(GaugeRateWord, VanillaXiaoRefillMul); _rateWritten = VanillaXiaoRefillMul; }   // belt and braces: the ISO bakes 1.5 there
+            catch (Exception e) { Console.WriteLine(Tag + "gauge seed failed: " + e.Message); }
             _thread = new Thread(Loop) { IsBackground = true, Name = "GuardianReflector" };
             _thread.Start();
             if (_hitThread == null || !_hitThread.IsAlive)
@@ -243,18 +260,48 @@ namespace Dark_Cloud_Improved_Version
                     }
                     _comboLatch = combo;
 
-                    // A MELEE HIT dispels the shield: fast fade-out, then a cooldown before it can return.
+                    // The attack gauge is ours while the ISO's dun.bin refill patch is in this overlay.
+                    _gaugeLive = (uint)Memory.ReadInt(DunPatches.GaugePatchAddrMmu) == DunPatches.GaugePatchedWord0;
+
+                    // A MELEE HIT takes one of the shield's ShieldHits; the last one dispels it: fast fade-out,
+                    // then the bar refills before it can return.
                     if (_hitFlag)
                     {
                         _hitFlag = false;
                         if (SlingshotProp.Active && !_dispelling)
                         {
-                            _dispelling = true;
-                            _cooldownUntil = DateTime.UtcNow.AddSeconds(CooldownSeconds);
-                            SeSeq.Play(SeSeq.WeaponBreak, 60);                 // the game's own weapon-break sound (WHP → 0)
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slingshot struck — dispelled (weapon-break SE), back in {CooldownSeconds:0.#} s");
+                            _shieldHp = Math.Max(0, _shieldHp - 1);
+                            if (_gaugeLive) Memory.WriteFloat(GaugeAddr, _shieldHp * GaugePerHit);
+                            if (_shieldHp > 0)
+                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slingshot struck — {_shieldHp}/{ShieldHits} left");
+                            else
+                            {
+                                _dispelling = true; _cooling = true;
+                                _cooldownUntil = DateTime.UtcNow.AddSeconds(CooldownSeconds);
+                                SeSeq.Play(SeSeq.WeaponBreak, 60);                 // the game's own weapon-break sound (WHP → 0)
+                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slingshot broken (weapon-break SE) — bar refills over {CooldownSeconds:0.#} s");
+                            }
                         }
                     }
+                    // Bar ownership: hold while the shield stands (and re-assert it if a hit on her reset the bar
+                    // to 100), slow refill while broken, vanilla otherwise. Ready = the bar is full again.
+                    if (SlingshotProp.Active && !_dispelling)
+                    {
+                        SetGaugeRate(0f);
+                        if (_gaugeLive && Math.Abs(Memory.ReadFloat(GaugeAddr) - _shieldHp * GaugePerHit) > 0.5f)
+                            Memory.WriteFloat(GaugeAddr, _shieldHp * GaugePerHit);
+                    }
+                    else if (_dispelling) SetGaugeRate(0f);
+                    else if (_cooling)
+                    {
+                        if (_gaugeLive)
+                        {
+                            SetGaugeRate(RefillMultiplier());
+                            if (Memory.ReadFloat(GaugeAddr) >= 99.5f) { _cooling = false; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "bar full — slingshot ready"); }
+                        }
+                        else if (DateTime.UtcNow >= _cooldownUntil) _cooling = false;
+                    }
+                    else SetGaugeRate(VanillaXiaoRefillMul);
 
                     // THE SHIELD FOLLOWS THE GUARD: up for the whole hold, folding away on release.
                     if (_dispelling)
@@ -264,9 +311,10 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else if (armed)
                     {
-                        if (!SlingshotProp.Active && DateTime.UtcNow >= _cooldownUntil
+                        bool ready = !_cooling && (!_gaugeLive || Memory.ReadFloat(GaugeAddr) >= 99.5f);   // full bar, as her own shot needs
+                        if (!SlingshotProp.Active && ready
                             && SlingshotProp.Spawn(PropScale, PouchHeight, PropAhead, PullLength))
-                        { _alpha = 0f; _jingled = false; }
+                        { _alpha = 0f; _jingled = false; _shieldHp = ShieldHits; if (_gaugeLive) Memory.WriteFloat(GaugeAddr, 100f); }
                         if (SlingshotProp.Active)
                         {
                             _alpha = Math.Min(1f, _alpha + 1f / FadeInTicks);
@@ -714,6 +762,24 @@ namespace Dark_Cloud_Improved_Version
             return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
         }
 
+        // ─────────────────────────────────── attack gauge ───────────────────────────────────────
+
+        private static void SetGaugeRate(float k)
+        {
+            if (k == _rateWritten) return;
+            Memory.WriteFloat(GaugeRateWord, k);
+            _rateWritten = k;
+        }
+
+        /// <summary>Multiplier that makes the engine's own refill — max(1, speed/30) per frame — fill the bar
+        /// from 0 to 100 over CooldownSeconds (status halving/doubling ignored).</summary>
+        private static float RefillMultiplier()
+        {
+            float speed = Memory.ReadShort(WeaponHave.BattleWeaponRecord + 8);
+            float perFrame = Math.Max(1f, speed / 30f);
+            return (float)(100.0 / (CooldownSeconds * 60.0 * perFrame));
+        }
+
         // ───────────────────────────────── physical block patch ─────────────────────────────────
 
         /// <summary>Make MoveCheck2's enemy-block addend a data word (see the constants above). Cold only:
@@ -857,6 +923,9 @@ namespace Dark_Cloud_Improved_Version
             ReleaseRing();
             _dispelling = false;
             _hitFlag = false;
+            _cooling = false;
+            _shieldHp = 0;
+            SetGaugeRate(VanillaXiaoRefillMul);
             RedirectShots(false);
             if (SlingshotProp.Active) SlingshotProp.Despawn();
             _claimed.Clear();

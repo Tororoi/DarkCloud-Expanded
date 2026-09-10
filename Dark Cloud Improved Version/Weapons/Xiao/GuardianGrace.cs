@@ -10,7 +10,8 @@ namespace Dark_Cloud_Improved_Version
     /// ONE proc every 4 seconds carrying the heal, the sparkle, the flash and the chime together.
     ///
     /// MECHANISM — ride the VANILLA cadence, amplify the amount: the dungeon overlay's per-frame loop
-    /// (dun 0x1DB8240) increments a heal-tick counter (main BSS 0x2A3684) and every 240 frames grants
+    /// (dun 0x1DB8240) increments a heal-tick counter (main BSS 0x2A3684) and every 240 frames (180 with the mod's dun.bin
+    /// cadence patch — DunPatches) grants
     /// +1 HP through AddNowLife IF the live weapon flags carry HEAL (0x800, read from the battle
     /// record's +0xEE). We never touch the counter: while the guard channel is open we WATCH it, and
     /// when it wraps (a native heal just fired) we top the heal up to the ability total — +3 for the

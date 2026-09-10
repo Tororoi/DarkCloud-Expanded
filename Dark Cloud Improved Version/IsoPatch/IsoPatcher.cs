@@ -490,6 +490,10 @@ namespace Dark_Cloud_Improved_Version
                 Wr(fs, uAt, new byte[] { (byte)'0', (byte)'.', (byte)'5', (byte)'5' });
             }
 
+            // 5b) dungeon overlay words (dun.bin — a flat image; CRC-neutral, it is not the ELF)
+            if (!recs.TryGetValue("DUN.BIN", out var dunRec)) throw new IOException("DUN.BIN not found in the ISO root — unexpected ISO layout.");
+            DunPatches.Apply(fs, dunRec, progress);
+
             // 6) ELF boot-cave + CRC
             progress("Patching the boot loader …");
             return ElfPatchAndCrc(fs, recs["SCUS_971.11"]);
