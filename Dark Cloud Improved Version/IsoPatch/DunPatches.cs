@@ -30,6 +30,25 @@ namespace Dark_Cloud_Improved_Version
             // → `lui v0,HI; lwc1 f0,LO(v0)` of Mailbox.ShieldGaugeRate (pnach-seeded 1.5 = vanilla while idle).
             new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) >> 16),    "gauge refill multiplier → mailbox word (lui)"),
             new(0x01DB8094, 0x44820000, 0xC4400000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) & 0xFFFF), "gauge refill multiplier → mailbox word (lwc1 f0)"),
+            // CHARACTER HEAP: the dungeon's character + weapons + shot-effect data share ONE CDataAlloc2 pool that
+            // GameInit carves from the 27 MB global buffer as 210000 × 16 B = 3.36 MB, and an overflow is a silent
+            // spin (Alloc__14CDataAlloc2: printf + while(true)). Vanilla Xiao already sits within ~150 KB of that
+            // ceiling; the cat baked into her pack (build_cat_pack.py) needs ~300 KB more. The global buffer is FULL
+            // by design (reset base 50,010 + GameInit's carves 1,256,006 + read buffer 280,000 + 2 × 37,700 packet
+            // buffers + 25,000 ≈ 1,688,000 of 1,690,000 units — raising the heap alone black-screened the dungeon),
+            // so the 20,000 units come out of the dungeon READ buffer (SetPacketReadBuffer(0x9344, 280000) at the
+            // end of GameInit): 4.48 → 4.16 MB. Its real demand is bounded: the largest single dungeon file is a
+            // 3.86 MB map pack, and the longest staged menu chain (Xiao's party switch: dunmenu5 + portraits + her
+            // 2.36 MB pack + weapons + effect) reaches ~3.75 MB. Measured 2026-09-10: Xiao+cat chara 3,216,400 +
+            // weapons 107,008 + effects ~200,000 vs 3,360,000. The literal 210000 is `lui r,3; ori r,r,0x3450` at
+            // four sites (carve, the two remaining-room computations, a memory-map printf): 230000 = ori 0x8270.
+            // 280000 is `lui v0,4; ori a1,v0,0x45C0` → 260000 = `lui v0,3; ori a1,v0,0xF7A0`.
+            new(0x01DAC0C4, 0x34463450, 0x34468270, "character heap 210000 → 230000 units (MemoryMapDump printf)"),
+            new(0x01DAC338, 0x34453450, 0x34458270, "character heap 210000 → 230000 units (GameInit carve)"),
+            new(0x01DB9A88, 0x34433450, 0x34438270, "character heap 210000 → 230000 units (LoadWeapon2 remaining)"),
+            new(0x01DBA8B0, 0x34423450, 0x34428270, "character heap 210000 → 230000 units (LoadChara2 remaining)"),
+            new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 260000 units (lui)"),
+            new(0x01DAC464, 0x344545C0, 0x3445F7A0, "dungeon read buffer 280000 → 260000 units (ori)"),
         };
 
         /// <summary>The patched form of the first gauge word — what the runtime checks to know the patch is live.</summary>
@@ -52,7 +71,7 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, off, w.New);
                 applied++;
             }
-            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word) …");
+            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 3.68 MB from the read buffer) …");
         }
     }
 }

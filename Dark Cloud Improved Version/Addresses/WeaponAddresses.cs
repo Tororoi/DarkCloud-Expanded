@@ -125,6 +125,10 @@ namespace Dark_Cloud_Improved_Version
         // iRam01dc4498: reset to 0 by BattleActionOn_Jinn at shot start, set to 1 when the fire input
         // releases → what makes the 0xC hold advance to the 0xD shoot. Forcing it = fire now (no hold).
         internal const long XiaoShotReleaseFlag = 0x21DC4498;
+        // ── Lock-on (SetNearLockOnTarget dun 0x1DC0160 / LockOffTargte 0x1DBFCE0, gp-relative globals) ──
+        // iGpffff9d94 = the locked-on MONSTOR SLOT (0..15; -1 = none), uGpffff9d90 = 1 while a lock is held.
+        internal const long LockOnTargetSlot = 0x202A3584;
+        internal const long LockOnActive     = 0x202A3580;
         // iRam01dc4490: nonzero while a shot is in progress (set at BattleActionOn start, cleared at the
         // shoot-motion end). iRam01dc44c8 (float): the ranged "speed bar" — BattleActionOn starts a shot
         // only when it reaches 100.0, then resets it to 0; its fill rate is the weapon's speed stat.

@@ -257,6 +257,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int  VisMDT       = 0x20;        // → MDT block
         internal const uint MdtMagic     = 0x0054444D;  // "MDT\0" at MDT+0x00
         internal const int  MdtSizeField = 0x08;        // MDT+0x08 = total block size
+        internal const int  MdtVertCount = 0x0C;        // MDT+0x0C = vertex count (AnimeDataInit 0x1493A0 loops over it)
+        internal const int  MdtVertOffset = 0x10;       // MDT+0x10 = offset of the 16-byte vertex table from the MDT start
     }
 
     /// <summary>

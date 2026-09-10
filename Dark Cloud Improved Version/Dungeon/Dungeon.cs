@@ -81,7 +81,6 @@ namespace Dark_Cloud_Improved_Version
         public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
         public static Thread kitchenKnifeThread = new Thread(new ThreadStart(CustomToanEffects.KitchenKnifeEffect));
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
-        public static Thread angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
         public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
@@ -391,11 +390,6 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
                                             angelGearThread.Start();
-                                        }
-                                        if (!angelGearHaloThread.IsAlive)
-                                        {
-                                            angelGearHaloThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearHaloEffect));
-                                            angelGearHaloThread.Start();
                                         }
                                         break;
 

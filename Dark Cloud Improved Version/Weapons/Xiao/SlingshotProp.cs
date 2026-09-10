@@ -52,16 +52,16 @@ namespace Dark_Cloud_Improved_Version
         // motion-speed override slows it while that key plays (-1 = the KEY rate).
         private const float ShootRate   = 0.3f;
 
-        // Orientation preset (L3+R3 cycles it in game): bits 0-1 = upright pitch quarter-turns,
+        // Orientation preset (tuned live with a debug cycle, since removed): bits 0-1 = upright pitch quarter-turns,
         // bits 2-3 = facing yaw quarter-turns, composed onto the weapon's authored grip rotation
         // exactly as the earlier welded-weapon bake did (5 = tuned live). The draw re-seeds the ROOT
         // from the slot each frame, so this is baked into the root's child bone (chn30) instead —
         // never re-seeded, never motion-tracked — and the slot rotation stays zero.
-        internal static int OrientPreset = 7;   // tuned live 2026-09-08
+        private const int OrientPreset = 7;     // pinned 2026-09-08
 
         private static uint  _rootGuest;                 // copied tree root (guest)
         private static uint  _liveRoot, _playerRoot;     // for change detection
-        private static int   _nodeCount, _key = -1, _lastDiag;
+        private static int   _nodeCount, _key = -1;
         private static float _scale, _up, _ahead, _pull, _orbit;
         private static volatile float _orbitTarget;      // wanted bearing (rad, relative to her facing)
         private static Thread _orbitThread;
@@ -253,18 +253,6 @@ namespace Dark_Cloud_Improved_Version
             if (((uint)Memory.ReadInt(r + CFrameVu1.Parent) & Memory.PhysAddrMask) != _playerRoot)
                 Memory.WriteUInt(r + CFrameVu1.Parent, _playerRoot);
 
-            if (Environment.TickCount - _lastDiag > 1000)
-            {
-                _lastDiag = Environment.TickCount;
-                float feet = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-                string heights = "";
-                if (LiveHeights(out float lmH, out float lpH) && MuzzleWorld(out _, out float cmH, out _) && PouchWorld(out _, out float cpH, out _))
-                    heights = $"HEIGHTS above her feet — live muzzle {lmH - feet:F1} pouch {lpH - feet:F1} | copy muzzle {cmH - feet:F1} pouch {cpH - feet:F1}  ";
-                Console.WriteLine(Tag + heights + $"DIAG copy motionId={Memory.ReadInt(s + CCharacter.MotionId)} " +
-                    $"key={Memory.ReadInt(CodeCaves.MotionCave + MotionType.StateKeyIdx)} frame={Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1} " +
-                    $"rootW=({Memory.ReadFloat(r + 0x180):F0},{Memory.ReadFloat(r + 0x184):F0},{Memory.ReadFloat(r + 0x188):F0}) " +
-                    $"xiao=({Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos):F0},{Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8):F0})");
-            }
         }
 
         internal static void Despawn()

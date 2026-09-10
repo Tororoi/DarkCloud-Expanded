@@ -227,7 +227,6 @@ namespace Dark_Cloud_Improved_Version
         private static int   _ownerWritten = -1;
         /// <summary>The shield ring owns the AI redirect pointer table (Mirage's table writer stands down).</summary>
         internal static bool RingActive { get; private set; }
-        private static bool  _comboLatch;
 
         internal static void Start()
         {
@@ -270,19 +269,6 @@ namespace Dark_Cloud_Improved_Version
                     float xy = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
                     float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
 
-                    // ORIENTATION TUNING: L3+R3 (edge) cycles the wings' orientation preset and
-                    // respawns them — cycle in game until they stand right, then read the preset
-                    // from the log so it can be pinned.
-                    bool combo = (Memory.ReadUShort(Addresses.buttonInputs) & ((ushort)Button.L3 | (ushort)Button.R3))
-                                 == ((ushort)Button.L3 | (ushort)Button.R3);
-                    if (inDun && combo && !_comboLatch)
-                    {
-                        SlingshotProp.OrientPreset = (SlingshotProp.OrientPreset + 1) & 15;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                            $"orientation preset -> {SlingshotProp.OrientPreset}");
-                        if (SlingshotProp.Active) SlingshotProp.Despawn();   // respawns next armed tick
-                    }
-                    _comboLatch = combo;
 
                     // The attack gauge is ours while the ISO's dun.bin refill patch is in this overlay.
                     _gaugeLive = (uint)Memory.ReadInt(DunPatches.GaugePatchAddrMmu) == DunPatches.GaugePatchedWord0;

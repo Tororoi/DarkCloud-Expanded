@@ -37,6 +37,7 @@ namespace Dark_Cloud_Improved_Version
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             GuardianGrace.Start();   // Xiao's Angel Shooter guard-heal + spring sparkle (roadmap PR 2)
             GuardianReflector.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
+            DivineBeastCat.Start();      // Xiao's Divine Beast Title charged cat shot (roadmap PR 8)
             CustomFishingSpot.InstallShallowLinePatch();   // COLD: rewrite FishLineStep's bobber anchor to read a data global (before any fishing JITs it)
             CustomFishingSpot.SeedFishCamHeight();   // the ISO-patched fishing SetHeight reads a data word EVERY town — seed it to vanilla 40 before any session
         }
