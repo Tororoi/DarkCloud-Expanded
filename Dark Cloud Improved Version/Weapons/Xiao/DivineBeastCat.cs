@@ -55,15 +55,15 @@ namespace Dark_Cloud_Improved_Version
 
         // Charge + launch.
         private const double ChargeSeconds = 1.5;      // hold this long → the shot is the cat
-        private const float  LaunchSpeed   = 1.8f;     // units/frame along the pellet's own line (user 2026-09-10: slower)
-        private const float  Gravity       = 0.05f;    // units/frame² — it sails out level like the pellet, then settles
+        private const float  LaunchSpeed   = 1.0f;     // units/frame along the pellet's own line (user 2026-09-10: slow, to verify)
+        private const float  Gravity       = 0.03f;    // units/frame² — it sails out level like the pellet, then settles
         private const float  CatScale      = 1.0f;
         // Ground game.
-        private const float  RunSpeed      = 1.3f;     // units/frame
+        private const float  RunSpeed      = 0.8f;     // units/frame
         private const float  PounceRange   = 24f;      // start the pounce within this of the target
-        private const float  PounceFrames  = 28f;      // leap flight time (frames)
+        private const float  PounceFrames  = 40f;      // leap flight time (frames)
         private const float  HitRadius     = 9f;       // planted hit sphere
-        private const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 3.5, StraightRunSeconds = 1.0;
+        private const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
         private const int    FadeTicks     = 18;
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         private const int    PlantedLifeTicks = 2;
@@ -75,7 +75,10 @@ namespace Dark_Cloud_Improved_Version
         private const long BattleWeaponStats  = WeaponHave.BattleWeaponRecord + 0x1C;
         private const long BattleWeaponFlags  = WeaponHave.BattleWeaponRecord + 0xEE;
 
-        private enum Phase { Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading }
+        private enum Phase { Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading, Hold }
+        /// <summary>DEBUG: instead of flying, the cat stands still on the floor at the muzzle point until the next
+        /// charged shot (or the floor/character changes), so it can be screenshotted (user 2026-09-10).</summary>
+        private const bool DebugHold = true;
 
         private static Thread _thread;
         private static readonly bool[] _seenPellet = new bool[PlayerShotPool.SlotCount];
@@ -228,6 +231,7 @@ namespace Dark_Cloud_Improved_Version
                 if (live && !_seenPellet[i])
                 {
                     _seenPellet[i] = true;
+                    if (_holdSeconds >= ChargeSeconds && Active && DebugHold) Despawn();   // a new shot replaces the held cat
                     if (_holdSeconds >= ChargeSeconds && !Active)
                     {
                         long pa = PlayerShotPool.PosAddr(pool, i), va = PlayerShotPool.VelAddr(pool, i);
@@ -266,8 +270,14 @@ namespace Dark_Cloud_Improved_Version
             _x = px; _h = ph; _y = py;                                           // provisional; PlaceRootUnderHead after the spawn
             if (!Spawn()) return false;
             PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f;
+            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f; _texTrace = 0;
             SetKey(KeyLeap);
+            if (DebugHold)
+            {
+                _h = _floor;                                         // stand on the floor right at the muzzle point
+                Enter(Phase.Hold, KeyStand);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "DEBUG HOLD: cat parked at the muzzle point (fire another charged shot to replace it)");
+            }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"cat launched from ({px:F1},{ph:F1},{py:F1}) toward " + (_target >= 0 ? $"locked enemy slot {_target}" : "straight ahead"));
             return true;
@@ -290,8 +300,18 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
 
+        private static int _texTrace;
+        private static void TraceTextures()
+        {
+            if (_texTrace++ >= 12) return;
+            long grp = TextureManager + TexBlocks + (long)SlotTextureGroup * TexBlockStride;
+            long her = TextureManager + TexBlocks + (long)HerTextureBlock * TexBlockStride;
+            Console.WriteLine(Tag + $"tex trace {_texTrace}: current block {Memory.ReadInt(TextureManager + 0xC)}; group 0x{SlotTextureGroup:X} base 0x{Memory.ReadUInt(grp + BlkBase):X} top 0x{Memory.ReadUInt(grp + BlkTop):X} loaded {Memory.ReadUInt(grp + BlkLoaded)} dirty 0x{Memory.ReadUInt(grp + BlkDirty):X}; her base 0x{Memory.ReadUInt(her + BlkBase):X} top 0x{Memory.ReadUInt(her + BlkTop):X} loaded {Memory.ReadUInt(her + BlkLoaded)} dirty 0x{Memory.ReadUInt(her + BlkDirty):X}; slot tex word 0x{Memory.ReadInt(SlotAddr() + 0x148C):X}");
+        }
+
         private static void Step()
         {
+            TraceTextures();
             double t = (DateTime.UtcNow - _phaseStart).TotalSeconds;
             if (_target >= 0 && !IsLiveEnemy(_target)) _target = -1;
             float tx = 0, th = 0, ty = 0;
@@ -352,6 +372,8 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.LandEnd:
                     if (t >= LandSeconds) Enter(Phase.Fading, KeyStand);
                     break;
+                case Phase.Hold:
+                    break;                                           // stays put, idle loop, until replaced
                 case Phase.Fading:
                     _fade++;
                     _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
@@ -554,7 +576,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(node + CFrameVu1.GeomPtr, cVisG);
                 if (twoBuffers) need += A16(vuSz);
                 cave += need; caveGuest += need; copied++;
-                _skinNodes.Add((i, cMDT));
+                _skinNodes.Add((i, cMDT, mdtSz, cVU, twoBuffers ? cVU2 : 0L, vuSz));
                 Console.WriteLine(Tag + $"mesh n{i} ({ReadName((uint)(CodeCaves.NodePoolGuest + i * CFrameVu1.NodeStride))}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
             }
             _caveFree = cave;
@@ -562,7 +584,7 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        private static readonly List<(int node, long mdt)> _skinNodes = new();
+        private static readonly List<(int node, long mdt, int mdtSz, long vu, long vu2, int vuSz)> _skinNodes = new();
         private static long _caveFree;
 
         /// <summary>The skinner's SOURCE vertices. AnimeDataInit (0x1493A0) runs once per character — from
@@ -575,7 +597,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool BuildSkinSources(byte[] fib)
         {
             long cave = A16L(_caveFree), caveEnd = CodeCaves.MeshCave + CodeCaves.MeshCaveSize - 0x1000;
-            foreach (var (node, mdt) in _skinNodes)
+            foreach (var (node, mdt, _, _, _, _) in _skinNodes)
             {
                 int count = Memory.ReadInt(mdt + CVisualMDT.MdtVertCount);
                 int vOff  = Memory.ReadInt(mdt + CVisualMDT.MdtVertOffset);
@@ -646,18 +668,16 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib);
                 BitConverter.GetBytes((uint)CodeCaves.FrameInfCaveGuest).CopyTo(mstr, MotionType.FrameInfPtr);
             }
-            // Per-bone ANIMATION matrices (channel +0): MotionProc writes the posed local of every bone that has a
-            // track; the skinner chains world = parentWorld × this for EVERY weighted bone. Bones the trimmed clips
-            // never drive must therefore start at their bind local, not at whatever her never-run channel held
-            // (garbage there scattered/collapsed the vertices those bones weight).
+            // Per-bone BIND matrices (channel +0): CreateAnimeDataEX (0x149090) makes this buffer a straight copy of
+            // the channel's .bbp file, and the skinner chains it into the inverse-bind side (posed world × inv(bind
+            // world) × vertex). Her channel 1's buffer IS cat.bbp — 37 rows in cat order — so take rows 0..36 as they
+            // are. (The .mds local matrices are NOT the same thing: initializing from them stretched every blended
+            // joint — neck, shoulders, tail tip.)
+            uint bm = (uint)BitConverter.ToInt32(mstr, MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(bm)) { Console.WriteLine(Tag + "her cat channel has no bind rows"); return false; }
             {
-                byte[] bmb = new byte[bmSize];
-                for (int i = 0; i < _nodeCount; i++)
-                {
-                    byte[] local = Memory.ReadBytesBatch(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.LocalMatrix, 0x40);
-                    if (local == null) return false;
-                    local.CopyTo(bmb, i * MotionType.BoneMtxEntry);
-                }
+                byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
+                if (bmb == null) return false;
                 Memory.WriteBytesBatch(CodeCaves.BoneMtxCave, bmb);
                 BitConverter.GetBytes((uint)(CodeCaves.BoneMtxCave & Memory.PhysAddrMask)).CopyTo(mstr, MotionType.BoneMtxPtr);
             }
@@ -724,6 +744,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
             Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
+            RetagCatTextures(HerTextureBlock, SlotTextureGroup);
             uint boneHead = (uint)BitConverter.ToInt32(mstr, MotListHead) & Memory.PhysAddrMask, skinHead = (uint)BitConverter.ToInt32(mstr, MotionType.MotionSkinList) & Memory.PhysAddrMask;
             string heads = $"bone list 0x{boneHead:X}" + (Memory.IsValidGuest(boneHead) ? $" (w0 {Memory.ReadInt(Memory.ToMmu(boneHead))}, type {Memory.ReadInt(Memory.ToMmu(boneHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(boneHead) + 0xC)})" : "")
                          + $", skin list 0x{skinHead:X}" + (Memory.IsValidGuest(skinHead) ? $" (mesh {Memory.ReadInt(Memory.ToMmu(skinHead))}, bone {Memory.ReadInt(Memory.ToMmu(skinHead) + 4)}, type {Memory.ReadInt(Memory.ToMmu(skinHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(skinHead) + 0xC)})" : "");
@@ -785,11 +806,166 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteUInt (s + CCharacter.CharModel, 0);
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);
+            RetagCatTextures(SlotTextureGroup, HerTextureBlock);
             Active = false; _key = -1; _target = -1;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
         }
 
         private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
+
+        // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
+        // The dungeon draw loop re-uploads texture group 0x20+slot to VRAM right before it draws chara slot i
+        // (ReloadTexture 0x133070 uploads every CTexture entry tagged with that block). The cat's textures sit in
+        // HER block, whose VRAM pages are gone by then (the upload window is paged and shared), so the copy sampled
+        // whatever was there — a shimmering cat. Re-tag the five cat entries to the slot's group while the copy is
+        // up (CTextureManager @0x1C75870: entry count @+0, entries @+0x10F8, 0x50 apart, block tag = first short,
+        // name @+8) and hand them back on despawn.
+        private const long TextureManager = 0x21C75870;
+        private const int  TexEntries = 0x10F8, TexStride = 0x50, TexMaxEntries = 0xC4, TexName = 8;
+        private const short HerTextureBlock = 0x11;
+        private const short SlotTextureGroup = (short)(DungeonCharaDraw.CharaTexBase + Slot);
+        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05" };
+        // A block descriptor (CTextureBlock, 0x3C bytes at manager+0x18+block*0x3C): +0x20 VRAM base, +0x24 VRAM top,
+        // +0x28 loaded flag, +0x30 dirty watermark. ReloadTexture re-uploads an entry only if its VRAM address is at or
+        // below the watermark (capped by the block's top) or the loaded flag is 0 — so a block whose base/top are 0
+        // uploads nothing. The re-tagged entries keep the VRAM addresses they were given in HER window, so slot 1's
+        // block takes over that tail of her window (and hers shrinks to just before it) while the copy is up.
+        private const int  TexBlocks = 0x18, TexBlockStride = 0x3C, BlkBase = 0x20, BlkTop = 0x24, BlkLoaded = 0x28, BlkDirty = 0x30;
+        private static uint _herTopSaved;
+        private static void RetagCatTextures(short from, short to)
+        {
+            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+            int done = 0; uint minTbp = uint.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                long e = TextureManager + TexEntries + (long)i * TexStride;
+                if (Memory.ReadShort(e) != from) continue;
+                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
+                if (nb == null) continue;
+                int len = 0; while (len < nb.Length && nb[len] != 0) len++;
+                string nm = System.Text.Encoding.ASCII.GetString(nb, 0, len);
+                if (Array.IndexOf(CatTextureNames, nm) < 0) continue;
+                Memory.WriteUShort(e, (ushort)to);
+                minTbp = Math.Min(minTbp, Memory.ReadUInt(e + 0x28) & 0x3FFF);
+                done++;
+            }
+            long her = TextureManager + TexBlocks + (long)HerTextureBlock * TexBlockStride;
+            long grp = TextureManager + TexBlocks + (long)SlotTextureGroup * TexBlockStride;
+            if (to == SlotTextureGroup && done > 0 && minTbp != uint.MaxValue)
+            {
+                // The slot loop's group reload is written into the main frame packet, but the slot's draw goes
+                // into the chara packet the GS consumes EARLIER in the frame (GS dump 2026-09-10: the cat's binds
+                // precede its own upload, and an enemy block had overwritten the pages in between). So the cat's
+                // textures live where nothing else uploads: the top of the manager's VRAM range, above every
+                // block's top. Entries, the copy's packet buffers and MDT get the new addresses; hers are untouched.
+                _herTopSaved = Memory.ReadUInt(her + BlkTop);
+                uint size = _herTopSaved - minTbp;
+                uint limit = Memory.ReadUInt(TextureManager + 0x14);
+                uint newBase = (limit - size) & ~0x1Fu;
+                uint highest = 0;
+                for (int b = 0; b < 0x48; b++) highest = Math.Max(highest, Memory.ReadUInt(TextureManager + TexBlocks + (long)b * TexBlockStride + BlkTop));
+                if (highest > newBase) Console.WriteLine(Tag + $"WARNING: a texture block tops at 0x{highest:X}, inside the cat's window 0x{newBase:X}..0x{newBase + size:X}");
+                int patched = RelocateCatTextures(minTbp, newBase);
+                Memory.WriteUInt(grp + BlkBase, newBase);
+                Memory.WriteUInt(grp + BlkTop, newBase + size);
+                Memory.WriteUInt(grp + BlkLoaded, 0);
+                Memory.WriteUInt(grp + BlkDirty, 0);
+                Memory.WriteUInt(her + BlkTop, minTbp);
+                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} register words patched in the copy); her block now tops at 0x{minTbp:X}");
+            }
+            else if (to == HerTextureBlock)
+            {
+                if (_texMoved.Count > 0) RelocateCatTextures(0, 0);          // back to their original addresses
+                if (_herTopSaved != 0) Memory.WriteUInt(her + BlkTop, _herTopSaved);
+                Memory.WriteUInt(grp + BlkBase, 0);
+                Memory.WriteUInt(grp + BlkTop, 0);
+                Memory.WriteUInt(grp + BlkLoaded, 1);
+                Memory.WriteUInt(her + BlkLoaded, 0);                          // she re-uploads her whole window next frame
+                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}; her block restored to top 0x{_herTopSaved:X}");
+            }
+            else Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
+        }
+
+        // (entry address, original tex0) for every cat texture moved this spawn — restored on despawn.
+        private static readonly List<(long entry, ulong tex0)> _texMoved = new();
+
+        /// <summary>Move the cat entries' TEX0 (TBP0 bits 0..13, CBP bits 37..50) by newBase − oldBase, and patch
+        /// the identical register words wherever they sit in the copy's own packet buffers and MDT copy (the
+        /// packet is rebuilt from the MDT every frame). With oldBase == 0 the saved originals are put back.</summary>
+        private static int RelocateCatTextures(uint oldBase, uint newBase)
+        {
+            var moves = new List<(ulong oldT, ulong newT)>();
+            if (oldBase == 0 && newBase == 0)
+            {
+                foreach (var (entry, tex0) in _texMoved)
+                {
+                    ulong cur = (ulong)Memory.ReadUInt(entry + 0x28) | ((ulong)Memory.ReadUInt(entry + 0x2C) << 32);
+                    moves.Add((cur, tex0));
+                    Memory.WriteUInt(entry + 0x28, (uint)tex0); Memory.WriteUInt(entry + 0x2C, (uint)(tex0 >> 32));
+                }
+                _texMoved.Clear();
+            }
+            else
+            {
+                int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+                for (int i = 0; i < count; i++)
+                {
+                    long e = TextureManager + TexEntries + (long)i * TexStride;
+                    if (Memory.ReadShort(e) != SlotTextureGroup) continue;
+                    ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
+                    uint tbp = (uint)(t & 0x3FFF), cbp = (uint)((t >> 37) & 0x3FFF);
+                    ulong n = (t & ~0x3FFFUL & ~(0x3FFFUL << 37)) | (ulong)(newBase + (tbp - oldBase)) | ((ulong)(newBase + (cbp - oldBase)) << 37);
+                    _texMoved.Add((e, t));
+                    moves.Add((t, n));
+                    Memory.WriteUInt(e + 0x28, (uint)n); Memory.WriteUInt(e + 0x2C, (uint)(n >> 32));
+                }
+            }
+            int patched = 0;
+            foreach (var (node, mdt, mdtSz, vu, vu2, vuSz) in _skinNodes)
+                foreach (var (addr, size) in new[] { (mdt, mdtSz), (vu, vuSz), (vu2, vuSz) })
+                {
+                    if (addr == 0) continue;
+                    byte[] b = Memory.ReadBytesBatch(addr, size);
+                    if (b == null) continue;
+                    bool dirty = false;
+                    for (int o = 0; o + 8 <= b.Length; o += 4)                 // GIF A+D data is 16-aligned, but be safe
+                    {
+                        ulong w = BitConverter.ToUInt64(b, o);
+                        foreach (var (oldT, newT) in moves)
+                            if (w == oldT) { BitConverter.GetBytes(newT).CopyTo(b, o); dirty = true; patched++; o += 4; break; }
+                    }
+                    if (dirty) Memory.WriteBytesBatch(addr, b);
+                }
+            return patched;
+        }
+
+        /// <summary>Diagnostics: every entry of her block / the slot group, with its GS TEX0 decoded, and the two
+        /// block descriptors — to see whether the upload or the packet's registers disagree.</summary>
+        private static void DumpTextures()
+        {
+            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"tex manager: entries {count}, current block {Memory.ReadInt(TextureManager + 0xC)}, vram limit 0x{Memory.ReadInt(TextureManager + 0x14):X}");
+            for (int i = 0; i < count; i++)
+            {
+                long e = TextureManager + TexEntries + (long)i * TexStride;
+                short blk = Memory.ReadShort(e);
+                if (blk != HerTextureBlock && blk != SlotTextureGroup) continue;
+                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
+                int len = 0; while (nb != null && len < nb.Length && nb[len] != 0) len++;
+                string nm = nb == null ? "?" : System.Text.Encoding.ASCII.GetString(nb, 0, len);
+                ulong tex0 = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
+                sb.Append($"\n  [{i}] blk 0x{blk:X} {nm,-10} tex0 tbp 0x{tex0 & 0x3FFF:X} tbw {(tex0 >> 14) & 0x3F} psm {(tex0 >> 20) & 0x3F} tw {(tex0 >> 26) & 0xF} th {(tex0 >> 30) & 0xF} cbp 0x{(tex0 >> 37) & 0x3FFF:X} cpsm {(tex0 >> 51) & 0xF} csa {(tex0 >> 56) & 0x1F}");
+                sb.Append($" words+0x30..: {Memory.ReadUInt(e + 0x30):X8} {Memory.ReadUInt(e + 0x34):X8} {Memory.ReadUInt(e + 0x38):X8} {Memory.ReadUInt(e + 0x3C):X8} {Memory.ReadUInt(e + 0x40):X8} {Memory.ReadUInt(e + 0x44):X8} {Memory.ReadUInt(e + 0x48):X8} {Memory.ReadUInt(e + 0x4C):X8}; +4 {Memory.ReadUInt(e + 4):X8}");
+            }
+            foreach (int blk in new[] { HerTextureBlock, SlotTextureGroup })
+            {
+                long b = TextureManager + 0x18 + blk * 0x3C;
+                sb.Append($"\n  block 0x{blk:X}:");
+                for (int o = 0; o < 0x3C; o += 4) sb.Append($" {Memory.ReadUInt(b + o):X}");
+            }
+            Console.WriteLine(Tag + sb);
+        }
 
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────
 

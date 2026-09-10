@@ -19,8 +19,8 @@ What goes in (from gedit\s86\chara\c04cat.chr — the cat rig with the leap clip
   .mds  37 nodes appended after Xiao's 79, names prefixed `cat_` (her rig already has `kao` and `skin`), the
         cat root renamed `catroot`, UNPARENTED (-1), its bind 3x3 scaled by HIDE_SCALE as well. 2 MDT chunks.
   .bbp  c04b.bbp + the cat's 37 rows (one row per model node); cat.bbp = the cat's own 37 rows for channel 1.
-  .img  c04b01.img + the 5 texture NAMES the skin references, as tiny flat pale-blue 32x32 pictures (FLAT_TEXTURES)
-        — 10 KB instead of 137 KB, and the cat is blue from the start.
+  .img  c04b01.img + the 5 cat textures the skin references (137 KB; FLAT_TEXTURES swaps them for tiny flat
+        pictures — kept as an option, the blue/glow will be flash effects instead).
   cat.mot / cat.wgt   the cat's tracks, bone ids unchanged (relative), keyframes trimmed to the clip windows.
   cfg   `ALLOC_DBUFF "cat_skin"` (software-skinned double buffer for the cat body) + the MOTION 1 block.
 
@@ -57,9 +57,9 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # the cat never joins her tree — no draw, no skinning, no DMA while hidden. (The
                                    # parented+hidden variant froze the weapon/party menus, whose draw buffers are
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
-FLAT_TEXTURES = True               # replace the 137 KB of cat fur with 5 tiny flat-colour 32x32 TIM2s (~2 KB each)
+FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v3 unparented flat motion-last"
+VERSION_MARK  = "//catpack v5 unparented realtex motion-last"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -153,11 +153,10 @@ def flat_tim2(template, rgba, size=32):
     img_sz, clut_sz = size * size, 256 * 4
     struct.pack_into("<3I", hdr, pic, 0x30 + img_sz + clut_sz, clut_sz, img_sz)
     struct.pack_into("<2H", hdr, pic + 0x14, size, size)
-    tex0 = struct.unpack_from("<Q", hdr, pic + 0x18)[0]
-    lg = size.bit_length() - 1
-    tex0 &= ~((0x3F << 14) | (0xF << 26) | (0xF << 30))
-    tex0 |= (max(1, size // 64) << 14) | (lg << 26) | (lg << 30)
-    struct.pack_into("<Q", hdr, pic + 0x18, tex0)
+    # GsTex0 / GsTex1 / GsRegs / GsTexClut stay ZERO like every vanilla picture: the engine derives the GS
+    # register values itself at load (a hand-set buffer width here made the GS sample the wrong VRAM columns —
+    # a shimmering cat, 2026-09-10).
+    hdr[pic + 0x18:pic + 0x30] = bytes(0x18)
     return bytes(hdr) + bytes(img_sz) + bytes(rgba) * 256
 
 
