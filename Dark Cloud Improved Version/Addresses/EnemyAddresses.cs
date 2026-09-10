@@ -417,6 +417,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int PoisonPeriod      = 0x00C; // int   — poison tick interval; 0 at rest
         internal const int StaminaTimer      = 0x010; // int   — stamina/status countdown; starts at a large value (e.g. 0x004F0000 ≈ 5.2M) and decrements each frame; 0 when expired
         internal const int GooeyState        = 0x014; // int   — gooey/slime status; 0 at rest
+        internal const int StatusSusceptibility = 0x0DE; // short — species ItemStatusRes copy (unit +0x1E4AE): 0 = immune to poison/freeze/gooey
         internal const int DistanceToPlayer  = 0x018; // float — live distance to player in world units; updated each frame; used as proximity filter
 
         // ── HP / Stats ───────────────────────────────────────────────────────
@@ -426,7 +427,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int ResistancePack1   = 0x028; // [Category, FireRes]      — Category = enemy category index; fire confirmed; scale: 100=neutral, >100=weak, <100=resistant
         internal const int ResistancePack2   = 0x02C; // [IceRes, ThunderRes] — both confirmed
         internal const int ResistancePack3   = 0x030; // [WindRes, HolyRes]   — wind confirmed
-        internal const int MinGoldDrop       = 0x034; // int   — minimum gold dropped on death
+        internal const int MinGoldDrop       = 0x034; // int   — minimum gold dropped on death. ⚠ Also what CheckDmg's element branch
+                                                       //   multiplies by when a player-side entry's +0x50 holds ONLY status bits (element index 5
+                                                       //   = one short past the resistance row) — a vanilla quirk; never plant status bits in +0x50.
         internal const int DropChance        = 0x038; // int   — item drop chance (0–100)
 
         // ── Identity ─────────────────────────────────────────────────────────

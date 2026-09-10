@@ -45,10 +45,10 @@ namespace Dark_Cloud_Improved_Version
         private const int  OffWait    = 0x9FD0;    // + i*4 — phase-1 countdown
         private const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 3+ impact chain
         private const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
-        private const int  OffLife    = 0xA010;    // + i*4
+        private const int  OffDamage  = 0xA010;    // + i*4 — the shot's DAMAGE (Set: cfg+0x3C; SetDmg; Step passes it as entry +0x34). Life/wait = OffWait.
         private const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58
         private const int  OffA060    = 0xA060;    // + i*2, short — Set writes 0xFFFF; SetUserID2 (0x1AE400) then stamps the FIRING ENEMY SLOT
-        private const int  OffDamage  = 0xA070;    // + i*4
+        private const int  OffUserCol = 0xA070;    // + i*4 — Set param_5 (user/collider id → entry +0x60); −1 default
         private const int  OffA0B0    = 0xA0B0;    // + i*4 — Set: -1
         private const int  OffA0D0    = 0xA0D0;    // + i*4 — Set: -1.0f
         private const int  OffA0F0    = 0xA0F0;    // + i*4 — Set: -1
@@ -100,6 +100,25 @@ namespace Dark_Cloud_Improved_Version
         // items) — the discriminator that keeps a shot detonating near the slingshot from reading as a swing.
         private const int    ColClass = 0x38;
         private const int    ColColIdx = 0x60;
+        // ── REFLECTED DAMAGE (Stage C, RE doc §C; formula agreed 2026-09-09) ──
+        // A reflected shot stays a latched visual (its own mask is the enemy-shot one, so the engine never
+        // collides it with monsters). We track OUR in-flight shots only; on contact with a live enemy the
+        // shot's wait is zeroed (the engine ends the flight next frame with the shot's own impact motion,
+        // planting nothing because latched) and ONE pellet-style CollisionData entry is planted:
+        //   +0x34 base = weapon ATTACK × (dungeon+1)/14  (0 = Divine Beast Cave … 6 = Demon Shaft = half attack;
+        //                user 2026-09-09: /7 read too strong for a defensive ability)
+        //   +0x50 = the SHOT's element bit (pure) or its enemy-valid status bits (0x100/0x200/0x800)
+        //   +0x58 = 1 (Xiao: ranged falloff + kill credit), +0x64 = her stats block, +0x6C = her ability flags
+        // and CMonstorUnit::CheckDmg does defense, anti-category, resistance, No Effect, statuses, numbers.
+        private const long   BattleWeaponAttack  = WeaponHave.BattleWeaponRecord + 0x04;   // short (BattleActionPlay_Jinn's pellet damage)
+        private const long   BattleWeaponStats   = WeaponHave.BattleWeaponRecord + 0x1C;   // anti-category bytes (entry +0x64 points here)
+        private const long   BattleWeaponFlags   = WeaponHave.BattleWeaponRecord + 0xEE;   // ability flags (entry +0x6C)
+        private const float  TierDivisor = 14f;
+        private const uint   ShotElementMask = 0x1F, ShotEnemyStatusMask = 0x100 | 0x200 | 0x800;
+        private const int    CfgFlags = 0x40, CfgRadiusFlying = 0x2C;                    // BT_SHOT_EFFECT fields
+        private const float  HitMargin = 4f;                                              // contact slack + planted-entry reach
+        private const int    PlantedLifeTicks = 2;                                       // retire an unconsumed entry
+        private const int    ReflectMaxTicks = 260;                                      // give up tracking (FreshTimers + slack)
         // RULE (user 2026-09-09): melee is melee — any melee-class player-hurting sphere on the slingshot
         // dispels it. Shots are shots — a pool shot whose BODY reaches the slingshot is caught there and
         // re-fired (see CatchAtProp), and a shot's impact sphere landing on it is swallowed, never a hit.
@@ -189,6 +208,9 @@ namespace Dark_Cloud_Improved_Version
         private static Thread _thread;
         private static readonly List<Claim> _claimed = new();   // in flight toward Xiao (latched)
         private static readonly List<Claim> _pending = new();   // absorbed, awaiting re-fire
+        private sealed class Fired { public int Slot, Idx, Ticks; public uint Flags; public float Radius; }
+        private static readonly List<Fired> _flying  = new();   // OUR reflected shots in flight
+        private static readonly List<(int idx, int ticks)> _planted = new();   // entries we planted, to retire
         private static float _alpha;                            // prop opacity 0..1
         private static bool  _jingled;                          // once per appearance
         private static int   _pullTick = -1;                    // -1 idle; else ticks into the fire cycle
@@ -329,6 +351,8 @@ namespace Dark_Cloud_Improved_Version
                         _alpha = Math.Max(0f, _alpha - 1f / FadeOutTicks);
                         if (_alpha <= 0f) SlingshotProp.Despawn();
                     }
+                    TrackReflected(pack, xx, xh, xy);
+
                     // Shots are only intercepted while the SHIELD is up (not while it is broken / cooling
                     // down / folding): with no slingshot they reach her exactly as vanilla.
                     bool shieldUp = armed && SlingshotProp.Active && !_dispelling;
@@ -655,8 +679,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat (obj + ObjFrame,  startFrame);
             WriteVec(dirA, ax * v, ah * v, ay * v);
             Memory.WriteInt   (inst + OffWait + j * 4, FreshTimers);
-            Memory.WriteInt   (inst + OffLife + j * 4, FreshTimers);
             Memory.WriteInt   (inst + OffDamage + j * 4, c.Damage);
+            Memory.WriteInt   (inst + OffUserCol + j * 4, -1);
             Memory.WriteUShort(inst + OffOwner + j * 2, c.Owner);
             Memory.WriteUShort(inst + OffAttr2 + j * 2, c.Attr2);
             Memory.WriteUShort(inst + OffA060 + j * 2, 0xFFFF);
@@ -670,6 +694,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + OffLastIdx, j);
             FaceAlong(obj, ax, ah, ay);
             Memory.WriteUShort(inst + OffActive + j * 2, 1);         // live — engine steps it from here
+            _flying.Add(new Fired { Slot = c.Slot, Idx = j, Flags = Memory.ReadUInt(cfg + CfgFlags), Radius = Math.Max(0.5f, Memory.ReadFloat(cfg + CfgRadiusFlying)) });
 
             _pending.RemoveAt(0);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
@@ -860,6 +885,132 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (want ? $"shots now collide with the pouch (0x{target:X})" : "shots collide with her again"));
         }
 
+        // ───────────────────────────────── reflected shot impact ────────────────────────────────
+
+        /// <summary>Follow OUR reflected shots: keep each latched, and when one reaches a live enemy end
+        /// its flight (wait = 0 → the engine's impact motion) and plant the damage entry. Also retire
+        /// planted entries the engine did not consume.</summary>
+        private static void TrackReflected(long pack, float xx, float xh, float xy)
+        {
+            for (int q = _planted.Count - 1; q >= 0; q--)
+            {
+                var (idx, ticks) = _planted[q];
+                if (ticks <= 0)
+                {
+                    long pool = Memory.ReadInt(NowColDataPtr);
+                    if (pool > 0) Memory.WriteInt(pool + 0x20000000 + ColActiveOff + idx * 4, 0);
+                    _planted.RemoveAt(q);
+                }
+                else _planted[q] = (idx, ticks - 1);
+            }
+            if (_flying.Count == 0) return;
+            for (int q = _flying.Count - 1; q >= 0; q--)
+            {
+                var f = _flying[q];
+                long inst = pack + f.Slot * SlotStride;
+                if (Memory.ReadUShort(inst + OffActive + f.Idx * 2) == 0 || ++f.Ticks > ReflectMaxTicks) { _flying.RemoveAt(q); continue; }
+                Memory.WriteByte(inst + OffLatch + f.Idx, LatchHold);                      // never plants on its own
+                long obj = inst + OffObj + f.Idx * ObjStride, dirA = inst + OffDir + f.Idx * 0x10;
+                float sx = Memory.ReadFloat(obj + ObjPos), sh = Memory.ReadFloat(obj + ObjPos + 4), sy = Memory.ReadFloat(obj + ObjPos + 8);
+                float vx = Memory.ReadFloat(dirA), vh = Memory.ReadFloat(dirA + 4), vy = Memory.ReadFloat(dirA + 8);
+                float speed = (float)Math.Sqrt(vx * vx + vh * vh + vy * vy);
+                for (int e = 0; e < EnemyAddresses.FloorSlots.Count; e++)
+                {
+                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.Hp)) <= 0) continue;
+                    long p = EnemyAddresses.CharObjects.PosAddr(e);
+                    float ex = Memory.ReadFloat(p), eh = Memory.ReadFloat(p + 4), ey = Memory.ReadFloat(p + 8);
+                    if (ex == 0f && eh == 0f && ey == 0f) continue;
+                    float body = Math.Max(2f, Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.EntityScale)));
+                    // judge height against the lock-on point when the species has one (chest), else origin + 8
+                    float th = eh + EnemySlotOffsets.LockOnFallbackLift;
+                    if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.LockOnFrame)) != 0)
+                    {
+                        float lh = Memory.ReadFloat(EnemyAddresses.FloorSlots.SlotAddr(e, EnemySlotOffsets.LockOnPoint) + 4);
+                        if (Math.Abs(lh - eh) < 200f) th = lh;
+                    }
+                    float reach = body + f.Radius + speed * 2f + HitMargin;
+                    float dx = sx - ex, dh = sh - th, dy = sy - ey;
+                    if (dx * dx + dy * dy > reach * reach) continue;
+                    if (Math.Abs(dh) > body + HitMargin + 12f) continue;
+
+                    Memory.WriteInt(inst + OffWait + f.Idx * 4, 0);                        // flight ends next frame: impact motion, no entry (latched)
+                    PlantReflectedHit(sx, sh, sy, body + f.Radius + HitMargin, f.Flags, e);
+                    _flying.RemoveAt(q);
+                    break;
+                }
+            }
+        }
+
+        /// <summary>One pellet-style CollisionData entry at the impact, fields per the RE doc §C.</summary>
+        private static void PlantReflectedHit(float x, float h, float y, float radius, uint shotFlags, int enemySlot)
+        {
+            long pool = Memory.ReadInt(NowColDataPtr);
+            if (pool <= 0) return;
+            pool += 0x20000000;
+            int slot = -1;
+            for (int i = ColEntries - 1; i >= 0; i--)                                          // from the top: real swings fill from 0
+                if (Memory.ReadInt(pool + ColActiveOff + i * 4) == 0) { slot = i; break; }
+            if (slot < 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no free collision entry — reflected hit lost"); return; }
+
+            int dungeon = Math.Max(0, Math.Min(6, (int)Memory.ReadByte(Addresses.checkDungeon)));
+            float attack = Memory.ReadShort(BattleWeaponAttack);
+            int baseDmg = Math.Max(1, (int)Math.Round(attack * (dungeon + 1) / TierDivisor));
+            uint elem = shotFlags & ShotElementMask, stat = shotFlags & ShotEnemyStatusMask;
+            // +0x50 must be a PURE element bit (or 0): any status bit there sends CheckDmg's element branch
+            // through index 5 = MinGoldDrop as the percent (vanilla quirk — the rose's gooey shot did ~35 of
+            // 156). Statuses are applied by data instead, with CheckDmg's own rules (ApplyReflectedStatus).
+            uint attr = (elem != 0 && (shotFlags & 0xFF00) == 0) ? elem : 0u;
+            string statusNote = stat != 0 ? ApplyReflectedStatus(enemySlot, stat) : "";
+
+            var e = new byte[ColStride];
+            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
+            void I(int o, int v)   => BitConverter.GetBytes(v).CopyTo(e, o);
+            F(0x00, x); F(0x04, h); F(0x08, y); F(0x0C, 1f);
+            F(0x1C, 1f); F(0x20, 1f);                                                        // Set's vec w's
+            I(0x34, baseDmg); I(0x38, 0); F(0x3C, radius);
+            I(0x44, 1); I(0x48, 2); I(0x4C, 2); I(0x50, (int)attr); I(0x54, 0);
+            I(0x58, 1); I(0x5C, -1); I(0x60, 0);
+            I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
+            I(0x70, 0); I(0x74, 0); F(0x8C, 1f); I(0x98, 0);
+            Memory.WriteBytesBatch(pool + slot * ColStride, e);
+            Memory.WriteInt(pool + ColActiveOff + slot * 4, 1);                               // active LAST
+            _planted.Add((slot, PlantedLifeTicks));
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"reflected hit on slot {enemySlot}: base {baseDmg} (atk {attack:F0} × {dungeon + 1}/{TierDivisor:F0}), attr 0x{attr:X} ({(attr != 0 ? "element" : "none")}){statusNote}, r={radius:F1} → entry {slot}");
+        }
+
+        /// <summary>The shot's statuses, applied exactly as CheckDmg applies +0x50 bits: gated only by the
+        /// species susceptibility (0 = immune); poison 180 f unless frozen/raging (clears gooey); freeze 300 f
+        /// (toggles OFF if already frozen; clears the others and the move blend); gooey 180 f only when no
+        /// other status is up. Curse (0x400) and 0x1000 do nothing to enemies, as in vanilla.</summary>
+        private static string ApplyReflectedStatus(int slot, uint stat)
+        {
+            long a = EnemyAddresses.FloorSlots.SlotAddr(slot, 0);
+            if (Memory.ReadShort(a + EnemySlotOffsets.StatusSusceptibility) == 0) return " status: immune";
+            int freeze = Memory.ReadInt(a + EnemySlotOffsets.FreezeTimer), poison = Memory.ReadInt(a + EnemySlotOffsets.PoisonPeriod);
+            int rage = Memory.ReadInt(a + EnemySlotOffsets.StaminaTimer);
+            var applied = new List<string>();
+            if ((stat & 0x200) != 0 && freeze == 0 && rage == 0)
+            {
+                Memory.WriteInt(a + EnemySlotOffsets.PoisonPeriod, 0xB4); Memory.WriteInt(a + EnemySlotOffsets.GooeyState, 0); poison = 0xB4; applied.Add("poison");
+            }
+            if ((stat & 0x100) != 0)
+            {
+                if (freeze < 1)
+                {
+                    Memory.WriteInt(a + EnemySlotOffsets.FreezeTimer, 300); Memory.WriteInt(a + EnemySlotOffsets.PoisonPeriod, 0);
+                    Memory.WriteInt(a + EnemySlotOffsets.GooeyState, 0); Memory.WriteInt(a + EnemySlotOffsets.StaminaTimer, 0);
+                    Memory.WriteFloat(a + EnemySlotOffsets.MovementBlend, 0f); freeze = 300; poison = 0; applied.Add("freeze");
+                }
+                else { Memory.WriteInt(a + EnemySlotOffsets.FreezeTimer, 0); freeze = 0; applied.Add("freeze off"); }
+            }
+            if ((stat & 0x800) != 0 && freeze == 0 && poison == 0 && rage == 0)
+            {
+                Memory.WriteInt(a + EnemySlotOffsets.GooeyState, 0xB4); applied.Add("gooey");
+            }
+            return applied.Count > 0 ? " status: " + string.Join("+", applied) : " status: blocked by an active status";
+        }
+
         // ─────────────────────────────────── melee hit watch ───────────────────────────────────
 
         /// <summary>Frame-rate scan of the melee pool while the shield is solid: an open, player-hurting
@@ -928,6 +1079,8 @@ namespace Dark_Cloud_Improved_Version
             ReleaseRing();
             _dispelling = false;
             _hitFlag = false;
+            _flying.Clear();
+            _planted.Clear();
             _cooling = false;
             _shieldHp = 0;
             SetGaugeRate(VanillaXiaoRefillMul);
