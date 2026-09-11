@@ -32,7 +32,8 @@
 #   frame is read through slot 1's channel pointer (+0xC20 → MOTION_TYPE, frame @+0x10). Key switches set the motion
 #   flags restart bit (slot +0xC64 |= 4), or the engine would finish the current clip before changing.
 #   +0xEC CatMoveKey int the key played while moving after the landing (mod: the brisk walk, 70).
-#   +0xF0 CatMoveFrac float ground speed after the landing as a fraction of the pellet's horizontal speed (mod, 0.4).
+#   +0xF0 CatMoveFrac float ground speed after the landing as a fraction of the pellet's horizontal speed (mod);
+#   +0x194 CatMoveAbs float overrides it with an absolute units/frame when > 0 (mod).
 #   +0x11C CatPounceRange float (mod)  +0x120 CatPounceFrames float leap flight frames (mod)  +0x124 CatTakeoffEnd float
 #   take-off clip end frame (mod, 204)  +0x128 CatHitRadius float the cat's touch radius (mod)  +0x12C CatHitSlot int
 #   enemy slot + 1 the cat touched (cave → mod; 0 none). +0x130 CatReadyEnd / +0x134 CatRampStart / +0x138 CatRampInv
@@ -239,6 +240,14 @@ addiu $t5, $zero, 1
 sw    $t5, 0x02B0($t4)         # pellet lifetime = 1 (expires on its next step) …
 sw    $t5, 0x0280($t4)         # … and no collision meanwhile
 mul.s $f2, $f10, $f2           # ground speed = fraction · |v_xz|   (f10 = h, still valid)
+lwc1  $f4, 0x4194($t0)         # … unless the mod gave an ABSOLUTE ground speed (a full-charge pellet flies 5.0,
+nop                            #     a lighter one 3.5 — a fraction made the walk jump between 0.56 and 0.80)
+.word 0x4604A034               # c.lt.s $f20, $f4   (0 < abs ?)  fs=f20 ft=f4
+nop
+bc1f  speedset
+nop
+mov.s $f2, $f4
+speedset:
 swc1  $f2, 0x40C8($t0)
 nop
 .word 0x460AA034               # c.lt.s $f20, $f10   (0 < h ?)
@@ -443,7 +452,7 @@ nop
 startland:
 sw    $zero, 0x4150($t0)       # the flying pounce (if any) is over
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
+ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
 sw    $t5, 0x0C64($t6)         # motion flags |= restart → the land clip starts on this very frame
 addiu $t5, $zero, 69
 sw    $t5, 0x0C68($t6)         # key = land
@@ -470,6 +479,8 @@ bne   $t5, $t7, leapkey        # switching from the float-up: restart the fall c
 nop
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 4
+addiu $t7, $zero, -3
+and   $t5, $t5, $t7            # restart, and clear play-once: this clip LOOPS (fall / walk)
 sw    $t5, 0x0C64($t6)
 leapkey:
 addiu $t5, $zero, 68
@@ -490,7 +501,14 @@ lwc1  $f6, 0x40E0($t0)         # clip end frame (→ run)
 lwc1  $f10, 0x40E4($t0)        # frame seen last time
 swc1  $f2, 0x40E4($t0)
 nop
-.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)  fs=f2 ft=f6
+lui   $t7, 0x3F80
+mtc1  $t7, $f12
+nop
+nop
+nop
+sub.s $f12, $f6, $f12          # end − 1: a play-once clip HOLDS just short of its end
+nop
+.word 0x460C1034               # c.lt.s $f2, $f12  (frame < end−1 ?)  fs=f2 ft=f12
 nop
 bc1f  landdone                 # clip finished → straight into the run
 nop
@@ -544,6 +562,8 @@ nop
 landdone:
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 4
+addiu $t7, $zero, -3
+and   $t5, $t5, $t7            # restart, and clear play-once: this clip LOOPS (fall / walk)
 sw    $t5, 0x0C64($t6)         # restart bit: the run clip starts on this very frame
 addiu $t5, $zero, 6
 b     running                  # run from this very frame
@@ -618,7 +638,7 @@ nop
 swc1  $f20, 0x40B8($t0)        # (3 insns after its mtc1)
 sw    $zero, 0x4150($t0)       # not a flying pounce
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
+ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
 sw    $t5, 0x0C64($t6)         # restart: take-off from frame 190
 addiu $t5, $zero, 67
 sw    $t5, 0x0C68($t6)
@@ -630,7 +650,7 @@ b     done
 sw    $t5, 0x4098($t0)         # state = take-off (delay slot)
 readystart:                    # ── flying target: the ready crouch first, standing ──
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
+ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
 sw    $t5, 0x0C64($t6)
 addiu $t5, $zero, 65
 sw    $t5, 0x0C68($t6)
@@ -744,7 +764,14 @@ bc1t  readyhold                # frame > end+1 → a stale frame from an earlier
 nop
 swc1  $f2, 0x40E4($t0)         # a frame of THIS clip: remember it
 nop
-.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)
+lui   $t7, 0x3F80
+mtc1  $t7, $f12
+nop
+nop
+nop
+sub.s $f12, $f6, $f12          # end − 1: a play-once clip HOLDS just short of its end
+nop
+.word 0x460C1034               # c.lt.s $f2, $f12  (frame < end−1 ?)  fs=f2 ft=f12
 nop
 bc1f  readydone
 nop
@@ -826,7 +853,7 @@ swc1  $f16, 0x40B4($t0)
 swc1  $f8, 0x40B8($t0)
 swc1  $f18, 0x40BC($t0)
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
+ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
 sw    $t5, 0x0C64($t6)         # restart: float-up from its first frame
 lw    $t5, 0x4154($t0)
 sw    $t5, 0x0C68($t6)         # key = float-up
@@ -856,7 +883,14 @@ bc1t  takeoffhold
 nop
 swc1  $f2, 0x40E4($t0)
 nop
-.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)
+lui   $t7, 0x3F80
+mtc1  $t7, $f12
+nop
+nop
+nop
+sub.s $f12, $f6, $f12          # end − 1: a play-once clip HOLDS just short of its end
+nop
+.word 0x460C1034               # c.lt.s $f2, $f12  (frame < end−1 ?)  fs=f2 ft=f12
 nop
 bc1f  takeoffdone
 nop
@@ -908,6 +942,8 @@ nop
 takeoffdone:
 lw    $t5, 0x0C64($t6)         # ── ground leap: the leap clip at full momentum ──
 ori   $t5, $t5, 4
+addiu $t7, $zero, -3
+and   $t5, $t5, $t7            # restart, and clear play-once: this clip LOOPS (fall / walk)
 sw    $t5, 0x0C64($t6)
 addiu $t5, $zero, 68
 sw    $t5, 0x0C68($t6)
@@ -963,7 +999,7 @@ b     touch
 nop
 groundland:                    # the leap clip is done: land (momentum continues until the paws touch, as always)
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
+ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
 sw    $t5, 0x0C64($t6)
 addiu $t5, $zero, 69
 sw    $t5, 0x0C68($t6)
@@ -985,6 +1021,18 @@ lui   $t0, 0x01FB
 sw    $v0, 0x412C($t0)         # CatHitSlot = enemy + 1 (the mod plants the damage)
 addiu $t5, $zero, 9
 sw    $t5, 0x4098($t0)         # state = hit: the cat freezes where it touched
+lui   $t6, 0x01EA
+ori   $t6, $t6, 0x9900
+lw    $t7, 0x0C68($t6)         # the clip it is in: fall (68) and walk (70) may keep looping through the fade …
+addiu $t8, $zero, 68
+beq   $t7, $t8, done
+nop
+addiu $t8, $zero, 70
+beq   $t7, $t8, done
+nop
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 2
+sw    $t5, 0x0C64($t6)         # … any other finishes and HOLDS its last frame (no repeat)
 lw    $t1, 0x4094($t0)         # still riding a pellet? spend it
 beq   $t1, $zero, done
 nop

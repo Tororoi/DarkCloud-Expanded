@@ -281,6 +281,16 @@ namespace Dark_Cloud_Improved_Version
     /// walks the same slots; <see cref="StepSkipTable"/> lets you have a slot DRAWN but not STEPPED.
     /// (Slot gates below are CNPCharacter fields, i.e. past the embedded CCharacter.)
     /// </summary>
+    /// <summary>Dungeon SCRIPT EVENT state (the battle-system script runner). Non-zero while an in-floor scripted
+    /// event runs (the jump-across, chest and story beats that load event models such as c04bjump.chr);
+    /// BtSystemScriptAfter (0x1BB5E0) zeroes it at the event's end — right after EdEventAllClear, which deletes the
+    /// player's extend motions (MOTION 1+), and alongside a reset of her motion-speed/flags/id words. Anything that
+    /// depends on the player's extra motion channels or the texture manager must stand down while it is set.</summary>
+    internal static class DungeonScriptEvent
+    {
+        internal const long BtEventMode = 0x202A3608;
+    }
+
     internal static class DungeonCharaDraw
     {
         internal const long CharaArray    = 0x21EA8460;  // guest 0x01EA8460 (hardcoded in the dungeon draw)

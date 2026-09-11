@@ -43,6 +43,9 @@ namespace Dark_Cloud_Improved_Version
         private const int  KeyBase = 64, KeyCount = 8;
         private const int  KeyStand = 64, KeyReady = 65, KeyRun = 66, KeyTakeOff = 67, KeyLeap = 68, KeyLand = 69, KeyWalk = 70, KeyFloat = 71;   // walk = s86 KEY 2 at 1.0; float = the town ladder jump's vertical leap (e04c04cat #5)
         private const float  MoveFrac      = 0.16f;    // ground speed after the landing, as a fraction of the pellet's speed (user 2026-09-11)
+        // A full-charge pellet flies 5.0 u/frame, a lighter one 3.5, so a fraction made the walk jump between 0.56 and 0.80
+        // ("suddenly very fast", 2026-09-11). The tuned feel was 16% of 3.5: pin it as an absolute speed instead.
+        private const float  MoveSpeedAbs  = 0.16f * 3.5f;
         // Walk clip rate from the ground speed, the TOWN's mapping for this very rig (EdMoveChara 0x16A160: rate =
         // 0.8·(0.2 + stick) capped at 0.85, ground = 1.6·stick → rate = 0.16 + 0.5·ground). Planted feet would need
         // 5× that (the clip's real stride is 0.196 u/clip-frame) and looked far too fast; this is the tuned look.
@@ -167,7 +170,8 @@ namespace Dark_Cloud_Improved_Version
                     if (inDun) { HeapWatch(); sleep = WatchMs; }
                     bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
                               && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.divinebeasttitle
-                              && !Player.CheckDunIsPausedOrMenu();
+                              && !Player.CheckDunIsPausedOrMenu()
+                              && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
                     if (!armed)
                     {
                         if (Active) Despawn();
@@ -179,6 +183,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         sleep = TickMs;
                         WatchHerCatChannel();
+                        if (Active && ++_texCheckTick >= 30) { _texCheckTick = 0; CheckTexturesStillOurs(); }
                         if (_armedSince == DateTime.MinValue) _armedSince = DateTime.UtcNow;
                         if (!Active && (DateTime.UtcNow - _armedSince).TotalSeconds >= 1.0) SpawnResident();   // built once, hidden — after the switch/menu has settled (textures still register for a moment)
                         TrackCharge();
@@ -343,6 +348,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandLead, LandLeadFrames);
             Memory.WriteInt  (CodeCaves.Mailbox.CatMoveKey, KeyWalk);                // a brisk walk reads better than the run (user 2026-09-10)
             Memory.WriteFloat(CodeCaves.Mailbox.CatMoveFrac, MoveFrac);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatMoveAbs, MoveSpeedAbs);
             Memory.WriteFloat(CodeCaves.Mailbox.CatProbeUp, ProbeUp);
             Memory.WriteFloat(CodeCaves.Mailbox.CatProbeDown, ProbeDown);
             Memory.WriteFloat(CodeCaves.Mailbox.CatProbeFront, ProbeFront);
@@ -990,6 +996,20 @@ namespace Dark_Cloud_Improved_Version
         private static bool _herChanValid = true;
         private static DateTime _lastDespawn = DateTime.MinValue;
 
+        private static int _texCheckTick;
+        /// <summary>A dungeon script event or a menu can rebuild the texture manager under the resident copy: the cat's
+        /// entries come back at their vanilla addresses (or vanish) while the copy's packets still name the relocated
+        /// ones — garbled fur until a rebuild. Notice it and tear the copy down; it re-spawns clean after the 1 s gate.</summary>
+        private static void CheckTexturesStillOurs()
+        {
+            long e = FindTexEntry(CatTextureNames[0]);
+            uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + 0x28) & 0x3FFF);
+            if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
+            _texMoved.Clear();                                                   // nothing of ours is in there to restore
+            Despawn();
+        }
+
         private static void WatchHerCatChannel()
         {
             uint raw = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4);
@@ -1001,7 +1021,7 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < CCharacter.MotionSlots; i++)
                 sb.Append($" ch{i}=0x{(uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + i * 4):X8}/{Memory.ReadInt(CCharacter.Base + ChanKeyStart + i * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + i * 4)}");
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(DateTime.UtcNow - _lastDespawn).TotalSeconds:F2} s after the last despawn; table:{sb}");
+                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(DateTime.UtcNow - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
         }
 
         /// <summary>Put her channel-1 pointer and key range back when the inline MOTION struct still holds its data
@@ -1156,7 +1176,7 @@ namespace Dark_Cloud_Improved_Version
             _key = key;
             long s = SlotAddr();
             Memory.WriteInt  (s + CCharacter.MotionId, key);
-            Memory.WriteInt  (s + CCharacter.MotionFlags, Memory.ReadInt(s + CCharacter.MotionFlags) | CCharacter.MotionRestart);
+            Memory.WriteInt  (s + CCharacter.MotionFlags, (Memory.ReadInt(s + CCharacter.MotionFlags) & ~CCharacter.MotionPlayOnce) | CCharacter.MotionRestart);   // a fresh key loops again (the hit sets play-once)
             Memory.WriteFloat(s + CharacterMotion.MotionSpeedOffset, CharacterMotion.MotionSpeedUseKey);
         }
 

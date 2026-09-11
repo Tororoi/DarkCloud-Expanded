@@ -348,6 +348,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatPounceMaxDist = CatBase + 0x16C; // float, farthest a pounce may still launch at after the ready (mod, 2× range)
             internal const long CatDbgTrig       = CatBase + 0x170; // float ×4 (diagnostics): cat x, cat y, target x, target y at the pounce trigger (cave)
             internal const long CatDbgReady      = CatBase + 0x180; // float ×5 (diagnostics): the same four at the end of the ready, then its distance (cave)
+            internal const long CatMoveAbs       = CatBase + 0x194; // float, absolute ground speed after the landing (units/frame); > 0 overrides CatMoveFrac (mod)
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
@@ -438,11 +439,11 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 3844 B → 0x1FB1C94 (frame 0x80, sq/lq saves) — 876 B left in the segment
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4028 B → 0x1FB1D4C (frame 0x80, sq/lq saves) — 692 B left in the segment
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB1CA0;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB1D50;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

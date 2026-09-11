@@ -179,7 +179,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothList      = 0xC74;   // → up to 4 CCloth ptrs (null list = no cloth)
         internal const int  MotionSlotBase = 0xC20;   // channel[i] MOTION_TYPE ptr at +0xC20 + i*4
         internal const int  MotionSlots    = 8;
-        internal const int  MotionFlags    = 0xC64;   // per-step motion flags
+        internal const int  MotionFlags    = 0xC64;   // per-step motion flags: 0x1 stop, 0x2 play once + hold the last frame, 0x4 restart (Step clears 0x4)
+        internal const int  MotionPlayOnce = 0x2;
         internal const int  MotionRestart  = 0x4;     //   bit2 = clean restart (frame 0, no blend); consumed once
         internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN
         internal const int  CharaTint      = 0xCE0;   // float3 ambient ADD (tint)
