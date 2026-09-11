@@ -234,7 +234,12 @@ namespace Dark_Cloud_Improved_Version
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin")
                 ?? throw new IOException("Embedded EE function missing: catPelletFollow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFF0 || U32(b, 8) != Jal(0x001ABD10))   // addiu sp,-0x10 … jal step__5CSHOT
+            // Shape check: opens a stack frame (`addiu sp,sp,-N`) and performs the displaced `jal step__5CSHOT` within
+            // its first eight words (after the register saves) — the frame size and save count vary by stub version.
+            bool opensFrame = b.Length >= 32 && (b.Length & 3) == 0 && (U32(b, 0) & 0xFFFF8000) == 0x27BD8000;
+            bool callsStep = false;
+            for (int i = 4; i < 32 && i < b.Length; i += 4) if (U32(b, i) == Jal(0x001ABD10)) callsStep = true;
+            if (!opensFrame || !callsStep)
                 throw new IOException($"catPelletFollow.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.NextFree.");

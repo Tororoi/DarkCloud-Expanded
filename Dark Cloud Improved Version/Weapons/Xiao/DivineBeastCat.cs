@@ -40,8 +40,23 @@ namespace Dark_Cloud_Improved_Version
         // bone ids are relative to the cat root, which is the copy's node 0).
         private const int  CatChannel = 1;
         private const int  MaxTreeNodes = 160;         // her array: 79 body + 37 cat (+ headroom for the scan)
-        private const int  KeyBase = 64, KeyCount = 6;
-        private const int  KeyStand = 64, KeyReady = 65, KeyRun = 66, KeyTakeOff = 67, KeyLeap = 68, KeyLand = 69;
+        private const int  KeyBase = 64, KeyCount = 7;
+        private const int  KeyStand = 64, KeyReady = 65, KeyRun = 66, KeyTakeOff = 67, KeyLeap = 68, KeyLand = 69, KeyWalk = 70;   // walk = s86 KEY 2 at 1.0 (brisk)
+        private const float  MoveFrac      = 0.16f;    // ground speed after the landing, as a fraction of the pellet's speed (user 2026-09-11)
+        // Walk clip rate from the ground speed, the TOWN's mapping for this very rig (EdMoveChara 0x16A160: rate =
+        // 0.8·(0.2 + stick) capped at 0.85, ground = 1.6·stick → rate = 0.16 + 0.5·ground). Planted feet would need
+        // 5× that (the clip's real stride is 0.196 u/clip-frame) and looked far too fast; this is the tuned look.
+        // Calibrated by eye against the town (user 2026-09-11): the walk reaches its cap at WalkCapSpeed units/frame —
+        // 20% of the 3.5 u/frame pellet — rather than at the 1.36 u/frame the town formula literally implies (the two
+        // contexts' units-per-frame do not read the same on screen). Slope = (cap − base) / that speed.
+        private const float  RateBase = 0.16f, RateMax = 0.85f, WalkCapSpeed = 0.16f * 3.5f;   // cap and ground speed both at 16% (user 2026-09-11)
+        private const float  RatePerSpeed = (RateMax - RateBase) / WalkCapSpeed;   // ≈ 0.99 per unit of ground speed
+        private const double LifetimeSeconds = 30.0;   // from the bind: the cat stays until it reaches its target or this passes (user 2026-09-10)
+        private const float  ProbeUp       = 8f;       // floor probe reach above the cat's root (catches a tread it is flying into)
+        private const float  ProbeDown     = 40f;      // … and below (a drop off a ledge still finds the floor)
+        // Extra casts ahead of and behind the root along its direction; the cat stands on the HIGHEST of the three, so a
+        // ten-unit body on stairs rides on its uphill end (front paws ≈ z 2, hind paws ≈ z −2 in cat space).
+        private const float  ProbeFront    = 3f, ProbeBack = 2f;
         private const string CatRootName = "catroot";
         private const float  HideScale   = 0.001f;     // must match build_cat_pack.py HIDE_SCALE
         private const int    ChanKeyStart = 0x3E0;     // CCharacter: channel[i] first key id (CommandKEY_START)
@@ -112,6 +127,8 @@ namespace Dark_Cloud_Improved_Version
         private static int   _disarmTicks;                   // after a shot-less release: ticks until the waiting cave is disarmed
         private static DateTime _spawnFailedAt = DateTime.MinValue;
         private static float _flightFrame0;                  // copy's motion frame at the bind (fall-pose check in the log)
+        private static DateTime _boundAt = DateTime.MinValue, _armedSince = DateTime.MinValue;
+        private static bool _gaitLogged, _blockedLogged;
         private static int   _target = -1;
         private static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
         private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
@@ -143,6 +160,7 @@ namespace Dark_Cloud_Improved_Version
                     if (!armed)
                     {
                         if (Active) Despawn();
+                        _armedSince = DateTime.MinValue;
                         _holding = false; _holdSeconds = 0;
                         Array.Clear(_seenPellet, 0, _seenPellet.Length);
                     }
@@ -150,7 +168,8 @@ namespace Dark_Cloud_Improved_Version
                     {
                         sleep = TickMs;
                         WatchHerCatChannel();
-                        if (!Active) SpawnResident();                          // built once, hidden, ready for the next charge
+                        if (_armedSince == DateTime.MinValue) _armedSince = DateTime.UtcNow;
+                        if (!Active && (DateTime.UtcNow - _armedSince).TotalSeconds >= 1.0) SpawnResident();   // built once, hidden — after the switch/menu has settled (textures still register for a moment)
                         TrackCharge();
                         if (_native) PollCave(); else WatchPellets();
                         if (Active) Step();
@@ -311,6 +330,17 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandStopFrame, LandStopFrame);
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandEndFrame, LandEndFrame);
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandLead, LandLeadFrames);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatMoveKey, KeyWalk);                // a brisk walk reads better than the run (user 2026-09-10)
+            Memory.WriteFloat(CodeCaves.Mailbox.CatMoveFrac, MoveFrac);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeUp, ProbeUp);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeDown, ProbeDown);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeFront, ProbeFront);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatProbeBack, ProbeBack);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatRateBase, RateBase);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatRatePerSpeed, RatePerSpeed);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatRateMax, RateMax);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatIdleKey, KeyStand);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatBlocked, 0);
             long sl = SlotAddr();
             Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
@@ -347,7 +377,7 @@ namespace Dark_Cloud_Improved_Version
                         _target = LockedTarget();
                         _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
                                               : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-                        _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false;
+                        _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _boundAt = DateTime.UtcNow; _gaitLogged = false; _blockedLogged = false;
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                         Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
                         Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, _target >= 0 ? (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask) : 0);
@@ -376,7 +406,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_phase != Phase.Running)
                     {
                         _phase = Phase.Running; _phaseStart = DateTime.UtcNow;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — running at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F2}/frame");
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
                     }
                     float dx = Memory.ReadFloat(CodeCaves.Mailbox.CatDirX), dz = Memory.ReadFloat(CodeCaves.Mailbox.CatDirZ);
                     if (dx * dx + dz * dz > 1e-6f) { _dirX = dx; _dirY = dz; _yaw = (float)Math.Atan2(dx, dz); }
@@ -390,12 +420,21 @@ namespace Dark_Cloud_Improved_Version
                         long tp = EnemyAddresses.CharObjects.PosAddr(_target);
                         float ex = Memory.ReadFloat(tp) - _x, ey = Memory.ReadFloat(tp + 8) - _y; dist = (float)Math.Sqrt(ex * ex + ey * ey);
                     }
-                    bool reached = _target >= 0 ? dist <= PounceRange : rt >= StraightRunSeconds;
-                    if (reached || rt >= RunTimeoutSeconds)                     // (the pounce chain is still parked: fade here)
+                    if (!_gaitLogged && Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) == 0)
+                    {
+                        _gaitLogged = true;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
+                    }
+                    bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
+                    if (blocked && !_blockedLogged) { _blockedLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "a wall stops the cat — waiting"); }
+                    if (!blocked) _blockedLogged = false;
+                    bool reached = _target >= 0 && dist <= PounceRange;         // (the pounce/hit is still parked: fade here)
+                    bool expired = (DateTime.UtcNow - _boundAt).TotalSeconds >= LifetimeSeconds;
+                    if (reached || expired)
                     {
                         Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                         _scale = 1f; _caveOwns = false;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (reached ? "run reached its mark" : "run timed out") + " — fading");
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (reached ? "reached its target" : "30 s lifetime over") + " — fading");
                         Enter(Phase.Fading, KeyStand);
                     }
                     break;
@@ -508,7 +547,7 @@ namespace Dark_Cloud_Improved_Version
                     break;                                                       // the cave flies it; PollCave sees the landing
                 case Phase.Landing:
                     if (_native) break;                                          // the cave runs the clip and hands over to the run at its end
-                    if (t >= LandSeconds) Enter(Phase.Running, KeyRun);
+                    if (t >= LandSeconds) Enter(Phase.Running, KeyWalk);
                     break;
                 case Phase.Running:
                 {
@@ -1081,7 +1120,26 @@ namespace Dark_Cloud_Improved_Version
                 string nm = System.Text.Encoding.ASCII.GetString(nb, 0, len);
                 if (Array.IndexOf(CatTextureNames, nm) < 0) continue;
                 Memory.WriteUShort(e, (ushort)to);
-                minTbp = Math.Min(minTbp, Memory.ReadUInt(e + 0x28) & 0x3FFF);
+                if (to == SlotTextureGroup)
+                {
+                    // An entry still sitting in the relocation window is one an earlier despawn failed to put back
+                    // (the manager's entry list had shifted under an address-keyed restore — 2026-09-11, textures
+                    // garbled until a party switch rebuilt the manager). Put its remembered original back first.
+                    ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
+                    uint tbp = (uint)(t & 0x3FFF);
+                    if (tbp >= StuckFloor)
+                    {
+                        if (_texOriginal.TryGetValue(nm, out ulong orig))
+                        {
+                            Memory.WriteUInt(e + 0x28, (uint)orig); Memory.WriteUInt(e + 0x2C, (uint)(orig >> 32));
+                            Console.WriteLine(Tag + $"texture {nm} was left at 0x{tbp:X} by an earlier despawn — restored to 0x{orig & 0x3FFF:X}");
+                            t = orig; tbp = (uint)(t & 0x3FFF);
+                        }
+                        else Console.WriteLine(Tag + $"WARNING: texture {nm} sits at 0x{tbp:X} with no remembered original — its relocation will be wrong this spawn");
+                    }
+                    else _texOriginal[nm] = t;
+                    minTbp = Math.Min(minTbp, tbp);
+                }
                 done++;
             }
             long her = TextureManager + TexBlocks + (long)HerTextureBlock * TexBlockStride;
@@ -1121,8 +1179,27 @@ namespace Dark_Cloud_Improved_Version
             else Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
         }
 
-        // (entry address, original tex0) for every cat texture moved this spawn — restored on despawn.
-        private static readonly List<(long entry, ulong tex0)> _texMoved = new();
+        // (texture NAME, original tex0) for every cat texture moved this spawn — restored on despawn by looking the
+        // entry up by name again (entry addresses shift when the manager registers or drops textures meanwhile).
+        private static readonly List<(string name, ulong tex0)> _texMoved = new();
+        // name → TEX0 at rest, refreshed at every sane spawn; repairs an entry a failed restore left relocated.
+        private static readonly Dictionary<string, ulong> _texOriginal = new();
+        private const uint StuckFloor = 0x3000;          // no vanilla block reaches this high (max seen 0x3920 is the manager's own top area)
+
+        /// <summary>The manager entry for a cat texture, found by name (0 if absent).</summary>
+        private static long FindTexEntry(string name)
+        {
+            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+            for (int i = 0; i < count; i++)
+            {
+                long e = TextureManager + TexEntries + (long)i * TexStride;
+                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
+                if (nb == null) continue;
+                int len = 0; while (len < nb.Length && nb[len] != 0) len++;
+                if (System.Text.Encoding.ASCII.GetString(nb, 0, len) == name) return e;
+            }
+            return 0;
+        }
 
         /// <summary>Move the cat entries' TEX0 (TBP0 bits 0..13, CBP bits 37..50) by newBase − oldBase, and patch
         /// the identical register words wherever they sit in the copy's own packet buffers and MDT copy (the
@@ -1132,8 +1209,10 @@ namespace Dark_Cloud_Improved_Version
             var moves = new List<(ulong oldT, ulong newT)>();
             if (oldBase == 0 && newBase == 0)
             {
-                foreach (var (entry, tex0) in _texMoved)
+                foreach (var (name, tex0) in _texMoved)
                 {
+                    long entry = FindTexEntry(name);
+                    if (entry == 0) { Console.WriteLine(Tag + $"WARNING: texture {name} is gone from the manager — nothing to restore"); continue; }
                     ulong cur = (ulong)Memory.ReadUInt(entry + 0x28) | ((ulong)Memory.ReadUInt(entry + 0x2C) << 32);
                     moves.Add((cur, tex0));
                     Memory.WriteUInt(entry + 0x28, (uint)tex0); Memory.WriteUInt(entry + 0x2C, (uint)(tex0 >> 32));
@@ -1142,15 +1221,14 @@ namespace Dark_Cloud_Improved_Version
             }
             else
             {
-                int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
-                for (int i = 0; i < count; i++)
+                foreach (string name in CatTextureNames)                     // the five cat textures only, by name
                 {
-                    long e = TextureManager + TexEntries + (long)i * TexStride;
-                    if (Memory.ReadShort(e) != SlotTextureGroup) continue;
+                    long e = FindTexEntry(name);
+                    if (e == 0) continue;
                     ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
                     uint tbp = (uint)(t & 0x3FFF), cbp = (uint)((t >> 37) & 0x3FFF);
                     ulong n = (t & ~0x3FFFUL & ~(0x3FFFUL << 37)) | (ulong)(newBase + (tbp - oldBase)) | ((ulong)(newBase + (cbp - oldBase)) << 37);
-                    _texMoved.Add((e, t));
+                    _texMoved.Add((name, t));
                     moves.Add((t, n));
                     Memory.WriteUInt(e + 0x28, (uint)n); Memory.WriteUInt(e + 0x2C, (uint)(n >> 32));
                 }

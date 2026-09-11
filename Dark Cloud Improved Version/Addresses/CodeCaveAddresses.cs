@@ -296,7 +296,23 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatLandEndFrame  = Base + 0xE0; // float, clip end frame — straight into the run (mod)
             internal const long CatPrevFrame     = Base + 0xE4; // float, motion frame seen last time (cave; wrap detection)
             internal const long CatLandLead      = Base + 0xE8; // float, frames before the predicted touchdown at which the land clip starts (mod)
-            internal const long NextFree = Base + 0xEC;
+            internal const long CatMoveKey       = Base + 0xEC; // int, motion key played while moving after the landing (mod: the brisk walk)
+            internal const long CatMoveFrac      = Base + 0xF0; // float, ground speed after the landing as a fraction of the pellet's speed (mod)
+            internal const long CatProbeUp       = Base + 0xF4; // float, floor probe reach above the cat (mod)
+            internal const long CatProbeDown     = Base + 0xF8; // float, floor probe reach below the cat (mod)
+            internal const long CatProbeFront    = Base + 0xFC; // float, extra floor cast this far AHEAD of the root along its direction (mod)
+            internal const long CatProbeBack     = Base + 0x100; // float, … and this far BEHIND; the cat stands on the highest of the three casts
+            // Clip rate while moving: the cave writes slot +0xC60 (motion-speed override) = min(base + perSpeed · ground
+            // speed, max) — the town's own walk mapping for this rig (EdMoveChara: 0.8·(0.2 + stick) capped 0.85 with
+            // ground 1.6·stick → 0.16 + 0.5·ground). Not planted feet; the ratio the designers tuned. A forward wall
+            // probe stops the cat (CatBlocked = 1, idle key).
+            internal const long CatRateBase      = Base + 0x104; // float, clip rate at zero speed (mod: 0.16)
+            internal const long CatRatePerSpeed  = Base + 0x108; // float, clip rate per unit of ground speed (mod: 0.5)
+            internal const long CatRateMax       = Base + 0x10C; // float, clip rate cap (mod: 0.85)
+            internal const long CatReserved110   = Base + 0x110; // (was the run key; unused)
+            internal const long CatIdleKey       = Base + 0x114; // int, stand key (mod)
+            internal const long CatBlocked       = Base + 0x118; // int, 1 while a wall stops the cat (cave)
+            internal const long NextFree = Base + 0x11C;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -386,11 +402,11 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 1292 B → 0x1FB129C
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 2036 B → 0x1FB1584 (frame 0x80, sq/lq saves)
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB12A0;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB1590;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

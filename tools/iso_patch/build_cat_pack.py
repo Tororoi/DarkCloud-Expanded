@@ -59,7 +59,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v5 unparented realtex motion-last"
+VERSION_MARK  = "//catpack v7 walk1.0"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -68,6 +68,7 @@ CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat
     (190, 204, 0.5,  "cat take-off"),
     (205, 214, 0.5,  "cat leap"),
     (215, 227, 0.36, "cat land"),
+    (60,  80,  1.0,  "cat walk (s86 KEY 2, brisk)"),
 ]
 MOT_WINDOWS = [(k[0], k[1]) for k in CAT_KEYS]
 REC_TAG = 0x00140E02               # word at record +0x4C on every vanilla record
