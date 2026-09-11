@@ -50,11 +50,22 @@ namespace Dark_Cloud_Improved_Version
             new(0x01DBA8B0, 0x34423450, 0x3442A980, "character heap 210000 → 240000 units (LoadChara2 remaining)"),
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
+            // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)
+            // → the native pellet-follower cave, which performs that call and then pins the cat's chara slot to the
+            // pellet the Mailbox names (ElfPatches.PatchCatPelletFollow writes the cave).
+            new(CatFollowHookAddr, CatFollowHookOrig, CatFollowHookNew, "cat pellet follower hook (jal step__5CSHOT → cave)"),
         };
 
         /// <summary>The patched form of the first gauge word — what the runtime checks to know the patch is live.</summary>
         internal static uint GaugePatchedWord0 => Words[1].New;
         internal const long GaugePatchAddrMmu = 0x201DB8090;
+
+        /// <summary>The cat follower hook site (dun step loop `jal step__5CSHOT`) — the runtime checks the word to
+        /// know the native follower is live (DivineBeastCat falls back to its thread follower when it is not).</summary>
+        internal const uint CatFollowHookAddr = 0x01DB874C;
+        internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
+        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.CatPelletFollow >> 2);
+        internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 
         internal static void Apply(FileStream fs, Rec dun, Action<string> progress)
         {
@@ -72,7 +83,7 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, off, w.New);
                 applied++;
             }
-            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 3.84 MB from the read buffer) …");
+            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 3.84 MB from the read buffer, cat pellet-follower hook) …");
         }
     }
 }

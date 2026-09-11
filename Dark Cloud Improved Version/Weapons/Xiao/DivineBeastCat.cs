@@ -8,9 +8,11 @@ namespace Dark_Cloud_Improved_Version
     /// Divine Beast Title — the CHARGED shot launches Xiao's cat form (roadmap PR 8).
     ///
     /// Hold the shot past <see cref="ChargeSeconds"/> (the game's own charge flash announces it) and the pellet
-    /// that leaves the slingshot is replaced by an animated cat: it flies out along the pellet's line from the
-    /// muzzle, lands, runs at the locked-on enemy (straight ahead when nothing is locked), pounces, and the
-    /// pounce lands a pellet-style hit through the game's own damage pipeline. Then it fades out.
+    /// that leaves the slingshot grows into an animated cat: the copy is pinned to the LIVE pellet — its head rides
+    /// the pellet's point every tick — and scales up from nothing over <see cref="GrowSeconds"/> while the pellet's
+    /// own sprite shrinks away, so the pellet itself appears to become the cat. The pellet keeps flying and
+    /// colliding exactly as the game runs it; the cat only follows, in its fall pose, and fades when the pellet
+    /// ends. (The landing → run → pounce chain that follows is parked while the flight is tuned — user 2026-09-10.)
     ///
     /// Where the cat comes from: the ISO bake (tools/iso_patch/build_cat_pack.py) grafts the s86 cat rig INTO
     /// Xiao's dungeon character pack c04b.chr as 37 extra `cat_` nodes that sit UNPARENTED in her frame array (the
@@ -54,12 +56,13 @@ namespace Dark_Cloud_Improved_Version
         private const int    SeqWord1490 = 0x1490;     // Initialize sets -1
 
         // Charge + launch.
-        private const double ChargeSeconds = 1.5;      // hold this long → the shot is the cat
-        private const float  LaunchSpeed   = 1.0f;     // units/frame along the pellet's own line (user 2026-09-10: slow, to verify)
-        private const float  Gravity       = 0.03f;    // units/frame² — it sails out level like the pellet, then settles
+        private const double ChargeSeconds = 1.0;      // hold this long → the shot is the cat (1.5 → 1.0, user 2026-09-10)
+        private const double GrowSeconds   = 0.1;      // the pellet grows into the cat over this long after it is fired
+        private const int    GrowFrames    = 6;        // the same, in frames, for the native follower (60 fps)
+        private const float  Gravity       = 0.05f;    // units/frame² — the pounce arc
         private const float  CatScale      = 1.0f;
         // Ground game.
-        private const float  RunSpeed      = 0.8f;     // units/frame
+        private const float  RunSpeed      = 1.3f;     // units/frame
         private const float  PounceRange   = 24f;      // start the pounce within this of the target
         private const float  PounceFrames  = 40f;      // leap flight time (frames)
         private const float  HitRadius     = 9f;       // planted hit sphere
@@ -75,7 +78,7 @@ namespace Dark_Cloud_Improved_Version
         private const long BattleWeaponStats  = WeaponHave.BattleWeaponRecord + 0x1C;
         private const long BattleWeaponFlags  = WeaponHave.BattleWeaponRecord + 0xEE;
 
-        private enum Phase { Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading }
+        private enum Phase { Resident, Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
 
         private static Thread _thread;
         private static readonly bool[] _seenPellet = new bool[PlayerShotPool.SlotCount];
@@ -92,6 +95,15 @@ namespace Dark_Cloud_Improved_Version
         private static Phase _phase;
         private static DateTime _phaseStart;
         private static float _x, _h, _y, _yaw, _vx, _vh, _vy, _floor, _dirX, _dirY;
+        private static float _scale = 1f;                    // growth 0 → 1 over GrowSeconds (× CatScale)
+        private static long  _pool;                          // the shot pool the cat is pinned to
+        private static int   _pelletSlot = -1;               // its pellet's slot while that pellet lives, else −1
+        private static bool  _native;                        // the ISO carries the pellet catcher/follower cave
+        private static bool  _nativeWarned;
+        private static bool  _caveOwns;                      // cave armed (waiting) or following: slot 1's pos/scale/opacity are its
+        private static int   _disarmTicks;                   // after a shot-less release: ticks until the waiting cave is disarmed
+        private static DateTime _spawnFailedAt = DateTime.MinValue;
+        private static float _flightFrame0;                  // copy's motion frame at the bind (fall-pose check in the log)
         private static int   _target = -1;
         private static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
         private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
@@ -129,8 +141,10 @@ namespace Dark_Cloud_Improved_Version
                     else
                     {
                         sleep = TickMs;
+                        WatchHerCatChannel();
+                        if (!Active) SpawnResident();                          // built once, hidden, ready for the next charge
                         TrackCharge();
-                        WatchPellets();
+                        if (_native) PollCave(); else WatchPellets();
                         if (Active) Step();
                     }
                     RetirePlanted();
@@ -211,9 +225,17 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (!_holding) { _holding = true; _holdStart = DateTime.UtcNow; _flashed = false; }
                 _holdSeconds = (DateTime.UtcNow - _holdStart).TotalSeconds;
-                if (_holdSeconds >= ChargeSeconds && !_flashed) { Player.FlashChargeComplete(); _flashed = true; }
+                if (_holdSeconds >= ChargeSeconds && !_flashed)
+                {
+                    Player.FlashChargeComplete(); _flashed = true;
+                    if (_native && Active) ArmCave();                          // the cave catches the release's pellet on its birth frame
+                }
             }
-            else _holding = false;
+            else
+            {
+                if (_holding && _caveOwns && _phase != Phase.Flying) _disarmTicks = 30;  // released: ~0.5 s for the shoot motion to spawn the pellet, else the charge was cancelled
+                _holding = false;
+            }
         }
 
         /// <summary>A pellet that appears while the shot was charged becomes the cat: read where it was born
@@ -228,49 +250,147 @@ namespace Dark_Cloud_Improved_Version
                 if (live && !_seenPellet[i])
                 {
                     _seenPellet[i] = true;
-                    if (_holdSeconds >= ChargeSeconds && !Active)
+                    if (_holdSeconds >= ChargeSeconds && Active)
                     {
-                        long pa = PlayerShotPool.PosAddr(pool, i), va = PlayerShotPool.VelAddr(pool, i);
-                        float px = Memory.ReadFloat(pa), ph = Memory.ReadFloat(pa + 4), py = Memory.ReadFloat(pa + 8);
-                        float vx = Memory.ReadFloat(va), vh = Memory.ReadFloat(va + 4), vy = Memory.ReadFloat(va + 8);
                         _holdSeconds = 0;                                        // one cat per charge
-                        if (Launch(px, ph, py, vx, vh, vy))
-                        {
-                            Memory.WriteInt(PlayerShotPool.NoCollideAddr(pool, i), 1);   // the pellet is the cat now
-                            Memory.WriteInt(pool + PlayerShotPool.LifetimeOffset + i * PlayerShotPool.ScalarStride, 1);
-                        }
+                        Bind(pool, i);                                           // (thread fallback: unpatched ISO)
                     }
                 }
                 else if (!live) _seenPellet[i] = false;
             }
         }
 
-        /// <summary>The pellet becomes the cat: it leaves from the pellet's position along the pellet's own
-        /// 3-D line (no added lift — user 2026-09-10), just slower, and gravity settles it to the floor.</summary>
-        private static bool Launch(float px, float ph, float py, float vx, float vh, float vy)
+        /// <summary>Build the copy once per floor/character and keep it RESIDENT but hidden (opacity 0, scale 0, the
+        /// fall pose looping) so a charged shot has nothing left to build — the cave shows it on the pellet's birth
+        /// frame (user 2026-09-10: the growth must start the very frame the pellet is created). A failed spawn is
+        /// retried after a pause rather than every tick.</summary>
+        private static void SpawnResident()
+        {
+            if (_spawnFailedAt != DateTime.MinValue && (DateTime.UtcNow - _spawnFailedAt).TotalSeconds < 5) return;
+            _scale = 0f; _alpha = 0f; _target = -1; _pelletSlot = -1; _caveOwns = false; _disarmTicks = 0;
+            _yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
+            _x = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos);
+            _h = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
+            _y = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
+            if (!Spawn()) { _spawnFailedAt = DateTime.UtcNow; return; }
+            _spawnFailedAt = DateTime.MinValue;
+            _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
+            if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
+            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
+            _phase = Phase.Resident; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0;
+            SetKey(KeyLeap);
+            Maintain();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
+        }
+
+        /// <summary>At the charge threshold: give the cave the growth reciprocal and the head rest offset (cat space ×
+        /// scale), zero its counters, hide the copy (scale 0 — the cave owns position/scale/opacity from here) and set
+        /// state 3: the next NEW pellet binds on its birth frame. Arming while a previous cat still rides its pellet
+        /// clears it (the new charged shot always starts clean — user 2026-09-10).</summary>
+        private static void ArmCave()
+        {
+            Memory.WriteInt  (CodeCaves.Mailbox.CatPelletSlot, 0);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatState, 0);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGrowInv, 1f / GrowFrames);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadX, CatScale * _headX);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadH, CatScale * _headH);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatHeadZ, CatScale * _headZ);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGrowFrames, 0);
+            long sl = SlotAddr();
+            Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
+            Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
+            _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
+            _phase = Phase.Resident; _phaseStart = DateTime.UtcNow;
+            Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charge complete — the cave binds the next pellet on its birth frame");
+        }
+
+        private static void DisarmCave()
+        {
+            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
+            _caveOwns = false; _disarmTicks = 0;
+        }
+
+        /// <summary>Follow the cave's state: 1 = it bound a pellet (note it, face along the pellet, log), 2 = that
+        /// pellet ended (hold the last placed spot, fade, then hide again). A shot-less release disarms it.</summary>
+        private static void PollCave()
+        {
+            if (!Active) return;
+            int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
+            if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Console.WriteLine(Tag + "charge released without a shot — cat stays hidden"); return; }
+            switch (state)
+            {
+                case 1:
+                    if (_phase != Phase.Flying)
+                    {
+                        long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
+                        int slot = Memory.ReadInt(CodeCaves.Mailbox.CatPelletSlot) - 1;
+                        if (!Memory.IsValidGuest(pool) || slot < 0) break;
+                        _pool = pool; _pelletSlot = slot; _alpha = 1f; _fade = 0; _caveOwns = true; _disarmTicks = 0;
+                        long va = PlayerShotPool.VelAddr(pool, slot);
+                        FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
+                        _target = LockedTarget();
+                        _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
+                                              : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
+                        _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false;
+                        _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                            $"cat bound to pellet slot {slot} on its birth frame" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
+                    }
+                    break;
+                case 2:
+                {
+                    long sp = SlotAddr() + CCharacter.CharPos;                       // hold the last placed spot through the fade
+                    _x = Memory.ReadFloat(sp); _h = Memory.ReadFloat(sp + 4); _y = Memory.ReadFloat(sp + 8);
+                    int frames = Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames);
+                    float mf = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
+                    _scale = 1f; _pelletSlot = -1;
+                    Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
+                    _caveOwns = false;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
+                    Enter(Phase.Fading, KeyLeap);
+                    break;
+                }
+            }
+        }
+
+        /// <summary>Thread fallback (unpatched ISO): pin the resident copy to the new charged pellet from here on.</summary>
+        private static void Bind(long pool, int slot)
+        {
+            long pa = PlayerShotPool.PosAddr(pool, slot), va = PlayerShotPool.VelAddr(pool, slot);
+            _px = Memory.ReadFloat(pa); _ph = Memory.ReadFloat(pa + 4); _py = Memory.ReadFloat(pa + 8);
+            FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
+            _target = LockedTarget();
+            _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
+                                  : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
+            _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0;
+            PlaceRootUnderHead();
+            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false;
+            Maintain();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"cat pinned to pellet slot {slot} from ({_px:F1},{_ph:F1},{_py:F1})" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + " [thread follower]");
+        }
+
+        /// <summary>Back to resident: invisible, scale 0, fall pose looping, ready for the next charge.</summary>
+        private static void Hide()
+        {
+            _alpha = 0f; _scale = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = false;
+            _phase = Phase.Resident; _phaseStart = DateTime.UtcNow;
+            SetKey(KeyLeap);
+            Maintain();
+        }
+
+        /// <summary>Yaw the cat along a horizontal direction; a pellet going straight up or down keeps her facing.</summary>
+        private static void FaceAlong(float vx, float vy)
         {
             float hl = (float)Math.Sqrt(vx * vx + vy * vy);
             if (hl < 1e-3f)
             {
                 float yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
-                vx = (float)Math.Sin(yaw); vy = (float)Math.Cos(yaw); vh = 0f; hl = 1f;
+                vx = (float)Math.Sin(yaw); vy = (float)Math.Cos(yaw); hl = 1f;
             }
             _dirX = vx / hl; _dirY = vy / hl;
-            float l3 = (float)Math.Sqrt(vx * vx + vh * vh + vy * vy);
-            float ux = vx / l3, uh = vh / l3, uy = vy / l3;                  // the pellet's unit direction, vertical included
-            _target = LockedTarget();
-            _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
-                                  : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-            _px = px; _ph = ph; _py = py; _yaw = (float)Math.Atan2(_dirX, _dirY);
-            _vx = ux * LaunchSpeed; _vy = uy * LaunchSpeed; _vh = uh * LaunchSpeed;
-            _x = px; _h = ph; _y = py;                                           // provisional; PlaceRootUnderHead after the spawn
-            if (!Spawn()) return false;
-            PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f;
-            SetKey(KeyLeap);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"cat launched from ({px:F1},{ph:F1},{py:F1}) toward " + (_target >= 0 ? $"locked enemy slot {_target}" : "straight ahead"));
-            return true;
+            _yaw = (float)Math.Atan2(_dirX, _dirY);
         }
 
         /// <summary>The locked-on enemy slot, if it is still alive.</summary>
@@ -302,12 +422,26 @@ namespace Dark_Cloud_Improved_Version
             }
             switch (_phase)
             {
+                case Phase.Resident:
+                    break;                                                       // hidden; the cave (or Bind) wakes it
                 case Phase.Flying:
-                    // The pellet's point flies; the cat hangs off it by its head. Land when the ROOT reaches the floor.
-                    _px += _vx; _py += _vy; _ph += _vh; _vh -= Gravity;
+                {
+                    if (_native) break;                                          // the cave owns position/scale; PollCave handles the end
+                    // Thread follower (unpatched ISO): the head sits on the pellet's point, the body grows in behind it.
+                    if (Memory.ReadInt(PlayerShotPool.FlagAddr(_pool, _pelletSlot)) == 0)
+                    {
+                        _pelletSlot = -1;                                        // the pellet ended (hit, wall or lifetime)
+                        Enter(Phase.Fading, KeyLeap);                            // landing / run / pounce parked while the flight is tuned
+                        break;
+                    }
+                    long pa = PlayerShotPool.PosAddr(_pool, _pelletSlot), va = PlayerShotPool.VelAddr(_pool, _pelletSlot);
+                    _px = Memory.ReadFloat(pa); _ph = Memory.ReadFloat(pa + 4); _py = Memory.ReadFloat(pa + 8);
+                    FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
+                    _scale = (float)Math.Min(1.0, t / GrowSeconds);
+                    Memory.WriteFloat(PlayerShotPool.ScaleAddr(_pool, _pelletSlot), 1f - _scale);   // sprite only; the hitbox is untouched
                     PlaceRootUnderHead();
-                    if (_vh < 0 && _h <= _floor) { _h = _floor; Enter(Phase.Landing, KeyLand); }
                     break;
+                }
                 case Phase.Landing:
                     if (t >= LandSeconds) Enter(Phase.Running, KeyRun);
                     break;
@@ -355,19 +489,20 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.Fading:
                     _fade++;
                     _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
-                    if (_fade >= FadeTicks) { Despawn(); return; }
+                    if (_fade >= FadeTicks) { Hide(); return; }
                     break;
             }
             Maintain();
         }
 
-        /// <summary>Root = flight point − the head's rest offset turned by the yaw (model +Z → world (sin yaw, cos yaw)).</summary>
+        /// <summary>Root = flight point − the head's rest offset (at the current growth scale) turned by the yaw
+        /// (model +Z → world (sin yaw, cos yaw)), so the head stays on the pellet while the body grows behind it.</summary>
         private static void PlaceRootUnderHead()
         {
-            float cy = (float)Math.Cos(_yaw), sy = (float)Math.Sin(_yaw);
-            _x = _px - (_headX * cy + _headZ * sy);
-            _y = _py - (-_headX * sy + _headZ * cy);
-            _h = _ph - _headH;
+            float cy = (float)Math.Cos(_yaw), sy = (float)Math.Sin(_yaw), k = _scale * CatScale;
+            _x = _px - k * (_headX * cy + _headZ * sy);
+            _y = _py - k * (-_headX * sy + _headZ * cy);
+            _h = _ph - k * _headH;
         }
 
         private static void Enter(Phase p, int key)
@@ -606,6 +741,50 @@ namespace Dark_Cloud_Improved_Version
 
         private static long A16L(long n) => (n + 15) & ~15L;
 
+        // ── Her MOTION 1 channel: watchdog + repair ─────────────────────────────────────────────────────────
+        // 2026-09-10: after some spawn/despawn cycles her channel-1 pointer (+0xC24) read as invalid and every later
+        // shot failed ("she has no MOTION 1 channel"). No engine writer of that word runs mid-floor (DeleteExtendMotion
+        // is town-only, Initialize/CommandMOTION only on loads, operator= only for town NPCs) and the mod never writes
+        // her table — so the watchdog logs the exact tick it changes, with the raw words, and the spawn repairs it
+        // when the inline channel struct (character + 0x420 + 0x80·1, CommandMOTION's placement) is still intact.
+        private const int  ChanInlineBase = 0x420, ChanInlineStride = 0x80;
+        private static bool _herChanValid = true;
+        private static DateTime _lastDespawn = DateTime.MinValue;
+
+        private static void WatchHerCatChannel()
+        {
+            uint raw = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4);
+            bool valid = Memory.IsValidGuest(raw & Memory.PhysAddrMask);
+            if (valid == _herChanValid) return;
+            _herChanValid = valid;
+            if (valid) { Console.WriteLine(Tag + $"her MOTION 1 pointer is back (0x{raw:X8})"); return; }
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < CCharacter.MotionSlots; i++)
+                sb.Append($" ch{i}=0x{(uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + i * 4):X8}/{Memory.ReadInt(CCharacter.Base + ChanKeyStart + i * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + i * 4)}");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(DateTime.UtcNow - _lastDespawn).TotalSeconds:F2} s after the last despawn; table:{sb}");
+        }
+
+        /// <summary>Put her channel-1 pointer and key range back when the inline MOTION struct still holds its data
+        /// (its KEY table and bind rows are valid pointers). Returns true and refreshes <paramref name="buf"/> on success.</summary>
+        private static bool RepairHerCatChannel(ref byte[] buf)
+        {
+            long inline = CCharacter.Base + ChanInlineBase + CatChannel * ChanInlineStride;
+            uint keyTable = (uint)Memory.ReadInt(inline + MotionType.MotionInfoPtr) & Memory.PhysAddrMask;
+            uint boneRows = (uint)Memory.ReadInt(inline + MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(keyTable) || !Memory.IsValidGuest(boneRows))
+            {
+                Console.WriteLine(Tag + $"her MOTION 1 struct @0x{inline & Memory.PhysAddrMask:X} is empty too (KEY 0x{keyTable:X}, rows 0x{boneRows:X}) — cannot repair");
+                return false;
+            }
+            Memory.WriteUInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4, (uint)(inline & Memory.PhysAddrMask));
+            Memory.WriteInt (CCharacter.Base + ChanKeyStart + CatChannel * 4, KeyBase);
+            Memory.WriteInt (CCharacter.Base + ChanKeyEnd   + CatChannel * 4, KeyBase + KeyCount);
+            Console.WriteLine(Tag + $"her MOTION 1 pointer repaired → 0x{inline & Memory.PhysAddrMask:X} (keys {KeyBase}..{KeyBase + KeyCount})");
+            buf = Memory.ReadBytesBatch(CCharacter.Base, CharCopySize) ?? buf;
+            return true;
+        }
+
         /// <summary>Host slot from XIAO's own CCharacter (draw/texture config, as the Mirage clone does), aimed at
         /// the copy, with her cat channel (MOTION 1) cloned as the copy's ONLY channel — own FrameInf/BoneMtx (any
         /// bone pointers into the live cat block re-based to the copy), the KEY table and track list shared
@@ -616,7 +795,9 @@ namespace Dark_Cloud_Improved_Version
             byte[] buf = Memory.ReadBytesBatch(CCharacter.Base, CharCopySize);
             if (buf == null) return false;
             uint chan = (uint)BitConverter.ToInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(chan)) { Console.WriteLine(Tag + "she has no MOTION 1 channel — the loaded c04b.chr has no cat"); return false; }
+            if (!Memory.IsValidGuest(chan) && RepairHerCatChannel(ref buf))
+                chan = (uint)BitConverter.ToInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(chan)) { Console.WriteLine(Tag + $"she has no MOTION 1 channel (raw 0x{BitConverter.ToUInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4):X8}) — the loaded c04b.chr has no cat"); return false; }
             byte[] mstr = Memory.ReadBytesBatch(Memory.ToMmu(chan), MotionStructSize);
             if (mstr == null) return false;
             int fiSize = (_nodeCount + 1) * MotionType.FrameInfEntry;
@@ -693,9 +874,9 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharRot);
             BitConverter.GetBytes(_yaw).CopyTo(buf, CCharacter.CharRotY);
             BitConverter.GetBytes(0f).CopyTo(buf, CCharacter.CharRot + 8);
-            BitConverter.GetBytes(CatScale).CopyTo(buf, CCharacter.CharScale);
-            BitConverter.GetBytes(CatScale).CopyTo(buf, CCharacter.CharScale + 4);
-            BitConverter.GetBytes(CatScale).CopyTo(buf, CCharacter.CharScale + 8);
+            BitConverter.GetBytes(CatScale * _scale).CopyTo(buf, CCharacter.CharScale);
+            BitConverter.GetBytes(CatScale * _scale).CopyTo(buf, CCharacter.CharScale + 4);
+            BitConverter.GetBytes(CatScale * _scale).CopyTo(buf, CCharacter.CharScale + 8);
             BitConverter.GetBytes(KeyLeap).CopyTo(buf, CCharacter.MotionId);
             BitConverter.GetBytes(CharacterMotion.MotionSpeedUseKey).CopyTo(buf, CharacterMotion.MotionSpeedOffset);
             BitConverter.GetBytes((uint)BitConverter.ToInt32(buf, CCharacter.MotionFlags) | (uint)CCharacter.MotionRestart)
@@ -751,17 +932,20 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
             long s = SlotAddr();
-            Memory.WriteFloat(s + CCharacter.CharPos,     _x);
-            Memory.WriteFloat(s + CCharacter.CharPos + 4, _h);
-            Memory.WriteFloat(s + CCharacter.CharPos + 8, _y);
+            if (!_caveOwns)                                                      // armed/following: position, scale and opacity are the cave's
+            {
+                Memory.WriteFloat(s + CCharacter.CharPos,     _x);
+                Memory.WriteFloat(s + CCharacter.CharPos + 4, _h);
+                Memory.WriteFloat(s + CCharacter.CharPos + 8, _y);
+                Memory.WriteFloat(s + CCharacter.CharScale,     CatScale * _scale);
+                Memory.WriteFloat(s + CCharacter.CharScale + 4, CatScale * _scale);
+                Memory.WriteFloat(s + CCharacter.CharScale + 8, CatScale * _scale);
+                Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));
+            }
             Memory.WriteFloat(s + CCharacter.CharRot,     0f);
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
             Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
-            Memory.WriteFloat(s + CCharacter.CharScale,     CatScale);
-            Memory.WriteFloat(s + CCharacter.CharScale + 4, CatScale);
-            Memory.WriteFloat(s + CCharacter.CharScale + 8, CatScale);
             Memory.WriteUInt (s + CCharacter.CharModel, _copyRoot);
-            Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));
             Memory.WriteInt  (s + CCharacter.MotionId, _key);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 1);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 1);
@@ -776,6 +960,12 @@ namespace Dark_Cloud_Improved_Version
         internal static void Despawn()
         {
             if (!Active) return;
+            DisarmCave();
+            if (_pelletSlot >= 0)                                                // cat gone while its pellet still flies: give the sprite back
+            {
+                if (Memory.ReadInt(PlayerShotPool.FlagAddr(_pool, _pelletSlot)) != 0) Memory.WriteFloat(PlayerShotPool.ScaleAddr(_pool, _pelletSlot), 1f);
+                _pelletSlot = -1;
+            }
             long s = SlotAddr();
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 0);
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 1);
@@ -786,6 +976,7 @@ namespace Dark_Cloud_Improved_Version
             RetagCatTextures(SlotTextureGroup, HerTextureBlock);
             Active = false; _key = -1; _target = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
+            _lastDespawn = DateTime.UtcNow;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
         }
 

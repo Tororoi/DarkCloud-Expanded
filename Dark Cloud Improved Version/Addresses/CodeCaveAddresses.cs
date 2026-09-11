@@ -263,7 +263,20 @@ namespace Dark_Cloud_Improved_Version
             internal const long ShieldGaugeRate = Base + 0x90;
 
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
-            internal const long NextFree = Base + 0x94;
+            /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastCat.cs).
+            /// The cat copy sits resident and hidden in chara slot 1. At the charge threshold the mod writes the growth
+            /// reciprocal and the head rest offset (cat space × cat scale), zeroes frames/slot, and sets state 3 (waiting);
+            /// the cave then binds the next NEW pellet on its birth frame (slot+1, state 1, opacity 128) and owns slot 1's
+            /// position and scale every frame until that pellet ends (slot 0, state 2 → the mod fades and re-hides).</summary>
+            internal const long CatPelletSlot  = Base + 0x94;   // int, bound pellet slot + 1; 0 = none (page boots zero-filled)
+            internal const long CatState       = Base + 0x98;   // int: 0 idle, 1 following, 2 pellet ended, 3 waiting for a new pellet
+            internal const long CatGrowFrames  = Base + 0x9C;   // int, frames since bound (cave increments)
+            internal const long CatGrowInv     = Base + 0xA0;   // float, 1 / growth frames
+            internal const long CatHeadX       = Base + 0xA4;   // float ×3: head rest offset in CAT space (x, height, z)
+            internal const long CatHeadH       = Base + 0xA8;
+            internal const long CatHeadZ       = Base + 0xAC;
+            internal const long CatSeenMask    = Base + 0xB0;   // int, active pellet-slot bits last frame (cave)
+            internal const long NextFree = Base + 0xB4;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -349,10 +362,15 @@ namespace Dark_Cloud_Improved_Version
             internal const uint LadderRefusal      = 0x01FB0CD0;   // 52 B → 0x1FB0D04
             internal const uint ExclamationHeight  = 0x01FB0D10;   // 24 B → 0x1FB0D28
             internal const uint IdleMotionOverride = 0x01FB0D50;   // 36 B → 0x1FB0D74
+            /// <summary>Divine Beast cat pellet catcher + follower (tools/stubs/cat_pellet_follow.s): takes the dungeon
+            /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
+            /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
+            /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 516 B → 0x1FB0F94
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB0D90;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB0FA0;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

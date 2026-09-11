@@ -104,6 +104,7 @@ namespace Dark_Cloud_Improved_Version
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
+            PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -220,6 +221,27 @@ namespace Dark_Cloud_Improved_Version
         // to 0x16a6b0 (the c60 stores). Scratch = $v0 (reloaded by `lui v0` at the return) and $at (dead after
         // the guard branch), both dead across the hook; $ra is stack-saved at function entry (`sq ra,0xc0(sp)`),
         // so the jal's $ra clobber is safe. $s0/$s2 are read-only. (Cave hand-built via the MipsAsm encoders.)
+        // ── Divine Beast cat: native pellet follower ─────────────────────────────────────────────────────
+        // The charged shot's cat rides the live pellet (head on the pellet's point) and grows in over a few
+        // frames — a mod-thread follower trails and jitters, so a cave does it: DunPatches redirects the dungeon
+        // step loop's `jal step__5CSHOT` (dun 0x1DB874C, once per frame, a0 = the player shot pool) to this cave,
+        // which performs that call and then places chara slot 1 from the pellet the Mailbox names (see
+        // Mailbox.CatPelletSlot). Stub: tools/stubs/cat_pellet_follow.s → catPelletFollow.bin.
+        internal static void PatchCatPelletFollow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatPelletFollow;   // registry: CodeCaveAddresses.ElfCave
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin")
+                ?? throw new IOException("Embedded EE function missing: catPelletFollow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length == 0 || (b.Length & 3) != 0 || U32(b, 0) != 0x27BDFFF0 || U32(b, 8) != Jal(0x001ABD10))   // addiu sp,-0x10 … jal step__5CSHOT
+                throw new IOException($"catPelletFollow.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x0016A6A8;   // EdMoveChara grounded locomotion store `sw s0,0xc68(s2)`
