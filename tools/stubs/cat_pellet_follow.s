@@ -12,7 +12,14 @@
 # STATES (Mailbox.CatState +0x98):
 #   0 idle   3 waiting (armed: bind the next NEW pellet)   1 following the pellet (growing)   2 pellet ended early
 #   4 falling (broke away at full size)   5 landing (land clip playing; momentum until the paws touch)   6 running
-# MAILBOX (guest 0x01F10000 page; CodeCaveAddresses.Mailbox):
+#   10 ready (in place)   7 take-off (in place until CatRampStart, then forward momentum ramps to full by CatRampEnd)
+#   8 ground leap (full momentum, leap clip; ends into 5 — the clips carry the height)   9 hit (frozen; mod deals damage)
+#   Flying targets (target height − floor > CatFlyThreshold): straight from the ready into the ballistic arc of state 4
+#   (vh = Δh/T + g·T/2) in the float-up pose (CatFloatKey, +0x154) until the apex, the fall pose after — the town
+#   ladder jump's ready → vertical leap → fall → land sequence.
+# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.Mailbox.CatBase; the
+# offsets 0x94.. are historical: the words FIRST sat in the PNACH mailbox page, whose 0x100+ span turned out to be
+# the AI-stub table (2026-09-11: clobbered clip frames, range, hit slot). $t0 = 0x01FB0000, offsets 0x40xx.):
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int
 #   +0xA0 CatGrowInv float 1/N (mod)   +0xA4/+0xA8/+0xAC CatHeadX/H/Z float head rest offset, CAT space (mod)
 #   +0xB0 CatSeenMask int (cave)   +0xB4/+0xB8/+0xBC CatVx/Vh/Vz float fall velocity (cave, captured at breakaway)
@@ -26,6 +33,21 @@
 #   flags restart bit (slot +0xC64 |= 4), or the engine would finish the current clip before changing.
 #   +0xEC CatMoveKey int the key played while moving after the landing (mod: the brisk walk, 70).
 #   +0xF0 CatMoveFrac float ground speed after the landing as a fraction of the pellet's horizontal speed (mod, 0.4).
+#   +0x11C CatPounceRange float (mod)  +0x120 CatPounceFrames float leap flight frames (mod)  +0x124 CatTakeoffEnd float
+#   take-off clip end frame (mod, 204)  +0x128 CatHitRadius float the cat's touch radius (mod)  +0x12C CatHitSlot int
+#   enemy slot + 1 the cat touched (cave → mod; 0 none). +0x130 CatReadyEnd / +0x134 CatRampStart / +0x138 CatRampInv
+#   (1/(rampEnd−rampStart)) / +0x13C CatRampEnd / +0x140 CatLeapEnd float clip frames (mod); +0x144 CatPounceTravel
+#   float momentum-frames the pounce covers (V = dist / travel) (mod); +0x148 CatFlyThreshold float (mod);
+#   +0x16C CatPounceMaxDist float: at the end of the ready the pounce launches only if the target is still within this
+#   (mod, 2× the range) — the mod may have re-targeted during the ready clip, and a far target means walk, not leap.
+#   +0x14C CatPounceV float (cave); +0x150 CatPounceFly int (cave); +0x158/+0x15C CatDbgDist/CatDbgRange float the
+#   distance and range compared when the pounce was decided (cave, diagnostics); +0x160 CatReadyStart / +0x164
+#   CatTakeoffStart / +0x168 CatLeapStart float clip start frames (mod): a clip-end test only trusts a frame inside
+#   [start, end+1] — on a state's first frame the live frame still belongs to the PREVIOUS clip. The touch test
+#   (states 1/4/5/8) uses
+#   the pellet code's own enemy body-sphere table (*NowMonstorUnit: enemy i active @i*400+0x1E3D0 != −1 and
+#   @+0x1E4A4 != 0; spheres @i*0x510 + 0x55250 + j*0x10, radius +0x55390 + j*4, active +0x55450 + j*4) against the
+#   root and a point 3 ahead, both 2 above the root.
 #   +0xF4 CatProbeUp / +0xF8 CatProbeDown float the floor probe's reach above / below the cat (mod, 8 / 40).
 #   +0x104 CatRateBase / +0x108 CatRatePerSpeed / +0x10C CatRateMax float: while moving the cave writes slot +0xC60
 #   (motion-speed override) = min(base + perSpeed · ground speed, max) — the TOWN's own walk mapping (EdMoveChara:
@@ -55,10 +77,10 @@ addiu $sp, $sp, -0x80
 sw    $ra, 0x40($sp)
 jal   0x001ABD10               # step__5CSHOT(pool) — the displaced vanilla call (a0 still the pool)
 nop
-lui   $t0, 0x01F1              # mailbox page
+lui   $t0, 0x01FB              # mailbox page
 lui   $t2, 0x002A
 lw    $t2, 0x35D4($t2)         # pool base
-lw    $t9, 0x00B0($t0)         # seen mask (previous frame)
+lw    $t9, 0x40B0($t0)         # seen mask (previous frame)
 move  $t1, $zero               # i
 move  $t7, $zero               # new mask
 addiu $t8, $zero, -1           # first NEW slot this frame (-1 = none)
@@ -82,24 +104,34 @@ addiu $t1, $t1, 1
 slti  $t3, $t1, 12
 bne   $t3, $zero, scan
 nop
-sw    $t7, 0x00B0($t0)         # seen mask ← this frame
-lw    $t3, 0x0098($t0)         # state
+sw    $t7, 0x40B0($t0)         # seen mask ← this frame
+lw    $t3, 0x4098($t0)         # state
 addiu $t4, $zero, 4
 beq   $t3, $t4, probe          # states 4/5/6 first refresh the floor height under the cat, then run their block
 addiu $t4, $zero, 6
 beq   $t3, $t4, probe
 addiu $t4, $zero, 5
 beq   $t3, $t4, probe
+addiu $t4, $zero, 7
+beq   $t3, $t4, takeoff
+addiu $t4, $zero, 8
+beq   $t3, $t4, groundleap
+addiu $t4, $zero, 10
+beq   $t3, $t4, ready
 addiu $t4, $zero, 3
 bne   $t3, $t4, notwaiting
 nop
 bltz  $t8, done                # waiting, no new pellet yet
 nop
 addiu $t5, $t8, 1              # ── BIND on the birth frame ──
-sw    $t5, 0x0094($t0)         # slot + 1
-sw    $zero, 0x009C($t0)       # frames = 0
+sw    $t5, 0x4094($t0)         # slot + 1
+sw    $zero, 0x409C($t0)       # frames = 0
+sll   $t3, $t8, 2
+addu  $t4, $t2, $t3
 addiu $t5, $zero, 1
-sw    $t5, 0x0098($t0)         # state = following
+sw    $t5, 0x0280($t4)         # the pellet passes through everything now: the cat's touch is the hit
+addiu $t5, $zero, 1
+sw    $t5, 0x4098($t0)         # state = following
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900         # chara slot 1
 lui   $t5, 0x4300              # 128.0f
@@ -110,7 +142,7 @@ notwaiting:
 addiu $t4, $zero, 1
 bne   $t3, $t4, done           # only state 1 follows
 nop
-lw    $t1, 0x0094($t0)
+lw    $t1, 0x4094($t0)
 beq   $t1, $zero, done
 addiu $t1, $t1, -1             # → zero-based slot (delay slot; dead when the branch is taken)
 follow:
@@ -119,16 +151,16 @@ addu  $t4, $t2, $t3            # scalar row
 lw    $t5, 0x03D0($t4)         # pellet still active?
 bne   $t5, $zero, alive
 nop
-sw    $zero, 0x0094($t0)       # pellet ended early: unbind …
+sw    $zero, 0x4094($t0)       # pellet ended early: unbind …
 addiu $t6, $zero, 2
 b     done
-sw    $t6, 0x0098($t0)         # … and tell the mod (delay slot)
+sw    $t6, 0x4098($t0)         # … and tell the mod (delay slot)
 alive:
-lw    $t8, 0x009C($t0)         # frames since bound (t8 kept for the breakaway test)
+lw    $t8, 0x409C($t0)         # frames since bound (t8 kept for the breakaway test)
 addiu $t7, $t8, 1
-sw    $t7, 0x009C($t0)
+sw    $t7, 0x409C($t0)
 mtc1  $t8, $f0
-lwc1  $f2, 0x00A0($t0)         # 1 / N
+lwc1  $f2, 0x40A0($t0)         # 1 / N
 lui   $t7, 0x3F80
 mtc1  $t7, $f4                 # 1.0
 mtc1  $zero, $f20              # 0.0
@@ -149,8 +181,8 @@ mul.s $f10, $f6, $f6
 mul.s $f12, $f8, $f8
 add.s $f10, $f10, $f12         # h²
 .word 0x460A0284               # sqrt.s $f10, $f10   (EE ft-operand form)
-lwc1  $f12, 0x00A4($t0)        # headX (cat space)
-lwc1  $f14, 0x00AC($t0)        # headZ
+lwc1  $f12, 0x40A4($t0)        # headX (cat space)
+lwc1  $f14, 0x40AC($t0)        # headZ
 nop
 .word 0x460AA034               # c.lt.s $f20, $f10   (0 < h ?)  fs=f20 ft=f10
 nop
@@ -169,7 +201,7 @@ mul.s $f2,  $f12, $f6          # headX·vx
 sub.s $f18, $f18, $f2
 div.s $f18, $f18, $f10         # offY = −headX·sin + headZ·cos
 offdone:
-lwc1  $f2, 0x00A8($t0)         # headH
+lwc1  $f2, 0x40A8($t0)         # headH
 mul.s $f16, $f16, $f0          # × growth
 mul.s $f18, $f18, $f0
 mul.s $f2,  $f2,  $f0
@@ -191,23 +223,23 @@ addiu $t5, $zero, 68
 sw    $t5, 0x0C68($t6)         # key = leap (fall pose)
 sub.s $f14, $f4, $f0           # pellet sprite = 1 − k (draw only)
 swc1  $f14, 0x0310($t4)
-lw    $t5, 0x00D8($t0)         # N
+lw    $t5, 0x40D8($t0)         # N
 slt   $t3, $t8, $t5            # frames (before this one) < N → still growing
-bne   $t3, $zero, done
+bne   $t3, $zero, touch        # (growing: test the touch, then done)
 nop
 # ── BREAKAWAY at full size: keep the pellet's velocity, expire the pellet, start the fall ──
 lwc1  $f6, 0x01C0($t9)         # vx
 lwc1  $f7, 0x01C4($t9)         # vh
 lwc1  $f8, 0x01C8($t9)         # vz
-swc1  $f6, 0x00B4($t0)
-swc1  $f7, 0x00B8($t0)
-swc1  $f8, 0x00BC($t0)
-lwc1  $f2, 0x00F0($t0)         # ground-speed fraction
+swc1  $f6, 0x40B4($t0)
+swc1  $f7, 0x40B8($t0)
+swc1  $f8, 0x40BC($t0)
+lwc1  $f2, 0x40F0($t0)         # ground-speed fraction
 addiu $t5, $zero, 1
 sw    $t5, 0x02B0($t4)         # pellet lifetime = 1 (expires on its next step) …
 sw    $t5, 0x0280($t4)         # … and no collision meanwhile
 mul.s $f2, $f10, $f2           # ground speed = fraction · |v_xz|   (f10 = h, still valid)
-swc1  $f2, 0x00C8($t0)
+swc1  $f2, 0x40C8($t0)
 nop
 .word 0x460AA034               # c.lt.s $f20, $f10   (0 < h ?)
 nop
@@ -220,12 +252,12 @@ dirzero:
 mov.s $f16, $f20               # no horizontal speed: direction (0, 0)
 mov.s $f18, $f20
 dirstore:
-swc1  $f16, 0x00D0($t0)        # dirX
-swc1  $f18, 0x00D4($t0)        # dirZ
-sw    $zero, 0x0094($t0)       # unbound from the pellet
+swc1  $f16, 0x40D0($t0)        # dirX
+swc1  $f18, 0x40D4($t0)        # dirZ
+sw    $zero, 0x4094($t0)       # unbound from the pellet
 addiu $t5, $zero, 4
 b     done
-sw    $t5, 0x0098($t0)         # state = falling (delay slot)
+sw    $t5, 0x4098($t0)         # state = falling (delay slot)
 # ── FLOOR PROBE: the real ground under the cat, the way a thrown item finds it (ItemThrowStep / checkCollision):
 # reset the per-call work allocator, take a 0x500-unit CCPoly scratch from it, gather the map's collision polygons
 # around the cat (setCollisionData(NowDngMap, polys, pos, 20.0, 1.5) → count), then cast a vertical segment from
@@ -261,10 +293,10 @@ move  $s1, $v0
 # cast helper's return address). Vector y/w are common to all three; x/z are set per cast.
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
-lui   $t0, 0x01F1              # mailbox (the calls clobbered t0)
+lui   $t0, 0x01FB              # mailbox (the calls clobbered t0)
 lwc1  $f8, 0x0014($t6)         # height
-lwc1  $f2, 0x00F4($t0)         # probe reach up
-lwc1  $f4, 0x00F8($t0)         # probe reach down
+lwc1  $f2, 0x40F4($t0)         # probe reach up
+lwc1  $f4, 0x40F8($t0)         # probe reach down
 lui   $t7, 0x3F80
 mtc1  $t7, $f10                # 1.0 (w)
 add.s $f14, $f8, $f2           # from.y = height + reach up
@@ -285,12 +317,12 @@ swc1  $f12, 0x68($sp)          # (delay slot)
 # cast 2: ahead of the root
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
-lui   $t0, 0x01F1
+lui   $t0, 0x01FB
 lwc1  $f6, 0x0010($t6)
 lwc1  $f12, 0x0018($t6)
-lwc1  $f2, 0x00D0($t0)         # dirX
-lwc1  $f4, 0x00D4($t0)         # dirZ
-lwc1  $f14, 0x00FC($t0)        # front distance
+lwc1  $f2, 0x40D0($t0)         # dirX
+lwc1  $f4, 0x40D4($t0)         # dirZ
+lwc1  $f14, 0x40FC($t0)        # front distance
 mul.s $f2, $f2, $f14
 mul.s $f4, $f4, $f14
 add.s $f6, $f6, $f2
@@ -303,12 +335,12 @@ swc1  $f12, 0x68($sp)          # (delay slot)
 # cast 3: behind the root
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
-lui   $t0, 0x01F1
+lui   $t0, 0x01FB
 lwc1  $f6, 0x0010($t6)
 lwc1  $f12, 0x0018($t6)
-lwc1  $f2, 0x00D0($t0)
-lwc1  $f4, 0x00D4($t0)
-lwc1  $f14, 0x0100($t0)        # back distance
+lwc1  $f2, 0x40D0($t0)
+lwc1  $f4, 0x40D4($t0)
+lwc1  $f14, 0x4100($t0)        # back distance
 mul.s $f2, $f2, $f14
 mul.s $f4, $f4, $f14
 sub.s $f6, $f6, $f2
@@ -321,10 +353,10 @@ swc1  $f12, 0x68($sp)          # (delay slot)
 lw    $t5, 0x4C($sp)
 beq   $t5, $zero, probed       # nothing under any of the three (over a pit): the last known floor stands
 nop
-lui   $t0, 0x01F1
+lui   $t0, 0x01FB
 lwc1  $f2, 0x48($sp)           # the highest hit
 b     probed
-swc1  $f2, 0x00C4($t0)         # → CatFloorH (delay slot)
+swc1  $f2, 0x40C4($t0)         # → CatFloorH (delay slot)
 castone:                       # CheckHit(polys, count, from, to, hit, nearest=1, skip=1); keep the highest hit.y
 sw    $ra, 0x44($sp)
 move  $a0, $s0
@@ -356,7 +388,7 @@ lw    $ra, 0x44($sp)
 jr    $ra
 nop
 probed:
-lui   $t0, 0x01F1              # rebuild the state blocks' registers
+lui   $t0, 0x01FB              # rebuild the state blocks' registers
 lui   $t2, 0x002A
 lw    $t2, 0x35D4($t2)
 addiu $t4, $zero, 4
@@ -376,16 +408,16 @@ ori   $t6, $t6, 0x9900
 lwc1  $f6, 0x0010($t6)         # x
 lwc1  $f8, 0x0014($t6)         # height
 lwc1  $f12, 0x0018($t6)        # y
-lwc1  $f16, 0x00B4($t0)        # vx
-lwc1  $f18, 0x00B8($t0)        # vh
-lwc1  $f14, 0x00BC($t0)        # vz
-lwc1  $f2,  0x00C0($t0)        # gravity
-lwc1  $f20, 0x00C4($t0)        # floor height
+lwc1  $f16, 0x40B4($t0)        # vx
+lwc1  $f18, 0x40B8($t0)        # vh
+lwc1  $f14, 0x40BC($t0)        # vz
+lwc1  $f2,  0x40C0($t0)        # gravity
+lwc1  $f20, 0x40C4($t0)        # floor height
 add.s $f6, $f6, $f16           # forward speed kept
 add.s $f12, $f12, $f14
 add.s $f8, $f8, $f18
 sub.s $f18, $f18, $f2
-swc1  $f18, 0x00B8($t0)        # vh −= g
+swc1  $f18, 0x40B8($t0)        # vh −= g
 nop
 .word 0x4608A034               # c.lt.s $f20, $f8   (floor < height ?)  fs=f20 ft=f8
 nop
@@ -400,7 +432,7 @@ add.s $f7, $f2, $f2            # 2g
 mul.s $f7, $f7, $f10           # 2·g·d
 add.s $f10, $f4, $f7
 .word 0x460A0284               # sqrt.s $f10, $f10
-lwc1  $f4, 0x00E8($t0)         # lead (frames)
+lwc1  $f4, 0x40E8($t0)         # lead (frames)
 add.s $f10, $f18, $f10         # vh + sqrt(…)
 div.s $f10, $f10, $f2          # t = frames until the floor
 nop
@@ -409,33 +441,54 @@ nop
 bc1t  keepfalling
 nop
 startland:
+sw    $zero, 0x4150($t0)       # the flying pounce (if any) is over
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 4
 sw    $t5, 0x0C64($t6)         # motion flags |= restart → the land clip starts on this very frame
 addiu $t5, $zero, 69
 sw    $t5, 0x0C68($t6)         # key = land
 addiu $t5, $zero, 5
-sw    $t5, 0x0098($t0)         # state = landing (clip running; physics continues until the floor)
+sw    $t5, 0x4098($t0)         # state = landing (clip running; physics continues until the floor)
 b     storepos
-sw    $zero, 0x00E4($t0)       # last-seen frame = 0 (delay slot)
+sw    $zero, 0x40E4($t0)       # last-seen frame = 0 (delay slot)
 keepfalling:
+lw    $t5, 0x4150($t0)         # flying pounce?
+beq   $t5, $zero, fallpose
+nop
+nop
+.word 0x4612A034               # c.lt.s $f20, $f18   (0 < vh ? still rising)  fs=f20 ft=f18
+nop
+bc1f  fallpose
+nop
+lw    $t5, 0x4154($t0)         # rising: hold the float-up pose
+b     storepos
+sw    $t5, 0x0C68($t6)         # (delay slot)
+fallpose:
+lw    $t5, 0x0C68($t6)
+lw    $t7, 0x4154($t0)
+bne   $t5, $t7, leapkey        # switching from the float-up: restart the fall clip once
+nop
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 4
+sw    $t5, 0x0C64($t6)
+leapkey:
 addiu $t5, $zero, 68
-sw    $t5, 0x0C68($t6)         # key = leap
+sw    $t5, 0x0C68($t6)         # key = leap (the fall)
 storepos:
 swc1  $f6, 0x0010($t6)
 swc1  $f8, 0x0014($t6)
 swc1  $f12, 0x0018($t6)
-b     done
+b     touch
 nop
 landing:
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
 lw    $t7, 0x0C20($t6)         # slot 1's channel 0 = the copy's cat channel (MOTION_TYPE)
 lwc1  $f2, 0x0010($t7)         # its live motion frame (absolute clip frame: land = 215..227)
-lwc1  $f4, 0x00DC($t0)         # paws-touch frame (momentum stops)
-lwc1  $f6, 0x00E0($t0)         # clip end frame (→ run)
-lwc1  $f10, 0x00E4($t0)        # frame seen last time
-swc1  $f2, 0x00E4($t0)
+lwc1  $f4, 0x40DC($t0)         # paws-touch frame (momentum stops)
+lwc1  $f6, 0x40E0($t0)         # clip end frame (→ run)
+lwc1  $f10, 0x40E4($t0)        # frame seen last time
+swc1  $f2, 0x40E4($t0)
 nop
 .word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)  fs=f2 ft=f6
 nop
@@ -448,11 +501,11 @@ nop
 lwc1  $f6, 0x0010($t6)         # x
 lwc1  $f8, 0x0014($t6)         # height
 lwc1  $f12, 0x0018($t6)        # y
-lwc1  $f16, 0x00B4($t0)        # vx
-lwc1  $f18, 0x00B8($t0)        # vh
-lwc1  $f14, 0x00BC($t0)        # vz
-lwc1  $f7,  0x00C0($t0)        # gravity
-lwc1  $f20, 0x00C4($t0)        # floor height
+lwc1  $f16, 0x40B4($t0)        # vx
+lwc1  $f18, 0x40B8($t0)        # vh
+lwc1  $f14, 0x40BC($t0)        # vz
+lwc1  $f7,  0x40C0($t0)        # gravity
+lwc1  $f20, 0x40C4($t0)        # floor height
 move  $t8, $zero               # airborne this frame? (momentum is kept while so)
 nop
 .word 0x4608A034               # c.lt.s $f20, $f8   (floor < height ?)
@@ -462,7 +515,7 @@ nop
 addiu $t8, $zero, 1            # still in the air: keep falling
 add.s $f8, $f8, $f18
 sub.s $f18, $f18, $f7
-swc1  $f18, 0x00B8($t0)
+swc1  $f18, 0x40B8($t0)
 nop
 .word 0x4608A034               # c.lt.s $f20, $f8   (still above the floor ?)
 nop
@@ -486,7 +539,7 @@ sw    $t5, 0x0C68($t6)         # key = land (no restart bit: the clip never rest
 swc1  $f6, 0x0010($t6)
 swc1  $f8, 0x0014($t6)
 swc1  $f12, 0x0018($t6)
-b     done
+b     touch
 nop
 landdone:
 lw    $t5, 0x0C64($t6)
@@ -494,15 +547,15 @@ ori   $t5, $t5, 4
 sw    $t5, 0x0C64($t6)         # restart bit: the run clip starts on this very frame
 addiu $t5, $zero, 6
 b     running                  # run from this very frame
-sw    $t5, 0x0098($t0)         # state = running (delay slot)
+sw    $t5, 0x4098($t0)         # state = running (delay slot)
 running:
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
 lwc1  $f6, 0x0010($t6)         # x
 lwc1  $f12, 0x0018($t6)        # y
-lwc1  $f16, 0x00D0($t0)        # dirX
-lwc1  $f14, 0x00D4($t0)        # dirZ
-lw    $t5, 0x00CC($t0)         # target position vector (0 = run straight)
+lwc1  $f16, 0x40D0($t0)        # dirX
+lwc1  $f14, 0x40D4($t0)        # dirZ
+lw    $t5, 0x40CC($t0)         # target position vector (0 = run straight)
 beq   $t5, $zero, runmove
 nop
 lwc1  $f2, 0x0000($t5)         # target x
@@ -523,17 +576,79 @@ bc1f  runmove
 nop
 div.s $f16, $f2, $f10          # steer at the target
 div.s $f14, $f4, $f10
-swc1  $f16, 0x00D0($t0)
-swc1  $f14, 0x00D4($t0)
+swc1  $f16, 0x40D0($t0)
+swc1  $f14, 0x40D4($t0)
+lwc1  $f2, 0x411C($t0)         # pounce range
+nop
+.word 0x460A1034               # c.lt.s $f2, $f10   (range < dist ?)  fs=f2 ft=f10
+nop
+bc1t  runmove                  # too far: keep walking
+nop
+swc1  $f10, 0x4158($t0)        # diagnostics: the distance …
+swc1  $f2, 0x415C($t0)         # … and the range this decision used
+swc1  $f6, 0x4170($t0)         # … cat x
+swc1  $f12, 0x4174($t0)        # … cat y
+lwc1  $f2, 0x0000($t5)
+lwc1  $f4, 0x0008($t5)
+swc1  $f2, 0x4178($t0)         # … target x
+swc1  $f4, 0x417C($t0)         # … target y
+# Which pounce? A flying target (its height above the floor > CatFlyThreshold — the mod sets the threshold only for
+# flying species) gets the ready crouch and then the vertical leap; a ground target goes straight into the take-off.
+lwc1  $f8, 0x0004($t5)         # target height
+lwc1  $f12, 0x40C4($t0)        # floor
+lwc1  $f4, 0x4148($t0)         # fly threshold
+sub.s $f8, $f8, $f12           # Δh
+nop
+.word 0x46082034               # c.lt.s $f4, $f8   (threshold < Δh ? → flying)  fs=f4 ft=f8
+nop
+bc1t  readystart
+nop
+groundpounce:                  # ── ground pounce: momentum sized to the distance NOW, take-off from this frame ──
+lwc1  $f14, 0x4144($t0)        # momentum-frames the clips cover
+div.s $f0, $f10, $f14          # V = dist / travel
+swc1  $f0, 0x414C($t0)         # CatPounceV
+lwc1  $f2, 0x40D0($t0)         # unit direction (just steered)
+lwc1  $f4, 0x40D4($t0)
+mul.s $f2, $f2, $f0
+mul.s $f4, $f4, $f0
+mtc1  $zero, $f20
+swc1  $f2, 0x40B4($t0)         # momentum (vx, 0, vz) for the leap and the landing slide
+swc1  $f4, 0x40BC($t0)
+nop
+swc1  $f20, 0x40B8($t0)        # (3 insns after its mtc1)
+sw    $zero, 0x4150($t0)       # not a flying pounce
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 4
+sw    $t5, 0x0C64($t6)         # restart: take-off from frame 190
+addiu $t5, $zero, 67
+sw    $t5, 0x0C68($t6)
+lui   $t7, 0xBF80
+sw    $t7, 0x0C60($t6)         # the pounce clips play at their KEY rates
+sw    $zero, 0x40E4($t0)
+addiu $t5, $zero, 7
+b     done
+sw    $t5, 0x4098($t0)         # state = take-off (delay slot)
+readystart:                    # ── flying target: the ready crouch first, standing ──
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 4
+sw    $t5, 0x0C64($t6)
+addiu $t5, $zero, 65
+sw    $t5, 0x0C68($t6)
+lui   $t7, 0xBF80
+sw    $t7, 0x0C60($t6)
+sw    $zero, 0x40E4($t0)
+addiu $t5, $zero, 10
+b     done
+sw    $t5, 0x4098($t0)         # state = ready (delay slot)
 runmove:
-lwc1  $f2, 0x00C8($t0)         # ground speed
+lwc1  $f2, 0x40C8($t0)         # ground speed
 mul.s $f16, $f16, $f2          # this frame's move vector
 mul.s $f14, $f14, $f2
 swc1  $f16, 0x48($sp)
 swc1  $f14, 0x4C($sp)
 # Wall probe (same gathered polygons, character mask): a horizontal segment 6 above the floor from the root to three
 # frames of travel ahead. A hit means a wall (a ramp cannot rise 6 units in that distance; a low crate is climbed).
-lwc1  $f8, 0x00C4($t0)         # floor
+lwc1  $f8, 0x40C4($t0)         # floor
 lui   $t7, 0x40C0
 mtc1  $t7, $f4                 # 6.0
 lui   $t7, 0x4040
@@ -561,33 +676,33 @@ addiu $t0, $sp, 0x70
 addiu $t1, $zero, 1
 jal   0x00149D50               # CheckHit(polys, count, from, to, hit, 1, 1)
 addiu $t2, $zero, 1
-lui   $t0, 0x01F1
+lui   $t0, 0x01FB
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
 lwc1  $f6, 0x0010($t6)
 lwc1  $f12, 0x0018($t6)
-lwc1  $f8, 0x00C4($t0)         # floor
+lwc1  $f8, 0x40C4($t0)         # floor
 bltz  $v0, runfree
 nop
 addiu $t5, $zero, 1            # ── blocked by a wall: hold, idle, the KEY's own rate ──
-sw    $t5, 0x0118($t0)
-lw    $t5, 0x0114($t0)         # idle key
+sw    $t5, 0x4118($t0)
+lw    $t5, 0x4114($t0)         # idle key
 sw    $t5, 0x0C68($t6)
 lui   $t7, 0xBF80
 sw    $t7, 0x0C60($t6)         # motion-speed override = −1.0 (use the KEY's rate)
 b     runstore
 nop
 runfree:
-sw    $zero, 0x0118($t0)
+sw    $zero, 0x4118($t0)
 lwc1  $f16, 0x48($sp)
 lwc1  $f14, 0x4C($sp)
 add.s $f6, $f6, $f16           # move
 add.s $f12, $f12, $f14
 # Clip rate from the ground speed, the town's way: rate = base + perSpeed · speed, capped.
-lwc1  $f2, 0x00C8($t0)         # ground speed
-lwc1  $f4, 0x0104($t0)         # base
-lwc1  $f10, 0x0108($t0)        # per unit of speed
-lwc1  $f16, 0x010C($t0)        # cap
+lwc1  $f2, 0x40C8($t0)         # ground speed
+lwc1  $f4, 0x4104($t0)         # base
+lwc1  $f10, 0x4108($t0)        # per unit of speed
+lwc1  $f16, 0x410C($t0)        # cap
 mul.s $f10, $f10, $f2
 add.s $f10, $f10, $f4          # rate
 nop
@@ -597,13 +712,386 @@ bc1f  rateok
 nop
 mov.s $f10, $f16               # capped
 rateok:
-lw    $t5, 0x00EC($t0)         # walk key
+lw    $t5, 0x40EC($t0)         # walk key
 sw    $t5, 0x0C68($t6)
 swc1  $f10, 0x0C60($t6)        # motion-speed override
 runstore:
 swc1  $f6, 0x0010($t6)
 swc1  $f8, 0x0014($t6)
 swc1  $f12, 0x0018($t6)
+b     done                     # (2026-09-11: this branch was missing — every walking frame fell through into the
+nop                            #  ready block below: ready pose while walking, pounces launched with no trigger)
+ready:
+lui   $t6, 0x01EA
+ori   $t6, $t6, 0x9900
+lw    $t7, 0x0C20($t6)
+lwc1  $f2, 0x0010($t7)         # live motion frame (ready = 95..105)
+lwc1  $f6, 0x4130($t0)         # ready clip end
+lwc1  $f4, 0x4160($t0)         # ready clip start
+lwc1  $f10, 0x40E4($t0)
+lui   $t7, 0x3F80
+mtc1  $t7, $f8                 # 1.0
+nop
+.word 0x46041034               # c.lt.s $f2, $f4   (frame < start ? → not this clip yet)  fs=f2 ft=f4
+nop
+bc1t  readyhold
+nop
+add.s $f8, $f6, $f8            # end + 1
+nop
+.word 0x46024034               # c.lt.s $f8, $f2   (end+1 < frame ?)  fs=f8 ft=f2
+nop
+bc1t  readyhold                # frame > end+1 → a stale frame from an earlier clip: hold
+nop
+swc1  $f2, 0x40E4($t0)         # a frame of THIS clip: remember it
+nop
+.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)
+nop
+bc1f  readydone
+nop
+.word 0x460A1034               # c.lt.s $f2, $f10  (wrapped ?)
+nop
+bc1t  readydone
+nop
+readyhold:
+addiu $t5, $zero, 65
+sw    $t5, 0x0C68($t6)         # hold the ready clip, in place
+b     done
+nop
+readydone:                     # ── the jump is decided here, from the target's live position ──
+lw    $t5, 0x40CC($t0)         # target position vector
+beq   $t5, $zero, walkagain    # target gone: back to walking
+nop
+lwc1  $f2, 0x0000($t5)         # target x
+lwc1  $f8, 0x0004($t5)         # target height
+lwc1  $f4, 0x0008($t5)         # target y
+lwc1  $f6, 0x0010($t6)         # cat x
+lwc1  $f12, 0x0018($t6)        # cat y
+swc1  $f6, 0x4180($t0)         # diagnostics: the ready's view — cat x
+swc1  $f12, 0x4184($t0)        # cat y
+swc1  $f2, 0x4188($t0)         # target x
+swc1  $f4, 0x418C($t0)         # target y
+sub.s $f2, $f2, $f6            # dx
+sub.s $f4, $f4, $f12           # dz
+mul.s $f0, $f2, $f2
+mul.s $f1, $f4, $f4
+add.s $f0, $f0, $f1
+.word 0x46000004               # sqrt.s $f0, $f0  → distance
+swc1  $f0, 0x4190($t0)         # distance
+mtc1  $zero, $f20
+nop
+nop
+nop
+.word 0x4600A034               # c.lt.s $f20, $f0   (0 < dist ?)
+nop
+bc1f  jumpdir                  # on top of it: keep the old direction
+nop
+lwc1  $f10, 0x416C($t0)        # farthest a pounce may launch at (the target may have changed during the ready)
+nop
+.word 0x46005034               # c.lt.s $f10, $f0   (max < dist ?)  fs=f10 ft=f0
+nop
+bc1t  walkagain                # too far now: walk instead
+nop
+div.s $f2, $f2, $f0
+div.s $f4, $f4, $f0
+swc1  $f2, 0x40D0($t0)         # face the target
+swc1  $f4, 0x40D4($t0)
+jumpdir:
+lwc1  $f10, 0x40C4($t0)        # floor
+sub.s $f8, $f8, $f10           # Δh = target height above the floor (the ready only ever precedes a vertical leap)
+flyjump:                       # ── flying target: vertical leap now — arc at its live position, v = d/T, vh = Δh/T + g·T/2 ──
+addiu $t5, $zero, 1
+sw    $t5, 0x4150($t0)         # CatPounceFly = 1 (the fall block holds the float-up pose while rising)
+lwc1  $f14, 0x4120($t0)        # flight frames T
+div.s $f16, $f2, $f14          # (f2/f4 are the unit direction here; recompute the displacement)
+lw    $t5, 0x40CC($t0)
+lwc1  $f2, 0x0000($t5)
+lwc1  $f4, 0x0008($t5)
+lwc1  $f6, 0x0010($t6)
+lwc1  $f12, 0x0018($t6)
+sub.s $f2, $f2, $f6            # dx
+sub.s $f4, $f4, $f12           # dz
+div.s $f16, $f2, $f14          # vx
+div.s $f18, $f4, $f14          # vz
+div.s $f8, $f8, $f14           # Δh / T   (f8 = Δh from above)
+lwc1  $f10, 0x40C0($t0)        # g
+mul.s $f10, $f10, $f14         # g·T
+lui   $t7, 0x3F00
+mtc1  $t7, $f0
+nop
+nop
+nop
+mul.s $f10, $f10, $f0          # g·T/2
+add.s $f8, $f8, $f10           # vh
+swc1  $f16, 0x40B4($t0)
+swc1  $f8, 0x40B8($t0)
+swc1  $f18, 0x40BC($t0)
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 4
+sw    $t5, 0x0C64($t6)         # restart: float-up from its first frame
+lw    $t5, 0x4154($t0)
+sw    $t5, 0x0C68($t6)         # key = float-up
+addiu $t5, $zero, 4
+b     done
+sw    $t5, 0x4098($t0)         # state = falling (the arc; landing lead-in as usual)
+takeoff:
+lui   $t6, 0x01EA
+ori   $t6, $t6, 0x9900
+lw    $t7, 0x0C20($t6)
+lwc1  $f2, 0x0010($t7)         # live motion frame (take-off = 190..204)
+lwc1  $f6, 0x4124($t0)         # take-off end frame
+lwc1  $f4, 0x4164($t0)         # take-off start frame
+lwc1  $f10, 0x40E4($t0)
+lui   $t7, 0x3F80
+mtc1  $t7, $f8
+nop
+.word 0x46041034               # c.lt.s $f2, $f4   (frame < start ?)
+nop
+bc1t  takeoffhold
+nop
+add.s $f8, $f6, $f8            # end + 1
+nop
+.word 0x46024034               # c.lt.s $f8, $f2   (end+1 < frame ? stale)
+nop
+bc1t  takeoffhold
+nop
+swc1  $f2, 0x40E4($t0)
+nop
+.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)
+nop
+bc1f  takeoffdone
+nop
+.word 0x460A1034               # c.lt.s $f2, $f10  (wrapped ?)
+nop
+bc1t  takeoffdone
+nop
+# forward momentum: 0 until CatRampStart, then V·(frame − start)·rampInv up to V by CatRampEnd
+lwc1  $f4, 0x4134($t0)         # ramp start
+lwc1  $f8, 0x4138($t0)         # ramp inverse span
+lwc1  $f0, 0x414C($t0)         # V
+mtc1  $zero, $f20
+sub.s $f4, $f2, $f4            # frame − start
+mul.s $f4, $f4, $f8            # 0..1 across the ramp
+nop
+.word 0x4604A034               # c.lt.s $f20, $f4   (0 < t ?)  fs=f20 ft=f4
+nop
+bc1f  takeoffhold              # before the ramp: in place
+nop
+lui   $t7, 0x3F80
+mtc1  $t7, $f10                # 1.0
+nop
+nop
+nop
+.word 0x460A2034               # c.lt.s $f4, $f10   (t < 1 ?)  fs=f4 ft=f10
+nop
+bc1t  takeoffmove
+nop
+mov.s $f4, $f10                # past the ramp end: full
+takeoffmove:
+mul.s $f0, $f0, $f4            # v = V·t
+lwc1  $f16, 0x40D0($t0)
+lwc1  $f14, 0x40D4($t0)
+lwc1  $f6, 0x0010($t6)
+lwc1  $f12, 0x0018($t6)
+mul.s $f16, $f16, $f0
+mul.s $f14, $f14, $f0
+add.s $f6, $f6, $f16
+add.s $f12, $f12, $f14
+lwc1  $f8, 0x40C4($t0)         # on the floor (the clip carries the height)
+swc1  $f6, 0x0010($t6)
+swc1  $f8, 0x0014($t6)
+swc1  $f12, 0x0018($t6)
+takeoffhold:
+addiu $t5, $zero, 67
+sw    $t5, 0x0C68($t6)
+b     done
+nop
+takeoffdone:
+lw    $t5, 0x0C64($t6)         # ── ground leap: the leap clip at full momentum ──
+ori   $t5, $t5, 4
+sw    $t5, 0x0C64($t6)
+addiu $t5, $zero, 68
+sw    $t5, 0x0C68($t6)
+sw    $zero, 0x40E4($t0)
+addiu $t5, $zero, 8
+b     done
+sw    $t5, 0x4098($t0)
+groundleap:
+lui   $t6, 0x01EA
+ori   $t6, $t6, 0x9900
+lw    $t7, 0x0C20($t6)
+lwc1  $f2, 0x0010($t7)         # live motion frame (leap = 205..214)
+lwc1  $f6, 0x4140($t0)         # leap clip end
+lwc1  $f4, 0x4168($t0)         # leap clip start
+lwc1  $f10, 0x40E4($t0)
+lui   $t7, 0x3F80
+mtc1  $t7, $f8
+nop
+.word 0x46041034               # c.lt.s $f2, $f4   (frame < start ?)
+nop
+bc1t  groundmove
+nop
+add.s $f8, $f6, $f8
+nop
+.word 0x46024034               # c.lt.s $f8, $f2   (end+1 < frame ? stale)
+nop
+bc1t  groundmove
+nop
+swc1  $f2, 0x40E4($t0)
+nop
+.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)
+nop
+bc1f  groundland
+nop
+.word 0x460A1034               # c.lt.s $f2, $f10  (wrapped ?)
+nop
+bc1t  groundland
+nop
+groundmove:
+lwc1  $f16, 0x40B4($t0)        # full momentum (vx, vz) set at the ready
+lwc1  $f14, 0x40BC($t0)
+lwc1  $f6, 0x0010($t6)
+lwc1  $f12, 0x0018($t6)
+add.s $f6, $f6, $f16
+add.s $f12, $f12, $f14
+lwc1  $f8, 0x40C4($t0)
+swc1  $f6, 0x0010($t6)
+swc1  $f8, 0x0014($t6)
+swc1  $f12, 0x0018($t6)
+addiu $t5, $zero, 68
+sw    $t5, 0x0C68($t6)
+b     touch
+nop
+groundland:                    # the leap clip is done: land (momentum continues until the paws touch, as always)
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 4
+sw    $t5, 0x0C64($t6)
+addiu $t5, $zero, 69
+sw    $t5, 0x0C68($t6)
+sw    $zero, 0x40E4($t0)
+addiu $t5, $zero, 5
+b     done
+sw    $t5, 0x4098($t0)
+walkagain:
+addiu $t5, $zero, 6
+b     done
+sw    $t5, 0x4098($t0)
+# ── TOUCH: the cat's root and a point 3 ahead, 2 above the root, against every live enemy's body spheres ──
+touch:
+jal   hittest
+nop
+beq   $v0, $zero, done
+nop
+lui   $t0, 0x01FB
+sw    $v0, 0x412C($t0)         # CatHitSlot = enemy + 1 (the mod plants the damage)
+addiu $t5, $zero, 9
+sw    $t5, 0x4098($t0)         # state = hit: the cat freezes where it touched
+lw    $t1, 0x4094($t0)         # still riding a pellet? spend it
+beq   $t1, $zero, done
+nop
+lui   $t2, 0x002A
+lw    $t2, 0x35D4($t2)
+addiu $t1, $t1, -1
+sll   $t3, $t1, 2
+addu  $t4, $t2, $t3
+addiu $t5, $zero, 1
+sw    $t5, 0x02B0($t4)         # lifetime = 1
+sw    $zero, 0x4094($t0)
+b     done
+nop
+hittest:                       # → v0 = enemy slot + 1 touched, else 0. Pure loops, no calls; clobbers t0-t9, f0-f20.
+lui   $t0, 0x01FB
+lui   $t6, 0x01EA
+ori   $t6, $t6, 0x9900
+lwc1  $f6, 0x0010($t6)         # root x
+lwc1  $f8, 0x0014($t6)         # root height
+lwc1  $f12, 0x0018($t6)        # root y
+lwc1  $f16, 0x40D0($t0)        # dirX
+lwc1  $f14, 0x40D4($t0)        # dirZ
+lwc1  $f18, 0x4128($t0)        # cat touch radius
+lui   $t7, 0x4000
+mtc1  $t7, $f2                 # 2.0
+lui   $t7, 0x4040
+mtc1  $t7, $f4                 # 3.0
+lui   $t2, 0x002A
+lw    $t2, 0x34D0($t2)         # NowMonstorUnit
+move  $t1, $zero               # enemy i
+add.s $f8, $f8, $f2            # test height
+mul.s $f16, $f16, $f4
+mul.s $f14, $f14, $f4
+add.s $f16, $f6, $f16          # front x
+add.s $f14, $f12, $f14         # front z
+eloop:
+addiu $t3, $zero, 400
+mult  $t1, $t3
+mflo  $t3
+addu  $t4, $t2, $t3
+lw    $t5, 0x1E3D0($t4)        # enemy active (−1 = none)
+addiu $t7, $zero, -1
+beq   $t5, $t7, enext
+nop
+lh    $t5, 0x1E4A4($t4)        # collidable
+beq   $t5, $zero, enext
+nop
+addiu $t3, $zero, 0x510
+mult  $t1, $t3
+mflo  $t3
+addu  $t9, $t2, $t3            # this enemy's sphere table base
+move  $t8, $zero               # sphere j
+sloop:
+sll   $t3, $t8, 2
+addu  $t4, $t9, $t3
+lw    $t5, 0x55450($t4)        # sphere active
+beq   $t5, $zero, snext
+nop
+lwc1  $f10, 0x55390($t4)       # radius
+sll   $t3, $t8, 4
+addu  $t4, $t9, $t3
+lwc1  $f2, 0x55250($t4)        # centre x
+lwc1  $f4, 0x55254($t4)        # centre y
+lwc1  $f0, 0x55258($t4)        # centre z
+add.s $f10, $f10, $f18         # + the cat's radius
+mul.s $f10, $f10, $f10         # r²
+sub.s $f1, $f6, $f2            # root: d²
+mul.s $f1, $f1, $f1
+sub.s $f3, $f8, $f4
+mul.s $f3, $f3, $f3
+add.s $f1, $f1, $f3
+sub.s $f3, $f12, $f0
+mul.s $f3, $f3, $f3
+add.s $f1, $f1, $f3
+nop
+.word 0x46015034               # c.lt.s $f10, $f1   (r² < d² ?)  fs=f10 ft=f1
+nop
+bc1f  touched
+nop
+sub.s $f1, $f16, $f2           # front point: d²
+mul.s $f1, $f1, $f1
+sub.s $f3, $f8, $f4
+mul.s $f3, $f3, $f3
+add.s $f1, $f1, $f3
+sub.s $f3, $f14, $f0
+mul.s $f3, $f3, $f3
+add.s $f1, $f1, $f3
+nop
+.word 0x46015034               # c.lt.s $f10, $f1
+nop
+bc1f  touched
+nop
+snext:
+addiu $t8, $t8, 1
+slti  $t3, $t8, 16
+bne   $t3, $zero, sloop
+nop
+enext:
+addiu $t1, $t1, 1
+slti  $t3, $t1, 16
+bne   $t3, $zero, eloop
+nop
+jr    $ra
+move  $v0, $zero               # (delay slot) no touch
+touched:
+jr    $ra
+addiu $v0, $t1, 1              # (delay slot) enemy + 1
 done:
 lw    $ra, 0x40($sp)
 .word 0x7BB00010               # lq $s0, 0x10($sp)

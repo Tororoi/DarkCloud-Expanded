@@ -263,56 +263,92 @@ namespace Dark_Cloud_Improved_Version
             internal const long ShieldGaugeRate = Base + 0x90;
 
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
+            /// <summary>The Divine Beast cat's runtime block: guest 0x01FB4094..0x01FB4193 inside the spare 0x1FB4000 span
+            /// (only BobberPtr uses its first four bytes). The cat's words were first laid out in THIS mailbox page from
+            /// +0x94, and grew past +0x100 — which is the AI-stub table (AiStubBase 0x1F10100): clip frames, range,
+            /// hit slot and diagnostics were being shared with and wiped by it (2026-09-11). Same offsets, new base.</summary>
+            internal const long CatBase = 0x21FB4000;
+
             /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastCat.cs).
             /// The cat copy sits resident and hidden in chara slot 1. At the charge threshold the mod writes the growth
             /// reciprocal and the head rest offset (cat space × cat scale), zeroes frames/slot, and sets state 3 (waiting);
             /// the cave then binds the next NEW pellet on its birth frame (slot+1, state 1, opacity 128) and owns slot 1's
             /// position and scale every frame until that pellet ends (slot 0, state 2 → the mod fades and re-hides).</summary>
-            internal const long CatPelletSlot  = Base + 0x94;   // int, bound pellet slot + 1; 0 = none (page boots zero-filled)
-            internal const long CatState       = Base + 0x98;   // int: 0 idle, 1 following, 2 pellet ended, 3 waiting for a new pellet
-            internal const long CatGrowFrames  = Base + 0x9C;   // int, frames since bound (cave increments)
-            internal const long CatGrowInv     = Base + 0xA0;   // float, 1 / growth frames
-            internal const long CatHeadX       = Base + 0xA4;   // float ×3: head rest offset in CAT space (x, height, z)
-            internal const long CatHeadH       = Base + 0xA8;
-            internal const long CatHeadZ       = Base + 0xAC;
-            internal const long CatSeenMask    = Base + 0xB0;   // int, active pellet-slot bits last frame (cave)
+            internal const long CatPelletSlot  = CatBase + 0x94;   // int, bound pellet slot + 1; 0 = none (page boots zero-filled)
+            internal const long CatState       = CatBase + 0x98;   // int: 0 idle, 1 following, 2 pellet ended, 3 waiting for a new pellet
+            internal const long CatGrowFrames  = CatBase + 0x9C;   // int, frames since bound (cave increments)
+            internal const long CatGrowInv     = CatBase + 0xA0;   // float, 1 / growth frames
+            internal const long CatHeadX       = CatBase + 0xA4;   // float ×3: head rest offset in CAT space (x, height, z)
+            internal const long CatHeadH       = CatBase + 0xA8;
+            internal const long CatHeadZ       = CatBase + 0xAC;
+            internal const long CatSeenMask    = CatBase + 0xB0;   // int, active pellet-slot bits last frame (cave)
             // States 4 (falling) / 5 (landed) / 6 (running): at full size the cave breaks the cat away from the pellet
             // (expiring it), falls it with the pellet's forward speed, snaps it to CatFloorH on the landing frame and,
             // once the mod sets state 6, runs it at ½ the pellet speed toward CatTargetPtr (or straight).
-            internal const long CatVx          = Base + 0xB4;   // float ×3: fall velocity, captured at the breakaway (cave)
-            internal const long CatVh          = Base + 0xB8;
-            internal const long CatVz          = Base + 0xBC;
-            internal const long CatGravity     = Base + 0xC0;   // float, units/frame² (mod)
-            internal const long CatFloorH      = Base + 0xC4;   // float, landing height (mod)
-            internal const long CatRunSpeed    = Base + 0xC8;   // float, ½·|pellet horizontal speed| (cave)
-            internal const long CatTargetPtr   = Base + 0xCC;   // uint, guest address of the target's position vector, 0 = none (mod)
-            internal const long CatDirX        = Base + 0xD0;   // float ×2: unit run direction (cave; the mod faces the cat along it)
-            internal const long CatDirZ        = Base + 0xD4;
-            internal const long CatGrowN       = Base + 0xD8;   // int, growth frames (mod)
+            internal const long CatVx          = CatBase + 0xB4;   // float ×3: fall velocity, captured at the breakaway (cave)
+            internal const long CatVh          = CatBase + 0xB8;
+            internal const long CatVz          = CatBase + 0xBC;
+            internal const long CatGravity     = CatBase + 0xC0;   // float, units/frame² (mod)
+            internal const long CatFloorH      = CatBase + 0xC4;   // float, landing height (mod)
+            internal const long CatRunSpeed    = CatBase + 0xC8;   // float, ½·|pellet horizontal speed| (cave)
+            internal const long CatTargetPtr   = CatBase + 0xCC;   // uint, guest address of the target's position vector, 0 = none (mod)
+            internal const long CatDirX        = CatBase + 0xD0;   // float ×2: unit run direction (cave; the mod faces the cat along it)
+            internal const long CatDirZ        = CatBase + 0xD4;
+            internal const long CatGrowN       = CatBase + 0xD8;   // int, growth frames (mod)
             // State 5 (landing): the land clip plays straight through; the cave reads the copy's live motion frame (slot 1
             // +0xC20 → MOTION_TYPE +0x10) and keeps the fall's forward momentum until the paws-touch frame, then runs the
             // moment the clip reaches its end (or wraps).
-            internal const long CatLandStopFrame = Base + 0xDC; // float, clip frame where the paws touch — momentum stops (mod)
-            internal const long CatLandEndFrame  = Base + 0xE0; // float, clip end frame — straight into the run (mod)
-            internal const long CatPrevFrame     = Base + 0xE4; // float, motion frame seen last time (cave; wrap detection)
-            internal const long CatLandLead      = Base + 0xE8; // float, frames before the predicted touchdown at which the land clip starts (mod)
-            internal const long CatMoveKey       = Base + 0xEC; // int, motion key played while moving after the landing (mod: the brisk walk)
-            internal const long CatMoveFrac      = Base + 0xF0; // float, ground speed after the landing as a fraction of the pellet's speed (mod)
-            internal const long CatProbeUp       = Base + 0xF4; // float, floor probe reach above the cat (mod)
-            internal const long CatProbeDown     = Base + 0xF8; // float, floor probe reach below the cat (mod)
-            internal const long CatProbeFront    = Base + 0xFC; // float, extra floor cast this far AHEAD of the root along its direction (mod)
-            internal const long CatProbeBack     = Base + 0x100; // float, … and this far BEHIND; the cat stands on the highest of the three casts
+            internal const long CatLandStopFrame = CatBase + 0xDC; // float, clip frame where the paws touch — momentum stops (mod)
+            internal const long CatLandEndFrame  = CatBase + 0xE0; // float, clip end frame — straight into the run (mod)
+            internal const long CatPrevFrame     = CatBase + 0xE4; // float, motion frame seen last time (cave; wrap detection)
+            internal const long CatLandLead      = CatBase + 0xE8; // float, frames before the predicted touchdown at which the land clip starts (mod)
+            internal const long CatMoveKey       = CatBase + 0xEC; // int, motion key played while moving after the landing (mod: the brisk walk)
+            internal const long CatMoveFrac      = CatBase + 0xF0; // float, ground speed after the landing as a fraction of the pellet's speed (mod)
+            internal const long CatProbeUp       = CatBase + 0xF4; // float, floor probe reach above the cat (mod)
+            internal const long CatProbeDown     = CatBase + 0xF8; // float, floor probe reach below the cat (mod)
+            internal const long CatProbeFront    = CatBase + 0xFC; // float, extra floor cast this far AHEAD of the root along its direction (mod)
+            internal const long CatProbeBack     = CatBase + 0x100; // float, … and this far BEHIND; the cat stands on the highest of the three casts
             // Clip rate while moving: the cave writes slot +0xC60 (motion-speed override) = min(base + perSpeed · ground
             // speed, max) — the town's own walk mapping for this rig (EdMoveChara: 0.8·(0.2 + stick) capped 0.85 with
             // ground 1.6·stick → 0.16 + 0.5·ground). Not planted feet; the ratio the designers tuned. A forward wall
             // probe stops the cat (CatBlocked = 1, idle key).
-            internal const long CatRateBase      = Base + 0x104; // float, clip rate at zero speed (mod: 0.16)
-            internal const long CatRatePerSpeed  = Base + 0x108; // float, clip rate per unit of ground speed (mod: 0.5)
-            internal const long CatRateMax       = Base + 0x10C; // float, clip rate cap (mod: 0.85)
-            internal const long CatReserved110   = Base + 0x110; // (was the run key; unused)
-            internal const long CatIdleKey       = Base + 0x114; // int, stand key (mod)
-            internal const long CatBlocked       = Base + 0x118; // int, 1 while a wall stops the cat (cave)
-            internal const long NextFree = Base + 0x11C;
+            internal const long CatRateBase      = CatBase + 0x104; // float, clip rate at zero speed (mod: 0.16)
+            internal const long CatRatePerSpeed  = CatBase + 0x108; // float, clip rate per unit of ground speed (mod: 0.5)
+            internal const long CatRateMax       = CatBase + 0x10C; // float, clip rate cap (mod: 0.85)
+            internal const long CatReserved110   = CatBase + 0x110; // (was the run key; unused)
+            internal const long CatIdleKey       = CatBase + 0x114; // int, stand key (mod)
+            internal const long CatBlocked       = CatBase + 0x118; // int, 1 while a wall stops the cat (cave)
+            // Pounce + hit: within CatPounceRange of its target the cave plays the take-off, then leaps an arc of
+            // CatPounceFrames at the target's live position and lands as usual. While riding, falling or landing it
+            // tests its root and a point ahead against every enemy's body spheres (the pellet code's own table);
+            // a touch freezes it (state 9) and names the enemy in CatHitSlot for the mod to deal the damage.
+            internal const long CatPounceRange   = CatBase + 0x11C; // float (mod)
+            internal const long CatPounceFrames  = CatBase + 0x120; // float, leap flight frames (mod)
+            internal const long CatTakeoffEnd    = CatBase + 0x124; // float, take-off clip end frame (mod, 204)
+            internal const long CatHitRadius     = CatBase + 0x128; // float, the cat's touch radius (mod)
+            internal const long CatHitSlot       = CatBase + 0x12C; // int, enemy slot + 1 the cat touched (cave → mod; 0 none)
+            // The pounce's clip frames: ready (in place) → take-off, in place until CatRampStart, forward momentum ramping
+            // to full by CatRampEnd → leap at full momentum → landing. V = distance ÷ CatPounceTravel (the momentum-frames
+            // the clips cover). A target higher than CatFlyThreshold above the floor gets the ballistic arc instead.
+            internal const long CatReadyEnd      = CatBase + 0x130; // float, ready clip end frame (mod, 105)
+            internal const long CatRampStart     = CatBase + 0x134; // float, take-off frame where the forward ramp starts (mod, 194)
+            internal const long CatRampInv       = CatBase + 0x138; // float, 1 / (ramp end − ramp start) (mod)
+            internal const long CatRampEnd       = CatBase + 0x13C; // float, take-off frame of full momentum (mod, 198; informational)
+            internal const long CatLeapEnd       = CatBase + 0x140; // float, leap clip end frame (mod, 214)
+            internal const long CatPounceTravel  = CatBase + 0x144; // float, momentum-frames covered by take-off + leap + landing (mod)
+            internal const long CatFlyThreshold  = CatBase + 0x148; // float, target height above the floor that makes it a flying target (mod)
+            internal const long CatPounceV       = CatBase + 0x14C; // float, this pounce's full momentum (cave)
+            internal const long CatPounceFly     = CatBase + 0x150; // int, 1 = flying-target pounce (cave)
+            internal const long CatFloatKey      = CatBase + 0x154; // int, the vertical-leap key held while rising on a flying pounce (mod, 71)
+            internal const long CatDbgDist       = CatBase + 0x158; // float, distance compared when the cave decided to pounce (cave, diagnostics)
+            internal const long CatDbgRange      = CatBase + 0x15C; // float, the range it compared against (cave, diagnostics)
+            internal const long CatReadyStart    = CatBase + 0x160; // float, ready clip start frame (mod, 95) — clip-end tests ignore frames outside [start, end+1]
+            internal const long CatTakeoffStart  = CatBase + 0x164; // float, take-off clip start frame (mod, 190)
+            internal const long CatLeapStart     = CatBase + 0x168; // float, leap clip start frame (mod, 205)
+            internal const long CatPounceMaxDist = CatBase + 0x16C; // float, farthest a pounce may still launch at after the ready (mod, 2× range)
+            internal const long CatDbgTrig       = CatBase + 0x170; // float ×4 (diagnostics): cat x, cat y, target x, target y at the pounce trigger (cave)
+            internal const long CatDbgReady      = CatBase + 0x180; // float ×5 (diagnostics): the same four at the end of the ready, then its distance (cave)
+            internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -402,11 +438,11 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 2036 B → 0x1FB1584 (frame 0x80, sq/lq saves)
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 3844 B → 0x1FB1C94 (frame 0x80, sq/lq saves) — 876 B left in the segment
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB1590;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB1CA0;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

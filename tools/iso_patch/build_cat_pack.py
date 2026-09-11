@@ -48,6 +48,8 @@ def align(x, a=SEC): return (x + a - 1) & ~(a - 1)
 HOST_CHR  = r"dun\mainchara\c04b.chr"
 HOST_CFG, HOST_MDS, HOST_BBP, HOST_IMG = "base.cfg", "c04b.mds", "c04b.bbp", "c04b01.img"
 CAT_CHR   = r"gedit\s86\chara\c04cat.chr"
+FLOAT_CHR = r"gedit\e01\chara\e04c04cat.chr"   # the town cat's vertical float/hop-up (its #5 clip, frames 160..169)
+FLOAT_SRC, FLOAT_DST = (160, 169), (285, 294)  # grafted into cat.mot where s86 has no keys (assemble_town_model.py slot 12)
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree
@@ -59,7 +61,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v7 walk1.0"
+VERSION_MARK  = "//catpack v8 +floatup"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -69,6 +71,7 @@ CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat
     (205, 214, 0.5,  "cat leap"),
     (215, 227, 0.36, "cat land"),
     (60,  80,  1.0,  "cat walk (s86 KEY 2, brisk)"),
+    (285, 294, 0.6,  "cat float-up (e04c04cat #5 160..169)"),   # 71: the vertical leap, as the town ladder jump
 ]
 MOT_WINDOWS = [(k[0], k[1]) for k in CAT_KEYS]
 REC_TAG = 0x00140E02               # word at record +0x4C on every vanilla record
@@ -258,8 +261,11 @@ def build_cfg(text, nl):
     return nl.join(out)
 
 
-def assemble(base_bytes, cat_bytes):
-    base, cat = mc.Pack.parse(base_bytes), mc.Pack.parse(cat_bytes)
+def assemble(base_bytes, cat_bytes, float_bytes):
+    base, cat, flt = mc.Pack.parse(base_bytes), mc.Pack.parse(cat_bytes), mc.Pack.parse(float_bytes)
+    for n in ("e04c04cat.mds", "e04c04cat.mot"):
+        if flt.find(n) is None:
+            raise SystemExit(f"float-up pack lacks {n}")
     for n in (HOST_CFG, HOST_MDS, HOST_BBP, HOST_IMG):
         if base.find(n) is None:
             raise SystemExit(f"host pack lacks {n}")
@@ -286,6 +292,13 @@ def assemble(base_bytes, cat_bytes):
     base.replace_payload(HOST_IMG, Bank.build(himg.magic, items))
     rep["textures"] = [n for n, _ in items]
     mot = trim_tracks(mc.Mot.from_pack(cat, "c04cat.mot"), MOT_WINDOWS)
+    # The vertical leap: e04c04cat's float/hop-up window grafted by joint NAME (same rig, but never trust the order)
+    # into frames FLOAT_DST — exactly what the town ladder jump plays between the ready crouch and the fall.
+    fmot = mc.Mot.from_pack(flt, "e04c04cat.mot")
+    frep = mc.splice_motion_by_joint(mot, fmot, mc.read_mds_frames(flt.find("e04c04cat.mds").payload),
+                                     mc.read_mds_frames(cat.find("c04cat.mds").payload), *FLOAT_SRC, *FLOAT_DST)
+    if not frep["written"]:
+        raise SystemExit("float-up graft wrote no tracks")
     wgt = mc.Mot.from_pack(cat, "c04cat.wgt")
     mot_rec, wgt_rec = _new_record("cat.mot", mot.build_payload()), _new_record("cat.wgt", wgt.build_payload())
     bbp_rec = _new_record("cat.bbp", cb)
@@ -437,7 +450,7 @@ def run(iso, log=print):
             f.seek(slot_of(HOST_CHR)); f.write(struct.pack("<IIII", *HOST_VANILLA))
             log("reverted dun\\mainchara\\c04b.chr to its vanilla record (older cat bake removed)")
             base = van
-        new_chr, rep = assemble(base, read_src(CAT_CHR))
+        new_chr, rep = assemble(base, read_src(CAT_CHR), read_src(FLOAT_CHR))
         log(f"Divine Beast Title cat assembled into c04b.chr — {rep['nodes'][1]} cat nodes, {len(rep['textures'])} textures, "
             f"cat.mot {rep['mot_bytes']:,} B ({rep['mot_keys']} keys), {rep['size'][0]:,}->{rep['size'][1]:,} B")
         redirect(HOST_CHR, new_chr)
@@ -447,7 +460,8 @@ def run(iso, log=print):
 def _from_dc_dir(dc_dir):
     _, base = mc.load_pack(HOST_CHR, dc_dir)
     _, cat = mc.load_pack(CAT_CHR, dc_dir)
-    return assemble(base.rebuild(), cat.rebuild())
+    _, flt = mc.load_pack(FLOAT_CHR, dc_dir)
+    return assemble(base.rebuild(), cat.rebuild(), flt.rebuild())
 
 
 def main():
