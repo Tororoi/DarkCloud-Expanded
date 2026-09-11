@@ -60,6 +60,14 @@ namespace Dark_Cloud_Improved_Version
         private const double GrowSeconds   = 0.1;      // the pellet grows into the cat over this long after it is fired
         private const int    GrowFrames    = 6;        // the same, in frames, for the native follower (60 fps)
         private const float  Gravity       = 0.05f;    // units/frame² — the pounce arc
+        private const float  FallGravity   = 0.08f;    // units/frame² — the fall off the pellet's line at full size (cave)
+        // The land clip is s86 c04cat motion 7, frames 215..227 (KEY 69 in build_cat_pack.py keeps the absolute frames):
+        // the paws first touch the ground at 219 — that is where the forward momentum stops; at 227 the run begins.
+        private const float  LandStopFrame = 219f, LandEndFrame = 227f;
+        private const float  LandClipStart = 215f, LandClipSpeed = 0.36f;   // KEY 69 in build_cat_pack.py (frames/frame)
+        // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
+        // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
+        private const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
         private const float  CatScale      = 1.0f;
         // Ground game.
         private const float  RunSpeed      = 1.3f;     // units/frame
@@ -78,7 +86,7 @@ namespace Dark_Cloud_Improved_Version
         private const long BattleWeaponStats  = WeaponHave.BattleWeaponRecord + 0x1C;
         private const long BattleWeaponFlags  = WeaponHave.BattleWeaponRecord + 0xEE;
 
-        private enum Phase { Resident, Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
+        private enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
 
         private static Thread _thread;
         private static readonly bool[] _seenPellet = new bool[PlayerShotPool.SlotCount];
@@ -296,6 +304,13 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatHeadH, CatScale * _headH);
             Memory.WriteFloat(CodeCaves.Mailbox.CatHeadZ, CatScale * _headZ);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGrowFrames, 0);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGrowN, GrowFrames);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGravity, FallGravity);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4));
+            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, 0);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatLandStopFrame, LandStopFrame);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatLandEndFrame, LandEndFrame);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatLandLead, LandLeadFrames);
             long sl = SlotAddr();
             Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
@@ -334,10 +349,57 @@ namespace Dark_Cloud_Improved_Version
                                               : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
                         _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false;
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
+                        Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
+                        Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, _target >= 0 ? (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask) : 0);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                             $"cat bound to pellet slot {slot} on its birth frame" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
                     }
                     break;
+                case 4:                                                          // broke away at full size: falling
+                    if (_phase != Phase.Falling)
+                    {
+                        _phase = Phase.Falling; _phaseStart = DateTime.UtcNow;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                            $"full size after {Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames)} frames — off the pellet's line, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame, run speed {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F2}");
+                    }
+                    break;
+                case 5:                                                          // land clip started (ahead of touchdown); the cave stops momentum at paw contact and runs at clip end
+                    if (_phase != Phase.Landing)
+                    {
+                        _phase = Phase.Landing; _phaseStart = DateTime.UtcNow;
+                        long lp = SlotAddr() + CCharacter.CharPos;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
+                    }
+                    break;
+                case 6:                                                          // running (cave moves it); face along its direction, decide the end
+                {
+                    if (_phase != Phase.Running)
+                    {
+                        _phase = Phase.Running; _phaseStart = DateTime.UtcNow;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — running at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F2}/frame");
+                    }
+                    float dx = Memory.ReadFloat(CodeCaves.Mailbox.CatDirX), dz = Memory.ReadFloat(CodeCaves.Mailbox.CatDirZ);
+                    if (dx * dx + dz * dz > 1e-6f) { _dirX = dx; _dirY = dz; _yaw = (float)Math.Atan2(dx, dz); }
+                    long rp = SlotAddr() + CCharacter.CharPos;
+                    _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
+                    double rt = (DateTime.UtcNow - _phaseStart).TotalSeconds;
+                    float dist = float.MaxValue;
+                    if (_target >= 0 && !IsLiveEnemy(_target)) { _target = -1; Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, 0); }
+                    if (_target >= 0)
+                    {
+                        long tp = EnemyAddresses.CharObjects.PosAddr(_target);
+                        float ex = Memory.ReadFloat(tp) - _x, ey = Memory.ReadFloat(tp + 8) - _y; dist = (float)Math.Sqrt(ex * ex + ey * ey);
+                    }
+                    bool reached = _target >= 0 ? dist <= PounceRange : rt >= StraightRunSeconds;
+                    if (reached || rt >= RunTimeoutSeconds)                     // (the pounce chain is still parked: fade here)
+                    {
+                        Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
+                        _scale = 1f; _caveOwns = false;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (reached ? "run reached its mark" : "run timed out") + " — fading");
+                        Enter(Phase.Fading, KeyStand);
+                    }
+                    break;
+                }
                 case 2:
                 {
                     long sp = SlotAddr() + CCharacter.CharPos;                       // hold the last placed spot through the fade
@@ -442,11 +504,15 @@ namespace Dark_Cloud_Improved_Version
                     PlaceRootUnderHead();
                     break;
                 }
+                case Phase.Falling:
+                    break;                                                       // the cave flies it; PollCave sees the landing
                 case Phase.Landing:
+                    if (_native) break;                                          // the cave runs the clip and hands over to the run at its end
                     if (t >= LandSeconds) Enter(Phase.Running, KeyRun);
                     break;
                 case Phase.Running:
                 {
+                    if (_native) break;                                          // the cave runs it; PollCave ends the run
                     float dx = _dirX, dy = _dirY, dist = float.MaxValue;
                     if (_target >= 0)
                     {
@@ -946,7 +1012,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
             Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
             Memory.WriteUInt (s + CCharacter.CharModel, _copyRoot);
-            Memory.WriteInt  (s + CCharacter.MotionId, _key);
+            if (!_caveOwns) Memory.WriteInt(s + CCharacter.MotionId, _key);      // the cave sets leap/land/run keys on its own frames
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 1);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 1);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionB, 0);

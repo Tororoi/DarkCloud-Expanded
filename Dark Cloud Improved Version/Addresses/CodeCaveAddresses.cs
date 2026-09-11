@@ -276,7 +276,27 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatHeadH       = Base + 0xA8;
             internal const long CatHeadZ       = Base + 0xAC;
             internal const long CatSeenMask    = Base + 0xB0;   // int, active pellet-slot bits last frame (cave)
-            internal const long NextFree = Base + 0xB4;
+            // States 4 (falling) / 5 (landed) / 6 (running): at full size the cave breaks the cat away from the pellet
+            // (expiring it), falls it with the pellet's forward speed, snaps it to CatFloorH on the landing frame and,
+            // once the mod sets state 6, runs it at ½ the pellet speed toward CatTargetPtr (or straight).
+            internal const long CatVx          = Base + 0xB4;   // float ×3: fall velocity, captured at the breakaway (cave)
+            internal const long CatVh          = Base + 0xB8;
+            internal const long CatVz          = Base + 0xBC;
+            internal const long CatGravity     = Base + 0xC0;   // float, units/frame² (mod)
+            internal const long CatFloorH      = Base + 0xC4;   // float, landing height (mod)
+            internal const long CatRunSpeed    = Base + 0xC8;   // float, ½·|pellet horizontal speed| (cave)
+            internal const long CatTargetPtr   = Base + 0xCC;   // uint, guest address of the target's position vector, 0 = none (mod)
+            internal const long CatDirX        = Base + 0xD0;   // float ×2: unit run direction (cave; the mod faces the cat along it)
+            internal const long CatDirZ        = Base + 0xD4;
+            internal const long CatGrowN       = Base + 0xD8;   // int, growth frames (mod)
+            // State 5 (landing): the land clip plays straight through; the cave reads the copy's live motion frame (slot 1
+            // +0xC20 → MOTION_TYPE +0x10) and keeps the fall's forward momentum until the paws-touch frame, then runs the
+            // moment the clip reaches its end (or wraps).
+            internal const long CatLandStopFrame = Base + 0xDC; // float, clip frame where the paws touch — momentum stops (mod)
+            internal const long CatLandEndFrame  = Base + 0xE0; // float, clip end frame — straight into the run (mod)
+            internal const long CatPrevFrame     = Base + 0xE4; // float, motion frame seen last time (cave; wrap detection)
+            internal const long CatLandLead      = Base + 0xE8; // float, frames before the predicted touchdown at which the land clip starts (mod)
+            internal const long NextFree = Base + 0xEC;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -366,11 +386,11 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 516 B → 0x1FB0F94
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 1292 B → 0x1FB129C
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB0FA0;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB12A0;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
