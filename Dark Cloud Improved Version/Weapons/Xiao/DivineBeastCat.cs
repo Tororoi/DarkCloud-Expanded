@@ -75,10 +75,7 @@ namespace Dark_Cloud_Improved_Version
         private const long BattleWeaponStats  = WeaponHave.BattleWeaponRecord + 0x1C;
         private const long BattleWeaponFlags  = WeaponHave.BattleWeaponRecord + 0xEE;
 
-        private enum Phase { Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading, Hold }
-        /// <summary>DEBUG: instead of flying, the cat stands still on the floor at the muzzle point until the next
-        /// charged shot (or the floor/character changes), so it can be screenshotted (user 2026-09-10).</summary>
-        private const bool DebugHold = true;
+        private enum Phase { Flying, Landing, Running, TakeOff, Leaping, LandEnd, Fading }
 
         private static Thread _thread;
         private static readonly bool[] _seenPellet = new bool[PlayerShotPool.SlotCount];
@@ -231,7 +228,6 @@ namespace Dark_Cloud_Improved_Version
                 if (live && !_seenPellet[i])
                 {
                     _seenPellet[i] = true;
-                    if (_holdSeconds >= ChargeSeconds && Active && DebugHold) Despawn();   // a new shot replaces the held cat
                     if (_holdSeconds >= ChargeSeconds && !Active)
                     {
                         long pa = PlayerShotPool.PosAddr(pool, i), va = PlayerShotPool.VelAddr(pool, i);
@@ -270,14 +266,8 @@ namespace Dark_Cloud_Improved_Version
             _x = px; _h = ph; _y = py;                                           // provisional; PlaceRootUnderHead after the spawn
             if (!Spawn()) return false;
             PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f; _texTrace = 0; _holdTicks = 0;
+            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f;
             SetKey(KeyLeap);
-            if (DebugHold)
-            {
-                _h = _floor;                                         // stand on the floor right at the muzzle point
-                Enter(Phase.Hold, KeyStand);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "DEBUG HOLD: cat parked at the muzzle point (fire another charged shot to replace it)");
-            }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"cat launched from ({px:F1},{ph:F1},{py:F1}) toward " + (_target >= 0 ? $"locked enemy slot {_target}" : "straight ahead"));
             return true;
@@ -300,77 +290,8 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
 
-        private static int _texTrace, _holdTicks;
-        /// <summary>DEBUG: dump everything the skinner used this frame to a file beside the logs — the copy's skinned
-        /// vertex table (the skinner writes the MDT's table in place), the bind-source table it read, every copied
-        /// node's world/local matrix, the copy's bind rows and its FRAME_INF rows (incl. the two per-bone scratch
-        /// matrices the skinner fills) — so the hanging chin strips (2026-09-10) can be traced to a bone offline.</summary>
-        private static long _herMdt;
-        /// <summary>DEBUG (2026-09-10): the five muzzle vertices whose Y reads 0 in the copy's source table — log
-        /// their Y from a vertex table (an MDT, or a raw 16-B table when vOff is given as 0) at each stage.</summary>
-        private static void ProbeVerts(string when, long table, int vOff = -1)
-        {
-            try
-            {
-                if (table == 0) return;
-                if (vOff < 0) vOff = Memory.ReadInt(table + CVisualMDT.MdtVertOffset);
-                var sb = new System.Text.StringBuilder();
-                foreach (int v in new[] { 344, 360, 404, 420, 461, 326 })
-                    sb.Append($" v{v}:{Memory.ReadFloat(table + vOff + v * 16 + 4):F3}");
-                Console.WriteLine(Tag + $"probe [{when}] @0x{table:X}+0x{vOff:X}:{sb}");
-            }
-            catch (Exception e) { Console.WriteLine(Tag + "probe failed: " + e.Message); }
-        }
-        private static void DumpLowVertices()
-        {
-            try
-            {
-                var (node, mdt, _, vu, vu2, vuSz) = _skinNodes[0];
-                int count = Memory.ReadInt(mdt + CVisualMDT.MdtVertCount), vOff = Memory.ReadInt(mdt + CVisualMDT.MdtVertOffset);
-                byte[] skinned = Memory.ReadBytesBatch(mdt + vOff, count * 16);
-                byte[] fib = Memory.ReadBytesBatch(CodeCaves.FrameInfCave, _nodeCount * MotionType.FrameInfEntry);
-                byte[] bm  = Memory.ReadBytesBatch(CodeCaves.BoneMtxCave, _nodeCount * MotionType.BoneMtxEntry);
-                if (skinned == null || fib == null || bm == null) { Console.WriteLine(Tag + "skin dump: read failed"); return; }
-                uint srcG = BitConverter.ToUInt32(fib, node * MotionType.FrameInfEntry + 8);
-                byte[] src = Memory.ReadBytesBatch(Memory.ToMmu(srcG), count * 16) ?? new byte[count * 16];
-                var ms = new System.IO.MemoryStream();
-                var w = new System.IO.BinaryWriter(ms);
-                w.Write(_nodeCount); w.Write(count); w.Write(node);
-                w.Write(skinned); w.Write(src);
-                for (int i = 0; i < _nodeCount; i++)
-                {
-                    long n = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                    w.Write(Memory.ReadBytesBatch(n + CFrameVu1.WorldMatrix, 0x40) ?? new byte[0x40]);
-                    w.Write(Memory.ReadBytesBatch(n + CFrameVu1.LocalMatrix, 0x40) ?? new byte[0x40]);
-                }
-                w.Write(bm); w.Write(fib);
-                // Draw packets: the visual struct (active ptr +0x18, size +0x1C, buffers +0x28/+0x2C), DBuffID, both buffers.
-                long visAddr = CodeCaves.NodePool + (long)node * CFrameVu1.NodeStride + CFrameVu1.GeomPtr;
-                long vis = Memory.ToMmu((uint)Memory.ReadInt(visAddr) & Memory.PhysAddrMask);
-                w.Write(Memory.ReadBytesBatch(vis, CVisualMDT.VisualSize) ?? new byte[CVisualMDT.VisualSize]);
-                w.Write(Memory.ReadInt(0x202A23B0 /* DBuffID (ELF symbol 0x2A23B0) */)); w.Write(vuSz);
-                w.Write(Memory.ReadBytesBatch(vu, vuSz) ?? new byte[vuSz]);
-                w.Write(vu2 != 0 ? (Memory.ReadBytesBatch(vu2, vuSz) ?? new byte[vuSz]) : new byte[vuSz]);
-                string dir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".", "EnhancedModLogs");
-                string path = System.IO.Path.Combine(dir, "catskin-" + DateTime.Now.ToString("HH-mm-ss") + ".bin");
-                System.IO.File.WriteAllBytes(path, ms.ToArray());
-                float minY = float.MaxValue; int low = 0;
-                for (int i = 0; i < count; i++) { float y = BitConverter.ToSingle(skinned, i * 16 + 4); minY = Math.Min(minY, y); if (y < 0.6f) low++; }
-                Console.WriteLine(Tag + $"skin dump: {count} verts (min y {minY:F2}, {low} below 0.6), {_nodeCount} nodes → {path}");
-            }
-            catch (Exception e) { Console.WriteLine(Tag + "skin dump failed: " + e.Message); }
-        }
-        private static void TraceTextures()
-        {
-            if (_texTrace++ >= 12) return;
-            long grp = TextureManager + TexBlocks + (long)SlotTextureGroup * TexBlockStride;
-            long her = TextureManager + TexBlocks + (long)HerTextureBlock * TexBlockStride;
-            Console.WriteLine(Tag + $"tex trace {_texTrace}: current block {Memory.ReadInt(TextureManager + 0xC)}; group 0x{SlotTextureGroup:X} base 0x{Memory.ReadUInt(grp + BlkBase):X} top 0x{Memory.ReadUInt(grp + BlkTop):X} loaded {Memory.ReadUInt(grp + BlkLoaded)} dirty 0x{Memory.ReadUInt(grp + BlkDirty):X}; her base 0x{Memory.ReadUInt(her + BlkBase):X} top 0x{Memory.ReadUInt(her + BlkTop):X} loaded {Memory.ReadUInt(her + BlkLoaded)} dirty 0x{Memory.ReadUInt(her + BlkDirty):X}; slot tex word 0x{Memory.ReadInt(SlotAddr() + 0x148C):X}");
-        }
-
         private static void Step()
         {
-            TraceTextures();
             double t = (DateTime.UtcNow - _phaseStart).TotalSeconds;
             if (_target >= 0 && !IsLiveEnemy(_target)) _target = -1;
             float tx = 0, th = 0, ty = 0;
@@ -431,10 +352,6 @@ namespace Dark_Cloud_Improved_Version
                 case Phase.LandEnd:
                     if (t >= LandSeconds) Enter(Phase.Fading, KeyStand);
                     break;
-                case Phase.Hold:
-                    if (++_holdTicks == 40) DumpLowVertices();       // DEBUG: which skinned vertices sit near the floor
-                    if (_holdTicks % 10 == 1 && _holdTicks < 60) { ProbeVerts($"hold {_holdTicks} her MDT", _herMdt); ProbeVerts($"hold {_holdTicks} copy MDT", _skinNodes[0].mdt); }
-                    break;                                           // stays put, idle loop, until replaced
                 case Phase.Fading:
                     _fade++;
                     _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
@@ -607,8 +524,6 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(vis)) continue;
                 uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(mdt) || (uint)Memory.ReadInt(Memory.ToMmu(mdt)) != CVisualMDT.MdtMagic) continue;
-                _herMdt = Memory.ToMmu(mdt);
-                ProbeVerts("her MDT at copy", _herMdt);
                 uint vu   = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
                 int vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
                 int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
@@ -728,8 +643,6 @@ namespace Dark_Cloud_Improved_Version
                     local.CopyTo(fib, e + 0x10);
                 }
                 if (!BuildSkinSources(fib)) return false;
-                ProbeVerts("copy MDT after sources", _skinNodes[0].mdt);
-                ProbeVerts("src table", Memory.ToMmu(BitConverter.ToUInt32(fib, _skinNodes[0].node * MotionType.FrameInfEntry + 8)), 0);
                 Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib);
                 BitConverter.GetBytes((uint)CodeCaves.FrameInfCaveGuest).CopyTo(mstr, MotionType.FrameInfPtr);
             }
@@ -1020,33 +933,6 @@ namespace Dark_Cloud_Improved_Version
             return patched;
         }
 
-        /// <summary>Diagnostics: every entry of her block / the slot group, with its GS TEX0 decoded, and the two
-        /// block descriptors — to see whether the upload or the packet's registers disagree.</summary>
-        private static void DumpTextures()
-        {
-            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
-            var sb = new System.Text.StringBuilder();
-            sb.Append($"tex manager: entries {count}, current block {Memory.ReadInt(TextureManager + 0xC)}, vram limit 0x{Memory.ReadInt(TextureManager + 0x14):X}");
-            for (int i = 0; i < count; i++)
-            {
-                long e = TextureManager + TexEntries + (long)i * TexStride;
-                short blk = Memory.ReadShort(e);
-                if (blk != HerTextureBlock && blk != SlotTextureGroup) continue;
-                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
-                int len = 0; while (nb != null && len < nb.Length && nb[len] != 0) len++;
-                string nm = nb == null ? "?" : System.Text.Encoding.ASCII.GetString(nb, 0, len);
-                ulong tex0 = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
-                sb.Append($"\n  [{i}] blk 0x{blk:X} {nm,-10} tex0 tbp 0x{tex0 & 0x3FFF:X} tbw {(tex0 >> 14) & 0x3F} psm {(tex0 >> 20) & 0x3F} tw {(tex0 >> 26) & 0xF} th {(tex0 >> 30) & 0xF} cbp 0x{(tex0 >> 37) & 0x3FFF:X} cpsm {(tex0 >> 51) & 0xF} csa {(tex0 >> 56) & 0x1F}");
-                sb.Append($" words+0x30..: {Memory.ReadUInt(e + 0x30):X8} {Memory.ReadUInt(e + 0x34):X8} {Memory.ReadUInt(e + 0x38):X8} {Memory.ReadUInt(e + 0x3C):X8} {Memory.ReadUInt(e + 0x40):X8} {Memory.ReadUInt(e + 0x44):X8} {Memory.ReadUInt(e + 0x48):X8} {Memory.ReadUInt(e + 0x4C):X8}; +4 {Memory.ReadUInt(e + 4):X8}");
-            }
-            foreach (int blk in new[] { HerTextureBlock, SlotTextureGroup })
-            {
-                long b = TextureManager + 0x18 + blk * 0x3C;
-                sb.Append($"\n  block 0x{blk:X}:");
-                for (int o = 0; o < 0x3C; o += 4) sb.Append($" {Memory.ReadUInt(b + o):X}");
-            }
-            Console.WriteLine(Tag + sb);
-        }
 
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────
 
