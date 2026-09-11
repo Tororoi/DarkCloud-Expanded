@@ -27,6 +27,7 @@ All changes made to this fork of [Dark Cloud Enhanced Mod](https://github.com/Gu
 - **Max Thirst memory addresses** — Corrected the memory addresses used to read and write Max Thirst value.
 - **No-drop enemies** — Regular enemy species that ship unable to drop items (flyers, Gol/Sil, …) had a working `DropChance` but a `DeathDropFlag` of 0, which made the engine skip their entire death-drop block. The flag is now flipped to 1 in the static species table so every spawn drops as intended. Scoped to regular `e####` enemies; bosses, effects, and the steal item are untouched.
 - **Log file names** — Mod log filenames now use a correct `yyyy-MM-dd` date format (was `yyyy-dd-M`, which sorted wrong and collided across months).
+- **Copied-mesh pointer re-basing** — The block copier behind the Mirage decoy, the Angel Gear slingshot and the cat shot re-pointed any 32-bit word whose low bits fell inside the source block's address range, floats included. On the cat that bent five muzzle vertices into the floor (thin strips hanging from the chin); on the other copies it could bend any vertex whose float happened to match. Only words carrying a real EE pointer segment are re-based now.
 
 ---
 

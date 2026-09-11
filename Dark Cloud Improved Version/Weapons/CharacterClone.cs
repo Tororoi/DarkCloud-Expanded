@@ -551,16 +551,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Rewrite every 4-byte word in <paramref name="b"/> whose value points into [oldBase,
         /// oldBase+size) to the corresponding offset in the clone copy at newBaseGuest.</summary>
-        private static void RebaseRange(byte[] b, uint oldBase, int size, uint newBaseGuest)
-        {
-            for (int o = 0; o + 4 <= b.Length; o += 4)
-            {
-                uint w = (uint)BitConverter.ToInt32(b, o);
-                uint phys = w & Memory.PhysAddrMask;
-                if (phys >= oldBase && phys < oldBase + (uint)size)
-                    BitConverter.GetBytes(newBaseGuest + (phys - oldBase)).CopyTo(b, o);
-            }
-        }
+        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (Memory.RebaseRange: a float whose
+        /// low 29 bits fall inside the source range must NOT be re-pointed; the mask-first version did).</summary>
+        private static void RebaseRange(byte[] b, uint oldBase, int size, uint newBaseGuest) => Memory.RebaseRange(b, oldBase, size, newBaseGuest);
 
         /// <summary>Snapshot the player's cloth pieces into clone-owned copies (frozen drape) and return the guest
         /// address of a cloth-ptr list to hang off the clone's +0xC74. Each CCloth is a self-contained 0x8550 object

@@ -270,7 +270,7 @@ namespace Dark_Cloud_Improved_Version
             _x = px; _h = ph; _y = py;                                           // provisional; PlaceRootUnderHead after the spawn
             if (!Spawn()) return false;
             PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f; _texTrace = 0;
+            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0; _alpha = 1f; _texTrace = 0; _holdTicks = 0;
             SetKey(KeyLeap);
             if (DebugHold)
             {
@@ -300,7 +300,66 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
 
-        private static int _texTrace;
+        private static int _texTrace, _holdTicks;
+        /// <summary>DEBUG: dump everything the skinner used this frame to a file beside the logs — the copy's skinned
+        /// vertex table (the skinner writes the MDT's table in place), the bind-source table it read, every copied
+        /// node's world/local matrix, the copy's bind rows and its FRAME_INF rows (incl. the two per-bone scratch
+        /// matrices the skinner fills) — so the hanging chin strips (2026-09-10) can be traced to a bone offline.</summary>
+        private static long _herMdt;
+        /// <summary>DEBUG (2026-09-10): the five muzzle vertices whose Y reads 0 in the copy's source table — log
+        /// their Y from a vertex table (an MDT, or a raw 16-B table when vOff is given as 0) at each stage.</summary>
+        private static void ProbeVerts(string when, long table, int vOff = -1)
+        {
+            try
+            {
+                if (table == 0) return;
+                if (vOff < 0) vOff = Memory.ReadInt(table + CVisualMDT.MdtVertOffset);
+                var sb = new System.Text.StringBuilder();
+                foreach (int v in new[] { 344, 360, 404, 420, 461, 326 })
+                    sb.Append($" v{v}:{Memory.ReadFloat(table + vOff + v * 16 + 4):F3}");
+                Console.WriteLine(Tag + $"probe [{when}] @0x{table:X}+0x{vOff:X}:{sb}");
+            }
+            catch (Exception e) { Console.WriteLine(Tag + "probe failed: " + e.Message); }
+        }
+        private static void DumpLowVertices()
+        {
+            try
+            {
+                var (node, mdt, _, vu, vu2, vuSz) = _skinNodes[0];
+                int count = Memory.ReadInt(mdt + CVisualMDT.MdtVertCount), vOff = Memory.ReadInt(mdt + CVisualMDT.MdtVertOffset);
+                byte[] skinned = Memory.ReadBytesBatch(mdt + vOff, count * 16);
+                byte[] fib = Memory.ReadBytesBatch(CodeCaves.FrameInfCave, _nodeCount * MotionType.FrameInfEntry);
+                byte[] bm  = Memory.ReadBytesBatch(CodeCaves.BoneMtxCave, _nodeCount * MotionType.BoneMtxEntry);
+                if (skinned == null || fib == null || bm == null) { Console.WriteLine(Tag + "skin dump: read failed"); return; }
+                uint srcG = BitConverter.ToUInt32(fib, node * MotionType.FrameInfEntry + 8);
+                byte[] src = Memory.ReadBytesBatch(Memory.ToMmu(srcG), count * 16) ?? new byte[count * 16];
+                var ms = new System.IO.MemoryStream();
+                var w = new System.IO.BinaryWriter(ms);
+                w.Write(_nodeCount); w.Write(count); w.Write(node);
+                w.Write(skinned); w.Write(src);
+                for (int i = 0; i < _nodeCount; i++)
+                {
+                    long n = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
+                    w.Write(Memory.ReadBytesBatch(n + CFrameVu1.WorldMatrix, 0x40) ?? new byte[0x40]);
+                    w.Write(Memory.ReadBytesBatch(n + CFrameVu1.LocalMatrix, 0x40) ?? new byte[0x40]);
+                }
+                w.Write(bm); w.Write(fib);
+                // Draw packets: the visual struct (active ptr +0x18, size +0x1C, buffers +0x28/+0x2C), DBuffID, both buffers.
+                long visAddr = CodeCaves.NodePool + (long)node * CFrameVu1.NodeStride + CFrameVu1.GeomPtr;
+                long vis = Memory.ToMmu((uint)Memory.ReadInt(visAddr) & Memory.PhysAddrMask);
+                w.Write(Memory.ReadBytesBatch(vis, CVisualMDT.VisualSize) ?? new byte[CVisualMDT.VisualSize]);
+                w.Write(Memory.ReadInt(0x202A23B0 /* DBuffID (ELF symbol 0x2A23B0) */)); w.Write(vuSz);
+                w.Write(Memory.ReadBytesBatch(vu, vuSz) ?? new byte[vuSz]);
+                w.Write(vu2 != 0 ? (Memory.ReadBytesBatch(vu2, vuSz) ?? new byte[vuSz]) : new byte[vuSz]);
+                string dir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".", "EnhancedModLogs");
+                string path = System.IO.Path.Combine(dir, "catskin-" + DateTime.Now.ToString("HH-mm-ss") + ".bin");
+                System.IO.File.WriteAllBytes(path, ms.ToArray());
+                float minY = float.MaxValue; int low = 0;
+                for (int i = 0; i < count; i++) { float y = BitConverter.ToSingle(skinned, i * 16 + 4); minY = Math.Min(minY, y); if (y < 0.6f) low++; }
+                Console.WriteLine(Tag + $"skin dump: {count} verts (min y {minY:F2}, {low} below 0.6), {_nodeCount} nodes → {path}");
+            }
+            catch (Exception e) { Console.WriteLine(Tag + "skin dump failed: " + e.Message); }
+        }
         private static void TraceTextures()
         {
             if (_texTrace++ >= 12) return;
@@ -373,6 +432,8 @@ namespace Dark_Cloud_Improved_Version
                     if (t >= LandSeconds) Enter(Phase.Fading, KeyStand);
                     break;
                 case Phase.Hold:
+                    if (++_holdTicks == 40) DumpLowVertices();       // DEBUG: which skinned vertices sit near the floor
+                    if (_holdTicks % 10 == 1 && _holdTicks < 60) { ProbeVerts($"hold {_holdTicks} her MDT", _herMdt); ProbeVerts($"hold {_holdTicks} copy MDT", _skinNodes[0].mdt); }
                     break;                                           // stays put, idle loop, until replaced
                 case Phase.Fading:
                     _fade++;
@@ -546,6 +607,8 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(vis)) continue;
                 uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(mdt) || (uint)Memory.ReadInt(Memory.ToMmu(mdt)) != CVisualMDT.MdtMagic) continue;
+                _herMdt = Memory.ToMmu(mdt);
+                ProbeVerts("her MDT at copy", _herMdt);
                 uint vu   = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
                 int vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
                 int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
@@ -665,6 +728,8 @@ namespace Dark_Cloud_Improved_Version
                     local.CopyTo(fib, e + 0x10);
                 }
                 if (!BuildSkinSources(fib)) return false;
+                ProbeVerts("copy MDT after sources", _skinNodes[0].mdt);
+                ProbeVerts("src table", Memory.ToMmu(BitConverter.ToUInt32(fib, _skinNodes[0].node * MotionType.FrameInfEntry + 8)), 0);
                 Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib);
                 BitConverter.GetBytes((uint)CodeCaves.FrameInfCaveGuest).CopyTo(mstr, MotionType.FrameInfPtr);
             }
@@ -805,9 +870,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteUInt (s + CCharacter.CharModel, 0);
-            if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);
             RetagCatTextures(SlotTextureGroup, HerTextureBlock);
             Active = false; _key = -1; _target = -1;
+            if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
         }
 
@@ -921,8 +986,24 @@ namespace Dark_Cloud_Improved_Version
                 }
             }
             int patched = 0;
+            var blocks = new List<(long addr, int size)>();
             foreach (var (node, mdt, mdtSz, vu, vu2, vuSz) in _skinNodes)
-                foreach (var (addr, size) in new[] { (mdt, mdtSz), (vu, vuSz), (vu2, vuSz) })
+                blocks.AddRange(new[] { (mdt, mdtSz), (vu, vuSz), (vu2, vuSz) });
+            // Rigid cat meshes (the bell) were not copied — their packet is shared with her hidden cat, which is
+            // never drawn, so patching it in place is harmless (and undone with the entries on despawn).
+            for (int i = 0; i < _nodeCount; i++)
+            {
+                if (_skinNodes.Exists(sn => sn.node == i)) continue;
+                long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
+                uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
+                if (!Memory.IsValidGuest(vis)) continue;
+                uint vu = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
+                int vuSz = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
+                if (Memory.IsValidGuest(vu) && vuSz > 0 && vuSz < 0x40000) blocks.Add((Memory.ToMmu(vu), vuSz));
+                uint vuB = (uint)Memory.ReadInt(Memory.ToMmu(vis) + 0x2C) & Memory.PhysAddrMask;
+                if (vuB != vu && Memory.IsValidGuest(vuB) && vuSz > 0) blocks.Add((Memory.ToMmu(vuB), vuSz));
+            }
+            foreach (var (addr, size) in blocks)
                 {
                     if (addr == 0) continue;
                     byte[] b = Memory.ReadBytesBatch(addr, size);
@@ -1030,13 +1111,8 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(neu).CopyTo(block, off);
         }
 
-        private static void RebaseRange(byte[] b, uint src, int size, uint dst)
-        {
-            for (int o = 0; o + 4 <= b.Length; o += 4)
-            {
-                uint v = (uint)BitConverter.ToInt32(b, o) & Memory.PhysAddrMask;
-                if (v >= src && v < src + (uint)size) BitConverter.GetBytes(dst + (v - src)).CopyTo(b, o);
-            }
-        }
+        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (see Memory.RebaseRange: the
+        /// old mask-first version re-pointed five vertex floats of the MDT copy into the cave).</summary>
+        private static void RebaseRange(byte[] b, uint src, int size, uint dst) => Memory.RebaseRange(b, src, size, dst);
     }
 }

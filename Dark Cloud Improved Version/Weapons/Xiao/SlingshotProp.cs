@@ -720,14 +720,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Re-base every 4-byte word in <paramref name="b"/> that points into [src, src+size).</summary>
-        private static void RebaseRange(byte[] b, uint src, int size, uint dst)
-        {
-            for (int o = 0; o + 4 <= b.Length; o += 4)
-            {
-                uint v = (uint)BitConverter.ToInt32(b, o) & Memory.PhysAddrMask;
-                if (v >= src && v < src + (uint)size) BitConverter.GetBytes(dst + (v - src)).CopyTo(b, o);
-            }
-        }
+        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (Memory.RebaseRange).</summary>
+        private static void RebaseRange(byte[] b, uint src, int size, uint dst) => Memory.RebaseRange(b, src, size, dst);
 
         private static int A16(int n) => (n + 15) & ~15;
     }

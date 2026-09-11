@@ -390,10 +390,11 @@ namespace Dark_Cloud_Improved_Version
                         // town overlay at those addresses is never touched.
                         // 1 = decoy up & running (NOP scene+step gates); 3 = decoy up but PAUSED (NOP scene only →
                         // clone still drawn but frozen); 2 = dungeon, no decoy (restore vanilla).
-                        // Guardian Reflector's slingshot prop shares this gate flag (and slot 3 /
-                        // WeaponCave): while its prop is up, IT drives the flag — stand down.
-                        // (Mirage and Angel Gear can never be wielded simultaneously.)
-                        if (!SlingshotProp.Active)
+                        // Guardian Reflector's slingshot prop and Divine Beast Title's cat share this gate flag
+                        // (and the chara slots / caves): while either copy is up, IT drives the flag — stand down.
+                        // (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here made
+                        // the slot loop run only on the frames the other writer won — the cat flickered (2026-09-10).
+                        if (!SlingshotProp.Active && !DivineBeastCat.Active)
                             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? (paused ? 3 : 1) : 2);
                         sleep = FastTickMs;
                     }
@@ -401,7 +402,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         guardLatched = false;
                         if (_decoyActive || CharacterClone.IsActive) EndDecoy();   // left the floor
-                        if (!SlingshotProp.Active)
+                        if (!SlingshotProp.Active && !DivineBeastCat.Active)
                             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 0);   // town: leave the gates to the overlay reload
                     }
                 }
