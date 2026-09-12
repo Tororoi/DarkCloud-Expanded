@@ -12,6 +12,7 @@
 #   +0x1F0/+0x1F4 CatGlowNodeA/B uint the two torso frames (mod, at spawn): the glow sits at the midpoint of their posed
 #   world positions (world matrix +0x150, translation row +0x180)   +0x1F8 CatGlowReady int (cave; mod clears per charge)
 #   +0x1FC CatGlowPull float how far toward the camera the sprite is pulled (mod; the torches use 15.0)
+#   +0x240 CatGlowLift float added to the glow's height (mod; negative lowers it)
 #   +0x200..+0x240 the CFireOmni object.
 .word 0x67746163               # +0x00 "catg"
 .word 0x00776F6C               # +0x04 "low\0"
@@ -120,6 +121,8 @@ lui   $t9, 0x002A
 lwc1  $f8, 0x19DC($t9)         # DrawFire adds this torch lift (4.6) to the height: cancel it so the glow centres on the torso
 lwc1  $f6, 0x0024($t6)
 sub.s $f6, $f6, $f8
+lwc1  $f8, 0x4240($t0)         # CatGlowLift: the mod's height nudge (negative = lower; user 2026-09-12: it sat just above the cat)
+add.s $f6, $f6, $f8
 swc1  $f6, 0x0024($t6)
 lwc1  $f12, 0x41E8($t0)        # CatGlowScale → f12, the draw's scale (the torches use 1.0; the flame sprite is 45 × 22.5 units at 1.0)
 lwc1  $f13, 0x41FC($t0)        # CatGlowPull → f13: how far toward the camera the sprite is pulled (the torches use 15 to clear their wall)

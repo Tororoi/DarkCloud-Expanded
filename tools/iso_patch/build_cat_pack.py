@@ -32,6 +32,7 @@ Usage:
   python3 tools/iso_patch/build_cat_pack.py --dc-dir "$DC1_DATA_DIR" --out /tmp/c04b_cat.chr   # dev build
   python3 tools/iso_patch/build_cat_pack.py --dc-dir "$DC1_DATA_DIR" --test
 """
+import math
 import os, sys, struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,7 +53,9 @@ FLOAT_CHR = r"gedit\e01\chara\e04c04cat.chr"   # the town cat's vertical float/h
 FLOAT_SRC, FLOAT_DST = (160, 169), (285, 294)  # grafted into cat.mot where s86 has no keys (assemble_town_model.py slot 12)
 GLOW_SRC  = r"dun\mpd_pack\d06main_a.mpd"     # the Gallery of Time map pack: its own fire.img holds the PURPLE torch glow disc
 GLOW_NAME = "catglow"                           # the cat's glow: that 64x64 RGBA32 disc re-tinted (CFireOmni draws it additively)
-GLOW_TINT = (65, 62, 255)                       # saturated blue with the slightest lean to purple (user 2026-09-12)
+GLOW_CORE  = (15, 219, 255)                     # radial gradient: this at the centre …
+GLOW_OUTER = (60, 67, 255)                      # … to this at the disc's edge (user 2026-09-12)
+GLOW_CROSS = 0.125                              # radius fraction where the mix is halfway (0.5 = linear); smaller = the blue reaches further in (user 2026-09-12)
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree
@@ -64,7 +67,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v12 glow 65,62,255"
+VERSION_MARK  = "//catpack v16 glow cross 12.5"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -169,19 +172,27 @@ def flat_tim2(template, rgba, size=32):
 
 
 # ───────────────────────────────────────────── the graft ────────────────────────────────────────────────
-def glow_tim2(lightling, tint=GLOW_TINT):
-    """The torch glow disc (a 64x64 RGBA32 TIM2, no CLUT) re-tinted: every pixel keeps its alpha and its share of
-    the disc's peak luminance, and takes the tint's hue at that brightness — the Gallery's purple becomes our blue."""
+def glow_tim2(lightling, core=GLOW_CORE, outer=GLOW_OUTER, cross=GLOW_CROSS):
+    """The torch glow disc (a 64x64 RGBA32 TIM2, no CLUT) re-coloured as a radial gradient: every pixel keeps its alpha
+    and its share of the disc's peak luminance (the soft falloff), and its hue runs from `core` at the centre to `outer`
+    at the disc's visible edge — the Gallery's purple becomes our cyan-cored blue."""
     ts, cs, isz, hs, cc, pf, mm, ct, it, w, h = struct.unpack_from("<IIIHHBBBBHH", lightling, 0x10)
     if it != 3 or cs != 0:
         raise SystemExit(f"glow source is not a 32-bit TIM2 (type {it}, clut {cs})")
     px = bytearray(lightling[0x10 + hs:0x10 + hs + isz])
     lum = lambda r, g, b: 0.30 * r + 0.59 * g + 0.11 * b
-    peak = max(lum(px[k], px[k + 1], px[k + 2]) for k in range(0, len(px), 4)) or 1.0
-    for k in range(0, len(px), 4):
-        l = lum(px[k], px[k + 1], px[k + 2]) / peak
+    lums = [lum(px[k], px[k + 1], px[k + 2]) for k in range(0, len(px), 4)]
+    peak = max(lums) or 1.0
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    lit = [i for i, l in enumerate(lums) if l > peak * 0.02]                     # the disc's visible extent
+    edge = max((((i % w) - cx) ** 2 + ((i // w) - cy) ** 2) ** 0.5 for i in lit) or 1.0
+    for i in range(w * h):
+        k = i * 4
+        l = lums[i] / peak
+        t = min(1.0, ((((i % w) - cx) ** 2 + ((i // w) - cy) ** 2) ** 0.5) / edge)   # 0 at the centre, 1 at the edge
+        t = t ** (math.log(0.5) / math.log(cross))                                      # biased: halfway at radius `cross` (user: more blue, sooner)
         for c in range(3):
-            px[k + c] = min(255, int(tint[c] * l))
+            px[k + c] = min(255, int((core[c] * (1.0 - t) + outer[c] * t) * l))
     return lightling[:0x10 + hs] + bytes(px) + lightling[0x10 + hs + isz:]
 
 

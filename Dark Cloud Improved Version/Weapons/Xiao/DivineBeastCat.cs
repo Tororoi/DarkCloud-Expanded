@@ -154,9 +154,14 @@ namespace Dark_Cloud_Improved_Version
         private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
         private const string HeadNodeName = "cat_kao";
         private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
-        private const float  GlowScale = 0.4f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor — the 2026-09-12 screenshot); 0.4 ≈ 18 × 9 around the torso (user: 2× the 0.2 radius)
+        private const float  GlowScale = 0.5f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor — the 2026-09-12 screenshot); 0.5 ≈ 22.5 × 11 around the torso (user 2026-09-12)
         private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
-        private const float  GlowPull  = 2.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
+        // The cat's own light: Draw__10CCharacter (0x137xxx) adds this float3 (CCharacter +0xCE0) to the scene ambient it lights
+        // the model with (0..255 scale; the dungeon's own key lights are ~100-120). Brightness with a slight cyan lean
+        // (user 2026-09-12); scaled by the fade so the cat dims as it goes.
+        private static readonly float[] CatTint = { 12f, 34f, 48f };   // user 2026-09-12
+        private const float  GlowLift  = 0f;        // units added to the glow's height (negative lowers it; user 2026-09-12: the centre sat just above the cat)
+        private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (user 2026-09-12)         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
         private const float  HeadFallbackHeight = 6f;
         private static bool  _hitDone;
         private static int   _fade;
@@ -370,6 +375,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);                 // the copy's texture entries are remade per spawn: rebind
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, GlowLift);
             Memory.WriteFloat(CodeCaves.Mailbox.CatBlendDefault, BlendDefault);
             Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, BlendDefault);   // the copy's channel: a hit mid-fall can leave the slow fade armed
             Memory.WriteInt  (CodeCaves.Mailbox.CatSitKey, KeySit);
@@ -1296,6 +1302,10 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));
             }
             else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours
+            float lit = Math.Max(0f, Math.Min(1f, _alpha));
+            Memory.WriteFloat(s + CCharacter.CharaTint,     CatTint[0] * lit);      // ambient ADD: brightness + cyan lean
+            Memory.WriteFloat(s + CCharacter.CharaTint + 4, CatTint[1] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint + 8, CatTint[2] * lit);
             Memory.WriteFloat(s + CCharacter.CharRot,     0f);
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
             Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
