@@ -494,17 +494,55 @@ keepfalling:
 lw    $t5, 0x4150($t0)         # flying pounce?
 beq   $t5, $zero, fallpose
 nop
-# The float-up hands over to the fall so that the fade (CatFallBlendFrames steps) ENDS exactly as the land clip starts:
-# the land clip starts at t = lead frames before the floor (f10 = t, f4 = lead, both live from the prediction above),
-# so the switch comes at t = lead + blend frames. Dynamic in the blend length (user 2026-09-11).
+# ── TRACKING until the apex (user 2026-09-11): while still rising (0 < vh), whichever clip is showing, re-solve the
+# horizontal speed every frame from the target's LIVE position and the frames still to fly (t, f10 — the same
+# prediction the landing uses), so the cat arrives over the enemy at touchdown even if it walks away; the facing
+# follows. The vertical arc is untouched. (f6/f12 = the cat's position after this frame's step; f0-f4 free here.)
+mtc1  $zero, $f1
+nop
+nop
+nop
+.word 0x46120834               # c.lt.s $f1, $f18   (0 < vh ? still rising)  fs=f1 ft=f18
+nop
+bc1f  clipsel                  # past the apex: the trajectory is committed
+nop
+lw    $t5, 0x40CC($t0)         # target position vector
+beq   $t5, $zero, clipsel      # no target: keep the launch trajectory
+nop
+lwc1  $f2, 0x0000($t5)         # target x
+lwc1  $f4, 0x0008($t5)         # target z
+sub.s $f2, $f2, $f6            # dx
+sub.s $f4, $f4, $f12           # dz
+div.s $f16, $f2, $f10          # vx = dx / frames to the floor
+div.s $f14, $f4, $f10          # vz
+swc1  $f16, 0x40B4($t0)        # CatVx
+swc1  $f14, 0x40BC($t0)        # CatVz (CatVh keeps the arc)
+mul.s $f0, $f2, $f2
+mul.s $f1, $f4, $f4
+add.s $f0, $f0, $f1
+.word 0x46000004               # sqrt.s $f0, $f0  → distance
+mtc1  $zero, $f1
+nop
+nop
+nop
+.word 0x46000834               # c.lt.s $f1, $f0   (0 < dist ?)  fs=f1 ft=f0
+nop
+bc1f  clipsel
+nop
+div.s $f2, $f2, $f0
+div.s $f4, $f4, $f0
+swc1  $f2, 0x40D0($t0)         # face the target
+swc1  $f4, 0x40D4($t0)
+clipsel:                       # ── which clip: the float-up hands over to the fall so the fade ENDS as the land clip starts ──
+lwc1  $f4, 0x40E8($t0)         # lead (reloaded: the tracking above used $f4)
 lwc1  $f7, 0x41E0($t0)         # CatFallBlendFrames
-add.s $f7, $f7, $f4            # lead + blend
+add.s $f7, $f7, $f4            # lead + blend: the land clip starts at t = lead, so the switch comes at t = lead + blend
 nop
 .word 0x460A3834               # c.lt.s $f7, $f10   (lead + blend < t ? too early: keep the float pose)  fs=f7 ft=f10
 nop
 bc1f  fallpose
 nop
-lw    $t5, 0x4154($t0)         # rising: hold the float-up pose
+lw    $t5, 0x4154($t0)         # hold the float-up pose
 b     storepos
 sw    $t5, 0x0C68($t6)         # (delay slot)
 fallpose:
