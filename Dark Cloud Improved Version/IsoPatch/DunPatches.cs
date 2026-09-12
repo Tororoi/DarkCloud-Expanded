@@ -54,6 +54,10 @@ namespace Dark_Cloud_Improved_Version
             // → the native pellet-follower cave, which performs that call and then pins the cat's chara slot to the
             // pellet the Mailbox names (ElfPatches.PatchCatPelletFollow writes the cave).
             new(CatFollowHookAddr, CatFollowHookOrig, CatFollowHookNew, "cat pellet follower hook (jal step__5CSHOT → cave)"),
+            // Divine Beast cat glow: the draw loop's two torch passes → the glow cave's entries, which perform the pass
+            // and then draw the cat's glow disc with the same routine (ElfPatches.PatchCatGlowDraw writes the cave).
+            new(0x01DAEBF8, 0x0C071030, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryA >> 2), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
+            new(0x01DAEC10, 0x0C070F30, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryB >> 2), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
         };
 
         /// <summary>The patched form of the first gauge word — what the runtime checks to know the patch is live.</summary>
@@ -83,7 +87,7 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, off, w.New);
                 applied++;
             }
-            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 3.84 MB from the read buffer, cat pellet-follower hook) …");
+            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 3.84 MB from the read buffer, cat pellet-follower hook, cat glow hooks) …");
         }
     }
 }

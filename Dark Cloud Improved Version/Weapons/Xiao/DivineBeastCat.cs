@@ -153,6 +153,10 @@ namespace Dark_Cloud_Improved_Version
         private static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
         private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
         private const string HeadNodeName = "cat_kao";
+        private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
+        private const float  GlowScale = 0.4f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor — the 2026-09-12 screenshot); 0.4 ≈ 18 × 9 around the torso (user: 2× the 0.2 radius)
+        private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
+        private const float  GlowPull  = 2.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
         private const float  HeadFallbackHeight = 6f;
         private static bool  _hitDone;
         private static int   _fade;
@@ -361,6 +365,11 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatFloatRate, CharacterMotion.MotionSpeedUseKey);   // KEY rate — FloatRate is baked into the KEY entry at spawn (see RegisterSlot)
             Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlend, 1f / FallBlendSteps);
             Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlendFrames, FallBlendSteps);   // the cave switches float → fall this many frames before the land clip starts
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);                 // the copy's texture entries are remade per spawn: rebind
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
             Memory.WriteFloat(CodeCaves.Mailbox.CatBlendDefault, BlendDefault);
             Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, BlendDefault);   // the copy's channel: a hit mid-fall can leave the slow fade armed
             Memory.WriteInt  (CodeCaves.Mailbox.CatSitKey, KeySit);
@@ -398,7 +407,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DisarmCave()
         {
-            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
+            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); }
             _caveOwns = false; _disarmTicks = 0;
         }
 
@@ -409,6 +418,8 @@ namespace Dark_Cloud_Improved_Version
             if (!Active) return;
             int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
             if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Console.WriteLine(Tag + "charge released without a shot — cat stays hidden"); return; }
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, (state != 0 && state != 3) ? 1 : 0);                    // the glow follows the cat's visibility …
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * Math.Max(0f, Math.Min(1f, _alpha)));   // … and shrinks with the fade
             int ent = Memory.ReadInt(CodeCaves.Mailbox.CatHitEntry);
             if (ent != 0)                                                        // the cave planted a damage entry at a contact (the pellet's own recipe)
             {
@@ -913,6 +924,17 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>The head's rest position in the cat's own space (row-vector chain of local matrices from
         /// `cat_kao` up to the root), so the flight can keep the HEAD on the pellet's line (user 2026-09-10).</summary>
+        private static int FindNode(byte[] block, string name)
+        {
+            for (int i = 0; i < _nodeCount; i++)
+            {
+                int o = i * CFrameVu1.NodeStride + CFrameVu1.Name, len = 0;
+                while (len < 0x20 && block[o + len] != 0) len++;
+                if (System.Text.Encoding.ASCII.GetString(block, o, len) == name) return i;
+            }
+            return -1;
+        }
+
         private static void FindHead(byte[] block)
         {
             _headX = 0f; _headH = HeadFallbackHeight; _headZ = 0f;
@@ -924,6 +946,11 @@ namespace Dark_Cloud_Improved_Version
                 if (System.Text.Encoding.ASCII.GetString(block, o, len) == HeadNodeName) { head = i; break; }
             }
             Memory.WriteInt(CodeCaves.Mailbox.CatHeadNode, head >= 0 ? (int)(CodeCaves.NodePoolGuest + head * CFrameVu1.NodeStride) : 0);   // the cave's contact point = this frame's posed position
+            int ga = FindNode(block, GlowNodeA), gb = FindNode(block, GlowNodeB);                                                              // the glow's anchor frames
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeA, ga >= 0 ? (int)(CodeCaves.NodePoolGuest + ga * CFrameVu1.NodeStride) : 0);
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeB, gb >= 0 ? (int)(CodeCaves.NodePoolGuest + gb * CFrameVu1.NodeStride) : 0);
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
+            if (ga < 0 || gb < 0) Console.WriteLine(Tag + $"glow anchors: {GlowNodeA} n{ga}, {GlowNodeB} n{gb} — falling back to the root");
             if (head < 0) return;
             uint poolG = (uint)CodeCaves.NodePoolGuest;
             float[] p = { 0f, 0f, 0f, 1f };
@@ -1320,7 +1347,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  TexEntries = 0x10F8, TexStride = 0x50, TexMaxEntries = 0xC4, TexName = 8;
         private const short HerTextureBlock = 0x11;
         private const short SlotTextureGroup = (short)(DungeonCharaDraw.CharaTexBase + Slot);
-        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05" };
+        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catglow" };   // catglow = the blue torch-glow disc (build_cat_pack.GLOW_NAME)
         // A block descriptor (CTextureBlock, 0x3C bytes at manager+0x18+block*0x3C): +0x20 VRAM base, +0x24 VRAM top,
         // +0x28 loaded flag, +0x30 dirty watermark. ReloadTexture re-uploads an entry only if its VRAM address is at or
         // below the watermark (capped by the block's top) or the loaded flag is 0 — so a block whose base/top are 0

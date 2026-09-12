@@ -368,6 +368,14 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatKickDecay     = CatBase + 0x1D8; // float (mod)
             internal const long CatHeadNode      = CatBase + 0x1DC; // uint, guest address of the copy's cat_kao frame (mod, at spawn): the contact point is its posed world position
             internal const long CatFallBlendFrames = CatBase + 0x1E0; // float, the float-up → fall fade length in steps (mod): the cave times the switch so the fade ends as the land clip starts
+            internal const long CatGlowOn        = CatBase + 0x1E4; // int, 1 while the cat is up (mod): the glow cave draws
+            internal const long CatGlowScale     = CatBase + 0x1E8; // float, the torch routine's scale argument (mod; × the fade)
+            internal const long CatGlowFlags     = CatBase + 0x1EC; // int, 1 = glow pair, 2 = flickering flame sprite, 3 = both (mod)
+            internal const long CatGlowNodeA     = CatBase + 0x1F0; // uint, guest address of the copy's cat_kosibone frame (mod, at spawn)
+            internal const long CatGlowNodeB     = CatBase + 0x1F4; // uint, guest address of the copy's cat_sebone2 frame (mod, at spawn)
+            internal const long CatGlowReady     = CatBase + 0x1F8; // int, the cave bound its textures (cave; the mod clears it per charge)
+            internal const long CatGlowPull      = CatBase + 0x1FC; // float, how far toward the camera the sprite is pulled (mod; the torches use 15)
+            internal const long CatGlowObject    = CatBase + 0x200; // the cave's CFireOmni object, 0x40 B
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
@@ -426,10 +434,10 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>Guest bounds of the hijacked-phdr3 segment; RegionEnd − RegionStart is its p_filesz/p_memsz.
             /// RegionStart must stay 16KB-aligned (page isolation — see the class doc) and 0x80-aligned (p_align).</summary>
             internal const uint RegionStart = 0x01FB0000;
-            internal const uint RegionEnd   = 0x01FB2000;
+            internal const uint RegionEnd   = 0x01FB4000;   // grown from 0x1FB2000 (2026-09-12): the second band holds the cat glow cave
             /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
             /// time; formerly .reldun debug bytes — outside every phdr's file extent, never read at runtime).</summary>
-            internal const uint SegmentFileOff = 0x002AF000;
+            internal const uint SegmentFileOff = 0x002AD000;   // 0x4000 B of dead .reldun (0x29FE60..0x2B11C8) — was 0x2AF000 for 0x2000
 
             internal const uint CanalEvictFadeHook = 0x01FB0000;   // 64 B → 0x1FB0040
             internal const uint QueensSpray        = 0x01FB0050;   // 180 B → 0x1FB0104
@@ -463,10 +471,16 @@ namespace Dark_Cloud_Improved_Version
             /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
             /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
             internal const uint XiaoMeleeFlinch    = 0x01FB1FA0;   // 40 B → 0x1FB1FC8
+            /// <summary>Divine Beast cat glow (tools/stubs/cat_glow_draw.s): hooked in place of the dungeon draw loop's two torch
+            /// passes (dun 0x1DAEBF8 / 0x1DAEC10), performs them, then draws the `catglow` disc at the cat's torso with the torch
+            /// routine. +0x00 = the "catglow" name, +0x08 = entry A (DrawFire), +0x20 = entry B (DrawFireFreeStyle).</summary>
+            internal const uint CatGlowDraw        = 0x01FB2000;   // 468 B → 0x1FB21D4 (second band)
+            internal const uint CatGlowDrawEntryA  = CatGlowDraw + 0x08;
+            internal const uint CatGlowDrawEntryB  = CatGlowDraw + 0x20;
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB1FD0;   // after the flinch stub (0x1FB1FA0 + 40 B); 48 B to the segment end — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB21E0;   // after the glow cave (468 B → 0x1FB21D4); the band runs to 0x1FB4000 (7712 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

@@ -106,6 +106,7 @@ namespace Dark_Cloud_Improved_Version
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
             PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
             PatchXiaoMeleeFlinch(fs, ElfOff);             // Divine Beast cat: its melee-type hits may stagger (dun.bin hook in DunPatches)
+            PatchCatGlowDraw(fs, ElfOff);                 // Divine Beast cat: blue torch-glow at its torso (dun.bin hooks in DunPatches)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -120,7 +121,7 @@ namespace Dark_Cloud_Improved_Version
         // ── The ELF cave SEGMENT: hijack the degenerate phdr3 into a real PT_LOAD ────────────────────
         // SCUS_971.11 ships 4 program headers; phdr3 is a DEGENERATE placeholder (PT_LOAD, filesz=0,
         // MEMSZ=0 — it loads and reserves nothing). Rewrite it to load file span
-        // [ElfCave.SegmentFileOff, +0x2000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
+        // [ElfCave.SegmentFileOff, +0x4000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
         // dead .reldun debug data BEYOND every phdr's file extent (phdr0 loads only 0x100..0x1a2480;
         // phdr1-3 have filesz=0), so PCSX2 never reads it — and RE tooling uses the PRISTINE extracted
         // ELF, so clobbering it in the PATCHED ISO loses nothing. The guest band is inside the mod's
@@ -132,7 +133,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const uint SegVa   = CodeCaves.ElfCave.RegionStart;
             const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
-            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x2000
+            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (2026-09-12: grown for the cat glow cave)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");
@@ -277,6 +278,27 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(HookAddr), jump);          // j cave
             WrU32(fs, ElfOff(HookAddr + 4), 0);         // delay slot nop (was the bne)
+        }
+
+        // ── Divine Beast cat glow ────────────────────────────────────────────────────────────────────────
+        // The dungeon draw loop's two torch passes (dun 0x1DAEBF8 / 0x1DAEC10, hooked by DunPatches) come here;
+        // the cave performs them and then draws the cat's `catglow` disc at its torso with CFireOmni::DrawFire.
+        // Stub: tools/stubs/cat_glow_draw.s (name string at +0, entries at +0x08 / +0x20).
+        internal static void PatchCatGlowDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatGlowDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: catGlowDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: "catglow\0" then two entries that each open a 0x40 frame and jal the pass they replace.
+            if (b.Length < 0x40 || (b.Length & 3) != 0 || U32(b, 0) != 0x67746163u || U32(b, 4) != 0x00776F6Cu
+                || U32(b, 0x08) != 0x27BDFFC0u || U32(b, 0x10) != Jal(0x001C40C0) || U32(b, 0x20) != 0x27BDFFC0u || U32(b, 0x28) != Jal(0x001C3CC0))
+                throw new IOException($"catGlowDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catGlowDraw.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)

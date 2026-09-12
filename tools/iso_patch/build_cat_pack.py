@@ -50,6 +50,9 @@ HOST_CFG, HOST_MDS, HOST_BBP, HOST_IMG = "base.cfg", "c04b.mds", "c04b.bbp", "c0
 CAT_CHR   = r"gedit\s86\chara\c04cat.chr"
 FLOAT_CHR = r"gedit\e01\chara\e04c04cat.chr"   # the town cat's vertical float/hop-up (its #5 clip, frames 160..169)
 FLOAT_SRC, FLOAT_DST = (160, 169), (285, 294)  # grafted into cat.mot where s86 has no keys (assemble_town_model.py slot 12)
+GLOW_SRC  = r"dun\mpd_pack\d06main_a.mpd"     # the Gallery of Time map pack: its own fire.img holds the PURPLE torch glow disc
+GLOW_NAME = "catglow"                           # the cat's glow: that 64x64 RGBA32 disc re-tinted (CFireOmni draws it additively)
+GLOW_TINT = (65, 62, 255)                       # saturated blue with the slightest lean to purple (user 2026-09-12)
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree
@@ -61,7 +64,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v9 +sit"
+VERSION_MARK  = "//catpack v12 glow 65,62,255"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -166,6 +169,22 @@ def flat_tim2(template, rgba, size=32):
 
 
 # ───────────────────────────────────────────── the graft ────────────────────────────────────────────────
+def glow_tim2(lightling, tint=GLOW_TINT):
+    """The torch glow disc (a 64x64 RGBA32 TIM2, no CLUT) re-tinted: every pixel keeps its alpha and its share of
+    the disc's peak luminance, and takes the tint's hue at that brightness — the Gallery's purple becomes our blue."""
+    ts, cs, isz, hs, cc, pf, mm, ct, it, w, h = struct.unpack_from("<IIIHHBBBBHH", lightling, 0x10)
+    if it != 3 or cs != 0:
+        raise SystemExit(f"glow source is not a 32-bit TIM2 (type {it}, clut {cs})")
+    px = bytearray(lightling[0x10 + hs:0x10 + hs + isz])
+    lum = lambda r, g, b: 0.30 * r + 0.59 * g + 0.11 * b
+    peak = max(lum(px[k], px[k + 1], px[k + 2]) for k in range(0, len(px), 4)) or 1.0
+    for k in range(0, len(px), 4):
+        l = lum(px[k], px[k + 1], px[k + 2]) / peak
+        for c in range(3):
+            px[k + c] = min(255, int(tint[c] * l))
+    return lightling[:0x10 + hs] + bytes(px) + lightling[0x10 + hs + isz:]
+
+
 def cat_name(orig, index):
     return CAT_ROOT_NAME if index == 0 else NODE_PREFIX + orig
 
@@ -262,8 +281,12 @@ def build_cfg(text, nl):
     return nl.join(out)
 
 
-def assemble(base_bytes, cat_bytes, float_bytes):
+def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes):
     base, cat, flt = mc.Pack.parse(base_bytes), mc.Pack.parse(cat_bytes), mc.Pack.parse(float_bytes)
+    glow_pack = mc.Pack.parse(glow_bytes)
+    glow_img = glow_pack.find("fire.img")
+    if glow_img is None:
+        raise SystemExit("glow source pack lacks fire.img")
     for n in ("e04c04cat.mds", "e04c04cat.mot"):
         if flt.find(n) is None:
             raise SystemExit(f"float-up pack lacks {n}")
@@ -288,6 +311,7 @@ def assemble(base_bytes, cat_bytes, float_bytes):
         items += [(n, flat_tim2(template, FLAT_RGBA)) for n, _ in cimg.entries]
     else:
         items += [(n, cimg.block(n)) for n, _ in cimg.entries]
+    items.append((GLOW_NAME, glow_tim2(Bank(glow_img.payload).block("lightling"))))
     if len({n for n, _ in items}) != len(items):
         raise SystemExit("texture entry name clash")
     base.replace_payload(HOST_IMG, Bank.build(himg.magic, items))
@@ -451,7 +475,7 @@ def run(iso, log=print):
             f.seek(slot_of(HOST_CHR)); f.write(struct.pack("<IIII", *HOST_VANILLA))
             log("reverted dun\\mainchara\\c04b.chr to its vanilla record (older cat bake removed)")
             base = van
-        new_chr, rep = assemble(base, read_src(CAT_CHR), read_src(FLOAT_CHR))
+        new_chr, rep = assemble(base, read_src(CAT_CHR), read_src(FLOAT_CHR), read_src(GLOW_SRC))
         log(f"Divine Beast Title cat assembled into c04b.chr — {rep['nodes'][1]} cat nodes, {len(rep['textures'])} textures, "
             f"cat.mot {rep['mot_bytes']:,} B ({rep['mot_keys']} keys), {rep['size'][0]:,}->{rep['size'][1]:,} B")
         redirect(HOST_CHR, new_chr)
@@ -462,7 +486,8 @@ def _from_dc_dir(dc_dir):
     _, base = mc.load_pack(HOST_CHR, dc_dir)
     _, cat = mc.load_pack(CAT_CHR, dc_dir)
     _, flt = mc.load_pack(FLOAT_CHR, dc_dir)
-    return assemble(base.rebuild(), cat.rebuild(), flt.rebuild())
+    _, glow = mc.load_pack(GLOW_SRC, dc_dir)
+    return assemble(base.rebuild(), cat.rebuild(), flt.rebuild(), glow.rebuild())
 
 
 def main():
