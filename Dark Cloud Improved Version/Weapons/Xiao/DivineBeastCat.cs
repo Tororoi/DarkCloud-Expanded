@@ -92,7 +92,8 @@ namespace Dark_Cloud_Improved_Version
         private const float  PounceRange   = 30f;      // start the pounce within this of the target (user 2026-09-11; the leap re-sizes itself at launch)
         private const float  MaxTargetDistance = 300f; // PickTarget: only enemies within the vanilla render distance of Xiao
         private const float  KickStrength  = 2.0f, KickDecay = 0.3f;   // the hit's kickback, sized like Toan's heavier combo hits (1.2..3.0 / 0.2..0.4, type 2)
-        private const float  PounceFrames  = 40f;      // leap flight time (frames)
+        private const float  PounceFrames  = 32f;      // leap flight time (frames) to the enemy — most enemies (user 2026-09-11)
+        private const float  PounceFramesTall = 40f;   // … for the tall/large/flying set (EnemySpecies.VerticalLeapTargets) and minibosses: a higher, longer arc
         private const float  HitRadius     = 4f;       // planted hit sphere at the struck enemy
         private const float  TouchRadius   = 3f;       // the cat's own touch radius in the cave's body-sphere test
         // Pounce clips (KEY 65 ready 95..105 @0.4, 67 take-off 190..204 @0.5, 68 leap 205..214 @0.5, 69 land 215..227 @0.36):
@@ -373,7 +374,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.Mailbox.CatIdleKey, KeyStand);
             Memory.WriteInt  (CodeCaves.Mailbox.CatBlocked, 0);
             Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, PounceRange);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, PounceFrames);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, PounceFrames);   // per target: ApplyFlightTime
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitEntry, 0);
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitLatch, 0);
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitDamage, 1);                 // set for real at bind (the pellet's damage is known then)
@@ -437,6 +438,7 @@ namespace Dark_Cloud_Improved_Version
                         _pelletDamage = Memory.ReadInt(PlayerShotPool.DamageAddr(pool, slot));
                         WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
                         CrushGuard(_target);                                      // Guard Crush: the target's guard windows are dropped for this flight
+                        ApplyFlightTime();
                         _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _boundAt = DateTime.UtcNow; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                         Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
@@ -482,7 +484,7 @@ namespace Dark_Cloud_Improved_Version
                         int was = _target;
                         _target = PickTarget();                                   // the next nearest, if any
                         Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, _target >= 0 ? (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask) : 0);
-                        CrushGuard(_target);
+                        CrushGuard(_target); ApplyFlightTime();
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
                     }
                     if (_target >= 0)
@@ -500,7 +502,7 @@ namespace Dark_Cloud_Improved_Version
                             if (_target >= 0)
                             {
                                 Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask));
-                                CrushGuard(_target);
+                                CrushGuard(_target); ApplyFlightTime();
                                 _sitLogged = false; _gaitLogged = false;
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {_target} came within range — up and after it");
                             }
@@ -589,6 +591,23 @@ namespace Dark_Cloud_Improved_Version
         /// large bodies; enhanced variants share the id) and for any miniboss spawn (MiniBoss's slot list, or a model
         /// scale ≥ 1.25 in the scale table). For those the cave's height threshold is set far below zero so the leap is
         /// always vertical; for everything else far above, so a ground enemy on a ledge is never mistaken for airborne.</summary>
+        /// <summary>The leap's flight time to the target (the cave reads it at launch): the tall/large/flying set in
+        /// <see cref="EnemySpecies.VerticalLeapTargets"/> and minibosses get the higher 40-frame arc, everything else
+        /// the quick 27-frame one (user 2026-09-11).</summary>
+        private static void ApplyFlightTime()
+        {
+            float frames = PounceFrames; string why = "";
+            if (_target >= 0)
+            {
+                ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.EnemySpeciesId));
+                float scale = Memory.ReadFloat(ModelScaleOffsets.ModelBase + (long)_target * ModelScaleOffsets.ModelStride + ModelScaleOffsets.ScaleX);
+                if (EnemySpecies.VerticalLeapTargets.TryGetValue(species, out string name)) { frames = PounceFramesTall; why = name; }
+                else if (MiniBoss.miniBossEnemyNumbers.Contains(_target) || scale >= 1.25f) { frames = PounceFramesTall; why = $"miniboss (model scale {scale:F2})"; }
+            }
+            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, frames);
+            if (why.Length > 0) Console.WriteLine(Tag + $"target slot {_target}: {frames:F0}-frame leap ({why})");
+        }
+
         /// <summary>Locked-on enemy first; otherwise the live enemy nearest to Xiao (user 2026-09-11); −1 when none.</summary>
         private static int PickTarget()
         {
