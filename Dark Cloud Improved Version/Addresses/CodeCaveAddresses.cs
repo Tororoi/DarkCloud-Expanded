@@ -360,7 +360,14 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatFloatRate     = CatBase + 0x1B8; // float, the float-up's motion-speed override (mod)
             internal const long CatFallBlend     = CatBase + 0x1BC; // float, MOTION_STATE blend increment for the float-up → fall fade (mod, 1/steps)
             internal const long CatBlendDefault  = CatBase + 0x1C0; // float, the increment put back when the land clip starts (mod, 0.1)
-            internal const long CatHitLatch      = CatBase + 0x1C8; // int, 1 after a flight's first touch (cave): one hit per flight
+            internal const long CatHitEntry      = CatBase + 0x1C4; // int, the damage entry the cave planted natively, index + 1 (cave → mod)
+            internal const long CatHitLatch      = CatBase + 0x1C8; // int, 1 while a planted entry is unresolved (cave sets, mod clears if it never connects)
+            internal const long CatHitDamage     = CatBase + 0x1CC; // int, the entry's base damage = pellet damage + attack (mod, at bind)
+            internal const long CatHitAttr       = CatBase + 0x1D0; // int, the entry's element attribute bits (mod, at bind)
+            internal const long CatKickStrength  = CatBase + 0x1D4; // float (mod)
+            internal const long CatKickDecay     = CatBase + 0x1D8; // float (mod)
+            internal const long CatHeadNode      = CatBase + 0x1DC; // uint, guest address of the copy's cat_kao frame (mod, at spawn): the contact point is its posed world position
+            internal const long CatFallBlendFrames = CatBase + 0x1E0; // float, the float-up → fall fade length in steps (mod): the cave times the switch so the fade ends as the land clip starts
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
@@ -451,7 +458,7 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4480 B → 0x1FB1F10 (frame 0x80, sq/lq saves); the flinch stub sits at 0x1FB1FA0
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 3632 B → 0x1FB1BC0 (frame 0x80, sq/lq saves); the flinch stub sits at 0x1FB1FA0
             /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
             /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
             /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
