@@ -2497,6 +2497,50 @@ namespace Dark_Cloud_Improved_Version
             { Gol.Id,         Gol.Name         },  // non-flying, but cannot drop an item
             { Sil.Id,         Sil.Name         },  // non-flying, but cannot drop an item
         };
+        /// <summary>Enemies the Divine Beast cat reaches with its VERTICAL leap (ready crouch → the town ladder jump's
+        /// float-up → fall) instead of the flat pounce: flyers, hoverers, and the tall or large bodies whose hit spheres
+        /// sit above a cat-height jump (user list, 2026-09-11). Keyed by species id, so the "(Enhanced)" variants —
+        /// which share their base species' id — are covered without being listed. A miniboss spawn (MiniBoss, 1.5×
+        /// model) counts as well, by slot, regardless of species.</summary>
+        internal static readonly Dictionary<ushort, string> VerticalLeapTargets = new()
+        {
+            // flyers and hoverers
+            { Hornet.Id,           Hornet.Name           },
+            { WitchHellza.Id,      WitchHellza.Name      },
+            { WitchIllza.Id,       WitchIllza.Name       },
+            { Ghost.Id,            Ghost.Name            },
+            { Lich.Id,             Lich.Name             },
+            { Phantom.Id,          Phantom.Name          },
+            { CaveBat.Id,          CaveBat.Name          },
+            { EvilBat.Id,          EvilBat.Name          },
+            { Nikapous.Id,         Nikapous.Name         },
+            { CrescentBaron.Id,    CrescentBaron.Name    },
+            { MaskOfPrajna.Id,     MaskOfPrajna.Name     },
+            { Alexander.Id,        Alexander.Name        },
+            { Arthur.Id,           Arthur.Name           },
+            // tall or large bodies
+            { BlackKnight.Id,      BlackKnight.Name      },   // the Mount shares id 221
+            { DarkGenie.Id,        DarkGenie.Name        },
+            { DarkGenieForm2.Id,   DarkGenieForm2.Name   },
+            { DarkGenieFinal.Id,   DarkGenieFinal.Name   },
+            { MinotaurJoe.Id,      MinotaurJoe.Name      },
+            { KingsCurse.Id,       KingsCurse.Name       },
+            { KingsCurseCoffin.Id, KingsCurseCoffin.Name },
+            { MasterUtan.Id,       MasterUtan.Name       },
+            { Dran.Id,             Dran.Name             },
+            { Gol.Id,              Gol.Name              },
+            { Sil.Id,              Sil.Name              },
+            { Blizzard.Id,         Blizzard.Name         },
+            { SteelGiant.Id,       SteelGiant.Name       },
+            { Titan.Id,            Titan.Name            },
+            { Golem.Id,            Golem.Name            },
+            { BlackDragon.Id,      BlackDragon.Name      },
+            { BlueDragon.Id,       BlueDragon.Name       },
+            { Dragon.Id,           Dragon.Name           },
+            { Opar.Id,             Opar.Name             },
+
+        };
+
         // Overseas enemies appear in the USA/PAL version of Dark Cloud but are absent
         // from the Japanese release. Pool assignments match the Japanese versions of the
         // same dungeons (DBC area).

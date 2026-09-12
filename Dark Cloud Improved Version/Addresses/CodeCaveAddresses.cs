@@ -349,6 +349,18 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatDbgTrig       = CatBase + 0x170; // float ×4 (diagnostics): cat x, cat y, target x, target y at the pounce trigger (cave)
             internal const long CatDbgReady      = CatBase + 0x180; // float ×5 (diagnostics): the same four at the end of the ready, then its distance (cave)
             internal const long CatMoveAbs       = CatBase + 0x194; // float, absolute ground speed after the landing (units/frame); > 0 overrides CatMoveFrac (mod)
+            internal const long CatLeapTravel    = CatBase + 0x198; // float, momentum-frames from the leap's start to the paws-touch frame (mod); the leap is re-sized to the live distance ÷ this
+            internal const long CatHitSphere     = CatBase + 0x19C; // int, the enemy body sphere the touch test met (cave); the hit entry is planted on it
+            internal const long CatSitKey        = CatBase + 0x1A0; // int, the sit clip's key — with no target the cat sits in place (mod)
+            internal const long CatPounceGravity = CatBase + 0x1A4; // float, the ground pounce's arc gravity (mod)
+            internal const long CatLeapRate      = CatBase + 0x1A8; // float, the leap clip's motion-speed override during a ground pounce (mod)
+            internal const long CatPounceGround  = CatBase + 0x1AC; // int, 1 while a ground pounce is airborne (cave): the fall block uses CatPounceGravity
+            internal const long CatFloatLaunch   = CatBase + 0x1B0; // float, the float-up frame where the feet leave the ground (mod): the vertical leap is computed there
+            internal const long CatFloatStart    = CatBase + 0x1B4; // float, the float-up clip's first frame (mod)
+            internal const long CatFloatRate     = CatBase + 0x1B8; // float, the float-up's motion-speed override (mod)
+            internal const long CatFallBlend     = CatBase + 0x1BC; // float, MOTION_STATE blend increment for the float-up → fall fade (mod, 1/steps)
+            internal const long CatBlendDefault  = CatBase + 0x1C0; // float, the increment put back when the land clip starts (mod, 0.1)
+            internal const long CatHitLatch      = CatBase + 0x1C8; // int, 1 after a flight's first touch (cave): one hit per flight
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
@@ -439,11 +451,15 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4028 B → 0x1FB1D4C (frame 0x80, sq/lq saves) — 692 B left in the segment
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4480 B → 0x1FB1F10 (frame 0x80, sq/lq saves); the flinch stub sits at 0x1FB1FA0
+            /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
+            /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
+            /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
+            internal const uint XiaoMeleeFlinch    = 0x01FB1FA0;   // 40 B → 0x1FB1FC8
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB1D50;   // ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB1FD0;   // after the flinch stub (0x1FB1FA0 + 40 B); 48 B to the segment end — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

@@ -105,6 +105,7 @@ namespace Dark_Cloud_Improved_Version
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
             PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
+            PatchXiaoMeleeFlinch(fs, ElfOff);             // Divine Beast cat: its melee-type hits may stagger (dun.bin hook in DunPatches)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -245,6 +246,37 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.NextFree.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        // ── Xiao melee-type flinch ───────────────────────────────────────────────────────────────────────
+        // CheckDmg__12CMonstorUnit hard-codes "Xiao's hits never stagger" (the monster step starts an enemy's damage
+        // reaction, script label 110, only when CheckDmg returns 1). The Divine Beast cat's hit entry carries a
+        // melee-type kick (+0x98 == 2; pellets carry 0), so DunPatches re-routes the start of that rule (dun 0x1DB410)
+        // to this stub, which applies it only to entries WITHOUT that kick. Stub: tools/stubs/xiao_melee_flinch.s.
+        internal static void PatchXiaoMeleeFlinch(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.XiaoMeleeFlinch;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin")
+                ?? throw new IOException("Embedded EE function missing: xiaoMeleeFlinch.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 10 words, opens with `lw v0,-0x6210(gp)` (NowColData) and returns with `j 0x1DB420` + nop.
+            if (b.Length != 40 || U32(b, 0) != 0x8F829DF0u || U32(b, 32) != 0x08076D08u || U32(b, 36) != 0)
+                throw new IOException($"xiaoMeleeFlinch.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("xiaoMeleeFlinch.bin overruns its cave — move ElfCave.NextFree.");
+            // Hook site (main ELF, CheckDmg__12CMonstorUnit 0x1D9F10): `li v0,1; bne s3,v0,+2; nop; clear s0` = the
+            // "owner == Xiao → no flinch" rule; the stub replaces it and returns to the untouched tail at 0x1DB420.
+            const uint HookAddr = 0x001DB410;
+            uint jump = 0x08000000u | (CaveAddr >> 2);
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
+            bool vanilla = cur0 == 0x24020001u && cur1 == 0x16620002u, ours = cur0 == jump && cur1 == 0;
+            if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr + 0x10)) != 0x8F829DF0u || RdU32(fs, ElfOff(HookAddr + 0x14)) != 0x0056A021u)
+                throw new IOException($"Xiao-flinch hook site 0x{HookAddr:X} is not vanilla `li v0,1; bne s3,v0` (tail `lw v0,NowColData; addu s4,v0,s6`) — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jump);          // j cave
+            WrU32(fs, ElfOff(HookAddr + 4), 0);         // delay slot nop (was the bne)
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)

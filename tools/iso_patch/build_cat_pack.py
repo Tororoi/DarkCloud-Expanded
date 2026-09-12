@@ -61,7 +61,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v8 +floatup"
+VERSION_MARK  = "//catpack v9 +sit"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -72,6 +72,7 @@ CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat
     (215, 227, 0.36, "cat land"),
     (60,  80,  1.0,  "cat walk (s86 KEY 2, brisk)"),
     (285, 294, 0.6,  "cat float-up (e04c04cat #5 160..169)"),   # 71: the vertical leap, as the town ladder jump
+    (30,  40,  0.1,  "cat sit (s86 KEY 1)"),                    # 72: in place when there is no enemy to go for
 ]
 MOT_WINDOWS = [(k[0], k[1]) for k in CAT_KEYS]
 REC_TAG = 0x00140E02               # word at record +0x4C on every vanilla record

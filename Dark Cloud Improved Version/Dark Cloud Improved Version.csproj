@@ -31,6 +31,9 @@
     <EmbeddedResource Include="Resources\isoPatch\catPelletFollow.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\xiaoMeleeFlinch.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
     </EmbeddedResource>

@@ -29,11 +29,33 @@
 #   +0xDC CatLandStopFrame float clip frame where the paws touch (momentum stops; 219)   +0xE0 CatLandEndFrame float
 #   clip end (227 → run)   +0xE4 CatPrevFrame float the frame seen last time (wrap detection)   +0xE8 CatLandLead float
 #   frames before the predicted touchdown at which the land clip starts ((219−215)/clip speed) — the copy's live motion
-#   frame is read through slot 1's channel pointer (+0xC20 → MOTION_TYPE, frame @+0x10). Key switches set the motion
-#   flags restart bit (slot +0xC64 |= 4), or the engine would finish the current clip before changing.
+#   frame is read through slot 1's channel pointer (+0xC20 → MOTION_TYPE, frame @+0x10). A key switch with the motion
+#   flags restart bit CLEAR is cross-faded by the engine (SetMotionEX 0x148D00: the outgoing clip freezes at its frame
+#   and every bone slerps to the new key's first frame over 1/increment steps; increment = MOTION_STATE+0x08, seeded 0.1
+#   by the .chr loader → 10 steps). The live frame stays at the OUTGOING clip's until the fade completes — which is why
+#   every clip test below ignores frames outside its own range. The restart bit (+0xC64 |= 4) makes it a hard cut to the
+#   key's first frame; it is used at the seams of the one authored jump (take-off 204 → leap 205, leap 214 → land 215,
+#   where a fade would freeze the cat mid-air for 10 steps between two near-identical poses) and at fall → land, whose
+#   lead-in is tuned for an instant start. Every other switch (land → walk, walk → take-off/ready/sit, sit → walk,
+#   ready → float-up, float-up → fall) fades (2026-09-11).
 #   +0xEC CatMoveKey int the key played while moving after the landing (mod: the brisk walk, 70).
 #   +0xF0 CatMoveFrac float ground speed after the landing as a fraction of the pellet's horizontal speed (mod);
 #   +0x194 CatMoveAbs float overrides it with an absolute units/frame when > 0 (mod).
+#   +0x198 CatLeapTravel float momentum-frames from the leap's start to the paws-touch frame (mod, ≈29): at the take-off's
+#   end the leap's momentum is re-sized to the target's LIVE distance ÷ this, and the take-off ramp re-aims every frame.
+#   +0x19C CatHitSphere int the enemy body sphere the touch test met (cave → mod: the hit entry is planted on it).
+#   +0x1A0 CatSitKey int the sit clip's key: with no target the cat sits in place instead of walking straight (mod, 72).
+#   +0x1A4 CatPounceGravity float the ground pounce's arc gravity (mod)   +0x1A8 CatLeapRate float (raw) the leap clip's
+#   motion-speed override in that arc (mod)   +0x1AC CatPounceGround int 1 while a ground pounce is airborne (cave): the
+#   fall block flies it with CatPounceGravity; the land clip's start clears it and puts the KEY rate back.
+#   +0x1B0 CatFloatLaunch float the float-up frame where the feet leave the ground (mod, 297): state 11 stands in the
+#   float-up's wind-up turning to the target until then, and the vertical leap is computed THERE   +0x1B4 CatFloatStart.
+#   +0x1B8 CatFloatRate float (raw) the float-up's motion-speed override (mod)   +0x1BC CatFallBlend float the channel's
+#   blend increment (MOTION_STATE+0x08) for the float-up → fall fade (mod, 1/steps)   +0x1C0 CatBlendDefault float 0.1,
+#   put back when the land clip starts (mod).
+#   (+0x1C4 was CatStaggerSlot: the stagger is now the engine's own — ELF 0x1DB410 (CheckDmg) → ElfCave.XiaoMeleeFlinch lets a
+#   Xiao-owned entry with a melee-type kick take the normal flinch decision.)
+#   +0x1C8 CatHitLatch int 1 after the first touch of a flight (cave): the hit lands once; the flight follows through.
 #   +0x11C CatPounceRange float (mod)  +0x120 CatPounceFrames float leap flight frames (mod)  +0x124 CatTakeoffEnd float
 #   take-off clip end frame (mod, 204)  +0x128 CatHitRadius float the cat's touch radius (mod)  +0x12C CatHitSlot int
 #   enemy slot + 1 the cat touched (cave → mod; 0 none). +0x130 CatReadyEnd / +0x134 CatRampStart / +0x138 CatRampInv
@@ -115,10 +137,10 @@ addiu $t4, $zero, 5
 beq   $t3, $t4, probe
 addiu $t4, $zero, 7
 beq   $t3, $t4, takeoff
-addiu $t4, $zero, 8
-beq   $t3, $t4, groundleap
 addiu $t4, $zero, 10
 beq   $t3, $t4, ready
+addiu $t4, $zero, 11
+beq   $t3, $t4, floatwait
 addiu $t4, $zero, 3
 bne   $t3, $t4, notwaiting
 nop
@@ -421,6 +443,11 @@ lwc1  $f16, 0x40B4($t0)        # vx
 lwc1  $f18, 0x40B8($t0)        # vh
 lwc1  $f14, 0x40BC($t0)        # vz
 lwc1  $f2,  0x40C0($t0)        # gravity
+lw    $t5, 0x41AC($t0)         # a ground pounce in the air flies on its own (stronger) gravity
+beq   $t5, $zero, gsel
+nop
+lwc1  $f2,  0x41A4($t0)
+gsel:
 lwc1  $f20, 0x40C4($t0)        # floor height
 add.s $f6, $f6, $f16           # forward speed kept
 add.s $f12, $f12, $f14
@@ -451,9 +478,14 @@ bc1t  keepfalling
 nop
 startland:
 sw    $zero, 0x4150($t0)       # the flying pounce (if any) is over
+lw    $t7, 0x0C20($t6)
+lw    $t8, 0x41C0($t0)
+sw    $t8, 0x0018($t7)         # the channel's blend increment back to the default (the fall fade may have slowed it)
+lui   $t7, 0xBF80
+sw    $t7, 0x0C60($t6)         # the land clip plays at its KEY rate (the leap may have run at CatLeapRate)
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
-sw    $t5, 0x0C64($t6)         # motion flags |= restart → the land clip starts on this very frame
+ori   $t5, $t5, 6              # restart = HARD CUT + play once: fall → land never fades (user 2026-09-11: the lead-in is tuned for an
+sw    $t5, 0x0C64($t6)         # instant start and the poses already meet); the clip runs to its end and HOLDS
 addiu $t5, $zero, 69
 sw    $t5, 0x0C68($t6)         # key = land
 addiu $t5, $zero, 5
@@ -475,13 +507,17 @@ sw    $t5, 0x0C68($t6)         # (delay slot)
 fallpose:
 lw    $t5, 0x0C68($t6)
 lw    $t7, 0x4154($t0)
-bne   $t5, $t7, leapkey        # switching from the float-up: restart the fall clip once
+bne   $t5, $t7, leapkey        # switching from the float-up: fade into the fall clip once
 nop
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
 addiu $t7, $zero, -3
-and   $t5, $t5, $t7            # restart, and clear play-once: this clip LOOPS (fall / walk)
+and   $t5, $t5, $t7            # clear play-once: this clip LOOPS; no restart → the engine cross-fades
 sw    $t5, 0x0C64($t6)
+lw    $t7, 0x0C20($t6)         # the copy's channel: fade into the fall over 1/CatFallBlend steps (slower than the 0.1 default)
+lw    $t8, 0x41BC($t0)
+sw    $t8, 0x0018($t7)         # MOTION_STATE blend increment (Step saves/restores it around each step, so it persists)
+lui   $t7, 0xBF80
+sw    $t7, 0x0C60($t6)         # the fall clip at its own KEY rate again
 leapkey:
 addiu $t5, $zero, 68
 sw    $t5, 0x0C68($t6)         # key = leap (the fall)
@@ -523,6 +559,11 @@ lwc1  $f16, 0x40B4($t0)        # vx
 lwc1  $f18, 0x40B8($t0)        # vh
 lwc1  $f14, 0x40BC($t0)        # vz
 lwc1  $f7,  0x40C0($t0)        # gravity
+lw    $t5, 0x41AC($t0)         # a ground pounce keeps its own gravity through the land clip's lead-in
+beq   $t5, $zero, lgsel
+nop
+lwc1  $f7,  0x41A4($t0)
+lgsel:
 lwc1  $f20, 0x40C4($t0)        # floor height
 move  $t8, $zero               # airborne this frame? (momentum is kept while so)
 nop
@@ -560,13 +601,13 @@ swc1  $f12, 0x0018($t6)
 b     touch
 nop
 landdone:
+sw    $zero, 0x41AC($t0)       # a ground pounce's arc is over (its gravity applied through the landing)
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 4
 addiu $t7, $zero, -3
-and   $t5, $t5, $t7            # restart, and clear play-once: this clip LOOPS (fall / walk)
-sw    $t5, 0x0C64($t6)         # restart bit: the run clip starts on this very frame
+and   $t5, $t5, $t7            # clear play-once: the walk LOOPS; no restart → the landing pose fades into it
+sw    $t5, 0x0C64($t6)
 addiu $t5, $zero, 6
-b     running                  # run from this very frame
+b     running                  # walk from this very frame (the pose catches up over the fade)
 sw    $t5, 0x4098($t0)         # state = running (delay slot)
 running:
 lui   $t6, 0x01EA
@@ -575,8 +616,8 @@ lwc1  $f6, 0x0010($t6)         # x
 lwc1  $f12, 0x0018($t6)        # y
 lwc1  $f16, 0x40D0($t0)        # dirX
 lwc1  $f14, 0x40D4($t0)        # dirZ
-lw    $t5, 0x40CC($t0)         # target position vector (0 = run straight)
-beq   $t5, $zero, runmove
+lw    $t5, 0x40CC($t0)         # target position vector (0 = nothing in range → sit)
+beq   $t5, $zero, sitdown
 nop
 lwc1  $f2, 0x0000($t5)         # target x
 lwc1  $f4, 0x0008($t5)         # target y
@@ -638,8 +679,8 @@ nop
 swc1  $f20, 0x40B8($t0)        # (3 insns after its mtc1)
 sw    $zero, 0x4150($t0)       # not a flying pounce
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
-sw    $t5, 0x0C64($t6)         # restart: take-off from frame 190
+ori   $t5, $t5, 2              # play once, no restart: the walk fades into the take-off, which runs to its end and HOLDS
+sw    $t5, 0x0C64($t6)
 addiu $t5, $zero, 67
 sw    $t5, 0x0C68($t6)
 lui   $t7, 0xBF80
@@ -650,7 +691,7 @@ b     done
 sw    $t5, 0x4098($t0)         # state = take-off (delay slot)
 readystart:                    # ── flying target: the ready crouch first, standing ──
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
+ori   $t5, $t5, 2              # play once, no restart: the walk fades into the crouch, which runs to its end and HOLDS
 sw    $t5, 0x0C64($t6)
 addiu $t5, $zero, 65
 sw    $t5, 0x0C68($t6)
@@ -741,6 +782,21 @@ swc1  $f8, 0x0014($t6)
 swc1  $f12, 0x0018($t6)
 b     done                     # (2026-09-11: this branch was missing — every walking frame fell through into the
 nop                            #  ready block below: ready pose while walking, pounces launched with no trigger)
+sitdown:                       # ── no enemy in range: sit in place (the sit clip loops) until the mod names one ──
+lw    $t7, 0x0C68($t6)
+lw    $t5, 0x41A0($t0)         # sit key
+beq   $t7, $t5, done           # already sitting: nothing to do
+nop
+lw    $t8, 0x0C64($t6)
+addiu $t9, $zero, -3
+and   $t8, $t8, $t9            # let it loop; no restart → the walk fades into the sit
+sw    $t8, 0x0C64($t6)
+sw    $t5, 0x0C68($t6)
+lui   $t7, 0xBF80
+sw    $t7, 0x0C60($t6)         # the sit plays at its KEY rate
+sw    $zero, 0x4118($t0)       # not "blocked"
+b     done
+nop
 ready:
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
@@ -779,12 +835,97 @@ nop
 nop
 bc1t  readydone
 nop
-readyhold:
+readyhold:                     # ── every frame of the crouch: face the target where it is NOW (user 2026-09-11) ──
+lw    $t5, 0x40CC($t0)         # target position vector
+beq   $t5, $zero, readykey
+nop
+lwc1  $f2, 0x0000($t5)
+lwc1  $f4, 0x0008($t5)
+lwc1  $f6, 0x0010($t6)
+lwc1  $f12, 0x0018($t6)
+sub.s $f2, $f2, $f6
+sub.s $f4, $f4, $f12
+mul.s $f10, $f2, $f2
+mul.s $f14, $f4, $f4
+add.s $f10, $f10, $f14
+.word 0x460A0284               # sqrt.s $f10, $f10
+mtc1  $zero, $f20
+nop
+nop
+nop
+.word 0x460AA034               # c.lt.s $f20, $f10   (0 < dist ?)
+nop
+bc1f  readykey
+nop
+div.s $f2, $f2, $f10
+div.s $f4, $f4, $f10
+swc1  $f2, 0x40D0($t0)         # the mod turns the cat to CatDirX/Z in every cave-owned state
+swc1  $f4, 0x40D4($t0)
+readykey:
 addiu $t5, $zero, 65
 sw    $t5, 0x0C68($t6)         # hold the ready clip, in place
 b     done
 nop
-readydone:                     # ── the jump is decided here, from the target's live position ──
+readydone:                     # ── crouch done: the float-up starts IN PLACE (state 11); the jump is decided at its feet-off frame ──
+lw    $t5, 0x0C64($t6)
+ori   $t5, $t5, 2              # play once, no restart: the crouch fades into the float-up, which runs to its end and HOLDS
+sw    $t5, 0x0C64($t6)
+lw    $t5, 0x4154($t0)
+sw    $t5, 0x0C68($t6)         # key = float-up
+lw    $t7, 0x41B8($t0)
+sw    $t7, 0x0C60($t6)         # at CatFloatRate (user 2026-09-11: a touch faster than its KEY rate)
+sw    $zero, 0x40E4($t0)
+addiu $t5, $zero, 11
+b     done
+sw    $t5, 0x4098($t0)         # state = float wind-up (delay slot)
+floatwait:                     # ── state 11: standing in the float-up's wind-up, turning to the target every frame (user 2026-09-11) ──
+lui   $t6, 0x01EA
+ori   $t6, $t6, 0x9900
+lw    $t7, 0x0C20($t6)
+lwc1  $f2, 0x0010($t7)         # live motion frame
+lwc1  $f4, 0x41B4($t0)         # float clip start
+lwc1  $f6, 0x41B0($t0)         # feet-off frame = the launch
+nop
+.word 0x46041034               # c.lt.s $f2, $f4   (frame < start ? still fading in from the crouch: hold)
+nop
+bc1t  floathold
+nop
+.word 0x46061034               # c.lt.s $f2, $f6   (frame < launch ? keep turning)
+nop
+bc1f  launch                   # the feet leave the ground: jump at where the target is NOW
+nop
+floathold:
+lw    $t5, 0x40CC($t0)         # target position vector
+beq   $t5, $zero, floatkey
+nop
+lwc1  $f2, 0x0000($t5)
+lwc1  $f4, 0x0008($t5)
+lwc1  $f6, 0x0010($t6)
+lwc1  $f12, 0x0018($t6)
+sub.s $f2, $f2, $f6
+sub.s $f4, $f4, $f12
+mul.s $f10, $f2, $f2
+mul.s $f14, $f4, $f4
+add.s $f10, $f10, $f14
+.word 0x460A0284               # sqrt.s $f10, $f10
+mtc1  $zero, $f20
+nop
+nop
+nop
+.word 0x460AA034               # c.lt.s $f20, $f10   (0 < dist ?)
+nop
+bc1f  floatkey
+nop
+div.s $f2, $f2, $f10
+div.s $f4, $f4, $f10
+swc1  $f2, 0x40D0($t0)         # face the target (the mod turns the cat to CatDirX/Z)
+swc1  $f4, 0x40D4($t0)
+floatkey:
+lw    $t5, 0x4154($t0)
+sw    $t5, 0x0C68($t6)         # hold the float-up
+b     done
+nop
+launch:                        # ── the jump is decided here, from the target's live position ──
 lw    $t5, 0x40CC($t0)         # target position vector
 beq   $t5, $zero, walkagain    # target gone: back to walking
 nop
@@ -853,8 +994,8 @@ swc1  $f16, 0x40B4($t0)
 swc1  $f8, 0x40B8($t0)
 swc1  $f18, 0x40BC($t0)
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
-sw    $t5, 0x0C64($t6)         # restart: float-up from its first frame
+ori   $t5, $t5, 2              # play once, no restart: the crouch fades into the float-up, which runs to its end and HOLDS
+sw    $t5, 0x0C64($t6)
 lw    $t5, 0x4154($t0)
 sw    $t5, 0x0C68($t6)         # key = float-up
 addiu $t5, $zero, 4
@@ -922,6 +1063,32 @@ nop
 mov.s $f4, $f10                # past the ramp end: full
 takeoffmove:
 mul.s $f0, $f0, $f4            # v = V·t
+lw    $t5, 0x40CC($t0)         # re-aim at the target's live position while gathering speed
+beq   $t5, $zero, takeoffdir
+nop
+lwc1  $f2, 0x0000($t5)
+lwc1  $f4, 0x0008($t5)
+lwc1  $f6, 0x0010($t6)
+lwc1  $f12, 0x0018($t6)
+sub.s $f2, $f2, $f6
+sub.s $f4, $f4, $f12
+mul.s $f10, $f2, $f2
+mul.s $f14, $f4, $f4
+add.s $f10, $f10, $f14
+.word 0x460A0284               # sqrt.s $f10, $f10
+mtc1  $zero, $f20
+nop
+nop
+nop
+.word 0x460AA034               # c.lt.s $f20, $f10   (0 < dist ?)
+nop
+bc1f  takeoffdir
+nop
+div.s $f2, $f2, $f10
+div.s $f4, $f4, $f10
+swc1  $f2, 0x40D0($t0)         # face and move toward where the target is NOW
+swc1  $f4, 0x40D4($t0)
+takeoffdir:
 lwc1  $f16, 0x40D0($t0)
 lwc1  $f14, 0x40D4($t0)
 lwc1  $f6, 0x0010($t6)
@@ -940,73 +1107,62 @@ sw    $t5, 0x0C68($t6)
 b     done
 nop
 takeoffdone:
-lw    $t5, 0x0C64($t6)         # ── ground leap: the leap clip at full momentum ──
-ori   $t5, $t5, 4
-addiu $t7, $zero, -3
-and   $t5, $t5, $t7            # restart, and clear play-once: this clip LOOPS (fall / walk)
-sw    $t5, 0x0C64($t6)
-addiu $t5, $zero, 68
-sw    $t5, 0x0C68($t6)
-sw    $zero, 0x40E4($t0)
-addiu $t5, $zero, 8
-b     done
-sw    $t5, 0x4098($t0)
-groundleap:
-lui   $t6, 0x01EA
-ori   $t6, $t6, 0x9900
-lw    $t7, 0x0C20($t6)
-lwc1  $f2, 0x0010($t7)         # live motion frame (leap = 205..214)
-lwc1  $f6, 0x4140($t0)         # leap clip end
-lwc1  $f4, 0x4168($t0)         # leap clip start
-lwc1  $f10, 0x40E4($t0)
-lui   $t7, 0x3F80
-mtc1  $t7, $f8
+lw    $t5, 0x40CC($t0)         # ── size the leap to the target's LIVE distance: V = dist / leap momentum-frames ──
+beq   $t5, $zero, leapsized    # (no target: keep the momentum set at the trigger)
 nop
-.word 0x46041034               # c.lt.s $f2, $f4   (frame < start ?)
-nop
-bc1t  groundmove
-nop
-add.s $f8, $f6, $f8
-nop
-.word 0x46024034               # c.lt.s $f8, $f2   (end+1 < frame ? stale)
-nop
-bc1t  groundmove
-nop
-swc1  $f2, 0x40E4($t0)
-nop
-.word 0x46061034               # c.lt.s $f2, $f6   (frame < end ?)
-nop
-bc1f  groundland
-nop
-.word 0x460A1034               # c.lt.s $f2, $f10  (wrapped ?)
-nop
-bc1t  groundland
-nop
-groundmove:
-lwc1  $f16, 0x40B4($t0)        # full momentum (vx, vz) set at the ready
-lwc1  $f14, 0x40BC($t0)
+lwc1  $f2, 0x0000($t5)
+lwc1  $f4, 0x0008($t5)
 lwc1  $f6, 0x0010($t6)
 lwc1  $f12, 0x0018($t6)
-add.s $f6, $f6, $f16
-add.s $f12, $f12, $f14
-lwc1  $f8, 0x40C4($t0)
-swc1  $f6, 0x0010($t6)
-swc1  $f8, 0x0014($t6)
-swc1  $f12, 0x0018($t6)
-addiu $t5, $zero, 68
-sw    $t5, 0x0C68($t6)
-b     touch
+sub.s $f2, $f2, $f6
+sub.s $f4, $f4, $f12
+mul.s $f10, $f2, $f2
+mul.s $f14, $f4, $f4
+add.s $f10, $f10, $f14
+.word 0x460A0284               # sqrt.s $f10, $f10
+mtc1  $zero, $f20
 nop
-groundland:                    # the leap clip is done: land (momentum continues until the paws touch, as always)
+nop
+nop
+.word 0x460AA034               # c.lt.s $f20, $f10   (0 < dist ?)
+nop
+bc1f  leapsized
+nop
+div.s $f2, $f2, $f10           # unit direction
+div.s $f4, $f4, $f10
+swc1  $f2, 0x40D0($t0)
+swc1  $f4, 0x40D4($t0)
+lwc1  $f14, 0x4198($t0)        # leap momentum-frames
+div.s $f0, $f10, $f14          # V = dist / travel
+mul.s $f2, $f2, $f0
+mul.s $f4, $f4, $f0
+swc1  $f2, 0x40B4($t0)         # momentum for the leap and the landing slide
+swc1  $f4, 0x40BC($t0)
+swc1  $f0, 0x414C($t0)         # CatPounceV (log)
+leapsized:                     # ── ground leap: a real arc — V (sized above) for T = CatLeapTravel frames, vh0 = g·T/2 (2026-09-11) ──
 lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 6              # restart + play once: this clip runs to its end and HOLDS (never loops)
+ori   $t5, $t5, 4              # restart = HARD CUT: take-off 204 → leap 205 is a seam of the one authored jump (a fade would freeze it mid-air)
+addiu $t7, $zero, -3
+and   $t5, $t5, $t7            # and clear play-once: the leap clip LOOPS (it is also the fall)
 sw    $t5, 0x0C64($t6)
-addiu $t5, $zero, 69
-sw    $t5, 0x0C68($t6)
+addiu $t5, $zero, 68
+sw    $t5, 0x0C68($t6)         # key = leap (the fall pose)
+lw    $t5, 0x41A8($t0)         # CatLeapRate → motion-speed override: the leap clip runs faster than its KEY rate
+sw    $t5, 0x0C60($t6)
+lui   $t7, 0x3F00
+mtc1  $t7, $f0                 # 0.5
+lwc1  $f10, 0x41A4($t0)        # pounce gravity
+lwc1  $f14, 0x4198($t0)        # T
+mul.s $f10, $f10, $f14         # g·T   (3 insns after the mtc1)
+mul.s $f10, $f10, $f0          # vh0 = g·T/2: back on the floor after T frames, apex g·T²/8
+swc1  $f10, 0x40B8($t0)        # CatVh
+addiu $t5, $zero, 1
+sw    $t5, 0x41AC($t0)         # CatPounceGround = 1: the fall block flies it on the pounce gravity
+sw    $zero, 0x4150($t0)       # not the flying (float-up) pounce
 sw    $zero, 0x40E4($t0)
-addiu $t5, $zero, 5
+addiu $t5, $zero, 4
 b     done
-sw    $t5, 0x4098($t0)
+sw    $t5, 0x4098($t0)         # state = falling: the arc, then the land clip by its lead-in as always
 walkagain:
 addiu $t5, $zero, 6
 b     done
@@ -1018,34 +1174,20 @@ nop
 beq   $v0, $zero, done
 nop
 lui   $t0, 0x01FB
-sw    $v0, 0x412C($t0)         # CatHitSlot = enemy + 1 (the mod plants the damage)
-addiu $t5, $zero, 9
-sw    $t5, 0x4098($t0)         # state = hit: the cat freezes where it touched
-lui   $t6, 0x01EA
-ori   $t6, $t6, 0x9900
-lw    $t7, 0x0C68($t6)         # the clip it is in: fall (68) and walk (70) may keep looping through the fade …
-addiu $t8, $zero, 68
-beq   $t7, $t8, done
+lw    $t5, 0x41C8($t0)         # CatHitLatch: one hit per flight — later touches are ignored
+bne   $t5, $zero, done
 nop
-addiu $t8, $zero, 70
-beq   $t7, $t8, done
-nop
-lw    $t5, 0x0C64($t6)
-ori   $t5, $t5, 2
-sw    $t5, 0x0C64($t6)         # … any other finishes and HOLDS its last frame (no repeat)
-lw    $t1, 0x4094($t0)         # still riding a pellet? spend it
-beq   $t1, $zero, done
-nop
-lui   $t2, 0x002A
-lw    $t2, 0x35D4($t2)
-addiu $t1, $t1, -1
-sll   $t3, $t1, 2
-addu  $t4, $t2, $t3
 addiu $t5, $zero, 1
-sw    $t5, 0x02B0($t4)         # lifetime = 1
-sw    $zero, 0x4094($t0)
-b     done
+sw    $t5, 0x41C8($t0)
+sw    $v0, 0x412C($t0)         # CatHitSlot = enemy + 1 (the mod plants the damage and starts the fade)
+sw    $t8, 0x419C($t0)         # CatHitSphere = the body sphere it touched (t8 = j at hittest's return)
+lw    $t5, 0x4098($t0)         # no state change: the flight/landing follows through (user 2026-09-11) …
+addiu $t6, $zero, 1
+bne   $t5, $t6, done
 nop
+lw    $t5, 0x40D8($t0)         # … except on the pellet: full size next frame → the follow block breaks it away
+b     done
+sw    $t5, 0x409C($t0)         # frames = N (delay slot)
 hittest:                       # → v0 = enemy slot + 1 touched, else 0. Pure loops, no calls; clobbers t0-t9, f0-f20.
 lui   $t0, 0x01FB
 lui   $t6, 0x01EA
