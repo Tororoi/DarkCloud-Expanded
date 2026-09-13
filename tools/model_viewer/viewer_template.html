@@ -62,6 +62,27 @@
     padding:7px 8px;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical;min-height:96px}
   textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
   .cap .val{float:right;text-transform:none;letter-spacing:0}
+  canvas{touch-action:none}
+  #panelToggle{display:none;position:absolute;right:10px;top:10px;z-index:3;padding:8px 12px;border-radius:8px;
+    background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);color:var(--ink);font-size:13px}
+  @media (pointer:coarse){
+    button{min-height:42px;font-size:14px}
+    select{padding:11px 10px;font-size:15px}
+    input[type=range]{height:34px}
+    .toggles label{font-size:14px;padding:6px 2px}
+    .toggles input[type=checkbox]{width:20px;height:20px}
+  }
+  @media (max-width:760px){
+    body{flex-direction:column}
+    #stage{order:1;flex:none;height:56vh;min-height:280px}
+    #panel{order:2;width:100%;min-width:0;height:auto;flex:1;border-right:0;border-top:1px solid var(--line);
+      padding:10px 12px 14px;gap:10px}
+    #panel.collapsed{display:none}
+    body.panel-collapsed #stage{height:100vh;height:100dvh}
+    #panelToggle{display:block}
+    #hint{font-size:10px;right:12px}
+    .foot{display:none}
+  }
 </style>
 </head>
 <body>
@@ -124,8 +145,9 @@
 </div>
 
 <div id="stage">
+  <button id="panelToggle" type="button" aria-controls="panel" aria-expanded="true">Hide controls</button>
   <canvas id="gl"></canvas>
-  <div id="hint">drag = orbit &nbsp;&middot;&nbsp; wheel = zoom &nbsp;&middot;&nbsp; right-drag = pan &nbsp;&middot;&nbsp; click = select poly (while paused) &nbsp;&middot;&nbsp; axes at the origin: <span style="color:#e04848">X</span> <span style="color:#3aa84a">Y up</span> <span style="color:#3b6fe0">Z</span></div>
+  <div id="hint">drag / 1 finger = orbit &nbsp;&middot;&nbsp; wheel / pinch = zoom &nbsp;&middot;&nbsp; right-drag / 2 fingers = pan &nbsp;&middot;&nbsp; click / tap = select poly (while paused) &nbsp;&middot;&nbsp; axes: <span style="color:#e04848">X</span> <span style="color:#3aa84a">Y up</span> <span style="color:#3b6fe0">Z</span></div>
 </div>
 
 <script>
@@ -480,6 +502,37 @@ window.addEventListener('mousemove',e=>{
   else{ cam.panx-=dx*cam.dist*0.0016; cam.pany+=dy*cam.dist*0.0016; }
 });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
+// ---- touch: one finger orbits, two fingers pinch-zoom and pan, a short still tap selects (while paused)
+let touchMode=0, t1x=0,t1y=0, tStartX=0,tStartY=0, tStart=0, tMoved=false, pinchD=0, pinchMx=0, pinchMy=0;
+function tdist(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(e.touches.length===1){ const t=e.touches[0]; touchMode=1; t1x=tStartX=t.clientX; t1y=tStartY=t.clientY; tStart=performance.now(); tMoved=false; }
+  else if(e.touches.length>=2){ const a=e.touches[0], b=e.touches[1]; touchMode=2; pinchD=tdist(a,b); pinchMx=(a.clientX+b.clientX)/2; pinchMy=(a.clientY+b.clientY)/2; tMoved=true; }
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(touchMode===1 && e.touches.length===1){
+    const t=e.touches[0]; const dx=t.clientX-t1x, dy=t.clientY-t1y; t1x=t.clientX; t1y=t.clientY;
+    if(Math.hypot(t.clientX-tStartX,t.clientY-tStartY)>8) tMoved=true;
+    cam.yaw-=dx*0.01; cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch+dy*0.01));
+  }else if(e.touches.length>=2){
+    const a=e.touches[0], b=e.touches[1]; const d=tdist(a,b), mx=(a.clientX+b.clientX)/2, my=(a.clientY+b.clientY)/2;
+    if(touchMode!==2){ touchMode=2; pinchD=d; pinchMx=mx; pinchMy=my; }
+    if(pinchD>0) cam.dist=Math.max(8,Math.min(160,cam.dist*pinchD/d));
+    cam.panx-=(mx-pinchMx)*cam.dist*0.0016; cam.pany+=(my-pinchMy)*cam.dist*0.0016;
+    pinchD=d; pinchMx=mx; pinchMy=my; tMoved=true;
+  }
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(touchMode===1 && !tMoved && performance.now()-tStart<400 && e.changedTouches.length){
+    const t=e.changedTouches[0]; clickPick({clientX:t.clientX, clientY:t.clientY});
+  }
+  if(e.touches.length===0) touchMode=0;
+  else if(e.touches.length===1){ const t=e.touches[0]; touchMode=1; t1x=t.clientX; t1y=t.clientY; tMoved=true; }
+},{passive:false});
+canvas.addEventListener('touchcancel',()=>{ touchMode=0; },{passive:true});
 canvas.addEventListener('wheel',e=>{ cam.dist=Math.max(8,Math.min(160,cam.dist*(1+Math.sign(e.deltaY)*0.1))); e.preventDefault(); },{passive:false});
 
 // ============================================================ app state
@@ -657,6 +710,12 @@ el('frame').oninput=()=>{ frame=parseFloat(el('frame').value); playing=false; el
 el('speed').oninput=()=>{ el('speedval').textContent=parseFloat(el('speed').value).toFixed(2); };
 el('cbSpin').onchange=()=>spin=el('cbSpin').checked;
 el('copySel').onclick=copySelection;
+el('panelToggle').onclick=()=>{
+  const p=el('panel'); const hide=!p.classList.contains('collapsed');
+  p.classList.toggle('collapsed',hide); document.body.classList.toggle('panel-collapsed',hide);
+  el('panelToggle').textContent=hide?'Show controls':'Hide controls'; el('panelToggle').setAttribute('aria-expanded',hide?'false':'true');
+  resize();
+};
 el('clearSel').onclick=clearSelection;
 
 // go

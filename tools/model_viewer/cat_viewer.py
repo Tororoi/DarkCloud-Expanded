@@ -168,6 +168,19 @@ WING_TAB_POLYS = [('Rb', 'Ri', 'ir'),          # the rear tab hangs off the base
                   ('RIM', 'if'),               # the front: a fan from 'if' over EVERY upper-rim segment Ri→…→Rf (a single chord
                   ('Rg', 'Rf', 'if', 'under')] # Ri–Rf left a gap against the rim's middle vertices)
 WING_TAB_CAP = True                # also close the base ring's open top (the hole Dran's body used to fill) under the fan
+WING_APEX_PULL = (0.30, 0.6)       # (pull at the midline, |x| where it fades to 0): the inboard fan's tip is moved OUTWARD toward
+                                   # the wing root in the mesh itself — it lies under the back's skin in flight, so the open wing
+                                   # is unchanged, and the shorter fan rises less when the humerus folds (user 2026-09-13: "reduce
+                                   # the height the polys spike to so their slope when folded is a little gentler")
+WING_ROOT_FORWARD = (0.15, 0.8, 0.85, 0.45)   # (forward shift, z below which, |x| where it fades to 0, |x| up to which it is full —
+                                   # leap pose): the fan's back edge moves forward so it no longer cuts into the folded wing behind
+                                   # it; the outer rear vertices get less so the fold behind them closes up (user 2026-09-13)
+WING_FOLD_LIFT = {28: 0.25, 24: 0.15, 29: 0.10, 19: 0.05}   # wing-mesh vertex → lift in the folded pose (two-pose fit; the
+                                   # leap is exact): the top edge of the membrane behind the root, whose blend sagged into a V
+WING_ROOT_LOWER = None             # (drop at the midline, |x| where it fades to 0): the inboard fan's apex is LOWERED by this much
+                                   # in the folded pose only — a two-pose fit (leap exact, fold = rigid spot moved straight down),
+                                   # so the fan's slope is gentler when folded without pulling it anywhere (user 2026-09-13)
+WING_ROOT_SOFTEN = None            # (share at the midline, |x| where it fades to 0): the inboard fan's apex leans on the body
 WING_ROOT_ANCHOR = False           # ring verts inside WING_ROOT_ANCHOR_X of the midline (the footprint's inward part, which stood up
 WING_ROOT_ANCHOR_X = None          # above the back when the humerus folded down) are skinned like the back beneath them; the rim
                                    # (Ri, Rf, Rt, the outer verts) keeps riding the wing so the front base folds cleanly
@@ -207,6 +220,10 @@ WING_FOLD = [((-0.08, -0.96, -0.27), (-0.83, 0.38, 0.10)),   # humerus: down the
 WING_FOLD_ROOT_SHIFT = (-0.43, 0.08, 0.0)   # the folded wing's root sits this far from the flight pivot (stand world, right wing;
                                             # mirrored for the left): out of the shoulder and up to the back's edge. The root slides
                                             # there over the humerus's fold window and back during the take-off.
+WING_HAND_DROOP = {'bones': {1: -10.0, 2: 8.0, 3: -2.0}, 'frames': (224, 227)}   # extra pitch (degrees, about the cat's lateral axis, in the spine
+                                   # frame) per wing bone index (0 = wing1 … 3 = wing4), eased in over these landing frames and held
+                                   # in the idle. Pitching the FOREARM (1) lowers the whole hand: the back feathers come DOWN to the
+                                   # back's line without leaning inward or tipping forward (user 2026-09-13)
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
                                    # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
@@ -477,6 +494,19 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 root = [pivot_local[sd][i] + (fold_root[sd][i] - pivot_local[sd][i]) * t for i in range(3)]
             else:
                 Rls = fold_local[sd][0]; root = fold_root[sd]
+            if WING_HAND_DROOP and (lcs <= f <= lce or df is None):
+                # DROOP the hand (wing3, wing4): pitch the back feathers downward about the cat's lateral axis over
+                # WING_HAND_DROOP['frames'] and hold it in the idle (user 2026-09-13: "morph the entire back two feathers angled
+                # further … downward, not inward towards the spine … the top feather edge in line with the top of the back").
+                # A rotation in the PARENT (spine) frame is post-multiplied; the spine's local z is the cat's lateral axis.
+                a, b = WING_HAND_DROOP['frames']
+                s_ = 1.0 if df is None and not (lcs <= f <= lce) else _smooth((f - a) / (b - a))
+                if s_ > 0:
+                    Rls = list(Rls)
+                    for k, deg in WING_HAND_DROOP['bones'].items():                            # a pitch of the FOREARM lowers the whole
+                        th = math.radians(deg * s_); c, sn = math.cos(th), math.sin(th)          # hand (its bones keep their own
+                        Qz = [[c, sn, 0], [-sn, c, 0], [0, 0, 1]]                                # orientation): the feathers move DOWN,
+                        Rls[k] = _mul3(Rls[k], Qz)                                              # not inward and not tilted forward
             if WING_PIN_ROOT:
                 Tls = fk_locals(sd, Rls, root)
             else:
@@ -673,6 +703,106 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     me['b0'][li], me['p0'][li], me['b1'][li], me['p1'][li], me['w0'][li] = ba, pa, bb, pb, wa
                     anchored.append(f"({q[0]:.2f}, {q[2]:.2f})")
                 log(f"  {sd} wing root anchored: {len(anchored)} ring verts held to the back: {', '.join(anchored)}")
+            if WING_APEX_PULL:
+                pull, reach = WING_APEX_PULL; pulled = []
+                for vi in used:
+                    li = remap[vi]; q = wpos(li); x = abs(q[0])
+                    if x >= reach: continue
+                    d = pull * (reach - x) / reach
+                    q2 = [q[0] + (-d if sd == 'r' else d), q[1], q[2]]                     # toward this wing's root, along x
+                    for slot in ('0', '1'):
+                        b = me['b' + slot][li]; M = Wref[b] if b in Wref else Wcat[b]
+                        me['p' + slot][li] = list(em.xform_pt(em.rigid_inv(M), q2))
+                    pulled.append(f"v{li} {d:.2f}")
+                log(f"  {sd} wing fan tip pulled toward the root: {', '.join(pulled)}")
+            if WING_ROOT_FORWARD:
+                # the fan's BACK EDGE (the rear-most root vertices) is moved forward in the mesh — the offset is taken as "the cat's
+                # forward" in the FOLDED pose and carried in each bone's frame — so it stops cutting into the folded wing behind it
+                # (user 2026-09-13: "move the back edge of these polys forward a little bit")
+                fwd, zmax, xmax, xfull = WING_ROOT_FORWARD; moved = []
+                W_fold = wing_pose(WING_FOLD_FRAME)[0]; Wc_fold = cat_world(WING_FOLD_FRAME)
+                for vi in used:
+                    li = remap[vi]; q = wpos(li); x = abs(q[0])
+                    if q[2] >= zmax or x >= xmax: continue
+                    f_ = fwd * min(1.0, (xmax - x) / (xmax - xfull))                      # full shift inboard of xfull, fading to 0 at xmax
+                    for slot in ('0', '1'):                                               # (user 2026-09-13: the outer rear verts came
+                        b = me['b' + slot][li]; M = W_fold[b] if b in W_fold else Wc_fold[b]   # too far forward → a gap behind them)
+                        R = M[:3]                                                         # rows = the bone's axes in world (fold pose)
+                        dl = [f_ * R[i][2] for i in range(3)]                             # world +z → bone-local (v · R^T)
+                        me['p' + slot][li] = [me['p' + slot][li][i] + dl[i] for i in range(3)]
+                    moved.append(f"v{li} {f_:.2f}")
+                log(f"  {sd} wing fan back edge moved forward: {', '.join(moved)}")
+            if WING_FOLD_LIFT:
+                # LIFT specific wing vertices in the FOLDED pose only (user 2026-09-13: "allow the top edge of these polys to stay
+                # higher so they don't create such a deep V when folded"): the deep V is the linear-blend collapse at the elbow —
+                # a 50/50 wing1/wing2 vertex lands on the chord between its two rigid images. A two-pose fit per vertex keeps the
+                # leap position exact and raises the folded one; keys = (side-independent) vertex index in the wing mesh
+                import numpy as _np
+                W_fold = wing_pose(WING_FOLD_FRAME)[0]; Wc_fold = cat_world(WING_FOLD_FRAME)
+                def M_of(b, Wwing, Wc):
+                    M = _np.array(Wwing[b] if b in Wwing else Wc[b], dtype=float)
+                    return M[:3, :3].T, M[3, :3]
+                lifted = []
+                for li, d in WING_FOLD_LIFT.items():
+                    if li >= len(used): continue
+                    b0_, b1_, w_ = me['b0'][li], me['b1'][li], me['w0'][li]
+                    p0_, p1_ = _np.array(me['p0'][li]), _np.array(me['p1'][li])
+                    RA0, tA0 = M_of(b0_, Wref, Wcat); RA1, tA1 = M_of(b1_, Wref, Wcat)
+                    RB0, tB0 = M_of(b0_, W_fold, Wc_fold); RB1, tB1 = M_of(b1_, W_fold, Wc_fold)
+                    tgtA = w_ * (RA0 @ p0_ + tA0) + (1 - w_) * (RA1 @ p1_ + tA1)
+                    tgtB = w_ * (RB0 @ p0_ + tB0) + (1 - w_) * (RB1 @ p1_ + tB1) + _np.array([0.0, d, 0.0])
+                    A = _np.zeros((6, 6)); rhs = _np.zeros(6)
+                    A[:3, :3] = w_ * RA0; A[:3, 3:] = (1 - w_) * RA1; rhs[:3] = tgtA - w_ * tA0 - (1 - w_) * tA1
+                    A[3:, :3] = w_ * RB0; A[3:, 3:] = (1 - w_) * RB1; rhs[3:] = tgtB - w_ * tB0 - (1 - w_) * tB1
+                    sol, *_ = _np.linalg.lstsq(A, rhs, rcond=1e-6)
+                    if _np.all(_np.isfinite(sol)) and _np.abs(sol).max() < 50:
+                        me['p0'][li] = [float(c) for c in sol[:3]]; me['p1'][li] = [float(c) for c in sol[3:]]
+                        lifted.append(f"v{li} +{d:g}")
+                log(f"  {sd} wing verts lifted in the fold: {', '.join(lifted)}")
+            if WING_ROOT_LOWER:
+                import numpy as _np
+                drop, reach = WING_ROOT_LOWER
+                W_fold = wing_pose(WING_FOLD_FRAME)[0]; Wc_fold = cat_world(WING_FOLD_FRAME)
+                def M_of(b, Wwing, Wc):
+                    M = _np.array(Wwing[b] if b in Wwing else Wc[b], dtype=float)
+                    return M[:3, :3].T, M[3, :3]                                          # column form: world = R·p + t
+                lowered = []
+                for vi in used:
+                    li = remap[vi]; q = wpos(li); x = abs(q[0])
+                    if x >= reach: continue
+                    d = drop * (reach - x) / reach
+                    b0_, b1_, w_ = me['b0'][li], me['b1'][li], me['w0'][li]
+                    p0_, p1_ = _np.array(me['p0'][li]), _np.array(me['p1'][li])
+                    RB0, tB0 = M_of(b0_, W_fold, Wc_fold); RB1, tB1 = M_of(b1_, W_fold, Wc_fold)
+                    tgtA = _np.array(q); tgtB = w_ * (RB0 @ p0_ + tB0) + (1 - w_) * (RB1 @ p1_ + tB1) + _np.array([0.0, -d, 0.0])
+                    # re-skin as wing bone + the spine (the wings' parent), half each, and solve both poses at once
+                    nb0, nb1, nw = b0_, sb2, 0.5
+                    RA0, tA0 = M_of(nb0, Wref, Wcat); RA1, tA1 = M_of(nb1, Wref, Wcat)
+                    RB0, tB0 = M_of(nb0, W_fold, Wc_fold); RB1, tB1 = M_of(nb1, W_fold, Wc_fold)
+                    A = _np.zeros((6, 6)); rhs = _np.zeros(6)
+                    A[:3, :3] = nw * RA0; A[:3, 3:] = (1 - nw) * RA1; rhs[:3] = tgtA - nw * tA0 - (1 - nw) * tA1
+                    A[3:, :3] = nw * RB0; A[3:, 3:] = (1 - nw) * RB1; rhs[3:] = tgtB - nw * tB0 - (1 - nw) * tB1
+                    sol, *_ = _np.linalg.lstsq(A, rhs, rcond=1e-6)
+                    if _np.all(_np.isfinite(sol)) and _np.abs(sol).max() < 50:
+                        me['b0'][li], me['b1'][li], me['w0'][li] = nb0, nb1, nw
+                        me['p0'][li] = [float(c) for c in sol[:3]]; me['p1'][li] = [float(c) for c in sol[3:]]
+                        lowered.append(f"v{li} −{d:.2f}")
+                log(f"  {sd} wing root apex lowered in the fold: {', '.join(lowered)}")
+            if WING_ROOT_SOFTEN:
+                # SOFTEN the inboard fan's apex (user 2026-09-13: the polys around the midline vertex "spike upward during the
+                # fold"): the membrane that lay flat on Dran's back is rigid with the wing, so when the humerus folds down its
+                # inboard tip points up. The midline vertex gets a modest share of the body (its dominant skin bone beneath, via
+                # snap_to_skin), fading to nothing by |x| = WING_ROOT_SOFTEN[1] — the apex drops toward the back without the
+                # full anchoring that tore the base. Slot 0 keeps the vertex's own wing bone.
+                share, reach = WING_ROOT_SOFTEN; soft = []
+                for vi in used:
+                    li = remap[vi]; q = wpos(li); x = abs(q[0])
+                    if x >= reach: continue
+                    w_b = share * (reach - x) / reach
+                    ba, pa, bb, pb, wa = snap_to_skin(q)
+                    me['b1'][li], me['p1'][li] = ba, pa; me['w0'][li] = 1.0 - w_b
+                    soft.append(f"v{li} {w_b:.0%}")
+                log(f"  {sd} wing root softened: {', '.join(soft)}")
             # Rm = the midpoint of the base's rear edge Rb–Rt (user 2026-09-13: "connect to the midpoint of the back edge"),
             # a new wing vertex skinned EXACTLY as the average of its two ends (their bone influences pooled per bone)
             acc = {}
