@@ -612,6 +612,9 @@ function render(){
     gl.disable(gl.CULL_FACE);                 // two-sided lambert; winding is unreliable across parts
     if(selDirty) rebuildSelFlags();
     for(const me of curDec.meshes){
+      // wing meshes (grafted parts) draw white so their intersection with the grey body reads clearly
+      const wing=(curDec.nodes[me.node].name||'').toLowerCase().includes('wing');
+      if(wing) gl.uniform3f(MESH_uC, 1.0,1.0,1.0); else gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
       gl.bindBuffer(gl.ARRAY_BUFFER,meshVBO);
       const n=me.nt*9;
       gl.bufferData(gl.ARRAY_BUFFER, (me.nt*21)*4, gl.DYNAMIC_DRAW);
