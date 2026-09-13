@@ -92,6 +92,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  PounceRange   = 30f;      // start the pounce within this of the target (user 2026-09-11; the leap re-sizes itself at launch)
         private const float  MaxTargetDistance = 300f; // PickTarget: only enemies within the vanilla render distance of Xiao
         private const float  KickStrength  = 2.0f, KickDecay = 0.3f;   // the hit's kickback, sized like Toan's heavier combo hits (1.2..3.0 / 0.2..0.4, type 2)
+        private const int    CatKickType   = 2;                        // the hit's kick type (+0x98): melee-style reaction; also the value a hurt sphere's spare[1] must hold to admit the cat at spare[0] % (ELF PatchCatSpherePercent; disc-baked on Minotaur Joe's face)
         private const float  PounceFrames  = 32f;      // leap flight time (frames) to the enemy — most enemies (user 2026-09-11)
         private const float  PounceFramesTall = 40f;   // … for the tall/large/flying set (EnemySpecies.VerticalLeapTargets) and minibosses: a higher, longer arc
         private const float  HitRadius     = 4f;       // planted hit sphere at the struck enemy
@@ -111,6 +112,8 @@ namespace Dark_Cloud_Improved_Version
         private const float  BlendDefault    = 0.1f;    // the engine's own per-step blend increment (MOTION_END seeds it)
         private const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
         private const int    FadeTicks     = 30;       // ≈ 0.5 s at the 16 ms tick (user 2026-09-11)
+        private const int    GlowFadeTicks = 45;       // ≈ 0.75 s: the glow SHRINKS on its own clock and lingers a beat after the cat has faded (user 2026-09-12)
+        private static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = the glow is at full size)
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         private const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
@@ -167,6 +170,7 @@ namespace Dark_Cloud_Improved_Version
         private static int   _fade;
         private static readonly List<(int idx, int ticks, bool native)> _planted = new();   // native = planted by the cave (the cat's hit)
         private static bool _hitFade;                        // the hit landed: the flight follows through while the cat fades out
+        private static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
 
         internal static void Start()
         {
@@ -372,6 +376,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlendFrames, FallBlendSteps);   // the cave switches float → fall this many frames before the land clip starts
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale);
+            _glowFade = -1;
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);                 // the copy's texture entries are remade per spawn: rebind
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
@@ -413,7 +418,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void DisarmCave()
         {
-            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); }
+            if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }   // CatGlowOn is PollCave's (the glow may linger past the cat)
             _caveOwns = false; _disarmTicks = 0;
         }
 
@@ -424,8 +429,17 @@ namespace Dark_Cloud_Improved_Version
             if (!Active) return;
             int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
             if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Console.WriteLine(Tag + "charge released without a shot — cat stays hidden"); return; }
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, (state != 0 && state != 3) ? 1 : 0);                    // the glow follows the cat's visibility …
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * Math.Max(0f, Math.Min(1f, _alpha)));   // … and shrinks with the fade
+            if (_target >= 0 && state >= 4) WriteTargetAim();                                                  // the aim point follows the target's body every tick
+            // The glow follows the cat's visibility. While the cat fades out (hit or 20 s expiry: opacity over FadeTicks) the glow
+            // SHRINKS on its own, longer clock (GlowFadeTicks) — so it lingers a beat where the cat vanished (user 2026-09-12;
+            // dimming it through the torch tint global did not take, so size is the fade). Its clock starts with the fade
+            // and keeps running past Hide(); a new bind resets it.
+            bool fading = _hitFade || _phase == Phase.Fading;
+            if (fading && _glowFade < 0) _glowFade = 0;
+            if (_glowFade >= 0 && ++_glowFade >= GlowFadeTicks) _glowFade = -1;
+            bool glow = (state != 0 && state != 3) || _glowFade >= 0;
+            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, glow ? 1 : 0);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * (_glowFade >= 0 ? 1f - _glowFade / (float)GlowFadeTicks : 1f));
             int ent = Memory.ReadInt(CodeCaves.Mailbox.CatHitEntry);
             if (ent != 0)                                                        // the cave planted a damage entry at a contact (the pellet's own recipe)
             {
@@ -446,7 +460,7 @@ namespace Dark_Cloud_Improved_Version
                         long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
                         int slot = Memory.ReadInt(CodeCaves.Mailbox.CatPelletSlot) - 1;
                         if (!Memory.IsValidGuest(pool) || slot < 0) break;
-                        _pool = pool; _pelletSlot = slot; _alpha = 1f; _fade = 0; _caveOwns = true; _disarmTicks = 0;
+                        _pool = pool; _pelletSlot = slot; _alpha = 1f; _fade = 0; _glowFade = -1; _caveOwns = true; _disarmTicks = 0;
                         long va = PlayerShotPool.VelAddr(pool, slot);
                         FaceAlong(Memory.ReadFloat(va), Memory.ReadFloat(va + 8));
                         _target = PickTarget();                                   // locked-on first, else the nearest to Xiao (user 2026-09-11)
@@ -459,7 +473,7 @@ namespace Dark_Cloud_Improved_Version
                         _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _boundAt = DateTime.UtcNow; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                         Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
-                        Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, _target >= 0 ? (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask) : 0);
+                        WriteTargetAim();
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                             $"cat bound to pellet slot {slot} on its birth frame" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
                     }
@@ -500,7 +514,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         int was = _target;
                         _target = PickTarget();                                   // the next nearest, if any
-                        Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, _target >= 0 ? (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask) : 0);
+                        WriteTargetAim();
                         CrushGuard(_target); ApplyFlightTime();
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
                     }
@@ -518,7 +532,7 @@ namespace Dark_Cloud_Improved_Version
                             _target = PickTarget();
                             if (_target >= 0)
                             {
-                                Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)(EnemyAddresses.CharObjects.PosAddr(_target) & Memory.PhysAddrMask));
+                                WriteTargetAim();
                                 CrushGuard(_target); ApplyFlightTime();
                                 _sitLogged = false; _gaitLogged = false;
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {_target} came within range — up and after it");
@@ -537,8 +551,8 @@ namespace Dark_Cloud_Improved_Version
                     {
                         Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                         _scale = 1f; _caveOwns = false;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "20 s lifetime over — fading");
-                        FadeKeepingPose();                                       // sitting, walking or blocked: fade as it is
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "20 s lifetime over — shrinking away");
+                        FadeKeepingPose();                                       // sitting, walking or blocked: shrink + fade as it is (Phase.Fading; the glow follows)
                     }
                     break;
                 }
@@ -573,7 +587,7 @@ namespace Dark_Cloud_Improved_Version
             _target = LockedTarget();
             _floor = _target >= 0 ? Memory.ReadFloat(EnemyAddresses.CharObjects.PosAddr(_target) + 4)
                                   : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
-            _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0;
+            _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0; _glowFade = -1;
             PlaceRootUnderHead();
             _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false;
             Maintain();
@@ -623,6 +637,48 @@ namespace Dark_Cloud_Improved_Version
             }
             Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, frames);
             if (why.Length > 0) Console.WriteLine(Tag + $"target slot {_target}: {frames:F0}-frame leap ({why})");
+        }
+
+        /// <summary>The point the cave walks to and jumps at: the centre of the target's BIGGEST active body sphere (the
+        /// Dragon's torso, a bat's body, a Titan's chest) rather than its root at the feet (user 2026-09-12). Written
+        /// into the mailbox every tick; CatTargetPtr points at that vector. No target → pointer 0 (the cat sits).</summary>
+        private static void WriteTargetAim()
+        {
+            if (_target < 0) { Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, 0); return; }
+            long root = EnemyAddresses.CharObjects.PosAddr(_target);
+            float x = Memory.ReadFloat(root), h = Memory.ReadFloat(root + 4), y = Memory.ReadFloat(root + 8);
+            long tbl = EnemyAddresses.MainMonstorUnit.Base + (long)_target * 0x510;
+            byte[] active = Memory.ReadBytesBatch(tbl + 0x55450, 16 * 4), radii = Memory.ReadBytesBatch(tbl + 0x55390, 16 * 4), centres = Memory.ReadBytesBatch(tbl + 0x55250, 16 * 0x10);
+            byte[] pct = Memory.ReadBytesBatch(tbl + 0x555D0, 16 * 0x18);           // per sphere: damage % by attacker character (_SET_BODY_COL_PARA 10+char); Xiao = +4
+            byte[] spare = Memory.ReadBytesBatch(tbl + 0x55490, 16 * 0x14);         // per sphere: the spare 5-int table — [1] = kick type admitted for Xiao at [0] % (disc-baked on Joe's face; ELF PatchCatSpherePercent)
+            if (active != null && radii != null && centres != null)
+            {
+                // The biggest hurt sphere that can actually damage (Xiao % > 0 — Master Utan's neck/face/hands are 0 for her,
+                // only the toes count); among equals, the one furthest FORWARD along the enemy's facing (Statue Dog's front
+                // sphere, the Black Knight Mount's fore-body), then the root as a last resort (user 2026-09-12).
+                float yaw = Memory.ReadFloat(EnemyAddresses.CharObjects.CharAddr(_target) + CCharacter.CharRotY);
+                float fx = (float)Math.Sin(yaw), fz = (float)Math.Cos(yaw);
+                float best = -1f, bestFwd = float.MinValue; bool anyDamaging = false;
+                for (int pass = 0; pass < 2 && best < 0; pass++)                     // pass 0: damaging spheres only; pass 1: any
+                {
+                    for (int j = 0; j < 16; j++)
+                    {
+                        if (BitConverter.ToInt32(active, j * 4) == 0) continue;
+                        int p = pct == null ? 100 : BitConverter.ToInt32(pct, j * 0x18 + 4);
+                        if (spare != null && BitConverter.ToInt32(spare, j * 0x14 + 4) == CatKickType) p = BitConverter.ToInt32(spare, j * 0x14);   // the cat's own % on this sphere
+                        if (pass == 0 && p <= 0) continue;
+                        float r = BitConverter.ToSingle(radii, j * 4);
+                        float cx = BitConverter.ToSingle(centres, j * 0x10), ch = BitConverter.ToSingle(centres, j * 0x10 + 4), cy = BitConverter.ToSingle(centres, j * 0x10 + 8);
+                        float fwd = (cx - Memory.ReadFloat(root)) * fx + (cy - Memory.ReadFloat(root + 8)) * fz;
+                        if (r > best + 0.01f || (Math.Abs(r - best) <= 0.01f && fwd > bestFwd)) { best = r; bestFwd = fwd; x = cx; h = ch; y = cy; anyDamaging = pass == 0; }
+                    }
+                }
+                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
+            }
+            Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos,     x);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
+            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)(CodeCaves.Mailbox.CatAimPos - 0x20000000));
         }
 
         /// <summary>Locked-on enemy first; otherwise the live enemy nearest to Xiao (user 2026-09-11); −1 when none.</summary>
@@ -1301,7 +1357,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteFloat(s + CCharacter.CharScale + 8, CatScale * _scale);
                 Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));
             }
-            else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours
+            else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours (a plain fade, no shrink — user 2026-09-12)
             float lit = Math.Max(0f, Math.Min(1f, _alpha));
             Memory.WriteFloat(s + CCharacter.CharaTint,     CatTint[0] * lit);      // ambient ADD: brightness + cyan lean
             Memory.WriteFloat(s + CCharacter.CharaTint + 4, CatTint[1] * lit);
@@ -1325,6 +1381,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Active) return;
             DisarmCave();
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowOn, 0); _glowFade = -1;    // PollCave stops with Active — switch the glow off here
             if (_pelletSlot >= 0)                                                // cat gone while its pellet still flies: give the sprite back
             {
                 if (Memory.ReadInt(PlayerShotPool.FlagAddr(_pool, _pelletSlot)) != 0) Memory.WriteFloat(PlayerShotPool.ScaleAddr(_pool, _pelletSlot), 1f);
@@ -1590,7 +1647,7 @@ namespace Dark_Cloud_Improved_Version
             I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
             I(0x70, 0); I(0x74, 0);
             F(0x80, ox); F(0x84, oh); F(0x88, oy); F(0x8C, 1f);                   // kick origin (a point)
-            F(0x90, KickStrength); F(0x94, KickDecay); I(0x98, 2);                 // kick strength, decay, type 2 = melee-style reaction
+            F(0x90, KickStrength); F(0x94, KickDecay); I(0x98, CatKickType);       // kick strength, decay, type 2 = melee-style reaction
             Memory.WriteBytesBatch(pool + slot * ColStride, e);
             Memory.WriteInt(pool + ColActiveOff + slot * 4, 1);
             lock (_planted) _planted.Add((slot, PlantedLifeTicks, false));

@@ -1095,7 +1095,7 @@ namespace Dark_Cloud_Improved_Version
             Id=65, TableIndex=57, Name="Blizzard", ModelCode="e65a", ModelFootprint=51196,
             Abs=8, MinGoldDrop=5, DropChance=30, StealItemId=162, RareDropItemId=82,
             MaxHp=750, DamageReduction=5, WeaponDefense=0, KnockbackMult=0.5f,
-            Category=EnemyCategory.Metal, FireRes=100, IceRes=100, ThunderRes=140, WindRes=140, HolyRes=100,
+            Category=EnemyCategory.Metal, FireRes=100, IceRes=0 /* vanilla 100; ISO patch ElfPatches.PatchBlizzardIceImmunity (user 2026-09-12) */, ThunderRes=140, WindRes=140, HolyRes=100,
             ItemDamageRes=100, ItemStatusRes=50,
             BodyWidth=7.0f, BodyHeight=28.0f, BodyDepth=60.0f, EntityScale=14.0f, EntityScaleCopy=14.0f,
             MeleeDamage=new int[]{119,119,119,119,105,90,75}, ProjectileDamage=new int[]{105,105} };

@@ -37,6 +37,9 @@
     <EmbeddedResource Include="Resources\isoPatch\catGlowDraw.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catSpherePercent.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
     </EmbeddedResource>

@@ -158,6 +158,12 @@ namespace Dark_Cloud_Improved_Version
             progress("Baking the Divine Beast Title cat into Xiao's dungeon model …");
             BakeCatPack(outIso, progress);
 
+            // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb, redirected into the tail): Blizzard takes
+            // Titan's four spheres, Sam and Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast
+            // cat's kick at 100 % (ElfPatches.PatchCatSpherePercent reads the armed spare table) — user 2026-09-12.
+            progress("Baking monster hurt-sphere fixes …");
+            BakeMonsterSpheres(outIso, progress);
+
             progress("Publishing pnach to PCSX2 …");
             ReshipPnach(crc);
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
@@ -330,14 +336,25 @@ namespace Dark_Cloud_Improved_Version
         // leap/land) and redirects the rebuilt pack into the DATA.DAT tail. Reads every model from the user's OWN
         // ISO. Idempotent; also reverts the earlier weapon-pack bake if an ISO carries it. TODO: port to pure C#.
         static void BakeCatPack(string outIso, Action<string> progress)
+            => RunPythonBake("build_cat_pack.py", "Divine Beast Title cat", outIso, progress);
+
+        // tools/iso_patch/patch_monster_spheres.py rewrites the hurt-sphere declarations of a few monster scripts (each
+        // `_SET_BODY_COL` block becomes a CALL_FUNC into a function appended to the script; nothing else moves) and
+        // redirects them into the DATA.DAT tail. Idempotent (appended marker).
+        static void BakeMonsterSpheres(string outIso, Action<string> progress)
+            => RunPythonBake("patch_monster_spheres.py", "monster hurt-sphere", outIso, progress);
+
+        /// <summary>Runs tools/iso_patch/<paramref name="scriptName"/> --iso <paramref name="outIso"/> and relays its
+        /// progress lines. Missing script → warning, not a failure (the rest of the patch still applies).</summary>
+        static void RunPythonBake(string scriptName, string what, string outIso, Action<string> progress)
         {
             string repo = Environment.GetEnvironmentVariable("DC_REPO");
             if (string.IsNullOrEmpty(repo))
                 repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-            string script = Path.Combine(repo, "tools", "iso_patch", "build_cat_pack.py");
+            string script = Path.Combine(repo, "tools", "iso_patch", scriptName);
             if (!File.Exists(script))
             {
-                progress($"⚠ cat-pack builder not found at {script} — Divine Beast Title cat NOT baked (set DC_REPO).");
+                progress($"⚠ {scriptName} not found at {script} — {what} NOT baked (set DC_REPO).");
                 return;
             }
             string py = Environment.GetEnvironmentVariable("DC_PYTHON");
@@ -365,11 +382,11 @@ namespace Dark_Cloud_Improved_Version
             }
             catch (Exception e)
             {
-                throw new IOException($"Could not run the cat-pack builder ('{py}'). Is Python installed / on PATH? "
+                throw new IOException($"Could not run {scriptName} ('{py}'). Is Python installed / on PATH? "
                                       + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
             }
             if (code != 0)
-                throw new IOException($"Divine Beast Title cat bake failed (exit {code}).\n{so}\n{se}");
+                throw new IOException($"{what} bake failed (exit {code}).\n{so}\n{se}");
             foreach (string line in so.Split('\n'))
                 if (line.Contains("assembled") || line.Contains("redirected") || line.Contains("reverted") || line.Contains("DONE") || line.Contains("skipped"))
                     progress(line.Trim());

@@ -377,6 +377,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatGlowPull      = CatBase + 0x1FC; // float, how far toward the camera the sprite is pulled (mod; the torches use 15)
             internal const long CatGlowObject    = CatBase + 0x200; // the cave's CFireOmni object, 0x40 B
             internal const long CatGlowLift      = CatBase + 0x240; // float, added to the glow's height (mod; negative lowers it)
+            internal const long CatAimPos        = CatBase + 0x244; // float3 x,h,z: the point the cat walks to / jumps at — the target's biggest body sphere (mod, per tick); CatTargetPtr points here
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
@@ -475,13 +476,18 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>Divine Beast cat glow (tools/stubs/cat_glow_draw.s): hooked in place of the dungeon draw loop's two torch
             /// passes (dun 0x1DAEBF8 / 0x1DAEC10), performs them, then draws the `catglow` disc at the cat's torso with the torch
             /// routine. +0x00 = the "catglow" name, +0x08 = entry A (DrawFire), +0x20 = entry B (DrawFireFreeStyle).</summary>
-            internal const uint CatGlowDraw        = 0x01FB2000;   // 476 B → 0x1FB21DC (second band)
+            internal const uint CatGlowDraw        = 0x01FB2000;   // 476 B → 0x1FB21DC (second band; the sphere-percent cave follows at 0x1FB21E0)
             internal const uint CatGlowDrawEntryA  = CatGlowDraw + 0x08;
             internal const uint CatGlowDrawEntryB  = CatGlowDraw + 0x20;
+            /// <summary>Cat sphere percentage (tools/stubs/cat_sphere_percent.s): CheckDmg's per-attacker damage-% load
+            /// (main-ELF 0x1DC084) re-entered so a Xiao-owned hit whose kick type equals the sphere's spare[1]
+            /// (`_SET_BODY_COL_PARA(1, kick)`, disc-baked on Minotaur Joe's face for the cat's kick 2) reads spare[0] instead
+            /// of her column. Returns to 0x1DC08C.</summary>
+            internal const uint CatSpherePercent   = 0x01FB21E0;   // 112 B → 0x1FB2250
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB21E0;   // after the glow cave (476 B → 0x1FB21DC); the band runs to 0x1FB4000 (7712 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB2250;   // after the sphere-percent cave (112 B → 0x1FB2250); the band runs to 0x1FB4000 (7600 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

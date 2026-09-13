@@ -107,6 +107,8 @@ namespace Dark_Cloud_Improved_Version
             PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
             PatchXiaoMeleeFlinch(fs, ElfOff);             // Divine Beast cat: its melee-type hits may stagger (dun.bin hook in DunPatches)
             PatchCatGlowDraw(fs, ElfOff);                 // Divine Beast cat: blue torch-glow at its torso (dun.bin hooks in DunPatches)
+            PatchCatSpherePercent(fs, ElfOff);            // Divine Beast cat: a hurt sphere may admit the cat's kick (spare[1]) at its own % (spare[0]) — Minotaur Joe's face
+            PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -295,10 +297,60 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length < 0x40 || (b.Length & 3) != 0 || U32(b, 0) != 0x67746163u || U32(b, 4) != 0x00776F6Cu
                 || U32(b, 0x08) != 0x27BDFFC0u || U32(b, 0x10) != Jal(0x001C40C0) || U32(b, 0x20) != 0x27BDFFC0u || U32(b, 0x28) != Jal(0x001C3CC0))
                 throw new IOException($"catGlowDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
-                throw new IOException("catGlowDraw.bin overruns its cave — move ElfCave.NextFree.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatSpherePercent)   // the sphere-percent cave sits right after it
+                throw new IOException("catGlowDraw.bin overruns its cave — move ElfCave.CatSpherePercent/NextFree.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        // ── Blizzard: immune to ice ──────────────────────────────────────────────────────────────────────
+        // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
+        // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
+        // like Ice Gemron (2026-09-12). EnemyData.cs carries the patched value so the mod's tables agree with the disc.
+        internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex
+            long rec = ElfOff((uint)EnemySpeciesTable.RecordAddress(Row));
+            long ice = rec + EnemySpeciesTable.IceRes;
+            ushort cur = U16(Rd(fs, ice, 2), 0);
+            bool vanilla = cur == 100, ours = cur == 0;
+            if (RdU32(fs, rec) != 0x61353665u /* "e65a" */ || !(vanilla || ours)
+                || U16(Rd(fs, rec + EnemySpeciesTable.FireRes, 2), 0) != 100 || U16(Rd(fs, rec + EnemySpeciesTable.ThunderRes, 2), 0) != 140)
+                throw new IOException($"Species row {Row} is not Blizzard as shipped (\"e65a\", fire 100 / ice 100 / thunder 140) — unmodified Dark Cloud (USA) ISO expected.");
+            Wr(fs, ice, new byte[] { 0, 0 });                                                       // IceRes = 0: immune
+        }
+
+        // ── Divine Beast cat: per-sphere cat percentage ─────────────────────────────────────────────────
+        // CheckDmg scales a hit by the hurt sphere's per-attacker % (`_SET_BODY_COL_PARA(10+char, %)`); Minotaur Joe's
+        // face is 0 % for Xiao. The cave (tools/stubs/cat_sphere_percent.s) re-forms that load's address: a Xiao-owned
+        // hit whose kick type (+0x98) equals the sphere's spare[1] (`_SET_BODY_COL_PARA(1, kick)`, +0x55490 table — no
+        // vanilla reader or writer, reset to 100 by every _SET_BODY_COL) reads spare[0] instead. The disc side
+        // (tools/iso_patch/patch_monster_spheres.py, run by IsoPatcher.BakeMonsterSpheres) arms Joe's face with (100, 2).
+        internal static void PatchCatSpherePercent(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatSpherePercent;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin")
+                ?? throw new IOException("Embedded EE function missing: catSpherePercent.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 28 words, opens `li v1,1; bne s3,v1`, both exits `j 0x1DC08C`; the last word is the vanilla `addu at,v1,at`.
+            const uint Return = 0x001DC08C;
+            if (b.Length != 112 || U32(b, 0) != 0x24030001u || (U32(b, 4) >> 16) != 0x1663u || U32(b, 64) != J(Return) || U32(b, 104) != J(Return) || U32(b, 108) != 0x00610821u)
+                throw new IOException($"catSpherePercent.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catSpherePercent.bin overruns its cave — move ElfCave.NextFree.");
+            // Hook site (main ELF, CheckDmg__12CMonstorUnit 0x1D9F10): `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8`
+            // — the per-attacker % load; the first two words become the jump, the lw stays and the cave returns onto it.
+            const uint HookAddr = 0x001DC084;
+            uint jump = J(CaveAddr);
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
+            bool vanilla = cur0 == 0x3C010005u && cur1 == 0x00610821u, ours = cur0 == jump && cur1 == 0;
+            if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr + 8)) != 0x8C2655D0u || RdU32(fs, ElfOff(HookAddr + 12)) != 0x3C0342C8u)
+                throw new IOException($"Sphere-percent hook site 0x{HookAddr:X} is not vanilla `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8` — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jump);          // j cave
+            WrU32(fs, ElfOff(HookAddr + 4), 0);         // delay slot nop (was the addu)
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
