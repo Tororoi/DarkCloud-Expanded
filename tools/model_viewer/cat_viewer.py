@@ -163,14 +163,13 @@ WING_TAB_TILT_DEG = 15.0           # the tabs' dihedral about the CAT'S BODY AXI
 WING_EXTEND_Z_BACK, WING_EXTEND_Z_FRONT, WING_EXTEND_Z_FRONT_OUT = 1.1, 2.03, 1.85   # user's top-down 2026-09-12: the front corner is at the
                                                                                       # neck base (z ≈ 2.0), 0.9 ahead of my first guess
 WING_EXTEND_LIFT = 0.1             # the corner points sit this far above the skin
-WING_TAB_POLYS = [('Rt', 'Ri', 'ir'), ('Ri', 'if', 'ir'), ('Ri', 'Rf', 'if'),   # the base's top rim (Rt→Ri→Rf) extended to the inner line;
-                  ('Rt', 'ir', 'Rm'),                                          # Rf itself is the outer-front corner — no 'of' point below it (user
-                  ('Rg', 'Rf', 'if', 'under')]                                 # 2026-09-13: the tabs dipped to it); + the rear tab joined to the
-                                   # midpoint Rm of the base's rear edge Rb–Rt; + the lower rim (Rg) joined to the front tab's inner point, closing
-                                   # the root's underside ('under' = skipped by the skin-clearance check, it lies inside the body)
+WING_TAB_POLYS = [('Rb', 'Ri', 'ir'),          # the rear tab hangs off the base triangle's INNER edge Rb–Ri (user 2026-09-13: the tabs
+                  ('Ri', 'if', 'ir'),          # must connect to the edge of the base polys, not share their other edges)
+                  ('RIM', 'if'),               # the front: a fan from 'if' over EVERY upper-rim segment Ri→…→Rf (a single chord
+                  ('Rg', 'Rf', 'if', 'under')] # Ri–Rf left a gap against the rim's middle vertices)
 WING_TAB_CAP = True                # also close the base ring's open top (the hole Dran's body used to fill) under the fan
-WING_ROOT_ANCHOR = True            # ring verts inside WING_ROOT_ANCHOR_X of the midline (the footprint's inward part, which stood up
-WING_ROOT_ANCHOR_X = 0.6           # above the back when the humerus folded down) are skinned like the back beneath them; the rim
+WING_ROOT_ANCHOR = False           # ring verts inside WING_ROOT_ANCHOR_X of the midline (the footprint's inward part, which stood up
+WING_ROOT_ANCHOR_X = None          # above the back when the humerus folded down) are skinned like the back beneath them; the rim
                                    # (Ri, Rf, Rt, the outer verts) keeps riding the wing so the front base folds cleanly
 WING_TAB_SUBDIV = 1                # each top tab → n² triangles laid on the skin (see the block); 1 = the plain triangles
                                    # (user 2026-09-13: back to the plain tabs while the wing size is re-judged)
@@ -199,7 +198,7 @@ WING_FOLD = [((-0.08, -0.96, -0.27), (-0.83, 0.38, 0.10)),   # humerus: down the
              ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.00)),   # forearm: back along the belly line
              (( 0.03,  0.20, -0.98), (-0.90, 0.42, 0.00)),   # hand: back at mid-flank, rolled 25° up
              (( 0.10,  0.15, -0.98), (-0.90, 0.42, 0.00))]   # tips: back, converging over the tail
-WING_FOLD_ROOT_SHIFT = (-0.35, 0.10, 0.0)   # the folded wing's root sits this far from the flight pivot (stand world, right wing;
+WING_FOLD_ROOT_SHIFT = (-0.43, -0.12, 0.0)  # the folded wing's root sits this far from the flight pivot (stand world, right wing;
                                             # mirrored for the left): out of the shoulder and up to the back's edge. The root slides
                                             # there over the humerus's fold window and back during the take-off.
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
@@ -496,6 +495,10 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     for i in range(skin_me['nv']):
         pa = em.xform_pt(Wcat[skin_me['b0'][i]], skin_me['p0'][i]); pb = em.xform_pt(Wcat[skin_me['b1'][i]], skin_me['p1'][i]); wa = skin_me['w0'][i]
         skin_ref.append([pa[c] * wa + pb[c] * (1 - wa) for c in range(3)])
+    mirror_bone = {}
+    for n in cat_nodes:
+        other = n['name'].replace('migi', '\0').replace('hidari', 'migi').replace('\0', 'hidari')
+        if other != n['name'] and other in cn: mirror_bone[n['i']] = cn[other]['i']
     for me, sd in zip(meshes[:2], ('r', 'l')):
         wt, used, remap = wing_sets[sd]
         wedges = Counter(e for t in wt for e in edges_of(t))
@@ -594,6 +597,26 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 infl = sorted(acc.items(), key=lambda kv: -kv[1])[:2]; tot = sum(w for _, w in infl)
                 (ba, wa), (bb, wb) = infl[0], (infl[1] if len(infl) > 1 else infl[0])
                 return q, ba, list(em.xform_pt(em.rigid_inv(Wf[ba]), q)), bb, list(em.xform_pt(em.rigid_inv(Wf[bb]), q)), wa / tot
+            def snap_to_skin(q):
+                """the skinning of the nearest cat_skin vertex to q (reference pose) — its exact (b0, b1, w0) — with q's offset from
+                that vertex carried in each bone's frame, so q rides the surface in every pose exactly as its neighbour does (a
+                triangle-sampled blend sank ≤0.6 into the back in the poses it was not fitted in). The nearest vertex to q's MIRROR
+                image is also considered and taken when it leans less on an arm bone (bones mirrored back): the cat's skin is
+                asymmetric, and a rim point owned by a leg swung with the leg mid-fold"""
+                def nearest(pt):
+                    return min(range(skin_me['nv']), key=lambda i: (skin_ref[i][0] - pt[0]) ** 2 + (skin_ref[i][1] - pt[1]) ** 2 + (skin_ref[i][2] - pt[2]) ** 2)
+                def arm_share(i):
+                    return sum(w for b, w in ((skin_me['b0'][i], skin_me['w0'][i]), (skin_me['b1'][i], 1 - skin_me['w0'][i])) if 'arm' in cat_nodes[b]['name'])
+                j = nearest(q); jm = nearest([-q[0], q[1], q[2]])
+                if arm_share(jm) < arm_share(j) - 1e-6:
+                    b0_, b1_, w_ = mirror_bone.get(skin_me['b0'][jm], skin_me['b0'][jm]), mirror_bone.get(skin_me['b1'][jm], skin_me['b1'][jm]), skin_me['w0'][jm]
+                    return b0_, list(em.xform_pt(em.rigid_inv(Wcat[b0_]), q)), b1_, list(em.xform_pt(em.rigid_inv(Wcat[b1_]), q)), w_
+                b0_, b1_, w_ = skin_me['b0'][j], skin_me['b1'][j], skin_me['w0'][j]
+                off = [q[i] - skin_ref[j][i] for i in range(3)]
+                def carried(b, pl):
+                    R = Wcat[b]                                                          # rows = the bone's axes in world → v_local = v · R^T
+                    return [pl[i] + sum(off[k] * R[i][k] for k in range(3)) for i in range(3)]
+                return b0_, carried(b0_, skin_me['p0'][j]), b1_, carried(b1_, skin_me['p1'][j]), w_
             def skin_weights(x, z, q):
                 """the skin's OWN skinning under (x, z), pooled over the triangle's three vertices by barycentric weight and cut
                 to two bones, with local positions for the point q — so a patch point moves exactly as the skin beneath it"""
@@ -632,16 +655,18 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 pa = em.xform_pt(M(me['b0'][i]), me['p0'][i]); pb = em.xform_pt(M(me['b1'][i]), me['p1'][i]); wa = me['w0'][i]
                 return [pa[c] * wa + pb[c] * (1 - wa) for c in range(3)]
             if WING_ROOT_ANCHOR:
-                n_sk = 0; anchored = []
+                # the whole intersection — the ring where the wing's top enters the back — is held to the body (user 2026-09-13:
+                # "stabilize the entire intersection where the tops of the wings enter the back with the wings open"): each ring
+                # vertex (+Rt) copies the nearest skin vertex's exact skinning with its offset carried, so it sits where it sits in
+                # every pose; the base triangles and tabs then never span a moving and a fixed corner (the notch in the fold)
+                anchored = []
                 for vi in list(chain) + (rt[:1] if rt else []):
                     li = remap[vi]; q = wpos(li)
-                    if abs(q[0]) >= WING_ROOT_ANCHOR_X: continue                         # only the footprint's INNER part (user 2026-09-13:
-                    sw_ = skin_weights(q[0], q[2], q)                                    # anchoring the whole ring pulled the base into the
-                    if sw_: ba, pa, bb, pb, wa = sw_; n_sk += 1                          # body and wrinkled the front base)
-                    else: ba = bb = sb2; pa = pb = list(em.xform_pt(em.rigid_inv(Wcat[sb2]), q)); wa = 1.0
+                    if WING_ROOT_ANCHOR_X is not None and abs(q[0]) >= WING_ROOT_ANCHOR_X: continue
+                    ba, pa, bb, pb, wa = snap_to_skin(q)
                     me['b0'][li], me['p0'][li], me['b1'][li], me['p1'][li], me['w0'][li] = ba, pa, bb, pb, wa
                     anchored.append(f"({q[0]:.2f}, {q[2]:.2f})")
-                log(f"  {sd} wing root anchored: {len(anchored)} inner ring verts (|x| < {WING_ROOT_ANCHOR_X:g}) skinned like the back: {', '.join(anchored)}; the rim rides the wing")
+                log(f"  {sd} wing root anchored: {len(anchored)} ring verts held to the back: {', '.join(anchored)}")
             # Rm = the midpoint of the base's rear edge Rb–Rt (user 2026-09-13: "connect to the midpoint of the back edge"),
             # a new wing vertex skinned EXACTLY as the average of its two ends (their bone influences pooled per bone)
             acc = {}
@@ -680,11 +705,34 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 if nm in corners and nm not in pts:
                     pts[nm], cpos[pts[nm]] = back_pt(*corners[nm])
             polys = []
-            if WING_TAB_CAP:                                                         # close the base hole under the upper rim
-                for k in range(1, len(top) - 1):
-                    polys.append((remap[top[0]], remap[top[k]], remap[top[k + 1]]))
-            coarse = [tuple(pts[p] for p in poly[:3]) for poly in WING_TAB_POLYS]
-            tabs = [t for t, poly in zip(coarse, WING_TAB_POLYS) if len(poly) == 3]     # 'under' polys are inside the body by design
+            if WING_TAB_CAP:
+                # close the base as a CLOSED FORM (user 2026-09-13): a lid over the WHOLE ring loop, fanned from a centre vertex
+                # pooled from every loop vertex (equal shares; its bone influences pooled per bone and cut to two) — the old cap
+                # only spanned the upper rim, leaving the rear and underside of the loop open, and a fan from a rim vertex would be
+                # a star of slivers
+                loop = [remap[v] for v in chain]
+                acc = {}
+                for vi in loop:
+                    for b, w, pl in ((me['b0'][vi], me['w0'][vi], me['p0'][vi]), (me['b1'][vi], 1.0 - me['w0'][vi], me['p1'][vi])):
+                        if w <= 1e-6: continue
+                        a = acc.setdefault(b, [0.0, [0.0, 0.0, 0.0]]); a[0] += w / len(loop)
+                        for c in range(3): a[1][c] += w / len(loop) * pl[c]
+                infl = sorted(acc.items(), key=lambda kv: -kv[1][0])[:2]; tot = sum(a[0] for _, a in infl)
+                (ba, aa), (bb, ab) = infl[0], (infl[1] if len(infl) > 1 else infl[0])
+                centre = me['nv']; me['nv'] += 1
+                me['b0'].append(ba); me['p0'].append([c / aa[0] for c in aa[1]]); me['w0'].append(aa[0] / tot)
+                me['b1'].append(bb); me['p1'].append([c / ab[0] for c in ab[1]])
+                for k in range(len(loop)):
+                    polys.append((centre, loop[k], loop[(k + 1) % len(loop)]))
+            tab_polys = []
+            for poly in WING_TAB_POLYS:
+                if poly[0] == 'RIM':
+                    rim = [remap[v] for v in top]                                        # Ri … Rf along the upper rim
+                    tab_polys += [(a_, b_, pts[poly[1]]) for a_, b_ in zip(rim, rim[1:])]
+                else:
+                    tab_polys.append(tuple(pts[p] for p in poly[:3]) + tuple(poly[3:]))
+            coarse = [t[:3] for t in tab_polys]
+            tabs = [t for t, poly in zip(coarse, tab_polys) if len(poly) == 3]         # 'under' polys are inside the body by design
             # clearance: the tab surface vs the skin under it (negative = the skin pokes through), sampled inside each tab;
             # a corner is raised (never a ring vertex) until every tab clears the skin by WING_TAB_CLEAR
             def wp_of(i):                                                            # any wing-mesh vertex, ref pose: wing bones from
@@ -775,7 +823,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                             me['b1'].append(arm); me['p1'].append(list(em.xform_pt(em.rigid_inv(Wcat[arm]), q))); me['w0'].append(w_spine)
                 cache[key] = i; return i
             fine = []
-            for tri, poly in zip(coarse, WING_TAB_POLYS):
+            for tri, poly in zip(coarse, tab_polys):
                 if len(poly) > 3: polys.append(tri); continue                             # 'under': one tri, inside the body
                 V = [wp_of(i) for i in tri]
                 grid = {}
@@ -802,7 +850,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             w_ = clearance(); c = w_[0] if w_ else float('nan')
             corner_log = [f"{nm} ({cpos[i][0]:.2f}, {cpos[i][1]:.2f}, {cpos[i][2]:.2f}{' ↑%.2f' % raised[i] if i in raised else ''})" for nm, i in pts.items() if i in cpos]
             log(f"  {sd} wing tabs: ring {ring_log}")
-            log(f"  {sd} wing tabs: corners {', '.join(corner_log)}; cap {len(polys) - len(fine) - sum(1 for q in WING_TAB_POLYS if len(q) > 3)} + tabs {[q[:3] for q in WING_TAB_POLYS]} subdivided ×{n} → {len(fine)} tris (+ under) = {len(polys)} tris, {len(cache)} new verts; dihedral {WING_TAB_TILT_DEG}°; min clearance over the skin {c:+.2f}")
+            log(f"  {sd} wing tabs: corners {', '.join(corner_log)}; cap {len(polys) - len(fine) - sum(1 for q in tab_polys if len(q) > 3)} + tabs {len(tabs)} subdivided ×{n} → {len(fine)} tris (+ under) = {len(polys)} tris, {len(cache)} new verts; dihedral {WING_TAB_TILT_DEG}°; min clearance over the skin {c:+.2f}")
     if WING_RIDGES:
         def skin_y3(x, z):
             best = None
