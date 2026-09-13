@@ -169,6 +169,9 @@ WING_TAB_POLYS = [('Rt', 'Ri', 'ir'), ('Ri', 'if', 'ir'), ('Ri', 'Rf', 'if'),   
                                    # midpoint Rm of the base's rear edge Rb–Rt; + the lower rim (Rg) joined to the front tab's inner point, closing
                                    # the root's underside ('under' = skipped by the skin-clearance check, it lies inside the body)
 WING_TAB_CAP = True                # also close the base ring's open top (the hole Dran's body used to fill) under the fan
+WING_ROOT_ANCHOR = True            # ring verts inside WING_ROOT_ANCHOR_X of the midline (the footprint's inward part, which stood up
+WING_ROOT_ANCHOR_X = 0.6           # above the back when the humerus folded down) are skinned like the back beneath them; the rim
+                                   # (Ri, Rf, Rt, the outer verts) keeps riding the wing so the front base folds cleanly
 WING_TAB_SUBDIV = 1                # each top tab → n² triangles laid on the skin (see the block); 1 = the plain triangles
                                    # (user 2026-09-13: back to the plain tabs while the wing size is re-judged)
 WING_TAB_ANCHOR_FRAME = 15         # the patch points sit on the skin (+lift) of THIS cat pose (the stand = the folded idle) and copy
@@ -620,6 +623,25 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             eb, ei = chain[0], top[0]
             rt = [v for t in wt if eb in t and ei in t for v in t if v not in (eb, ei)]
             pts['Rt'] = remap[rt[0]] if rt else pts['Ri']
+            # ── the ROOT is anchored to the body (user 2026-09-13: the base tri (Ri, Rb, Rt) crossed the tabs mid-fold; "make the
+            # mesh more stable"): the base ring, Rt and (through pooling) Rm take the skinning of the skin beneath them in the
+            # reference pose, so the intersection with the back is literally fixed and the wing flexes at its first membrane row
+            # instead of swinging its root through the tabs ──
+            def wp_any(i):                                                            # any wing-mesh vertex, ref pose
+                M = lambda b: Wref[b] if b in Wref else Wcat[b]
+                pa = em.xform_pt(M(me['b0'][i]), me['p0'][i]); pb = em.xform_pt(M(me['b1'][i]), me['p1'][i]); wa = me['w0'][i]
+                return [pa[c] * wa + pb[c] * (1 - wa) for c in range(3)]
+            if WING_ROOT_ANCHOR:
+                n_sk = 0; anchored = []
+                for vi in list(chain) + (rt[:1] if rt else []):
+                    li = remap[vi]; q = wpos(li)
+                    if abs(q[0]) >= WING_ROOT_ANCHOR_X: continue                         # only the footprint's INNER part (user 2026-09-13:
+                    sw_ = skin_weights(q[0], q[2], q)                                    # anchoring the whole ring pulled the base into the
+                    if sw_: ba, pa, bb, pb, wa = sw_; n_sk += 1                          # body and wrinkled the front base)
+                    else: ba = bb = sb2; pa = pb = list(em.xform_pt(em.rigid_inv(Wcat[sb2]), q)); wa = 1.0
+                    me['b0'][li], me['p0'][li], me['b1'][li], me['p1'][li], me['w0'][li] = ba, pa, bb, pb, wa
+                    anchored.append(f"({q[0]:.2f}, {q[2]:.2f})")
+                log(f"  {sd} wing root anchored: {len(anchored)} inner ring verts (|x| < {WING_ROOT_ANCHOR_X:g}) skinned like the back: {', '.join(anchored)}; the rim rides the wing")
             # Rm = the midpoint of the base's rear edge Rb–Rt (user 2026-09-13: "connect to the midpoint of the back edge"),
             # a new wing vertex skinned EXACTLY as the average of its two ends (their bone influences pooled per bone)
             acc = {}
@@ -636,9 +658,9 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             me['b1'].append(bb); me['p1'].append([c / ab[0] for c in ab[1]])
             ring_log = ', '.join(f"{'Rb' if k == 0 else 'Ri' if vi == top[0] else 'Rf' if vi == top[-1] else '·'}({P[vi][0]:.2f}, {P[vi][1]:.2f}, {P[vi][2]:.2f}; skin {(skin_y2(P[vi][0], P[vi][2]) or float('nan')):.2f})"
                                  for k, vi in enumerate(chain))
-            if rt: q = wpos(remap[rt[0]]); ring_log += f"; Rt({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f})"
-            q = wpos(pts['Rm']); ring_log += f"; Rm({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f})"
-            q = wpos(pts['Rg']); ring_log += f"; Rg({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f})"
+            if rt: q = wp_any(remap[rt[0]]); ring_log += f"; Rt({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f})"
+            q = wp_any(pts['Rm']); ring_log += f"; Rm({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f})"
+            q = wp_any(pts['Rg']); ring_log += f"; Rg({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f})"
             def back_pt(x, z):
                 xx = sx * x; sy = skin_y2(xx, z)
                 while sy is None and abs(xx) > 0.05:                                    # beyond the back's silhouette: slide inward
