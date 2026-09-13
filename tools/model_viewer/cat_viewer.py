@@ -184,10 +184,10 @@ WING_FOLD_FRAME = 15               # the cat frame (stand) whose spine orientati
 # so that membrane lies on the flank: the humerus hangs down the front of the flank (its membrane trails straight back), the
 # forearm runs back along the belly line (membrane rises up the flank), and the hand runs back at mid-flank rolled 30° up so
 # the primaries' vanes drape over the rump toward the spine; the tips end just past the rump over the tail base.
-WING_FOLD = [((-0.12, -0.95, -0.28), (-0.70, 0.70, 0.0)),    # humerus: down the flank, slightly back
-             ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.0)),    # forearm: back and a little up along the belly line
-             (( 0.03,  0.20, -0.98), (-0.85, 0.50, 0.0)),    # hand: back at mid-flank, rolled up
-             (( 0.10,  0.15, -0.98), (-0.85, 0.50, 0.0))]    # tips: back, converging over the tail
+WING_FOLD = [((-0.30, -0.92, -0.25), (-0.95, 0.06, 0.20)),   # humerus: down the flank, held OUT (elbow 0.4 outside the flank);
+             ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.00)),   #   membrane trails back and slightly out. forearm: back along the belly line
+             (( 0.03,  0.20, -0.98), (-0.94, 0.34, 0.00)),   # hand: back at mid-flank, rolled 20° up: the vanes' top edge clears the back
+             (( 0.10,  0.15, -0.98), (-0.94, 0.34, 0.00))]   # tips: back, converging over the tail   (user 2026-09-13: no clipping past the base)
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
                                    # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
