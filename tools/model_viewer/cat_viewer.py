@@ -712,24 +712,26 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     pts[nm], cpos[pts[nm]] = back_pt(*corners[nm])
             polys = []
             if WING_TAB_CAP:
-                # close the base as a CLOSED FORM (user 2026-09-13): a lid over the WHOLE ring loop, fanned from a centre vertex
-                # pooled from every loop vertex (equal shares; its bone influences pooled per bone and cut to two) — the old cap
-                # only spanned the upper rim, leaving the rear and underside of the loop open, and a fan from a rim vertex would be
-                # a star of slivers
-                loop = [remap[v] for v in chain]
-                acc = {}
-                for vi in loop:
-                    for b, w, pl in ((me['b0'][vi], me['w0'][vi], me['p0'][vi]), (me['b1'][vi], 1.0 - me['w0'][vi], me['p1'][vi])):
-                        if w <= 1e-6: continue
-                        a = acc.setdefault(b, [0.0, [0.0, 0.0, 0.0]]); a[0] += w / len(loop)
-                        for c in range(3): a[1][c] += w / len(loop) * pl[c]
-                infl = sorted(acc.items(), key=lambda kv: -kv[1][0])[:2]; tot = sum(a[0] for _, a in infl)
-                (ba, aa), (bb, ab) = infl[0], (infl[1] if len(infl) > 1 else infl[0])
-                centre = me['nv']; me['nv'] += 1
-                me['b0'].append(ba); me['p0'].append([c / aa[0] for c in aa[1]]); me['w0'].append(aa[0] / tot)
-                me['b1'].append(bb); me['p1'].append([c / ab[0] for c in ab[1]])
-                for k in range(len(loop)):
-                    polys.append((centre, loop[k], loop[(k + 1) % len(loop)]))
+                # close the base as a CLOSED FORM by ZIPPING the ring's upper rim to its lower rim (user 2026-09-13: a lid fanned
+                # from a centre vertex made flat facets that stuck out when folded; the closure must taper toward the base like
+                # the membrane does). Both rims run Rb → … → Rf; walk them together, always closing the shorter diagonal, so the
+                # closure is the thin wedge between the membrane's top and bottom surfaces and the top surface stays smooth.
+                upper = [remap[v] for v in chain[:fi + 1]]                                # Rb, Ri, (D, E), Rf
+                lower = [remap[chain[0]]] + [remap[v] for v in reversed(chain[fi + 1:])] + [remap[chain[fi]]]   # Rb, (A, Rg), Rf
+                i_, j_ = 0, 0; zipped = 0
+                while i_ < len(upper) - 1 or j_ < len(lower) - 1:
+                    if i_ == len(upper) - 1: adv_upper = False
+                    elif j_ == len(lower) - 1: adv_upper = True
+                    else:
+                        du = math.dist(wp_any(upper[i_ + 1]), wp_any(lower[j_])); dl = math.dist(wp_any(upper[i_]), wp_any(lower[j_ + 1]))
+                        adv_upper = du <= dl
+                    if adv_upper:
+                        if upper[i_ + 1] != lower[j_]: polys.append((upper[i_], upper[i_ + 1], lower[j_])); zipped += 1
+                        i_ += 1
+                    else:
+                        if lower[j_ + 1] != upper[i_]: polys.append((upper[i_], lower[j_ + 1], lower[j_])); zipped += 1
+                        j_ += 1
+                log(f"  {sd} wing base closed: upper rim {len(upper)} verts zipped to lower rim {len(lower)} verts → {zipped} tris")
             tab_polys = []
             for poly in WING_TAB_POLYS:
                 if poly[0] == 'RIM':
