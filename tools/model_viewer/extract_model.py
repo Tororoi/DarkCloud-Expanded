@@ -20,9 +20,12 @@ motion with forward kinematics (see game_data/docs/mot-format.md sec.10 for the 
       that node -- hands, feet, face, hat, hair, cloth, bag, belt... plus one big body mesh "skin"
       (whole T-pose body, ~400 verts) attached at/near the root. The small parts animate perfectly by
       drawing them at their owner node's animated world transform. The big body mesh spans many joints,
-      so it is AUTO-SKINNED here: every body vertex is bound to its 2 nearest bind-pose joints
-      (inverse-distance weights) -> linear-blend skinning at runtime. There are no per-vertex weights
-      in the file; nearest-bone auto-skin is a preview heuristic, good enough to judge a motion.
+      so it is SKINNED. The REAL per-vertex weights live in the pack's `.wgt` (decoded 2026-09-12 — the
+      mot_codec note calling it a "vertex-morph" list was wrong): one track per bone (w0 = the mesh's
+      node index, w1 = the BONE's node index, w2 = 20), whose "keyframes" are (frame = vertex index,
+      value[0] = weight in percent); every vertex is covered, weights sum to 100, up to 3-5 influences.
+      `load_weights` + `build_mesh_weighted` use them (top-2 influences, renormalised — the viewer's
+      format); packs without a .wgt fall back to the old nearest-2-joints auto-skin heuristic.
 
   ANIMATION -- the `.mot` track list (mot_codec): per (node index w0, channel w2) a sparse ascending
       list of keyframes. chan 0 = ABSOLUTE local rotation quaternion (scalar-first w,x,y,z); chan 2 =
@@ -439,6 +442,51 @@ def build_mesh(mds, node, nodes):
         infl1_bone.append(n1['i']); infl1_pos.append(xform_pt(n1['invworld'], vm))
         w0.append(wa)
     return {'node': owner, 'skin': is_skin, 'nv': len(local_pos), 'tris': tris,
+            'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}
+
+
+def load_weights(pack, wgt_name):
+    """{mesh node index: {vertex index: [(bone node index, weight 0..1), ...]}} from the pack's .wgt (see the
+    module docstring). None when the record is missing."""
+    if not wgt_name or pack.find(wgt_name) is None:
+        return None
+    wgt = Mot.from_pack(pack, wgt_name)
+    out = {}
+    for t in wgt.tracks:
+        if t.w2 != 20:
+            continue
+        per = out.setdefault(t.w0, {})
+        for kf in t.keyframes:
+            per.setdefault(kf.frame, []).append((t.w1, kf.value[0] / 100.0))
+    return out
+
+
+def build_mesh_weighted(mds, node, nodes, per_vertex):
+    """Like build_mesh, but with the pack's REAL weights for this mesh (top two influences per vertex, renormalised);
+    vertices the .wgt leaves out ride the owner node."""
+    m = parse_mdt(mds, node['meshoff'])
+    local_pos = [v[:3] for v in m.pos]
+    tris = mdt_triangles(m)
+    if not tris:
+        return None
+    owner = node['i']
+    ow = node['world']
+    infl0_bone, infl0_pos, infl1_bone, infl1_pos, w0 = [], [], [], [], []
+    for vi, v in enumerate(local_pos):
+        vm = xform_pt(ow, v)
+        infl = sorted(per_vertex.get(vi, []), key=lambda bw: -bw[1])[:2]
+        infl = [(b, w) for b, w in infl if 0 <= b < len(nodes)]
+        if not infl:
+            infl0_bone.append(owner); infl0_pos.append(v)
+            infl1_bone.append(owner); infl1_pos.append((0.0, 0.0, 0.0)); w0.append(1.0)
+            continue
+        (b0, wa) = infl[0]
+        (b1, wb) = infl[1] if len(infl) > 1 else (b0, 0.0)
+        tot = wa + wb
+        infl0_bone.append(b0); infl0_pos.append(xform_pt(nodes[b0]['invworld'], vm))
+        infl1_bone.append(b1); infl1_pos.append(xform_pt(nodes[b1]['invworld'], vm))
+        w0.append(wa / tot if tot > 0 else 1.0)
+    return {'node': owner, 'skin': True, 'nv': len(local_pos), 'tris': tris,
             'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}
 
 

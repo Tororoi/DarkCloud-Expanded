@@ -39,7 +39,9 @@ def main():
         mds = pack.find(mds_name).payload
         nodes = em.read_skeleton(mds)
         label = f"{names.get(code, code)} ({code})"
-        m = cv.model_from(label, code, chr_name.replace('\\', '/'), nodes, mds, pack, mot_name, motions, mds_name)
+        wm = re.search(rb'MOTION\s+\d+\s*,\s*"[^"]+"\s*,\s*"[^"]*"\s*,\s*"([^"]+\.wgt)"', cfg.payload)
+        m = cv.model_from(label, code, chr_name.replace('\\', '/'), nodes, mds, pack, mot_name, motions, mds_name,
+                          wgt_name=wm.group(1).decode('latin1') if wm else None)
         m['group'] = names.get(code, code)
         models.append(m)
         print(f"{label}: {len(nodes)} nodes, {m['_stats']['tris']} tris, {m['_stats']['tracks']} tracks, {len(motions)} clips, max frame {m['maxFrame']}")
