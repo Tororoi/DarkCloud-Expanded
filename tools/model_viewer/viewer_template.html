@@ -58,6 +58,10 @@
     border:1px solid var(--line);pointer-events:none}
   .foot{margin-top:auto;color:var(--muted);font-size:10.5px;border-top:1px solid var(--line);padding-top:8px}
   code{background:var(--field);padding:1px 4px;border-radius:4px;font-size:11px}
+  textarea{width:100%;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+    padding:7px 8px;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical;min-height:96px}
+  textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .cap .val{float:right;text-transform:none;letter-spacing:0}
 </style>
 </head>
 <body>
@@ -97,7 +101,18 @@
       <label><input type="checkbox" id="cbSkel"> skeleton</label>
       <label><input type="checkbox" id="cbGrid" checked> grid</label>
       <label><input type="checkbox" id="cbSpin"> spin</label>
+      <label><input type="checkbox" id="cbAxes" checked> axes</label>
     </div>
+  </div>
+
+  <div class="group">
+    <label class="cap" for="selText">Selected polys <span id="selcount" class="val">none</span></label>
+    <div class="row">
+      <button id="copySel">Copy selected</button>
+      <button id="clearSel">Clear</button>
+    </div>
+    <textarea id="selText" readonly spellcheck="false" placeholder="Pause, then click polys on the model to select them (click again to deselect). Their mesh, index, vertices and bones are listed here — Copy selected puts the list on the clipboard."></textarea>
+    <div id="selStatus" class="val"></div>
   </div>
 
   <div class="readout" id="readout"></div>
@@ -110,7 +125,7 @@
 
 <div id="stage">
   <canvas id="gl"></canvas>
-  <div id="hint">drag = orbit &nbsp;&middot;&nbsp; wheel = zoom &nbsp;&middot;&nbsp; right-drag = pan</div>
+  <div id="hint">drag = orbit &nbsp;&middot;&nbsp; wheel = zoom &nbsp;&middot;&nbsp; right-drag = pan &nbsp;&middot;&nbsp; click = select poly (while paused) &nbsp;&middot;&nbsp; axes at the origin: <span style="color:#e04848">X</span> <span style="color:#3aa84a">Y up</span> <span style="color:#3b6fe0">Z</span></div>
 </div>
 
 <script>
@@ -187,20 +202,22 @@ function prog(vs,fs){ const p=gl.createProgram();
 
 // mesh program: per-vertex position + flat normal, two-sided lambert + ambient, single neutral material
 const MESH_P = prog(`
-  attribute vec3 aPos; attribute vec3 aNrm;
-  uniform mat4 uVP; varying vec3 vN;
-  void main(){ vN=aNrm; gl_Position = uVP * vec4(aPos,1.0); }`,`
-  precision mediump float; varying vec3 vN;
-  uniform vec3 uLight; uniform vec3 uColor;
+  attribute vec3 aPos; attribute vec3 aNrm; attribute float aSel;
+  uniform mat4 uVP; varying vec3 vN; varying float vSel;
+  void main(){ vN=aNrm; vSel=aSel; gl_Position = uVP * vec4(aPos,1.0); }`,`
+  precision mediump float; varying vec3 vN; varying float vSel;
+  uniform vec3 uLight; uniform vec3 uColor; uniform vec3 uSelColor;
   void main(){
     vec3 n=normalize(vN);
     float d=abs(dot(n, normalize(uLight)));           // two-sided so winding never darkens a face
     float shade=0.32 + 0.68*d;                        // ambient + directional
-    gl_FragColor=vec4(uColor*shade,1.0);
+    vec3 col=mix(uColor, uSelColor, step(0.5, vSel)); // selected polys in the accent colour
+    gl_FragColor=vec4(col*shade,1.0);
   }`);
 const MESH_uVP=gl.getUniformLocation(MESH_P,'uVP'), MESH_uL=gl.getUniformLocation(MESH_P,'uLight'),
-      MESH_uC=gl.getUniformLocation(MESH_P,'uColor'),
-      MESH_aP=gl.getAttribLocation(MESH_P,'aPos'), MESH_aN=gl.getAttribLocation(MESH_P,'aNrm');
+      MESH_uC=gl.getUniformLocation(MESH_P,'uColor'), MESH_uS=gl.getUniformLocation(MESH_P,'uSelColor'),
+      MESH_aP=gl.getAttribLocation(MESH_P,'aPos'), MESH_aN=gl.getAttribLocation(MESH_P,'aNrm'),
+      MESH_aS=gl.getAttribLocation(MESH_P,'aSel');
 
 // line program: grid + skeleton bones
 const LINE_P = prog(`
@@ -209,7 +226,15 @@ const LINE_P = prog(`
 const LINE_uVP=gl.getUniformLocation(LINE_P,'uVP'), LINE_uC=gl.getUniformLocation(LINE_P,'uColor'),
       LINE_aP=gl.getAttribLocation(LINE_P,'aPos');
 
-const meshVBO=gl.createBuffer(), lineVBO=gl.createBuffer(), gridVBO=gl.createBuffer();
+const meshVBO=gl.createBuffer(), lineVBO=gl.createBuffer(), gridVBO=gl.createBuffer(), axesVBO=gl.createBuffer();
+// world axes at the origin, with arrowheads: X, Y (up), Z — 8 units long
+(function buildAxes(){
+  const L=8, h=0.6, a=[];
+  a.push(0,0,0, L,0,0, L,0,0, L-h,h*0.5,0, L,0,0, L-h,-h*0.5,0);          // X
+  a.push(0,0,0, 0,L,0, 0,L,0, h*0.5,L-h,0, 0,L,0, -h*0.5,L-h,0);          // Y
+  a.push(0,0,0, 0,0,L, 0,0,L, h*0.5,0,L-h, 0,0,L, -h*0.5,0,L-h);          // Z
+  gl.bindBuffer(gl.ARRAY_BUFFER,axesVBO); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(a),gl.STATIC_DRAW);
+})();
 
 // static ground grid
 let gridN=0;
@@ -233,9 +258,9 @@ function decodeModel(m){
     const P0=new Float32Array(nv*3), P1=new Float32Array(nv*3);
     for(let i=0;i<nv*3;i++){ P0[i]=p0[i]/psc; P1[i]=p1[i]/psc; }
     const W0=new Float32Array(nv); for(let i=0;i<nv;i++) W0[i]=w0[i]/255;
-    return {nv,nt,b0,b1,w0:W0,p0:P0,p1:P1,tri,
+    return {nv,nt,b0,b1,w0:W0,p0:P0,p1:P1,tri, node:me.node, tag:me.tag||'',
             skinned:new Float32Array(nv*3),
-            drawPos:new Float32Array(nt*9), drawNrm:new Float32Array(nt*9)};
+            drawPos:new Float32Array(nt*9), drawNrm:new Float32Array(nt*9), drawSel:new Float32Array(nt*3)};
   });
   // tracks -> node channels
   const rot={}, trans={};
@@ -361,9 +386,94 @@ function buildSkeletonLines(dec){
 
 // ============================================================ camera / interaction
 const cam={yaw:0.6, pitch:0.32, dist:44, panx:0, pany:0};
-let dragging=0, lastx=0, lasty=0;
-canvas.addEventListener('mousedown',e=>{ dragging=(e.button===2||e.shiftKey)?2:1; lastx=e.clientX;lasty=e.clientY; e.preventDefault(); });
-window.addEventListener('mouseup',()=>dragging=0);
+let dragging=0, lastx=0, lasty=0, downx=0, downy=0, downbtn=-1;
+canvas.addEventListener('mousedown',e=>{ dragging=(e.button===2||e.shiftKey)?2:1; lastx=downx=e.clientX;lasty=downy=e.clientY; downbtn=e.button; e.preventDefault(); });
+window.addEventListener('mouseup',e=>{
+  const wasDrag=dragging; dragging=0;
+  if(wasDrag===1 && downbtn===0 && Math.hypot(e.clientX-downx,e.clientY-downy)<4) clickPick(e);   // a click, not an orbit
+});
+function cameraVectors(){ // eye + target of the orbit camera (shared by render() and picking)
+  const midY=curDec?curDec.midY:0;
+  const tx=cam.panx, ty=midY+cam.pany, tz=0;
+  const ex=tx+cam.dist*Math.cos(cam.pitch)*Math.sin(cam.yaw);
+  const ey=ty+cam.dist*Math.sin(cam.pitch);
+  const ez=tz+cam.dist*Math.cos(cam.pitch)*Math.cos(cam.yaw);
+  return {ex,ey,ez,tx,ty,tz};
+}
+const FOVY=45*Math.PI/180;
+function pickRay(px,py){ // px,py = CSS pixels inside the canvas -> world-space ray through that pixel
+  const c=cameraVectors();
+  let fx=c.tx-c.ex, fy=c.ty-c.ey, fz=c.tz-c.ez; const fl=Math.hypot(fx,fy,fz)||1; fx/=fl;fy/=fl;fz/=fl;
+  let rx=-fz, ry=0, rz=fx; const rl=Math.hypot(rx,ry,rz)||1; rx/=rl;ry/=rl;rz/=rl;   // right = forward x up(0,1,0)
+  const ux=ry*fz-rz*fy, uy=rz*fx-rx*fz, uz=rx*fy-ry*fx;   // up = right x forward
+  const asp=(canvas.width/canvas.height)||1, t=Math.tan(FOVY/2);
+  const nx=(px/canvas.clientWidth)*2-1, ny=1-(py/canvas.clientHeight)*2;
+  let dx=fx+rx*(nx*t*asp)+ux*(ny*t), dy=fy+ry*(nx*t*asp)+uy*(ny*t), dz=fz+rz*(nx*t*asp)+uz*(ny*t);
+  const dl=Math.hypot(dx,dy,dz)||1;
+  return {ox:c.ex,oy:c.ey,oz:c.ez, dx:dx/dl,dy:dy/dl,dz:dz/dl};
+}
+function rayTri(r,S,a,b,c){ // Moller-Trumbore, two-sided; returns the ray distance or -1
+  const ax=S[a*3],ay=S[a*3+1],az=S[a*3+2];
+  const e1x=S[b*3]-ax,e1y=S[b*3+1]-ay,e1z=S[b*3+2]-az, e2x=S[c*3]-ax,e2y=S[c*3+1]-ay,e2z=S[c*3+2]-az;
+  const px=r.dy*e2z-r.dz*e2y, py=r.dz*e2x-r.dx*e2z, pz=r.dx*e2y-r.dy*e2x;
+  const det=e1x*px+e1y*py+e1z*pz; if(Math.abs(det)<1e-9) return -1;
+  const inv=1/det, tx=r.ox-ax,ty=r.oy-ay,tz=r.oz-az;
+  const u=(tx*px+ty*py+tz*pz)*inv; if(u<0||u>1) return -1;
+  const qx=ty*e1z-tz*e1y, qy=tz*e1x-tx*e1z, qz=tx*e1y-ty*e1x;
+  const v=(r.dx*qx+r.dy*qy+r.dz*qz)*inv; if(v<0||u+v>1) return -1;
+  const t=(e2x*qx+e2y*qy+e2z*qz)*inv; return t>1e-4?t:-1;
+}
+// ---- poly selection (paused only): click toggles the poly under the cursor; the list is copyable text
+const sel=new Map(); let selDirty=true;
+function selKey(mi,ti){ return mi+':'+ti; }
+function clickPick(e){
+  if(!curDec || playing || !el('cbMesh').checked){ if(playing) setSelStatus('pause the motion to select polys'); return; }
+  const rc=canvas.getBoundingClientRect(); const r=pickRay(e.clientX-rc.left, e.clientY-rc.top);
+  let best=null;
+  curDec.meshes.forEach((me,mi)=>{ const S=me.skinned,T=me.tri;
+    for(let ti=0;ti<me.nt;ti++){ const t=rayTri(r,S,T[ti*3],T[ti*3+1],T[ti*3+2]); if(t>0&&(best===null||t<best.t)) best={t,mi,ti}; } });
+  if(!best){ setSelStatus('nothing under the cursor'); return; }
+  const k=selKey(best.mi,best.ti);
+  if(sel.has(k)) sel.delete(k); else sel.set(k,{mi:best.mi,ti:best.ti});
+  selDirty=true; refreshSelText(); setSelStatus('');
+}
+function rebuildSelFlags(){
+  for(const me of curDec.meshes) me.drawSel.fill(0);
+  for(const s of sel.values()){ const me=curDec.meshes[s.mi]; if(me) me.drawSel.fill(1, s.ti*3, s.ti*3+3); }
+  selDirty=false;
+}
+function selectionText(){
+  if(!curDec||!curMotion) return '';
+  const f3=x=>(x>=0?' ':'')+x.toFixed(2);
+  const lines=[`${curModel.label} (${curModel.code}) — motion #${curMotion.id} ${curMotion.name||''}${curMotion.gloss?' ('+curMotion.gloss+')':''} — frame ${frame.toFixed(1)} — ${sel.size} poly${sel.size===1?'':'s'}`];
+  for(const s of sel.values()){
+    const me=curDec.meshes[s.mi]; if(!me) continue;
+    const nodeName=curDec.nodes[me.node].name, tag=me.tag?` [${me.tag}]`:'';
+    const S=me.skinned; let cx=0,cy=0,cz=0;
+    const vs=[0,1,2].map(k=>{
+      const vi=me.tri[s.ti*3+k]; cx+=S[vi*3]/3; cy+=S[vi*3+1]/3; cz+=S[vi*3+2]/3;
+      const w=me.w0[vi], b0=curDec.nodes[me.b0[vi]].name, b1=curDec.nodes[me.b1[vi]].name;
+      const bones = w>0.995 ? b0 : `${b0} ${Math.round(w*100)}% + ${b1}`;
+      return `v${vi} (${f3(S[vi*3])},${f3(S[vi*3+1])},${f3(S[vi*3+2])}) ${bones}`;
+    });
+    lines.push(`mesh ${s.mi} ${nodeName}${tag} tri ${s.ti} — centre (${f3(cx)},${f3(cy)},${f3(cz)})`);
+    for(const v of vs) lines.push('    '+v);
+  }
+  return lines.join('\n');
+}
+function refreshSelText(){
+  el('selText').value = sel.size ? selectionText() : '';
+  el('selcount').textContent = sel.size ? `${sel.size} poly${sel.size===1?'':'s'}` : 'none';
+}
+function setSelStatus(msg){ el('selStatus').textContent=msg; }
+function clearSelection(){ sel.clear(); selDirty=true; refreshSelText(); setSelStatus(''); }
+async function copySelection(){
+  if(!sel.size){ setSelStatus('nothing selected'); return; }
+  const text=selectionText(); el('selText').value=text;
+  try{ await navigator.clipboard.writeText(text); setSelStatus(`copied ${sel.size} poly${sel.size===1?'':'s'} to the clipboard`); return; }catch(err){}
+  try{ const ta=el('selText'); ta.focus(); ta.select(); if(document.execCommand('copy')){ setSelStatus('copied to the clipboard'); return; } }catch(err){}
+  const ta=el('selText'); ta.focus(); ta.select(); setSelStatus('clipboard blocked here — the text is selected, press Ctrl/Cmd+C');
+}
 window.addEventListener('mousemove',e=>{
   if(!dragging) return; const dx=e.clientX-lastx, dy=e.clientY-lasty; lastx=e.clientX;lasty=e.clientY;
   if(dragging===1){ cam.yaw-=dx*0.01; cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch+dy*0.01)); }
@@ -397,6 +507,7 @@ function fillMotions(){
 }
 function selectModel(i){
   curModel=MODELS[i]; curDec=decodeModel(curModel);
+  sel.clear(); selDirty=true; if(el('selText')){ refreshSelText(); setSelStatus(''); }
   cam.dist=Math.max(20, curDec.height*2.6); cam.panx=0; cam.pany=0;
   el('model').value=i;
   const skelOnly = !curDec.meshes.length;
@@ -465,11 +576,7 @@ function render(){
 
   const asp=canvas.width/canvas.height;
   const P=perspective(45*Math.PI/180, asp||1, 0.5, 600);
-  const midY=curDec.midY;
-  const tx=cam.panx, ty=midY+cam.pany, tz=0;
-  const ex=tx+cam.dist*Math.cos(cam.pitch)*Math.sin(cam.yaw);
-  const ey=ty+cam.dist*Math.sin(cam.pitch);
-  const ez=tz+cam.dist*Math.cos(cam.pitch)*Math.cos(cam.yaw);
+  const {ex,ey,ez,tx,ty,tz}=cameraVectors();
   const V=lookAt(ex,ey,ez, tx,ty,tz, 0,1,0);
   const VP=mul4(P,V);
 
@@ -485,21 +592,48 @@ function render(){
     gl.enableVertexAttribArray(LINE_aP); gl.vertexAttribPointer(LINE_aP,3,gl.FLOAT,false,0,0);
     gl.drawArrays(gl.LINES,0,gridN);
   }
+  // axes: X red, Y green (up), Z blue — drawn over everything so they can be referenced from any angle
+  if(el('cbAxes').checked){
+    gl.useProgram(LINE_P); gl.uniformMatrix4fv(LINE_uVP,false,VP);
+    gl.bindBuffer(gl.ARRAY_BUFFER,axesVBO);
+    gl.enableVertexAttribArray(LINE_aP); gl.vertexAttribPointer(LINE_aP,3,gl.FLOAT,false,0,0);
+    gl.disable(gl.DEPTH_TEST);
+    gl.uniform4f(LINE_uC, 0.88,0.28,0.28,1.0); gl.drawArrays(gl.LINES,0,6);
+    gl.uniform4f(LINE_uC, 0.23,0.66,0.29,1.0); gl.drawArrays(gl.LINES,6,6);
+    gl.uniform4f(LINE_uC, 0.23,0.44,0.88,1.0); gl.drawArrays(gl.LINES,12,6);
+    gl.enable(gl.DEPTH_TEST);
+  }
   // mesh
   if(el('cbMesh').checked){
     gl.useProgram(MESH_P); gl.uniformMatrix4fv(MESH_uVP,false,VP);
     gl.uniform3f(MESH_uL, 0.4,0.85,0.35);
     gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
+    gl.uniform3f(MESH_uS, 1.0, 0.55, 0.15);   // selected polys: orange
     gl.disable(gl.CULL_FACE);                 // two-sided lambert; winding is unreliable across parts
+    if(selDirty) rebuildSelFlags();
     for(const me of curDec.meshes){
       gl.bindBuffer(gl.ARRAY_BUFFER,meshVBO);
       const n=me.nt*9;
-      gl.bufferData(gl.ARRAY_BUFFER, (me.nt*18)*4, gl.DYNAMIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, (me.nt*21)*4, gl.DYNAMIC_DRAW);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, me.drawPos);
       gl.bufferSubData(gl.ARRAY_BUFFER, n*4, me.drawNrm);
+      gl.bufferSubData(gl.ARRAY_BUFFER, n*8, me.drawSel);
       gl.enableVertexAttribArray(MESH_aP); gl.vertexAttribPointer(MESH_aP,3,gl.FLOAT,false,0,0);
       gl.enableVertexAttribArray(MESH_aN); gl.vertexAttribPointer(MESH_aN,3,gl.FLOAT,false,0,n*4);
+      gl.enableVertexAttribArray(MESH_aS); gl.vertexAttribPointer(MESH_aS,1,gl.FLOAT,false,0,n*8);
       gl.drawArrays(gl.TRIANGLES,0,me.nt*3);
+    }
+    gl.disableVertexAttribArray(MESH_aS);
+    if(sel.size){                             // outline the selected polys on top, so they read even when occluded
+      const L=[];
+      for(const s of sel.values()){ const me=curDec.meshes[s.mi]; if(!me) continue; const S=me.skinned, T=me.tri;
+        for(let k=0;k<3;k++){ const a=T[s.ti*3+k]*3, b=T[s.ti*3+(k+1)%3]*3; L.push(S[a],S[a+1],S[a+2],S[b],S[b+1],S[b+2]); } }
+      const LA=new Float32Array(L);
+      gl.useProgram(LINE_P); gl.uniformMatrix4fv(LINE_uVP,false,VP);
+      gl.uniform4f(LINE_uC, 1.0,0.45,0.05,1.0);
+      gl.bindBuffer(gl.ARRAY_BUFFER,lineVBO); gl.bufferData(gl.ARRAY_BUFFER,LA,gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(LINE_aP); gl.vertexAttribPointer(LINE_aP,3,gl.FLOAT,false,0,0);
+      gl.disable(gl.DEPTH_TEST); gl.drawArrays(gl.LINES,0,LA.length/3); gl.enable(gl.DEPTH_TEST);
     }
   }
   // skeleton
@@ -519,6 +653,8 @@ el('reset').onclick=()=>{ cam.yaw=0.6;cam.pitch=0.32;cam.panx=0;cam.pany=0; cam.
 el('frame').oninput=()=>{ frame=parseFloat(el('frame').value); playing=false; el('play').textContent='Play'; };
 el('speed').oninput=()=>{ el('speedval').textContent=parseFloat(el('speed').value).toFixed(2); };
 el('cbSpin').onchange=()=>spin=el('cbSpin').checked;
+el('copySel').onclick=copySelection;
+el('clearSel').onclick=clearSelection;
 
 // go
 if(gl){

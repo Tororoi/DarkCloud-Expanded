@@ -162,7 +162,7 @@ namespace Dark_Cloud_Improved_Version
         // The cat's own light: Draw__10CCharacter (0x137xxx) adds this float3 (CCharacter +0xCE0) to the scene ambient it lights
         // the model with (0..255 scale; the dungeon's own key lights are ~100-120). Brightness with a slight cyan lean
         // (user 2026-09-12); scaled by the fade so the cat dims as it goes.
-        private static readonly float[] CatTint = { 12f, 34f, 48f };   // user 2026-09-12
+        private static readonly float[] CatTint = { 16f, 30f, 35f };   // user 2026-09-12
         private const float  GlowLift  = 0f;        // units added to the glow's height (negative lowers it; user 2026-09-12: the centre sat just above the cat)
         private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (user 2026-09-12)         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
         private const float  HeadFallbackHeight = 6f;
