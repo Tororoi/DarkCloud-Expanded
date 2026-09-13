@@ -118,6 +118,8 @@ WING_BONES = ['r_wing1', 'r_wing2', 'r_wing3', 'r_wing4', 'l_wing1', 'l_wing2', 
 WING_ATTACH_NODE = 'cat_sebone2'   # the wing roots sit at this cat bone's bind position (the mid-spine the glow uses)
 WING_SCALE = None                  # None = auto: wing length (wing1→wing4 on Dran, ≈59 units) = the cat's body length × WING_SCALE_MUL
 WING_SCALE_MUL = 0.5               # user 2026-09-12: 0.6× the first try, then 0.5×
+WING_SIZE_MUL = 0.7                # user 2026-09-13: the wings' MESH and bone chain at 0.6× of that, about the wing roots — the roots
+                                   # (and so the intersection on the back) stay where they were; only the wing itself shrinks
 # The attach point (the midpoint between the two wing roots), cat world in the BIND pose = cat_sebone2's bind position (0, 3.1, 1.0)
 # lifted 0.3 and moved 0.7 forward — the position the user approved (2026-09-12); it rides the spine bone from there. (A leap-pose
 # re-definition at the shoulder-blade polys put the wings too far back — reverted.)
@@ -167,6 +169,12 @@ WING_TAB_POLYS = [('Rt', 'Ri', 'ir'), ('Ri', 'if', 'ir'), ('Ri', 'Rf', 'if'),   
                                    # midpoint Rm of the base's rear edge Rb–Rt; + the lower rim (Rg) joined to the front tab's inner point, closing
                                    # the root's underside ('under' = skipped by the skin-clearance check, it lies inside the body)
 WING_TAB_CAP = True                # also close the base ring's open top (the hole Dran's body used to fill) under the fan
+WING_TAB_SUBDIV = 1                # each top tab → n² triangles laid on the skin (see the block); 1 = the plain triangles
+                                   # (user 2026-09-13: back to the plain tabs while the wing size is re-judged)
+WING_TAB_ANCHOR_FRAME = 15         # the patch points sit on the skin (+lift) of THIS cat pose (the stand = the folded idle) and copy
+                                   # its skinning there; None = the leap reference pose (they sank ≤0.3 into the back when standing)
+WING_TAB_HINGE, WING_TAB_HINGE_MAX = 0.35, 0.0   # sub-points closer than this (barycentric) to the ring follow the wing bone, up to this
+                                   # much at the ring's own row — a fan hinge instead of sliver triangles tearing between ring and patch
 WING_TAB_CLEAR = None              # corners are raised until every tab clears the skin by this (the flat tabs vs the convex shoulder);
                                    # None = off (the tilt sets the heights absolutely; intersecting the back is intended)
 # which Dran clip drives which cat clip: cat KEY index → (Dran start, Dran end, Dran speed, loop?)
@@ -265,7 +273,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     body_len = max(ext[0], ext[2]); body_h = ext[1]
     S = WING_SCALE if WING_SCALE else body_len / wing_len * WING_SCALE_MUL
     attach = None                                         # set below, once the reference pose is known
-    log(f"wing graft: cat body {body_len:.1f} long × {body_h:.1f} high; Dran wing {wing_len:.1f} → scale {S:.3f} (wing ≈ {wing_len * S:.1f}); roots {14.8 * S:.1f} apart")
+    log(f"wing graft: cat body {body_len:.1f} long × {body_h:.1f} high; Dran wing {wing_len:.1f} → scale {S:.3f} × size {WING_SIZE_MUL:g} (wing ≈ {wing_len * S * WING_SIZE_MUL:.1f}); roots {14.8 * S:.1f} apart")
     # ── new nodes: Dran's wing bones are children of Dran's root; place them in the CAT's WORLD (Dran's orientation,
     # positioned at the attach point) and convert into catroot-local — neither root's bind rotation is assumed identity ──
     nodes = [dict(n) for n in cat_nodes]
@@ -328,7 +336,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     # ── the wing as an FK chain: Dran's four bones per side are siblings, but their positions always satisfy
     # T[k+1] = T[k] + len_k · (bone k's local +x); so with the root pinned on the shoulder every pose is rotations only ──
     SIDES = {'r': ['r_wing1', 'r_wing2', 'r_wing3', 'r_wing4'], 'l': ['l_wing1', 'l_wing2', 'l_wing3', 'l_wing4']}
-    seg_len = {sd: [math.dist(dn[a]['T'], dn[b]['T']) * S for a, b in zip(ch, ch[1:])] for sd, ch in SIDES.items()}
+    seg_len = {sd: [math.dist(dn[a]['T'], dn[b]['T']) * S * WING_SIZE_MUL for a, b in zip(ch, ch[1:])] for sd, ch in SIDES.items()}
     pivot_local = {sd: list(nodes[wid[dn[ch[0]]['i']]]['T']) for sd, ch in SIDES.items()}       # wing1's bind position, spine-local
     def fk_locals(sd, Rls, root=None):
         """spine-local rotations of wing1..4 → spine-local positions, chained from the pinned pivot (or `root`)"""
@@ -410,8 +418,8 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             if not infl: infl = [(dn[root]['i'], 1.0)]
             (ba, wa) = infl[0]; (bb, wb) = infl[1] if len(infl) > 1 else (ba, 0.0)
             tot = wa + wb
-            pa = [c * S for c in em.xform_pt(dran_nodes[ba]['invworld'], vw[vi])]
-            pb = [c * S for c in em.xform_pt(dran_nodes[bb]['invworld'], vw[vi])]
+            pa = [c * S * WING_SIZE_MUL for c in em.xform_pt(dran_nodes[ba]['invworld'], vw[vi])]
+            pb = [c * S * WING_SIZE_MUL for c in em.xform_pt(dran_nodes[bb]['invworld'], vw[vi])]
             b0.append(wid[ba]); p0.append(pa); b1.append(wid[bb]); p1.append(pb); w0.append(wa / tot if tot else 1.0)
         meshes.append({'node': wid[dn[root]['i']], 'skin': True, 'nv': len(used), 'tris': [(remap[a], remap[b], remap[c]) for a, b, c in wt],
                        'b0': b0, 'p0': p0, 'b1': b1, 'p1': p1, 'w0': w0})
@@ -537,7 +545,8 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             sx = 1.0 if sd == 'l' else -1.0
             arm = cn['cat_arm_hidari' if sd == 'l' else 'cat_arm_migi']['i']
             sb1, sb2 = cn['cat_sebone1']['i'], cn['cat_sebone2']['i']
-            def skin_y2(x, z):
+            def skin_hit(x, z):
+                """the topmost cat_skin triangle under (x, z) in the reference pose: (y, tri, (l1, l2, l3)) or None"""
                 best = None
                 for t in skin_me['tris']:
                     A, B, C = (skin_ref[v] for v in t)
@@ -548,8 +557,52 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     l3 = 1 - l1 - l2
                     if l1 < -1e-6 or l2 < -1e-6 or l3 < -1e-6: continue
                     y = l1 * A[1] + l2 * B[1] + l3 * C[1]
-                    if best is None or y > best: best = y
+                    if best is None or y > best[0]: best = (y, t, (l1, l2, l3))
                 return best
+            def skin_y2(x, z):
+                h = skin_hit(x, z); return h[0] if h else None
+            def skin_hit_at(x, z, skin_pts):
+                best = None
+                for t in skin_me['tris']:
+                    A, B, C = (skin_pts[v] for v in t)
+                    det = (B[0] - A[0]) * (C[2] - A[2]) - (C[0] - A[0]) * (B[2] - A[2])
+                    if abs(det) < 1e-9: continue
+                    l1 = ((B[0] - x) * (C[2] - z) - (C[0] - x) * (B[2] - z)) / det
+                    l2 = ((C[0] - x) * (A[2] - z) - (A[0] - x) * (C[2] - z)) / det
+                    l3 = 1 - l1 - l2
+                    if l1 < -1e-6 or l2 < -1e-6 or l3 < -1e-6: continue
+                    y = l1 * A[1] + l2 * B[1] + l3 * C[1]
+                    if best is None or y > best[0]: best = (y, t, (l1, l2, l3))
+                return best
+            def skin_point_at(frame, x, z, lift):
+                """a point on the skin at (x, z) in the given cat pose, lifted, skinned like the skin beneath it:
+                (world position, b0, p0, b1, p1, w0) or None (no skin under it there)"""
+                Wf = cat_world(frame)
+                pts_f = []
+                for i in range(skin_me['nv']):
+                    pa = em.xform_pt(Wf[skin_me['b0'][i]], skin_me['p0'][i]); pb = em.xform_pt(Wf[skin_me['b1'][i]], skin_me['p1'][i]); wa = skin_me['w0'][i]
+                    pts_f.append([pa[c] * wa + pb[c] * (1 - wa) for c in range(3)])
+                h = skin_hit_at(x, z, pts_f)
+                if not h: return None
+                y, t, lam = h; q = [x, y + lift, z]; acc = {}
+                for v, l in zip(t, lam):
+                    for b, w in ((skin_me['b0'][v], skin_me['w0'][v]), (skin_me['b1'][v], 1.0 - skin_me['w0'][v])):
+                        if w > 1e-6: acc[b] = acc.get(b, 0.0) + l * w
+                infl = sorted(acc.items(), key=lambda kv: -kv[1])[:2]; tot = sum(w for _, w in infl)
+                (ba, wa), (bb, wb) = infl[0], (infl[1] if len(infl) > 1 else infl[0])
+                return q, ba, list(em.xform_pt(em.rigid_inv(Wf[ba]), q)), bb, list(em.xform_pt(em.rigid_inv(Wf[bb]), q)), wa / tot
+            def skin_weights(x, z, q):
+                """the skin's OWN skinning under (x, z), pooled over the triangle's three vertices by barycentric weight and cut
+                to two bones, with local positions for the point q — so a patch point moves exactly as the skin beneath it"""
+                h = skin_hit(x, z)
+                if not h: return None
+                _, t, lam = h; acc = {}
+                for v, l in zip(t, lam):
+                    for b, w in ((skin_me['b0'][v], skin_me['w0'][v]), (skin_me['b1'][v], 1.0 - skin_me['w0'][v])):
+                        if w > 1e-6: acc[b] = acc.get(b, 0.0) + l * w
+                infl = sorted(acc.items(), key=lambda kv: -kv[1])[:2]; tot = sum(w for _, w in infl)
+                (ba, wa), (bb, wb) = infl[0], (infl[1] if len(infl) > 1 else infl[0])
+                return ba, list(em.xform_pt(em.rigid_inv(Wcat[ba]), q)), bb, list(em.xform_pt(em.rigid_inv(Wcat[bb]), q)), wa / tot
             chain = max(chains, key=len)
             if len(chain) > 1 and chain[0] == chain[-1]: chain = chain[:-1]
             P = {vi: wpos(remap[vi]) for vi in chain}
@@ -608,10 +661,8 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             if WING_TAB_CAP:                                                         # close the base hole under the upper rim
                 for k in range(1, len(top) - 1):
                     polys.append((remap[top[0]], remap[top[k]], remap[top[k + 1]]))
-            tabs = [tuple(pts[p] for p in poly[:3]) for poly in WING_TAB_POLYS]
-            polys += tabs
-            tabs = [t for t, poly in zip(tabs, WING_TAB_POLYS) if len(poly) == 3]     # 'under' polys are inside the body by design
-            me['tris'] += polys
+            coarse = [tuple(pts[p] for p in poly[:3]) for poly in WING_TAB_POLYS]
+            tabs = [t for t, poly in zip(coarse, WING_TAB_POLYS) if len(poly) == 3]     # 'under' polys are inside the body by design
             # clearance: the tab surface vs the skin under it (negative = the skin pokes through), sampled inside each tab;
             # a corner is raised (never a ring vertex) until every tab clears the skin by WING_TAB_CLEAR
             def wp_of(i):                                                            # any wing-mesh vertex, ref pose: wing bones from
@@ -651,10 +702,85 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     y_rim = y0 + (y1 - y0) * t                                            # the rim's height beside this corner
                     pos[1] = y_rim - abs(pos[0] - hx) * math.tan(th)                      # lower toward the spine by the dihedral
                     me['p0'][i] = list(em.xform_pt(em.rigid_inv(Wcat[me['b0'][i]]), pos)); me['p1'][i] = list(em.xform_pt(em.rigid_inv(Wcat[me['b1'][i]]), pos))
+            # ── subdivide the top tabs (user 2026-09-13: "subdivide these so you can fold the wings while keeping the intersection
+            # into the back stable and not clipping"): each tab → n² triangles; new points on a wing–wing edge stay wing-skinned
+            # (their ends' influences pooled), every other new point is laid on the skin (+lift, never below the tab's own plane)
+            # and weighted like the skin under it — so the patch hugs the back in every pose and only the one ring-side row
+            # stretches to the wing as it folds (the hinge = the stable intersection) ──
+            n = WING_TAB_SUBDIV; wing_vert = lambda i: i < len(used) or i == pts.get('Rm'); ch_root = SIDES[sd][0]
+            P_anchor = cat_world(WING_TAB_ANCHOR_FRAME)[parent] if WING_TAB_ANCHOR_FRAME is not None else None
+            cache = {}
+            def sub_vertex(key, pos, ends):
+                if key in cache: return cache[key]
+                if all(wing_vert(e) for e, _ in ends):                                   # on a wing–wing edge: pool the ends
+                    acc = {}
+                    for vi, wgt in ends:
+                        for b, w, pl in ((me['b0'][vi], me['w0'][vi], me['p0'][vi]), (me['b1'][vi], 1.0 - me['w0'][vi], me['p1'][vi])):
+                            if w <= 1e-6: continue
+                            a = acc.setdefault(b, [0.0, [0.0, 0.0, 0.0]]); a[0] += wgt * w
+                            for c in range(3): a[1][c] += wgt * w * pl[c]
+                    infl = sorted(acc.items(), key=lambda kv: -kv[1][0])[:2]; tot = sum(a[0] for _, a in infl)
+                    (ba, aa), (bb, ab) = infl[0], (infl[1] if len(infl) > 1 else infl[0])
+                    i = me['nv']; me['nv'] += 1
+                    me['b0'].append(ba); me['p0'].append([c / aa[0] for c in aa[1]]); me['w0'].append(aa[0] / tot)
+                    me['b1'].append(bb); me['p1'].append([c / ab[0] for c in ab[1]])
+                else:                                                                    # on the back: skin height, skin-like weights
+                    xx, z = pos[0], pos[2]; sy = skin_y2(xx, z)
+                    y = max(pos[1], sy + WING_EXTEND_LIFT) if sy is not None else pos[1]
+                    q = [xx, y, z]
+                    spine = sb1 if z < 0.9 else sb2
+                    w_spine = min(max((0.6 - abs(xx)) / (0.6 - 0.35), 0.0), 1.0)
+                    skin_b = spine if w_spine >= 0.5 else arm                             # the dominant skin bone (one slot left)
+                    sw = sum(wgt for e, wgt in ends if wing_vert(e))                       # how far toward the ring this point sits
+                    w_wing = min(max((sw - WING_TAB_HINGE) / (1.0 - WING_TAB_HINGE), 0.0), 1.0) * WING_TAB_HINGE_MAX
+                    i = me['nv']; me['nv'] += 1
+                    if w_wing > 0:                                                        # hinge: wing bone + the dominant skin bone
+                        wb = wid[dn[ch_root]['i']]                                         # (the ring's bone: this wing's wing1)
+                        me['b0'].append(wb); me['p0'].append(list(em.xform_pt(em.rigid_inv(Wref[wb]), q)))
+                        me['b1'].append(skin_b); me['p1'].append(list(em.xform_pt(em.rigid_inv(Wcat[skin_b]), q))); me['w0'].append(w_wing)
+                    else:                                                                 # on the back: skinned like the skin beneath it,
+                        sw_ = None                                                        # placed on the skin of the STAND pose (the idle
+                        if WING_TAB_ANCHOR_FRAME is not None:                             # the fold is judged in) — same spine-relative spot
+                            l_ = em.xform_pt(Pref_inv, q); q15 = em.xform_pt(P_anchor, l_)
+                            r_ = skin_point_at(WING_TAB_ANCHOR_FRAME, q15[0], q15[2], WING_EXTEND_LIFT)
+                            if r_: sw_ = r_[1:]
+                        if sw_ is None: sw_ = skin_weights(xx, z, q)
+                        if sw_:
+                            ba, pa, bb, pb, wa = sw_
+                            me['b0'].append(ba); me['p0'].append(pa); me['b1'].append(bb); me['p1'].append(pb); me['w0'].append(wa)
+                        else:                                                             # beyond the silhouette: the spine↔arm guess
+                            me['b0'].append(spine); me['p0'].append(list(em.xform_pt(em.rigid_inv(Wcat[spine]), q)))
+                            me['b1'].append(arm); me['p1'].append(list(em.xform_pt(em.rigid_inv(Wcat[arm]), q))); me['w0'].append(w_spine)
+                cache[key] = i; return i
+            fine = []
+            for tri, poly in zip(coarse, WING_TAB_POLYS):
+                if len(poly) > 3: polys.append(tri); continue                             # 'under': one tri, inside the body
+                V = [wp_of(i) for i in tri]
+                grid = {}
+                for a_ in range(n + 1):
+                    for b_ in range(n + 1 - a_):
+                        c_ = n - a_ - b_; bc = (a_, b_, c_)
+                        if bc.count(n) == 1: grid[bc] = tri[bc.index(n)]; continue          # a corner
+                        pos = [(a_ * V[0][k] + b_ * V[1][k] + c_ * V[2][k]) / n for k in range(3)]
+                        zero = [k for k in range(3) if bc[k] == 0]
+                        if len(zero) == 1:                                                  # on an edge: shared with the neighbour tab
+                            e0, e1 = [k for k in range(3) if k != zero[0]]
+                            lo, hi = (e0, e1) if tri[e0] < tri[e1] else (e1, e0)
+                            key = ('e', tri[lo], tri[hi], bc[hi]); ends = [(tri[e0], bc[e0] / n), (tri[e1], bc[e1] / n)]
+                        else:
+                            key = ('t', tri, bc); ends = [(tri[k], bc[k] / n) for k in range(3)]
+                        grid[bc] = sub_vertex(key, pos, ends)
+                for a_ in range(n):
+                    for b_ in range(n - a_):
+                        c_ = n - a_ - b_
+                        fine.append((grid[(a_ + 1, b_, c_ - 1)], grid[(a_, b_ + 1, c_ - 1)], grid[(a_, b_, c_)]))
+                        if c_ >= 2: fine.append((grid[(a_ + 1, b_, c_ - 1)], grid[(a_ + 1, b_ + 1, c_ - 2)], grid[(a_, b_ + 1, c_ - 1)]))
+            polys += fine; tabs = fine
+            me['tris'] += polys
             w_ = clearance(); c = w_[0] if w_ else float('nan')
             corner_log = [f"{nm} ({cpos[i][0]:.2f}, {cpos[i][1]:.2f}, {cpos[i][2]:.2f}{' ↑%.2f' % raised[i] if i in raised else ''})" for nm, i in pts.items() if i in cpos]
             log(f"  {sd} wing tabs: ring {ring_log}")
-            log(f"  {sd} wing tabs: corners {', '.join(corner_log)}; cap {len(polys) - len(WING_TAB_POLYS)} + tabs {[p[:3] for p in WING_TAB_POLYS]} = {len(polys)} tris; dihedral {WING_TAB_TILT_DEG}° toward the spine; min clearance over the skin {c:+.2f} (negative = the ridge cuts the tab)")
+            log(f"  {sd} wing tabs: corners {', '.join(corner_log)}; cap {len(polys) - len(fine) - sum(1 for q in WING_TAB_POLYS if len(q) > 3)} + tabs {[q[:3] for q in WING_TAB_POLYS]} subdivided ×{n} → {len(fine)} tris (+ under) = {len(polys)} tris, {len(cache)} new verts; dihedral {WING_TAB_TILT_DEG}°; min clearance over the skin {c:+.2f}")
     if WING_RIDGES:
         def skin_y3(x, z):
             best = None
