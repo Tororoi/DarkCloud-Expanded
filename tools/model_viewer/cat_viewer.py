@@ -832,12 +832,6 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 cache[key] = i; return i
             fine = []
             work = list(zip(coarse, tab_polys))
-            if WING_TAB_SUBDIV_NEIGHBOURS and n > 1:
-                top_edges = {frozenset(e) for t, poly in work if len(poly) == 3 for e in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))}
-                nb = [t for t in me['tris'] if any(frozenset(e) in top_edges for e in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])))]
-                me['tris'] = [t for t in me['tris'] if t not in nb]                       # replaced by their split versions below
-                work += [(t, ('w', 'w', 'w')) for t in nb]
-                log(f"  {sd} wing tabs: {len(nb)} base polys sharing an edge with a tab are split with them")
             for tri, poly in work:
                 if len(poly) > 3: polys.append(tri); continue                             # 'under': one tri, inside the body
                 V = [wp_of(i) for i in tri]
@@ -860,6 +854,27 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                         c_ = n - a_ - b_
                         fine.append((grid[(a_ + 1, b_, c_ - 1)], grid[(a_, b_ + 1, c_ - 1)], grid[(a_, b_, c_)]))
                         if c_ >= 2: fine.append((grid[(a_ + 1, b_, c_ - 1)], grid[(a_ + 1, b_ + 1, c_ - 2)], grid[(a_, b_ + 1, c_ - 1)]))
+            if WING_TAB_SUBDIV_NEIGHBOURS and n == 2:
+                # CONFORMING split of everything that shares an edge with a split tab — the base triangles, the lid, the 'under'
+                # poly, any wing poly — on exactly those edges (1 → 2 tris, 2 → 3, 3 → 4), so no edge is left with a midpoint
+                # on one side only (user 2026-09-13: thin gaps along the fore edge of the base opened and inverted as the bulged
+                # midpoints moved off the neighbour's straight edge). Nothing new is created, so it never cascades.
+                def mid_of(a_, b_):
+                    return cache.get(('e', min(a_, b_), max(a_, b_), 1))
+                def conform(t):
+                    a_, b_, c_ = t; m = [mid_of(a_, b_), mid_of(b_, c_), mid_of(c_, a_)]
+                    k = sum(x is not None for x in m)
+                    if k == 0: return [t]
+                    if k == 3: return [(a_, m[0], m[2]), (m[0], b_, m[1]), (m[2], m[1], c_), (m[0], m[1], m[2])]
+                    # rotate so the split edge(s) start at index 0
+                    while m[0] is None or (k == 2 and m[1] is None):
+                        a_, b_, c_ = b_, c_, a_; m = m[1:] + m[:1]
+                    if k == 1: return [(a_, m[0], c_), (m[0], b_, c_)]
+                    return [(m[0], b_, m[1]), (a_, m[0], m[1]), (a_, m[1], c_)]                # k == 2: edges ab and bc
+                before = len(me['tris']) + len(polys)
+                me['tris'] = [u for t in me['tris'] for u in conform(t)]
+                polys = [u for t in polys for u in conform(t)]
+                log(f"  {sd} wing tabs: conforming split of the neighbours: {len(me['tris']) + len(polys) - before} extra tris")
             polys += fine; tabs = fine
             if WING_TAB_BULGE and mixed:
                 # ROUND THE FOLD (user 2026-09-13: "take advantage of the subdivision to make the folded pose smoother"): a pooled
