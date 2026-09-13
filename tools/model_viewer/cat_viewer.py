@@ -179,15 +179,18 @@ WING_LAND = {'cat': (215, 227), 'dran': (70, 75), 'flare_end': 220,
              'lag': [(220.0, 225.0), (220.5, 226.0), (221.0, 226.5), (221.5, 227.0)]}   # per bone (wing1..4): fold start/end frames
 WING_FOLD_FRAME = 15               # the cat frame (stand) whose spine orientation the folded pose is authored in
 # folded pose, right wing, in the stand pose's world: per bone (span direction root→tip, top-surface normal); the left is mirrored
-# in x. A BIRD fold (user 2026-09-13: "you've folded the backs of the wings against the body"): the top (dorsal) surface faces
-# OUT, and because Dran's membrane trails 1.8–2.4 behind every bone line (trailing direction = span × top), the bones are laid
-# so that membrane lies on the flank: the humerus hangs down the front of the flank (its membrane trails straight back), the
-# forearm runs back along the belly line (membrane rises up the flank), and the hand runs back at mid-flank rolled 30° up so
-# the primaries' vanes drape over the rump toward the spine; the tips end just past the rump over the tail base.
-WING_FOLD = [((-0.30, -0.92, -0.25), (-0.95, 0.06, 0.20)),   # humerus: down the flank, held OUT (elbow 0.4 outside the flank);
-             ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.00)),   #   membrane trails back and slightly out. forearm: back along the belly line
-             (( 0.03,  0.20, -0.98), (-0.94, 0.34, 0.00)),   # hand: back at mid-flank, rolled 20° up: the vanes' top edge clears the back
-             (( 0.10,  0.15, -0.98), (-0.94, 0.34, 0.00))]   # tips: back, converging over the tail   (user 2026-09-13: no clipping past the base)
+# in x. A BIRD fold with the dorsal side out (user 2026-09-13). Dran's membrane trails 1.8–2.4 behind every bone line in the
+# direction span × top, so: the humerus hangs down the front of the flank (membrane trails back over the flank), the forearm runs
+# back along the belly line (membrane rises up the flank), the hand runs back at mid-flank rolled 25° up (vanes graze the back's
+# edge); tips just past the rump. The wing's ROOT (base ring + first rows) is pushed out of the shoulder by WING_FOLD_ROOT_SHIFT
+# (user 2026-09-13: "push these polys out away from the body a bit"); the humerus is re-aimed so the elbow stays where it was.
+WING_FOLD = [((-0.08, -0.96, -0.27), (-0.83, 0.38, 0.10)),   # humerus: down the flank from the shifted root, elbow ≈ at the flank
+             ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.00)),   # forearm: back along the belly line
+             (( 0.03,  0.20, -0.98), (-0.90, 0.42, 0.00)),   # hand: back at mid-flank, rolled 25° up
+             (( 0.10,  0.15, -0.98), (-0.90, 0.42, 0.00))]   # tips: back, converging over the tail
+WING_FOLD_ROOT_SHIFT = (-0.35, 0.10, 0.0)   # the folded wing's root sits this far from the flight pivot (stand world, right wing;
+                                            # mirrored for the left): out of the shoulder and up to the back's edge. The root slides
+                                            # there over the humerus's fold window and back during the take-off.
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
                                    # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
@@ -327,9 +330,9 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     SIDES = {'r': ['r_wing1', 'r_wing2', 'r_wing3', 'r_wing4'], 'l': ['l_wing1', 'l_wing2', 'l_wing3', 'l_wing4']}
     seg_len = {sd: [math.dist(dn[a]['T'], dn[b]['T']) * S for a, b in zip(ch, ch[1:])] for sd, ch in SIDES.items()}
     pivot_local = {sd: list(nodes[wid[dn[ch[0]]['i']]]['T']) for sd, ch in SIDES.items()}       # wing1's bind position, spine-local
-    def fk_locals(sd, Rls):
-        """spine-local rotations of wing1..4 → spine-local positions, chained from the pinned pivot"""
-        T = [list(pivot_local[sd])]
+    def fk_locals(sd, Rls, root=None):
+        """spine-local rotations of wing1..4 → spine-local positions, chained from the pinned pivot (or `root`)"""
+        T = [list(root if root is not None else pivot_local[sd])]
         for k in range(3):
             T.append([T[k][i] + seg_len[sd][k] * Rls[k][0][i] for i in range(3)])
         return T
@@ -350,7 +353,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
         Rw = world_R(_quat_to_mat(_sample(rsrc, df))) if (df is not None and rsrc) else world_R(d['R'])
         return local_of(Rw, d['T'])[0]
     R_stand = [r[:3] for r in cat_world(WING_FOLD_FRAME)[parent][:3]]
-    fold_local = {}
+    fold_local = {}; fold_root = {}
     for sd, ch in SIDES.items():
         sx = -1.0 if sd == 'l' else 1.0                                           # WING_FOLD is the RIGHT wing (x < 0); mirror for the left
         Rls = []
@@ -375,7 +378,10 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             Bf, Bt = _basis(span_f, top_f), _basis(span_t, top_t)
             A = _mul3(_t3(Bf), Bt)                                                # row vectors: v_t = v_f · Bf^T · Bt
             Rls.append(_mul3(Rf, A))
-        fold_local[sd] = (Rls, fk_locals(sd, Rls))
+        shift_w = [WING_FOLD_ROOT_SHIFT[0] * sx, WING_FOLD_ROOT_SHIFT[1], WING_FOLD_ROOT_SHIFT[2]]
+        shift_l = [sum(shift_w[j] * _t3(R_stand)[j][i] for j in range(3)) for i in range(3)]     # stand world → spine-local (direction)
+        fold_root[sd] = [pivot_local[sd][i] + shift_l[i] for i in range(3)]
+        fold_local[sd] = (Rls, fk_locals(sd, Rls, fold_root[sd]))
         for k, name in enumerate(ch):                                             # the folded pose is the wings' bind
             n = nodes[wid[dn[name]['i']]]; n['R'] = Rls[k]; n['T'] = fold_local[sd][1][k]; n['quat'] = em.mat_to_quat(Rls[k])
             L = em.mat_from_rt(n['R'], n['T']); n['world'] = em.mat_mul(L, nodes[parent]['world']); n['invworld'] = em.rigid_inv(n['world'])
@@ -439,6 +445,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             for cs, ce, ds, de, cycles, loop in windows:
                 if cs <= f <= ce:
                     u = (f - cs) / float(ce - cs); df = ds + (math.fmod(u * cycles * (de - ds), de - ds) if loop else u * (de - ds))
+            root = None
             if df is not None:
                 Rls = [dran_local_R(name, df) for name in ch]
             elif lcs <= f <= lce:
@@ -450,10 +457,12 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     if t <= 0: Rls.append(Rf)
                     elif t >= 1: Rls.append(Rt)
                     else: Rls.append(_quat_to_mat(_slerp(em.mat_to_quat(Rf), em.mat_to_quat(Rt), t)))
+                a, b = WING_LAND['lag'][0]; t = _smooth((f - a) / (b - a))                    # the root slides out with the humerus
+                root = [pivot_local[sd][i] + (fold_root[sd][i] - pivot_local[sd][i]) * t for i in range(3)]
             else:
-                Rls = fold_local[sd][0]
+                Rls = fold_local[sd][0]; root = fold_root[sd]
             if WING_PIN_ROOT:
-                Tls = fk_locals(sd, Rls)
+                Tls = fk_locals(sd, Rls, root)
             else:
                 Tls = [local_of(world_R(dn[name]['R']), _sample(dtracks[(dn[name]['i'], 2)], df)[:3] if df is not None and (dn[name]['i'], 2) in dtracks else dn[name]['T'])[1] for name in ch]
             for k, name in enumerate(ch):
