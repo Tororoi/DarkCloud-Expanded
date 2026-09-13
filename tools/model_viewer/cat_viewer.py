@@ -171,6 +171,25 @@ WING_TAB_CLEAR = None              # corners are raised until every tab clears t
                                    # None = off (the tilt sets the heights absolutely; intersecting the back is intended)
 # which Dran clip drives which cat clip: cat KEY index → (Dran start, Dran end, Dran speed, loop?)
 WING_CLIPS = {4: (200, 205, 0.2, True)}   # cat 'leap' (the fall, 205-214 @0.5) ← Dran motion 3 "charge loop" (user 2026-09-12)
+# The LANDING is authored (user 2026-09-13: Dran's charge-end swung the root around; the cat's wings sit lower so the attachment
+# must stay put, and the wings must end FOLDED like a bird's — feathers back, tight to the flanks — as the ground idle):
+#   cat 215..LAND_FLARE_END ← Dran 70..75 (the forward braking swing = the momentum), root position PINNED;
+#   then each bone slerps into WING_FOLD over its own lag window (the tips trail) and stays there: WING_FOLD is the wings' BIND.
+WING_LAND = {'cat': (215, 227), 'dran': (70, 75), 'flare_end': 220,
+             'lag': [(220.0, 225.0), (220.5, 226.0), (221.0, 226.5), (221.5, 227.0)]}   # per bone (wing1..4): fold start/end frames
+WING_FOLD_FRAME = 15               # the cat frame (stand) whose spine orientation the folded pose is authored in
+# folded pose, right wing, in the stand pose's world: per bone (span direction root→tip, top-surface normal); the left is mirrored
+# in x. A BIRD fold (user 2026-09-13: "you've folded the backs of the wings against the body"): the top (dorsal) surface faces
+# OUT, and because Dran's membrane trails 1.8–2.4 behind every bone line (trailing direction = span × top), the bones are laid
+# so that membrane lies on the flank: the humerus hangs down the front of the flank (its membrane trails straight back), the
+# forearm runs back along the belly line (membrane rises up the flank), and the hand runs back at mid-flank rolled 30° up so
+# the primaries' vanes drape over the rump toward the spine; the tips end just past the rump over the tail base.
+WING_FOLD = [((-0.12, -0.95, -0.28), (-0.70, 0.70, 0.0)),    # humerus: down the flank, slightly back
+             ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.0)),    # forearm: back and a little up along the belly line
+             (( 0.03,  0.20, -0.98), (-0.85, 0.50, 0.0)),    # hand: back at mid-flank, rolled up
+             (( 0.10,  0.15, -0.98), (-0.85, 0.50, 0.0))]    # tips: back, converging over the tail
+WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
+                                   # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
                                    # RIGID to the spine bone; in this pose they come out level, elsewhere they follow the back (user 2026-09-12)
 
@@ -291,6 +310,9 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     def to_local(Rw, Tw):                                # cat-world (R, T) → attach-bone-local (R, T), bind pose
         W = em.mat_from_rt(Rw, Tw); L = em.mat_mul(W, root_inv)
         return [L[r][:3] for r in range(3)], list(L[3][:3])
+    weights_all = em.load_weights(dran_pack, 'c12a.wgt')[dn['obj1']['i']]
+    obj1 = dn['obj1']; om = parse_mdt(dran_mds, obj1['meshoff'])
+    vw_all = [em.xform_pt(obj1['world'], v[:3]) for v in om.pos]
     base = len(nodes); wid = {}
     for k, name in enumerate(WING_BONES):
         d = dn[name]
@@ -300,10 +322,70 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
         n['worldpos'] = (n['world'][3][0], n['world'][3][1], n['world'][3][2])
         nodes.append(n); wid[d['i']] = base + k
     log(f"  wing roots (cat world): r {tuple(round(c, 2) for c in nodes[wid[dn['r_wing1']['i']]]['worldpos'])}, l {tuple(round(c, 2) for c in nodes[wid[dn['l_wing1']['i']]]['worldpos'])}; tips r {tuple(round(c, 2) for c in nodes[wid[dn['r_wing4']['i']]]['worldpos'])}")
+    # ── the wing as an FK chain: Dran's four bones per side are siblings, but their positions always satisfy
+    # T[k+1] = T[k] + len_k · (bone k's local +x); so with the root pinned on the shoulder every pose is rotations only ──
+    SIDES = {'r': ['r_wing1', 'r_wing2', 'r_wing3', 'r_wing4'], 'l': ['l_wing1', 'l_wing2', 'l_wing3', 'l_wing4']}
+    seg_len = {sd: [math.dist(dn[a]['T'], dn[b]['T']) * S for a, b in zip(ch, ch[1:])] for sd, ch in SIDES.items()}
+    pivot_local = {sd: list(nodes[wid[dn[ch[0]]['i']]]['T']) for sd, ch in SIDES.items()}       # wing1's bind position, spine-local
+    def fk_locals(sd, Rls):
+        """spine-local rotations of wing1..4 → spine-local positions, chained from the pinned pivot"""
+        T = [list(pivot_local[sd])]
+        for k in range(3):
+            T.append([T[k][i] + seg_len[sd][k] * Rls[k][0][i] for i in range(3)])
+        return T
+    def _unit(v):
+        n = math.sqrt(sum(c * c for c in v)) or 1.0; return [c / n for c in v]
+    def _cross(a, b):
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    def _basis(span, top):
+        span = _unit(span); d = sum(a * b for a, b in zip(top, span)); top = _unit([t - d * s_ for t, s_ in zip(top, span)])
+        return [span, top, _cross(span, top)]
+    # flight reference per bone: its spine-local rotation in the level pose (Dran frame WING_CLIPS' loop start) and the membrane's
+    # top normal there — the fold is expressed as "take the flight (span, top) to the folded (span, top)", so no assumption about
+    # either wing's local axis conventions (they are mirrored on Dran)
+    loop_start = min(ds for ds, de, sp, lp in WING_CLIPS.values() if lp)
+    dtracks = {(t['node'], t['chan']): t for t in em.build_tracks(dran_pack, dmot_name, len(dran_nodes))}
+    def dran_local_R(name, df):
+        d = dn[name]; rsrc = dtracks.get((d['i'], 0))
+        Rw = world_R(_quat_to_mat(_sample(rsrc, df))) if (df is not None and rsrc) else world_R(d['R'])
+        return local_of(Rw, d['T'])[0]
+    R_stand = [r[:3] for r in cat_world(WING_FOLD_FRAME)[parent][:3]]
+    fold_local = {}
+    for sd, ch in SIDES.items():
+        sx = -1.0 if sd == 'l' else 1.0                                           # WING_FOLD is the RIGHT wing (x < 0); mirror for the left
+        Rls = []
+        for k, name in enumerate(ch):
+            Rf = dran_local_R(name, loop_start)                                  # flight pose, spine-local (rows = bone axes)
+            import numpy as _np
+            bid = dn[name]['i']
+            vi_ = [v for v, infl in weights_all.items() if any(b == bid and w >= 20 for b, w in infl)]   # any real influence
+            loc = [em.xform_pt(dran_nodes[bid]['invworld'], vw_all[v]) for v in vi_]
+            if len(loc) < 4:                                                       # (r_wing3 owns almost nothing) → the sheet as a whole
+                loc = [em.xform_pt(dran_nodes[bid]['invworld'], vw_all[v]) for v, infl in weights_all.items()
+                       if any(dran_nodes[b]['name'].startswith(name[:2]) for b, w in infl)]
+            c = [sum(p[i] for p in loc) / len(loc) for i in range(3)]
+            A_ = _np.array(loc) - _np.array(c); _u, _s, _vt = _np.linalg.svd(A_, full_matrices=False); nrm = list(_vt[2])   # membrane normal, bone-local
+            span_f = list(Rf[0]); top_f = [sum(nrm[j] * Rf[j][i] for j in range(3)) for i in range(3)]
+            top_w = [sum(top_f[k2] * R_ref[k2][i] for k2 in range(3)) for i in range(3)]        # in the leap world: must point UP
+            if top_w[1] < 0: top_f = [-c_ for c_ in top_f]
+            span_t, top_t = WING_FOLD[k]
+            span_t = [span_t[0] * sx, span_t[1], span_t[2]]; top_t = [top_t[0] * sx, top_t[1], top_t[2]]
+            span_t = [sum(span_t[j] * _t3(R_stand)[j][i] for j in range(3)) for i in range(3)]  # stand world → spine-local
+            top_t = [sum(top_t[j] * _t3(R_stand)[j][i] for j in range(3)) for i in range(3)]
+            Bf, Bt = _basis(span_f, top_f), _basis(span_t, top_t)
+            A = _mul3(_t3(Bf), Bt)                                                # row vectors: v_t = v_f · Bf^T · Bt
+            Rls.append(_mul3(Rf, A))
+        fold_local[sd] = (Rls, fk_locals(sd, Rls))
+        for k, name in enumerate(ch):                                             # the folded pose is the wings' bind
+            n = nodes[wid[dn[name]['i']]]; n['R'] = Rls[k]; n['T'] = fold_local[sd][1][k]; n['quat'] = em.mat_to_quat(Rls[k])
+            L = em.mat_from_rt(n['R'], n['T']); n['world'] = em.mat_mul(L, nodes[parent]['world']); n['invworld'] = em.rigid_inv(n['world'])
+            n['worldpos'] = (n['world'][3][0], n['world'][3][1], n['world'][3][2])
+        Ws = cat_world(WING_FOLD_FRAME)[parent]
+        tipk = fold_local[sd][1][3]; tipd = fold_local[sd][0][3][0]
+        tip = [tipk[i] + 2.14 * tipd[i] for i in range(3)]
+        log(f"  {sd} folded (stand world): " + ', '.join(f"w{k + 1} {tuple(round(float(c), 2) for c in em.xform_pt(Ws, fold_local[sd][1][k]))}" for k in range(4)) + f", tip ≈ {tuple(round(float(c), 2) for c in em.xform_pt(Ws, tip))}; segments {[round(l, 2) for l in seg_len[sd]]}")
     # ── wing meshes carved from obj1 by weight ──
-    weights = em.load_weights(dran_pack, 'c12a.wgt')[dn['obj1']['i']]
-    obj1 = dn['obj1']; om = parse_mdt(dran_mds, obj1['meshoff'])
-    vw = [em.xform_pt(obj1['world'], v[:3]) for v in om.pos]
+    weights, vw = weights_all, vw_all
     tris = em.mdt_triangles(om)
     def side(vi):
         infl = weights.get(vi, [])
@@ -337,30 +419,51 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             if mm: meshes.append(mm)
     # ── tracks: the cat's, plus the wing bones' rigid-to-the-spine transforms: constant (their bind) except inside the driven
     # windows, where Dran's sampled pose is converted through the same reference frame; bind keys bracket each window ──
-    dtracks = {(t['node'], t['chan']): t for t in em.build_tracks(dran_pack, dmot_name, len(dran_nodes))}
     windows = []
     for ki, (ds, de, dspd, loop) in sorted(WING_CLIPS.items()):
         cs, ce, cspd, _ = bcp.CAT_KEYS[ki]
         win_game = (ce - cs) / cspd; loop_game = (de - ds) / dspd
         cycles = max(1, round(win_game / loop_game)) if loop else 1
         windows.append((cs, ce, ds, de, cycles, loop))
-        log(f"  clip {ki} ({cs}-{ce} @{cspd}): {cycles} flap cycle(s) over {win_game:.0f} game frames (Dran's own rate would give {win_game / loop_game:.2f})")
-    def wing_pose(f):
-        """Cat-world matrices of the 8 wing bones at cat frame f (Dran's bind, or the driven clip's sample) and the anchor."""
-        df = None
-        for cs, ce, ds, de, cycles, loop in windows:
-            if cs <= f <= ce:
-                u = (f - cs) / float(ce - cs); df = ds + (math.fmod(u * cycles * (de - ds), de - ds) if loop else u * (de - ds))
-        Pw = cat_world(f)[parent]
+        if loop: log(f"  clip {ki} ({cs}-{ce} @{cspd}): {cycles} flap cycle(s) over {win_game:.0f} game frames (Dran's own rate would give {win_game / loop_game:.2f})")
+        else: log(f"  clip {ki} ({cs}-{ce} @{cspd}): Dran {ds}-{de} once over {win_game:.0f} game frames (Dran's own length {loop_game:.0f} → {loop_game / win_game:.2f}× its rate)")
+    def _smooth(t):
+        t = min(max(t, 0.0), 1.0); return t * t * (3 - 2 * t)
+    lcs, lce = WING_LAND['cat']; lds, lde = WING_LAND['dran']; lfe = WING_LAND['flare_end']
+    def wing_locals(f):
+        """Spine-local (R, T) of wing1..4 per side at cat frame f: Dran's loop sample inside a WING_CLIPS window, the
+        authored landing inside WING_LAND, the folded bind elsewhere. Root pinned, positions by FK."""
         out = {}
-        for k, name in enumerate(WING_BONES):
-            d = dn[name]
-            rsrc, tsrc = dtracks.get((d['i'], 0)), dtracks.get((d['i'], 2))
-            Rw = world_R(_quat_to_mat(_sample(rsrc, df))) if (df is not None and rsrc) else world_R(d['R'])
-            Td = _sample(tsrc, df)[:3] if (df is not None and tsrc) else d['T']
-            Rl, Tl = local_of(Rw, Td)
-            out[base + k] = em.mat_mul(em.mat_from_rt(Rl, Tl), Pw)
-        return out, em.xform_pt(Pw, anchor_local)
+        for sd, ch in SIDES.items():
+            df = None
+            for cs, ce, ds, de, cycles, loop in windows:
+                if cs <= f <= ce:
+                    u = (f - cs) / float(ce - cs); df = ds + (math.fmod(u * cycles * (de - ds), de - ds) if loop else u * (de - ds))
+            if df is not None:
+                Rls = [dran_local_R(name, df) for name in ch]
+            elif lcs <= f <= lce:
+                dfl = lds + (lde - lds) * min(1.0, (f - lcs) / float(lfe - lcs))             # the flare: Dran 70..75 over 215..flare_end
+                Rls = []
+                for k, name in enumerate(ch):
+                    Rf = dran_local_R(name, dfl); Rt = fold_local[sd][0][k]
+                    a, b = WING_LAND['lag'][k]; t = _smooth((f - a) / (b - a))
+                    if t <= 0: Rls.append(Rf)
+                    elif t >= 1: Rls.append(Rt)
+                    else: Rls.append(_quat_to_mat(_slerp(em.mat_to_quat(Rf), em.mat_to_quat(Rt), t)))
+            else:
+                Rls = fold_local[sd][0]
+            if WING_PIN_ROOT:
+                Tls = fk_locals(sd, Rls)
+            else:
+                Tls = [local_of(world_R(dn[name]['R']), _sample(dtracks[(dn[name]['i'], 2)], df)[:3] if df is not None and (dn[name]['i'], 2) in dtracks else dn[name]['T'])[1] for name in ch]
+            for k, name in enumerate(ch):
+                out[wid[dn[name]['i']]] = (Rls[k], Tls[k])
+        return out
+    def wing_pose(f):
+        """Cat-world matrices of the 8 wing bones at cat frame f and the anchor."""
+        Pw = cat_world(f)[parent]
+        loc = wing_locals(f)
+        return {nid: em.mat_mul(em.mat_from_rt(R, T), Pw) for nid, (R, T) in loc.items()}, em.xform_pt(Pw, anchor_local)
     Wref, anchor_ref = wing_pose(ref_frame)
     Pref_inv = em.rigid_inv(cat_world(ref_frame)[parent])
     from collections import Counter, defaultdict
@@ -589,24 +692,16 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 prev = (Lp, Rp, Cp)
         meshes.append(ridge)
         log(f"  ridges: {ridge['nv']} verts, {len(ridge['tris'])} tris along the two L-lines (|x| {WING_EXTEND_X_IN:g}, z {WING_EXTEND_Z_BACK:g}..{WING_EXTEND_Z_FRONT:g}; front edge to ({WING_EXTEND_X_OUT:g}, {WING_EXTEND_Z_FRONT_OUT:g}))")
+    spans = [(cs, ce) for cs, ce, ds, de, cycles, loop in windows] + [WING_LAND['cat']]
+    keyed = sorted({f for cs, ce in spans for f in range(cs, ce + 1)})
+    frames_all = sorted(set(keyed) | {f for cs, ce in spans for f in (cs - 1, ce + 1)})   # bind brackets where nothing else keys
+    per_frame = {f: wing_locals(f) for f in frames_all}
     for k, name in enumerate(WING_BONES):
-        d = dn[name]; nid = base + k
-        rsrc, tsrc = dtracks.get((d['i'], 0)), dtracks.get((d['i'], 2))
-        bq, bt = nodes[nid]['quat'], nodes[nid]['T']
-        rf, rv, tf, tv = [], [], [], []
-        for cs, ce, ds, de, cycles, loop in windows:
-            rf.append(cs - 1); rv.append(list(bq)); tf.append(cs - 1); tv.append(list(bt) + [0.0])
-            for f in range(cs, ce + 1):
-                u = (f - cs) / float(ce - cs)
-                df = ds + (math.fmod(u * cycles * (de - ds), de - ds) if loop else u * (de - ds))
-                Rw = world_R(_quat_to_mat(_sample(rsrc, df))) if rsrc else world_R(d['R'])
-                Td = _sample(tsrc, df)[:3] if tsrc else d['T']
-                Rl, Tl = local_of(Rw, Td)
-                rf.append(f); rv.append(list(em.mat_to_quat(Rl))); tf.append(f); tv.append(list(Tl) + [0.0])
-            rf.append(ce + 1); rv.append(list(bq)); tf.append(ce + 1); tv.append(list(bt) + [0.0])
-        tracks.append({'node': nid, 'chan': 0, 'frames': rf, 'vals': rv})
-        tracks.append({'node': nid, 'chan': 2, 'frames': tf, 'vals': tv})
-    return serialize("Divine Beast cat + Dran's wings — fall = Dran charge loop (experiment)", 'c04b+cat+wings', 'viewer experiment (nothing baked)',
+        nid = base + k
+        tracks.append({'node': nid, 'chan': 0, 'frames': frames_all, 'vals': [list(em.mat_to_quat(per_frame[f][nid][0])) for f in frames_all]})
+        tracks.append({'node': nid, 'chan': 2, 'frames': frames_all, 'vals': [list(per_frame[f][nid][1]) + [0.0] for f in frames_all]})
+    log(f"  wing tracks: keys at {frames_all[0]}..{frames_all[-1]} ({len(frames_all)} frames); landing {lcs}-{lce}: Dran {lds}-{lde} flare to {lfe}, then fold (lag {WING_LAND['lag']}); folded = bind")
+    return serialize("Divine Beast cat + Dran's wings — leap = charge loop, land = flare + fold (experiment)", 'c04b+cat+wings', 'viewer experiment (nothing baked)',
                      nodes, meshes, tracks, cat_motions, 'c04b.mds + c12a obj1 wings', 'cat.mot + c12a.mot (wings)')
 
 
