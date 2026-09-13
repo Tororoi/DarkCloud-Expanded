@@ -22,6 +22,7 @@
 # the AI-stub table (2026-09-11: clobbered clip frames, range, hit slot). $t0 = 0x01FB0000, offsets 0x40xx.):
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int
 #   +0xA0 CatGrowInv float 1/N (mod)   +0xA4/+0xA8/+0xAC CatHeadX/H/Z float head rest offset, CAT space (mod)
+#   +0x250 CatScaleMul float the cat's full size, multiplied into the growth k (mod; 0 = unset → 1.0)
 #   +0xB0 CatSeenMask int (cave)   +0xB4/+0xB8/+0xBC CatVx/Vh/Vz float fall velocity (cave, captured at breakaway)
 #   +0xC0 CatGravity float (mod)   +0xC4 CatFloorH float landing height (mod)   +0xC8 CatRunSpeed float = ½|v| (cave)
 #   +0xCC CatTargetPtr uint guest address of the target's position vector (x @+0, z @+8) or 0 (mod)
@@ -242,9 +243,20 @@ ori   $t6, $t6, 0x9900         # chara slot 1
 swc1  $f6, 0x0010($t6)         # CharPos x
 swc1  $f8, 0x0014($t6)         # CharPos height
 swc1  $f12, 0x0018($t6)        # CharPos y
-swc1  $f0, 0x0090($t6)         # scale x/y/z = k
-swc1  $f0, 0x0094($t6)
-swc1  $f0, 0x0098($t6)
+mtc1  $zero, $f16              # 0.0
+lwc1  $f10, 0x4250($t0)        # CatScaleMul (mod): the cat's full size (1.0 = the rig's own; 0 = unset → treated as 1.0)
+nop
+mul.s $f18, $f10, $f0          # k × CatScaleMul
+nop
+.word 0x46105032               # c.eq.s $f10, $f16   (unset ?)  fs=f10 ft=f16
+nop
+bc1f  scaleok                  # a real multiplier → grow toward k × mul
+mov.s $f10, $f18               # (delay slot)
+mov.s $f10, $f0                # unset → plain k
+scaleok:
+swc1  $f10, 0x0090($t6)        # scale x/y/z = k × CatScaleMul (f0 = k stays: the pellet sprite is 1 − k below)
+swc1  $f10, 0x0094($t6)
+swc1  $f10, 0x0098($t6)
 addiu $t5, $zero, 68
 sw    $t5, 0x0C68($t6)         # key = leap (fall pose)
 sub.s $f14, $f4, $f0           # pellet sprite = 1 − k (draw only)

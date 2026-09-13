@@ -86,7 +86,7 @@ namespace Dark_Cloud_Improved_Version
         // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
         // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
         private const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
-        private const float  CatScale      = 1.0f;
+        private const float  CatScale      = 1.0f;                     // the rig's own size (the 2× try on 2026-09-12 was reverted); the cave grows the cat to this via Mailbox.CatScaleMul
         // Ground game.
         private const float  RunSpeed      = 1.3f;     // units/frame
         private const float  PounceRange   = 30f;      // start the pounce within this of the target (user 2026-09-11; the leap re-sizes itself at launch)
@@ -112,7 +112,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  BlendDefault    = 0.1f;    // the engine's own per-step blend increment (MOTION_END seeds it)
         private const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
         private const int    FadeTicks     = 30;       // ≈ 0.5 s at the 16 ms tick (user 2026-09-11)
-        private const int    GlowFadeTicks = 45;       // ≈ 0.75 s: the glow SHRINKS on its own clock and lingers a beat after the cat has faded (user 2026-09-12)
+        private const int    GlowFadeTicks = FadeTicks; // the glow SHRINKS over the same ≈ 0.5 s the cat fades (user 2026-09-12; a longer linger was tried and dropped)
         private static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = the glow is at full size)
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         private const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
@@ -376,6 +376,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatFallBlendFrames, FallBlendSteps);   // the cave switches float → fall this many frames before the land clip starts
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, 0);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatScaleMul, CatScale);          // the size the cave grows the cat to on the pellet
             _glowFade = -1;
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);                 // the copy's texture entries are remade per spawn: rebind

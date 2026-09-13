@@ -245,8 +245,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 4; i < 32 && i < b.Length; i += 4) if (U32(b, i) == Jal(0x001ABD10)) callsStep = true;
             if (!opensFrame || !callsStep)
                 throw new IOException($"catPelletFollow.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
-                throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.NextFree.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)   // the flinch stub sits right after it
+                throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.XiaoMeleeFlinch/NextFree.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
