@@ -124,6 +124,9 @@ WING_SIZE_MUL = 0.7                # user 2026-09-13: the wings' MESH and bone c
 # lifted 0.3 and moved 0.7 forward — the position the user approved (2026-09-12); it rides the spine bone from there. (A leap-pose
 # re-definition at the shoulder-blade polys put the wings too far back — reverted.)
 WING_ATTACH_BIND = (0.0, 3.4, 1.7)
+WING_RAISE = 0.2                   # the whole wing (its roots, so every pose) sits this much higher than WING_ATTACH_BIND; the tab
+                                   # corners on the back stay where they are (user 2026-09-13: "raise the entirety of the wings 0.1
+                                   # while keeping the attachment points on the back the same")
 WING_YAW = 0.0                     # radians about the cat's up axis, if Dran's wing orientation needs turning
 # Closing the gap between the wing base and the back (user 2026-09-12: solid-colour wings, so the mesh may be extended; moving
 # wing vertices spoiled the other poses, and a strip to a seam line stood up as a patch on the spine). The fix is a SLEEVE:
@@ -224,6 +227,9 @@ WING_HAND_DROOP = {'bones': {1: -10.0, 2: 8.0, 3: -2.0}, 'frames': (224, 227)}  
                                    # frame) per wing bone index (0 = wing1 … 3 = wing4), eased in over these landing frames and held
                                    # in the idle. Pitching the FOREARM (1) lowers the whole hand: the back feathers come DOWN to the
                                    # back's line without leaning inward or tipping forward (user 2026-09-13)
+WING_HAND_ROLL = {'bones': {2: 6.0, 3: 10.0}, 'frames': (224, 227)}   # extra roll (degrees, about each bone's own span) per
+                                   # wing bone index, eased over these landing frames and held in the idle: + = the feathers above
+                                   # the hand line lean IN toward the cat (checked in v59; the sign is mirrored per side in code)
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
                                    # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
@@ -319,7 +325,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     ref_frame = (rcs + rce) // 2
     P_ref = cat_world(ref_frame)[parent]                 # the spine bone in the reference pose (world)
     R_ref = [P_ref[r][:3] for r in range(3)]
-    attach = list(WING_ATTACH_BIND)
+    attach = [WING_ATTACH_BIND[0], WING_ATTACH_BIND[1] + WING_RAISE, WING_ATTACH_BIND[2]]
     anchor_local = list(em.xform_pt(root_inv, attach))                                # the attach point in the spine bone's frame (rides the back)
     attach_ref = em.xform_pt(P_ref, anchor_local)
     log(f"  wings rigid to {WING_ATTACH_NODE}; attach {WING_ATTACH_BIND} at bind = ({attach_ref[0]:.2f}, {attach_ref[1]:.2f}, {attach_ref[2]:.2f}) in the {bcp.CAT_KEYS[WING_LEVEL_AT][3]!r} pose (frame {ref_frame}); spine pitch there vs bind: row0 {[round(c, 2) for c in R_ref[0]]} vs {[round(c, 2) for c in nodes[parent]['world'][0][:3]]}")
@@ -507,6 +513,20 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                         th = math.radians(deg * s_); c, sn = math.cos(th), math.sin(th)          # hand (its bones keep their own
                         Qz = [[c, sn, 0], [-sn, c, 0], [0, 0, 1]]                                # orientation): the feathers move DOWN,
                         Rls[k] = _mul3(Rls[k], Qz)                                              # not inward and not tilted forward
+            if WING_HAND_ROLL and (lcs <= f <= lce or df is None):
+                # ROLL the hand (wing3, wing4) about its own span so the feathers above the hand line lean in toward the cat, eased
+                # over WING_HAND_ROLL['frames'] and held in the idle (user 2026-09-13: "roll the top 3 feathers toward the cat in
+                # the folded pose … now that the wings sit higher"). A roll about the bone's own x is PRE-multiplied; the wings'
+                # local frames are mirrored, so the sign flips per side. Vanes near the hand line barely move, the top ones most.
+                a, b = WING_HAND_ROLL['frames']
+                s_ = 1.0 if df is None and not (lcs <= f <= lce) else _smooth((f - a) / (b - a))
+                if s_ > 0:
+                    sgn = 1.0 if sd == 'r' else -1.0
+                    Rls = list(Rls)
+                    for k, deg in WING_HAND_ROLL['bones'].items():
+                        th = math.radians(deg * s_ * sgn); c, sn = math.cos(th), math.sin(th)
+                        Rx = [[1, 0, 0], [0, c, sn], [0, -sn, c]]
+                        Rls[k] = _mul3(Rx, Rls[k])
             if WING_PIN_ROOT:
                 Tls = fk_locals(sd, Rls, root)
             else:
@@ -907,7 +927,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 (z0, y0), (z1, y1) = (P[top[0]][2], P[top[0]][1]), (P[top[-1]][2], P[top[-1]][1])   # Ri, Rf
                 for i, pos in cpos.items():
                     t = 0.0 if z1 == z0 else min(max((pos[2] - z0) / (z1 - z0), 0.0), 1.0)
-                    y_rim = y0 + (y1 - y0) * t                                            # the rim's height beside this corner
+                    y_rim = y0 + (y1 - y0) * t - WING_RAISE                               # the rim's height beside this corner, before
                     pos[1] = y_rim - abs(pos[0] - hx) * math.tan(th)                      # lower toward the spine by the dihedral
                     me['p0'][i] = list(em.xform_pt(em.rigid_inv(Wcat[me['b0'][i]]), pos)); me['p1'][i] = list(em.xform_pt(em.rigid_inv(Wcat[me['b1'][i]]), pos))
             # ── subdivide the top tabs (user 2026-09-13: "subdivide these so you can fold the wings while keeping the intersection
