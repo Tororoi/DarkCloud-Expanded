@@ -23,6 +23,8 @@
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int
 #   +0xA0 CatGrowInv float 1/N (mod)   +0xA4/+0xA8/+0xAC CatHeadX/H/Z float head rest offset, CAT space (mod)
 #   +0x250 CatScaleMul float the cat's full size, multiplied into the growth k (mod; 0 = unset → 1.0)
+#   +0x254 CatHoldReady int 1 = keep looping the ready crouch instead of leaping (mod: the target is a dormant chest-mimic);
+#         checked every crouch frame — once it has looped, release = float-up at once (the crouch IS the wind-up)
 #   +0xB0 CatSeenMask int (cave)   +0xB4/+0xB8/+0xBC CatVx/Vh/Vz float fall velocity (cave, captured at breakaway)
 #   +0xC0 CatGravity float (mod)   +0xC4 CatFloorH float landing height (mod)   +0xC8 CatRunSpeed float = ½|v| (cave)
 #   +0xCC CatTargetPtr uint guest address of the target's position vector (x @+0, z @+8) or 0 (mod)
@@ -263,8 +265,10 @@ sub.s $f14, $f4, $f0           # pellet sprite = 1 − k (draw only)
 swc1  $f14, 0x0310($t4)
 lw    $t5, 0x40D8($t0)         # N
 slt   $t3, $t8, $t5            # frames (before this one) < N → still growing
-bne   $t3, $zero, touch        # (growing: test the touch, then done)
-nop
+bne   $t3, $zero, done         # growing: NO touch test. The head point below is the copy's LAST-DRAWN pose — after a hit the
+nop                            # hidden cat is not drawn, so on the next shot's first frames it still sits where it struck:
+                               # Witch Hellza took a 1-damage (unstamped) hit from that stale point (user 2026-09-12). By
+                               # state 4 the copy has been drawn at the pellet for N frames; states 4/5 test it.
 # ── BREAKAWAY at full size: keep the pellet's velocity, expire the pellet, start the fall ──
 lwc1  $f6, 0x01C0($t9)         # vx
 lwc1  $f7, 0x01C4($t9)         # vh
@@ -847,6 +851,14 @@ nop
 bc1t  readydone
 nop
 readyhold:                     # ── every frame of the crouch: face the target where it is NOW (user 2026-09-11) ──
+lw    $t5, 0x4254($t0)         # CatHoldReady still up? (a mimic still shut)
+bne   $t5, $zero, readyface
+nop
+lw    $t5, 0x0C64($t6)
+andi  $t5, $t5, 2              # play-once still set = the crouch's FIRST pass, the wind-up itself: let it finish
+beq   $t5, $zero, readygo      # released while looping: the cat is already wound up → the float-up NOW (user 2026-09-12)
+nop
+readyface:
 lw    $t5, 0x40CC($t0)         # target position vector
 beq   $t5, $zero, readykey
 nop
@@ -878,6 +890,17 @@ sw    $t5, 0x0C68($t6)         # hold the ready clip, in place
 b     done
 nop
 readydone:                     # ── crouch done: the float-up starts IN PLACE (state 11); the jump is decided at its feet-off frame ──
+lw    $t5, 0x4254($t0)         # CatHoldReady (mod): 1 = the target is a mimic still shut → stay crouched, looping (user 2026-09-12)
+beq   $t5, $zero, readygo
+nop
+lw    $t5, 0x0C64($t6)
+addiu $t7, $zero, -3
+and   $t5, $t5, $t7            # clear play-once: the crouch LOOPS natively (wraps) until the mod drops the hold
+sw    $t5, 0x0C64($t6)
+addiu $t5, $zero, 65
+b     done
+sw    $t5, 0x0C68($t6)         # (delay slot) key = ready, state stays 10 (readyhold keeps facing the target)
+readygo:
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 2              # play once, no restart: the crouch fades into the float-up, which runs to its end and HOLDS
 sw    $t5, 0x0C64($t6)
@@ -1027,6 +1050,9 @@ lui   $t0, 0x01FB
 lw    $t5, 0x41C8($t0)         # CatHitLatch: one planted entry at a time (the mod clears it if it never connects)
 bne   $t5, $zero, done
 nop
+lw    $t5, 0x41CC($t0)         # CatHitDamage: 0 until the mod has stamped THIS shot's damage at bind (arm writes 0)
+beq   $t5, $zero, done
+nop
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
 lw    $t7, 0x41DC($t0)         # CatHeadNode: the copy's cat_kao frame (mod) — the "pellet" is the middle of the head (user 2026-09-11)
@@ -1121,8 +1147,23 @@ lw    $t5, 0x41D8($s0)
 sw    $t5, 0x0094($t7)         # kick decay
 addiu $t5, $zero, 2
 sw    $t5, 0x0098($t7)         # kick type 2 = melee-style → the patched flinch rule lets it stagger
+# ── acceptance sentinel: CheckDmg writes the hit sphere's index into the victim's +0x55750 ONLY on an accepted hit (after
+# the guard/invincibility gates); an entry can vanish without one (`_STATUS_SET_MUTEKI` skips the whole test — a mimic
+# wakes with 100 frames of it). −1 into every slot's word now; the mod reads them back when the entry is gone.
+lui   $t5, 0x01DF
+ori   $t5, $t5, 0x87D0         # MainMonstorUnit
+lui   $t6, 0x0005
+ori   $t6, $t6, 0x5750
+addu  $t5, $t5, $t6            # slot 0's "last hit sphere" word
+addiu $t6, $zero, 16
+addiu $t3, $zero, -1
+sentinel:
+sw    $t3, 0x0000($t5)
+addiu $t6, $t6, -1
+bne   $t6, $zero, sentinel
+addiu $t5, $t5, 0x0510         # (delay slot) next slot
 addiu $t5, $t8, 1
-sw    $t5, 0x41C4($s0)         # CatHitEntry = index + 1 → the mod watches it: consumed = the hit landed = fade
+sw    $t5, 0x41C4($s0)         # CatHitEntry = index + 1 → the mod watches it: gone AND a sentinel overwritten = the hit landed = fade
 addiu $t5, $zero, 1
 sw    $t5, 0x41C8($s0)         # latch until the mod resolves the entry
 lw    $t5, 0x4098($s0)         # riding the pellet? full size next frame → the follow block breaks it away

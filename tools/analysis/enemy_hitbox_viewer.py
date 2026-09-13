@@ -8,7 +8,7 @@ Reads everything from the user's ISO (read-only). Output: enemy_hitboxes.html ne
 
     python3 tools/analysis/enemy_hitbox_viewer.py [--iso PATH] [--out PATH] [--patched]
 
---patched applies tools/iso_patch/patch_monster_spheres.py's script rewrites in memory (the ISO is never written) so the
+--patched applies tools/iso_patch/patch_monster_scripts.py's script rewrites in memory (the ISO is never written) so the
 atlas shows the spheres the patched disc declares (Blizzard, Sam, Billy, Minotaur Joe's cat-hittable face).
 """
 import base64
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(HERE, '..', 'model_viewer'))
 import ps2iso                       # noqa: E402
 import mot_codec as mc              # noqa: E402
 import extract_model as em          # noqa: E402
-import patch_monster_spheres as pm  # noqa: E402  (the disc bake's sphere rewrites, applied in memory with --patched)
+import patch_monster_scripts as pm  # noqa: E402  (the disc bake's sphere rewrites, applied in memory with --patched)
 
 SRC = os.path.join(HERE, '..', '..', 'Dark Cloud Improved Version', 'GameData', 'EnemyData.cs')
 FN_SET_BODY_COL = 130
@@ -71,7 +71,7 @@ def script_calls(stb, fns):
     ('str', name) / ('f', float) / ('i', int). Strings are codeBase-relative (extract_bodycol.py reads them
     absolute and mislabels most bones as root). A CALL_FUNC (op 19) is followed into its function — walked
     instruction by instruction up to its RET — so calls made from an appended function (the disc bake in
-    tools/iso_patch/patch_monster_spheres.py) land at the call site, in order, and are not counted again when the
+    tools/iso_patch/patch_monster_scripts.py) land at the call site, in order, and are not counted again when the
     linear scan reaches the function's own bytes."""
     W = lambda o: struct.unpack_from('<I', stb, o)[0] if o + 4 <= len(stb) else 0
     if W(0) != 0x425453:

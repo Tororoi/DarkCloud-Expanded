@@ -113,7 +113,7 @@ namespace Dark_Cloud_Improved_Version
         private const double LandSeconds   = 0.45, TakeOffSeconds = 0.4, RunTimeoutSeconds = 6.0, StraightRunSeconds = 1.5;
         private const int    FadeTicks     = 30;       // ≈ 0.5 s at the 16 ms tick (user 2026-09-11)
         private const int    GlowFadeTicks = FadeTicks; // the glow SHRINKS over the same ≈ 0.5 s the cat fades (user 2026-09-12; a longer linger was tried and dropped)
-        private static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = the glow is at full size)
+        private static int   _glowFade = -1;           // ticks into the glow's shrink (−1 = full size and following the cat; ≥ GlowFadeTicks = done: OFF until the next bind)
         private const float  DamageMult    = 1.5f;     // × the weapon's attack (a charged pellet's worth)
         private const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
@@ -398,7 +398,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, PounceFrames);   // per target: ApplyFlightTime
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitEntry, 0);
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitLatch, 0);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatHitDamage, 1);                 // set for real at bind (the pellet's damage is known then)
+            Memory.WriteInt  (CodeCaves.Mailbox.CatHitDamage, 0);                 // 0 = not stamped yet: the cave tests no touch until WriteHitStamps at bind (a stale 1 here, tested from the hidden copy's last-drawn head next to the enemy it had just hit, dealt a 1-damage hit on the first frame — user 2026-09-12)
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitAttr, 0);
             Memory.WriteFloat(CodeCaves.Mailbox.CatKickStrength, KickStrength);
             Memory.WriteFloat(CodeCaves.Mailbox.CatKickDecay, KickDecay);
@@ -431,16 +431,34 @@ namespace Dark_Cloud_Improved_Version
             int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
             if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Console.WriteLine(Tag + "charge released without a shot — cat stays hidden"); return; }
             if (_target >= 0 && state >= 4) WriteTargetAim();                                                  // the aim point follows the target's body every tick
+            // A lock-on made after the cat picked its target wins (user 2026-09-12: it kept a far target): checked every ~0.5 s
+            // while walking or crouched. A closed mimic keeps the cat crouched (the cave loops the ready clip on CatHoldReady).
+            if (_target >= 0 && (state == 6 || state == 10) && ++_retargetTick >= 30) { _retargetTick = 0; RetargetToLockOn(state); }
+            // Hold the crouch while the target cannot be hit: a chest-mimic still shut, or any enemy inside its invincibility
+            // frames (`_STATUS_SET_MUTEKI`: 9 after a hit, 100 when a mimic wakes, 1000 dying) — CheckDmg skips every hit then.
+            bool hold = _target >= 0 && state >= 4 && (IsUnopenedMimic(_target) || Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.HitStunTimer)) > 0);
+            Memory.WriteInt(CodeCaves.Mailbox.CatHoldReady, hold ? 1 : 0);
+            if (hold != _holdLogged)
+            {
+                _holdLogged = hold;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
+                // Released: a chest-mimic's init label ran when it woke (its guard windows — the disc bake makes the wake a
+                // guard — are registered only now); crush them for this flight so the leap lands through the guard.
+                if (!hold && _target >= 0) CrushGuard(_target, again: true);
+            }
             // The glow follows the cat's visibility. While the cat fades out (hit or 20 s expiry: opacity over FadeTicks) the glow
             // SHRINKS on its own, longer clock (GlowFadeTicks) — so it lingers a beat where the cat vanished (user 2026-09-12;
             // dimming it through the torch tint global did not take, so size is the fade). Its clock starts with the fade
             // and keeps running past Hide(); a new bind resets it.
+            // Once the shrink has run out the glow stays OFF until the next bind resets _glowFade: PollCave runs before Step in
+            // the tick, so snapping back to "follow the cat" here showed one full-size frame before Step hid the cat (user 2026-09-12).
             bool fading = _hitFade || _phase == Phase.Fading;
             if (fading && _glowFade < 0) _glowFade = 0;
-            if (_glowFade >= 0 && ++_glowFade >= GlowFadeTicks) _glowFade = -1;
-            bool glow = (state != 0 && state != 3) || _glowFade >= 0;
+            if (_glowFade >= 0 && _glowFade < GlowFadeTicks) _glowFade++;
+            bool shrinking = _glowFade >= 0 && _glowFade < GlowFadeTicks, done = _glowFade >= GlowFadeTicks;
+            bool glow = !done && ((state != 0 && state != 3) || shrinking);
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowOn, glow ? 1 : 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * (_glowFade >= 0 ? 1f - _glowFade / (float)GlowFadeTicks : 1f));
+            Memory.WriteFloat(CodeCaves.Mailbox.CatGlowScale, GlowScale * (shrinking ? 1f - _glowFade / (float)GlowFadeTicks : done ? 0f : 1f));
             int ent = Memory.ReadInt(CodeCaves.Mailbox.CatHitEntry);
             if (ent != 0)                                                        // the cave planted a damage entry at a contact (the pellet's own recipe)
             {
@@ -648,6 +666,16 @@ namespace Dark_Cloud_Improved_Version
             if (_target < 0) { Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, 0); return; }
             long root = EnemyAddresses.CharObjects.PosAddr(_target);
             float x = Memory.ReadFloat(root), h = Memory.ReadFloat(root + 4), y = Memory.ReadFloat(root + 8);
+            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.RenderStatus)) != 2)
+            {
+                // Dormant (a chest-mimic that has not opened): its script has not declared any spheres, so the sphere table
+                // is whatever the slot's previous occupant left — aiming at that sent the cat wandering off (user 2026-09-12).
+                // The root is the chest's spot (SetMimicEvent places the box at the enemy's spawn position).
+                Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos, x); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
+                Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)(CodeCaves.Mailbox.CatAimPos - 0x20000000));
+                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
+                return;
+            }
             long tbl = EnemyAddresses.MainMonstorUnit.Base + (long)_target * 0x510;
             byte[] active = Memory.ReadBytesBatch(tbl + 0x55450, 16 * 4), radii = Memory.ReadBytesBatch(tbl + 0x55390, 16 * 4), centres = Memory.ReadBytesBatch(tbl + 0x55250, 16 * 0x10);
             byte[] pct = Memory.ReadBytesBatch(tbl + 0x555D0, 16 * 0x18);           // per sphere: damage % by attacker character (_SET_BODY_COL_PARA 10+char); Xiao = +4
@@ -682,6 +710,40 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)(CodeCaves.Mailbox.CatAimPos - 0x20000000));
         }
 
+        // A chest-mimic waits as a DORMANT slot; while the cat's target is one, the cat crouches and waits (user 2026-09-12).
+        private static readonly HashSet<ushort> KingMimics = new() { (ushort)EnemySpecies.KingMimicDBC.Id, (ushort)EnemySpecies.KingMimicSMT.Id, (ushort)EnemySpecies.KingMimicMS.Id, (ushort)EnemySpecies.KingMimicWOF.Id, (ushort)EnemySpecies.KingMimicSW.Id, (ushort)EnemySpecies.KingMimicGoT.Id, (ushort)EnemySpecies.KingMimicDS.Id };
+        private static readonly HashSet<ushort> Mimics     = new() { (ushort)EnemySpecies.MimicDBC.Id, (ushort)EnemySpecies.MimicSMT.Id, (ushort)EnemySpecies.MimicMS.Id, (ushort)EnemySpecies.MimicWOF.Id, (ushort)EnemySpecies.MimicSW.Id, (ushort)EnemySpecies.MimicGoT.Id, (ushort)EnemySpecies.MimicDS.Id };
+        private static bool _holdLogged;
+
+        /// <summary>A native chest-mimic is a DORMANT enemy slot (RenderStatus 1: its view gate is 0, so it is never promoted
+        /// to 2 and never drawn — the treasure box drawn at its position is the disguise, see ChestAddresses). Opening the
+        /// box sets the gate and the slot goes to 2: its script declares the hurt spheres right then, so the cat leaps at
+        /// that moment and not after the "appear" clip (user 2026-09-12).</summary>
+        private static bool IsUnopenedMimic(int slot)
+        {
+            ushort species = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
+            if (!KingMimics.Contains(species) && !Mimics.Contains(species)) return false;
+            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.RenderStatus)) != 2;   // dormant: the chest
+        }
+
+        /// <summary>A lock-on onto a different live enemy retargets the cat. Crouched (state 10) it is sent back to walking
+        /// (state 6, the crouch's play-once cleared so the walk loops) so the cave closes the distance before leaping again.</summary>
+        private static void RetargetToLockOn(int state)
+        {
+            int locked = LockedTarget();
+            if (locked < 0 || locked == _target || !IsLiveEnemy(locked)) return;
+            int was = _target; _target = locked;
+            WriteTargetAim(); CrushGuard(_target); ApplyFlightTime();
+            _gaitLogged = false; _pounceLogged = false; _sitLogged = false;
+            if (state == 10)
+            {
+                long flags = SlotAddr() + CCharacter.MotionFlags;
+                Memory.WriteInt(flags, Memory.ReadInt(flags) & ~2);
+                Memory.WriteInt(CodeCaves.Mailbox.CatState, 6);
+            }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
+        }
+
         /// <summary>Locked-on enemy first; otherwise the live enemy nearest to Xiao (user 2026-09-11); −1 when none.</summary>
         private static int PickTarget()
         {
@@ -713,20 +775,38 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Guard Crush for the cat: the target's guard-frame windows are zeroed for the flight (a guarding enemy
         /// would otherwise take the hit on its guard); restored by <see cref="RetirePlanted"/> after the cat's lifetime
         /// or at once by <see cref="RestoreGuardsNow"/>.</summary>
-        private static void CrushGuard(int enemy)
+        private static void CrushGuard(int enemy, bool again = false)
         {
             if (enemy < 0 || enemy >= EnemyAddresses.FloorSlots.Count) return;
-            lock (_planted) if (_guardRestore.Exists(g => g.slot == enemy)) return;   // already crushed this flight
-            var snap = new ushort[EnemyAddresses.GuardWindows.WindowCount];
+            lock (_planted)
+            {
+                int have = _guardRestore.FindIndex(g => g.slot == enemy);
+                if (have >= 0 && !again) return;                                     // already crushed this flight
+                if (have >= 0)
+                {   // again: windows registered AFTER the first crush (a chest-mimic's init label runs when it wakes) — zero
+                    // them too; the snapshot keeps the first non-zero flag per window so the restore puts everything back
+                    var (slot, ticks, snap) = _guardRestore[have];
+                    bool more = false;
+                    for (int w = 0; w < snap.Length; w++)
+                    {
+                        long a = EnemyAddresses.GuardWindows.FlagAddr(enemy, w);
+                        ushort cur = Memory.ReadUShort(a);
+                        if (cur != 0) { Memory.WriteUShort(a, 0); if (snap[w] == 0) snap[w] = cur; more = true; }
+                    }
+                    if (more) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
+                    return;
+                }
+            }
+            var snap0 = new ushort[EnemyAddresses.GuardWindows.WindowCount];
             bool any = false;
-            for (int w = 0; w < snap.Length; w++)
+            for (int w = 0; w < snap0.Length; w++)
             {
                 long a = EnemyAddresses.GuardWindows.FlagAddr(enemy, w);
-                snap[w] = Memory.ReadUShort(a);
-                if (snap[w] != 0) { Memory.WriteUShort(a, 0); any = true; }
+                snap0[w] = Memory.ReadUShort(a);
+                if (snap0[w] != 0) { Memory.WriteUShort(a, 0); any = true; }
             }
             if (!any) return;
-            lock (_planted) _guardRestore.Add((enemy, (int)(LifetimeSeconds * 60) + 120, snap));
+            lock (_planted) _guardRestore.Add((enemy, (int)(LifetimeSeconds * 60) + 120, snap0));
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
         }
 
@@ -1674,10 +1754,25 @@ namespace Dark_Cloud_Improved_Version
                     var (idx, ticks, native) = _planted[i];
                     if (native && pool > 0 && Memory.ReadInt(pool + 0x20000000 + ColActiveOff + idx * 4) == 0)
                     {
-                        // Consumed: the enemy's CheckDmg accepted it — damage, hitspark, kick and (via the patched flinch
-                        // rule) the stagger are all the engine's. Only now is the cat spent (user 2026-09-11).
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"hit landed (entry {idx} consumed) — fading out");
-                        _hitFade = true; _fade = 0; _alpha = 1f;
+                        // The entry is gone. Accepted = some enemy's CheckDmg overwrote the −1 the cave stamped into every
+                        // slot's "last hit sphere" word (+0x55750) at the plant — it only does so past its guard and
+                        // invincibility gates, right before applying the damage. Gone without that = the engine dropped it
+                        // (a mimic wakes with 100 invincibility frames — user 2026-09-12): not spent, the latch is freed.
+                        int hitSlot = -1;
+                        for (int s2 = 0; s2 < 16 && hitSlot < 0; s2++)
+                            if (Memory.ReadInt(EnemyAddresses.MainMonstorUnit.Base + (long)s2 * 0x510 + 0x55750) != -1) hitSlot = s2;
+                        if (hitSlot >= 0)
+                        {
+                            // Accepted: damage, hitspark, kick and (via the patched flinch rule) the stagger are all the engine's.
+                            // Only now is the cat spent (user 2026-09-11).
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"hit landed on enemy slot {hitSlot} (entry {idx}) — fading out");
+                            _hitFade = true; _fade = 0; _alpha = 1f;
+                        }
+                        else
+                        {
+                            Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"contact was not accepted (entry {idx} gone, no enemy took it — invincible or guarding) — no hit, still flying");
+                        }
                         _planted.RemoveAt(i); continue;
                     }
                     if (--ticks > 0) { _planted[i] = (idx, ticks, native); continue; }

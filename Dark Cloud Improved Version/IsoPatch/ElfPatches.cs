@@ -325,7 +325,7 @@ namespace Dark_Cloud_Improved_Version
         // face is 0 % for Xiao. The cave (tools/stubs/cat_sphere_percent.s) re-forms that load's address: a Xiao-owned
         // hit whose kick type (+0x98) equals the sphere's spare[1] (`_SET_BODY_COL_PARA(1, kick)`, +0x55490 table — no
         // vanilla reader or writer, reset to 100 by every _SET_BODY_COL) reads spare[0] instead. The disc side
-        // (tools/iso_patch/patch_monster_spheres.py, run by IsoPatcher.BakeMonsterSpheres) arms Joe's face with (100, 2).
+        // (tools/iso_patch/patch_monster_scripts.py, run by IsoPatcher.BakeMonsterSpheres) arms Joe's face with (100, 2).
         internal static void PatchCatSpherePercent(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = CodeCaves.ElfCave.CatSpherePercent;

@@ -184,7 +184,7 @@ function info(m){
   const rows=m.spheres.map(s=>`<tr><td>${s.frame}${s.found?'':'<span class="tag warn">no frame</span>'}${s.cat?'<span class="tag">cat target</span>':''}</td><td class="${s===big?'big':''}">${f(s.r)}</td><td>${f(s.p[0])}, ${f(s.p[1])}, ${f(s.p[2])}</td><td>${(s.w0||s.w1)?f(s.w0)+'–'+f(s.w1):'always'}</td>${pctCell(s)}</tr>`).join('');
   const atk=m.attack.map(s=>`<tr><td>${s.frame}${s.found?'':'<span class="tag warn">no frame</span>'}</td><td>${f(s.r)}</td><td>${f(s.p[0])}, ${f(s.p[1])}, ${f(s.p[2])}</td></tr>`).join('');
   document.getElementById('info').innerHTML=
-    `<h2>${m.name}${m.patched?'<span class="tag" title="hurt spheres as the Dark Cloud – Expanded disc declares them (tools/iso_patch/patch_monster_spheres.py)">disc-patched</span>':''}</h2><div class="meta">id ${m.id} · table ${m.ti} · ${m.code}<br>${m.chr}<br>${m.stb||'(no script)'}</div>`+
+    `<h2>${m.name}${m.patched?'<span class="tag" title="script as the Dark Cloud – Expanded disc bakes it (tools/iso_patch/patch_monster_scripts.py: hurt spheres, cat arming, mimic wake guard)">disc-patched</span>':''}</h2><div class="meta">id ${m.id} · table ${m.ti} · ${m.code}<br>${m.chr}<br>${m.stb||'(no script)'}</div>`+
     (m.also.length?`<div class="also">Same model: ${m.also.join(', ')}</div>`:'')+
     `<div class="kv"><span>root position</span><span>0, 0, 0 (the model origin)</span></div>`+
     `<div class="kv"><span>lock-on point</span><span>${m.lockon?m.lockon.map(f).join(', '):'—'}</span></div>`+

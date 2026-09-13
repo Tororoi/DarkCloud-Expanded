@@ -6,7 +6,7 @@
 # reader, no vanilla script writer). This stub, reached by a `j` from ELF 0x1DC084 (the `lui at,5; addu at,v1,at`
 # that forms the pct address), keeps the vanilla address unless the hit is Xiao's (s3 == 1) AND its kick type
 # (entry +0x98) equals spare[1] — then it points `at` so the untouched `lw a2,0x55d0(at)` at 0x1DC08C reads spare[0]
-# instead. The disc script (tools/iso_patch/patch_monster_spheres.py) arms Joe's face with spare[0] = 100,
+# instead. The disc script (tools/iso_patch/patch_monster_scripts.py) arms Joe's face with spare[0] = 100,
 # spare[1] = 2 (the cat's kick type; pellets carry 0, and the vanilla 100 never matches a kick type).
 # Registers at the hook: v1 = &pct[owner] − 0x50000 (= a3 + j*0x18 + s3*4, recomputed below), a3 = MainMonstorUnit +
 # slot*0x510, 0xB0(sp) = sphere index j, s3 = owner, s6 = entry offset. a2 and v1 are dead (reloaded at 0x1DC08C and

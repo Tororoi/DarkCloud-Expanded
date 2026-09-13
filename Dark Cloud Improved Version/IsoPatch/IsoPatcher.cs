@@ -161,7 +161,7 @@ namespace Dark_Cloud_Improved_Version
             // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb, redirected into the tail): Blizzard takes
             // Titan's four spheres, Sam and Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast
             // cat's kick at 100 % (ElfPatches.PatchCatSpherePercent reads the armed spare table) — user 2026-09-12.
-            progress("Baking monster hurt-sphere fixes …");
+            progress("Baking monster script fixes (hurt spheres, mimic wake guard) …");
             BakeMonsterSpheres(outIso, progress);
 
             progress("Publishing pnach to PCSX2 …");
@@ -338,11 +338,11 @@ namespace Dark_Cloud_Improved_Version
         static void BakeCatPack(string outIso, Action<string> progress)
             => RunPythonBake("build_cat_pack.py", "Divine Beast Title cat", outIso, progress);
 
-        // tools/iso_patch/patch_monster_spheres.py rewrites the hurt-sphere declarations of a few monster scripts (each
+        // tools/iso_patch/patch_monster_scripts.py rewrites the hurt-sphere declarations of a few monster scripts (each
         // `_SET_BODY_COL` block becomes a CALL_FUNC into a function appended to the script; nothing else moves) and
         // redirects them into the DATA.DAT tail. Idempotent (appended marker).
         static void BakeMonsterSpheres(string outIso, Action<string> progress)
-            => RunPythonBake("patch_monster_spheres.py", "monster hurt-sphere", outIso, progress);
+            => RunPythonBake("patch_monster_scripts.py", "monster script", outIso, progress);
 
         /// <summary>Runs tools/iso_patch/<paramref name="scriptName"/> --iso <paramref name="outIso"/> and relays its
         /// progress lines. Missing script → warning, not a failure (the rest of the patch still applies).</summary>

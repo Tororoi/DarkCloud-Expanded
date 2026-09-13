@@ -484,7 +484,7 @@ namespace Dark_Cloud_Improved_Version
         // ENEMY → PLAYER DAMAGE block above EnemySpeciesTable.DamageReduction for the full enemy→player formula.
         internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
-        internal const int HitStunTimer      = 0x098; // int   — 0 at rest; set to a positive value on hit (e.g. 966 observed); presumably a stun or invincibility-frame countdown
+        internal const int HitStunTimer      = 0x098; // int   — INVINCIBILITY frame countdown (record +0x1E468): scripts set it with `_STATUS_SET_MUTEKI` (cmd 101: 9 after a hit, 100 when a mimic wakes, 1000 while dying); CheckDmg__12CMonstorUnit skips the whole hit test while > 0 (2026-09-12)
 
         internal const int ForceItemDrop     = 0x0A0; // int   — forces a specific item drop when nonzero
         internal const int RenderDistance    = 0x0A4; // float — CONFIRMED controls render distance and map-dot appearance threshold
