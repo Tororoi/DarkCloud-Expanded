@@ -171,8 +171,14 @@ WING_TAB_CAP = True                # also close the base ring's open top (the ho
 WING_ROOT_ANCHOR = False           # ring verts inside WING_ROOT_ANCHOR_X of the midline (the footprint's inward part, which stood up
 WING_ROOT_ANCHOR_X = None          # above the back when the humerus folded down) are skinned like the back beneath them; the rim
                                    # (Ri, Rf, Rt, the outer verts) keeps riding the wing so the front base folds cleanly
-WING_TAB_SUBDIV = 1                # each top tab → n² triangles laid on the skin (see the block); 1 = the plain triangles
+WING_TAB_SUBDIV = 2                # each top tab → n² triangles laid on the skin (see the block); 1 = the plain triangles
                                    # (user 2026-09-13: back to the plain tabs while the wing size is re-judged)
+WING_TAB_SUBDIV_POOL = True        # new sub-points are the plain average of their edge's ends — position AND skinning pooled — so the
+                                   # base bends smoothly between the wing and the body (user 2026-09-13: "subdivide these polys once
+                                   # … fold the base of the wing a bit more smoothly"); False = the older skin-projected points
+WING_TAB_BULGE = 0.2               # the pooled wing↔body midpoints are pushed this far out along the shoulder in the FOLDED pose
+                                   # (two-pose fit; the open wing is unchanged) so the folded base rounds over the blade
+WING_TAB_SUBDIV_NEIGHBOURS = True  # also split the wing polys that share an edge with a tab (the base triangles), so no T-junctions
 WING_TAB_ANCHOR_FRAME = 15         # the patch points sit on the skin (+lift) of THIS cat pose (the stand = the folded idle) and copy
                                    # its skinning there; None = the leap reference pose (they sank ≤0.3 into the back when standing)
 WING_TAB_HINGE, WING_TAB_HINGE_MAX = 0.35, 0.0   # sub-points closer than this (barycentric) to the ring follow the wing bone, up to this
@@ -198,7 +204,7 @@ WING_FOLD = [((-0.08, -0.96, -0.27), (-0.83, 0.38, 0.10)),   # humerus: down the
              ((-0.05,  0.35, -0.94), (-1.00, 0.00, 0.00)),   # forearm: back along the belly line
              (( 0.03,  0.20, -0.98), (-0.90, 0.42, 0.00)),   # hand: back at mid-flank, rolled 25° up
              (( 0.10,  0.15, -0.98), (-0.90, 0.42, 0.00))]   # tips: back, converging over the tail
-WING_FOLD_ROOT_SHIFT = (-0.43, -0.12, 0.0)  # the folded wing's root sits this far from the flight pivot (stand world, right wing;
+WING_FOLD_ROOT_SHIFT = (-0.43, 0.08, 0.0)   # the folded wing's root sits this far from the flight pivot (stand world, right wing;
                                             # mirrored for the left): out of the shoulder and up to the back's edge. The root slides
                                             # there over the humerus's fold window and back during the take-off.
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
@@ -778,11 +784,12 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             # and weighted like the skin under it — so the patch hugs the back in every pose and only the one ring-side row
             # stretches to the wing as it folds (the hinge = the stable intersection) ──
             n = WING_TAB_SUBDIV; wing_vert = lambda i: i < len(used) or i == pts.get('Rm'); ch_root = SIDES[sd][0]
+            mixed = []                                                                   # pooled points between the wing and the body
             P_anchor = cat_world(WING_TAB_ANCHOR_FRAME)[parent] if WING_TAB_ANCHOR_FRAME is not None else None
             cache = {}
             def sub_vertex(key, pos, ends):
                 if key in cache: return cache[key]
-                if all(wing_vert(e) for e, _ in ends):                                   # on a wing–wing edge: pool the ends
+                if WING_TAB_SUBDIV_POOL or all(wing_vert(e) for e, _ in ends):           # pool the ends (always on a wing–wing edge)
                     acc = {}
                     for vi, wgt in ends:
                         for b, w, pl in ((me['b0'][vi], me['w0'][vi], me['p0'][vi]), (me['b1'][vi], 1.0 - me['w0'][vi], me['p1'][vi])):
@@ -794,6 +801,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                     i = me['nv']; me['nv'] += 1
                     me['b0'].append(ba); me['p0'].append([c / aa[0] for c in aa[1]]); me['w0'].append(aa[0] / tot)
                     me['b1'].append(bb); me['p1'].append([c / ab[0] for c in ab[1]])
+                    if any(wing_vert(e) for e, _ in ends) and not all(wing_vert(e) for e, _ in ends): mixed.append(i)
                 else:                                                                    # on the back: skin height, skin-like weights
                     xx, z = pos[0], pos[2]; sy = skin_y2(xx, z)
                     y = max(pos[1], sy + WING_EXTEND_LIFT) if sy is not None else pos[1]
@@ -823,7 +831,14 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                             me['b1'].append(arm); me['p1'].append(list(em.xform_pt(em.rigid_inv(Wcat[arm]), q))); me['w0'].append(w_spine)
                 cache[key] = i; return i
             fine = []
-            for tri, poly in zip(coarse, tab_polys):
+            work = list(zip(coarse, tab_polys))
+            if WING_TAB_SUBDIV_NEIGHBOURS and n > 1:
+                top_edges = {frozenset(e) for t, poly in work if len(poly) == 3 for e in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))}
+                nb = [t for t in me['tris'] if any(frozenset(e) in top_edges for e in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])))]
+                me['tris'] = [t for t in me['tris'] if t not in nb]                       # replaced by their split versions below
+                work += [(t, ('w', 'w', 'w')) for t in nb]
+                log(f"  {sd} wing tabs: {len(nb)} base polys sharing an edge with a tab are split with them")
+            for tri, poly in work:
                 if len(poly) > 3: polys.append(tri); continue                             # 'under': one tri, inside the body
                 V = [wp_of(i) for i in tri]
                 grid = {}
@@ -846,6 +861,35 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                         fine.append((grid[(a_ + 1, b_, c_ - 1)], grid[(a_, b_ + 1, c_ - 1)], grid[(a_, b_, c_)]))
                         if c_ >= 2: fine.append((grid[(a_ + 1, b_, c_ - 1)], grid[(a_ + 1, b_ + 1, c_ - 2)], grid[(a_, b_ + 1, c_ - 1)]))
             polys += fine; tabs = fine
+            if WING_TAB_BULGE and mixed:
+                # ROUND THE FOLD (user 2026-09-13: "take advantage of the subdivision to make the folded pose smoother"): a pooled
+                # midpoint sits on the straight chord between its wing end and its body end, so the folded tab was two flat planes
+                # meeting at a crease. Each mixed point now gets bone-local positions solved from TWO targets: its reference-pose
+                # spot (the open wing is untouched) and, in the folded idle pose, that chord point pushed WING_TAB_BULGE out along
+                # the shoulder's normal — a 6×6 linear system per point (2 poses × 3 coords, unknowns = p0 and p1)
+                import numpy as _np
+                W_fold = wing_pose(WING_FOLD_FRAME)[0]; Wc_fold = cat_world(WING_FOLD_FRAME)
+                def M_of(b, Wwing, Wc):
+                    M = _np.array(Wwing[b] if b in Wwing else Wc[b], dtype=float)
+                    return M[:3, :3].T, M[3, :3]                                          # column form: world = R·p + t
+                nrm = _np.array([0.6 * (1.0 if sd == 'l' else -1.0), 0.8, 0.0]); nrm /= _np.linalg.norm(nrm)
+                for i in mixed:
+                    b0_, b1_, w_ = me['b0'][i], me['b1'][i], me['w0'][i]
+                    p0_, p1_ = _np.array(me['p0'][i]), _np.array(me['p1'][i])
+                    RA0, tA0 = M_of(b0_, Wref, Wcat); RA1, tA1 = M_of(b1_, Wref, Wcat)          # pose A: the leap reference
+                    RB0, tB0 = M_of(b0_, W_fold, Wc_fold); RB1, tB1 = M_of(b1_, W_fold, Wc_fold)   # pose B: folded (stand)
+                    tgtA = w_ * (RA0 @ p0_ + tA0) + (1 - w_) * (RA1 @ p1_ + tA1)               # where it is now, both poses
+                    tgtB = w_ * (RB0 @ p0_ + tB0) + (1 - w_) * (RB1 @ p1_ + tB1) + WING_TAB_BULGE * nrm
+                    A = _np.zeros((6, 6)); rhs = _np.zeros(6)
+                    A[:3, :3] = w_ * RA0; A[:3, 3:] = (1 - w_) * RA1; rhs[:3] = tgtA - w_ * tA0 - (1 - w_) * tA1
+                    A[3:, :3] = w_ * RB0; A[3:, 3:] = (1 - w_) * RB1; rhs[3:] = tgtB - w_ * tB0 - (1 - w_) * tB1
+                    # the system is singular by construction: a push along the fold's own rotation axis can't be produced by
+                    # bone-local offsets, so take the minimum-norm least-squares solution (the achievable part of the push) and
+                    # keep the old locals if it still explodes
+                    sol, *_ = _np.linalg.lstsq(A, rhs, rcond=1e-6)
+                    if _np.all(_np.isfinite(sol)) and _np.abs(sol).max() < 50:
+                        me['p0'][i] = [float(c) for c in sol[:3]]; me['p1'][i] = [float(c) for c in sol[3:]]
+                log(f"  {sd} wing tabs: {len(mixed)} wing↔body midpoints rounded by {WING_TAB_BULGE:g} along the shoulder in the folded pose (exact in the leap)")
             me['tris'] += polys
             w_ = clearance(); c = w_[0] if w_ else float('nan')
             corner_log = [f"{nm} ({cpos[i][0]:.2f}, {cpos[i][1]:.2f}, {cpos[i][2]:.2f}{' ↑%.2f' % raised[i] if i in raised else ''})" for nm, i in pts.items() if i in cpos]
