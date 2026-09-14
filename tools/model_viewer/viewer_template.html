@@ -123,6 +123,7 @@
       <label><input type="checkbox" id="cbGrid" checked> grid</label>
       <label><input type="checkbox" id="cbSpin"> spin</label>
       <label><input type="checkbox" id="cbAxes" checked> axes</label>
+      <label><input type="checkbox" id="cbBound"> cloth capsules</label>
     </div>
   </div>
 
@@ -464,7 +465,8 @@ function clickPick(e){
   if(!curDec || playing || !el('cbMesh').checked){ if(playing) setSelStatus('pause the motion to select polys'); return; }
   const rc=canvas.getBoundingClientRect(); const r=pickRay(e.clientX-rc.left, e.clientY-rc.top);
   let best=null;
-  curDec.meshes.forEach((me,mi)=>{ const S=me.skinned,T=me.tri;
+  curDec.meshes.forEach((me,mi)=>{ if(me.tag==='bound') return;   // the collision overlay is not pickable geometry
+    const S=me.skinned,T=me.tri;
     for(let ti=0;ti<me.nt;ti++){ const t=rayTri(r,S,T[ti*3],T[ti*3+1],T[ti*3+2]); if(t>0&&(best===null||t<best.t)) best={t,mi,ti}; } });
   if(!best){ setSelStatus('nothing under the cursor'); return; }
   const k=selKey(best.mi,best.ti);
@@ -680,10 +682,13 @@ function render(){
     gl.uniform3f(MESH_uS, 1.0, 0.55, 0.15);   // selected polys: orange
     gl.disable(gl.CULL_FACE);                 // two-sided lambert; winding is unreliable across parts
     if(selDirty) rebuildSelFlags();
+    const showBound=el('cbBound').checked;
     for(const me of curDec.meshes){
       // wing meshes (grafted parts) draw white so their intersection with the grey body reads clearly
       const wing=(curDec.nodes[me.node].name||'').toLowerCase().includes('wing');
-      if(wing) gl.uniform3f(MESH_uC, 1.0,1.0,1.0); else gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
+      if(me.tag==='bound'){ if(!showBound) continue; gl.uniform3f(MESH_uC, 0.05,0.16,0.30); }   // the cape's collision ellipsoids (added over the body)
+      else if(me.tag==='cape') gl.uniform3f(MESH_uC, 0.89,0.10,0.10);                // the Super Steve cape: solid bright red (build_cat_pack.CAPE_RGBA)
+      else if(wing) gl.uniform3f(MESH_uC, 1.0,1.0,1.0); else gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
       gl.bindBuffer(gl.ARRAY_BUFFER,meshVBO);
       const n=me.nt*9;
       gl.bufferData(gl.ARRAY_BUFFER, (me.nt*21)*4, gl.DYNAMIC_DRAW);
@@ -693,7 +698,9 @@ function render(){
       gl.enableVertexAttribArray(MESH_aP); gl.vertexAttribPointer(MESH_aP,3,gl.FLOAT,false,0,0);
       gl.enableVertexAttribArray(MESH_aN); gl.vertexAttribPointer(MESH_aN,3,gl.FLOAT,false,0,n*4);
       gl.enableVertexAttribArray(MESH_aS); gl.vertexAttribPointer(MESH_aS,1,gl.FLOAT,false,0,n*8);
+      if(me.tag==='bound'){ gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); gl.depthMask(false); }   // additive tint: the body stays visible through it, whatever the winding
       gl.drawArrays(gl.TRIANGLES,0,me.nt*3);
+      if(me.tag==='bound'){ gl.disable(gl.BLEND); gl.depthMask(true); }
     }
     gl.disableVertexAttribArray(MESH_aS);
     if(sel.size){                             // outline the selected polys on top, so they read even when occluded

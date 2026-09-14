@@ -48,7 +48,7 @@ class Archive:
         return self.f.read(size)
 
 
-def model_from(label, code, folder, nodes, mds, pack, mot_name, motions, mds_name, wgt_name=None, node_base=0):
+def model_from(label, code, folder, nodes, mds, pack, mot_name, motions, mds_name, wgt_name=None, node_base=0, extra_meshes=()):
     """`wgt_name`: the pack's skin-weight record → exact skinning; `node_base`: the .wgt's node indices are offset by this
     (the cat's cat.wgt keeps the rig's own 0..K-1 numbering, so 0 for every case here)."""
     em._MESH_DIM_CACHE.clear()
@@ -60,6 +60,7 @@ def model_from(label, code, folder, nodes, mds, pack, mot_name, motions, mds_nam
             mm = em.build_mesh_weighted(mds, n, nodes, per) if per else em.build_mesh(mds, n, nodes)
             if mm:
                 meshes.append(mm)
+    meshes += list(extra_meshes(meshes) if callable(extra_meshes) else extra_meshes)   # a callable sees the built meshes (the cape hangs off the skin's)
     tracks = em.build_tracks(pack, mot_name, len(nodes))
     return serialize(label, code, folder, nodes, meshes, tracks, motions, mds_name, mot_name)
 
@@ -173,6 +174,13 @@ def main():
     wings = [n['name'] for n in dnodes if 'wing' in n['name'].lower()]
     print(f"Dran: {len(dnodes)} nodes ({len(wings)} wing bones: {', '.join(wings)}), {donor['_stats']['tris']} tris, {donor['_stats']['tracks']} tracks, {len(dmotions)} clips, max frame {donor['maxFrame']}")
 
+    # Super Steve + an Angel sphere: the blue (wingless) cat with the yellow cape's cloth REST lattice (cat_wings.CAPE_*)
+    caped = model_from('Super Steve cat + red cape (cloth rest shape)', 'c04b+cat+cape', 'wingless bake + CAPE_* rest lattice',
+                       nodes, mds, pack, 'cat.mot', motions, bcp.HOST_MDS, wgt_name='cat.wgt',
+                       extra_meshes=lambda ms: [cw.build_cape_mesh(nodes, next(m for m in ms if nodes[m['node']]['name'] == 'cat_skin'))]
+                       + cw.build_bound_meshes(nodes))
+    caped['group'] = 'Xiao'
+    print(f"caped cat: cape {len(cw.CAPE_COLLAR)}×{cw.CAPE_ROWS} lattice on collar verts {cw.CAPE_COLLAR}, hem width {cw.CAPE_WIDTH:g}, length {cw.CAPE_LENGTH:g}, lift {cw.CAPE_LIFT:g}")
     wg = cw.build_winged_cat(nodes, mds, pack, motions, dnodes, dmds, dran, dmot_name)
     winged = serialize("Divine Beast cat + Dran's wings — leap = charge loop, land = flare + fold (experiment)", 'c04b+cat+wings',
                        'viewer experiment on the wingless pack', wg['nodes'], wg['meshes'], wg['tracks'], motions,
@@ -181,7 +189,7 @@ def main():
 
     tpl = io.open(os.path.join(HERE, 'viewer_template.html'), encoding='utf-8').read()
     html = tpl.replace('<title>Dark Cloud Model Viewer</title>', '<title>Divine Beast Cat Rig</title>')
-    html = html.replace('/*__MODEL_DATA__*/', 'const MODELS = ' + json.dumps([winged, game, source, donor], separators=(',', ':'), ensure_ascii=False) + ';')
+    html = html.replace('/*__MODEL_DATA__*/', 'const MODELS = ' + json.dumps([winged, game, caped, source, donor], separators=(',', ':'), ensure_ascii=False) + ';')
     io.open(out, 'w', encoding='utf-8').write(html)
     print(f"wrote {out}: {len(html.encode('utf-8')) / 1e6:.2f} MB")
 

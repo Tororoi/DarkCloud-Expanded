@@ -492,7 +492,8 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint NextFree = 0x01FB2250;   // after the sphere-percent cave (112 B → 0x1FB2250); the band runs to 0x1FB4000 (7600 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatGuardBypass     = 0x01FB2250;   // 108 B → 0x1FB22BC: the cat's hits ignore an enemy's guard window
+            internal const uint NextFree = 0x01FB22C0;   // after the guard-bypass cave; the band runs to 0x1FB4000 (7488 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
