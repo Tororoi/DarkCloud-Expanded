@@ -347,15 +347,27 @@ function sampleV(tr,f){
 }
 
 const _q=[1,0,0,0];
-function computePose(dec,f){ // f<0 => bind pose (use node bind q/t only)
+const _qa=[1,0,0,0], _qb=[1,0,0,0];
+function nodeQT(dec,i,f,qOut){ // a node's local rotation (into qOut) and translation at frame f (f<0 => bind)
+  const n=dec.nodes[i];
+  if(f>=0 && dec.rot[i]) sampleQ(dec.rot[i],f,qOut); else { qOut[0]=n.q[0];qOut[1]=n.q[1];qOut[2]=n.q[2];qOut[3]=n.q[3]; }
+  let tx=n.t[0],ty=n.t[1],tz=n.t[2];
+  if(f>=0 && dec.trans[i]){ const v=sampleV(dec.trans[i],f); tx=v[0];ty=v[1];tz=v[2]; }
+  return [tx,ty,tz];
+}
+function computePose(dec,f,blendFrom,blendW){ // f<0 => bind pose; blendFrom>=0 => cross-fade from the pose at that frame by (1-blendW)
   const nodes=dec.nodes, W=dec.world;
+  const blending = (blendFrom!==undefined && blendFrom!==null && blendFrom>=0 && blendW<1);
   for(let i=0;i<nodes.length;i++){
     const n=nodes[i];
-    let R;
-    if(f>=0 && dec.rot[i]){ sampleQ(dec.rot[i],f,_q); R=quatMat(_q[0],_q[1],_q[2],_q[3]); }
-    else { R=quatMat(n.q[0],n.q[1],n.q[2],n.q[3]); }
-    let tx=n.t[0],ty=n.t[1],tz=n.t[2];
-    if(f>=0 && dec.trans[i]){ const v=sampleV(dec.trans[i],f); tx=v[0];ty=v[1];tz=v[2]; }
+    let t=nodeQT(dec,i,f,_q);
+    if(blending){
+      const t0=nodeQT(dec,i,blendFrom,_qa);
+      slerp(0,_qa,1,_q,blendW,_qb); _q[0]=_qb[0];_q[1]=_qb[1];_q[2]=_qb[2];_q[3]=_qb[3];
+      t=[t0[0]+(t[0]-t0[0])*blendW, t0[1]+(t[1]-t0[1])*blendW, t0[2]+(t[2]-t0[2])*blendW];
+    }
+    const R=quatMat(_q[0],_q[1],_q[2],_q[3]);
+    const tx=t[0],ty=t[1],tz=t[2];
     const L=rtMat(R,tx,ty,tz);
     if(n.parent<0){ W.set(L,i*16); }
     else{ const w=matMulRow(L, W.subarray(n.parent*16,n.parent*16+16)); W.set(w,i*16); }
@@ -584,7 +596,7 @@ function updateReadout(){
   el('readout').innerHTML =
     `<div class="kv"><span><b>${curModel.group} · ${curModel.code}</b></span><span>${curModel.folder}</span></div>`+
     `<div class="kv"><span>motion</span><span>#${curMotion.id} ${curMotion.name||''} ${curMotion.gloss?('('+curMotion.gloss+')'):''}</span></div>`+
-    `<div class="kv"><span>frame</span><span>${frame.toFixed(1)} / ${curMotion.start}–${curMotion.end}</span></div>`+
+    `<div class="kv"><span>frame</span><span>${frame.toFixed(1)} / ${curMotion.start}–${curMotion.end}${curMotion.seam?(frame<curMotion.seam.clipStart?` · fade ${Math.round(100*(frame-curMotion.start)/(curMotion.seam.clipStart-curMotion.start))}% f${curMotion.seam.from}→f${curMotion.seam.clipStart}`:' · playing'):''}</span></div>`+
     `<div class="kv"><span>nodes / meshes</span><span>${s.nodes} / ${s.meshes}${curModel.skelOnly?' (skeleton-only)':''}</span></div>`+
     `<div class="kv"><span>verts / tris</span><span>${s.verts} / ${s.tris}</span></div>`+
     `<div class="kv"><span>motions</span><span>${s.motions}</span></div>`;
@@ -614,7 +626,11 @@ function loop(now){
   if(spin) cam.yaw+=0.004*dt;
 
   // pose + skin
-  computePose(curDec, frame);
+  if(curMotion && curMotion.seam && frame<curMotion.seam.clipStart){   // the game's key-change cross-fade: the outgoing frame freezes,
+    const bl=curMotion.seam.clipStart-curMotion.start;                  // the new key sits on its START frame, `blend` game frames of slerp,
+    const w=Math.min(1, Math.max(0,(frame-curMotion.start)/bl));        // THEN the clip plays (SetMotionEX; see motion-key-blend)
+    computePose(curDec, curMotion.seam.clipStart, curMotion.seam.from, w);
+  } else computePose(curDec, frame);
   skinAll(curDec);
   buildDrawArrays(curDec);
 
