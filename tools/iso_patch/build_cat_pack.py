@@ -60,8 +60,10 @@ GLOW_CROSS = 0.125                              # radius fraction where the mix 
 # Angel Gear's GOLD. Same disc, re-tinted; the runtime names the one to draw (mailbox CatGlowName → the glow cave).
 GLOW_VARIANTS = {"catgloww": ((255, 255, 255), (215, 225, 255)),   # white, a cool edge
                  "catglowg": ((255, 238, 180), (255, 176, 40))}    # gold
+CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
+CAPE_RGBA = (228, 26, 26, 0x80)                  # the Super Steve cape's flat texture: solid bright red (user 2026-09-14)
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree
@@ -73,7 +75,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v17 wings"
+VERSION_MARK  = "//catpack v18 wings+cape"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -424,9 +426,30 @@ def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes, dran_bytes=None, wi
     text2 = base.find(HOST_CFG).payload.decode("shift_jis", "replace")
     anchor = f'ALLOC_DBUFF "{CAT_SKIN_NAME}"'
     text2 = text2.replace(anchor, anchor + nl + nl.join(f'ALLOC_DBUFF "{nm}"' for nm in wd["alloc_dbuff"]), 1)
+    # ── the Super Steve cape: the engine's own cloth. A FRAME node reachable from HER root (parent 0, its bind 3×3 at HIDE_SCALE
+    #    so the cloth she builds from it collapses to a point), its MDT = the rest lattice in the cat's anchor bone's space, a
+    #    CLOTH line + the .clo record, ALLOC_MDT for the node (every shipped cloth has it), a flat yellow texture. The runtime
+    #    clones her CCloth onto the cat copy and re-anchors it (DivineBeastCat.SpawnCape). ──
+    cape = wd["cape"]
+    base.replace_payload(HOST_MDS, graft_extra_nodes(base.find(HOST_MDS).payload, [(cape["name"], cape["parent_abs"], cape["local16"], cape["mdt"])]))
+    crow = struct.pack("<16f", *cape["local16"])
+    base.replace_payload(HOST_BBP, base.find(HOST_BBP).payload + crow)
+    base.replace_payload("cat.bbp", base.find("cat.bbp").payload + crow)
+    bank2 = Bank(base.find(HOST_IMG).payload)
+    items2 = [(n, bank2.block(n)) for n, _ in bank2.entries] + [(cape["texture"], flat_tim2(cimg.block("c04cat01"), CAPE_RGBA))]
+    base.replace_payload(HOST_IMG, Bank.build(bank2.magic, items2))
+    rep["textures"] = [n for n, _ in items2]
+    base.records.append(_new_record(CAPE_CLO_NAME, cape["clo"]))
+    lines2 = text2.split(nl)
+    first_dbuff = next(i for i, ln in enumerate(lines2) if ln.strip().startswith("ALLOC_DBUFF"))
+    lines2.insert(first_dbuff, f'ALLOC_MDT "{cape["name"]}"')
+    shadow = next(i for i, ln in enumerate(lines2) if ln.strip().startswith("SHADOW_MODEL"))
+    lines2.insert(shadow + 1, f'CLOTH "{CAPE_CLO_NAME}"')
+    text2 = nl.join(lines2)
     base.replace_payload(HOST_CFG, text2.encode("shift_jis", "replace"))
     out = base.rebuild()
     rep["nodes"] = (nb, K + len(extra)); rep["size"] = (len(base_bytes), len(out)); rep["wings"] = wd["stats"]
+    rep["cape_node"] = nb + K + len(extra)                                       # after the cat run: the runtime's node scan stops at it
     verify(base_bytes, out, cat_bytes, wings=wd)
     return out, rep
 
@@ -438,8 +461,16 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
     cn = _mds_nodes(cat.find("c04cat.mds").payload)
     nb, K = len(on), len(cn)
     X = wings["nodes"] if wings else []
+    C = 1 if wings and wings.get("cape") else 0                                      # the cape's FRAME node, last
     npl = new.find(HOST_MDS).payload
-    assert len(nn) == nb + K + len(X) and struct.unpack_from("<I", npl, 8)[0] == nb + K + len(X), "node count"
+    assert len(nn) == nb + K + len(X) + C and struct.unpack_from("<I", npl, 8)[0] == nb + K + len(X) + C, "node count"
+    if C:
+        cp = wings["cape"]; ci = nb + K + len(X)
+        assert nn[ci][0] == cp["name"] and nn[ci][2] == 0 and nn[ci][1], "cape node"
+        cm = parse_mdt(npl, nn[ci][1]) if False else None
+        assert struct.unpack_from("<I", npl, nn[ci][1] + 12)[0] == cp["rows"] * cp["cols"], "cape lattice vertex count"
+        assert new.find(CAPE_CLO_NAME) is not None and new.find(CAPE_CLO_NAME).payload == cp["clo"], "cape .clo record"
+        assert cp["clo"].count(b"BOUND") == len(cp["bounds"]), "cape BOUND count"        # DivineBeastCat.CapeBoundBones must match, in order
     for k, (nm, par, local16, mdt) in enumerate(X):                       # the wing bones and mesh nodes
         assert nn[nb + K + k][0] == nm and nn[nb + K + k][2] == nb + par and bool(nn[nb + K + k][1]) == bool(mdt), f"wing node {nm}"
         assert struct.unpack_from("<16f", npl, 0x18 + (nb + K + k) * 0x70 + 0x28) == tuple(struct.unpack("<16f", struct.pack("<16f", *local16))), f"wing node {nm} bind"
@@ -452,7 +483,7 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
         if mo:
             assert npl[mo:mo + 4] == b"MDT\x00", f"{nm} mesh magic"
             meshes += 1
-    assert meshes == sum(1 for n in on if n[1]) + sum(1 for n in cn if n[1]) + sum(1 for x in X if x[3]), "mesh count"
+    assert meshes == sum(1 for n in on if n[1]) + sum(1 for n in cn if n[1]) + sum(1 for x in X if x[3]) + C, "mesh count"
     opl = old.find(HOST_MDS).payload
     for i, (nm, mo, par) in enumerate(on):
         o = opl[0x18 + i * 0x70:0x18 + i * 0x70 + 0x68]
@@ -460,8 +491,8 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
         if mo:
             struct.pack_into("<I", n, 0x20, mo)
         assert bytes(n) == o, f"host node {i} changed"
-    assert len(new.find(HOST_BBP).payload) == (nb + K + len(X)) * 64, "bbp rows"
-    assert len(new.find("cat.bbp").payload) == (K + len(X)) * 64, "cat.bbp rows"
+    assert len(new.find(HOST_BBP).payload) == (nb + K + len(X) + C) * 64, "bbp rows"
+    assert len(new.find("cat.bbp").payload) == (K + len(X) + C) * 64, "cat.bbp rows"
     for name in ("cat.mot", "cat.wgt"):
         m = mc.Mot.from_record(new.find(name))
         assert all(0 <= t.w0 < K + len(X) for t in m.tracks), f"{name} track ids must be cat-relative"
@@ -483,6 +514,9 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
     assert f'ALLOC_DBUFF "{CAT_SKIN_NAME}"' in text and 'MOTION 1, "cat.mot"' in text and f"KEY_START {KEY_START}" in text, "cfg"
     if wings:
         assert all(f'ALLOC_DBUFF "{nm}"' in text for nm in wings["alloc_dbuff"]), "wing ALLOC_DBUFF"
+    if C:
+        assert f'ALLOC_MDT "{wings["cape"]["name"]}"' in text and f'CLOTH "{CAPE_CLO_NAME}"' in text, "cape cfg lines"
+        assert text.index('CLOTH "') < text.index('MOTION 0'), "CLOTH must precede the motion blocks"
     assert text.count("MOTION_END") == 2, "cfg blocks"
     last_foot = max((text.rfind(k) for k in ("FOOT", "EVENT")), default=-1)
     assert last_foot < text.index('MOTION 1, "cat.mot"'), "MOTION 1 must follow every FOOT/EVENT line (they bind to the current channel)"
@@ -494,6 +528,8 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
     assert {"c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05"} <= names, "cat textures"
     if wings:
         assert {wings["texture"], *GLOW_VARIANTS} <= names, "wing / glow textures"
+    if C:
+        assert wings["cape"]["texture"] in names, "cape texture"
         inf = im.tim2_info(bank.block(wings["texture"]), 0)
         assert inf["w"] == 32 and inf["h"] == 32, "flat wing texture"
     assert {n for n, _ in Bank(old.find(HOST_IMG).payload).entries} <= names, "host textures kept"

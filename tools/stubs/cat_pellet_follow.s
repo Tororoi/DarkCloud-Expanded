@@ -275,6 +275,7 @@ nop                            # hidden cat is not drawn, so on the next shot's 
                                # Witch Hellza took a 1-damage (unstamped) hit from that stale point (user 2026-09-12). By
                                # state 4 the copy has been drawn at the pellet for N frames; states 4/5 test it.
 # ── BREAKAWAY at full size: keep the pellet's velocity, expire the pellet, start the fall ──
+sw    $zero, 0x4150($t0)       # CatPounceFly = 0: this descent came from the PELLET, so nothing below it re-aims
 lwc1  $f6, 0x01C0($t9)         # vx
 lwc1  $f7, 0x01C4($t9)         # vh
 lwc1  $f8, 0x01C8($t9)         # vz
@@ -496,8 +497,7 @@ nop
 bc1t  keepfalling
 nop
 startland:
-sw    $zero, 0x4150($t0)       # the flying pounce (if any) is over
-lw    $t7, 0x0C20($t6)
+lw    $t7, 0x0C20($t6)         # (CatPounceFly is kept: the landing block re-aims a tracked pounce into its last frames)
 lw    $t8, 0x41C0($t0)
 sw    $t8, 0x0018($t7)         # the channel's blend increment back to the default (the fall fade may have slowed it)
 lui   $t7, 0xBF80
@@ -683,6 +683,9 @@ nop
 nop
 bc1f  momentumgo
 nop
+lw    $t5, 0x4150($t0)         # …and only on a POUNCE: the descent from the pellet keeps the shot's own trajectory
+beq   $t5, $zero, momentumgo
+nop
 beq   $t8, $zero, momentumgo   # on the floor this frame: committed
 nop
 lw    $t5, 0x40CC($t0)         # target position vector
@@ -704,12 +707,12 @@ add.s $f5, $f5, $f9
 .word 0x46050144               # sqrt.s $f5, $f5  (ft=f5, fd=f5)
 add.s $f5, $f18, $f5           # vh + sqrt(…)
 div.s $f0, $f5, $f7            # t = frames until the floor (the horizon)
-lui   $t7, 0x3F80
-mtc1  $t7, $f1                 # 1.0
+lui   $t7, 0x4040
+mtc1  $t7, $f1                 # 3.0
 nop
 nop
 nop
-.word 0x46010034               # c.lt.s $f0, $f1   (horizon < 1 ? committed)  fs=f0 ft=f1
+.word 0x46010034               # c.lt.s $f0, $f1   (horizon < 3 ? committed — closer in, dx/horizon is a lurch)  fs=f0 ft=f1
 nop
 bc1t  momentumgo
 nop
@@ -749,6 +752,7 @@ swc1  $f12, 0x0018($t6)
 b     touch
 nop
 landdone:
+sw    $zero, 0x4150($t0)       # the flight is over: no more re-aiming until the next pounce
 lw    $t5, 0x0C64($t6)
 addiu $t7, $zero, -3
 and   $t5, $t5, $t7            # clear play-once: the walk LOOPS; no restart → the landing pose fades into it

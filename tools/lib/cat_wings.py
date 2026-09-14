@@ -317,6 +317,348 @@ WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose midd
                                    # RIGID to the spine bone; in this pose they come out level, elsewhere they follow the back (user 2026-09-12)
 
 
+# ───────────────────────────── the Super Steve cape (viewer rest shape; the game runs it as a CCloth) ─────────────────────────────
+# Super Steve with an Angel Shooter / Angel Gear sphere summons the BLUE cat wearing a solid-yellow cape hung from the back of
+# its collar (user 2026-09-13). The viewer shows the cloth's REST lattice so the attachment, width and length can be tuned;
+# the engine's cloth simulation drapes it in play.
+CAPE_COLLAR = (483, 503, 485, 477, 478)   # cat_skin vertices of the collar ring's REAR edge, left → right (user 2026-09-13: "attached to
+                                   # the collar"; bind pose (±0.86, 2.82, 2.75), (±0.62, 3.37, 2.46), (0, 3.55, 2.46), all 50 % sebone2 + kao)
+CAPE_WIDTH = 3.0                   # the hem's width MEASURED ACROSS THE CLOTH (it wraps the body, so its shadow on the ground is
+                                   # narrower); the sheet widens linearly from the collar arc to this
+CAPE_LENGTH = 4.0                  # from the collar back along the spine (the hips are at z −0.5, the tail root −1.5)
+CAPE_LIFT = 0.22                   # the rest sheet lies this far above the back's fur — also the whole sheet's clearance:
+                                   # the collision capsules sit AT the fur, so this is what keeps the spans between
+                                   # particles (0.7 apart) from cutting the bulges they stretch across
+CAPE_ROWS = 7                      # the lattice's rows (the collar row + 6); columns = the collar vertices
+CAPE_HANG = 0.35                   # past the body (no fur below a row) the sheet drops this much per row
+CAPE_ROW_TAUT = 0.55               # how much of each row's own arch survives: the engine's width tie (see the note on
+                                   # CAPE_SIDE_SLOPE) is exactly satisfied only by a FLAT row — solve it and both the crown and the
+                                   # shoulders must sit level — so a cape that hugs the cat's round back is always in a fight with
+                                   # it, and the fight is asymmetric (the tie's rest length is measured at one end), which shears
+                                   # the sheet left then right. Flattening the arch toward the row's own chord buys that back, and
+                                   # a cape that bridges the back instead of shrink-wrapping it is the floatier look anyway. 1 =
+                                   # follow the body exactly (unstable), 0 = a flat plank.
+CAPE_COLLAR_BIAS = (0.18, 0.18)    # (up, forward) carried into the pinned top row, GRADED across it (full at the spine, nothing at
+                                   # the ends): biasing the whole row carried the cape's front corners forward PAST the collar and
+                                   # down the chest, which the user called a worse trade than the gap (2026-09-14). The engine pins a cloth to ONE frame, so our
+                                   # edge rides cat_sebone2 while the collar's own vertices are half cat_kao: sit the cat and the
+                                   # head carries the real collar 0.22 up and 0.20 forward of the pinned row (measured over every
+                                   # clip by scratch collar_gap_probe.py), opening the bare strip under the collar the user saw on
+                                   # 2026-09-14. Biasing the authored edge by that much closes it when sitting and merely tucks the
+                                   # cape's top a touch further under the collar ring when standing.
+CAPE_SIDE_SLOPE = 0.9              # past the flank a column can no longer rest on fur, so it falls away from the last one that
+                                   # could, at this many units down per unit out (0.9 ≈ 42°). Before this the column simply dropped
+                                   # CAPE_HANG per ROW, which put a 3-unit CLIFF between the outer column and its neighbour — the
+                                   # crease the user saw on 2026-09-14, and a 127% violation of the engine's width tie (below).
+CAPE_BILLOW = 0.5                  # the hem rides this far above where it would lie, easing in along the hang: the cape keeps a
+                                   # gentle lifted curve as if a breeze were always blowing into the cat's face. It is AUTHORED
+                                   # rather than simulated because the engine damps a particle's velocity only across the cloth's
+                                   # normal — a steady push along the sheet accumulates until the sheet goes taut, so a constant
+                                   # wind gives a flag, not a billow (DivineBeastCat.BreezeCape adds a small clamped push on top)
+
+
+CAPE_ANCHOR = 'cat_sebone2'        # the bone the engine's cloth is pinned to (its collar row rides this frame; the rest lattice is
+                                   # authored in its bind-local space) — the upper spine: steadier than the head, the shoulders' bone
+
+
+# The cape's body collision: .clo BOUND ellipsoids on the cat's spine bones (CBound, RE'd 2026-09-13: centre = the midpoint of A and
+# B in the bone's space, the ellipsoid's z axis along A−B, y along `up`, x across; radii (rx across, ry up, rz along); particles
+# inside are pushed to the surface, their velocity scaled by `damp`; a particle inside several is moved to the AVERAGE of their
+# push-outs, so neighbours overlap with generous rz to keep that average near the back). Authored in BIND-POSE WORLD space (the cat
+# faces +z, +y up; the back ridge lies at y≈3.6–3.85 from the neck z 2.75 to the rump z −2.5, the flanks at |x|≈1 sit ≈0.3 lower)
+# and converted to each bone's local space by cape_bounds_local for the .clo. Tune: centre.y + ry = the top of the ellipsoid.
+# The cloth physics (the .clo's WINDEFFECT/NORMAL/GRAVITY/FOLLOW/K lines). Step__6CCloth integrates a particle as
+#     pos += velocity + FOLLOW·(anchor's movement) + K·(LW(anchor)·rest − pos);  velocity += GRAVITY  (+ wind, + constraints)
+# — the spring is a POSITION correction that feeds no momentum back, so velocity only ever grows by GRAVITY and shrinks through
+# the constraints. The only velocity damping is `min(1, 0.6 + (1 − |v̂·n̂|))`: it bites just for motion ALONG the cloth's normal
+# and leaves motion ACROSS the sheet completely undamped. A cape lying on a horizontal back is damped (gravity ⟂ the sheet), but
+# the moment the cat SITS its back is vertical, gravity runs along the sheet, velocity accumulates without limit and the cape
+# peels off the back and hangs from the collar (screenshot 2026-09-14). No value of K fixes that — the drift is linear in time —
+# so this cape carries **no gravity**: it holds the authored rest shape and takes its motion from the cat (FOLLOW + the spring's
+# lag) and the wind. Author any droop into the rest shape (CAPE_LENGTH / CAPE_HANG) rather than asking gravity for it.
+CAPE_PHYSICS = {
+    'K': (0.10, 0.10, 0.10),        # pull toward the rest shape per step (vanilla capes 0.08, and they hang). Weak on purpose:
+                                    # this is what lets the runtime breeze lift the cape off the back and stream it out behind —
+                                    # the spring is the only thing pulling it home, so a high K keeps it pinned to the body
+    'gravity': (0.0, 0.0, 0.0),     # see above — nonzero drifts the cape off a vertical back. NOTE: at runtime
+                                    # DivineBeastCat.BreezeCape OVERWRITES this field every tick with a breeze blowing from the
+                                    # cat's face toward its tail (turned with the cat), which is what makes the cape billow
+                                    # instead of lying scrunched on the back; tune it there (CapeBreezeBack/Up), not here
+    'follow': (0.40, 0.30, 0.40),   # how much of the cat's movement each particle takes directly; the rest becomes swing
+    'wind': 0.25,                   # WINDEFFECT: the dungeon wind noise, scaled by how squarely it hits the sheet
+    'normal': 1.0,                  # NORMAL: sign of the generated normals (vanilla flips it for one poncho half)
+}
+
+CAPE_BOUNDS = [                                                                 # grid-fitted to the fur (scratch cape_bound_opt.py)
+    # Snug on purpose: an ellipsoid grown past the cat's own width swallows the flanks, and then every rest point wrapping a side
+    # is "inside the body" and has to be shoved out — which flattens the drape into a plank or tears the lattice out of line. The
+    # sheet's clearance comes from CAPE_LIFT instead, and these stay at the fur, where their job is to stop the cloth passing
+    # THROUGH the cat while it moves. The head carries its own: nothing else covers it, and a cape that swings forward off the
+    # collar goes straight through it (user 2026-09-14).
+    {'bone': 'cat_sebone2', 'centre': (0.0, 3.05, 2.00), 'axis': (0.0, 0.0, 1.0), 'radii': (1.25, 0.70, 2.50), 'damp': 0.7},   # chest/shoulders
+    {'bone': 'cat_sebone1', 'centre': (0.0, 3.16, -0.30), 'axis': (0.0, 0.0, 1.0), 'radii': (1.25, 0.70, 2.30), 'damp': 0.7},  # mid back
+    {'bone': 'cat_kosibone', 'centre': (0.0, 2.75, -1.00), 'axis': (0.0, 0.0, 1.0), 'radii': (1.35, 1.10, 2.20), 'damp': 0.7}, # hips/rump
+    {'bone': 'cat_kao', 'centre': (0.0, 3.15, 3.55), 'axis': (0.0, 0.0, 1.0), 'radii': (1.10, 1.00, 0.90), 'damp': 0.7},       # head (not the ears)
+]
+
+
+def cape_bounds_local(cat_nodes):
+    """CAPE_BOUNDS as the .clo BOUND lines want them: per bound {'bone', 'A', 'B', 'up', 'radii', 'damp'} in the bone's bind-local
+    space (A/B = centre ± axis, up = world +y) — what the engine rotates by the bone's live LW."""
+    byname = {n['name']: n for n in cat_nodes}
+    out = []
+    for b in CAPE_BOUNDS:
+        n = byname[b['bone']]; inv = em.rigid_inv(n['world']); R = n['world']
+        A = em.xform_pt(inv, [c + a for c, a in zip(b['centre'], b['axis'])])
+        B = em.xform_pt(inv, [c - a for c, a in zip(b['centre'], b['axis'])])
+        up = [sum(R[j][k] * (1.0 if k == 1 else 0.0) for k in range(3)) for j in range(3)]      # world +y in local components
+        out.append({'bone': b['bone'], 'A': [round(c, 6) for c in A], 'B': [round(c, 6) for c in B], 'up': [round(c, 6) for c in up],
+                    'radii': list(b['radii']), 'damp': b['damp']})
+    return out
+
+
+def _cross(a, b): return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+
+def _unit(v):
+    n = math.sqrt(sum(c * c for c in v)) or 1.0
+    return [c / n for c in v]
+
+
+def cape_bounds_world(cat_nodes):
+    """Each CAPE_BOUNDS ellipsoid at the bind pose: {'bone', 'centre', 'axes': [x, y, z] (unit, world), 'radii', 'damp'} —
+    the engine's frame (UpDateDir__6CBound: z = LW·A − LW·B, y = up rotated, x = y × z)."""
+    byname = {n['name']: n for n in cat_nodes}
+    out = []
+    for b in cape_bounds_local(cat_nodes):                                          # through the local form: what the .clo carries
+        n = byname[b['bone']]; Wm = n['world']
+        Aw, Bw = em.xform_pt(Wm, b['A']), em.xform_pt(Wm, b['B'])
+        upw = [sum(b['up'][k] * Wm[k][c] for k in range(3)) for c in range(3)]
+        z = _unit([a - c for a, c in zip(Aw, Bw)]); x = _unit(_cross(upw, z)); y = _cross(z, x)
+        out.append({'bone': b['bone'], 'node': n['i'], 'centre': [(a + c) / 2 for a, c in zip(Aw, Bw)], 'axes': [x, y, z],
+                    'radii': list(b['radii']), 'damp': b['damp']})
+    return out
+
+
+def bound_depth(bw, p):
+    """The engine's normalised radius of world point p in ellipsoid bw (< 1 = inside; the push-out moves it to 1)."""
+    d = [p[k] - bw['centre'][k] for k in range(3)]
+    return math.sqrt(sum((sum(d[k] * bw['axes'][i][k] for k in range(3)) / bw['radii'][i]) ** 2 for i in range(3)))
+
+
+def bound_push(bw, p, margin=0.0):
+    """InCheck's push-out: p moved along the ellipsoid's normalised direction onto its surface (times 1 + margin)."""
+    d = [p[k] - bw['centre'][k] for k in range(3)]
+    u = [sum(d[k] * bw['axes'][i][k] for k in range(3)) / bw['radii'][i] for i in range(3)]
+    n = math.sqrt(sum(c * c for c in u))
+    u = [0.0, 1.0, 0.0] if n == 0 else [c / n for c in u]
+    return [bw['centre'][k] + sum(u[i] * bw['radii'][i] * (1 + margin) * bw['axes'][i][k] for i in range(3)) for k in range(3)]
+
+
+def clear_bounds(bws, p, margin=0.03, max_move=1.0, step=0.04):
+    """p moved clear of every ellipsoid, so the rest shape does not fight the collision at runtime (a rest buried inside a capsule
+    leaves the spring pulling in while the capsule pushes out, every frame). The direction is the short way OUT, chosen per point:
+    a point above the capsule's centre goes straight UP (it belongs on top of the back), a point below it goes straight OUT
+    sideways (it is wrapping a flank, and lifting it would flatten the drape into a plank). The engine's own push is radial in all
+    three axes, which would shuffle the lattice sideways and backwards and tear the rows out of line — hence the constrained move
+    here. A point that cannot clear within `max_move` is left where it is; pushing those out is the runtime's job."""
+    q = list(p)
+    if all(bound_depth(b, q) >= 1 + margin for b in bws): return q
+    deep = min(bws, key=lambda b: bound_depth(b, q))
+    if q[1] > deep['centre'][1]:
+        d = [0.0, 1.0, 0.0]
+    else:
+        d = [q[0] - deep['centre'][0], 0.0, q[2] - deep['centre'][2]]
+        n = math.sqrt(d[0] * d[0] + d[2] * d[2])
+        d = [d[0] / n, 0.0, d[2] / n] if n > 1e-6 else [0.0, -1.0, 0.0]
+    for _ in range(int(max_move / step)):
+        q = [q[k] + d[k] * step for k in range(3)]
+        if all(bound_depth(b, q) >= 1 + margin for b in bws): return q
+    return list(p)
+
+
+def build_bound_meshes(cat_nodes, seg=16, ring=10):
+    """The CAPE_BOUNDS ellipsoids as viewer meshes (tag 'bound'), rigidly skinned to their bones so they ride the animation.
+    The viewer draws them as an additive overlay: the model data's winding is not reliable enough to cull by."""
+    meshes = []
+    for bw in cape_bounds_world(cat_nodes):
+        inv = em.rigid_inv(cat_nodes[bw['node']]['world'])
+        verts = []
+        for j in range(ring + 1):
+            th = math.pi * j / ring
+            for i in range(seg):
+                ph = 2 * math.pi * i / seg
+                u = [math.sin(th) * math.cos(ph), math.cos(th), math.sin(th) * math.sin(ph)]
+                w = [bw['centre'][k] + sum(u[a] * bw['radii'][a] * bw['axes'][a][k] for a in range(3)) for k in range(3)]
+                verts.append(list(em.xform_pt(inv, w)))
+        tris = []
+        for j in range(ring):
+            for i in range(seg):
+                a = j * seg + i; b = j * seg + (i + 1) % seg; c = a + seg; d = b + seg
+                tris += [(a, b, d), (a, d, c)]
+        n = len(verts)
+        meshes.append({'node': bw['node'], 'skin': True, 'nv': n, 'tris': tris, 'b0': [bw['node']] * n, 'p0': verts,
+                       'b1': [bw['node']] * n, 'p1': [list(v) for v in verts], 'w0': [1.0] * n, 'tag': 'bound'})
+    return meshes
+
+
+def cape_rest_local(cat_nodes, skin):
+    """(rows, cols, verts) — the cape's rest lattice, row-major from the collar row (rows = the hang, cols = the width), in
+    CAPE_ANCHOR's bind-local space. wing_bake reorders it to the engine's (width-outer, hang-inner) MDT order; the engine pins the
+    collar row to the anchor frame and simulates the rest."""
+    me = build_cape_mesh(cat_nodes, skin)
+    W = lambda b: cat_nodes[b]['world']
+    world = [[a * me['w0'][i] + b * (1 - me['w0'][i]) for a, b in zip(em.xform_pt(W(me['b0'][i]), me['p0'][i]), em.xform_pt(W(me['b1'][i]), me['p1'][i]))] for i in range(me['nv'])]
+    anchor = next(n for n in cat_nodes if n['name'] == CAPE_ANCHOR)
+    inv = em.rigid_inv(anchor['world'])
+    return CAPE_ROWS, len(CAPE_COLLAR), [list(em.xform_pt(inv, v)) for v in world]
+
+
+def build_cape_mesh(cat_nodes, skin):
+    """The cape's rest lattice as a viewer mesh — and the shape the bake shares.
+
+    Built row by row across the cat: each row walks the body's surface outward from the spine, carries on past the flank at
+    CAPE_SIDE_SLOPE, and puts its columns at EQUAL ARC LENGTH along that curve out to the row's half-width. The spacing is not
+    cosmetic: Step__6CCloth ties every column to the one TWO over at exactly twice the single step, which only holds when three
+    consecutive points are evenly spaced and roughly straight. Columns spaced evenly in x are not evenly spaced along a row that
+    wraps a body — the outer segment plunges down the flank and is far longer — and the tie then deforms the sheet every frame
+    while the rest spring pulls back, which is the crumpled cape the user saw on 2026-09-14.
+
+    For the same reason every later adjustment — bridging a hollow, the billow, clearing the collision capsules — is applied to a
+    row AS A WHOLE, never per vertex: a per-vertex lift would pull the row's spacing apart again.
+
+    The whole sheet is bound RIGIDLY TO CAPE_ANCHOR, because that is what the engine does: the cloth's rest target is
+    LW(anchor) × rest for every particle, so it swings with that one spine bone and with nothing else.
+    `skin` = the cat_skin viewer mesh (b0/p0/b1/p1/w0)."""
+    cols = len(CAPE_COLLAR)
+    W = lambda b: cat_nodes[b]['world']
+    def skinned(i): return [a * skin['w0'][i] + b * (1 - skin['w0'][i]) for a, b in zip(em.xform_pt(W(skin['b0'][i]), skin['p0'][i]), em.xform_pt(W(skin['b1'][i]), skin['p1'][i]))]
+    fur = [skinned(i) for i in range(skin['nv'])]                                   # every skin vertex, bind-pose world
+    def cast(x, z):
+        """The cat's back directly under (x, z): where a vertical line last crosses the fur, or None when it misses the body
+        (past the rump, or wider than the flanks). A vertex-window sample was far too coarse for a 504-vertex cat."""
+        best = None
+        for i0, i1, i2 in skin['tris']:
+            a, b, c = fur[i0], fur[i1], fur[i2]
+            d = (b[2] - a[2]) * (c[0] - a[0]) - (c[2] - a[2]) * (b[0] - a[0])       # 2-D cross in the xz plane
+            if abs(d) < 1e-9: continue
+            u = ((z - a[2]) * (c[0] - a[0]) - (x - a[0]) * (c[2] - a[2])) / d
+            v = ((x - a[0]) * (b[2] - a[2]) - (z - a[2]) * (b[0] - a[0])) / d
+            if u < 0 or v < 0 or u + v > 1: continue
+            y = a[1] + u * (b[1] - a[1]) + v * (c[1] - a[1])
+            if best is None or y > best: best = y
+        return best
+
+    def ridge(x, z, dz=0.2):
+        """`cast` smoothed along the spine. A cloth lies over a body, not down into every facet of it: the cat is 1004 triangles,
+        and sampling one line per lattice point put a 0.7 step in the cape's edge where the shoulder's facets happen to fall."""
+        here = cast(x, z)
+        if here is None: return None                                                 # the silhouette stays crisp: smoothing across
+        hits = [(w, cast(x, z + o)) for w, o in ((0.25, -dz), (0.25, dz))]            # it made the arc jump where the sample set
+        hits = [(w, y) for w, y in hits if y is not None] + [(0.5, here)]             # changed, which threw the spacing out
+        return sum(w * y for w, y in hits) / sum(w for w, _ in hits)
+
+    bws = cape_bounds_world(cat_nodes)
+    collar = [skinned(i) for i in CAPE_COLLAR]                                       # the collar ring's rear edge, in the bind
+    top = []
+    for c, p in enumerate(collar):                                                   # row 0, the pinned edge (graded bias)
+        g = math.cos(math.pi / 2 * abs(2 * c / (cols - 1) - 1))
+        top.append([p[0], p[1] + CAPE_COLLAR_BIAS[0] * g, p[2] + CAPE_COLLAR_BIAS[1] * g])
+    zc = sum(p[2] for p in collar) / cols                                            # the rows are measured from the COLLAR itself,
+                                                                                     # so the bias moves only the pinned edge
+    top_half = max(abs(p[0]) for p in top)
+
+    def section(z, half_x):
+        """One row: the body's surface from the spine out to ±half_x, continued past the flank, flattened toward its own chord by
+        CAPE_ROW_TAUT, and only THEN sampled at equal arc length — flattening sampled points would move them off equal spacing
+        again, and the engine's width tie needs both."""
+        step = 0.03
+        out = [None] * cols
+        raw = {}
+        for way in (-1, 1):
+            pts = []; x = 0.0; last = None; edge = None
+            while abs(x) <= half_x + step:
+                y = ridge(x, z)
+                if y is not None: y += CAPE_LIFT; edge = (x, y)
+                elif edge is not None: y = edge[1] - CAPE_SIDE_SLOPE * abs(x - edge[0])
+                else: return None                                                    # nothing under this row at all
+                pts.append([x, y]); last = (x, y); x += way * step
+            raw[way] = pts
+        if CAPE_ROW_TAUT < 1.0:                                                      # the arch, blended toward the end-to-end chord
+            (xa, ya), (xb, yb) = raw[-1][-1], raw[1][-1]
+            for way in (-1, 1):
+                for q in raw[way]:
+                    t = (q[0] - xa) / (xb - xa) if abs(xb - xa) > 1e-6 else 0.0
+                    chord = ya + (yb - ya) * t
+                    q[1] = chord + (q[1] - chord) * CAPE_ROW_TAUT
+        for way in (-1, 1):
+            pts = []; arc = 0.0; last = None
+            for q in raw[way]:
+                if last is not None: arc += math.dist(q, last)
+                pts.append((q[0], q[1], arc)); last = q
+            for c in range(cols):
+                f = (c / (cols - 1) - 0.5) * 2                                        # −1 … +1 across the cape
+                if (f < 0 and way > 0) or (f > 0 and way < 0) or (f == 0 and way > 0): continue   # the centre rides the left walk
+                want = abs(f) * pts[-1][2]
+                q = (pts[-1][0], pts[-1][1])
+                for i in range(1, len(pts)):
+                    if pts[i][2] >= want:
+                        (x0, y0, a0), (x1, y1, a1) = pts[i - 1], pts[i]
+                        t = (want - a0) / (a1 - a0) if a1 > a0 else 0.0
+                        q = (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t); break
+                out[c] = [q[0], q[1], z]
+        return out
+
+    rows = [list(top)]
+    for r in range(1, CAPE_ROWS):
+        s_ = r / (CAPE_ROWS - 1); z = zc - CAPE_LENGTH * s_
+        row = section(z, top_half * (1 - s_) + (CAPE_WIDTH / 2) * s_)
+        if row is None:                                                              # past the rump: the row hangs off the last one
+            row = [[rows[-1][c][0], rows[-1][c][1] - CAPE_HANG, z] for c in range(cols)]
+        rows.append(row)
+
+    # ── per-row lifts. A cloth spans a hollow instead of sinking into it, so the SPINE's profile is raised onto its own upper
+    #    convex hull (the shoulder dip behind the collar was pulling the sheet down into it) and the row rides up with it. ──
+    mid = cols // 2
+    prof = sorted((rows[r][mid][2], rows[r][mid][1], r) for r in range(CAPE_ROWS))
+    hull = []
+    for q in prof:
+        while len(hull) >= 2:
+            (oz, oy, _), (az, ay, _) = hull[-2], hull[-1]
+            if (az - oz) * (q[1] - oy) - (ay - oy) * (q[0] - oz) >= 0: hull.pop()
+            else: break
+        hull.append(q)
+    for z, y, r in prof:
+        if r == 0: continue
+        for i in range(len(hull) - 1):
+            (z0, y0, _), (z1, y1, _) = hull[i], hull[i + 1]
+            if z0 <= z <= z1:
+                lift = (y0 + (y1 - y0) * ((z - z0) / (z1 - z0) if z1 > z0 else 0.0)) - y
+                if lift > 0:
+                    for c in range(cols): rows[r][c][1] += lift
+                break
+    for r in range(1, CAPE_ROWS):                                                    # the authored billow, easing in along the hang
+        lift = CAPE_BILLOW * (r / (CAPE_ROWS - 1)) ** 1.5
+        for c in range(cols): rows[r][c][1] += lift
+    for r in range(1, CAPE_ROWS):                                                    # and out of the collision capsules, as a row
+        lift = max((clear_bounds(bws, v)[1] - v[1]) for v in rows[r])
+        if lift > 0:
+            for c in range(cols): rows[r][c][1] += lift
+
+    verts = [list(v) for row in rows for v in row]
+    tris = []
+    for r in range(CAPE_ROWS - 1):
+        for c in range(cols - 1):
+            a = r * cols + c; bb = a + 1; cc = a + cols; dd = cc + 1
+            tris += [(a, bb, dd), (a, dd, cc)]
+    n = len(verts)
+    anchor = next(n_ for n_ in cat_nodes if n_['name'] == CAPE_ANCHOR)
+    inv = em.rigid_inv(anchor['world'])
+    p0 = [list(em.xform_pt(inv, v)) for v in verts]
+    return {'node': skin['node'], 'skin': True, 'nv': n, 'tris': tris, 'b0': [anchor['i']] * n, 'p0': p0,
+            'b1': [anchor['i']] * n, 'p1': [list(q) for q in p0], 'w0': [1.0] * n, 'tag': 'cape'}
+
+
 def _slerp(q0, q1, t):
     d = sum(a * b for a, b in zip(q0, q1))
     if d < 0:

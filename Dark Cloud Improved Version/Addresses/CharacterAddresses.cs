@@ -290,6 +290,17 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothActive    = 0x18;    // active draw-packet ptr (engine sets it each frame)
         internal const int  ClothBuf0      = 0x24;    // DBuffID0 packet; +0x28 = DBuffID1 (double-buffered)
         internal const int  ClothAttach    = 0x3C;    // anchor CFrame — drives the SIM when the cloth is stepped
+        internal const int  ClothBounds    = 0x44;    // → CBound linked list (body collision; 0 = the cloth passes through the body)
+        internal const int  ClothWindScale = 0x54;    // WINDEFFECT (+0x50 = the CWind the character hands it each step)
+        internal const int  ClothNormal    = 0x58;    // NORMAL: sign of the generated normals
+        internal const int  ClothGravity   = 0xC0;    // GRAVITY, added to every particle's velocity each step
+        internal const int  ClothFollow    = 0xD0;    // FOLLOW: share of the anchor's movement applied straight to each particle
+        internal const int  ClothK         = 0xE0;    // K: per-step pull toward LW(anchor) × rest — a POSITION correction, no momentum
+        internal const int  ClothRest      = 0x110;   // per particle: the shape it holds, in the anchor's space (a*0x100 + b*0x10)
+        internal const int  ClothCur       = 0x1110;  // per particle: where it is now, world
+        internal const int  ClothVel       = 0x4110;  // per particle: its velocity — the engine only ever ADDS gravity here, so a
+                                                      // zero-mean wave written in rides along without dragging the cloth anywhere
+        internal const int  ClothTarget    = 0x7550;  // per particle: LW(anchor) × rest, i.e. where the rest shape wants it (a*0x100 + b*0x10)
     }
 
     /// <summary><c>CBound</c> — a body collision capsule the cloth sim collides against. Linked list off
@@ -300,7 +311,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BoundSize   = 0x130;  // Sizeof__6CBound
         internal const int  BoundNext   = 0x00;   // linked-list next
         internal const int  BoundFrameA = 0xE4;   // capsule endpoint bone A (CFrame*)
-        internal const int  BoundFrameB = 0xE8;   // capsule endpoint bone B (CFrame*)
+        internal const int  BoundFrameB = 0xE8;   // capsule endpoint bone B (CFrame*) — 0 when A alone carries both endpoints
+        internal const int  BoundRadii  = 0x10;   // (rx across, ry up, rz along A−B); +0x20 = their reciprocals
+        internal const int  BoundCentre = 0xC0;   // world centre, refreshed each step by UpDate__6CBound
     }
 
     /// <summary>The EQUIPPED WEAPON is a separate object from the character: its model root (+0xBC) is PARENTED

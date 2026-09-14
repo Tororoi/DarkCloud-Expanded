@@ -37,6 +37,22 @@ from mdt_codec import Mdt, build_mdt, parse_mdt   # noqa: E402
 BONE_NAMES = ['cat_rwing1', 'cat_rwing2', 'cat_rwing3', 'cat_rwing4', 'cat_lwing1', 'cat_lwing2', 'cat_lwing3', 'cat_lwing4']
 MESH_NAMES = {'r': 'cat_rwingm', 'l': 'cat_lwingm'}   # no "__" suffix: no backface cull → the membrane draws from both sides (as Dran's)
 WING_TEX = 'catwing'                                    # the flat white texture (build_cat_pack bakes it)
+CAPE_NODE = 'cat_cape'                                  # the cloth's FRAME node: its MDT is the rest lattice (engine order, see below)
+CAPE_TEX = 'catcape'                                    # the flat yellow texture
+CAPE_CLO = 'catcape.clo'                                # the cloth definition record (CommandCLOTH → InitCloth)
+# The .clo grammar (RE'd 2026-09-13, Step__6CCloth 0x13b8a0 / Initialize 0x13d050 / CreateVUData 0x13c5f0). The physics numbers
+# come from cat_wings.CAPE_PHYSICS (which documents why this cape carries no gravity): SIZE outer, inner
+# (1..16 each; outer → CCloth+0x2C = the WIDTH, inner → +0x30 = the HANG). Particle (a, b) = MDT vertex a*inner + b, slot a*16 + b;
+# the engine pins every (a, 0) to LW(anchor) × rest, so inner index 0 is the collar edge and the rest hangs along b; the draw is
+# one triangle strip per outer pair (a, a+1) and POLYDIV holds outer-1 chars ('1' flips that strip's winding).
+CAPE_CLO_TEXT = ('SIZE\t{outer},\t{inner}\r\nFRAME\t"{node}"\r\nWINDEFFECT\t{wind:.6f}\r\nNORMAL\t{normal:.6f}\r\n'
+                 'GRAVITY\t{gx:.6f},\t{gy:.6f},\t{gz:.6f}\r\nFOLLOW\t{fx:.6f},\t{fy:.6f},\t{fz:.6f}\r\n'
+                 'K\t{kx:.6f},\t{ky:.6f},\t{kz:.6f}\r\nPOLYDIV\t"{polydiv}"\r\n')
+# BOUND "frame" / up / A / B / radii / damp (CommandBOUND 0x13fdb0 → SetDir mode 1 on that frame; vanilla poncho1.clo layout). The
+# frame must resolve in HER tree at load, so every bound names the cape node itself and DivineBeastCat.SpawnCape re-points each
+# CBound's frame (+0xE4) to the cat bone of the SAME INDEX in cat_wings.CAPE_BOUNDS (keep CapeBoundBones in that order).
+CAPE_BOUND_TEXT = ('BOUND\t"{node}"\r\n\t{ux:.6f},\t{uy:.6f},\t{uz:.6f}\r\n\t{ax:.6f},\t{ay:.6f},\t{az:.6f}\r\n'
+                   '\t{bx:.6f},\t{by:.6f},\t{bz:.6f}\r\n\t{rx:.6f},\t{ry:.6f},\t{rz:.6f}\r\n\t{damp:.6f}\r\n')
 WGT_CHAN = 20
 SUBMESH_RECS = 150                                      # triangle-list records per submesh (50 tris): the disc's own meshes never
                                                         # exceed 549 in one list; keep well inside what the VU builder sees in vanilla
@@ -189,8 +205,49 @@ def build(read, packed, rep, cat_bytes, log=print):
         if t['node'] < base: continue                                  # the cat's own tracks stay as they are
         assert t['node'] < base + 8 and t['chan'] in (0, 2), t['node']
         mot_tracks.append(mc.Track(t['node'], 0, t['chan'], 32, mc.TAG_W6, mc.TAG_W7, [_kf(f, v) for f, v in zip(t['frames'], t['vals'])]))
+    # ── the Super Steve cape: a cloth FRAME node (must be reachable from HER root for SearchFrame — parent = her node 0, its bind
+    #    3×3 scaled by HIDE_SCALE so the cloth she builds from it collapses to a point) whose MDT is the rest lattice in the cat's
+    #    anchor bone's space; the runtime clones her CCloth onto the copy and re-anchors it to that bone ──
+    cat_nodes = data['cat_nodes']
+    skin_node = next(n for n in cat_nodes if n['name'] == 'cat_skin')
+    skin_w = em.load_weights(data['pack'], 'cat.wgt').get(skin_node['i'])
+    skin_me = em.build_mesh_weighted(data['mds'], skin_node, cat_nodes, skin_w)
+    rows, cols, cverts = cw.cape_rest_local(cat_nodes, skin_me)                    # row-major from the collar row (rows = hang)
+    assert 1 <= rows <= 16 and 1 <= cols <= 16 and len(cverts) == rows * cols
+    cverts = [cverts[r * cols + c] for c in range(cols) for r in range(rows)]        # → engine order: outer = width c, inner = hang r
+    cm = Mdt(); cm.hdr = list(skin_mdt.hdr)
+    cm.pos = [(float(v[0]), float(v[1]), float(v[2]), 1.0) for v in cverts]
+    cm.uv = [(0.5, 0.5, 1.0, 1.0)] * len(cverts); cm.norm = [(0.5, 0.5, 1.0, 0.0)] * len(cverts); cm.col = None; cm.has_col = False
+    ctris = []
+    for c in range(cols - 1):
+        for r in range(rows - 1):
+            a = c * rows + r; ctris += [(a, a + rows, a + rows + 1), (a, a + rows + 1, a + 1)]
+    crecs = [(int(v), int(v), int(v)) for t in ctris for v in t]
+    cm.submeshes = [[3, 0, crecs[k:k + SUBMESH_RECS]] for k in range(0, len(crecs), SUBMESH_RECS)]
+    cmat = bytearray(mat_template); cmat[0x34:0x44] = CAPE_TEX.encode('ascii').ljust(16, b'\0'); cm.materials = [bytes(cmat)]
+    cm.preamble = [0, 16, len(cm.submeshes), 0]; cm.order = ['POS', 'DL', 'UV', 'NORM', 'MAT']
+    cdl = 16 + sum(12 + 12 * len(r) for _, _, r in cm.submeshes)
+    cm.pads = {'POS': b'', 'DL': bytes((-cdl) % 16), 'UV': b'', 'NORM': b'', 'MAT': b''}
+    cm.hdr[5] = len(cverts); cm.hdr[7] = 0; cm.hdr[8] = 0xFFFFFFFF; cm.hdr[11] = len(cverts); cm.hdr[13] = 1; cm.hdr[15] = 0
+    cape_mdt = build_mdt(cm)
+    assert len(parse_mdt(cape_mdt, 0).pos) == rows * cols
+    hs = 0.001                                                                     # build_cat_pack.HIDE_SCALE
+    cape_local = [hs, 0, 0, 0, 0, hs, 0, 0, 0, 0, hs, 0, 0, 0, 0, 1]
+    cape = {'name': CAPE_NODE, 'parent_abs': 0, 'local16': cape_local, 'mdt': cape_mdt, 'rows': rows, 'cols': cols,
+            'clo': (CAPE_CLO_TEXT.format(outer=cols, inner=rows, node=CAPE_NODE, polydiv='0' * (cols - 1),
+                                         wind=cw.CAPE_PHYSICS['wind'], normal=cw.CAPE_PHYSICS['normal'],
+                                         gx=cw.CAPE_PHYSICS['gravity'][0], gy=cw.CAPE_PHYSICS['gravity'][1], gz=cw.CAPE_PHYSICS['gravity'][2],
+                                         fx=cw.CAPE_PHYSICS['follow'][0], fy=cw.CAPE_PHYSICS['follow'][1], fz=cw.CAPE_PHYSICS['follow'][2],
+                                         kx=cw.CAPE_PHYSICS['K'][0], ky=cw.CAPE_PHYSICS['K'][1], kz=cw.CAPE_PHYSICS['K'][2])
+                    + ''.join(CAPE_BOUND_TEXT.format(node=CAPE_NODE, ux=b['up'][0], uy=b['up'][1], uz=b['up'][2],
+                                                     ax=b['A'][0], ay=b['A'][1], az=b['A'][2], bx=b['B'][0], by=b['B'][1], bz=b['B'][2],
+                                                     rx=b['radii'][0], ry=b['radii'][1], rz=b['radii'][2], damp=b['damp'])
+                              for b in cw.cape_bounds_local(cat_nodes))).encode('ascii'),
+            'bounds': [b['bone'] for b in cw.CAPE_BOUNDS],
+            'texture': CAPE_TEX, 'anchor': cw.CAPE_ANCHOR}
+    stats['cape'] = {'rows': rows, 'cols': cols, 'mdt': len(cape_mdt), 'anchor': cw.CAPE_ANCHOR, 'bounds': cape['bounds']}
     bbp = b''.join(struct.pack('<16f', *n[2]) for n in out_nodes)
     stats['tracks'] = len(mot_tracks); stats['mot_keys'] = sum(len(t.keyframes) for t in mot_tracks)
     stats['frames'] = (data['frames_all'][0], data['frames_all'][-1])
     return {'nodes': out_nodes, 'wgt_tracks': wgt_tracks, 'mot_tracks': mot_tracks, 'bbp': bbp,
-            'alloc_dbuff': [MESH_NAMES['r'], MESH_NAMES['l']], 'texture': WING_TEX, 'stats': stats}
+            'alloc_dbuff': [MESH_NAMES['r'], MESH_NAMES['l']], 'texture': WING_TEX, 'stats': stats, 'cape': cape}
