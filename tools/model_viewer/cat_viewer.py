@@ -202,7 +202,10 @@ WING_TAB_HINGE, WING_TAB_HINGE_MAX = 0.35, 0.0   # sub-points closer than this (
 WING_TAB_CLEAR = None              # corners are raised until every tab clears the skin by this (the flat tabs vs the convex shoulder);
                                    # None = off (the tilt sets the heights absolutely; intersecting the back is intended)
 # which Dran clip drives which cat clip: cat KEY index → (Dran start, Dran end, Dran speed, loop?)
-WING_CLIPS = {4: (200, 205, 0.2, True)}   # cat 'leap' (the fall, 205-214 @0.5) ← Dran motion 3 "charge loop" (user 2026-09-12)
+WING_CLIPS = {4: (200, 205, 0.2, True),   # cat 'leap' (the fall, 205-214 @0.5) ← Dran motion 3 "charge loop" (user 2026-09-12)
+              7: (295, 300, 0.15, False)}  # cat 'float-up' (285-294 @0.6) ← Dran motion 2 "charge: take-off" frames 295-300 = the
+                                          # DOWNSTROKE, wings raised at the first frame; the game's 10-frame cross-fade from the
+                                          # ready pose (wings folded) then IS the unfold/upstroke (user 2026-09-13)
 # The LANDING is authored (user 2026-09-13: Dran's charge-end swung the root around; the cat's wings sit lower so the attachment
 # must stay put, and the wings must end FOLDED like a bird's — feathers back, tight to the flanks — as the ground idle):
 #   cat 215..LAND_FLARE_END ← Dran 70..75 (the forward braking swing = the momentum), root position PINNED;
@@ -230,6 +233,54 @@ WING_HAND_DROOP = {'bones': {1: -10.0, 2: 8.0, 3: -2.0}, 'frames': (224, 227)}  
 WING_HAND_ROLL = {'bones': {2: 6.0, 3: 10.0}, 'frames': (224, 227)}   # extra roll (degrees, about each bone's own span) per
                                    # wing bone index, eased over these landing frames and held in the idle: + = the feathers above
                                    # the hand line lean IN toward the cat (checked in v59; the sign is mirrored per side in code)
+WING_STROKE = {7: {'phi': [(285.0, 85.0), (287.5, 110.0), (288.5, 110.0), (292.0, -20.0), (294.0, 0.0)], 'extend': [(285.0, 0.0), (287.5, 1.0)],
+                   # top 110° held 287.5-288.5 so the lagging hand catches up: the glide droops 19° below lateral, so the stretched
+                   # wings end ~5-10° from vertical, tips ~1 apart (user 2026-09-13: "at the peak of the stretch the wings should be
+                   # almost parallel"; 80° gave a 58° V, 100° with no hold still ~35°)
+                   'lag': 0.2, 'sweep': 60.0, 'axis': 'spine'}}
+                                   # 'phi': (frame, deg) keys of the flap angle (+ = up from the glide), smoothstepped; 'extend': (frame,
+                                   # 0..1) keys of the wing's EXTENSION: 0 = the forearm and hand keep the folded idle's chain-local
+                                   # rotations (the wing rises FLEXED, as a bird's does: the engine's ready → float-up fade then moves
+                                   # only the humerus and the body), 1 = the stroke's stretched shape — "when the first half of the wing
+                                   # is fully risen the primaries extend upward" (user 2026-09-13). Both are read at each bone's LAGGED
+                                   # frame, so the elbow opens before the wrist and the hand trails the arm through the stroke.
+                                   # 'axis': 'spine' = flap about the cat's own fore-aft axis; 'world' = about the world-horizontal
+                                   # fore-aft axis (per frame, from the spine's pitch) — REJECTED: with the body reared ~60° the
+                                   # glide's sweep-back rotates too, so the raised wings pointed FORWARD over the head and the stroke
+                                   # bottom went under the belly (30+ verts inside). The glide already droops 19° below lateral in
+                                   # the spine frame, so 'bottom' −20° puts the tips ~40° below lateral: a spread V, not flat along
+                                   # the flanks (−40/−45° did that, and clipped the hind flanks).
+                                   # per WING_CLIPS key: an AUTHORED flap instead of Dran's frames (user 2026-09-13: "from 289 the wings
+                                   # make an arc shape instead of trailing the momentum like a real bird's downflap … Dran's motions
+                                   # aren't the best flapping motion"). Base pose = the clip's Dran END frame (300 = the charge-loop
+                                   # glide = the leap). Every bone is rotated about the cat's fore-aft axis (through the pinned
+                                   # shoulder pivot) by a flap angle φ: 'top' (deg, + = up) at the clip's first frame (the fade
+                                   # target), 'bottom' at 'bottom_at', 0 (the glide) at the clip's end, smoothstepped. Bone k runs on
+                                   # the warped phase u^(1 + k·lag), so the outer wing LAGS the arm: at the arm's bottom the hand is
+                                   # still up (the primaries flex up under load), and on the raise the hand trails below — the
+                                   # momentum taper; the lag is zero at both ends so 285 is fully stretched and 294 is the glide.
+                                   # 'sweep' (deg per unit of phase lag) sweeps a lagging bone BACK about the vertical axis as well.
+                                   # WING_CLIP_PITCH still applies on top (the reared body: aim the stroke at the ground).
+WING_CLIP_PITCH = {7: [(285.0, 30.0), (292.0, 15.0), (294.0, 10.0)]}
+                                   # (with the authored WING_STROKE the flap is about the fore-aft axis and already aims down; the +45°
+                                   # that aimed Dran's forward arc at the ground folded the authored wing flat against the flanks → +15°)
+                                   # per WING_CLIPS key: (frame, deg) keys of an extra pitch of the WHOLE wing (all four bones rigidly
+                                   # about the pivot) about the cat's lateral axis, positive = tips UP, smoothstepped between keys, held
+                                   # outside them. Float-up: the fade from the folded ready ends on frame 285, so the first key is the
+                                   # "top of the upstroke": Dran 295's stretched wing sat 58° above the spine line (user saw ~45° from
+                                   # profile), user 2026-09-13: "closer to 75°, not the full 90° right away" → +30°. The stroke bottom
+                                   # (Dran 298 ↔ cat 290.4, 76° below the spine axis on the BACK side) pointed at the FRONT PAWS: the
+                                   # float-up rears the body ~59° nose-up, so "down relative to the spine" sweeps under the belly (world:
+                                   # 44° below horizontal, forward); user: "pointed a little more at the ground" → keep the stroke plane
+                                   # pitched DORSALLY through the downstroke; +25° at the bottom gave world 70° below horizontal, user:
+                                   # "around 291 still too far forward" → +45° at the bottom (291 ≈ straight down), easing to a +10°
+                                   # residual at 294 (the held glide's sweep points down-back instead of straight down; the 16-step
+                                   # float-up → leap fade dissolves it). (−20° there aimed it at the paws even more: −25°.)
+WING_CHAIN = True                  # rig wing2/3/4 as CHILDREN of the previous bone (constant local translation = the segment length)
+                                   # instead of Dran's siblings-under-the-root: the engine's key-change cross-fade slerps every bone's
+                                   # LOCAL rotation and lerps its translation independently, so sibling bones whose positions are 144°
+                                   # apart (folded ready → wings-up float-up) pass through a chord — the upper arm collapsed to 0.59 of
+                                   # its 1.93 mid-fade. A chain keeps every segment its length through any fade (2026-09-13).
 WING_PIN_ROOT = True               # ignore Dran's root-bone translation in every clip: the wing root stays on the shoulder and the
                                    # outer bones follow by FK (Dran's per-bone positions ARE an FK chain: +x along the wing, fixed lengths)
 WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose middle pose Dran's wing orientation is taken as-is: the wings are
@@ -425,6 +476,12 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
             n = nodes[wid[dn[name]['i']]]; n['R'] = Rls[k]; n['T'] = fold_local[sd][1][k]; n['quat'] = em.mat_to_quat(Rls[k])
             L = em.mat_from_rt(n['R'], n['T']); n['world'] = em.mat_mul(L, nodes[parent]['world']); n['invworld'] = em.rigid_inv(n['world'])
             n['worldpos'] = (n['world'][3][0], n['world'][3][1], n['world'][3][2])
+        if WING_CHAIN:                                                            # same bind worlds, expressed as a chain
+            for k, name in enumerate(ch[1:], 1):
+                n = nodes[wid[dn[name]['i']]]; pn = nodes[wid[dn[ch[k - 1]]['i']]]
+                L = em.mat_mul(n['world'], em.rigid_inv(pn['world']))
+                n['parent'] = pn['i']; n['R'] = [list(L[r][:3]) for r in range(3)]; n['T'] = list(L[3][:3]); n['quat'] = em.mat_to_quat(n['R'])
+                assert abs(n['T'][0] - seg_len[sd][k - 1]) < 1e-3 and abs(n['T'][1]) < 1e-3 and abs(n['T'][2]) < 1e-3, (name, n['T'], seg_len[sd][k - 1])
         Ws = cat_world(WING_FOLD_FRAME)[parent]
         tipk = fold_local[sd][1][3]; tipd = fold_local[sd][0][3][0]
         tip = [tipk[i] + 2.14 * tipd[i] for i in range(3)]
@@ -469,24 +526,85 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
         cs, ce, cspd, _ = bcp.CAT_KEYS[ki]
         win_game = (ce - cs) / cspd; loop_game = (de - ds) / dspd
         cycles = max(1, round(win_game / loop_game)) if loop else 1
-        windows.append((cs, ce, ds, de, cycles, loop))
+        windows.append((cs, ce, ds, de, cycles, loop, ki))
         if loop: log(f"  clip {ki} ({cs}-{ce} @{cspd}): {cycles} flap cycle(s) over {win_game:.0f} game frames (Dran's own rate would give {win_game / loop_game:.2f})")
         else: log(f"  clip {ki} ({cs}-{ce} @{cspd}): Dran {ds}-{de} once over {win_game:.0f} game frames (Dran's own length {loop_game:.0f} → {loop_game / win_game:.2f}× its rate)")
     def _smooth(t):
         t = min(max(t, 0.0), 1.0); return t * t * (3 - 2 * t)
     lcs, lce = WING_LAND['cat']; lds, lde = WING_LAND['dran']; lfe = WING_LAND['flare_end']
+    def rot_about(axis, deg):
+        """row-vector rotation (v' = v · Q) of +deg about the unit axis (Rodrigues, transposed)"""
+        x, y, z = _unit(axis); c, sn = math.cos(math.radians(deg)), math.sin(math.radians(deg)); t = 1 - c
+        R = [[t * x * x + c, t * x * y - sn * z, t * x * z + sn * y],
+             [t * x * y + sn * z, t * y * y + c, t * y * z - sn * x],
+             [t * x * z - sn * y, t * y * z + sn * x, t * z * z + c]]
+        return _t3(R)
+    def stroke_axes(f, mode):
+        """(flap axis, sweep axis) in spine-local: the cat's fore-aft / vertical ('spine') or the world-horizontal fore-aft / world
+        vertical expressed in the spine's frame at cat frame f ('world')"""
+        if mode != 'world': return [1, 0, 0], [0, 1, 0]
+        Pw = cat_world(f)[parent]; rows = [Pw[r][:3] for r in range(3)]
+        h = _unit([rows[0][0], 0.0, rows[0][2]]); v = [0.0, 1.0, 0.0]
+        return [sum(h[i] * rows[r][i] for i in range(3)) for r in range(3)], [sum(v[i] * rows[r][i] for i in range(3)) for r in range(3)]
+    def keyed_val(keys, f):
+        """(frame, value) keys → value at f: held outside, smoothstepped between"""
+        v = keys[0][1] if f <= keys[0][0] else keys[-1][1]
+        for (fa_, va_), (fb_, vb_) in zip(keys, keys[1:]):
+            if fa_ <= f <= fb_: v = va_ + (vb_ - va_) * _smooth((f - fa_) / (fb_ - fa_))
+        return v
+    idle_rots = {}
+    flap_sign, sweep_sign = {}, {}
+    for wki_, st_ in WING_STROKE.items():
+        wcs_, wde_ = next((cs, de) for cs, ce, ds, de, cycles, loop, ki in windows if ki == wki_)
+        fa, va = stroke_axes(wcs_, st_.get('axis', 'spine'))
+        for sd, ch in SIDES.items():
+            G = [dran_local_R(name, wde_) for name in ch]
+            def tip_of(Rs): return fk_locals(sd, Rs)[3]
+            up = tip_of([_mul3(R, rot_about(fa, 80)) for R in G])
+            flap_sign[sd] = 1.0 if up[1] < tip_of(G)[1] else -1.0                  # + must take the tip UP (spine-local −y)
+            back = tip_of([_mul3(R, rot_about(va, 30)) for R in G])
+            sweep_sign[sd] = 1.0 if back[0] < tip_of(G)[0] else -1.0                # + must take the tip BACK (spine-local −x)
+        log(f"  clip {wki_}: authored stroke from Dran {wde_} (flap {st_['phi']}, extend {st_.get('extend')}, lag {st_['lag']:g}, sweep {st_.get('sweep', 0):g}, axis {st_.get('axis', 'spine')}); flap sign r {flap_sign['r']:+.0f} l {flap_sign['l']:+.0f}, sweep sign r {sweep_sign['r']:+.0f} l {sweep_sign['l']:+.0f}")
     def wing_locals(f):
         """Spine-local (R, T) of wing1..4 per side at cat frame f: Dran's loop sample inside a WING_CLIPS window, the
         authored landing inside WING_LAND, the folded bind elsewhere. Root pinned, positions by FK."""
         out = {}
         for sd, ch in SIDES.items():
             df = None
-            for cs, ce, ds, de, cycles, loop in windows:
+            for cs, ce, ds, de, cycles, loop, ki in windows:
                 if cs <= f <= ce:
-                    u = (f - cs) / float(ce - cs); df = ds + (math.fmod(u * cycles * (de - ds), de - ds) if loop else u * (de - ds))
+                    u = (f - cs) / float(ce - cs); df = ds + (math.fmod(u * cycles * (de - ds), de - ds) if loop else u * (de - ds)); wki = ki
             root = None
             if df is not None:
-                Rls = [dran_local_R(name, df) for name in ch]
+                if wki in WING_STROKE:
+                    st = WING_STROKE[wki]; wcs, wce, wde = next((cs, ce, de) for cs, ce, ds, de, cycles, loop, ki in windows if ki == wki)
+                    u = (f - wcs) / float(wce - wcs)
+                    fa, va = stroke_axes(f, st.get('axis', 'spine'))
+                    if sd not in idle_rots:                                                   # the folded idle (with its droop/roll) —
+                        idle = wing_locals(WING_FOLD_FRAME)                                   # what the ready clip holds and the fade leaves
+                        idle_rots[sd] = [idle[wid[dn[name]['i']]][0] for name in ch]
+                    stroke, Rls = [], []
+                    for k, name in enumerate(ch):
+                        uk = u ** (1.0 + k * st['lag']); fk = wcs + uk * (wce - wcs)              # this bone's lagged frame
+                        R = _mul3(dran_local_R(name, wde), rot_about(fa, keyed_val(st['phi'], fk) * flap_sign[sd]))   # the flap, about the fore-aft axis
+                        psi = st.get('sweep', 0.0) * (u - uk)
+                        if abs(psi) > 1e-6: R = _mul3(R, rot_about(va, psi * sweep_sign[sd]))  # a lagging bone also sweeps back
+                        stroke.append(R)
+                        if k == 0 or 'extend' not in st: Rls.append(R); continue
+                        e = keyed_val(st['extend'], fk)
+                        rel_s = _mul3(stroke[k], _t3(stroke[k - 1])); rel_i = _mul3(idle_rots[sd][k], _t3(idle_rots[sd][k - 1]))
+                        rel = rel_s if e >= 1 else rel_i if e <= 0 else _quat_to_mat(_slerp(em.mat_to_quat(rel_i), em.mat_to_quat(rel_s), e))
+                        Rls.append(_mul3(rel, Rls[k - 1]))                                    # chain-local rotation on the ACTUAL parent
+                else:
+                    Rls = [dran_local_R(name, df) for name in ch]
+                if wki in WING_CLIP_PITCH:                                                # the clip's extra whole-wing pitch (see the knob)
+                    keys = WING_CLIP_PITCH[wki]; deg = keys[0][1] if f <= keys[0][0] else keys[-1][1]
+                    for (fa, da), (fb, db) in zip(keys, keys[1:]):
+                        if fa <= f <= fb: deg = da + (db - da) * _smooth((f - fa) / (fb - fa))
+                    if abs(deg) > 1e-6:
+                        th = math.radians(deg); c, sn = math.cos(th), math.sin(th)
+                        Qz = [[c, sn, 0], [-sn, c, 0], [0, 0, 1]]                          # about the spine's z = the cat's lateral axis, post-multiplied
+                        Rls = [_mul3(R, Qz) for R in Rls]
             elif lcs <= f <= lce:
                 dfl = lds + (lde - lds) * min(1.0, (f - lcs) / float(lfe - lcs))             # the flare: Dran 70..75 over 215..flare_end
                 Rls = []
@@ -1108,14 +1226,26 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 prev = (Lp, Rp, Cp)
         meshes.append(ridge)
         log(f"  ridges: {ridge['nv']} verts, {len(ridge['tris'])} tris along the two L-lines (|x| {WING_EXTEND_X_IN:g}, z {WING_EXTEND_Z_BACK:g}..{WING_EXTEND_Z_FRONT:g}; front edge to ({WING_EXTEND_X_OUT:g}, {WING_EXTEND_Z_FRONT_OUT:g}))")
-    spans = [(cs, ce) for cs, ce, ds, de, cycles, loop in windows] + [WING_LAND['cat']]
+    spans = [(cs, ce) for cs, ce, ds, de, cycles, loop, ki in windows] + [WING_LAND['cat']]
     keyed = sorted({f for cs, ce in spans for f in range(cs, ce + 1)})
     frames_all = sorted(set(keyed) | {f for cs, ce in spans for f in (cs - 1, ce + 1)})   # bind brackets where nothing else keys
     per_frame = {f: wing_locals(f) for f in frames_all}
+    if WING_CHAIN:                                                                # spine-local (R, T) per bone → parent-bone-local
+        for f in frames_all:
+            loc = per_frame[f]
+            for sd, ch in SIDES.items():
+                ids = [wid[dn[name]['i']] for name in ch]
+                Ms = [em.mat_from_rt(*loc[i]) for i in ids]
+                for k in range(1, 4):
+                    L = em.mat_mul(Ms[k], em.rigid_inv(Ms[k - 1]))
+                    dev = max(abs(L[3][0] - seg_len[sd][k - 1]), abs(L[3][1]), abs(L[3][2]))
+                    assert dev < 1e-3, (f, ch[k], L[3][:3], seg_len[sd][k - 1])
+                    loc[ids[k]] = ([list(L[r][:3]) for r in range(3)], nodes[ids[k]]['T'])   # translation = the bind's, constant
     for k, name in enumerate(WING_BONES):
         nid = base + k
         tracks.append({'node': nid, 'chan': 0, 'frames': frames_all, 'vals': [list(em.mat_to_quat(per_frame[f][nid][0])) for f in frames_all]})
-        tracks.append({'node': nid, 'chan': 2, 'frames': frames_all, 'vals': [list(per_frame[f][nid][1]) + [0.0] for f in frames_all]})
+        if not (WING_CHAIN and nodes[nid]['parent'] != parent):                  # a chained bone's translation never changes
+            tracks.append({'node': nid, 'chan': 2, 'frames': frames_all, 'vals': [list(per_frame[f][nid][1]) + [0.0] for f in frames_all]})
     log(f"  wing tracks: keys at {frames_all[0]}..{frames_all[-1]} ({len(frames_all)} frames); landing {lcs}-{lce}: Dran {lds}-{lde} flare to {lfe}, then fold (lag {WING_LAND['lag']}); folded = bind")
     return serialize("Divine Beast cat + Dran's wings — leap = charge loop, land = flare + fold (experiment)", 'c04b+cat+wings', 'viewer experiment (nothing baked)',
                      nodes, meshes, tracks, cat_motions, 'c04b.mds + c12a obj1 wings', 'cat.mot + c12a.mot (wings)')
@@ -1146,6 +1276,15 @@ def main():
                for i, (s, e, sp, cm) in enumerate(bcp.CAT_KEYS)]
     lo, hi = min(k[0] for k in bcp.CAT_KEYS), max(k[1] for k in bcp.CAT_KEYS)
     motions.append({'name': 'every clip (timeline)', 'gloss': '', 'start': lo, 'end': hi, 'speed': 0.5, 'id': -1, 'empty': 0})
+    # seam previews: the game's key-change cross-fade is STATIC — the outgoing clip freezes on its frame, the new key sits on its
+    # first frame, and the engine slerps between the two for `steps` game frames; only then does the new clip play (motion-key-blend).
+    # Shown as a pre-roll of steps·speed clip frames before the clip. The vertical pounce (DivineBeastCat.cs): ready 95-105 → 10-step
+    # fade → float-up 285-294 at 0.75 (feet off at 293, then HELD at 294 for the whole flight) → 16-step fade → leap 205 → hard cut
+    # → land 215-227 at 0.36.
+    for i_from, i_to, label, steps, speed in ((1, 7, 'ready → float-up', 10, 0.75), (7, 4, 'float-up → leap', 16, None)):
+        s0, e0, _, _ = bcp.CAT_KEYS[i_from]; s1, e1, sp1, _ = bcp.CAT_KEYS[i_to]; sp = speed or sp1
+        motions.append({'name': f'seam: {label} ({steps}-step fade, then the clip at {sp})', 'gloss': '', 'start': round(s1 - steps * sp, 3),
+                        'end': e1, 'speed': sp, 'id': -2, 'empty': 0, 'seam': {'from': e0, 'blend': steps, 'clipStart': s1}})
     game = model_from('Divine Beast cat — as baked into c04b.chr', 'c04b+cat', 'dun/mainchara/c04b.chr (patched)',
                       nodes, mds, pack, 'cat.mot', motions, bcp.HOST_MDS, wgt_name='cat.wgt')
     print(f"in-game cat: {K} nodes appended after her {nb}, {game['_stats']['meshes']} meshes, {game['_stats']['tris']} tris, "
