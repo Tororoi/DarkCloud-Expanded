@@ -41,13 +41,19 @@ namespace Dark_Cloud_Improved_Version
             // 3.86 MB map pack, and the longest staged menu chain (Xiao's party switch: dunmenu5 + portraits + her
             // ~2.5 MB pack + weapons + effect) reaches ~3.9 MB. Measured 2026-09-10 (flat textures): Xiao+cat chara
             // 3,216,400 + weapons 227,168 + effects 70,128 = 3,513,696; the real cat textures add ~127,000.
-            // The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two remaining-room
-            // computations, a memory-map printf): 240000 = ori 0xA980. 280000 is `lui v0,4; ori a1,v0,0x45C0` →
-            // 250000 = `lui v0,3; ori a1,v0,0xD090`.
-            new(0x01DAC0C4, 0x34463450, 0x3446A980, "character heap 210000 → 240000 units (MemoryMapDump printf)"),
-            new(0x01DAC338, 0x34453450, 0x3445A980, "character heap 210000 → 240000 units (GameInit carve)"),
-            new(0x01DB9A88, 0x34433450, 0x3443A980, "character heap 210000 → 240000 units (LoadWeapon2 remaining)"),
-            new(0x01DBA8B0, 0x34423450, 0x3442A980, "character heap 210000 → 240000 units (LoadChara2 remaining)"),
+            // 2026-09-13, the WINGS: the cat's wing bones/meshes/keys/textures cost another ~220 KB in this pool (chara
+            // 3,400,336 → 3,620,496 measured), and the pool is shared with the weapons (~216 KB) and the floor's shot effects
+            // (70-190 KB): 240000 units overflowed by 67-190 KB → a silent spin on the switch to Xiao. The allocator's own
+            // counter (DivineBeastCat.HeapWatch, GlobalPoolUsed 0x21C74980) shows the global buffer at 26,616,000 of
+            // 27,039,984 B in every log — 26,499 units unused (which is exactly why +30,000 alone black-screened and the
+            // read-buffer cut was needed) — so the heap takes 20,000 more of them: 260000 units = 4.16 MB, leaving 6,499
+            // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
+            // remaining-room computations, a memory-map printf): 260000 = 0x3F7A0 = ori 0xF7A0 (lui 3 unchanged). 280000 is
+            // `lui v0,4; ori a1,v0,0x45C0` → 250000 = `lui v0,3; ori a1,v0,0xD090`.
+            new(0x01DAC0C4, 0x34463450, 0x3446F7A0, "character heap 210000 → 260000 units (MemoryMapDump printf)"),
+            new(0x01DAC338, 0x34453450, 0x3445F7A0, "character heap 210000 → 260000 units (GameInit carve)"),
+            new(0x01DB9A88, 0x34433450, 0x3443F7A0, "character heap 210000 → 260000 units (LoadWeapon2 remaining)"),
+            new(0x01DBA8B0, 0x34423450, 0x3442F7A0, "character heap 210000 → 260000 units (LoadChara2 remaining)"),
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)
@@ -87,7 +93,7 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, off, w.New);
                 applied++;
             }
-            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 3.84 MB from the read buffer, cat pellet-follower hook, cat glow hooks) …");
+            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 4.16 MB (read buffer + global slack), cat pellet-follower hook, cat glow hooks) …");
         }
     }
 }
