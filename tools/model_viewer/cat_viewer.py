@@ -171,6 +171,11 @@ WING_TAB_POLYS = [('Rb', 'Ri', 'ir'),          # the rear tab hangs off the base
                   ('RIM', 'if'),               # the front: a fan from 'if' over EVERY upper-rim segment Ri→…→Rf (a single chord
                   ('Rg', 'Rf', 'if', 'under')] # Ri–Rf left a gap against the rim's middle vertices)
 WING_TAB_CAP = True                # also close the base ring's open top (the hole Dran's body used to fill) under the fan
+WING_TAB_FLOOR = True              # and FLOOR the base: a fan from the rear corner 'ir' over the ring's LOWER rim (Rb → A → Rg) and
+                                   # on to 'if', so the roof (tabs + fan), the cap, the 'under' wall and this floor make a closed boot.
+                                   # Without it the roof's two ends (Rb–ir at the back, if–Rg at the front) were open edges lying on
+                                   # the cat's back — hidden while the ring sat on the back, a see-through gap once the float-up's
+                                   # stroke lifted the ring 0.7 off it (user 2026-09-13, polys 7/174 and 120/121). Existing verts only.
 WING_APEX_PULL = (0.30, 0.6)       # (pull at the midline, |x| where it fades to 0): the inboard fan's tip is moved OUTWARD toward
                                    # the wing root in the mesh itself — it lies under the back's skin in flight, so the open wing
                                    # is unchanged, and the shorter fan rises less when the humerus folds (user 2026-09-13: "reduce
@@ -233,11 +238,17 @@ WING_HAND_DROOP = {'bones': {1: -10.0, 2: 8.0, 3: -2.0}, 'frames': (224, 227)}  
 WING_HAND_ROLL = {'bones': {2: 6.0, 3: 10.0}, 'frames': (224, 227)}   # extra roll (degrees, about each bone's own span) per
                                    # wing bone index, eased over these landing frames and held in the idle: + = the feathers above
                                    # the hand line lean IN toward the cat (checked in v59; the sign is mirrored per side in code)
-WING_STROKE = {7: {'phi': [(285.0, 85.0), (287.5, 110.0), (288.5, 110.0), (292.0, -20.0), (294.0, 0.0)], 'extend': [(285.0, 0.0), (287.5, 1.0)],
+WING_STROKE = {7: {'phi': [(285.0, 78.0), (287.5, 100.0), (288.5, 100.0), (292.0, -20.0), (294.0, 0.0)], 'extend': [(285.0, 0.0), (287.5, 1.0)],
+                   # (110° with the inboard hinge put the vanes ON the midline — top 100° with roots at lateral 0.4 = tips ~1.5 apart)
                    # top 110° held 287.5-288.5 so the lagging hand catches up: the glide droops 19° below lateral, so the stretched
                    # wings end ~5-10° from vertical, tips ~1 apart (user 2026-09-13: "at the peak of the stretch the wings should be
                    # almost parallel"; 80° gave a 58° V, 100° with no hold still ~35°)
-                   'lag': 0.2, 'sweep': 60.0, 'axis': 'spine'}}
+                   'lag': 0.2, 'sweep': 60.0, 'axis': 'spine', 'hinge_in': 0.25}}
+                                   # 'hinge_in': the flap rotates about an axis this far INBOARD of the wing1 origin (toward the spine),
+                                   # so the root rides up on a small arc and the base ring's inboard edge stays on the back — the two
+                                   # wings keep protruding close together as they rise (user 2026-09-13: "the visible back between the
+                                   # wings increases as the wings extend"; about the origin itself the ring stood up 0.7 above the back
+                                   # and only the stretched tabs bridged to the spine). 0 = the pinned origin. Root at 294 = the origin.
                                    # 'phi': (frame, deg) keys of the flap angle (+ = up from the glide), smoothstepped; 'extend': (frame,
                                    # 0..1) keys of the wing's EXTENSION: 0 = the forearm and hand keep the folded idle's chain-local
                                    # rotations (the wing rises FLEXED, as a bird's does: the engine's ready → float-up fade then moves
@@ -584,6 +595,11 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                         idle = wing_locals(WING_FOLD_FRAME)                                   # what the ready clip holds and the fade leaves
                         idle_rots[sd] = [idle[wid[dn[name]['i']]][0] for name in ch]
                     stroke, Rls = [], []
+                    if st.get('hinge_in', 0.0):                                                # the root rides on an arc about the inboard hinge
+                        piv = pivot_local[sd]; hz = st['hinge_in'] * (1.0 if piv[2] < 0 else -1.0)
+                        C = [piv[0], piv[1], piv[2] + hz]; arm = [piv[i] - C[i] for i in range(3)]
+                        Q = rot_about(fa, keyed_val(st['phi'], f) * flap_sign[sd])
+                        root = [C[i] + sum(arm[j] * Q[j][i] for j in range(3)) for i in range(3)]
                     for k, name in enumerate(ch):
                         uk = u ** (1.0 + k * st['lag']); fk = wcs + uk * (wce - wcs)              # this bone's lagged frame
                         R = _mul3(dran_local_R(name, wde), rot_about(fa, keyed_val(st['phi'], fk) * flap_sign[sd]))   # the flap, about the fore-aft axis
@@ -1145,6 +1161,11 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 me['tris'] = [u for t in me['tris'] for u in conform(t)]
                 polys = [u for t in polys for u in conform(t)]
                 log(f"  {sd} wing tabs: conforming split of the neighbours: {len(me['tris']) + len(polys) - before} extra tris")
+            if WING_TAB_FLOOR and WING_TAB_CAP and 'ir' in pts and 'if' in pts:
+                floor = [(pts['ir'], lower[k], lower[k + 1]) for k in range(len(lower) - 2)] + [(pts['ir'], lower[-2], pts['if'])]
+                if WING_TAB_SUBDIV_NEIGHBOURS and n == 2: floor = [u for t in floor for u in conform(t)]   # meet the split edges
+                polys += floor
+                log(f"  {sd} wing base floored: {len(floor)} tris from ir over the lower rim ({len(lower) - 1} verts) to if")
             polys += fine; tabs = fine
             if WING_TAB_BULGE and mixed:
                 # ROUND THE FOLD (user 2026-09-13: "take advantage of the subdivision to make the folded pose smoother"): a pooled
