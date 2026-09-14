@@ -171,8 +171,8 @@ namespace Dark_Cloud_Improved_Version
         private static readonly Dictionary<int, WeaponLook> Looks = new Dictionary<int, WeaponLook>
         {
             { Items.divinebeasttitle, new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false } },   // user 2026-09-12
-            { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 40f, 40f, 40f }, Wings = true  } },
-            { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 64f, 52f, 20f }, Wings = true  } },
+            { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 20f, 20f, 20f }, Wings = true  } },
+            { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 42f, 40f, 30f }, Wings = true  } },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
         private static int _weapon = -1;                                    // the weapon the resident copy was built for
@@ -194,21 +194,30 @@ namespace Dark_Cloud_Improved_Version
         // shot-pool step, which the pause screen does not run.
         private static DateTime _pausedAt = DateTime.MinValue;
         private static TimeSpan _pauseOffset = TimeSpan.Zero;
+        private static float _pausedBlend = -1f;                              // the channel's blend increment before the stop (the stop zeroes it for good)
         private static DateTime Now => DateTime.UtcNow - _pauseOffset;       // the cat's clock: stands still through the PAUSE screen
         private const int MotionStop = 0x1;                                   // CCharacter.MotionFlags bit 0 (CharacterAddresses: stop)
         private static void FreezeForPause()
         {
             if (_pausedAt != DateTime.MinValue) return;
             _pausedAt = DateTime.UtcNow;
+            _pausedBlend = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateSpeed);   // read BEFORE the stop: Step writes 0 there while stopped
             long f = SlotAddr() + CCharacter.MotionFlags;
             Memory.WriteInt(f, Memory.ReadInt(f) | MotionStop);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "paused — cat held");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"paused — cat held (blend increment {_pausedBlend:F3})");
         }
         private static void Resume()
         {
             if (_pausedAt == DateTime.MinValue) return;
             _pauseOffset += DateTime.UtcNow - _pausedAt; _pausedAt = DateTime.MinValue;
-            if (Active) { long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~MotionStop); }
+            if (Active)
+            {
+                long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~MotionStop);
+                // The stop left the blend increment at 0 and nothing re-seeds it (MOTION_END does so at load only): the next
+                // key cross-fade would never finish — the cat slid along frozen in its last pose (user 2026-09-13, "the walking
+                // motion isn't animating"). Put back what it was, or the engine's default.
+                Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, _pausedBlend > 0f ? _pausedBlend : BlendDefault);
+            }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {_pauseOffset.TotalSeconds:F1} s in all");
         }
 
@@ -221,17 +230,39 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
         }
 
-        /// <summary>A weapon without wings. DISABLED for now (2026-09-13): the first cut zeroed the two wing mesh nodes'
-        /// geometry pointers (SlingshotProp's shotpt precedent), but those frames are SKINNED — their .wgt runs make
-        /// MotionProc2 write the blended vertices through the frame's visual every frame, so a null pointer there is a
-        /// likely freeze (the game froze on the switch to Xiao with the Title equipped). The safe hide is to unlink the two
-        /// meshes' runs from the channel's skin list (MotionType.MotionSkinList) AND null the geometry; not done yet, so the
-        /// Title's cat shows the wings until then.</summary>
-        private const bool HideWingsEnabled = false;
+        /// <summary>A weapon without wings: the two wing meshes are SKINNED frames, so nulling their geometry alone is unsafe
+        /// (MotionProc2 writes every mesh's .wgt run through its visual each frame). So the copy's channel gets a PRIVATE
+        /// clone of the skin list (the same 0x18-byte nodes the .mot list uses: {mesh, bone, type 20, count, keys, next})
+        /// with the wing meshes' runs left out — the keys still point at her data, only the chain is ours — and THEN the
+        /// two geometry pointers are cleared so nothing draws them. Her own list is untouched.</summary>
+        private const int SkinNodeSize = 0x18;
         private static void HideWings()
         {
-            if (!HideWingsEnabled) { Console.WriteLine(Tag + "wings-off look requested, but hiding is disabled for now — wings stay visible"); return; }
+            if (_wingMeshIdx.Count == 0) return;
+            long chan = CodeCaves.MotionCave;                                              // the copy's channel struct
+            uint head = (uint)Memory.ReadInt(chan + MotionType.MotionSkinList) & Memory.PhysAddrMask;
+            var nodes = new List<byte[]>();
+            for (uint p = head; Memory.IsValidGuest(p) && nodes.Count < 256;)
+            {
+                byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), SkinNodeSize);
+                if (n == null) break;
+                nodes.Add(n);
+                p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
+            }
+            if (nodes.Count == 0) { Console.WriteLine(Tag + "wings-off: the copy's skin list is unreadable — wings stay visible"); return; }
+            var keep = new List<byte[]>();
+            foreach (byte[] n in nodes) if (!_wingMeshIdx.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
+            if (keep.Count == nodes.Count) { Console.WriteLine(Tag + "wings-off: no wing runs in the skin list — wings stay visible"); return; }
+            long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
+            if (cave == 0) { Console.WriteLine(Tag + "wings-off: no cave room for the skin list clone — wings stay visible"); return; }
+            for (int i = 0; i < keep.Count; i++)
+            {
+                BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
+                Memory.WriteBytesBatch(cave + i * SkinNodeSize, keep[i]);
+            }
+            Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
             foreach (int i in _wingMeshIdx) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
+            Console.WriteLine(Tag + $"wings hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {_wingMeshIdx.Count} geometry pointers cleared");
         }
 
         internal static void Start()
