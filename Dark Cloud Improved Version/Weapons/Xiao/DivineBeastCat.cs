@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 
 namespace Dark_Cloud_Improved_Version
@@ -162,7 +163,21 @@ namespace Dark_Cloud_Improved_Version
         // The cat's own light: Draw__10CCharacter (0x137xxx) adds this float3 (CCharacter +0xCE0) to the scene ambient it lights
         // the model with (0..255 scale; the dungeon's own key lights are ~100-120). Brightness with a slight cyan lean
         // (user 2026-09-12); scaled by the fade so the cat dims as it goes.
-        private static readonly float[] CatTint = { 12f, 24f, 48f };   // user 2026-09-12
+        // Per-weapon look (user 2026-09-13): the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel
+        // Shooter's cat wears the wings with a WHITE glow and a neutral ("dark grey") add; the Angel Gear's the wings with a
+        // GOLD glow and a gold-white add. The glow discs are baked textures (build_cat_pack.GLOW_VARIANTS) the glow cave binds by
+        // the name written to Mailbox.CatGlowName; the wings are two mesh nodes the copy hides by zeroing their geometry pointer.
+        private sealed class WeaponLook { public string Glow; public float[] Tint; public bool Wings; }
+        private static readonly Dictionary<int, WeaponLook> Looks = new Dictionary<int, WeaponLook>
+        {
+            { Items.divinebeasttitle, new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false } },   // user 2026-09-12
+            { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 40f, 40f, 40f }, Wings = true  } },
+            { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 64f, 52f, 20f }, Wings = true  } },
+        };
+        private static WeaponLook _look = Looks[Items.divinebeasttitle];
+        private static int _weapon = -1;                                    // the weapon the resident copy was built for
+        private static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
+        private static readonly List<int> _wingMeshIdx = new List<int>();
         private const float  GlowLift  = 0f;        // units added to the glow's height (negative lowers it; user 2026-09-12: the centre sat just above the cat)
         private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (user 2026-09-12)         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
         private const float  HeadFallbackHeight = 6f;
@@ -171,6 +186,53 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<(int idx, int ticks, bool native)> _planted = new();   // native = planted by the cave (the cat's hit)
         private static bool _hitFade;                        // the hit landed: the flight follows through while the cat fades out
         private static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
+
+        // ── the PAUSE screen (user 2026-09-13: the cat used to vanish; it should wait) ──
+        // The mod's clocks are wall-clock; the copy is a chara-slot character the engine keeps stepping on the pause screen
+        // (Player.CheckDunIsPausedOrMenu's note). So on entry the copy's motion is STOPPED (flags bit 0: rate 0, blend
+        // increment 0 — it holds its frame) and the clock offset grows by the pause; nothing else ticks. The cave hooks the
+        // shot-pool step, which the pause screen does not run.
+        private static DateTime _pausedAt = DateTime.MinValue;
+        private static TimeSpan _pauseOffset = TimeSpan.Zero;
+        private static DateTime Now => DateTime.UtcNow - _pauseOffset;       // the cat's clock: stands still through the PAUSE screen
+        private const int MotionStop = 0x1;                                   // CCharacter.MotionFlags bit 0 (CharacterAddresses: stop)
+        private static void FreezeForPause()
+        {
+            if (_pausedAt != DateTime.MinValue) return;
+            _pausedAt = DateTime.UtcNow;
+            long f = SlotAddr() + CCharacter.MotionFlags;
+            Memory.WriteInt(f, Memory.ReadInt(f) | MotionStop);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "paused — cat held");
+        }
+        private static void Resume()
+        {
+            if (_pausedAt == DateTime.MinValue) return;
+            _pauseOffset += DateTime.UtcNow - _pausedAt; _pausedAt = DateTime.MinValue;
+            if (Active) { long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~MotionStop); }
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {_pauseOffset.TotalSeconds:F1} s in all");
+        }
+
+        /// <summary>The glow disc for this weapon: written where the glow cave reads it (CatGlowName), and the cave is told
+        /// to bind again (CatGlowReady = 0).</summary>
+        private static void WriteGlowName()
+        {
+            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(_look.Glow).CopyTo(nm, 0);
+            Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
+        }
+
+        /// <summary>A weapon without wings. DISABLED for now (2026-09-13): the first cut zeroed the two wing mesh nodes'
+        /// geometry pointers (SlingshotProp's shotpt precedent), but those frames are SKINNED — their .wgt runs make
+        /// MotionProc2 write the blended vertices through the frame's visual every frame, so a null pointer there is a
+        /// likely freeze (the game froze on the switch to Xiao with the Title equipped). The safe hide is to unlink the two
+        /// meshes' runs from the channel's skin list (MotionType.MotionSkinList) AND null the geometry; not done yet, so the
+        /// Title's cat shows the wings until then.</summary>
+        private const bool HideWingsEnabled = false;
+        private static void HideWings()
+        {
+            if (!HideWingsEnabled) { Console.WriteLine(Tag + "wings-off look requested, but hiding is disabled for now — wings stay visible"); return; }
+            foreach (int i in _wingMeshIdx) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
+        }
 
         internal static void Start()
         {
@@ -188,29 +250,44 @@ namespace Dark_Cloud_Improved_Version
                 {
                     bool inDun = Player.InDungeonFloor();
                     if (inDun) { HeapWatch(); sleep = WatchMs; }
+                    int weapon = inDun ? Memory.ReadUShort(WeaponHave.BattleWeaponRecord) : -1;
+                    bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
+                    bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
                     bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
-                              && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.divinebeasttitle
-                              && !Player.CheckDunIsPausedOrMenu()
+                              && Looks.ContainsKey(weapon)
+                              && !menu
                               && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
+                    if (armed && Active && weapon != _weapon)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
+                        Despawn();
+                    }
                     if (!armed)
                     {
                         if (Active) Despawn();
+                        Resume();
                         _armedSince = DateTime.MinValue;
                         _holding = false; _holdSeconds = 0;
                         Array.Clear(_seenPellet, 0, _seenPellet.Length);
                     }
+                    else if (paused)
+                    {
+                        sleep = TickMs;
+                        if (Active) { FreezeForPause(); Maintain(); }                       // hold the copy's frame; keep re-asserting it
+                    }
                     else
                     {
                         sleep = TickMs;
+                        Resume();
                         WatchHerCatChannel();
                         if (Active && ++_texCheckTick >= 30) { _texCheckTick = 0; CheckTexturesStillOurs(); }
-                        if (_armedSince == DateTime.MinValue) _armedSince = DateTime.UtcNow;
-                        if (!Active && (DateTime.UtcNow - _armedSince).TotalSeconds >= 1.0) SpawnResident();   // built once, hidden — after the switch/menu has settled (textures still register for a moment)
+                        if (_armedSince == DateTime.MinValue) _armedSince = Now;
+                        if (!Active && (Now - _armedSince).TotalSeconds >= 1.0) SpawnResident();   // built once, hidden — after the switch/menu has settled (textures still register for a moment)
                         TrackCharge();
                         if (_native) PollCave(); else WatchPellets();
                         if (Active) Step();
                     }
-                    RetirePlanted();
+                    if (!paused) RetirePlanted();
                 }
                 catch (Exception e)
                 {
@@ -222,8 +299,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ─────────────────────────────────────── character heap watch ──────────────────────────────────────
-        // The dungeon's character/weapon/effect data share ONE CDataAlloc2 pool of 210000 × 16 B vanilla (240000
-        // with DunPatches' heap raise; LoadChara2: chara @0x1F06660, weapons @0x1F06670, effects @0x1F06680; the
+        // The dungeon's character/weapon/effect data share ONE CDataAlloc2 pool of 210000 × 16 B vanilla (260000 × 16 =
+        // 4.16 MB with DunPatches' heap raise; LoadChara2: chara @0x1F06660, weapons @0x1F06670, effects @0x1F06680; the
         // chara cap @+12 is the pool size, the others are whatever the earlier ones left). An
         // overflow is a SILENT spin (Alloc__14CDataAlloc2<1>Fi: printf + while(true)) — i.e. a freeze. Xiao only
         // ever loads through the party switch, so the watch runs on every floor for every character and logs the
@@ -286,8 +363,8 @@ namespace Dark_Cloud_Improved_Version
             bool holding = state == PlayerAction.XiaoShotDraw || state == PlayerAction.XiaoShotHold;
             if (holding)
             {
-                if (!_holding) { _holding = true; _holdStart = DateTime.UtcNow; _flashed = false; }
-                _holdSeconds = (DateTime.UtcNow - _holdStart).TotalSeconds;
+                if (!_holding) { _holding = true; _holdStart = Now; _flashed = false; }
+                _holdSeconds = (Now - _holdStart).TotalSeconds;
                 if (_holdSeconds >= ChargeSeconds && !_flashed)
                 {
                     Player.FlashChargeComplete(); _flashed = true;
@@ -329,18 +406,23 @@ namespace Dark_Cloud_Improved_Version
         /// retried after a pause rather than every tick.</summary>
         private static void SpawnResident()
         {
-            if (_spawnFailedAt != DateTime.MinValue && (DateTime.UtcNow - _spawnFailedAt).TotalSeconds < 5) return;
+            if (_spawnFailedAt != DateTime.MinValue && (Now - _spawnFailedAt).TotalSeconds < 5) return;
             _scale = 0f; _alpha = 0f; _target = -1; _pelletSlot = -1; _caveOwns = false; _disarmTicks = 0;
             _yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
             _x = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos);
             _h = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
             _y = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
-            if (!Spawn()) { _spawnFailedAt = DateTime.UtcNow; return; }
+            if (!Spawn()) { _spawnFailedAt = Now; return; }
             _spawnFailedAt = DateTime.MinValue;
+            _weapon = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
+            _look = Looks.TryGetValue(_weapon, out var lk) ? lk : Looks[Items.divinebeasttitle];
+            WriteGlowName();
+            if (!_look.Wings) HideWings();
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow {_look.Glow}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy)");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
-            _phase = Phase.Resident; _phaseStart = DateTime.UtcNow; _hitDone = false; _fade = 0;
+            _phase = Phase.Resident; _phaseStart = Now; _hitDone = false; _fade = 0;
             SetKey(KeyLeap);
             Maintain();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
@@ -379,7 +461,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatScaleMul, CatScale);          // the size the cave grows the cat to on the pellet
             _glowFade = -1;
             Memory.WriteInt  (CodeCaves.Mailbox.CatGlowFlags, GlowFlags);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatGlowReady, 0);                 // the copy's texture entries are remade per spawn: rebind
+            WriteGlowName();                                                      // (clears CatGlowReady: the copy's texture entries are remade per spawn — rebind)
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowPull, GlowPull);
             Memory.WriteFloat(CodeCaves.Mailbox.CatGlowLift, GlowLift);
             Memory.WriteFloat(CodeCaves.Mailbox.CatBlendDefault, BlendDefault);
@@ -412,7 +494,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
             _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
-            _phase = Phase.Resident; _phaseStart = DateTime.UtcNow;
+            _phase = Phase.Resident; _phaseStart = Now;
             Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charge complete — the cave binds the next pellet on its birth frame");
         }
@@ -489,7 +571,7 @@ namespace Dark_Cloud_Improved_Version
                         WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
                         CrushGuard(_target);                                      // Guard Crush: the target's guard windows are dropped for this flight
                         ApplyFlightTime();
-                        _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false; _boundAt = DateTime.UtcNow; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
+                        _phase = Phase.Flying; _phaseStart = Now; _hitDone = false; _boundAt = Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                         Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
                         WriteTargetAim();
@@ -500,7 +582,7 @@ namespace Dark_Cloud_Improved_Version
                 case 4:                                                          // falling: off the pellet's line, or a flying pounce's arc
                     if (_phase != Phase.Falling)
                     {
-                        _phase = Phase.Falling; _phaseStart = DateTime.UtcNow;
+                        _phase = Phase.Falling; _phaseStart = Now;
                         if (Memory.ReadInt(CodeCaves.Mailbox.CatPounceFly) != 0)
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
@@ -513,7 +595,7 @@ namespace Dark_Cloud_Improved_Version
                 case 5:                                                          // land clip started (ahead of touchdown); the cave stops momentum at paw contact and runs at clip end
                     if (_phase != Phase.Landing)
                     {
-                        _phase = Phase.Landing; _phaseStart = DateTime.UtcNow;
+                        _phase = Phase.Landing; _phaseStart = Now;
                         long lp = SlotAddr() + CCharacter.CharPos;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
                     }
@@ -522,12 +604,12 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (_phase != Phase.Running)
                     {
-                        _phase = Phase.Running; _phaseStart = DateTime.UtcNow; _pounceLogged = false; _pounceKind = 0;
+                        _phase = Phase.Running; _phaseStart = Now; _pounceLogged = false; _pounceKind = 0;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
                     }
                     long rp = SlotAddr() + CCharacter.CharPos;
                     _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
-                    double rt = (DateTime.UtcNow - _phaseStart).TotalSeconds;
+                    double rt = (Now - _phaseStart).TotalSeconds;
                     float dist = float.MaxValue;
                     if (_target >= 0 && !IsLiveEnemy(_target))
                     {
@@ -566,7 +648,7 @@ namespace Dark_Cloud_Improved_Version
                     bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
                     if (blocked && !_blockedLogged) { _blockedLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "a wall stops the cat — waiting"); }
                     if (!blocked) _blockedLogged = false;
-                    if ((DateTime.UtcNow - _boundAt).TotalSeconds >= LifetimeSeconds)
+                    if ((Now - _boundAt).TotalSeconds >= LifetimeSeconds)
                     {
                         Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                         _scale = 1f; _caveOwns = false;
@@ -579,7 +661,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
                     break;
                 case 10:                                                         // ready: in place before the jump
-                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = DateTime.UtcNow; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
+                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = Now; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
                     break;
                 case 2:
                 {
@@ -608,7 +690,7 @@ namespace Dark_Cloud_Improved_Version
                                   : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
             _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0; _glowFade = -1;
             PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = DateTime.UtcNow; _hitDone = false;
+            _phase = Phase.Flying; _phaseStart = Now; _hitDone = false;
             Maintain();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"cat pinned to pellet slot {slot} from ({_px:F1},{_ph:F1},{_py:F1})" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + " [thread follower]");
@@ -619,7 +701,7 @@ namespace Dark_Cloud_Improved_Version
         {
             _alpha = 0f; _scale = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = false; _hitFade = false;
             RestoreGuardsNow();
-            _phase = Phase.Resident; _phaseStart = DateTime.UtcNow;
+            _phase = Phase.Resident; _phaseStart = Now;
             SetKey(KeyLeap);
             Maintain();
         }
@@ -824,7 +906,7 @@ namespace Dark_Cloud_Improved_Version
         private static void FadeKeepingPose()
         {
             _key = Memory.ReadInt(SlotAddr() + CCharacter.MotionId);
-            _phase = Phase.Fading; _phaseStart = DateTime.UtcNow; _fade = 0;
+            _phase = Phase.Fading; _phaseStart = Now; _fade = 0;
         }
         private static int _pelletDamage;
         private static bool _pounceLogged, _sitLogged;
@@ -852,7 +934,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Step()
         {
-            double t = (DateTime.UtcNow - _phaseStart).TotalSeconds;
+            double t = (Now - _phaseStart).TotalSeconds;
             if (_hitFade)                                                        // after a landed hit: keep flying/landing under the cave, fade out meanwhile
             {
                 _fade++; _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
@@ -961,7 +1043,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void Enter(Phase p, int key)
         {
-            _phase = p; _phaseStart = DateTime.UtcNow;
+            _phase = p; _phaseStart = Now;
             SetKey(key);
         }
 
@@ -1057,6 +1139,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.NodePool, block);
             _copyRoot = poolG;
             FindHead(block);
+            _wingMeshIdx.Clear();
+            foreach (string nm in WingMeshNodes) { int wi = FindNode(block, nm); if (wi >= 0) _wingMeshIdx.Add(wi); }
 
             if (!CopyMeshes()) return false;
             if (!RegisterSlot(min, blockSize)) return false;
@@ -1124,11 +1208,24 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The cat's software-skinned meshes get their own copies in the MeshCave (CopyMeshNodes'
         /// recipe). HER copy of the cat skin sits collapsed under the hidden root, and MotionProc2 would skin a
         /// shared buffer for whichever character stepped last — the copy must own it, or the spawn is refused.</summary>
+        // Two arenas (2026-09-13, the wings): every mesh's visual + first VU buffer + MDT goes in the MeshCave (below the Angel
+        // Gear prop's region); the SECOND VU buffers and the skin sources go wherever they fit — the MeshCave's remainder,
+        // else the overflow cave borrowed from CharacterClone's cloth caves (idle while Xiao is the active character).
+        private static long _ovFree;
+        private static long TakeCave(int bytes, out uint guest)
+        {
+            long need = A16L(bytes);
+            if (_caveFree + need <= CodeCaves.CatMeshCaveEnd) { long a = _caveFree; _caveFree += need; guest = (uint)(a - 0x20000000); return a; }
+            if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = (uint)(a - 0x20000000); return a; }
+            guest = 0; return 0;
+        }
         private static bool CopyMeshes()
         {
             long cave = CodeCaves.MeshCave, caveGuest = CodeCaves.MeshCaveGuest;
-            long caveEnd = CodeCaves.MeshCave + CodeCaves.MeshCaveSize - 0x1000;    // top 0x1000 = the reflector's track cave
+            long caveEnd = CodeCaves.CatMeshCaveEnd;                                // above it: the Angel Gear prop's meshes, then its track cave
+            _ovFree = CodeCaves.CatOverflowCave;
             int copied = 0;
+            var second = new List<(long vis, byte[] vuB, int vuSz, int idx)>();
             for (int i = 0; i < _nodeCount; i++)
             {
                 long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
@@ -1153,24 +1250,31 @@ namespace Dark_Cloud_Improved_Version
                 RebaseRange(visB, vu, vuSz, cVUG); RebaseRange(visB, mdt, mdtSz, cMDTG);
                 foreach (byte[] b in new[] { vuB, mdtB }) { RebaseRange(b, vu, vuSz, cVUG); RebaseRange(b, mdt, mdtSz, cMDTG); }
                 // The engine writes the skinned draw packet into buffer[DBuffID] (+0x28 / +0x2C) every frame while
-                // the GIF is still reading the other. A single-buffered copy tears (flicker); give the copy both.
-                long cVU2 = cave + need; uint cVU2G = (uint)(caveGuest + need);
-                bool twoBuffers = cVU2 + A16(vuSz) <= caveEnd;
+                // the GIF is still reading the other. A single-buffered copy tears (flicker); give the copy both — the
+                // second one is placed after every mesh's primary data has a home (second pass below).
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x18);
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x28);
-                BitConverter.GetBytes(twoBuffers ? cVU2G : cVUG).CopyTo(visB, 0x2c);
+                BitConverter.GetBytes(cVUG).CopyTo(visB, 0x2c);
                 Memory.WriteBytesBatch(cVU, vuB);
-                if (twoBuffers) Memory.WriteBytesBatch(cVU2, vuB);
                 Memory.WriteBytesBatch(cMDT, mdtB);
                 Memory.WriteBytesBatch(cVis, visB);
                 Memory.WriteUInt(node + CFrameVu1.GeomPtr, cVisG);
-                if (twoBuffers) need += A16(vuSz);
                 cave += need; caveGuest += need; copied++;
-                _skinNodes.Add((i, cMDT, mdtSz, cVU, twoBuffers ? cVU2 : 0L, vuSz));
+                _skinNodes.Add((i, cMDT, mdtSz, cVU, 0L, vuSz));
+                second.Add((cVis, vuB, vuSz, _skinNodes.Count - 1));
                 Console.WriteLine(Tag + $"mesh n{i} ({ReadName((uint)(CodeCaves.NodePoolGuest + i * CFrameVu1.NodeStride))}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
             }
             _caveFree = cave;
             if (copied == 0) { Console.WriteLine(Tag + "no software-skinned cat mesh found — refusing to share her collapsed copy of the skin"); return false; }
+            foreach (var (vis, vuB, vuSz, idx) in second)                          // second VU buffers: MeshCave remainder, else the overflow cave
+            {
+                long cVU2 = TakeCave(vuSz, out uint cVU2G);
+                if (cVU2 == 0) { Console.WriteLine(Tag + $"mesh n{_skinNodes[idx].node}: no room for a second VU buffer — single-buffered (may flicker)"); continue; }
+                Memory.WriteBytesBatch(cVU2, vuB);
+                Memory.WriteUInt(vis + 0x2c, cVU2G);
+                var e = _skinNodes[idx]; _skinNodes[idx] = (e.node, e.mdt, e.mdtSz, e.vu, cVU2, e.vuSz);
+            }
+            Console.WriteLine(Tag + $"mesh caves: main {_caveFree - CodeCaves.MeshCave:N0} of {CodeCaves.CatMeshCaveEnd - CodeCaves.MeshCave:N0} B, overflow {_ovFree - CodeCaves.CatOverflowCave:N0} of {CodeCaves.CatOverflowCaveSize:N0} B");
             return true;
         }
 
@@ -1186,14 +1290,14 @@ namespace Dark_Cloud_Improved_Version
         /// matrix taken from the table row the caller built from the copied node.</summary>
         private static bool BuildSkinSources(byte[] fib)
         {
-            long cave = A16L(_caveFree), caveEnd = CodeCaves.MeshCave + CodeCaves.MeshCaveSize - 0x1000;
             foreach (var (node, mdt, _, _, _, _) in _skinNodes)
             {
                 int count = Memory.ReadInt(mdt + CVisualMDT.MdtVertCount);
                 int vOff  = Memory.ReadInt(mdt + CVisualMDT.MdtVertOffset);
                 if (count <= 0 || count > 3000 || vOff <= 0) { Console.WriteLine(Tag + $"skin n{node}: odd MDT header (count {count}, verts @+0x{vOff:X})"); return false; }
                 int bytes = count * 16;
-                if (cave + bytes > caveEnd) { Console.WriteLine(Tag + "skin source vertices do not fit the MeshCave"); return false; }
+                long cave = TakeCave(bytes, out uint caveG);
+                if (cave == 0) { Console.WriteLine(Tag + "skin source vertices do not fit the mesh caves"); return false; }
                 byte[] src = Memory.ReadBytesBatch(mdt + vOff, bytes);
                 if (src == null) return false;
                 int e = node * MotionType.FrameInfEntry;
@@ -1208,11 +1312,9 @@ namespace Dark_Cloud_Improved_Version
                 }
                 Memory.WriteBytesBatch(cave, dst);
                 BitConverter.GetBytes(count).CopyTo(fib, e + 4);
-                BitConverter.GetBytes((uint)(cave - 0x20000000)).CopyTo(fib, e + 8);
-                Console.WriteLine(Tag + $"skin n{node}: {count} source vertices built at 0x{cave - 0x20000000:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
-                cave += A16(bytes);
+                BitConverter.GetBytes(caveG).CopyTo(fib, e + 8);
+                Console.WriteLine(Tag + $"skin n{node}: {count} source vertices built at 0x{caveG:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
             }
-            _caveFree = cave;
             return true;
         }
 
@@ -1253,7 +1355,7 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < CCharacter.MotionSlots; i++)
                 sb.Append($" ch{i}=0x{(uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + i * 4):X8}/{Memory.ReadInt(CCharacter.Base + ChanKeyStart + i * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + i * 4)}");
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(DateTime.UtcNow - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
+                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(Now - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
         }
 
         /// <summary>Put her channel-1 pointer and key range back when the inline MOTION struct still holds its data
@@ -1293,7 +1395,7 @@ namespace Dark_Cloud_Improved_Version
             if (mstr == null) return false;
             int fiSize = (_nodeCount + 1) * MotionType.FrameInfEntry;
             int bmSize = (_nodeCount + 1) * MotionType.BoneMtxEntry;
-            if (fiSize > CodeCaves.FrameInfCaveSize || bmSize > CodeCaves.BoneMtxCaveSize) { Console.WriteLine(Tag + "bone buffers exceed the caves"); return false; }
+            if (fiSize > CodeCaves.CatFrameInfCaveSize || bmSize > CodeCaves.CatBoneMtxCaveSize) { Console.WriteLine(Tag + "bone buffers exceed the caves"); return false; }
             uint poolG = (uint)CodeCaves.NodePoolGuest;
             // FRAME_INF is indexed by NODE (AnimeDataInit 0x1493A0: entry i = {parent index, skin vertex count, →
             // bind-vertex copy, bind matrix @+0x10, two scratch matrices @+0x50/+0x90}). The initializer fills the
@@ -1440,9 +1542,9 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours (a plain fade, no shrink — user 2026-09-12)
             float lit = Math.Max(0f, Math.Min(1f, _alpha));
-            Memory.WriteFloat(s + CCharacter.CharaTint,     CatTint[0] * lit);      // ambient ADD: brightness + cyan lean
-            Memory.WriteFloat(s + CCharacter.CharaTint + 4, CatTint[1] * lit);
-            Memory.WriteFloat(s + CCharacter.CharaTint + 8, CatTint[2] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint,     _look.Tint[0] * lit);   // ambient ADD, per weapon (Looks)
+            Memory.WriteFloat(s + CCharacter.CharaTint + 4, _look.Tint[1] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint + 8, _look.Tint[2] * lit);
             Memory.WriteFloat(s + CCharacter.CharRot,     0f);
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
             Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
@@ -1476,9 +1578,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteUInt (s + CCharacter.CharModel, 0);
             RetagCatTextures(SlotTextureGroup, HerTextureBlock);
-            Active = false; _key = -1; _target = -1;
+            Active = false; _key = -1; _target = -1; _weapon = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
-            _lastDespawn = DateTime.UtcNow;
+            _lastDespawn = Now;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
         }
 
@@ -1495,7 +1597,7 @@ namespace Dark_Cloud_Improved_Version
         private const int  TexEntries = 0x10F8, TexStride = 0x50, TexMaxEntries = 0xC4, TexName = 8;
         private const short HerTextureBlock = 0x11;
         private const short SlotTextureGroup = (short)(DungeonCharaDraw.CharaTexBase + Slot);
-        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catglow" };   // catglow = the blue torch-glow disc (build_cat_pack.GLOW_NAME)
+        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catglow", "catwing", "catgloww", "catglowg" };   // catglow = the blue torch-glow disc (build_cat_pack.GLOW_NAME); catwing = the wings' flat white; catgloww/g = the white / gold discs
         // A block descriptor (CTextureBlock, 0x3C bytes at manager+0x18+block*0x3C): +0x20 VRAM base, +0x24 VRAM top,
         // +0x28 loaded flag, +0x30 dirty watermark. ReloadTexture re-uploads an entry only if its VRAM address is at or
         // below the watermark (capped by the block's top) or the loaded flag is 0 — so a block whose base/top are 0

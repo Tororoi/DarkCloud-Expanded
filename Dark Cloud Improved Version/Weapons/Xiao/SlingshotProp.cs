@@ -394,7 +394,7 @@ namespace Dark_Cloud_Improved_Version
         /// packet + MDT into the MeshCave, internal refs re-based, single-buffered.</summary>
         private static bool CopyMesh()
         {
-            long cave = CodeCaves.MeshCave; long caveGuest = CodeCaves.MeshCave - 0x20000000;
+            long cave = CodeCaves.PropMeshCave; long caveGuest = CodeCaves.PropMeshCave - 0x20000000;   // above the cat's meshes (both can be up on the Angel Gear)
             long caveEnd = TrackCave;                       // top TrackCaveSize bytes hold the cloned track list
             int copied = 0;
             for (int i = 0; i < _nodeCount; i++)
@@ -630,6 +630,7 @@ namespace Dark_Cloud_Improved_Version
 
             int fiSize = (_nodeCount + 1) * MotionType.FrameInfEntry;
             int bmSize = (_nodeCount + 1) * MotionType.BoneMtxEntry;
+            if (fiSize > CodeCaves.PropFrameInfCaveSize || bmSize > CodeCaves.PropBoneMtxCaveSize) { Console.WriteLine(Tag + "bone buffers exceed the prop's caves"); return false; }
             uint fiOld = 0, fiNew = 0, bmOld = 0, bmNew = 0, trkOld = 0, trkNew = 0, ktOld = 0, ktNew = 0;
             int chans = 0;
             for (int s = 0; s < CCharacter.MotionSlots; s++)
@@ -645,7 +646,7 @@ namespace Dark_Cloud_Improved_Version
                     if (fiNew == 0)
                     {
                         byte[] fib = Memory.ReadBytesBatch(Memory.ToMmu(fi), fiSize);
-                        if (fib != null) { Memory.WriteBytesBatch(CodeCaves.FrameInfCave, fib); fiOld = fi; fiNew = (uint)CodeCaves.FrameInfCaveGuest; }
+                        if (fib != null) { Memory.WriteBytesBatch(CodeCaves.PropFrameInfCave, fib); fiOld = fi; fiNew = (uint)CodeCaves.PropFrameInfCaveGuest; }
                     }
                     if (fiNew != 0) BitConverter.GetBytes(fiNew).CopyTo(mstr, MotionType.FrameInfPtr);
                 }
@@ -655,7 +656,7 @@ namespace Dark_Cloud_Improved_Version
                     if (bmNew == 0)
                     {
                         byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
-                        if (bmb != null) { Memory.WriteBytesBatch(CodeCaves.BoneMtxCave, bmb); bmOld = bm; bmNew = (uint)(CodeCaves.BoneMtxCave & Memory.PhysAddrMask); }
+                        if (bmb != null) { Memory.WriteBytesBatch(CodeCaves.PropBoneMtxCave, bmb); bmOld = bm; bmNew = (uint)(CodeCaves.PropBoneMtxCave & Memory.PhysAddrMask); }
                     }
                     if (bmNew != 0) BitConverter.GetBytes(bmNew).CopyTo(mstr, MotionType.BoneMtxPtr);
                 }
@@ -687,9 +688,10 @@ namespace Dark_Cloud_Improved_Version
                     if (trkNew == 0) { uint nh = CloneTracks(head); if (nh != 0) { trkOld = head; trkNew = nh; } }
                     if (trkNew != 0 && head == trkOld) BitConverter.GetBytes(trkNew).CopyTo(mstr, MotListHead);
                 }
-                long cloneChan = CodeCaves.MotionCave + (long)s * MotionStructSize;
+                if (s >= CodeCaves.PropMotionSlot0) { Console.WriteLine(Tag + $"weapon motion slot {s} beyond the prop's channels"); return false; }
+                long cloneChan = CodeCaves.MotionCave + (long)(CodeCaves.PropMotionSlot0 + s) * MotionStructSize;   // channels 4..7: the cat owns 0
                 Memory.WriteBytesBatch(cloneChan, mstr);
-                BitConverter.GetBytes((uint)(CodeCaves.MotionCaveGuest + s * MotionStructSize)).CopyTo(buf, po);
+                BitConverter.GetBytes((uint)(CodeCaves.MotionCaveGuest + (CodeCaves.PropMotionSlot0 + s) * MotionStructSize)).CopyTo(buf, po);
                 chans++;
             }
             if (chans == 0) { Console.WriteLine(Tag + "weapon has no motion channel?"); return false; }

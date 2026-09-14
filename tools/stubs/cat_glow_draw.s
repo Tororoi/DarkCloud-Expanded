@@ -2,8 +2,10 @@
 # Hooks BOTH of the dungeon draw loop's torch passes (dun 0x1DAEBF8 `jal DrawFire__11CDungeonMap` and 0x1DAEC10
 # `jal DrawFireFreeStyle__11CDungeonMap`): each entry performs the original call untouched, then — if the mod says the
 # cat is up (CatGlowOn) — draws our glow at the middle of the cat's torso with DrawFire__9CFireOmni (0x161AC0), exactly
-# as the wall torches are drawn, using the `catglow` texture the cat pack bakes (the Gallery of Time's purple torch disc
-# re-tinted blue) for BOTH sprite layers, so no dungeon flame haze leaks in. A CFireOmni object (0x40 B) lives in the
+# as the wall torches are drawn, using the glow disc the cat pack bakes (the Gallery of Time's purple torch disc re-tinted:
+# `catglow` blue for the Divine Beast Title, `catgloww` white for the Angel Shooter, `catglowg` gold for the Angel Gear —
+# the mod names the one to draw in the mailbox, CatGlowName +0x258, 16 B NUL-terminated) for BOTH sprite layers, so no
+# dungeon flame haze leaks in. (This cave's own first 8 bytes still spell "catglow": the ELF patcher checks them.) A CFireOmni object (0x40 B) lives in the
 # cat mailbox at 0x01FB4200; its textures are bound once per charge (CatGlowReady) since the copy's texture entries are
 # re-made per spawn. Runs inside the map's own draw pass, so the VIF1 packet is already open for sprites.
 # Layout: +0x00 "catglow\0"   +0x08 entry A   +0x20 entry B   (DunPatches jumps to the entries by these offsets.)
@@ -13,6 +15,7 @@
 #   world positions (world matrix +0x150, translation row +0x180)   +0x1F8 CatGlowReady int (cave; mod clears per charge)
 #   +0x1FC CatGlowPull float how far toward the camera the sprite is pulled (mod; the torches use 15.0)
 #   +0x240 CatGlowLift float added to the glow's height (mod; negative lowers it)
+#   +0x258 CatGlowName char[16] the texture entry to bind (mod, before clearing CatGlowReady); empty = nothing drawn
 #   +0x200..+0x240 the CFireOmni object.
 .word 0x67746163               # +0x00 "catg"
 .word 0x00776F6C               # +0x04 "low\0"
@@ -59,7 +62,7 @@ sw    $t7, 0x000C($t6)         # +0x0C = 15.0 (__ct__9CFireOmni)
 lui   $a0, 0x01C7
 ori   $a0, $a0, 0x5870         # the texture manager
 lui   $a1, 0x01FB
-ori   $a1, $a1, 0x2000         # "catglow" (this cave's first 8 bytes)
+ori   $a1, $a1, 0x4258         # the name the mod wrote to the mailbox (CatGlowName)
 jal   0x001312D0               # GetTexture(manager, name, -1)
 addiu $a2, $zero, -1           # (delay slot)
 beq   $v0, $zero, ret          # not registered (the copy is down): nothing to draw
@@ -68,7 +71,7 @@ sw    $v0, 0x0010($sp)
 lui   $a0, 0x01FB
 ori   $a0, $a0, 0x4200
 lw    $a1, 0x0010($sp)
-jal   0x00161AA0               # SetTexture(obj, catglow, catglow): both sprite layers are our disc
+jal   0x00161AA0               # SetTexture(obj, disc, disc): both sprite layers are our disc
 move  $a2, $a1                 # (delay slot)
 lui   $t0, 0x01FB
 addiu $t5, $zero, 1

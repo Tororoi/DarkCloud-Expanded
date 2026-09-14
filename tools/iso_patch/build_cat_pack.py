@@ -56,6 +56,12 @@ GLOW_NAME = "catglow"                           # the cat's glow: that 64x64 RGB
 GLOW_CORE  = (15, 219, 255)                     # radial gradient: this at the centre …
 GLOW_OUTER = (60, 67, 255)                      # … to this at the disc's edge (user 2026-09-12)
 GLOW_CROSS = 0.125                              # radius fraction where the mix is halfway (0.5 = linear); smaller = the blue reaches further in (user 2026-09-12)
+# Per-weapon glows (user 2026-09-13): the Divine Beast Title keeps the blue disc; the Angel Shooter's cat glows WHITE, the
+# Angel Gear's GOLD. Same disc, re-tinted; the runtime names the one to draw (mailbox CatGlowName → the glow cave).
+GLOW_VARIANTS = {"catgloww": ((255, 255, 255), (215, 225, 255)),   # white, a cool edge
+                 "catglowg": ((255, 238, 180), (255, 176, 40))}    # gold
+DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
+WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree
@@ -67,7 +73,7 @@ CAT_PARENT    = -1                 # UNPARENTED: LoadMDSFile 0x1262B0 calls SetP
                                    # smaller than the dungeon's.) It still sits in her frame ARRAY for the runtime scan.
 FLAT_TEXTURES = False              # real cat fur (user 2026-09-10: blue/glow will be flash effects, not a retexture)
 FLAT_RGBA     = (150, 190, 255, 0x80)   # pale blue — the "blue cat" — GS alpha 0x80 = opaque
-VERSION_MARK  = "//catpack v16 glow cross 12.5"
+VERSION_MARK  = "//catpack v17 wings"
 KEY_START     = 64                 # cat channel key ids 64.. (her own ids end at 45)
 CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat windows; ids = KEY_START + index
     (10,  20,  0.1,  "cat stand"),
@@ -252,6 +258,43 @@ def graft_mds(bp, spl):
     return bytes(table) + bytes(recs) + mblock + bytes(chunks), nb, K
 
 
+def graft_extra_nodes(payload, extra):
+    """Append `extra` = [(name, parent index (absolute in the payload's table), local16, mdt bytes or None), …] to an .mds
+    payload: the records go after the last node, every existing mesh offset shifts by the inserted records, and the new
+    MDTs land after the existing mesh block (16-aligned). Same layout rules as graft_mds."""
+    n_old = struct.unpack_from("<I", payload, 8)[0]
+    stride = struct.unpack_from("<I", payload, 0x14)[0]
+    if stride != 0x70:
+        raise SystemExit("mds stride")
+    mesh0 = 0x18 + n_old * 0x70 - 8
+    delta = len(extra) * 0x70
+    head = bytearray(payload[:mesh0]) + struct.pack("<II", n_old, 0x70)   # the prefix the first MDT header had absorbed
+    struct.pack_into("<I", head, 8, n_old + len(extra))
+    for i in range(n_old):
+        mo = struct.unpack_from("<I", head, 0x18 + i * 0x70 + 0x20)[0]
+        if mo:
+            struct.pack_into("<I", head, 0x18 + i * 0x70 + 0x20, mo + delta)
+    mblock = bytes(payload[mesh0:])
+    p_start = 0x18 + (n_old + len(extra)) * 0x70 - 8 + len(mblock)
+    chunks = b""
+    recs = bytearray()
+    for k, (name, par, local16, mdt) in enumerate(extra):
+        nm = name.encode("ascii")
+        if len(nm) > 0x1F:
+            raise SystemExit(f"node name too long: {name}")
+        rec = bytearray(0x68)
+        rec[:len(nm)] = nm
+        struct.pack_into("<I", rec, 0x20, p_start + len(chunks) if mdt else 0)
+        struct.pack_into("<i", rec, 0x24, par)
+        struct.pack_into("<16f", rec, 0x28, *local16)
+        if mdt:
+            chunks += mdt + b"\0" * ((-len(mdt)) % 16)
+        recs += rec + struct.pack("<II", n_old + k + 1, 0x70)
+    out = bytes(head) + bytes(recs)
+    out = out[:-8] + mblock + chunks                                       # the last record's tail merges into the first MDT again
+    return out
+
+
 def trim_tracks(mot, windows):
     """Keep only the keyframes inside the clip windows (+ the bracketing key on each side). Bone ids are
     left RELATIVE to the cat root — the channel only ever plays on the copy, whose root is the cat root."""
@@ -268,7 +311,7 @@ def trim_tracks(mot, windows):
     return mot
 
 
-def build_cfg(text, nl):
+def build_cfg(text, nl, extra_dbuff=()):
     lines = text.split(nl)
     out, alloc_done, chan_done = [], False, False
     last_alloc = max((i for i, ln in enumerate(lines) if ln.strip().startswith("ALLOC_DBUFF")), default=-1)
@@ -286,13 +329,19 @@ def build_cfg(text, nl):
         out.append(ln)
         if i == last_alloc:
             out.append(f'ALLOC_DBUFF "{CAT_SKIN_NAME}"')
+            for nm in extra_dbuff:                                        # the wing meshes: skinned → double-buffered too
+                out.append(f'ALLOC_DBUFF "{nm}"')
     while out and out[-1].strip() == "":
         out.pop()
     out += [""] + block
     return nl.join(out)
 
 
-def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes):
+def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes, dran_bytes=None, wings=True, log=print):
+    """The cat bake. With `wings` (and Dran's pack) the viewer's wing graft is baked on top: 8 wing bones + 2 wing meshes,
+    their .wgt/.mot/.bbp data, a flat white wing texture and the white/gold glow discs."""
+    if wings and dran_bytes is None:
+        raise SystemExit("wings need Dran's pack (DRAN_CHR)")
     base, cat, flt = mc.Pack.parse(base_bytes), mc.Pack.parse(cat_bytes), mc.Pack.parse(float_bytes)
     glow_pack = mc.Pack.parse(glow_bytes)
     glow_img = glow_pack.find("fire.img")
@@ -348,17 +397,52 @@ def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes):
     out = base.rebuild()
     rep["size"] = (len(base_bytes), len(out))
     verify(base_bytes, out, cat_bytes)
+    if not wings:
+        return out, rep
+    # ── the wings, baked from the viewer's graft on the wingless pack just built ──
+    import wing_bake
+    wd = wing_bake.build(lambda name: dran_bytes if name == DRAN_CHR else None, out, rep, cat_bytes, log=log)
+    extra = [(nm, nb + par, local16, mdt) for nm, par, local16, mdt in wd["nodes"]]   # parents → absolute host indices
+    base.replace_payload(HOST_MDS, graft_extra_nodes(base.find(HOST_MDS).payload, extra))
+    base.replace_payload(HOST_BBP, base.find(HOST_BBP).payload + wd["bbp"])
+    base.replace_payload("cat.bbp", base.find("cat.bbp").payload + wd["bbp"])
+    bank = Bank(base.find(HOST_IMG).payload)
+    items = [(n, bank.block(n)) for n, _ in bank.entries]
+    items.append((wd["texture"], flat_tim2(cimg.block("c04cat01"), WING_RGBA)))
+    light = Bank(glow_img.payload).block("lightling")
+    for nm, (core, outer) in GLOW_VARIANTS.items():
+        items.append((nm, glow_tim2(light, core=core, outer=outer)))
+    if len({n for n, _ in items}) != len(items):
+        raise SystemExit("texture entry name clash (wings)")
+    base.replace_payload(HOST_IMG, Bank.build(bank.magic, items))
+    rep["textures"] = [n for n, _ in items]
+    wgt2 = mc.Mot.from_record(base.find("cat.wgt")); wgt2.tracks += wd["wgt_tracks"]
+    mot2 = mc.Mot.from_record(base.find("cat.mot")); mot2.tracks += wd["mot_tracks"]
+    base.replace_payload("cat.wgt", wgt2.build_payload()); base.replace_payload("cat.mot", mot2.build_payload())
+    rep["mot_bytes"], rep["wgt_bytes"] = base.find("cat.mot").size, base.find("cat.wgt").size
+    rep["mot_keys"] = sum(len(t.keyframes) for t in mot2.tracks)
+    text2 = base.find(HOST_CFG).payload.decode("shift_jis", "replace")
+    anchor = f'ALLOC_DBUFF "{CAT_SKIN_NAME}"'
+    text2 = text2.replace(anchor, anchor + nl + nl.join(f'ALLOC_DBUFF "{nm}"' for nm in wd["alloc_dbuff"]), 1)
+    base.replace_payload(HOST_CFG, text2.encode("shift_jis", "replace"))
+    out = base.rebuild()
+    rep["nodes"] = (nb, K + len(extra)); rep["size"] = (len(base_bytes), len(out)); rep["wings"] = wd["stats"]
+    verify(base_bytes, out, cat_bytes, wings=wd)
     return out, rep
 
 
-def verify(base_bytes, new_bytes, cat_bytes):
+def verify(base_bytes, new_bytes, cat_bytes, wings=None):
     old, new, cat = mc.Pack.parse(base_bytes), mc.Pack.parse(new_bytes), mc.Pack.parse(cat_bytes)
     assert mc.Pack.parse(new.rebuild()).rebuild() == new_bytes, "pack round-trip"
     on, nn = _mds_nodes(old.find(HOST_MDS).payload), _mds_nodes(new.find(HOST_MDS).payload)
     cn = _mds_nodes(cat.find("c04cat.mds").payload)
     nb, K = len(on), len(cn)
+    X = wings["nodes"] if wings else []
     npl = new.find(HOST_MDS).payload
-    assert len(nn) == nb + K and struct.unpack_from("<I", npl, 8)[0] == nb + K, "node count"
+    assert len(nn) == nb + K + len(X) and struct.unpack_from("<I", npl, 8)[0] == nb + K + len(X), "node count"
+    for k, (nm, par, local16, mdt) in enumerate(X):                       # the wing bones and mesh nodes
+        assert nn[nb + K + k][0] == nm and nn[nb + K + k][2] == nb + par and bool(nn[nb + K + k][1]) == bool(mdt), f"wing node {nm}"
+        assert struct.unpack_from("<16f", npl, 0x18 + (nb + K + k) * 0x70 + 0x28) == tuple(struct.unpack("<16f", struct.pack("<16f", *local16))), f"wing node {nm} bind"
     assert [n[0] for n in nn[:nb]] == [n[0] for n in on], "host nodes renamed"
     assert nn[nb][0] == CAT_ROOT_NAME and nn[nb][2] == CAT_PARENT, "cat root parent"
     for k in range(1, K):
@@ -368,7 +452,7 @@ def verify(base_bytes, new_bytes, cat_bytes):
         if mo:
             assert npl[mo:mo + 4] == b"MDT\x00", f"{nm} mesh magic"
             meshes += 1
-    assert meshes == sum(1 for n in on if n[1]) + sum(1 for n in cn if n[1]), "mesh count"
+    assert meshes == sum(1 for n in on if n[1]) + sum(1 for n in cn if n[1]) + sum(1 for x in X if x[3]), "mesh count"
     opl = old.find(HOST_MDS).payload
     for i, (nm, mo, par) in enumerate(on):
         o = opl[0x18 + i * 0x70:0x18 + i * 0x70 + 0x68]
@@ -376,13 +460,29 @@ def verify(base_bytes, new_bytes, cat_bytes):
         if mo:
             struct.pack_into("<I", n, 0x20, mo)
         assert bytes(n) == o, f"host node {i} changed"
-    assert len(new.find(HOST_BBP).payload) == (nb + K) * 64, "bbp rows"
-    assert len(new.find("cat.bbp").payload) == K * 64, "cat.bbp rows"
+    assert len(new.find(HOST_BBP).payload) == (nb + K + len(X)) * 64, "bbp rows"
+    assert len(new.find("cat.bbp").payload) == (K + len(X)) * 64, "cat.bbp rows"
     for name in ("cat.mot", "cat.wgt"):
         m = mc.Mot.from_record(new.find(name))
-        assert all(0 <= t.w0 < K for t in m.tracks), f"{name} track ids must be cat-relative"
+        assert all(0 <= t.w0 < K + len(X) for t in m.tracks), f"{name} track ids must be cat-relative"
+    if wings:
+        wg = mc.Mot.from_record(new.find("cat.wgt"))
+        for nm, par, local16, mdt in X:
+            if not mdt: continue
+            M = K + [x[0] for x in X].index(nm)
+            run = [t for t in wg.tracks if t.w0 == M]
+            assert run and run[0].w1 == par and not run[0].keyframes, f"{nm} wgt reset entry"
+            bones = [t.w1 for t in run[1:]]
+            assert bones == sorted(bones) and all(0 <= b < K + len(X) for b in bones), f"{nm} wgt bone order"
+            cover = {}
+            for t in run[1:]:
+                for kf in t.keyframes: cover[kf.frame] = cover.get(kf.frame, 0) + kf.value[0]
+            nv = struct.unpack_from("<I", npl, nn[nb + M][1] + 12)[0]
+            assert set(cover) == set(range(nv)) and all(abs(v - 100) < 0.01 for v in cover.values()), f"{nm} wgt coverage ({len(cover)}/{nv})"
     text = new.find(HOST_CFG).payload.decode("shift_jis", "replace")
     assert f'ALLOC_DBUFF "{CAT_SKIN_NAME}"' in text and 'MOTION 1, "cat.mot"' in text and f"KEY_START {KEY_START}" in text, "cfg"
+    if wings:
+        assert all(f'ALLOC_DBUFF "{nm}"' in text for nm in wings["alloc_dbuff"]), "wing ALLOC_DBUFF"
     assert text.count("MOTION_END") == 2, "cfg blocks"
     last_foot = max((text.rfind(k) for k in ("FOOT", "EVENT")), default=-1)
     assert last_foot < text.index('MOTION 1, "cat.mot"'), "MOTION 1 must follow every FOOT/EVENT line (they bind to the current channel)"
@@ -392,6 +492,10 @@ def verify(base_bytes, new_bytes, cat_bytes):
     bank = Bank(new.find(HOST_IMG).payload)
     names = {n for n, _ in bank.entries}
     assert {"c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05"} <= names, "cat textures"
+    if wings:
+        assert {wings["texture"], *GLOW_VARIANTS} <= names, "wing / glow textures"
+        inf = im.tim2_info(bank.block(wings["texture"]), 0)
+        assert inf["w"] == 32 and inf["h"] == 32, "flat wing texture"
     assert {n for n, _ in Bank(old.find(HOST_IMG).payload).entries} <= names, "host textures kept"
     for n, _ in bank.entries:
         assert bank.block(n)[:4] == b"TIM2", f"texture {n} block"
@@ -486,8 +590,8 @@ def run(iso, log=print):
             f.seek(slot_of(HOST_CHR)); f.write(struct.pack("<IIII", *HOST_VANILLA))
             log("reverted dun\\mainchara\\c04b.chr to its vanilla record (older cat bake removed)")
             base = van
-        new_chr, rep = assemble(base, read_src(CAT_CHR), read_src(FLOAT_CHR), read_src(GLOW_SRC))
-        log(f"Divine Beast Title cat assembled into c04b.chr — {rep['nodes'][1]} cat nodes, {len(rep['textures'])} textures, "
+        new_chr, rep = assemble(base, read_src(CAT_CHR), read_src(FLOAT_CHR), read_src(GLOW_SRC), read_src(DRAN_CHR), log=log)
+        log(f"Divine Beast cat (wings) assembled into c04b.chr — {rep['nodes'][1]} cat nodes, {len(rep['textures'])} textures, "
             f"cat.mot {rep['mot_bytes']:,} B ({rep['mot_keys']} keys), {rep['size'][0]:,}->{rep['size'][1]:,} B")
         redirect(HOST_CHR, new_chr)
         log("DONE (Divine Beast Title cat pack)")
@@ -498,7 +602,8 @@ def _from_dc_dir(dc_dir):
     _, cat = mc.load_pack(CAT_CHR, dc_dir)
     _, flt = mc.load_pack(FLOAT_CHR, dc_dir)
     _, glow = mc.load_pack(GLOW_SRC, dc_dir)
-    return assemble(base.rebuild(), cat.rebuild(), flt.rebuild(), glow.rebuild())
+    _, dran = mc.load_pack(DRAN_CHR, dc_dir)
+    return assemble(base.rebuild(), cat.rebuild(), flt.rebuild(), glow.rebuild(), dran.rebuild())
 
 
 def main():
