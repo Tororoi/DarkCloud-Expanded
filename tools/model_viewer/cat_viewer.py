@@ -272,6 +272,10 @@ WING_STROKE = {7: {'phi': [(285.0, 78.0), (287.5, 100.0), (288.5, 100.0), (292.0
                                    # momentum taper; the lag is zero at both ends so 285 is fully stretched and 294 is the glide.
                                    # 'sweep' (deg per unit of phase lag) sweeps a lagging bone BACK about the vertical axis as well.
                                    # WING_CLIP_PITCH still applies on top (the reared body: aim the stroke at the ground).
+WING_HOLD = {8: 285.0}             # per CAT_KEYS index: the clip HOLDS the wings' pose of this cat frame (spine-local, root included)
+                                   # over its whole range — the sit (30-40, "in place when there is no enemy") wears the float-up's
+                                   # first frame: humerus raised, forearm and hand still flexed (user 2026-09-13). Keyed like the
+                                   # clip windows, with folded brackets one frame outside, so the engine's fades in/out work as usual.
 WING_CLIP_PITCH = {7: [(285.0, 30.0), (292.0, 15.0), (294.0, 10.0)]}
                                    # (with the authored WING_STROKE the flap is about the fore-aft axis and already aims down; the +45°
                                    # that aimed Dran's forward arc at the ground folded the authored wing flat against the flanks → +15°)
@@ -579,6 +583,9 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
     def wing_locals(f):
         """Spine-local (R, T) of wing1..4 per side at cat frame f: Dran's loop sample inside a WING_CLIPS window, the
         authored landing inside WING_LAND, the folded bind elsewhere. Root pinned, positions by FK."""
+        for ki, src in WING_HOLD.items():
+            hs, he = bcp.CAT_KEYS[ki][0], bcp.CAT_KEYS[ki][1]
+            if hs <= f <= he: return wing_locals(float(src))
         out = {}
         for sd, ch in SIDES.items():
             df = None
@@ -1247,7 +1254,7 @@ def build_winged_cat(cat_nodes, cat_mds, cat_pack, cat_motions, dran_nodes, dran
                 prev = (Lp, Rp, Cp)
         meshes.append(ridge)
         log(f"  ridges: {ridge['nv']} verts, {len(ridge['tris'])} tris along the two L-lines (|x| {WING_EXTEND_X_IN:g}, z {WING_EXTEND_Z_BACK:g}..{WING_EXTEND_Z_FRONT:g}; front edge to ({WING_EXTEND_X_OUT:g}, {WING_EXTEND_Z_FRONT_OUT:g}))")
-    spans = [(cs, ce) for cs, ce, ds, de, cycles, loop, ki in windows] + [WING_LAND['cat']]
+    spans = [(cs, ce) for cs, ce, ds, de, cycles, loop, ki in windows] + [WING_LAND['cat']] + [bcp.CAT_KEYS[ki][:2] for ki in WING_HOLD]
     keyed = sorted({f for cs, ce in spans for f in range(cs, ce + 1)})
     frames_all = sorted(set(keyed) | {f for cs, ce in spans for f in (cs - 1, ce + 1)})   # bind brackets where nothing else keys
     per_frame = {f: wing_locals(f) for f in frames_all}
@@ -1302,7 +1309,8 @@ def main():
     # Shown as a pre-roll of steps·speed clip frames before the clip. The vertical pounce (DivineBeastCat.cs): ready 95-105 → 10-step
     # fade → float-up 285-294 at 0.75 (feet off at 293, then HELD at 294 for the whole flight) → 16-step fade → leap 205 → hard cut
     # → land 215-227 at 0.36.
-    for i_from, i_to, label, steps, speed in ((1, 7, 'ready → float-up', 10, 0.75), (7, 4, 'float-up → leap', 16, None)):
+    for i_from, i_to, label, steps, speed in ((1, 7, 'ready → float-up', 10, 0.75), (7, 4, 'float-up → leap', 16, None),
+                                              (6, 8, 'walk → sit', 10, None), (8, 6, 'sit → walk', 10, None)):
         s0, e0, _, _ = bcp.CAT_KEYS[i_from]; s1, e1, sp1, _ = bcp.CAT_KEYS[i_to]; sp = speed or sp1
         motions.append({'name': f'seam: {label} ({steps}-step fade, then the clip at {sp})', 'gloss': '', 'start': round(s1 - steps * sp, 3),
                         'end': e1, 'speed': sp, 'id': -2, 'empty': 0, 'seam': {'from': e0, 'blend': steps, 'clipStart': s1}})
