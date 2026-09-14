@@ -381,6 +381,8 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave keeps the ready crouch looping instead of leaping (mod: the target is a mimic that has not opened yet — user 2026-09-12)
             internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastCat.CatScale at spawn; 0 = unset → the cave uses 1.0)
             internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — "catglow" (blue, Divine Beast Title), "catgloww" (white, Angel Shooter), "catglowg" (gold, Angel Gear); the glow cave binds it (mod writes it, then clears CatGlowReady)
+            internal const long CatTrackHalf     = CatBase + 0x268; // float: 0 = the flying pounce re-aims until the apex; > 0 = keep re-aiming past the apex until halfway down to the floor (the winged cat, mod)
+            internal const long CatApexH         = CatBase + 0x270; // float: the pounce's launch height, then the highest height while rising = the apex (cave)
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 

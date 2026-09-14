@@ -23,6 +23,11 @@
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int
 #   +0xA0 CatGrowInv float 1/N (mod)   +0xA4/+0xA8/+0xAC CatHeadX/H/Z float head rest offset, CAT space (mod)
 #   +0x250 CatScaleMul float the cat's full size, multiplied into the growth k (mod; 0 = unset → 1.0)
+#   +0x268 CatTrackHalf float (mod): 0 = the flying pounce re-aims only until the apex (below); > 0 = the WINGED cat keeps
+#         re-solving its horizontal speed at the target's live position past the apex, until it has fallen HALFWAY from the
+#         apex to the floor (user 2026-09-13) — in the fall block and on in the landing block (the land clip starts a lead
+#         before the floor), the horizon being the frames left to the floor; then the trajectory is committed
+#   +0x270 CatApexH float (cave): the pounce's launch height, then the highest height while rising = the apex
 #   +0x254 CatHoldReady int 1 = keep looping the ready crouch instead of leaping (mod: the target is a dormant chest-mimic);
 #         checked every crouch frame — once it has looped, release = float-up at once (the crouch IS the wind-up)
 #   +0xB0 CatSeenMask int (cave)   +0xB4/+0xB8/+0xBC CatVx/Vh/Vz float fall velocity (cave, captured at breakaway)
@@ -514,14 +519,38 @@ nop
 # horizontal speed every frame from the target's LIVE position and the frames still to fly (t, f10 — the same
 # prediction the landing uses), so the cat arrives over the enemy at touchdown even if it walks away; the facing
 # follows. The vertical arc is untouched. (f6/f12 = the cat's position after this frame's step; f0-f4 free here.)
+lwc1  $f0, 0x4268($t0)         # CatTrackHalf: > 0 = the winged cat tracks on past the apex, until halfway down
 mtc1  $zero, $f1
 nop
 nop
+nop
+.word 0x46000834               # c.lt.s $f1, $f0   (0 < CatTrackHalf ?)  fs=f1 ft=f0
+nop
+bc1t  trackhalf
 nop
 .word 0x46120834               # c.lt.s $f1, $f18   (0 < vh ? still rising)  fs=f1 ft=f18
 nop
 bc1f  clipsel                  # past the apex: the trajectory is committed
 nop
+b     trackon
+nop
+trackhalf:
+.word 0x46120834               # c.lt.s $f1, $f18   (0 < vh ? still rising)  fs=f1 ft=f18
+nop
+bc1f  pastapex
+nop
+b     trackon
+swc1  $f8, 0x4270($t0)         # (delay slot) rising: remember the height — the last one kept is the apex
+pastapex:
+lwc1  $f0, 0x4270($t0)         # apex height
+add.s $f0, $f0, $f20           # apex + floor
+add.s $f3, $f8, $f8            # 2 × height
+nop
+.word 0x46030034               # c.lt.s $f0, $f3   (apex + floor < 2·height ? still above halfway)  fs=f0 ft=f3
+nop
+bc1f  clipsel                  # halfway down: committed
+nop
+trackon:
 lw    $t5, 0x40CC($t0)         # target position vector
 beq   $t5, $zero, clipsel      # no target: keep the launch trajectory
 nop
@@ -642,6 +671,73 @@ nop
 bc1f  landhold                 # paws down: momentum gone, the clip plays on
 nop
 momentum:
+# ── the WINGED cat keeps re-aiming here too (CatTrackHalf > 0) while still airborne and still above halfway between the
+# apex and the floor: horizontal speed re-solved from the target's live position over the frames left to the floor,
+# t = (vh + sqrt(vh² + 2·g·d)) / g (the fall block's prediction); below one frame the momentum is committed ──
+lwc1  $f10, 0x4268($t0)        # CatTrackHalf
+mtc1  $zero, $f1
+nop
+nop
+nop
+.word 0x460A0834               # c.lt.s $f1, $f10   (0 < CatTrackHalf ?)  fs=f1 ft=f10
+nop
+bc1f  momentumgo
+nop
+beq   $t8, $zero, momentumgo   # on the floor this frame: committed
+nop
+lw    $t5, 0x40CC($t0)         # target position vector
+beq   $t5, $zero, momentumgo
+nop
+lwc1  $f0, 0x4270($t0)         # apex height
+add.s $f0, $f0, $f20           # apex + floor
+add.s $f3, $f8, $f8            # 2 × height
+nop
+.word 0x46030034               # c.lt.s $f0, $f3   (apex + floor < 2·height ? still above halfway)  fs=f0 ft=f3
+nop
+bc1f  momentumgo
+nop
+sub.s $f3, $f8, $f20           # d = height above the floor
+mul.s $f5, $f18, $f18          # vh²
+add.s $f9, $f7, $f7            # 2g
+mul.s $f9, $f9, $f3            # 2·g·d
+add.s $f5, $f5, $f9
+.word 0x46050144               # sqrt.s $f5, $f5  (ft=f5, fd=f5)
+add.s $f5, $f18, $f5           # vh + sqrt(…)
+div.s $f0, $f5, $f7            # t = frames until the floor (the horizon)
+lui   $t7, 0x3F80
+mtc1  $t7, $f1                 # 1.0
+nop
+nop
+nop
+.word 0x46010034               # c.lt.s $f0, $f1   (horizon < 1 ? committed)  fs=f0 ft=f1
+nop
+bc1t  momentumgo
+nop
+lwc1  $f3, 0x0000($t5)         # target x
+lwc1  $f5, 0x0008($t5)         # target z
+sub.s $f3, $f3, $f6            # dx
+sub.s $f5, $f5, $f12           # dz
+div.s $f16, $f3, $f0           # vx = dx / horizon
+div.s $f14, $f5, $f0           # vz
+swc1  $f16, 0x40B4($t0)        # CatVx
+swc1  $f14, 0x40BC($t0)        # CatVz
+mul.s $f9, $f3, $f3
+mul.s $f11, $f5, $f5
+add.s $f9, $f9, $f11
+.word 0x46090244               # sqrt.s $f9, $f9  → distance (ft=f9, fd=f9)
+mtc1  $zero, $f1
+nop
+nop
+nop
+.word 0x46090834               # c.lt.s $f1, $f9   (0 < dist ?)  fs=f1 ft=f9
+nop
+bc1f  momentumgo
+nop
+div.s $f3, $f3, $f9
+div.s $f5, $f5, $f9
+swc1  $f3, 0x40D0($t0)         # face the target
+swc1  $f5, 0x40D4($t0)
+momentumgo:
 add.s $f6, $f6, $f16           # forward momentum continues
 add.s $f12, $f12, $f14
 landhold:
@@ -1027,6 +1123,8 @@ add.s $f8, $f8, $f10           # vh
 swc1  $f16, 0x40B4($t0)
 swc1  $f8, 0x40B8($t0)
 swc1  $f18, 0x40BC($t0)
+lwc1  $f0, 0x0014($t6)         # the launch height starts the apex record (CatApexH; the rise then raises it every frame)
+swc1  $f0, 0x4270($t0)
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 2              # play once, no restart: the crouch fades into the float-up, which runs to its end and HOLDS
 sw    $t5, 0x0C64($t6)

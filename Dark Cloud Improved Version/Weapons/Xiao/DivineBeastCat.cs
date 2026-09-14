@@ -82,7 +82,11 @@ namespace Dark_Cloud_Improved_Version
         private const float  FallGravity   = 0.08f;    // units/frame² — the fall off the pellet's line at full size (cave)
         // The land clip is s86 c04cat motion 7, frames 215..227 (KEY 69 in build_cat_pack.py keeps the absolute frames):
         // the paws first touch the ground at 219 — that is where the forward momentum stops; at 227 the run begins.
-        private const float  LandStopFrame = 219f, LandEndFrame = 227f;
+        private const float  LandStopFrame = 219f, LandEndFrame = 227f;   // the paws touch at 219 (the land clip's lead-in aligns it with the touchdown)
+        // The WINGED cat (user 2026-09-13, "make it feel like the wings make a difference"): pounces from 50 units, and keeps
+        // re-aiming at the target past the apex until it has fallen halfway from the apex to the floor (the cave's height
+        // rule, Mailbox.CatTrackHalf). Dormant chest-mimics keep the 30-unit range.
+        private const float  PounceRangeWinged = 50f;
         private const float  LandClipStart = 215f, LandClipSpeed = 0.36f;   // KEY 69 in build_cat_pack.py (frames/frame)
         // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
         // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
@@ -167,12 +171,12 @@ namespace Dark_Cloud_Improved_Version
         // Shooter's cat wears the wings with a WHITE glow and a neutral ("dark grey") add; the Angel Gear's the wings with a
         // GOLD glow and a gold-white add. The glow discs are baked textures (build_cat_pack.GLOW_VARIANTS) the glow cave binds by
         // the name written to Mailbox.CatGlowName; the wings are two mesh nodes the copy hides by zeroing their geometry pointer.
-        private sealed class WeaponLook { public string Glow; public float[] Tint; public bool Wings; }
+        private sealed class WeaponLook { public string Glow; public float[] Tint; public bool Wings; public float Range = PounceRange; public bool Track; }
         private static readonly Dictionary<int, WeaponLook> Looks = new Dictionary<int, WeaponLook>
         {
             { Items.divinebeasttitle, new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false } },   // user 2026-09-12
-            { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 20f, 20f, 20f }, Wings = true  } },
-            { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 42f, 40f, 30f }, Wings = true  } },
+            { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 20f, 20f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
+            { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
         private static int _weapon = -1;                                    // the weapon the resident copy was built for
@@ -478,6 +482,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, 0);
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandStopFrame, LandStopFrame);
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandEndFrame, LandEndFrame);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatTrackHalf, _look.Track ? 1f : 0f);   // the winged cat re-aims until halfway down from the apex
             Memory.WriteFloat(CodeCaves.Mailbox.CatLandLead, LandLeadFrames);
             Memory.WriteInt  (CodeCaves.Mailbox.CatMoveKey, KeyWalk);                // a brisk walk reads better than the run (user 2026-09-10)
             Memory.WriteFloat(CodeCaves.Mailbox.CatMoveFrac, MoveFrac);
@@ -507,7 +512,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatRateMax, RateMax);
             Memory.WriteInt  (CodeCaves.Mailbox.CatIdleKey, KeyStand);
             Memory.WriteInt  (CodeCaves.Mailbox.CatBlocked, 0);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, PounceRange);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, RangeFor(_target));
             Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, PounceFrames);   // per target: ApplyFlightTime
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitEntry, 0);
             Memory.WriteInt  (CodeCaves.Mailbox.CatHitLatch, 0);
@@ -520,7 +525,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.Mailbox.CatPounceFly, 0);
             Memory.WriteInt  (CodeCaves.Mailbox.CatFloatKey, KeyFloat);
             Memory.WriteFloat(CodeCaves.Mailbox.CatReadyStart, ReadyStartFrame);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, PounceRange * 2f);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, RangeFor(_target) * 2f);
             long sl = SlotAddr();
             Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
@@ -774,9 +779,17 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The point the cave walks to and jumps at: the centre of the target's BIGGEST active body sphere (the
         /// Dragon's torso, a bat's body, a Titan's chest) rather than its root at the feet (user 2026-09-12). Written
         /// into the mailbox every tick; CatTargetPtr points at that vector. No target → pointer 0 (the cat sits).</summary>
+        /// <summary>The pounce range for this target: the look's (50 for the winged cat) — but a dormant chest-mimic is
+        /// always approached to 30 (user 2026-09-13).</summary>
+        private static float RangeFor(int target)
+            => target >= 0 && _look.Range > PounceRange && IsUnopenedMimic(target) ? PounceRange : _look.Range;
+
         private static void WriteTargetAim()
         {
             if (_target < 0) { Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, 0); return; }
+            float range = RangeFor(_target);                                     // per target, every tick (a mimic may open mid-approach)
+            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceRange, range);
+            Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, range * 2f);
             long root = EnemyAddresses.CharObjects.PosAddr(_target);
             float x = Memory.ReadFloat(root), h = Memory.ReadFloat(root + 4), y = Memory.ReadFloat(root + 8);
             if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(_target, EnemySlotOffsets.RenderStatus)) != 2)
