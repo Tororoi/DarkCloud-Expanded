@@ -1592,9 +1592,16 @@ namespace Dark_Cloud_Improved_Version
         /// the 37 `cat_` nodes after her 79 body nodes, so they are one contiguous run ending the array), make the
         /// copied cat root a free-standing root, un-hide it, give it its own skin buffers and motion channel, and
         /// host it in a dungeon chara slot.</summary>
+        /// <summary>Wall-clock through the build. The copy crosses the PINE socket a batch at a time, so the seconds between
+        /// the switch and a firable cat are mostly real work, not a wait — but which part of it was guesswork until these
+        /// stamps existed (user 2026-09-15). Every milestone reports milliseconds since Spawn began.</summary>
+        private static System.Diagnostics.Stopwatch _buildClock;
+        private static void BuildStep(string what) { if (_buildClock != null) Console.WriteLine(Tag + $"  build +{_buildClock.ElapsedMilliseconds,5} ms  {what}"); }
+
         private static bool Spawn()
         {
             if (Active) return true;
+            _buildClock = System.Diagnostics.Stopwatch.StartNew();
             if (FindTexEntry(CatTextureNames[0]) == 0 && RecreateCatEntries() < CatTextureNames.Length)
             {
                 if (!_texDeferLogged) { _texDeferLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
@@ -1634,6 +1641,7 @@ namespace Dark_Cloud_Improved_Version
                 chanInfo += $" ch{c}=0x{cp:X} keys {Memory.ReadInt(CCharacter.Base + ChanKeyStart + c * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + c * 4)}";
             }
             Console.WriteLine(Tag + $"live player tree @0x{playerRoot:X}: {names.Count} node(s); channels:{chanInfo}");
+            BuildStep("player tree scanned");
             if (catIdx < 0)
             {
                 Console.WriteLine(Tag + "nodes: " + string.Join(",", names));
@@ -1685,7 +1693,8 @@ namespace Dark_Cloud_Improved_Version
             if (!CopyMeshes()) return false;
             if (!RegisterSlot(min, blockSize)) return false;
             Active = true;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}");
+            BuildStep("channel + slot registered");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms");
             return true;
         }
 
@@ -1795,6 +1804,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool CopyMeshes()
         {
+            _copied.Clear(); _jobs.Clear(); _pending.Clear();
             long cave = CodeCaves.MeshCave, caveGuest = CodeCaves.MeshCaveGuest;
             long caveEnd = CodeCaves.CatMeshCaveEnd;                                // above it: the Angel Gear prop's meshes, then its track cave
             _ovFree = CodeCaves.CatOverflowCave;
@@ -1819,21 +1829,22 @@ namespace Dark_Cloud_Improved_Version
                 long cVis = cave;              uint cVisG = (uint)caveGuest;
                 long cVU  = cave + A16(visSz); uint cVUG  = (uint)(caveGuest + A16(visSz));
                 long cMDT = cVU + A16(vuSz);   uint cMDTG = (uint)(caveGuest + A16(visSz) + A16(vuSz));
+                // The two BIG blocks go to the machine; the visual is 0x30 B and needs fields poked into it anyway, so it
+                // stays here. A job carries the copy and both rebases, exactly what RebaseRange does to vuB/mdtB below.
+                _jobs.Add(new CopyJob(vu, cVUG, vuSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
+                _jobs.Add(new CopyJob(mdt, cMDTG, mdtSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
                 byte[] visB = Memory.ReadBytesBatch(Memory.ToMmu(vis), visSz);
-                byte[] vuB  = Memory.ReadBytesBatch(Memory.ToMmu(vu),  vuSz);
-                byte[] mdtB = Memory.ReadBytesBatch(Memory.ToMmu(mdt), mdtSz);
-                if (visB == null || vuB == null || mdtB == null) continue;
+                if (visB == null) continue;
                 RebaseRange(visB, vu, vuSz, cVUG); RebaseRange(visB, mdt, mdtSz, cMDTG);
-                foreach (byte[] b in new[] { vuB, mdtB }) { RebaseRange(b, vu, vuSz, cVUG); RebaseRange(b, mdt, mdtSz, cMDTG); }
+                byte[] vuB = null, mdtB = null;
                 // The engine writes the skinned draw packet into buffer[DBuffID] (+0x28 / +0x2C) every frame while
                 // the GIF is still reading the other. A single-buffered copy tears (flicker); give the copy both — the
                 // second one is placed after every mesh's primary data has a home (second pass below).
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x18);
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x28);
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x2c);
-                Memory.WriteBytesBatch(cVU, vuB);
-                Memory.WriteBytesBatch(cMDT, mdtB);
                 Memory.WriteBytesBatch(cVis, visB);
+                _pending.Add((cVU, vuSz, cMDT, mdtSz, vis, vu, mdt, cVUG, cMDTG));
                 Memory.WriteUInt(node + CFrameVu1.GeomPtr, cVisG);
                 if (i == _maskMeshIdx) _maskVisual = cVis;                           // the mask's visual is ours alone — MaskTint retints it
                 cave += need; caveGuest += need; copied++;
@@ -1847,16 +1858,117 @@ namespace Dark_Cloud_Improved_Version
             {
                 long cVU2 = TakeCave(vuSz, out uint cVU2G);
                 if (cVU2 == 0) { Console.WriteLine(Tag + $"mesh n{_skinNodes[idx].node}: no room for a second VU buffer — single-buffered (may flicker)"); continue; }
-                Memory.WriteBytesBatch(cVU2, vuB);
+                var pe = _pending[idx];
+                _jobs.Add(new CopyJob(pe.vu, (uint)(cVU2 - 0x20000000), vuSz, pe.vu, vuSz, pe.cVUG, pe.mdt, pe.mdtSz, pe.cMDTG));
                 Memory.WriteUInt(vis + 0x2c, cVU2G);
                 var e = _skinNodes[idx]; _skinNodes[idx] = (e.node, e.mdt, e.mdtSz, e.vu, cVU2, e.vuSz);
             }
+            if (!RunCopyJobs() && !CopyJobsBySocket()) return false;               // the machine does it, or we do it the slow way
             Console.WriteLine(Tag + $"mesh caves: main {_caveFree - CodeCaves.MeshCave:N0} of {CodeCaves.CatMeshCaveEnd - CodeCaves.MeshCave:N0} B, overflow {_ovFree - CodeCaves.CatOverflowCave:N0} of {CodeCaves.CatOverflowCaveSize:N0} B");
+            BuildStep("meshes copied");
             return true;
         }
 
         private static readonly List<(int node, long mdt, int mdtSz, long vu, long vu2, int vuSz)> _skinNodes = new();
         private static long _caveFree;
+
+        /// <summary>Every block CopyMeshes wrote, by the address it went to. RelocateCatTextures has to hunt TEX0 register
+        /// words through all of it, and it was re-READING the lot over PINE moments after the copy put it there — 300 KB of
+        /// round trip that made the texture re-tag the most expensive step of the whole build, 5.0 s of a 9.4 s spawn measured
+        /// 2026-09-15. The bytes are already in hand, so it scans these instead and only writes back what it changed. The
+        /// second draw buffer gets a CLONE, not the same array: the two blocks hold identical bytes, and sharing one array
+        /// would let the first patch mark the second clean and leave it unpatched on screen.</summary>
+        private static readonly Dictionary<long, byte[]> _copied = new();
+
+        /// <summary>The mesh copy, handed to the machine. Each job is "move `size` bytes src → dst, then re-point every
+        /// pointer-looking word of the copy that falls in one of two source ranges", which is exactly what the C# below used to
+        /// do a batch at a time over PINE — 600 KB of traffic at roughly 100 KB/s, the bulk of an 8.7 s build. ElfCave's
+        /// CatCopyQueue does it in one frame. The queue is written jobs-first and COUNT LAST so the cave can never see a
+        /// half-written list, and everything falls back to the old path if the cave does not answer (an ISO patched before it
+        /// existed, or a stall) — slow is a far better failure than wrong (user 2026-09-15).</summary>
+        private readonly struct CopyJob
+        {
+            public readonly uint Src, Dst; public readonly int Size;
+            public readonly uint R1Src, R1Dst; public readonly int R1Size;
+            public readonly uint R2Src, R2Dst; public readonly int R2Size;
+            public readonly int Op;                                                  // 0 = copy + re-point, 1 = find/replace 64-bit
+            public CopyJob(uint src, uint dst, int size, uint r1s, int r1n, uint r1d, uint r2s, int r2n, uint r2d)
+            { Src = src; Dst = dst; Size = size; R1Src = r1s; R1Size = r1n; R1Dst = r1d; R2Src = r2s; R2Size = r2n; R2Dst = r2d; Op = 0; }
+            /// <summary>Rewrite every occurrence of a 64-bit value inside one block — the cat's TEX0 registers, after its
+            /// textures move. The old value rides in the first rebase slot, the new one in the second.</summary>
+            public CopyJob(uint block, int size, ulong oldV, ulong newV)
+            { Src = 0; Dst = block; Size = size; R1Src = (uint)oldV; R1Size = (int)(oldV >> 32); R1Dst = (uint)newV;
+              R2Src = (uint)(newV >> 32); R2Size = 0; R2Dst = 0; Op = 1; }
+        }
+        private static readonly List<CopyJob> _jobs = new();
+        private static readonly List<(long cVU, int vuSz, long cMDT, int mdtSz, long vis, uint vu, uint mdt, uint cVUG, uint cMDTG)> _pending = new();
+
+        /// <summary>The old path, kept whole as the fallback: read each source block, rebase it here, write the copy. Only runs
+        /// when the cave is absent or silent.</summary>
+        private static bool CopyJobsBySocket()
+        {
+            foreach (CopyJob j in _jobs)
+            {
+                if (j.Op == 1)
+                {
+                    byte[] blk = Memory.ReadBytesBatch(0x20000000L + j.Dst, j.Size);
+                    if (blk == null) continue;
+                    ulong oldV = j.R1Src | ((ulong)(uint)j.R1Size << 32), newV = j.R1Dst | ((ulong)j.R2Src << 32);
+                    bool hit = false;
+                    for (int o = 0; o + 8 <= blk.Length; o += 4)
+                        if (BitConverter.ToUInt64(blk, o) == oldV) { BitConverter.GetBytes(newV).CopyTo(blk, o); hit = true; o += 4; }
+                    if (hit) Memory.WriteBytesBatch(0x20000000L + j.Dst, blk);
+                    continue;
+                }
+                byte[] b = Memory.ReadBytesBatch(0x20000000L + j.Src, j.Size);
+                if (b == null) { Console.WriteLine(Tag + $"copy fallback: could not read 0x{j.Src:X}"); return false; }
+                if (j.R1Size > 0) RebaseRange(b, j.R1Src, j.R1Size, j.R1Dst);
+                if (j.R2Size > 0) RebaseRange(b, j.R2Src, j.R2Size, j.R2Dst);
+                Memory.WriteBytesBatch(0x20000000L + j.Dst, b);
+                _copied[0x20000000L + j.Dst] = b;                                   // the texture pass scans these instead of re-reading
+            }
+            _jobs.Clear(); return true;
+        }
+
+        private static bool RunCopyJobs()
+        {
+            if (_jobs.Count == 0) return true;
+            if ((uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) != DunPatches.CatFollowHookNew) return false;
+            while (_jobs.Count > CodeCaves.CatCopyQueueJobs)                            // drain in queue-sized batches
+            {
+                var head = _jobs.GetRange(0, CodeCaves.CatCopyQueueJobs);
+                var tailJobs = _jobs.GetRange(CodeCaves.CatCopyQueueJobs, _jobs.Count - CodeCaves.CatCopyQueueJobs);
+                _jobs.Clear(); _jobs.AddRange(head);
+                if (!RunCopyJobs()) { _jobs.Clear(); _jobs.AddRange(head); _jobs.AddRange(tailJobs); return false; }
+                _jobs.Clear(); _jobs.AddRange(tailJobs);
+            }
+            var buf = new byte[0x10 + _jobs.Count * CodeCaves.CatCopyJobStride];
+            for (int i = 0; i < _jobs.Count; i++)
+            {
+                int o = 0x10 + i * CodeCaves.CatCopyJobStride; CopyJob j = _jobs[i];
+                BitConverter.GetBytes(j.Src).CopyTo(buf, o); BitConverter.GetBytes(j.Dst).CopyTo(buf, o + 4);
+                BitConverter.GetBytes(j.Size).CopyTo(buf, o + 8);
+                BitConverter.GetBytes(j.R1Src).CopyTo(buf, o + 0x0C); BitConverter.GetBytes(j.R1Size).CopyTo(buf, o + 0x10);
+                BitConverter.GetBytes(j.R1Dst).CopyTo(buf, o + 0x14);
+                BitConverter.GetBytes(j.R2Src).CopyTo(buf, o + 0x18); BitConverter.GetBytes(j.R2Size).CopyTo(buf, o + 0x1C);
+                BitConverter.GetBytes(j.R2Dst).CopyTo(buf, o + 0x20);
+                BitConverter.GetBytes(j.Op).CopyTo(buf, o + 0x24);
+            }
+            Memory.WriteBytesBatch(CodeCaves.CatCopyQueue, buf);                        // jobs first…
+            Memory.WriteInt(CodeCaves.CatCopyQueue, _jobs.Count);                       // …then the count: the cave's go signal
+            for (int spin = 0; spin < 120; spin++)                                      // ~2 s at 16 ms — it is one frame's work
+            {
+                if (Memory.ReadInt(CodeCaves.CatCopyQueue) == 0)
+                {
+                    Console.WriteLine(Tag + $"copy queue: {_jobs.Count} job(s) run in the machine ({_jobs.Sum(j => j.Size):N0} B)");
+                    _jobs.Clear(); return true;
+                }
+                Thread.Sleep(4);
+            }
+            Memory.WriteInt(CodeCaves.CatCopyQueue, 0);
+            Console.WriteLine(Tag + "copy queue: the cave did not answer — falling back to copying over PINE");
+            return false;
+        }
 
         /// <summary>The skinner's SOURCE vertices. AnimeDataInit (0x1493A0) runs once per character — from
         /// CommandMOTION only while CCharacter+0x2CC is still null, i.e. for MOTION 0 — and builds, for every mesh
@@ -1891,6 +2003,7 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(count).CopyTo(fib, e + 4);
                 BitConverter.GetBytes(caveG).CopyTo(fib, e + 8);
                 Console.WriteLine(Tag + $"skin n{node}: {count} source vertices built at 0x{caveG:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
+                BuildStep($"skin n{node} built ({count} vertices)");
             }
             return true;
         }
@@ -2248,7 +2361,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(grp + BlkLoaded, 0);
                 Memory.WriteUInt(grp + BlkDirty, 0);
                 Memory.WriteUInt(her + BlkTop, minTbp);
-                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} register words patched in the copy); her block now tops at 0x{minTbp:X}");
+                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} texture sweep(s) over the copy); her block now tops at 0x{minTbp:X}");
             }
             else if (to == HerTextureBlock)
             {
@@ -2261,6 +2374,7 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}; her block restored to top 0x{_herTopSaved:X}");
             }
             else Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
+            BuildStep("textures re-tagged");
         }
 
         // (texture NAME, original tex0) for every cat texture moved this spawn — restored on despawn by looking the
@@ -2362,20 +2476,19 @@ namespace Dark_Cloud_Improved_Version
                 uint vuB = (uint)Memory.ReadInt(Memory.ToMmu(vis) + 0x2C) & Memory.PhysAddrMask;
                 if (vuB != vu && Memory.IsValidGuest(vuB) && vuSz > 0) blocks.Add((Memory.ToMmu(vuB), vuSz));
             }
+            // The machine does the hunting. Every one of these blocks is a draw packet the copy just placed, and scanning them
+            // from here meant reading all 300 KB back over PINE — 3.5 s of a 4.6 s build once the copy itself moved inside
+            // (2026-09-15). One find/replace job per block per moved texture; the cave sweeps them all in a frame.
+            _jobs.Clear();
             foreach (var (addr, size) in blocks)
-                {
-                    if (addr == 0) continue;
-                    byte[] b = Memory.ReadBytesBatch(addr, size);
-                    if (b == null) continue;
-                    bool dirty = false;
-                    for (int o = 0; o + 8 <= b.Length; o += 4)                 // GIF A+D data is 16-aligned, but be safe
-                    {
-                        ulong w = BitConverter.ToUInt64(b, o);
-                        foreach (var (oldT, newT) in moves)
-                            if (w == oldT) { BitConverter.GetBytes(newT).CopyTo(b, o); dirty = true; patched++; o += 4; break; }
-                    }
-                    if (dirty) Memory.WriteBytesBatch(addr, b);
-                }
+            {
+                if (addr == 0 || size <= 0) continue;
+                foreach (var (oldT, newT) in moves) _jobs.Add(new CopyJob((uint)(addr - 0x20000000), size, oldT, newT));
+            }
+            patched = _jobs.Count;
+            if (_jobs.Count > 0 && !RunCopyJobs() && !CopyJobsBySocket())
+                Console.WriteLine(Tag + "texture relocation: neither path completed — the copy may draw with her texture block");
+            _jobs.Clear();
             return patched;
         }
 
