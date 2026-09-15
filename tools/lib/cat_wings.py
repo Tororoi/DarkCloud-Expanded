@@ -575,7 +575,7 @@ MASK_DRAPE_PASSES = 60             # the high points and slopes gently across th
                                    # the distances are relaxed toward their neighbours' but never allowed below the face.
 MASK_SEGS = 120                    # rays used to trace each half of the outline before it is decimated
 MASK_SMOOTH = 0.010                # how far the decimated outline may stray from those rays, measured ON THE FACE
-MASK_LATTICE = 0.11                # the mesh's step in the open middle of the mask
+MASK_LATTICE = 0.20                # the mesh's step in the open middle of the mask
 MASK_GRADE = 0.42                  # …and the fraction of that it falls to against an edge, so narrow rims still get a row
 MASK_HOLE_SEGS = 22                # points around each eye hole
 
