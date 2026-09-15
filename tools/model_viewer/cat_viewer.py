@@ -58,15 +58,37 @@ def model_from(label, code, folder, nodes, mds, pack, mot_name, motions, mds_nam
     for n in nodes:
         if n['meshoff']:
             per = weights.get(n['i'] + node_base) if weights else None
-            mm = em.build_mesh_weighted(mds, n, nodes, per) if per else em.build_mesh(mds, n, nodes)
+            mm = em.build_mesh_weighted(mds, n, nodes, per, textured=True) if per else em.build_mesh(mds, n, nodes)
             if mm:
                 meshes.append(mm)
     meshes += list(extra_meshes(meshes) if callable(extra_meshes) else extra_meshes)   # a callable sees the built meshes (the cape hangs off the skin's)
     tracks = em.build_tracks(pack, mot_name, len(nodes))
-    return serialize(label, code, folder, nodes, meshes, tracks, motions, mds_name, mot_name)
+    return serialize(label, code, folder, nodes, meshes, tracks, motions, mds_name, mot_name, pack_textures(pack))
 
 
-def serialize(label, code, folder, nodes, meshes, tracks, motions, mds_name, mot_name):
+def pack_textures(pack):
+    """{name: PNG data URI} for every texture in the pack's image bank, so the viewer can draw the model as the game does.
+    Skips anything that is not an 8-bit picture rather than failing the whole model for one odd entry."""
+    out = {}
+    for rec in pack.records:
+        nm = (getattr(rec, 'name', '') or '')
+        if not nm.lower().endswith('.img'):
+            continue
+        try: bank = bcp.Bank(rec.payload)
+        except Exception: continue
+        for name, _ in bank.entries:
+            try:
+                w, h, rgba = em.tim2_rgba(bank.block(name))
+                out[name] = em.png_data_uri(w, h, rgba)
+            except Exception as e:
+                print(f'  texture {name}: {e}')
+    return out
+
+
+UV_SCALE = 32000.0                             # keep in step with UV_SCALE in viewer_template.html
+
+
+def serialize(label, code, folder, nodes, meshes, tracks, motions, mds_name, mot_name, textures=None):
     maxabs = 1.0
     for m in meshes:
         for arr in (m['p0'], m['p1']):
@@ -82,17 +104,22 @@ def serialize(label, code, folder, nodes, meshes, tracks, motions, mds_name, mot
     jnodes = [{'n': n['name'], 'p': n['parent'], 't': [round(c, 4) for c in n['T']], 'q': [round(x, 6) for x in n['quat']]} for n in nodes]
     jmeshes = []
     for m in meshes:
-        jmeshes.append({'node': m['node'], 'skin': 1 if m['skin'] else 0, 'nv': m['nv'], 'nt': len(m['tris']), 'tag': m.get('tag', ''),
-                        'b0': em.b64_u16(m['b0']), 'b1': em.b64_u16(m['b1']), 'w0': em.b64_u8([w * 255 for w in m['w0']]),
-                        'p0': em.b64_i16([c for p in m['p0'] for c in p], pos_scale), 'p1': em.b64_i16([c for p in m['p1'] for c in p], pos_scale),
-                        'tri': em.b64_u16([i for t in m['tris'] for i in t])})
+        jm = {'node': m['node'], 'skin': 1 if m['skin'] else 0, 'nv': m['nv'], 'nt': len(m['tris']), 'tag': m.get('tag', ''),
+              'b0': em.b64_u16(m['b0']), 'b1': em.b64_u16(m['b1']), 'w0': em.b64_u8([w * 255 for w in m['w0']]),
+              'p0': em.b64_i16([c for p in m['p0'] for c in p], pos_scale), 'p1': em.b64_i16([c for p in m['p1'] for c in p], pos_scale),
+              'tri': em.b64_u16([i for t in m['tris'] for i in t])}
+        if m.get('uv'):                                                    # per CORNER, and the triangle runs that share a texture
+            jm['uv'] = em.b64_i16([c for uv in m['uv'] for c in uv], UV_SCALE)   # 0…1; the viewer's UV_SCALE must match
+            jm['runs'] = [[t, f, c] for t, f, c in m['runs']]
+        jmeshes.append(jm)
     jtracks = []
     for t in tracks:
         scale = 32767.0 if t['chan'] == 0 else pos_scale
         jtracks.append({'node': t['node'], 'chan': t['chan'], 'nk': len(t['frames']), 'f': em.b64_u16(t['frames']),
                         'v': em.b64_i16([c for v in t['vals'] for c in v], scale)})
     maxframe = max((t['frames'][-1] for t in tracks), default=1)
-    return {'label': label, 'group': 'Xiao', 'code': code, 'folder': folder, 'name': folder, 'mds': mds_name, 'mot': mot_name,
+    return {'textures': textures or {},
+            'label': label, 'group': 'Xiao', 'code': code, 'folder': folder, 'name': folder, 'mds': mds_name, 'mot': mot_name,
             'posScale': pos_scale, 'quatScale': 32767.0, 'maxFrame': maxframe, 'skelOnly': 0,
             'nodes': jnodes, 'meshes': jmeshes, 'motions': motions, 'tracks': jtracks,
             '_stats': {'nodes': len(nodes), 'meshes': len(meshes), 'verts': sum(m['nv'] for m in meshes),
@@ -179,7 +206,8 @@ def main():
     caped = model_from('Super Steve cat + red cape (cloth rest shape)', 'c04b+cat+cape', 'wingless bake + CAPE_* rest lattice',
                        nodes, mds, pack, 'cat.mot', motions, bcp.HOST_MDS, wgt_name='cat.wgt',
                        extra_meshes=lambda ms: [cw.cape_wind_pose(cw.build_cape_mesh(nodes, next(m for m in ms if nodes[m['node']]['name'] == 'cat_skin')),
-                                                                  cw.CAPE_ROWS, cw.CAPE_COLS)]
+                                                                  cw.CAPE_ROWS, cw.CAPE_COLS),
+                                                cw.build_mask_mesh(nodes, next(m for m in ms if nodes[m['node']]['name'] == 'cat_skin'))]
                        + cw.build_bound_meshes(nodes))
     caped['group'] = 'Xiao'
     print(f"caped cat: cape {cw.CAPE_COLS} wide × {cw.CAPE_ROWS} down, pinned edge resampled from collar verts {cw.CAPE_COLLAR}, hem width {cw.CAPE_WIDTH:g}, length {cw.CAPE_LENGTH:g}, lift {cw.CAPE_LIFT:g}")
@@ -202,8 +230,33 @@ def main():
                 r'CAPE_RGBA\s*=\s*\((\d+),\s*(\d+),\s*(\d+)', [128, 28, 0])
     tint = _grab(os.path.join(here, '..', '..', 'Dark Cloud Improved Version', 'Weapons', 'Xiao', 'DivineBeastCat.cs'),
                  r'CapeTint\s*=\s*\{\s*([\d.]+)f?,\s*([\d.]+)f?,\s*([\d.]+)f?', [80, 20, 10])
+    # a build stamp in the header: the one reliable way to tell a stale page (a phone had cached one for a whole debugging
+    # round, 2026-09-14) from a current one without opening dev tools
+    html = html.replace('/*__BUILT__*/', 'built ' + __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M'))
     html = html.replace('/*__CAPE_DEFAULTS__*/', json.dumps({'tex': tex, 'tint': tint}) + ' || ')
+    # The mask cannot borrow the cape's red: that red is an ambient the runtime adds around the CLOTH draw alone, and the mask
+    # is an ordinary mesh on the cat, lit by the cat's own Look.Tint. So it is previewed with the texture the bake writes for it
+    # under that tint, which is what the game will show — not with the cape's numbers.
+    mtex = _grab(os.path.join(here, '..', 'iso_patch', 'build_cat_pack.py'),
+                 r'MASK_RGBA\s*=\s*\((\d+),\s*(\d+),\s*(\d+)', [197, 27, 0])
+    ctint = _grab(os.path.join(here, '..', '..', 'Dark Cloud Improved Version', 'Weapons', 'Xiao', 'DivineBeastCat.cs'),
+                  r'SuperSteveAngelKey,\s*new WeaponLook \{[^}]*?Tint = new\[\] \{\s*([\d.]+)f,\s*([\d.]+)f,\s*([\d.]+)f',
+                  [12, 24, 48])
+    html = html.replace('/*__MASK_LOOK__*/', json.dumps({'tex': mtex, 'tint': ctint}) + ' || ')
+    print(f"mask colour previewed as baked: texture {tuple(mtex)} under the cat's tint {tuple(ctint)}")
     print(f"cape panel seeded from source: texture {tuple(tex)}, tint {tuple(tint)}")
+    # the mask panel rebuilds the geometry in the browser, so it must start from the very constants the bake uses
+    mask_defaults = {'eye': list(cw.MASK_EYE), 'core': list(cw.MASK_CORE), 'R': cw.MASK_R,
+                     'hole': list(cw.MASK_HOLE), 'holeAt': cw.MASK_HOLE_AT, 'holeTilt': cw.MASK_HOLE_TILT,
+                     'round': cw.MASK_HOLE_ROUND, 'shape': list(cw.MASK_EYE_SHAPE),
+                     'lobe': list(cw.MASK_LOBE), 'rise': cw.MASK_LOBE_RISE, 'tilt': cw.MASK_LOBE_TILT,
+                     'bridge': cw.MASK_BRIDGE, 'noseTop': cw.MASK_NOSE_TOP, 'noseW': cw.MASK_NOSE_W,
+                     'noseBlend': cw.MASK_NOSE_BLEND, 'lift': cw.MASK_LIFT, 'drape': cw.MASK_DRAPE,
+                     'drapePasses': cw.MASK_DRAPE_PASSES, 'segs': cw.MASK_SEGS,
+                     'holeSegs': cw.MASK_HOLE_SEGS, 'lattice': cw.MASK_LATTICE, 'smooth': cw.MASK_SMOOTH, 'grade': cw.MASK_GRADE,
+                     'anchor': cw.MASK_ANCHOR, 'skin': 'cat_skin'}
+    html = html.replace('/*__MASK_DEFAULTS__*/', json.dumps(mask_defaults) + ' || ')
+    print(f"mask panel seeded from cat_wings: lobe {cw.MASK_LOBE}, hole {cw.MASK_HOLE}, notch top {cw.MASK_NOSE_TOP}")
     html = html.replace('/*__MODEL_DATA__*/', 'const MODELS = ' + json.dumps([winged, game, caped, source, donor], separators=(',', ':'), ensure_ascii=False) + ';')
     io.open(out, 'w', encoding='utf-8').write(html)
     print(f"wrote {out}: {len(html.encode('utf-8')) / 1e6:.2f} MB")
