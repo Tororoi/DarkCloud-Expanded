@@ -388,13 +388,21 @@ namespace Dark_Cloud_Improved_Version
             // DFS over child/sibling to find the tree's address SPAN (the bones form a contiguous 0x270 array
             // rooted at the model root, so min == rootPhys and the block is [min, max+0x270)).
             uint min = rootPhys, max = rootPhys;
+            uint catRoot = 0, catSibling = 0;   // Xiao's baked cat subtree (DivineBeastCat): never part of the clone
             var seen = new System.Collections.Generic.HashSet<uint>();
             var work = new System.Collections.Generic.Stack<uint>();
             work.Push(rootPhys);
             while (work.Count > 0)
             {
                 uint n = work.Pop();
-                if (!Memory.IsValidGuest(n) || !seen.Add(n)) continue;
+                if (!Memory.IsValidGuest(n) || seen.Contains(n)) continue;
+                if (catRoot == 0 && IsCatRoot(n))
+                {
+                    catRoot = n;
+                    catSibling = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootSibling) & Memory.PhysAddrMask;
+                    continue;                                   // skip the whole cat subtree
+                }
+                seen.Add(n);
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > CodeCaves.MaxNodes)
                 { Console.WriteLine($"[Clone] clone tree > {CodeCaves.MaxNodes} nodes — aborting"); return false; }
@@ -418,6 +426,12 @@ namespace Dark_Cloud_Improved_Version
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
+                if (catRoot != 0)                                   // link AROUND the skipped cat subtree
+                {
+                    foreach (int lo in new[] { CFrameVu1.RootChild, CFrameVu1.RootSibling })
+                        if (((uint)BitConverter.ToInt32(block, o + lo) & Memory.PhysAddrMask) == catRoot)
+                            BitConverter.GetBytes(catSibling).CopyTo(block, o + lo);
+                }
                 Rebase(block, o + CFrameVu1.Parent,      min, max, isRoot);   // root's parent → 0
                 Rebase(block, o + CFrameVu1.RootChild,   min, max, false);
                 Rebase(block, o + CFrameVu1.RootSibling, min, max, isRoot);   // root's sibling → 0
@@ -430,6 +444,13 @@ namespace Dark_Cloud_Improved_Version
             _cloneRootGuest = (uint)(CodeCaves.NodePoolGuest + rootOff);   // clone root = pool + root offset
             Console.WriteLine($"[Clone] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}");
             return true;
+        }
+
+        private static bool IsCatRoot(uint node)
+        {
+            byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(node) + CFrameVu1.Name, 8);
+            return b != null && b[0] == (byte)'c' && b[1] == (byte)'a' && b[2] == (byte)'t' && b[3] == (byte)'r'
+                && b[4] == (byte)'o' && b[5] == (byte)'o' && b[6] == (byte)'t' && b[7] == 0;
         }
 
         /// <summary>Re-base a node link pointer: if it targets a node inside the copied block [min, max+0x270),
@@ -530,16 +551,9 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Rewrite every 4-byte word in <paramref name="b"/> whose value points into [oldBase,
         /// oldBase+size) to the corresponding offset in the clone copy at newBaseGuest.</summary>
-        private static void RebaseRange(byte[] b, uint oldBase, int size, uint newBaseGuest)
-        {
-            for (int o = 0; o + 4 <= b.Length; o += 4)
-            {
-                uint w = (uint)BitConverter.ToInt32(b, o);
-                uint phys = w & Memory.PhysAddrMask;
-                if (phys >= oldBase && phys < oldBase + (uint)size)
-                    BitConverter.GetBytes(newBaseGuest + (phys - oldBase)).CopyTo(b, o);
-            }
-        }
+        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (Memory.RebaseRange: a float whose
+        /// low 29 bits fall inside the source range must NOT be re-pointed; the mask-first version did).</summary>
+        private static void RebaseRange(byte[] b, uint oldBase, int size, uint newBaseGuest) => Memory.RebaseRange(b, oldBase, size, newBaseGuest);
 
         /// <summary>Snapshot the player's cloth pieces into clone-owned copies (frozen drape) and return the guest
         /// address of a cloth-ptr list to hang off the clone's +0xC74. Each CCloth is a self-contained 0x8550 object

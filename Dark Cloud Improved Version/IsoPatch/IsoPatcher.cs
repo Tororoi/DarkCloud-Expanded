@@ -151,6 +151,19 @@ namespace Dark_Cloud_Improved_Version
             progress("Assembling town-ally animation sets …");
             BakeTownModels(outIso, progress);
 
+            // Divine Beast Title cat shot — bake Xiao's cat rig (mesh, textures, leap clips) INTO her dungeon
+            // character pack (dun\mainchara\c04b.chr) as hidden extra nodes + a second motion channel. Scene data
+            // only; composes on the tail after the town models. (NOT the weapon pack: the weapon menu rebuilds
+            // every carried weapon into a 944 KB arena and a bigger weapon pack overflowed it.)
+            progress("Baking the Divine Beast Title cat into Xiao's dungeon model …");
+            BakeCatPack(outIso, progress);
+
+            // Hurt-sphere fixes baked into the monster scripts (dun\monstor\*.stb, redirected into the tail): Blizzard takes
+            // Titan's four spheres, Sam and Billy take Mr. Blare's two, and Minotaur Joe's face admits the Divine Beast
+            // cat's kick at 100 % (ElfPatches.PatchCatSpherePercent reads the armed spare table) — user 2026-09-12.
+            progress("Baking monster script fixes (hurt spheres, mimic wake guard) …");
+            BakeMonsterSpheres(outIso, progress);
+
             progress("Publishing pnach to PCSX2 …");
             ReshipPnach(crc);
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
@@ -314,6 +327,68 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Town-model assembly failed (exit {code}).\n{so}\n{se}");
             foreach (string line in so.Split('\n'))
                 if (line.Contains("assembled") || line.Contains("redirected") || line.Contains("DONE"))
+                    progress(line.Trim());
+        }
+
+        // ── Divine Beast Title cat pack (post-step; Python, mirrors BakeTownModels) ───────────────────────
+        // tools/iso_patch/build_cat_pack.py grafts the s86 cat rig into Xiao's dungeon pack c04b.chr (37 `cat_`
+        // nodes under her root, 5 textures, a MOTION 1 channel at KEY_START 64 with stand/ready/run/take-off/
+        // leap/land) and redirects the rebuilt pack into the DATA.DAT tail. Reads every model from the user's OWN
+        // ISO. Idempotent; also reverts the earlier weapon-pack bake if an ISO carries it. TODO: port to pure C#.
+        static void BakeCatPack(string outIso, Action<string> progress)
+            => RunPythonBake("build_cat_pack.py", "Divine Beast Title cat", outIso, progress);
+
+        // tools/iso_patch/patch_monster_scripts.py rewrites the hurt-sphere declarations of a few monster scripts (each
+        // `_SET_BODY_COL` block becomes a CALL_FUNC into a function appended to the script; nothing else moves) and
+        // redirects them into the DATA.DAT tail. Idempotent (appended marker).
+        static void BakeMonsterSpheres(string outIso, Action<string> progress)
+            => RunPythonBake("patch_monster_scripts.py", "monster script", outIso, progress);
+
+        /// <summary>Runs tools/iso_patch/<paramref name="scriptName"/> --iso <paramref name="outIso"/> and relays its
+        /// progress lines. Missing script → warning, not a failure (the rest of the patch still applies).</summary>
+        static void RunPythonBake(string scriptName, string what, string outIso, Action<string> progress)
+        {
+            string repo = Environment.GetEnvironmentVariable("DC_REPO");
+            if (string.IsNullOrEmpty(repo))
+                repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+            string script = Path.Combine(repo, "tools", "iso_patch", scriptName);
+            if (!File.Exists(script))
+            {
+                progress($"⚠ {scriptName} not found at {script} — {what} NOT baked (set DC_REPO).");
+                return;
+            }
+            string py = Environment.GetEnvironmentVariable("DC_PYTHON");
+            if (string.IsNullOrEmpty(py)) py = "python3";
+            var psi = new ProcessStartInfo
+            {
+                FileName = py,
+                WorkingDirectory = repo,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add(script);
+            psi.ArgumentList.Add("--iso");
+            psi.ArgumentList.Add(outIso);
+
+            string so, se; int code;
+            try
+            {
+                using var p = Process.Start(psi) ?? throw new IOException($"Process.Start returned null for '{py}'.");
+                so = p.StandardOutput.ReadToEnd();
+                se = p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                code = p.ExitCode;
+            }
+            catch (Exception e)
+            {
+                throw new IOException($"Could not run {scriptName} ('{py}'). Is Python installed / on PATH? "
+                                      + "Set DC_PYTHON to your python3, or DC_REPO to the repo root.\n" + e.Message);
+            }
+            if (code != 0)
+                throw new IOException($"{what} bake failed (exit {code}).\n{so}\n{se}");
+            foreach (string line in so.Split('\n'))
+                if (line.Contains("assembled") || line.Contains("redirected") || line.Contains("reverted") || line.Contains("DONE") || line.Contains("skipped"))
                     progress(line.Trim());
         }
 
@@ -489,6 +564,10 @@ namespace Dark_Cloud_Improved_Version
                     throw new IOException("Ungaga run-speed site is not vanilla (expected \"0.30\") — unmodified Dark Cloud (USA) ISO expected.");
                 Wr(fs, uAt, new byte[] { (byte)'0', (byte)'.', (byte)'5', (byte)'5' });
             }
+
+            // 5b) dungeon overlay words (dun.bin — a flat image; CRC-neutral, it is not the ELF)
+            if (!recs.TryGetValue("DUN.BIN", out var dunRec)) throw new IOException("DUN.BIN not found in the ISO root — unexpected ISO layout.");
+            DunPatches.Apply(fs, dunRec, progress);
 
             // 6) ELF boot-cave + CRC
             progress("Patching the boot loader …");

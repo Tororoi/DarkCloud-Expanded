@@ -1,0 +1,212 @@
+<title>Monster Hitbox Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#0f1116; --panel:#161a22; --panel-2:#1c212b; --line:#262c38; --text:#d9dce4; --muted:#8b91a1;
+    --hurt:#35c8e8; --hurt-dim:#1d6f80; --attack:#ff7a4d; --root:#ffb347; --lock:#f4f6fb; --bone:#5b6478;
+    --sans:'Instrument Sans',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 var(--sans);overflow:hidden}
+  .app{display:grid;grid-template-columns:260px 1fr 320px;grid-template-rows:auto 1fr;height:100vh}
+  header{grid-column:1/-1;display:flex;align-items:baseline;gap:18px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:16px;font-weight:600;letter-spacing:.01em;margin:0}
+  header .sub{color:var(--muted);font-size:12.5px}
+  header .legend{margin-left:auto;display:flex;gap:14px;font-size:12px;color:var(--muted)}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+  aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  aside input{margin:10px;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);font:13px var(--sans)}
+  aside input:focus{outline:2px solid var(--hurt-dim);outline-offset:0}
+  #list{overflow:auto;flex:1;padding:0 6px 10px}
+  #list button{display:block;width:100%;text-align:left;padding:6px 10px;border:0;border-radius:6px;background:transparent;color:var(--text);font:13px var(--sans);cursor:pointer}
+  #list button:hover{background:var(--panel-2)}
+  #list button.on{background:var(--hurt-dim);color:#fff}
+  #list button:focus-visible{outline:2px solid var(--hurt);outline-offset:-2px}
+  #list .code{color:var(--muted);font:11px var(--mono);margin-left:6px}
+  main{position:relative;min-width:0;min-height:0}
+  canvas{display:block;width:100%;height:100%}
+  .hud{position:absolute;top:10px;left:12px;display:flex;gap:6px;flex-wrap:wrap}
+  .hud label{background:rgba(22,26,34,.85);border:1px solid var(--line);border-radius:6px;padding:5px 9px;font-size:12px;color:var(--text);cursor:pointer;user-select:none}
+  .hud label:has(input:checked){border-color:var(--hurt-dim);color:#fff}
+  .hud input{margin:0 6px 0 0;vertical-align:-1px}
+  .hint{position:absolute;bottom:8px;left:12px;font-size:11.5px;color:var(--muted);background:rgba(15,17,22,.6);padding:3px 6px;border-radius:4px}
+  section{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:14px 16px;min-height:0}
+  section h2{font-size:17px;font-weight:600;margin:0 0 2px}
+  section .meta{color:var(--muted);font:12px var(--mono);margin-bottom:12px;word-break:break-all}
+  section h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 6px}
+  table{width:100%;border-collapse:collapse;font:12px var(--mono);font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:500}
+  td.big{color:var(--hurt);font-weight:500}
+  td.zero{color:#e07070}
+  .mini{display:block;color:var(--muted);font-size:10px}
+  .tag{display:inline-block;font:10.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;background:var(--hurt-dim);color:#fff;margin-left:6px}
+  .tag.warn{background:#5a3b1e;color:#ffd7b0}
+  .kv{display:flex;justify-content:space-between;gap:10px;font:12px var(--mono);padding:3px 0;border-bottom:1px solid var(--line)}
+  .kv span:first-child{color:var(--muted);font-family:var(--sans)}
+  .also{color:var(--muted);font-size:12px;margin-top:6px}
+  @media (max-width:900px){.app{grid-template-columns:200px 1fr;grid-template-rows:auto 1fr 40vh}section{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}}
+</style>
+<div class="app">
+  <header>
+    <h1>Monster Hitbox Atlas</h1>
+    <span class="sub">Every enemy's hurt spheres, attack spheres, root and lock-on point over its bind-pose mesh, from the disc</span>
+    <span class="legend">
+      <span><i class="sw" style="background:var(--hurt)"></i>hurt sphere</span>
+      <span><i class="sw" style="background:var(--attack)"></i>attack sphere</span>
+      <span><i class="sw" style="background:var(--root)"></i>root</span>
+      <span><i class="sw" style="background:var(--lock)"></i>lock-on</span>
+    </span>
+  </header>
+  <aside>
+    <input id="q" type="search" placeholder="Filter by name or code" aria-label="Filter species">
+    <div id="list" role="listbox"></div>
+  </aside>
+  <main>
+    <canvas id="c"></canvas>
+    <div class="hud">
+      <label><input type="checkbox" id="cbMesh" checked>mesh</label>
+      <label><input type="checkbox" id="cbWire">wireframe</label>
+      <label><input type="checkbox" id="cbHurt" checked>hurt spheres</label>
+      <label><input type="checkbox" id="cbAtk">attack spheres</label>
+      <label><input type="checkbox" id="cbSkel">skeleton</label>
+      <label><input type="checkbox" id="cbGrid" checked>floor grid</label>
+    </div>
+    <div class="hint">drag to orbit · right-drag or shift-drag to pan · wheel to zoom · F to re-frame</div>
+  </main>
+  <section id="info"></section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const MODELS = /*__MODELS__*/[];
+// ---------------------------------------------------------------- decode
+function b64bytes(s){ const bin=atob(s); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+function i16(s){ const u=b64bytes(s); return new Int16Array(u.buffer,u.byteOffset,u.byteLength>>1); }
+function u16(s){ const u=b64bytes(s); return new Uint16Array(u.buffer,u.byteOffset,u.byteLength>>1); }
+function decode(m){
+  const q=i16(m.v), inv=1/m.scale, pos=new Float32Array(q.length);
+  for(let i=0;i<q.length;i++) pos[i]=q[i]*inv;
+  const t=u16(m.t), idx=new Uint32Array(t.length); for(let i=0;i<t.length;i++) idx[i]=t[i];
+  return {pos,idx};
+}
+// ---------------------------------------------------------------- scene
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0f1116);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,4000);
+scene.add(new THREE.HemisphereLight(0xdfe6f5,0x1a1d26,0.9));
+const key=new THREE.DirectionalLight(0xffffff,0.7); key.position.set(40,80,60); scene.add(key);
+const grid=new THREE.GridHelper(200,40,0x2a3140,0x1f2530); scene.add(grid);
+const world=new THREE.Group(); scene.add(world);
+const COL={hurt:0x35c8e8,attack:0xff7a4d,root:0xffb347,lock:0xf4f6fb,bone:0x5b6478,mesh:0x9aa3b5};
+let cur=null, parts={};
+// orbit
+const orbit={yaw:0.65,pitch:0.42,dist:80,target:new THREE.Vector3(0,8,0)};
+function applyCam(){
+  const cp=Math.cos(orbit.pitch), sp=Math.sin(orbit.pitch);
+  camera.position.set(orbit.target.x+orbit.dist*cp*Math.sin(orbit.yaw), orbit.target.y+orbit.dist*sp, orbit.target.z+orbit.dist*cp*Math.cos(orbit.yaw));
+  camera.lookAt(orbit.target);
+}
+let drag=null;
+canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey};canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY;
+  if(drag.pan){ const s=orbit.dist*0.0016; const right=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0), up=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+    orbit.target.addScaledVector(right,-dx*s).addScaledVector(up,dy*s); }
+  else { orbit.yaw-=dx*0.006; orbit.pitch=Math.max(-1.45,Math.min(1.45,orbit.pitch+dy*0.006)); }
+  applyCam(); render(); });
+canvas.addEventListener('pointerup',()=>drag=null); canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{e.preventDefault(); orbit.dist=Math.max(4,Math.min(1500,orbit.dist*Math.exp(e.deltaY*0.0012))); applyCam(); render();},{passive:false});
+window.addEventListener('keydown',e=>{ if(e.key==='f'||e.key==='F') frame(); });
+function resize(){ const r=canvas.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); camera.aspect=r.width/r.height; camera.updateProjectionMatrix(); render(); }
+window.addEventListener('resize',resize);
+function render(){ renderer.render(scene,camera); }
+// ---------------------------------------------------------------- build
+function clear(){ world.clear(); parts={}; }
+function sphereMesh(s,color,opacity){
+  const g=new THREE.SphereGeometry(Math.max(s.r,0.05),24,16);
+  const grp=new THREE.Group();
+  grp.add(new THREE.Mesh(g,new THREE.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false})));
+  grp.add(new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(Math.max(s.r,0.05),12,8)),new THREE.LineBasicMaterial({color,transparent:true,opacity:0.35})));
+  grp.position.set(s.p[0],s.p[1],s.p[2]);
+  return grp;
+}
+function build(m){
+  clear(); cur=m;
+  const d=decode(m);
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(d.pos,3)); geo.setIndex(new THREE.BufferAttribute(d.idx,1)); geo.computeVertexNormals();
+  parts.mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:COL.mesh,side:THREE.DoubleSide}));
+  parts.wire=new THREE.LineSegments(new THREE.WireframeGeometry(geo),new THREE.LineBasicMaterial({color:0xc8d0e0,transparent:true,opacity:0.5}));
+  world.add(parts.mesh,parts.wire);
+  // hurt spheres (biggest brighter)
+  parts.hurt=new THREE.Group();
+  for(const s of m.spheres) parts.hurt.add(sphereMesh(s,s.cat?0x7fe3ff:COL.hurt,s.cat?0.38:0.16));
+  parts.atk=new THREE.Group(); for(const s of m.attack) parts.atk.add(sphereMesh(s,COL.attack,0.16));
+  world.add(parts.hurt,parts.atk);
+  // root: axes + amber ball + floor ring
+  parts.root=new THREE.Group();
+  parts.root.add(new THREE.Mesh(new THREE.SphereGeometry(0.6,16,12),new THREE.MeshBasicMaterial({color:COL.root})));
+  parts.root.add(new THREE.AxesHelper(6));
+  const ring=new THREE.Mesh(new THREE.RingGeometry(2.6,3,48),new THREE.MeshBasicMaterial({color:COL.root,transparent:true,opacity:0.5,side:THREE.DoubleSide})); ring.rotation.x=-Math.PI/2; ring.position.y=0.02; parts.root.add(ring);
+  world.add(parts.root);
+  if(m.lockon){ const l=new THREE.Mesh(new THREE.OctahedronGeometry(0.9),new THREE.MeshBasicMaterial({color:COL.lock})); l.position.set(m.lockon[0],m.lockon[1],m.lockon[2]); parts.lock=l; world.add(l); }
+  // skeleton
+  const pts=[]; for(const b of m.bones){ if(b.p>=0){ const pw=m.bones[b.p].w; pts.push(pw[0],pw[1],pw[2],b.w[0],b.w[1],b.w[2]); } }
+  const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+  parts.skel=new THREE.LineSegments(sg,new THREE.LineBasicMaterial({color:COL.bone})); world.add(parts.skel);
+  applyToggles(); frame(); info(m);
+}
+function applyToggles(){
+  if(!cur) return;
+  const wire=cbWire.checked, mesh=cbMesh.checked;
+  parts.mesh.visible=mesh&&!wire; parts.wire.visible=mesh&&wire;
+  parts.hurt.visible=cbHurt.checked; parts.atk.visible=cbAtk.checked; parts.skel.visible=cbSkel.checked; grid.visible=cbGrid.checked;
+  render();
+}
+for(const id of ['cbMesh','cbWire','cbHurt','cbAtk','cbSkel','cbGrid']) document.getElementById(id).addEventListener('change',applyToggles);
+function frame(){
+  if(!cur) return;
+  const box=new THREE.Box3().setFromObject(parts.mesh);
+  for(const s of cur.spheres) box.expandByPoint(new THREE.Vector3(s.p[0],s.p[1],s.p[2]));
+  const c=box.getCenter(new THREE.Vector3()), r=Math.max(box.getSize(new THREE.Vector3()).length()*0.5,4);
+  orbit.target.copy(c); orbit.dist=r*2.4; applyCam(); render();
+}
+// ---------------------------------------------------------------- info
+function f(x){ return (Math.round(x*100)/100).toString(); }
+function info(m){
+  const big=m.spheres.reduce((a,b)=>b.r>a.r?b:a,{r:-1});
+  const CH=['Toan','Xiao','Goro','Ruby','Ungaga','Osmond'];
+  const pctCell=s=>{ const p=s.pct||[100,100,100,100,100,100]; const all=p.every(v=>v===100); const title=CH.map((c,i)=>c+' '+p[i]+'%').join(' · ');
+    const cat=(s.catpct!==undefined&&s.catpct!==p[1])?`<span class="tag" title="the Divine Beast cat's own % on this sphere (disc bake + ELF patch); Xiao's pellets keep ${p[1]}%">cat ${s.catpct}%</span>`:'';
+    return `<td title="${title}" class="${p[1]===0&&!cat?'zero':''}">${all?'100':p[1]}${all?'':'<span class="mini">'+p.map(v=>v===100?'·':v).join('/')+'</span>'}${cat}</td>`; };
+  const rows=m.spheres.map(s=>`<tr><td>${s.frame}${s.found?'':'<span class="tag warn">no frame</span>'}${s.cat?'<span class="tag">cat target</span>':''}</td><td class="${s===big?'big':''}">${f(s.r)}</td><td>${f(s.p[0])}, ${f(s.p[1])}, ${f(s.p[2])}</td><td>${(s.w0||s.w1)?f(s.w0)+'–'+f(s.w1):'always'}</td>${pctCell(s)}</tr>`).join('');
+  const atk=m.attack.map(s=>`<tr><td>${s.frame}${s.found?'':'<span class="tag warn">no frame</span>'}</td><td>${f(s.r)}</td><td>${f(s.p[0])}, ${f(s.p[1])}, ${f(s.p[2])}</td></tr>`).join('');
+  document.getElementById('info').innerHTML=
+    `<h2>${m.name}${m.patched?'<span class="tag" title="script as the Dark Cloud – Expanded disc bakes it (tools/iso_patch/patch_monster_scripts.py: hurt spheres, cat arming, mimic wake guard)">disc-patched</span>':''}</h2><div class="meta">id ${m.id} · table ${m.ti} · ${m.code}<br>${m.chr}<br>${m.stb||'(no script)'}</div>`+
+    (m.also.length?`<div class="also">Same model: ${m.also.join(', ')}</div>`:'')+
+    `<div class="kv"><span>root position</span><span>0, 0, 0 (the model origin)</span></div>`+
+    `<div class="kv"><span>lock-on point</span><span>${m.lockon?m.lockon.map(f).join(', '):'—'}</span></div>`+
+    `<div class="kv"><span>bones / verts / tris</span><span>${m.bones.length} / ${m.nv} / ${m.nt}</span></div>`+
+    `<h3>Hurt spheres (${m.spheres.length})</h3>`+
+    (m.spheres.length?`<table><tr><th>frame</th><th>radius</th><th>bind x, h, z</th><th>frames</th><th title="damage % for Xiao's hits (hover: every character)">Xiao %</th></tr>${rows}</table>`:`<div class="also">none declared</div>`)+
+    `<h3>Attack spheres (${m.attack.length})</h3>`+
+    (m.attack.length?`<table><tr><th>frame</th><th>radius</th><th>bind x, h, z</th></tr>${atk}</table>`:`<div class="also">none declared</div>`)+
+    `<div class="also" style="margin-top:14px">Positions are the bind pose; in play each sphere rides its frame. Units are the game's (a floor tile is 16). "Frames" is the enemy's motion-frame window in which the sphere can be hit. Xiao % is the sphere's damage multiplier for her hits (hover for all six characters; a 0 registers a hit but deals nothing). "Cat target" = the biggest sphere that can damage (the cat's own % where one is armed), ties broken toward the front. "Disc-patched" species show the spheres the mod's patched disc declares.</div>`;
+}
+// ---------------------------------------------------------------- list
+const list=document.getElementById('list'), q=document.getElementById('q');
+const order=MODELS.map((m,i)=>i).sort((a,b)=>MODELS[a].name.localeCompare(MODELS[b].name));
+function renderList(){
+  const s=q.value.trim().toLowerCase(); list.innerHTML='';
+  for(const i of order){ const m=MODELS[i]; if(s && !(m.name.toLowerCase().includes(s)||m.code.toLowerCase().includes(s)||m.also.some(n=>n.toLowerCase().includes(s)))) continue;
+    const b=document.createElement('button'); b.setAttribute('role','option'); b.dataset.i=i; b.innerHTML=`${m.name}<span class="code">${m.code}</span>`; if(cur===m) b.classList.add('on');
+    b.addEventListener('click',()=>{ select(i); }); list.appendChild(b); }
+}
+function select(i){ build(MODELS[i]); for(const b of list.children) b.classList.toggle('on',+b.dataset.i===i); }
+q.addEventListener('input',renderList);
+renderList(); resize();
+const start=order.find(i=>/dragon/i.test(MODELS[i].name)) ?? order[0];
+if(MODELS.length){ select(start); const b=[...list.children].find(b=>+b.dataset.i===start); if(b) b.scrollIntoView({block:'center'}); }
+</script>

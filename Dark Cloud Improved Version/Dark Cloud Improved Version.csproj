@@ -28,6 +28,30 @@
     <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catPelletFollow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\xiaoMeleeFlinch.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catSpherePercent.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGuardBypass.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGuardBypass.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCapeTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCapeTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catMaskTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
     </EmbeddedResource>

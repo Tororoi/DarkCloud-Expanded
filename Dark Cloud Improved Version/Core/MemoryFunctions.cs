@@ -280,6 +280,35 @@ namespace Dark_Cloud_Improved_Version
 
         private static uint PhysAddr(long address) => (uint)(address & PhysAddrMask);
 
+        /// <summary>Does this 32-bit word LOOK like an EE pointer? Only the segments the EE maps RAM through
+        /// qualify: kuseg 0x0, kseg0 0x8, kseg1 0xA, and the 0x2/0x3 uncached forms. Any other top nibble is data —
+        /// most importantly a float: 3.3f is 0x4053651E, and masking it with <see cref="PhysAddrMask"/> first
+        /// yields 0x0053651E, a perfectly plausible heap address. That exact accident bent five muzzle vertices of
+        /// the Divine Beast cat copy into the floor (2026-09-10): a byte-copied MDT re-based against the source
+        /// MDT's own address range had those Y floats "re-pointed" into the cave (≈ denormal 0). Test the raw word
+        /// with this BEFORE masking.</summary>
+        internal static bool LooksLikePointer(uint word)
+        {
+            uint seg = word >> 28;
+            return seg == 0x0 || seg == 0x2 || seg == 0x3 || seg == 0x8 || seg == 0xA;
+        }
+
+        /// <summary>Re-base every pointer-looking word of <paramref name="block"/> that points into
+        /// [<paramref name="src"/>, src + size) so it points into the copy at <paramref name="dst"/> instead
+        /// (guest addresses; the word keeps its own segment bits). Words that are not pointers — floats, GS register
+        /// halves, VIF tags — are left alone even when their low bits happen to fall inside the range.</summary>
+        internal static void RebaseRange(byte[] block, uint src, int size, uint dst)
+        {
+            for (int o = 0; o + 4 <= block.Length; o += 4)
+            {
+                uint w = (uint)BitConverter.ToInt32(block, o);
+                if (!LooksLikePointer(w)) continue;
+                uint v = w & PhysAddrMask;
+                if (v >= src && v < src + (uint)size)
+                    BitConverter.GetBytes((w & ~PhysAddrMask) | (dst + (v - src))).CopyTo(block, o);
+            }
+        }
+
         private static byte[] BuildReadPacket(byte opcode, long address)
         {
             var pkt = new byte[9];

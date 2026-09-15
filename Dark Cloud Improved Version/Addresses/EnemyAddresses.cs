@@ -417,6 +417,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int PoisonPeriod      = 0x00C; // int   — poison tick interval; 0 at rest
         internal const int StaminaTimer      = 0x010; // int   — stamina/status countdown; starts at a large value (e.g. 0x004F0000 ≈ 5.2M) and decrements each frame; 0 when expired
         internal const int GooeyState        = 0x014; // int   — gooey/slime status; 0 at rest
+        internal const int StatusSusceptibility = 0x0DE; // short — species ItemStatusRes copy (unit +0x1E4AE): 0 = immune to poison/freeze/gooey
         internal const int DistanceToPlayer  = 0x018; // float — live distance to player in world units; updated each frame; used as proximity filter
 
         // ── HP / Stats ───────────────────────────────────────────────────────
@@ -426,7 +427,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int ResistancePack1   = 0x028; // [Category, FireRes]      — Category = enemy category index; fire confirmed; scale: 100=neutral, >100=weak, <100=resistant
         internal const int ResistancePack2   = 0x02C; // [IceRes, ThunderRes] — both confirmed
         internal const int ResistancePack3   = 0x030; // [WindRes, HolyRes]   — wind confirmed
-        internal const int MinGoldDrop       = 0x034; // int   — minimum gold dropped on death
+        internal const int MinGoldDrop       = 0x034; // int   — minimum gold dropped on death. ⚠ Also what CheckDmg's element branch
+                                                       //   multiplies by when a player-side entry's +0x50 holds ONLY status bits (element index 5
+                                                       //   = one short past the resistance row) — a vanilla quirk; never plant status bits in +0x50.
         internal const int DropChance        = 0x038; // int   — item drop chance (0–100)
 
         // ── Identity ─────────────────────────────────────────────────────────
@@ -481,7 +484,7 @@ namespace Dark_Cloud_Improved_Version
         // ENEMY → PLAYER DAMAGE block above EnemySpeciesTable.DamageReduction for the full enemy→player formula.
         internal const int DefenseStats      = 0x090; // packed: low ushort = DamageReduction, high ushort = WeaponDefense
 
-        internal const int HitStunTimer      = 0x098; // int   — 0 at rest; set to a positive value on hit (e.g. 966 observed); presumably a stun or invincibility-frame countdown
+        internal const int HitStunTimer      = 0x098; // int   — INVINCIBILITY frame countdown (record +0x1E468): scripts set it with `_STATUS_SET_MUTEKI` (cmd 101: 9 after a hit, 100 when a mimic wakes, 1000 while dying); CheckDmg__12CMonstorUnit skips the whole hit test while > 0 (2026-09-12)
 
         internal const int ForceItemDrop     = 0x0A0; // int   — forces a specific item drop when nonzero
         internal const int RenderDistance    = 0x0A4; // float — CONFIRMED controls render distance and map-dot appearance threshold
@@ -517,17 +520,17 @@ namespace Dark_Cloud_Improved_Version
         internal const int AiSpeedParam      = 0x0F0; // float — REQUESTED motion speed; _SET_MOTION writes −1.0 (= use the motion's own KEY speed) here, matching the −1.0 seen at spawn.
         internal const int MotionCommitFlag  = 0x0F4; // halfword — commit gate (-0x1b3c). CMonstorUnit::Step (ELF 0x1dd890) commits the requested motion (0xEC) into the render object's player ONLY when this is nonzero; the engine sets it when the current clip finishes. Writing 1 forces an immediate motion switch (interrupt).
 
-        // ── Species data pointer (regular enemies) ───────────────────────────
-        // +0x0FC: PS2-native pointer to a per-species data block, set at spawn and SHARED by all
-        // live slots of the same species (slots of species 3 → 0x010A5260, species 6 → 0x011D94B0, etc.;
-        // changes with the species). This is the regular-enemy analog of the boss SpeciesDataPtr (0x04C),
-        // which is 0 for non-bosses. Confirmed (savestate analysis 2026-06-09) NOT read by the per-frame
-        // DrawMonstor / Step / MoveChara / CheckDmg paths, so its exact role is unconfirmed (likely a
-        // spawn/despawn or stat/asset reference). Add 0x20000000 for the PCSX2 address.
-        // NOTE: the rendered MODEL/animation is NOT driven by this nor by any FloorSlot field — the
-        // engine draws each enemy from a separate CCharacter "render object" at
-        // (MonstorUnit + slot*0x3510 + 0x1FCD0), i.e. the ModelScaleOffsets region (see below).
-        internal const int SpeciesParamPtr   = 0x0FC; // int   — per-species data block ptr (PS2-native); shared by same-species slots; not read per-frame
+        // ── Lock-on target (regular enemies) — RESOLVED 2026-09-09 (was "SpeciesParamPtr", role unconfirmed) ──
+        // +0x0FC: PS2-native pointer to the enemy's LOCK-ON FRAME — the CFrame node named by the STB's
+        // `_STATUS_SET_LOCKON_TRG("lockon", w, h)` (handler 0x1E3710: SearchFrame on the species model →
+        // unit+slot*400+0x1E4CC; w/h → ReticleWidth/Height below). Same-species slots share the model, hence
+        // the shared pointer that puzzled the 2026-06-09 savestate analysis. +0x100: that frame's WORLD position
+        // (vec4 x, h, y, w), refreshed by DrawMonstor (GetWorldPosition) every draw. setTargetCursor (dun
+        // 0x1DC07A0) copies it to the lock-on aim point global 0x1DC4500 — the point Xiao's pellets fly at
+        // (BattleActionPlay_Jinn); with no lock-on frame the aim point is the enemy origin raised by 8.
+        internal const int LockOnFrame       = 0x0FC; // int   — lock-on CFrame ptr (PS2-native); 0 = species set none
+        internal const int LockOnPoint       = 0x100; // vec4  — lock-on frame WORLD position, engine-refreshed every draw
+        internal const float LockOnFallbackLift = 8f; // aim = origin + this when there is no lock-on frame
 
         // ── World Position ────────────────────────────────────────────────────
         internal const int LocationX         = 0x100; // float — world X position; updated each frame as enemy moves
