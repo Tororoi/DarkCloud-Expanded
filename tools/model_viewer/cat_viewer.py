@@ -12,6 +12,7 @@ Gear cat, so the wing poses to port can be judged (user 2026-09-12). Output: cat
 """
 import io
 import json
+import re
 import math
 import os
 import struct
@@ -177,7 +178,8 @@ def main():
     # Super Steve + an Angel sphere: the blue (wingless) cat with the yellow cape's cloth REST lattice (cat_wings.CAPE_*)
     caped = model_from('Super Steve cat + red cape (cloth rest shape)', 'c04b+cat+cape', 'wingless bake + CAPE_* rest lattice',
                        nodes, mds, pack, 'cat.mot', motions, bcp.HOST_MDS, wgt_name='cat.wgt',
-                       extra_meshes=lambda ms: [cw.build_cape_mesh(nodes, next(m for m in ms if nodes[m['node']]['name'] == 'cat_skin'))]
+                       extra_meshes=lambda ms: [cw.cape_wind_pose(cw.build_cape_mesh(nodes, next(m for m in ms if nodes[m['node']]['name'] == 'cat_skin')),
+                                                                  cw.CAPE_ROWS, cw.CAPE_COLS)]
                        + cw.build_bound_meshes(nodes))
     caped['group'] = 'Xiao'
     print(f"caped cat: cape {cw.CAPE_COLS} wide × {cw.CAPE_ROWS} down, pinned edge resampled from collar verts {cw.CAPE_COLLAR}, hem width {cw.CAPE_WIDTH:g}, length {cw.CAPE_LENGTH:g}, lift {cw.CAPE_LIFT:g}")
@@ -189,6 +191,19 @@ def main():
 
     tpl = io.open(os.path.join(HERE, 'viewer_template.html'), encoding='utf-8').read()
     html = tpl.replace('<title>Dark Cloud Model Viewer</title>', '<title>Divine Beast Cat Rig</title>')
+    # the cape panel opens on the values the game actually ships, read from the two files that hold them — the flat texture the
+    # bake writes and the ambient the runtime gives that one cloth — so the viewer can never present stale numbers to tune from
+    here = os.path.dirname(os.path.abspath(__file__))
+    def _grab(path, pattern, default):
+        try: m = re.search(pattern, open(path, encoding='utf-8').read())
+        except OSError: m = None
+        return [int(float(m.group(i))) for i in (1, 2, 3)] if m else default
+    tex = _grab(os.path.join(here, '..', 'iso_patch', 'build_cat_pack.py'),
+                r'CAPE_RGBA\s*=\s*\((\d+),\s*(\d+),\s*(\d+)', [128, 28, 0])
+    tint = _grab(os.path.join(here, '..', '..', 'Dark Cloud Improved Version', 'Weapons', 'Xiao', 'DivineBeastCat.cs'),
+                 r'CapeTint\s*=\s*\{\s*([\d.]+)f?,\s*([\d.]+)f?,\s*([\d.]+)f?', [80, 20, 10])
+    html = html.replace('/*__CAPE_DEFAULTS__*/', json.dumps({'tex': tex, 'tint': tint}) + ' || ')
+    print(f"cape panel seeded from source: texture {tuple(tex)}, tint {tuple(tint)}")
     html = html.replace('/*__MODEL_DATA__*/', 'const MODELS = ' + json.dumps([winged, game, caped, source, donor], separators=(',', ':'), ensure_ascii=False) + ';')
     io.open(out, 'w', encoding='utf-8').write(html)
     print(f"wrote {out}: {len(html.encode('utf-8')) / 1e6:.2f} MB")

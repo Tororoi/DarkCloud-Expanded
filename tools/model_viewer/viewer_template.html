@@ -51,6 +51,12 @@
   .toggles label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer}
   .val{font-variant-numeric:tabular-nums;color:var(--muted);font-size:11px}
   #stage{flex:1;position:relative;height:100%}
+  .caperow{display:flex;align-items:center;gap:6px;margin:3px 0}
+  .caperow label{flex:0 0 74px;font-size:11px;opacity:.75}
+  .caperow input[type=range]{flex:1;min-width:60px}
+  .caperow .val{flex:0 0 74px;text-align:right;font-variant-numeric:tabular-nums}
+  #capeBox{margin:8px 0}
+  #capeOut{line-height:1.6}
   canvas{display:block;width:100%;height:100%;
     background:linear-gradient(180deg,var(--canvas-top),var(--canvas-bot))}
   #hint{position:absolute;left:12px;bottom:10px;color:var(--muted);font-size:11px;
@@ -125,6 +131,18 @@
       <label><input type="checkbox" id="cbAxes" checked> axes</label>
       <label><input type="checkbox" id="cbBound"> cloth capsules</label>
     </div>
+    <details id="capeBox">
+      <summary class="cap" style="cursor:pointer">Cape colour</summary>
+      <div class="caperow"><label for="capeTex">texture</label><input type="color" id="capeTex" value="#968884"><span class="val" id="capeTexN"></span></div>
+      <div class="caperow"><label for="capeTintR">tint R</label><input type="range" id="capeTintR" min="0" max="160" step="1" value="40"><span class="val" id="capeTintRN"></span></div>
+      <div class="caperow"><label for="capeTintG">tint G</label><input type="range" id="capeTintG" min="0" max="160" step="1" value="10"><span class="val" id="capeTintGN"></span></div>
+      <div class="caperow"><label for="capeTintB">tint B</label><input type="range" id="capeTintB" min="0" max="160" step="1" value="5"><span class="val" id="capeTintBN"></span></div>
+      <div class="caperow"><label for="capeAmb">room light</label><input type="range" id="capeAmb" min="0" max="100" step="1" value="30"><span class="val" id="capeAmbN"></span></div>
+      <div class="caperow"><label for="capeLit">directional</label><input type="range" id="capeLit" min="0" max="120" step="1" value="70"><span class="val" id="capeLitN"></span></div>
+      <p class="cap" id="capeOut" style="user-select:all"></p>
+      <p class="cap" style="opacity:.7">The two room sliders are the DUNGEON's lighting, not cape settings — move them to see it under
+        a torch and in a dark corner. Only the texture and the tint are values you keep.</p>
+    </details>
   </div>
 
   <div class="group">
@@ -230,13 +248,19 @@ const MESH_P = prog(`
   void main(){ vN=aNrm; vSel=aSel; gl_Position = uVP * vec4(aPos,1.0); }`,`
   precision mediump float; varying vec3 vN; varying float vSel;
   uniform vec3 uLight; uniform vec3 uColor; uniform vec3 uSelColor;
+  uniform vec3 uCapeTint; uniform vec2 uScene; uniform float uIsCape;
   void main(){
     vec3 n=normalize(vN);
     float d=abs(dot(n, normalize(uLight)));           // two-sided so winding never darkens a face
-    float shade=0.32 + 0.68*d;                        // ambient + directional
     vec3 col=mix(uColor, uSelColor, step(0.5, vSel)); // selected polys in the accent colour
-    gl_FragColor=vec4(col*shade,1.0);
+    // The cape, the way the game arrives at its colour: its flat texture, lit by the scene (a floor of ambient plus a
+    // normal-dependent term — the only part that shows a fold), with the tint added into the ambient for its draw alone.
+    vec3 shaded = uIsCape > 0.5 ? col * (uScene.x + uCapeTint + uScene.y * d)
+                                : col * (0.32 + 0.68 * d);
+    gl_FragColor=vec4(min(shaded, vec3(1.0)),1.0);
   }`);
+const MESH_uTint=gl.getUniformLocation(MESH_P,'uCapeTint'), MESH_uScene=gl.getUniformLocation(MESH_P,'uScene'),
+      MESH_uIsCape=gl.getUniformLocation(MESH_P,'uIsCape');
 const MESH_uVP=gl.getUniformLocation(MESH_P,'uVP'), MESH_uL=gl.getUniformLocation(MESH_P,'uLight'),
       MESH_uC=gl.getUniformLocation(MESH_P,'uColor'), MESH_uS=gl.getUniformLocation(MESH_P,'uSelColor'),
       MESH_aP=gl.getAttribLocation(MESH_P,'aPos'), MESH_aN=gl.getAttribLocation(MESH_P,'aNrm'),
@@ -553,6 +577,31 @@ canvas.addEventListener('wheel',e=>{ cam.dist=Math.max(8,Math.min(160,cam.dist*(
 let curModel=null, curDec=null, curMotion=null, frame=0, playing=true, spin=false;
 const el=id=>document.getElementById(id);
 
+// ---- the cape's colour. Two values live in the mod — the flat texture the bake writes and the ambient the runtime gives that
+// one cloth — and the game combines them with the room's own lighting, which is why tuning either by eye in-game is so slow.
+function hexToRgb(h){ return [parseInt(h.substr(1,2),16), parseInt(h.substr(3,2),16), parseInt(h.substr(5,2),16)]; }
+const CAPE_DEFAULTS = /*__CAPE_DEFAULTS__*/{tex:[128,28,0], tint:[80,20,10]};
+(function(){ const h=n=>('0'+n.toString(16)).slice(-2);
+  el('capeTex').value = '#' + CAPE_DEFAULTS.tex.map(h).join('');
+  ['R','G','B'].forEach((k,i)=>{ el('capeTint'+k).value = CAPE_DEFAULTS.tint[i]; });
+})();
+function capeVals(){
+  const t=hexToRgb(el('capeTex').value);
+  const tint=[+el('capeTintR').value, +el('capeTintG').value, +el('capeTintB').value];
+  return {tex:[t[0]/255,t[1]/255,t[2]/255], rgb:t, tint, amb:+el('capeAmb').value/100, lit:+el('capeLit').value/100};
+}
+function capeReadout(){
+  const c=capeVals();
+  el('capeTexN').textContent = c.rgb.join(', ');
+  el('capeTintRN').textContent = c.tint[0]; el('capeTintGN').textContent = c.tint[1]; el('capeTintBN').textContent = c.tint[2];
+  el('capeAmbN').textContent = c.amb.toFixed(2); el('capeLitN').textContent = c.lit.toFixed(2);
+  el('capeOut').innerHTML = 'build_cat_pack.py&nbsp; <b>CAPE_RGBA = (' + c.rgb.join(', ') + ', 0x80)</b><br>' +
+                            'DivineBeastCat.cs&nbsp; <b>CapeTint = { ' + c.tint.map(v=>v+'f').join(', ') + ' }</b>';
+}
+['capeTex','capeTintR','capeTintG','capeTintB','capeAmb','capeLit'].forEach(id=>el(id).addEventListener('input', capeReadout));
+capeReadout();
+
+
 function fillModels(){
   const sel=el('model'); let og=null, curg=null;
   MODELS.forEach((m,i)=>{
@@ -687,7 +736,9 @@ function render(){
       // wing meshes (grafted parts) draw white so their intersection with the grey body reads clearly
       const wing=(curDec.nodes[me.node].name||'').toLowerCase().includes('wing');
       if(me.tag==='bound'){ if(!showBound) continue; gl.uniform3f(MESH_uC, 0.05,0.16,0.30); }   // the cape's collision ellipsoids (added over the body)
-      else if(me.tag==='cape') gl.uniform3f(MESH_uC, 1.0,0.19,0.19);                 // the Super Steve cape: solid bright red (build_cat_pack.CAPE_RGBA)
+      else if(me.tag==='cape'){ const c=capeVals(); gl.uniform3f(MESH_uC, c.tex[0],c.tex[1],c.tex[2]);
+        gl.uniform3f(MESH_uTint, c.tint[0]/128, c.tint[1]/128, c.tint[2]/128);
+        gl.uniform2f(MESH_uScene, c.amb, c.lit); gl.uniform1f(MESH_uIsCape, 1); }
       else if(wing) gl.uniform3f(MESH_uC, 1.0,1.0,1.0); else gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
       gl.bindBuffer(gl.ARRAY_BUFFER,meshVBO);
       const n=me.nt*9;
@@ -700,6 +751,7 @@ function render(){
       gl.enableVertexAttribArray(MESH_aS); gl.vertexAttribPointer(MESH_aS,1,gl.FLOAT,false,0,n*8);
       if(me.tag==='bound'){ gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); gl.depthMask(false); }   // additive tint: the body stays visible through it, whatever the winding
       gl.drawArrays(gl.TRIANGLES,0,me.nt*3);
+      if(me.tag==='cape') gl.uniform1f(MESH_uIsCape, 0);
       if(me.tag==='bound'){ gl.disable(gl.BLEND); gl.depthMask(true); }
     }
     gl.disableVertexAttribArray(MESH_aS);
