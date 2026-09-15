@@ -63,7 +63,12 @@ GLOW_VARIANTS = {"catgloww": ((255, 255, 255), (215, 225, 255)),   # white, a co
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
-CAPE_RGBA = (255, 48, 48, 0x80)                  # the Super Steve cape's flat texture: solid bright red (user 2026-09-14)
+CAPE_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cape's flat texture: a deep red, tuned in the viewer's cape panel
+                                                 # The red comes from the ambient the runtime gives the cloth (DivineBeastCat
+                                                 # .CapeTint), and a light base serves that better twice over — the tint reads
+                                                 # as its own colour instead of compounding with a red texture, and the scene's
+                                                 # shading (which is what makes the ripples visible) is multiplied by a bright
+                                                 # base rather than crushed by a dark one (user 2026-09-14)
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree

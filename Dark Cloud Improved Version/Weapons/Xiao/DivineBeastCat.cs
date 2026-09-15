@@ -630,7 +630,11 @@ namespace Dark_Cloud_Improved_Version
         /// draw alone and puts the ambient straight back, so the cape carries a red of its own while the cat keeps its blue and
         /// every other cloth in the game is untouched. The delta is ON TOP of the cat's tint, which is already in the ambient by
         /// then — so it is written as (what the cape should have) − (what the cat has), and the cat's colour does not leak in.</summary>
-        private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint
+        // Ambient is FLAT — it lifts every part of the cape by the same amount, so the more of it there is, the less the scene's
+        // own lighting (the part that varies with each particle's normal, and therefore the only part that SHOWS the ripples)
+        // counts for. Enough to be clearly red in a dark dungeon, not so much that it washes the shading out.
+        private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint —
+                                                                                       // tuned against the texture in the viewer's cape panel
                                                                                        // (the cat's blue is 12/24/48)
         private static void TintCape()
         {

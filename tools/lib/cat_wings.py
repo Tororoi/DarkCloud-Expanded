@@ -406,7 +406,12 @@ CAPE_PHYSICS = {
                                     # instead of lying scrunched on the back; tune it there (CapeBreezeBack/Up), not here
     'follow': (0.40, 0.30, 0.40),   # how much of the cat's movement each particle takes directly; the rest becomes swing
     'wind': 0.25,                   # WINDEFFECT: the dungeon wind noise, scaled by how squarely it hits the sheet
-    'normal': 1.0,                  # NORMAL: sign of the generated normals (vanilla flips it for one poncho half)
+    'normal': -1.0,                 # NORMAL: sign of the generated normals. The engine builds them per particle from the
+                                    # grid's own neighbour differences, so which way they face depends on the ORDER our
+                                    # lattice is baked in — get it backwards and every normal points into the cat, the lit
+                                    # side is the one against the body and the side you can see takes only ambient: a flat,
+                                    # solid colour with no hint of the ripples in it (user 2026-09-14). Vanilla flips this
+                                    # for one half of Ungaga's poncho for the same reason.
 }
 
 CAPE_BOUNDS = [                                                                 # grid-fitted to the fur (scratch cape_bound_opt.py)
@@ -520,6 +525,37 @@ def build_bound_meshes(cat_nodes, seg=16, ring=10):
         meshes.append({'node': bw['node'], 'skin': True, 'nv': n, 'tris': tris, 'b0': [bw['node']] * n, 'p0': verts,
                        'b1': [bw['node']] * n, 'p1': [list(v) for v in verts], 'w0': [1.0] * n, 'tag': 'bound'})
     return meshes
+
+
+# ── the wind, for the VIEWER only ────────────────────────────────────────────────────────────────────────────────────────────
+# The game does not bake the blown shape: DivineBeastCat.BreezeCape rewrites the cloth's rest shape every tick, lifting each row
+# off the back and running a ripple down it (see its own notes for why the wind is a shape and not a force). The viewer has no
+# simulation, so to judge the cape's COLOUR against its folds it poses the sheet the same way, once, at a fixed phase. These must
+# mirror the C# constants — they are duplicated on purpose, because the bake must keep the un-blown rest shape and only the viewer
+# wants this. Re-check them if the runtime values move.
+CAPE_VIEW_WIND = {'lift': 2.6, 'ease': 1.6, 'amp': 0.65, 'reach': 0.5, 'rows': 10.0, 'phase': 1.1}
+
+
+def cape_wind_pose(mesh, rows, cols, wind=None):
+    """`mesh` (from build_cape_mesh) with the blown shape and one frame of the ripple applied, in the anchor's own frame:
+    −x runs down the cape away from the collar and −y lifts off the back, exactly as the runtime writes it."""
+    import copy
+    w = dict(CAPE_VIEW_WIND, **(wind or {}))
+    out = copy.deepcopy(mesh)
+    mid = cols // 2
+    span = abs(out['p0'][mid][0] - out['p0'][(rows - 1) * cols + mid][0])
+    for r in range(1, rows):
+        t = r / (rows - 1)
+        f = t ** w['ease']
+        swell = w['amp'] * min(1.0, t / w['reach'])
+        lift = w['lift'] * f + swell * math.sin(w['phase'] - r * 2 * math.pi / w['rows'])
+        d = span * t
+        trim = d - math.sqrt(max(0.0, d * d - lift * lift))
+        for c in range(cols):
+            i = r * cols + c
+            for arr in ('p0', 'p1'):
+                out[arr][i] = [out[arr][i][0] + trim, out[arr][i][1] - lift, out[arr][i][2]]
+    return out
 
 
 def cape_rest_local(cat_nodes, skin):
