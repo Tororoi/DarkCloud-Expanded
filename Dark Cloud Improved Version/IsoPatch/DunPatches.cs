@@ -50,10 +50,19 @@ namespace Dark_Cloud_Improved_Version
             // units (104 KB) of global slack. The literal 210000 is `lui r,3; ori r,r,0x3450` at four sites (carve, the two
             // remaining-room computations, a memory-map printf): 260000 = 0x3F7A0 = ori 0xF7A0 (lui 3 unchanged). 280000 is
             // `lui v0,4; ori a1,v0,0x45C0` → 250000 = `lui v0,3; ori a1,v0,0xD090`.
-            new(0x01DAC0C4, 0x34463450, 0x3446F7A0, "character heap 210000 → 260000 units (MemoryMapDump printf)"),
-            new(0x01DAC338, 0x34453450, 0x3445F7A0, "character heap 210000 → 260000 units (GameInit carve)"),
-            new(0x01DB9A88, 0x34433450, 0x3443F7A0, "character heap 210000 → 260000 units (LoadWeapon2 remaining)"),
-            new(0x01DBA8B0, 0x34423450, 0x3442F7A0, "character heap 210000 → 260000 units (LoadChara2 remaining)"),
+            // 2026-09-14, the MASK: 260000 units was not enough for it. HeapWatch on the freeze read chara 3,905,424 of
+            // 4,160,000 with weapons 225,232 and effects 29,296 — total 4,159,952, i.e. 48 BYTES free, and the effects pool
+            // squeezed to a 29,344 cap against a real demand of 70-190 KB. So the heap takes 5,000 more units (80,000 B) out
+            // of the global buffer, which the same log measured at 103,984 B free; 23,984 B of it is left. 265000 = 0x40B28
+            // no longer fits the `ori` alone (260000 was 0x3F7A0, still lui 3), so each site's `lui r2,3` goes to 4 as well.
+            new(0x01DAC0C0, 0x3C020003, 0x3C020004, "character heap → 265000 units (MemoryMapDump printf, lui)"),
+            new(0x01DAC334, 0x3C020003, 0x3C020004, "character heap → 265000 units (GameInit carve, lui)"),
+            new(0x01DB9A84, 0x3C020003, 0x3C020004, "character heap → 265000 units (LoadWeapon2 remaining, lui)"),
+            new(0x01DBA8AC, 0x3C020003, 0x3C020004, "character heap → 265000 units (LoadChara2 remaining, lui)"),
+            new(0x01DAC0C4, 0x34463450, 0x34460B28, "character heap 210000 → 265000 units (MemoryMapDump printf)"),
+            new(0x01DAC338, 0x34453450, 0x34450B28, "character heap 210000 → 265000 units (GameInit carve)"),
+            new(0x01DB9A88, 0x34433450, 0x34430B28, "character heap 210000 → 265000 units (LoadWeapon2 remaining)"),
+            new(0x01DBA8B0, 0x34423450, 0x34420B28, "character heap 210000 → 265000 units (LoadChara2 remaining)"),
             new(0x01DAC460, 0x3C020004, 0x3C020003, "dungeon read buffer 280000 → 250000 units (lui)"),
             new(0x01DAC464, 0x344545C0, 0x3445D090, "dungeon read buffer 280000 → 250000 units (ori)"),
             // Divine Beast cat: the dungeon step loop's once-per-frame `jal step__5CSHOT` (a0 = player shot pool)

@@ -769,8 +769,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ─────────────────────────────────────── character heap watch ──────────────────────────────────────
-        // The dungeon's character/weapon/effect data share ONE CDataAlloc2 pool of 210000 × 16 B vanilla (260000 × 16 =
-        // 4.16 MB with DunPatches' heap raise; LoadChara2: chara @0x1F06660, weapons @0x1F06670, effects @0x1F06680; the
+        // The dungeon's character/weapon/effect data share ONE CDataAlloc2 pool of 210000 × 16 B vanilla (265000 × 16 =
+        // 4.24 MB with DunPatches' heap raise; LoadChara2: chara @0x1F06660, weapons @0x1F06670, effects @0x1F06680; the
         // chara cap @+12 is the pool size, the others are whatever the earlier ones left). An
         // overflow is a SILENT spin (Alloc__14CDataAlloc2<1>Fi: printf + while(true)) — i.e. a freeze. Xiao only
         // ever loads through the party switch, so the watch runs on every floor for every character and logs the
