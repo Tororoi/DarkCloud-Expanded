@@ -527,6 +527,413 @@ def build_bound_meshes(cat_nodes, seg=16, ring=10):
     return meshes
 
 
+# ── the Super Steve cat's mask ───────────────────────────────────────────────────────────────────────────────────────────────
+# A domino mask in the cape's red: real geometry with real holes in it, not a marking painted into the cat's texture — a painted
+# marking takes the CAT's tint, and the whole point of the mask is that it belongs to the cape. It rides cat_kao rigidly, so it
+# follows the head through every clip with no skinning of its own.
+#
+# The shape is authored in 2D and then wrapped onto the face:
+#   · the outline is the SOFT UNION of two tilted lobe ellipses, one over each eye. Two overlapping ellipses already make the
+#     domino silhouette — round over each eye, pinched to a bridge in the middle, with a shallow notch top and bottom centre —
+#     and the blend radius (MASK_BRIDGE) is the single knob for how deep those notches cut.
+#   · the eye holes are two smaller tilted ellipses, cut out of it.
+#   · the region between them is triangulated by ear clipping (the holes are bridged OUTWARD, away from the midline, so the two
+#     cuts can never run into each other).
+#   · every 2D point is then cast OUTWARD from a point inside the head (MASK_CORE) rather than straight back along −z, so the
+#     outer edge wraps around the cheekbone instead of shooting off the silhouette into thin air. The first build cast along −z
+#     and the four widest points found no face at all (2026-09-14).
+MASK_ANCHOR = 'cat_kao'            # the bone it rides — the whole mask is weighted 100% to it
+MASK_CORE = (0.0, 3.36, 3.35)      # the head's centre at eye height, in the cat's bind pose: every mask point is cast out from
+MASK_R = 0.88                      # here, along a ray through this sphere, so design coordinates are arc lengths over the face
+MASK_EYE = (0.507, 3.368)          # one eye's centre in design coordinates, mirrored for the other
+MASK_HOLE = (0.32, 0.20)           # and the eye's own half extents there: at exactly these the hole traces the painted eye
+MASK_HOLE_AT = 0.500               # where the hole's own centre sits, so the two openings can be drawn closer together than
+                                   # the eyes themselves are. The LOBES stay on MASK_EYE.
+MASK_HOLE_TILT = 11.0               # degrees of EXTRA slant on the hole, on top of whatever slant the measured shape has
+MASK_HOLE_ROUND = 0.70              # 0 = the eye's own silhouette below, 1 = a plain ellipse; anything between blends the two
+# The eye's silhouette, measured off the face: 24 radii at even angles, in a frame where the eye's bounding box is the unit
+# square (so every radius is about 1, and MASK_HOLE is the scale). Taken by flat-projecting the head, marking every pixel that
+# is not the fur's own colour, keeping the blob joined to the middle of the eye, and mapping it back through the same cast the
+# mask uses (tools scratch: eye_shape.py). An ellipse left fur showing inside the hole at the corners of the eye.
+MASK_EYE_SHAPE = (0.796, 0.999, 1.055, 0.980, 0.924, 0.934, 0.965, 0.990, 1.014, 1.024, 0.993, 0.926,
+                  0.915, 1.025, 1.163, 1.199, 1.116, 1.023, 0.987, 0.952, 0.883, 0.827, 0.746, 0.681)
+MASK_LOBE = (0.80, 0.33, 0.40)     # the lobe over each eye: half-width, half-height up (the brow), half-height down (the cheek)
+MASK_LOBE_RISE = 0.03              # the lobe sits this much ABOVE the eye, so the rim is thick over the brow and thin under it
+MASK_LOBE_TILT = 5.0              # degrees, outer corner lifted — a mask sweeps up toward the temple
+MASK_BRIDGE = 0.00                 # the soft-union radius: 0 leaves sharp notches where the lobes cross, larger fills them in
+MASK_NOSE_TOP = 3.20               # the notch bitten up out of the bottom edge so the mask clears the nose: how high it
+MASK_NOSE_W = 0.55                 # reaches on the midline, and the half-width at which it has fallen 0.25 below that.
+MASK_NOSE_BLEND = 0.13             # how rounded its corners are. It used to be an ELLIPSE subtracted from the mask, and that
+                                   # ellipse sat almost exactly tangent to the bottom of the lobes: a hair too low and it did
+                                   # nothing at all, a hair too high and it took a huge bite out of the middle, so there was no
+                                   # tuning it by eye. A parabola crosses the bottom edge squarely, so its height is a real
+                                   # knob and raising it simply thins the middle of the mask (2026-09-14).
+MASK_LIFT = 0.050                  # how far the mask stands off the fur
+MASK_DRAPE = 0.00                  # 0 = the mask hugs every bump and crease of the head; 1 = a stiff sheet that only touches
+MASK_DRAPE_PASSES = 60             # the high points and slopes gently across the hollows between them. Each vertex rides a
+                                   # fixed ray out of MASK_CORE, so this changes only how far out it sits, never the outline:
+                                   # the distances are relaxed toward their neighbours' but never allowed below the face.
+MASK_SEGS = 120                    # rays used to trace each half of the outline before it is decimated
+MASK_SMOOTH = 0.010                # how far the decimated outline may stray from those rays, measured ON THE FACE
+MASK_LATTICE = 0.11                # the mesh's step in the open middle of the mask
+MASK_GRADE = 0.42                  # …and the fraction of that it falls to against an edge, so narrow rims still get a row
+MASK_HOLE_SEGS = 22                # points around each eye hole
+
+
+def _ellipse_sd(p, c, rx, ryu, ryd, tilt):
+    """A rough signed distance to a tilted ellipse with its own up and down radii (negative inside). Not exact — it is the
+    radius ratio scaled by the smallest radius — but it is smooth and correctly signed, which is all the blend below needs."""
+    ca, sa = math.cos(-tilt), math.sin(-tilt)
+    dx, dy = p[0] - c[0], p[1] - c[1]
+    ux, uy = dx * ca - dy * sa, dx * sa + dy * ca
+    ry = ryu if uy >= 0 else ryd
+    return (math.hypot(ux / rx, uy / ry) - 1.0) * min(rx, ry)
+
+
+def _smin(a, b, k):
+    """Polynomial smooth minimum: a union with a fillet of radius k instead of a crease."""
+    if k <= 1e-6: return min(a, b)
+    h = max(0.0, min(1.0, 0.5 + 0.5 * (b - a) / k))
+    return b * (1 - h) + a * h - k * h * (1 - h)
+
+
+def _smax(a, b, k): return -_smin(-a, -b, k)
+
+
+def mask_field(p):
+    """The mask outline as an implicit function of a 2D design point: negative inside, zero on the outline. Two lobe ellipses
+    softly unioned — that pinch alone makes the domino silhouette — less the parabola notch bitten up over the nose."""
+    tilt = math.radians(MASK_LOBE_TILT)
+    lobes = [_ellipse_sd(p, (side * MASK_EYE[0], MASK_EYE[1] + MASK_LOBE_RISE), MASK_LOBE[0], MASK_LOBE[1], MASK_LOBE[2], side * tilt)
+             for side in (-1, 1)]
+    f = _smin(lobes[0], lobes[1], MASK_BRIDGE)
+    if MASK_NOSE_W > 0:
+        f = _smax(f, (MASK_NOSE_TOP - 0.25 * (p[0] / MASK_NOSE_W) ** 2) - p[1], MASK_NOSE_BLEND)
+    return f
+
+
+def _outline_at(th):
+    """The outline along one ray from the middle of the mask. The field is a union of two ellipses that both contain that
+    centre, so it is star shaped about it and a single bisection finds the edge."""
+    c = (0.0, MASK_EYE[1] + MASK_LOBE_RISE)
+    d = (math.cos(th), math.sin(th))
+    lo, hi = 0.0, 4.0
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if mask_field((c[0] + d[0] * mid, c[1] + d[1] * mid)) < 0: lo = mid
+        else: hi = mid
+    r = 0.5 * (lo + hi)
+    return (c[0] + d[0] * r, c[1] + d[1] * r)
+
+
+def _seg_dist(p, a, b):
+    """Distance from p to the segment ab, in however many dimensions they have."""
+    ab = [b[k] - a[k] for k in range(len(a))]
+    ap = [p[k] - a[k] for k in range(len(a))]
+    n2 = sum(c * c for c in ab)
+    t = 0.0 if n2 < 1e-18 else max(0.0, min(1.0, sum(ap[k] * ab[k] for k in range(len(a))) / n2))
+    return math.sqrt(sum((ap[k] - t * ab[k]) ** 2 for k in range(len(a))))
+
+
+def _decimate(line, tol, keys=None):
+    """Douglas-Peucker over `keys` (defaulting to the points themselves), returning the kept points of `line`. Sampling the
+    outline at even ANGLES spends most of its rays on the wide smooth arcs over the eyes and almost none in the nose notch,
+    which is a narrow wedge seen from the middle of the mask, so the notch came out faceted however it was tuned. And the run
+    that matters is the one ON THE FACE, not the one in the flat design — a stretch of outline that is nearly straight in
+    design space still bends hard as it crosses the shoulder of the muzzle, and a single edge there folded the mask over
+    itself. So the bake decimates against the projected points (2026-09-14)."""
+    keys = line if keys is None else keys
+    idx = _decimate_idx(keys, tol, 0, len(keys) - 1)
+    return [line[i] for i in idx]
+
+
+def _decimate_idx(keys, tol, lo, hi):
+    if hi - lo < 2: return [lo, hi]
+    worst, wi = -1.0, lo
+    for i in range(lo + 1, hi):
+        d = _seg_dist(keys[i], keys[lo], keys[hi])
+        if d > worst: worst, wi = d, i
+    if worst <= tol: return [lo, hi]
+    return _decimate_idx(keys, tol, lo, wi)[:-1] + _decimate_idx(keys, tol, wi, hi)
+
+
+def _mask_outline_half(dense=None, tol=None, project=None):
+    """The RIGHT half of the outline, bottom of the midline round to the top of it. Everything is built from this half and
+    mirrored, so the two sides of the mask are identical by construction rather than by luck. `project` maps a design point to
+    the face, and when it is given the decimation is judged there instead of in the flat design."""
+    dense = dense or MASK_SEGS
+    tol = MASK_SMOOTH if tol is None else tol
+    line = []
+    for k in range(dense + 1):
+        th = -math.pi / 2 + math.pi * k / dense
+        line.append(_outline_at(th))
+    line[0] = (0.0, line[0][1]); line[-1] = (0.0, line[-1][1])                       # exactly on the midline
+    keys = line if project is None else [project(*q) for q in line]
+    kept = _decimate_idx(keys, tol, 0, len(keys) - 1)
+    out = []                                                                         # and no boundary edge longer than the mesh
+    for a, b in zip(kept, kept[1:]):
+        out.append(a)
+        n = int(math.dist(line[a], line[b]) / MASK_LATTICE)
+        for k in range(1, n):
+            out.append(a + int(round((b - a) * k / n)))
+    out.append(kept[-1])
+    seen, idx = set(), []
+    for i in out:
+        if i not in seen: seen.add(i); idx.append(i)
+    return [line[i] for i in idx]
+
+
+def _mask_outline(segs=None, project=None):
+    """The whole outline, as a closed loop — the half above plus its mirror. For probes and previews."""
+    half = _mask_outline_half(project=project)
+    return list(half) + [(-x, y) for x, y in reversed(half[1:-1])]
+
+
+def _eye_radius(th):
+    """MASK_EYE_SHAPE read at an arbitrary angle, blended toward a circle by MASK_HOLE_ROUND."""
+    n = len(MASK_EYE_SHAPE)
+    x = (th % (2 * math.pi)) / (2 * math.pi) * n
+    i = int(x) % n
+    f = x - int(x)
+    r = MASK_EYE_SHAPE[i] * (1 - f) + MASK_EYE_SHAPE[(i + 1) % n] * f
+    return r * (1 - MASK_HOLE_ROUND) + MASK_HOLE_ROUND
+
+
+def _mask_hole(side, segs=None, grow=0.0):
+    """One eye hole, wound the opposite way round from the outline. `grow` pushes the ring outward by that distance, which is
+    how the lattice keeps its clear of the edge."""
+    segs = segs or MASK_HOLE_SEGS
+    tilt = math.radians(side * MASK_HOLE_TILT)
+    ca, sa = math.cos(tilt), math.sin(tilt)
+    cx, cy = side * MASK_HOLE_AT, MASK_EYE[1]
+    pts = []
+    for k in range(segs):
+        th = -2 * math.pi * k / segs                                                # clockwise
+        r = _eye_radius(th if side > 0 else math.pi - th)                           # the shape is measured on the +x eye
+        ux, uy = MASK_HOLE[0] * r * math.cos(th), MASK_HOLE[1] * r * math.sin(th)
+        if grow:
+            d = math.hypot(ux, uy)
+            if d > 1e-9: ux *= (d + grow) / d; uy *= (d + grow) / d
+        pts.append((cx + ux * ca - uy * sa, cy + ux * sa + uy * ca))
+    return pts
+
+
+def _area2(a, b, c): return (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+
+
+def _in_circum(P, t, p):
+    """Is p inside the circumcircle of triangle t (given counter-clockwise)?"""
+    a, b, c = P[t[0]], P[t[1]], P[t[2]]
+    ax, ay = a[0] - p[0], a[1] - p[1]
+    bx, by = b[0] - p[0], b[1] - p[1]
+    cx, cy = c[0] - p[0], c[1] - p[1]
+    return ((ax * ax + ay * ay) * (bx * cy - by * cx)
+            - (bx * bx + by * by) * (ax * cy - ay * cx)
+            + (cx * cx + cy * cy) * (ax * by - ay * bx)) > 0
+
+
+def _delaunay(pts):
+    """Bowyer-Watson: the Delaunay triangulation of a point set, as index triples wound counter-clockwise."""
+    xs = [q[0] for q in pts]; ys = [q[1] for q in pts]
+    cx, cy = 0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys))
+    r = 10 * max(max(xs) - min(xs), max(ys) - min(ys)) + 1
+    P = list(pts) + [(cx - r, cy - r), (cx + r, cy - r), (cx, cy + r)]
+    n = len(pts)
+    tris = [(n, n + 1, n + 2)]
+    for i in range(n):
+        bad, keep = [], []
+        for t in tris:
+            (bad if _in_circum(P, t, P[i]) else keep).append(t)
+        edge = {}
+        for t in bad:
+            for k in range(3):
+                e = (t[k], t[(k + 1) % 3])
+                edge[(min(e), max(e))] = edge.get((min(e), max(e)), 0) + 1
+        tris = keep
+        for (u, v), cnt in edge.items():
+            if cnt != 1: continue                                                    # interior to the cavity
+            tris.append((u, v, i) if _area2(P[u], P[v], P[i]) > 0 else (v, u, i))
+    return [t for t in tris if max(t) < n]
+
+
+def _pt_in_ring(p, ring):
+    """Crossing test against a sampled ring — the hole is no longer an ellipse, it is the eye's own outline."""
+    inside = False
+    for i in range(len(ring)):
+        a, b = ring[i], ring[i - 1]
+        if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]):
+            inside = not inside
+    return inside
+
+
+def _in_hole(p, grow=0.0):
+    """Inside either eye hole, grown outward by `grow`."""
+    return any(_pt_in_ring(p, _mask_hole(side, 48, grow)) for side in (-1, 1))
+
+
+def mask_mesh_2d(project=None):
+    """The mask's flat design as a mesh.
+
+    Only the RIGHT half is built — half outline, one eye hole, and a triangular lattice through the middle — and then mirrored.
+    Triangulating the whole thing at once looked wrong down the middle of the face however the sliders were set: the lattice ran
+    from a fixed left edge, so its columns did not line up with their own mirror images, and the Delaunay pass then broke ties
+    differently on the two sides. Mirroring a half makes the two sides identical by construction. The lattice is what keeps the
+    mask ON the face: the bare outline alone spans single triangles from the eye out to the cheek, and those long flat chords
+    cut back inside the curve of the head, so the fur pokes through at the temples (2026-09-14)."""
+    h = MASK_LATTICE
+    pts = list(_mask_outline_half(project=project)) + list(_mask_hole(1))
+    nb = len(pts)
+    lip = _mask_hole(1, 64, 0.0)
+    # Points are spaced by how far they are from an edge, not on a flat lattice. The rims of this mask are narrow — under each
+    # eye the band between the hole and the bottom edge is barely one step wide — and a flat lattice simply found no room
+    # there, leaving the whole rim as one strip of long thin triangles that shaded as a row of scallops (2026-09-14).
+    bnd = list(pts)
+    step = h / 3.0
+    y = MASK_EYE[1] - 1.2
+    while y < MASK_EYE[1] + 1.2:
+        x = 0.0
+        while x < 1.8:
+            q = (x, y)
+            d = min(math.dist(q, b) for b in bnd)
+            r = max(MASK_GRADE * h, min(h, 0.85 * d))
+            if x > 1e-9 and x < 0.5 * r: x += step; continue                          # its own mirror would crowd it
+            if mask_field(q) < -0.40 * r and not _pt_in_ring(q, _mask_hole(1, 40, 0.40 * r)) \
+               and all(math.dist(q, o) >= r for o in pts):
+                pts.append(q)
+            x += step
+        y += step
+    half = []
+    for t in _delaunay(pts):
+        c = (sum(pts[i][0] for i in t) / 3.0, sum(pts[i][1] for i in t) / 3.0)
+        if c[0] < 0: continue
+        if mask_field(c) < 0 and not _pt_in_ring(c, lip): half.append(t)
+    out = list(pts)
+    mir = {}
+    for i, p in enumerate(pts):                                                      # points on the midline are shared
+        if abs(p[0]) < 1e-9: mir[i] = i
+        else: mir[i] = len(out); out.append((-p[0], p[1]))
+    tris = list(half) + [(mir[c], mir[b], mir[a]) for a, b, c in half]               # mirroring flips the winding back
+    used = sorted({i for t in tris for i in t})
+    ren = {i: k for k, i in enumerate(used)}
+    return [out[i] for i in used], [(ren[a], ren[b], ren[c]) for a, b, c in tris], nb
+
+
+def mask_clearance():
+    """The smallest gap between an eye hole and the mask's own outline. Negative means the hole breaks the edge — which the ear
+    clipper will happily triangulate into a fan of crossed slivers rather than refuse (2026-09-14)."""
+    worst = None
+    for side in (-1, 1):
+        for p in _mask_hole(side, 72):
+            d = -mask_field(p)                                                       # positive inside the mask
+            if worst is None or d < worst[0]: worst = (d, side, p)
+    return worst
+
+
+def _mask_dir(u, v):
+    """The ray a design point rides: design coordinates are arc lengths on a sphere of radius MASK_R about MASK_CORE, so the
+    mask wraps the cheek instead of shooting off the silhouette."""
+    yaw, pitch = u / MASK_R, (v - MASK_CORE[1]) / MASK_R
+    return [math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)]
+
+
+def _mask_ray(fur, tris, u, v):
+    """Where that ray leaves the face: (point, unit normal)."""
+    d = _mask_dir(u, v)
+    o = MASK_CORE
+    best, acc = None, []
+    for i0, i1, i2 in tris:
+        a, b, c = fur[i0], fur[i1], fur[i2]
+        e1 = [b[k] - a[k] for k in range(3)]; e2 = [c[k] - a[k] for k in range(3)]
+        h = _cross(d, e2)
+        det = sum(e1[k] * h[k] for k in range(3))
+        if abs(det) < 1e-9: continue
+        s = [o[k] - a[k] for k in range(3)]
+        uu = sum(s[k] * h[k] for k in range(3)) / det
+        if uu < -1e-9 or uu > 1 + 1e-9: continue                                     # the slack matters: a ray landing exactly
+        q = _cross(s, e1)                                                            # on an edge shared by two faces must be
+        vv = sum(d[k] * q[k] for k in range(3)) / det                                # accepted by BOTH, or the offset direction
+        if vv < -1e-9 or uu + vv > 1 + 1e-9: continue                                # is one face's normal instead of the mean
+        t = sum(e2[k] * q[k] for k in range(3)) / det
+        if t <= 0.05: continue
+        n = _unit(_cross(e1, e2))
+        if sum(n[k] * d[k] for k in range(3)) < 0: n = [-x for x in n]               # outward, whatever the winding
+        # Every face hit at the SAME distance shares its normal with the rest. A ray down the middle of the face lands exactly
+        # on the seam where the two mirrored halves of the cat meet, and taking whichever of those two faces happened to be
+        # tested first pushed the mask's midline vertices sideways by the whole stand-off — the mask came out visibly crooked
+        # down the middle, and the browser and the bake picked different faces (2026-09-14).
+        if best is None or t > best + 1e-9: best, acc = t, [n]
+        elif t > best - 1e-9: acc.append(n)
+    if best is None: return None
+    n = _unit([sum(v[k] for v in acc) for k in range(3)])
+    return [o[k] + d[k] * best for k in range(3)], n
+
+
+def mask_outline_2d():
+    """The authored 2D design — outline and the two holes — for probes and previews."""
+    return _mask_outline(), _mask_hole(-1), _mask_hole(1)
+
+
+def _drape(floor, tris, n):
+    """Relax how far each vertex sits out along its ray toward its neighbours', but never below the face. The mask used to take
+    the fur's own shape point for point, so it inherited every crease of the muzzle and the edge around the nose notch came out
+    lumpy however the notch itself was tuned. A sheet of costume spans a hollow instead of dipping into it (2026-09-14)."""
+    if MASK_DRAPE <= 0: return list(floor)
+    adj = [set() for _ in range(n)]
+    for a, b, c in tris:
+        adj[a].update((b, c)); adj[b].update((a, c)); adj[c].update((a, b))
+    t = list(floor)
+    for _ in range(MASK_DRAPE_PASSES):
+        t = [t[i] if not adj[i] else max(floor[i], t[i] + 0.6 * (sum(t[j] for j in adj[i]) / len(adj[i]) - t[i]))
+             for i in range(n)]
+    return [floor[i] + MASK_DRAPE * (t[i] - floor[i]) for i in range(n)]
+
+
+def build_mask_mesh(cat_nodes, skin):
+    """The mask as a viewer mesh (tag 'mask'), rigidly bound to the head bone."""
+    W = lambda b: cat_nodes[b]['world']
+    def skinned(i): return [a * skin['w0'][i] + b * (1 - skin['w0'][i]) for a, b in zip(em.xform_pt(W(skin['b0'][i]), skin['p0'][i]), em.xform_pt(W(skin['b1'][i]), skin['p1'][i]))]
+    fur = [skinned(i) for i in range(skin['nv'])]
+    head = next(n for n in cat_nodes if n['name'] == MASK_ANCHOR)
+    inv = em.rigid_inv(head['world'])
+
+    gap, side, where = mask_clearance()
+    if gap < 0.02:
+        raise SystemExit(f"mask: the eye hole breaks the outline (clearance {gap:+.3f} at {where[0]:+.2f},{where[1]:.2f}) — "
+                         f"widen MASK_LOBE or shrink MASK_HOLE")
+    def project(u, v):
+        hit = _mask_ray(fur, skin['tris'], abs(u), v)
+        return hit[0] if hit else [abs(u), v, MASK_CORE[2] + MASK_R]
+    poly, tris, _ = mask_mesh_2d(project)
+
+    # Every point is cast on the RIGHT of the face and mirrored back if it belongs on the left. The cat's own mesh is not quite
+    # symmetric — the two sides differ by up to 0.015 — and casting each side against its own fur put that difference straight
+    # into a piece of costume that has to read as one solid shape.
+    dirs, floor, misses = [], [], 0
+    for u, v in poly:
+        au = abs(u)
+        d = _mask_dir(au, v)
+        hit = _mask_ray(fur, skin['tris'], au, v)
+        for pull in (0.92, 0.85, 0.78, 0.7):                                         # a ray that finds nothing — past the ear, or
+            if hit is not None: break                                                # out through a gap — walks back toward the
+            hit = _mask_ray(fur, skin['tris'], au * pull, MASK_EYE[1] + (v - MASK_EYE[1]) * pull)  # face and tries again
+            if hit is not None: misses += 1
+        if hit is None:
+            floor.append(MASK_R); misses += 1
+        else:
+            p, n = hit
+            face = abs(sum(d[k] * n[k] for k in range(3)))
+            floor.append(math.dist(p, MASK_CORE) + MASK_LIFT / max(face, 0.35))      # radial, so the clearance stays MASK_LIFT
+        dirs.append((d, -1.0 if u < 0 else 1.0))
+    ride = _drape(floor, tris, len(poly))
+    verts = [[sd * (MASK_CORE[0] + d[0] * r), MASK_CORE[1] + d[1] * r, MASK_CORE[2] + d[2] * r]
+             for (d, sd), r in zip(dirs, ride)]
+    if misses: print(f"  mask: {misses} of {len(poly)} points found no face on their ray (they fall back to the head sphere)")
+    n = len(verts)
+    p = [list(em.xform_pt(inv, v)) for v in verts]
+    return {'node': head['i'], 'skin': True, 'nv': n, 'tris': tris, 'b0': [head['i']] * n, 'p0': p,
+            'b1': [head['i']] * n, 'p1': [list(q) for q in p], 'w0': [1.0] * n, 'tag': 'mask'}
+
+
 # ── the wind, for the VIEWER only ────────────────────────────────────────────────────────────────────────────────────────────
 # The game does not bake the blown shape: DivineBeastCat.BreezeCape rewrites the cloth's rest shape every tick, lifting each row
 # off the back and running a ripple down it (see its own notes for why the wind is a shape and not a force). The viewer has no

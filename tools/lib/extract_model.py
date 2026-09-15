@@ -50,6 +50,8 @@ base64-packed so the whole multi-model viewer stays small. The viewer template
 (tools/model_viewer/viewer_template.html) has a `/*__MODEL_DATA__*/` placeholder that this script
 replaces with `const MODELS = {...}` to produce the self-contained tools/model_viewer/model_viewer.html.
 """
+import base64
+import zlib
 import os, sys, re, json, math, base64, struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -408,6 +410,89 @@ def mdt_triangles(m):
     return tris
 
 
+# ---------------------------------------------------------------- textures
+def tim2_rgba(block):
+    """(w, h, rgba bytes) from a TIM2 picture. 8-bit indexed only, which is every character texture on the disc.
+
+    The 256-colour CLUT is stored in the PS2's CSM1 block order, so entries have to be un-swizzled before use — bits 3 and 4
+    of the index swap. Reading it straight gives a picture with the right colours in the wrong places; measured on the cat's
+    face texture, neighbouring pixels differ by 34 taken straight and 24 un-swizzled, which is how you can tell without
+    looking at it."""
+    if block[:4] != b'TIM2':
+        raise ValueError('not a TIM2')
+    pic = 0x10
+    _, clut_sz, img_sz = struct.unpack_from('<3I', block, pic)
+    hdr_sz, colors = struct.unpack_from('<2H', block, pic + 0x0C)
+    w, h = struct.unpack_from('<2H', block, pic + 0x14)
+    if colors != 256:
+        raise ValueError(f'{colors}-colour TIM2 is not supported (8-bit indexed only)')
+    px = block[pic + hdr_sz: pic + hdr_sz + img_sz]
+    cl = block[pic + hdr_sz + img_sz: pic + hdr_sz + img_sz + clut_sz]
+    unsw = lambda k: (k & ~0x18) | ((k & 0x08) << 1) | ((k & 0x10) >> 1)
+    pal = []
+    for k in range(256):
+        o = unsw(k) * 4
+        r, g, b, a = cl[o], cl[o + 1], cl[o + 2], cl[o + 3]
+        pal.append(bytes((r, g, b, min(255, a * 2))))        # PS2 alpha: 0x80 is opaque
+    out = bytearray()
+    for i in px[:w * h]:
+        out += pal[i]
+    return w, h, bytes(out)
+
+
+def png_data_uri(w, h, rgba):
+    """`rgba` as a PNG data: URI. Hand-rolled because the bake runs on the stock python3, which has no PIL."""
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)                                        # filter: none
+        raw += rgba[y * w * 4:(y + 1) * w * 4]
+    def chunk(tag, payload):
+        return struct.pack('>I', len(payload)) + tag + payload + struct.pack('>I', zlib.crc32(tag + payload) & 0xFFFFFFFF)
+    png = (b'\x89PNG\r\n\x1a\n'
+           + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 6, 0, 0, 0))
+           + chunk(b'IDAT', zlib.compress(bytes(raw), 6))
+           + chunk(b'IEND', b''))
+    return 'data:image/png;base64,' + base64.b64encode(png).decode('ascii')
+
+
+def mdt_triangles_tex(m):
+    """Like `mdt_triangles`, but also per-corner UV indices and the material each triangle draws with: (tris, uvtris, mats).
+
+    ⚠ THE TWO ATTRIBUTE BLOCKS ARE NAMED BACKWARDS IN mdt_codec. A record is (position, NORMAL, UV) — not (position, uv, normal)
+    — and `Mdt.uv` holds the normals while `Mdt.norm` holds the texture coordinates. Measured, not guessed: every entry of the
+    first block is a UNIT vector with a constant 1.0 fourth component, and every entry of the second is (u, v, 1.0, 0.0) with u
+    and v inside 0…1. Texturing through the wrong one gives a mapping that looks almost plausible — a head's normals vary like a
+    spherical projection — but squeezes a whole face onto the muzzle (2026-09-14). The names are left alone because the bake
+    writes both blocks through them and its output is byte-identical; use `mdt_uvs` rather than reading either directly."""
+    tris, uvs, mats = [], [], []
+    for prim, midx, recs in m.submeshes:
+        if prim == 3:
+            for k in range(0, len(recs) - 2, 3):
+                tris.append((recs[k][0], recs[k + 1][0], recs[k + 2][0]))
+                uvs.append((recs[k][2], recs[k + 1][2], recs[k + 2][2]))
+                mats.append(midx)
+        elif prim == 4:
+            for k in range(len(recs) - 2):
+                a, b, c = recs[k][0], recs[k + 1][0], recs[k + 2][0]
+                if a == b or b == c or a == c:
+                    continue
+                ua, ub, uc = recs[k][2], recs[k + 1][2], recs[k + 2][2]
+                tris.append((b, a, c) if k & 1 else (a, b, c))
+                uvs.append((ub, ua, uc) if k & 1 else (ua, ub, uc))
+                mats.append(midx)
+    return tris, uvs, mats
+
+
+def mdt_uvs(m):
+    """The MDT's texture coordinates, in 0…1 — which live in the block mdt_codec calls `norm` (see mdt_triangles_tex)."""
+    return [(v[0], v[1]) for v in m.norm]
+
+
+def mdt_textures(m):
+    """The texture name each of the MDT's materials draws with (material +0x34, 16 bytes)."""
+    return [mat[0x34:0x44].split(b'\x00')[0].decode('latin1', 'replace') for mat in m.materials]
+
+
 def build_mesh(mds, node, nodes):
     """Return a per-vertex-skinned mesh dict for one node's MDT (verts in MODEL space, with up to two
     bone influences each). Rigid parts -> 1 bone (the owner). Large body meshes -> 2 nearest joints."""
@@ -461,12 +546,28 @@ def load_weights(pack, wgt_name):
     return out
 
 
-def build_mesh_weighted(mds, node, nodes, per_vertex):
+def build_mesh_weighted(mds, node, nodes, per_vertex, textured=False):
     """Like build_mesh, but with the pack's REAL weights for this mesh (top two influences per vertex, renormalised);
-    vertices the .wgt leaves out ride the owner node."""
+    vertices the .wgt leaves out ride the owner node. With `textured`, also carries what it takes to draw the thing with its
+    own textures: per-CORNER uv pairs (MDT records are (position, uv, normal), so UVs do not belong to vertices) and the
+    triangles sorted into runs, one per texture."""
     m = parse_mdt(mds, node['meshoff'])
     local_pos = [v[:3] for v in m.pos]
-    tris = mdt_triangles(m)
+    if textured:
+        tris, uvtris, mats = mdt_triangles_tex(m)
+        texnames = mdt_textures(m)
+        order = sorted(range(len(tris)), key=lambda i: mats[i])
+        tris = [tris[i] for i in order]; uvtris = [uvtris[i] for i in order]; mats = [mats[i] for i in order]
+        runs, at = [], 0
+        for i, mi in enumerate(mats):
+            if i and mi == mats[i - 1]: continue
+            if runs: runs[-1] = (runs[-1][0], runs[-1][1], i - runs[-1][1])
+            runs.append((texnames[mi] if mi < len(texnames) else '', i, 0))
+        if runs: runs[-1] = (runs[-1][0], runs[-1][1], len(tris) - runs[-1][1])
+        texuv = mdt_uvs(m)
+        uv = [texuv[i] for t in uvtris for i in t]
+    else:
+        tris = mdt_triangles(m); uv = runs = None
     if not tris:
         return None
     owner = node['i']
@@ -486,8 +587,10 @@ def build_mesh_weighted(mds, node, nodes, per_vertex):
         infl0_bone.append(b0); infl0_pos.append(xform_pt(nodes[b0]['invworld'], vm))
         infl1_bone.append(b1); infl1_pos.append(xform_pt(nodes[b1]['invworld'], vm))
         w0.append(wa / tot if tot > 0 else 1.0)
-    return {'node': owner, 'skin': True, 'nv': len(local_pos), 'tris': tris,
-            'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}
+    out = {'node': owner, 'skin': True, 'nv': len(local_pos), 'tris': tris,
+           'b0': infl0_bone, 'p0': infl0_pos, 'b1': infl1_bone, 'p1': infl1_pos, 'w0': w0}
+    if textured: out['uv'], out['runs'] = uv, runs
+    return out
 
 
 _MESH_DIM_CACHE = {}

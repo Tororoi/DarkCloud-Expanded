@@ -198,6 +198,8 @@ namespace Dark_Cloud_Improved_Version
         }
         private static int _weapon = -1;                                    // the weapon the resident copy was built for
         private static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
+        private const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
+        private static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
         private const string CapeNodeName = "cat_cape", CapeAnchorName = "cat_sebone2";     // wing_bake.CAPE_NODE / cat_wings.CAPE_ANCHOR
         /// <summary>The cape's body-collision capsules, in the order the .clo lists them — IN STEP WITH cat_wings.CAPE_BOUNDS.
         /// Every BOUND in the record names the cape node (the only name that resolves in HER tree at load); at spawn each cloned
@@ -256,15 +258,16 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
         }
 
-        /// <summary>A weapon without wings: the two wing meshes are SKINNED frames, so nulling their geometry alone is unsafe
-        /// (MotionProc2 writes every mesh's .wgt run through its visual each frame). So the copy's channel gets a PRIVATE
-        /// clone of the skin list (the same 0x18-byte nodes the .mot list uses: {mesh, bone, type 20, count, keys, next})
-        /// with the wing meshes' runs left out — the keys still point at her data, only the chain is ours — and THEN the
-        /// two geometry pointers are cleared so nothing draws them. Her own list is untouched.</summary>
+        /// <summary>Meshes this look does not wear — the wings on a wingless weapon, the mask on anything but Super Steve. They
+        /// are all SKINNED frames, so nulling their geometry alone is unsafe (MotionProc2 writes every mesh's .wgt run through
+        /// its visual each frame). So the copy's channel gets a PRIVATE clone of the skin list (the same 0x18-byte nodes the
+        /// .mot list uses: {mesh, bone, type 20, count, keys, next}) with those meshes' runs left out — the keys still point at
+        /// her data, only the chain is ours — and THEN their geometry pointers are cleared so nothing draws them. Her own list
+        /// is untouched. One pass for all of them, so the clone is built once.</summary>
         private const int SkinNodeSize = 0x18;
-        private static void HideWings()
+        private static void HideMeshes(List<int> hide, string what)
         {
-            if (_wingMeshIdx.Count == 0) return;
+            if (hide.Count == 0) return;
             long chan = CodeCaves.MotionCave;                                              // the copy's channel struct
             uint head = (uint)Memory.ReadInt(chan + MotionType.MotionSkinList) & Memory.PhysAddrMask;
             var nodes = new List<byte[]>();
@@ -275,20 +278,20 @@ namespace Dark_Cloud_Improved_Version
                 nodes.Add(n);
                 p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
             }
-            if (nodes.Count == 0) { Console.WriteLine(Tag + "wings-off: the copy's skin list is unreadable — wings stay visible"); return; }
+            if (nodes.Count == 0) { Console.WriteLine(Tag + $"{what}-off: the copy's skin list is unreadable — they stay visible"); return; }
             var keep = new List<byte[]>();
-            foreach (byte[] n in nodes) if (!_wingMeshIdx.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
-            if (keep.Count == nodes.Count) { Console.WriteLine(Tag + "wings-off: no wing runs in the skin list — wings stay visible"); return; }
+            foreach (byte[] n in nodes) if (!hide.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
+            if (keep.Count == nodes.Count) { Console.WriteLine(Tag + $"{what}-off: no such runs in the skin list — they stay visible"); return; }
             long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
-            if (cave == 0) { Console.WriteLine(Tag + "wings-off: no cave room for the skin list clone — wings stay visible"); return; }
+            if (cave == 0) { Console.WriteLine(Tag + $"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
             for (int i = 0; i < keep.Count; i++)
             {
                 BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
                 Memory.WriteBytesBatch(cave + i * SkinNodeSize, keep[i]);
             }
             Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
-            foreach (int i in _wingMeshIdx) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
-            Console.WriteLine(Tag + $"wings hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {_wingMeshIdx.Count} geometry pointers cleared");
+            foreach (int i in hide) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
+            Console.WriteLine(Tag + $"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
         }
 
         // ── the Super Steve cape: the engine's cloth (CCloth 0x8550), built by HER pack load from the baked cat_cape node + catcape.clo
@@ -884,9 +887,12 @@ namespace Dark_Cloud_Improved_Version
             if (!Spawn()) { _spawnFailedAt = Now; return; }
             _spawnFailedAt = DateTime.MinValue;
             WriteGlowName();
-            if (!_look.Wings) HideWings();
+            var hide = new List<int>();
+            if (!_look.Wings) hide.AddRange(_wingMeshIdx);
+            if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
+            HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
             if (_look.Cape) SpawnCape();
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow {_look.Glow}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy)");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow {_look.Glow}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
@@ -1670,6 +1676,7 @@ namespace Dark_Cloud_Improved_Version
             FindHead(block);
             _wingMeshIdx.Clear();
             foreach (string nm in WingMeshNodes) { int wi = FindNode(block, nm); if (wi >= 0) _wingMeshIdx.Add(wi); }
+            _maskMeshIdx = FindNode(block, MaskNodeName);
 
             if (!CopyMeshes()) return false;
             if (!RegisterSlot(min, blockSize)) return false;
@@ -1760,7 +1767,8 @@ namespace Dark_Cloud_Improved_Version
                 long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
                 uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(vis)) continue;
-                if (!_look.Wings && _wingMeshIdx.Contains(i)) continue;              // a wingless look: the wings are never copied (HideWings unlinks their runs and nulls their geometry)
+                if (!_look.Wings && _wingMeshIdx.Contains(i)) continue;              // a wingless look: the wings are never copied (HideMeshes unlinks their runs and nulls their geometry)
+                if (!_look.Cape && i == _maskMeshIdx) continue;                      // and the mask belongs to Super Steve alone
                 uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(mdt) || (uint)Memory.ReadInt(Memory.ToMmu(mdt)) != CVisualMDT.MdtMagic) continue;
                 uint vu   = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;

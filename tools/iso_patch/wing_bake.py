@@ -36,6 +36,8 @@ from mdt_codec import Mdt, build_mdt, parse_mdt   # noqa: E402
 
 BONE_NAMES = ['cat_rwing1', 'cat_rwing2', 'cat_rwing3', 'cat_rwing4', 'cat_lwing1', 'cat_lwing2', 'cat_lwing3', 'cat_lwing4']
 MESH_NAMES = {'r': 'cat_rwingm', 'l': 'cat_lwingm'}   # no "__" suffix: no backface cull → the membrane draws from both sides (as Dran's)
+MASK_NODE = 'cat_mask'                                  # the Super Steve cat's domino mask: one rigid mesh node, weighted whole
+MASK_TEX = 'catmask'                                    # to cat_kao, so it rides the head with no skinning of its own
 WING_TEX = 'catwing'                                    # the flat white texture (build_cat_pack bakes it)
 CAPE_NODE = 'cat_cape'                                  # the cloth's FRAME node: its MDT is the rest lattice (engine order, see below)
 CAPE_TEX = 'catcape'                                    # the flat yellow texture
@@ -116,6 +118,11 @@ def build(read, packed, rep, cat_bytes, log=print):
     for sd in ('r', 'l'):
         mesh_index[sd] = K + len(out_nodes)
         out_nodes.append([MESH_NAMES[sd], 0, ident, None])            # MDT filled below
+    # the mask goes AFTER the wing meshes: their MDTs are written back by fixed slot (8 and 9, the eight wing bones then the two
+    # meshes), so anything inserted ahead of them lands in their place instead
+    mask_slot = len(out_nodes)                                        # its place in out_nodes…
+    mask_index = K + mask_slot                                        # …and the node index the .wgt must name
+    out_nodes.append([MASK_NODE, 0, ident, None])
 
     # ── Dran's per-vertex UV / NORM entries, keyed by its obj1 position index (first record that uses it) ──
     om = data['om']
@@ -246,8 +253,30 @@ def build(read, packed, rep, cat_bytes, log=print):
             'bounds': [b['bone'] for b in cw.CAPE_BOUNDS],
             'texture': CAPE_TEX, 'anchor': cw.CAPE_ANCHOR}
     stats['cape'] = {'rows': rows, 'cols': cols, 'mdt': len(cape_mdt), 'anchor': cw.CAPE_ANCHOR, 'bounds': cape['bounds']}
+    # ── the mask: a ring of geometry around each eye with a real hole in it, bound 100% to the head bone ──
+    mask_me = cw.build_mask_mesh(cat_nodes, skin_me)
+    head_i = next(n['i'] for n in cat_nodes if n['name'] == cw.MASK_ANCHOR)
+    Wh = cat_nodes[head_i]['world']
+    mk = Mdt(); mk.hdr = list(skin_mdt.hdr)
+    mworld = [em.xform_pt(Wh, v) for v in mask_me['p0']]              # the viewer keeps it head-local; the MDT wants model space
+    mk.pos = [(float(v[0]), float(v[1]), float(v[2]), 1.0) for v in mworld]
+    mk.uv = [(0.5, 0.5, 1.0, 1.0)] * len(mworld); mk.norm = [(0.5, 0.5, 1.0, 0.0)] * len(mworld)
+    mk.col = None; mk.has_col = False
+    mrecs = [(int(v), int(v), int(v)) for t in mask_me['tris'] for v in t]
+    mk.submeshes = [[3, 0, mrecs[k:k + SUBMESH_RECS]] for k in range(0, len(mrecs), SUBMESH_RECS)]
+    mmat = bytearray(mat_template); mmat[0x34:0x44] = MASK_TEX.encode('ascii').ljust(16, b'\0'); mk.materials = [bytes(mmat)]
+    mk.preamble = [0, 16, len(mk.submeshes), 0]; mk.order = ['POS', 'DL', 'UV', 'NORM', 'MAT']
+    mdl = 16 + sum(12 + 12 * len(r) for _, _, r in mk.submeshes)
+    mk.pads = {'POS': b'', 'DL': bytes((-mdl) % 16), 'UV': b'', 'NORM': b'', 'MAT': b''}
+    mk.hdr[5] = len(mworld); mk.hdr[7] = 0; mk.hdr[8] = 0xFFFFFFFF; mk.hdr[11] = len(mworld); mk.hdr[13] = 1; mk.hdr[15] = 0
+    out_nodes[mask_slot][3] = build_mdt(mk)
+    wgt_tracks.append(mc.Track(mask_index, 0, WGT_CHAN, 32, W6, W7, []))          # the reset entry: the mesh node's parent
+    wgt_tracks.append(mc.Track(mask_index, head_i, WGT_CHAN, 32, W6, W7,           # …then every vertex, 100% on the head bone
+                               [_kf(v, [100.0]) for v in range(len(mworld))]))
+    stats['mask'] = {'verts': len(mworld), 'tris': len(mask_me['tris']), 'mdt': len(out_nodes[mask_slot][3]), 'anchor': cw.MASK_ANCHOR}
     bbp = b''.join(struct.pack('<16f', *n[2]) for n in out_nodes)
     stats['tracks'] = len(mot_tracks); stats['mot_keys'] = sum(len(t.keyframes) for t in mot_tracks)
     stats['frames'] = (data['frames_all'][0], data['frames_all'][-1])
     return {'nodes': out_nodes, 'wgt_tracks': wgt_tracks, 'mot_tracks': mot_tracks, 'bbp': bbp,
-            'alloc_dbuff': [MESH_NAMES['r'], MESH_NAMES['l']], 'texture': WING_TEX, 'stats': stats, 'cape': cape}
+            'alloc_dbuff': [MESH_NAMES['r'], MESH_NAMES['l'], MASK_NODE], 'texture': WING_TEX, 'stats': stats, 'cape': cape,
+            'mask': {'name': MASK_NODE, 'texture': MASK_TEX}}
