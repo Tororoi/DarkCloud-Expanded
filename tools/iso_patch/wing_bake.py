@@ -37,7 +37,14 @@ from mdt_codec import Mdt, build_mdt, parse_mdt   # noqa: E402
 BONE_NAMES = ['cat_rwing1', 'cat_rwing2', 'cat_rwing3', 'cat_rwing4', 'cat_lwing1', 'cat_lwing2', 'cat_lwing3', 'cat_lwing4']
 MESH_NAMES = {'r': 'cat_rwingm', 'l': 'cat_lwingm'}   # no "__" suffix: no backface cull → the membrane draws from both sides (as Dran's)
 MASK_NODE = 'cat_mask'                                  # the Super Steve cat's domino mask: one rigid mesh node, weighted whole
-MASK_TEX = 'catmask'                                    # to cat_kao, so it rides the head with no skinning of its own
+MASK_TEX = 'catcape'                                    # to cat_kao, so it rides the head with no skinning of its own. It
+                                                        # SHARES the cape's texture (CAPE_TEX) rather than carrying its own:
+                                                        # the two are the same red, and a mesh's texture is resolved by NAME
+                                                        # when the pack loads and baked into its VU packet — nothing looks it
+                                                        # up again at draw time (DrawVu1 makes no texture call at all). A
+                                                        # private 'catmask' entry never came through: the mask drew untextured
+                                                        # and so took the ambient straight, which is what made it pink instead
+                                                        # of red. catcape is the one name proven to resolve (2026-09-15).
 WING_TEX = 'catwing'                                    # the flat white texture (build_cat_pack bakes it)
 CAPE_NODE = 'cat_cape'                                  # the cloth's FRAME node: its MDT is the rest lattice (engine order, see below)
 CAPE_TEX = 'catcape'                                    # the flat yellow texture

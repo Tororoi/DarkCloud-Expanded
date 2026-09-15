@@ -237,13 +237,10 @@ def main():
     # The mask cannot borrow the cape's red: that red is an ambient the runtime adds around the CLOTH draw alone, and the mask
     # is an ordinary mesh on the cat, lit by the cat's own Look.Tint. So it is previewed with the texture the bake writes for it
     # under that tint, which is what the game will show — not with the cape's numbers.
-    mtex = _grab(os.path.join(here, '..', 'iso_patch', 'build_cat_pack.py'),
-                 r'MASK_RGBA\s*=\s*\((\d+),\s*(\d+),\s*(\d+)', [197, 27, 0])
-    ctint = _grab(os.path.join(here, '..', '..', 'Dark Cloud Improved Version', 'Weapons', 'Xiao', 'DivineBeastCat.cs'),
-                  r'SuperSteveAngelKey,\s*new WeaponLook \{[^}]*?Tint = new\[\] \{\s*([\d.]+)f,\s*([\d.]+)f,\s*([\d.]+)f',
-                  [12, 24, 48])
+    mtex = tex   # the mask shares the cape's texture: a private one does not resolve at load (wing_bake.MASK_TEX)
+    ctint = tint  # ElfCave.CatMaskTint gives the mask the CAPE's ambient now, not the cat's — preview it that way
     html = html.replace('/*__MASK_LOOK__*/', json.dumps({'tex': mtex, 'tint': ctint}) + ' || ')
-    print(f"mask colour previewed as baked: texture {tuple(mtex)} under the cat's tint {tuple(ctint)}")
+    print(f"mask colour previewed as baked: texture {tuple(mtex)} under the cape's ambient {tuple(ctint)}")
     print(f"cape panel seeded from source: texture {tuple(tex)}, tint {tuple(tint)}")
     # the mask panel rebuilds the geometry in the browser, so it must start from the very constants the bake uses
     mask_defaults = {'eye': list(cw.MASK_EYE), 'core': list(cw.MASK_CORE), 'R': cw.MASK_R,
