@@ -183,6 +183,9 @@ namespace Dark_Cloud_Improved_Version
             { Items.divinebeasttitle, new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false } },   // user 2026-09-12
             { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 20f, 20f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
             { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
+            // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
+            // mesh has its tint ADDED to its lit colour, so this blue lands on the mask too and turns red to pink. The mask is
+            // meant to be lit like the CAPE instead, which needs a per-node tint (see CapeTint below) (user 2026-09-15).
             { SuperSteveAngelKey,     new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true } },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
