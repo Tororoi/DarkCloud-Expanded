@@ -49,6 +49,9 @@
     <EmbeddedResource Include="Resources\isoPatch\catMaskTint.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
     </EmbeddedResource>

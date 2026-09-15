@@ -497,7 +497,8 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatGuardBypass     = 0x01FB2250;   // 108 B → 0x1FB22BC: the cat's hits ignore an enemy's guard window
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
-            internal const uint NextFree = 0x01FB2480;   // after the mask-tint cave; the band runs to 0x1FB4000 (7040 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatCopyQueue       = 0x01FB2480;   // 512 B → 0x1FB2680: the cat's mesh copy, done inside the machine
+            internal const uint NextFree = 0x01FB2690;   // after the copy-queue cave; the band runs to 0x1FB4000 (6512 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -654,7 +655,18 @@ namespace Dark_Cloud_Improved_Version
         // code SIGBUSes PCSX2's PINE thread; see the ElfCave doc). 0x21FB2000..0x21FB4000 is therefore
         // reserved for future segment growth / ISO-baked read-only data ONLY.
         //
-        // ── FREE: 0x21FAE614 .. 0x21FB0000 (~0x19EC B) ───────────────────────────────────────────────────
+        /// <summary>The cat's mesh-copy QUEUE (ElfCave.CatCopyQueue reads it). Data, not code, and deliberately NOT in the
+        /// mailbox page: that page ends at 0x1FB4300 and the cat's words already reach +0x290, leaving no room. This span is
+        /// the documented free remainder of the MeshCave margin, on pages that already carry runtime-written words, so a PINE
+        /// write here cannot fault the way one into a code page does. +0x00 job count (0 = idle), jobs from +0x10, 0x30 B
+        /// each: src, dst, size, then two (src, size, dst) rebase specs.</summary>
+        internal const long CatCopyQueue      = 0x21FAE620;
+        internal const uint CatCopyQueueGuest = 0x01FAE620;
+        internal const int  CatCopyQueueJobs  = 48;            // 48 × 0x30 + 0x10 = 0x910 B of the span below — the
+                                                               // texture relocation needs one job per block per moved texture
+        internal const int  CatCopyJobStride  = 0x30;
+
+        // ── FREE: 0x21FAEF30 .. 0x21FB0000 (~0x10D0 B) ───────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.
