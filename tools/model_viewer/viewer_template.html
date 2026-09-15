@@ -138,6 +138,10 @@
       <div class="caperow"><label for="capeTintR">tint R</label><input type="range" id="capeTintR" min="0" max="160" step="1" value="40"><span class="val" id="capeTintRN"></span></div>
       <div class="caperow"><label for="capeTintG">tint G</label><input type="range" id="capeTintG" min="0" max="160" step="1" value="10"><span class="val" id="capeTintGN"></span></div>
       <div class="caperow"><label for="capeTintB">tint B</label><input type="range" id="capeTintB" min="0" max="160" step="1" value="5"><span class="val" id="capeTintBN"></span></div>
+      <div class="caperow"><label for="maskTex">mask texture</label><input type="color" id="maskTex"><span class="val" id="maskTexN"></span></div>
+      <div class="caperow"><label for="maskTintR">cat tint R</label><input type="range" id="maskTintR" min="0" max="120" step="1"><span class="val" id="maskTintRN"></span></div>
+      <div class="caperow"><label for="maskTintG">cat tint G</label><input type="range" id="maskTintG" min="0" max="120" step="1"><span class="val" id="maskTintGN"></span></div>
+      <div class="caperow"><label for="maskTintB">cat tint B</label><input type="range" id="maskTintB" min="0" max="120" step="1"><span class="val" id="maskTintBN"></span></div>
       <div class="caperow"><label for="capeAmb">room light</label><input type="range" id="capeAmb" min="0" max="100" step="1" value="30"><span class="val" id="capeAmbN"></span></div>
       <div class="caperow"><label for="capeLit">directional</label><input type="range" id="capeLit" min="0" max="120" step="1" value="70"><span class="val" id="capeLitN"></span></div>
       <p class="cap" id="capeOut" style="user-select:all"></p>
@@ -285,7 +289,10 @@ const MESH_P = prog(`
     vec3 col=mix(base, uSelColor, step(0.5, vSel));    // selected polys in the accent colour
     // The cape, the way the game arrives at its colour: its flat texture, lit by the scene (a floor of ambient plus a
     // normal-dependent term — the only part that shows a fold), with the tint added into the ambient for its draw alone.
-    vec3 shaded = uIsCape > 0.5 ? col * (uScene.x + uCapeTint + uScene.y * d)
+    // The cape's tint reaches it as part of the ambient its cloth draw runs under. A MESH's tint is added to the lit colour
+    // instead, which is why a red mask under a blue tint came out pink in game and no texture could undo it (2026-09-15).
+    vec3 shaded = uIsCape > 1.5 ? col * (uScene.x + uScene.y * d) + uCapeTint
+                : uIsCape > 0.5 ? col * (uScene.x + uCapeTint + uScene.y * d)
                                 : col * (0.32 + 0.68 * d);
     gl_FragColor=vec4(min(shaded, vec3(1.0)),1.0);
   }`);
@@ -636,10 +643,16 @@ const el=id=>document.getElementById(id);
 // one cloth — and the game combines them with the room's own lighting, which is why tuning either by eye in-game is so slow.
 function hexToRgb(h){ return [parseInt(h.substr(1,2),16), parseInt(h.substr(3,2),16), parseInt(h.substr(5,2),16)]; }
 const CAPE_DEFAULTS = /*__CAPE_DEFAULTS__*/{tex:[128,28,0], tint:[80,20,10]};
-const MASK_LOOK = /*__MASK_LOOK__*/{tex:[197,27,0], tint:[12,24,48]};   // build_cat_pack.MASK_RGBA under DivineBeastCat's Look.Tint
+const MASK_LOOK = /*__MASK_LOOK__*/{tex:[255,64,20], tint:[0,0,0]};   // build_cat_pack.MASK_RGBA under DivineBeastCat's Look.Tint
+function maskLook(){
+  const t=hexToRgb(el('maskTex').value);
+  return {tex:t, tint:[+el('maskTintR').value, +el('maskTintG').value, +el('maskTintB').value]};
+}
 (function(){ const h=n=>('0'+n.toString(16)).slice(-2);
   el('capeTex').value = '#' + CAPE_DEFAULTS.tex.map(h).join('');
   ['R','G','B'].forEach((k,i)=>{ el('capeTint'+k).value = CAPE_DEFAULTS.tint[i]; });
+  el('maskTex').value = '#' + MASK_LOOK.tex.map(h).join('');
+  ['R','G','B'].forEach((k,i)=>{ el('maskTint'+k).value = MASK_LOOK.tint[i]; });
 })();
 function capeVals(){
   const t=hexToRgb(el('capeTex').value);
@@ -651,10 +664,15 @@ function capeReadout(){
   el('capeTexN').textContent = c.rgb.join(', ');
   el('capeTintRN').textContent = c.tint[0]; el('capeTintGN').textContent = c.tint[1]; el('capeTintBN').textContent = c.tint[2];
   el('capeAmbN').textContent = c.amb.toFixed(2); el('capeLitN').textContent = c.lit.toFixed(2);
+  const m = maskLook();
+  el('maskTexN').textContent = m.tex.join(', ');
+  el('maskTintRN').textContent = m.tint[0]; el('maskTintGN').textContent = m.tint[1]; el('maskTintBN').textContent = m.tint[2];
   el('capeOut').innerHTML = 'build_cat_pack.py&nbsp; <b>CAPE_RGBA = (' + c.rgb.join(', ') + ', 0x80)</b><br>' +
-                            'DivineBeastCat.cs&nbsp; <b>CapeTint = { ' + c.tint.map(v=>v+'f').join(', ') + ' }</b>';
+                            'DivineBeastCat.cs&nbsp; <b>CapeTint = { ' + c.tint.map(v=>v+'f').join(', ') + ' }</b><br>' +
+                            'build_cat_pack.py&nbsp; <b>MASK_RGBA = (' + m.tex.join(', ') + ', 0x80)</b><br>' +
+                            'DivineBeastCat.cs&nbsp; Super Steve <b>Tint = { ' + m.tint.map(v=>v+'f').join(', ') + ' }</b>';
 }
-['capeTex','capeTintR','capeTintG','capeTintB','capeAmb','capeLit'].forEach(id=>el(id).addEventListener('input', capeReadout));
+['capeTex','capeTintR','capeTintG','capeTintB','maskTex','maskTintR','maskTintG','maskTintB','capeAmb','capeLit'].forEach(id=>el(id).addEventListener('input', capeReadout));
 capeReadout();
 
 
@@ -1153,10 +1171,10 @@ function render(){
       // wing meshes (grafted parts) draw white so their intersection with the grey body reads clearly
       const wing=(curDec.nodes[me.node].name||'').toLowerCase().includes('wing');
       if(me.tag==='bound'){ if(!showBound) continue; gl.uniform3f(MESH_uC, 0.05,0.16,0.30); }   // the cape's collision ellipsoids (added over the body)
-      else if(me.tag==='mask'){ const c=capeVals(), m=MASK_LOOK;                   // the mask is lit by the CAT's tint, not the
-        gl.uniform3f(MESH_uC, m.tex[0]/255, m.tex[1]/255, m.tex[2]/255);            // cape's: its red has to come out of its own
-        gl.uniform3f(MESH_uTint, m.tint[0]/128, m.tint[1]/128, m.tint[2]/128);      // texture, so preview it exactly that way
-        gl.uniform2f(MESH_uScene, c.amb, c.lit); gl.uniform1f(MESH_uIsCape, 1); }
+      else if(me.tag==='mask'){ const c=capeVals(), m=maskLook();                 // the mask is lit by the CAT's tint, not the
+        gl.uniform3f(MESH_uC, m.tex[0]/255, m.tex[1]/255, m.tex[2]/255);            // cape's, and that tint is ADDED to it, so
+        gl.uniform3f(MESH_uTint, m.tint[0]/128, m.tint[1]/128, m.tint[2]/128);      // its red has to come out of its own texture
+        gl.uniform2f(MESH_uScene, c.amb, c.lit); gl.uniform1f(MESH_uIsCape, 2); }
       else if(me.tag==='cape'){ const c=capeVals(); gl.uniform3f(MESH_uC, c.tex[0],c.tex[1],c.tex[2]);
         gl.uniform3f(MESH_uTint, c.tint[0]/128, c.tint[1]/128, c.tint[2]/128);
         gl.uniform2f(MESH_uScene, c.amb, c.lit); gl.uniform1f(MESH_uIsCape, 1); }

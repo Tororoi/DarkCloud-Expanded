@@ -63,14 +63,14 @@ GLOW_VARIANTS = {"catgloww": ((255, 255, 255), (215, 225, 255)),   # white, a co
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
-MASK_RGBA = (197, 27, 0, 0x80)                   # the Super Steve cat's mask. It wants to read as the SAME red as the cape, but
-                                                 # it cannot get there the same way: the cape's red comes from an ambient the
-                                                 # runtime adds around the cloth draw alone (ElfCave.CatCapeTint wraps
-                                                 # jal Draw__6CCloth), while the mask is an ordinary mesh on the cat and takes
-                                                 # the CAT's ambient — for Super Steve that is the blue (12, 24, 48) of its
-                                                 # Look.Tint. So the texture carries the difference instead: the cape's own
-                                                 # (128, 28, 0) scaled by (ambient + cape tint) / (ambient + cat tint) per
-                                                 # channel at a mid scene. Blue stays 0, so the blue ambient adds nothing.
+MASK_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cat's mask. It cannot borrow the cape's red: that red is an
+                                                 # ambient the runtime adds around the CLOTH draw alone (ElfCave.CatCapeTint
+                                                 # wraps jal Draw__6CCloth), and the mask is an ordinary mesh on the cat. The
+                                                 # tint reaching a mesh is ADDED to its lit colour, not multiplied through its
+                                                 # texture, which is why a red mask under the cat's old blue tint came out pink
+                                                 # and why no texture could fix it — DivineBeastCat zeroes Super Steve's tint
+                                                 # instead. With nothing added, the mask's whole colour is this texture, so it
+                                                 # sits brighter than the cape's base to land near the cape's lit red.
 CAPE_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cape's flat texture: a deep red, tuned in the viewer's cape panel
                                                  # The red comes from the ambient the runtime gives the cloth (DivineBeastCat
                                                  # .CapeTint), and a light base serves that better twice over — the tint reads
