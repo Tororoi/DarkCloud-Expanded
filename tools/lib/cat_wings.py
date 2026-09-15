@@ -323,14 +323,30 @@ WING_LEVEL_AT = 4                  # the cat clip (CAT_KEYS index) in whose midd
 # the engine's cloth simulation drapes it in play.
 CAPE_COLLAR = (483, 503, 485, 477, 478)   # cat_skin vertices of the collar ring's REAR edge, left → right (user 2026-09-13: "attached to
                                    # the collar"; bind pose (±0.86, 2.82, 2.75), (±0.62, 3.37, 2.46), (0, 3.55, 2.46), all 50 % sebone2 + kao)
-CAPE_WIDTH = 3.0                   # the hem's width MEASURED ACROSS THE CLOTH (it wraps the body, so its shadow on the ground is
+CAPE_WIDTH = 3.5                   # the hem's width MEASURED ACROSS THE CLOTH (it wraps the body, so its shadow on the ground is
                                    # narrower); the sheet widens linearly from the collar arc to this
 CAPE_LENGTH = 4.0                  # from the collar back along the spine (the hips are at z −0.5, the tail root −1.5)
 CAPE_LIFT = 0.22                   # the rest sheet lies this far above the back's fur — also the whole sheet's clearance:
                                    # the collision capsules sit AT the fur, so this is what keeps the spans between
                                    # particles (0.7 apart) from cutting the bulges they stretch across
-CAPE_ROWS = 7                      # the lattice's rows (the collar row + 6); columns = the collar vertices
-CAPE_HANG = 0.35                   # past the body (no fur below a row) the sheet drops this much per row
+CAPE_COLS = 12                     # the lattice's columns ACROSS the cape (engine cap 16). It no longer has to match the number
+                                   # of CAPE_COLLAR vertices: the pinned edge is the arc THROUGH those vertices, resampled at this
+                                   # many equal-arc-length stations, so the collar verts set the shape of that edge and this sets
+                                   # how finely it is cut. More columns = shorter segments = less bend per segment, which is what
+                                   # the engine's width tie wants; it also costs one more triangle strip per pair in the packet.
+CAPE_ROWS = 16                     # the lattice's rows along the hang, the first being the pinned collar edge. A finer sheet has
+                                   # shorter spans between particles (less chance of one cutting a bulge) and shows a longer wave
+                                   # travelling down it.
+                                   #
+                                   # 12 × 16 is a deliberate choice, not the ceiling. The engine's cap is 16 either way; the real
+                                   # budgets are the cave the runtime clones the cloth into (2 packet buffers + the 0x8550 object:
+                                   # 69 KB here against 211 KB free) and the per-tick velocity write the ripple does over PINE
+                                   # (3 KB each way). 16 × 16 costs 82 KB and 4 KB a tick and still fits. What a finer lattice buys
+                                   # is FLOP: the engine solves its distance constraints exactly 4 times a step and each pass
+                                   # carries a correction one neighbour along, so a longer chain is a softer cloth — which is the
+                                   # point, and why the rest spring (CAPE_PHYSICS K) goes back up to hold the stretch in.
+CAPE_HANG = 0.52                   # past the body (no fur below a row) the sheet falls at this SLOPE — units down per unit
+                                   # back, not per row, so changing CAPE_ROWS re-tessellates the cape without reshaping it
 CAPE_ROW_TAUT = 0.55               # how much of each row's own arch survives: the engine's width tie (see the note on
                                    # CAPE_SIDE_SLOPE) is exactly satisfied only by a FLAT row — solve it and both the crown and the
                                    # shoulders must sit level — so a cape that hugs the cat's round back is always in a fight with
@@ -377,9 +393,13 @@ CAPE_ANCHOR = 'cat_sebone2'        # the bone the engine's cloth is pinned to (i
 # so this cape carries **no gravity**: it holds the authored rest shape and takes its motion from the cat (FOLLOW + the spring's
 # lag) and the wind. Author any droop into the rest shape (CAPE_LENGTH / CAPE_HANG) rather than asking gravity for it.
 CAPE_PHYSICS = {
-    'K': (0.10, 0.10, 0.10),        # pull toward the rest shape per step (vanilla capes 0.08, and they hang). Weak on purpose:
-                                    # this is what lets the runtime breeze lift the cape off the back and stream it out behind —
-                                    # the spring is the only thing pulling it home, so a high K keeps it pinned to the body
+    'K': (0.12, 0.12, 0.12),        # pull toward the rest shape per step (vanilla capes 0.08, and they hang). ONLY THE SEED:
+                                    # DivineBeastCat.StiffenCape rewrites this vector every tick, stiff across the cape and
+                                    # slack along it, turned with the cat — the engine applies K per axis, so the cloth can
+                                    # hold its width while the wind still lifts it and runs a wave down its length. It is the only
+                                    # thing pulling the cape home against the runtime breeze, so it trades two ways: too high and
+                                    # the cape stays pinned to the back, too low and a fine lattice rubber-bands (the engine's own
+                                    # distance constraints only get 4 iterations a step, so they do not hold a long chain alone)
     'gravity': (0.0, 0.0, 0.0),     # see above — nonzero drifts the cape off a vertical back. NOTE: at runtime
                                     # DivineBeastCat.BreezeCape OVERWRITES this field every tick with a breeze blowing from the
                                     # cat's face toward its tail (turned with the cat), which is what makes the cape billow
@@ -511,7 +531,7 @@ def cape_rest_local(cat_nodes, skin):
     world = [[a * me['w0'][i] + b * (1 - me['w0'][i]) for a, b in zip(em.xform_pt(W(me['b0'][i]), me['p0'][i]), em.xform_pt(W(me['b1'][i]), me['p1'][i]))] for i in range(me['nv'])]
     anchor = next(n for n in cat_nodes if n['name'] == CAPE_ANCHOR)
     inv = em.rigid_inv(anchor['world'])
-    return CAPE_ROWS, len(CAPE_COLLAR), [list(em.xform_pt(inv, v)) for v in world]
+    return CAPE_ROWS, CAPE_COLS, [list(em.xform_pt(inv, v)) for v in world]
 
 
 def build_cape_mesh(cat_nodes, skin):
@@ -530,7 +550,7 @@ def build_cape_mesh(cat_nodes, skin):
     The whole sheet is bound RIGIDLY TO CAPE_ANCHOR, because that is what the engine does: the cloth's rest target is
     LW(anchor) × rest for every particle, so it swings with that one spine bone and with nothing else.
     `skin` = the cat_skin viewer mesh (b0/p0/b1/p1/w0)."""
-    cols = len(CAPE_COLLAR)
+    cols = CAPE_COLS
     W = lambda b: cat_nodes[b]['world']
     def skinned(i): return [a * skin['w0'][i] + b * (1 - skin['w0'][i]) for a, b in zip(em.xform_pt(W(skin['b0'][i]), skin['p0'][i]), em.xform_pt(W(skin['b1'][i]), skin['p1'][i]))]
     fur = [skinned(i) for i in range(skin['nv'])]                                   # every skin vertex, bind-pose world
@@ -559,7 +579,15 @@ def build_cape_mesh(cat_nodes, skin):
         return sum(w * y for w, y in hits) / sum(w for w, _ in hits)
 
     bws = cape_bounds_world(cat_nodes)
-    collar = [skinned(i) for i in CAPE_COLLAR]                                       # the collar ring's rear edge, in the bind
+    ring = [skinned(i) for i in CAPE_COLLAR]                                         # the collar ring's rear edge, in the bind
+    arc = [0.0]                                                                      # …resampled to CAPE_COLS equal-arc stations
+    for k in range(1, len(ring)): arc.append(arc[-1] + math.dist(ring[k - 1], ring[k]))
+    collar = []
+    for c in range(cols):
+        want = arc[-1] * c / (cols - 1)
+        k = next((k for k in range(1, len(ring)) if arc[k] >= want), len(ring) - 1)
+        t = (want - arc[k - 1]) / (arc[k] - arc[k - 1]) if arc[k] > arc[k - 1] else 0.0
+        collar.append([ring[k - 1][j] + (ring[k][j] - ring[k - 1][j]) * t for j in range(3)])
     top = []
     for c, p in enumerate(collar):                                                   # row 0, the pinned edge (graded bias)
         g = math.cos(math.pi / 2 * abs(2 * c / (cols - 1) - 1))
@@ -584,6 +612,14 @@ def build_cape_mesh(cat_nodes, skin):
                 else: return None                                                    # nothing under this row at all
                 pts.append([x, y]); last = (x, y); x += way * step
             raw[way] = pts
+        # Round the corner where the cape leaves the flank and starts falling at CAPE_SIDE_SLOPE. It is a curvature singularity —
+        # the body's surface simply stops — and cloth cannot hold a crease like that. It also wrecks the engine's width tie as soon
+        # as the lattice is fine enough to land a column on it (12 columns took the tie from 13% to 31% before this).
+        for way in (-1, 1):
+            pts = raw[way]
+            for _ in range(6):
+                for i in range(1, len(pts) - 1):
+                    pts[i][1] = 0.25 * pts[i - 1][1] + 0.5 * pts[i][1] + 0.25 * pts[i + 1][1]
         if CAPE_ROW_TAUT < 1.0:                                                      # the arch, blended toward the end-to-end chord
             (xa, ya), (xb, yb) = raw[-1][-1], raw[1][-1]
             for way in (-1, 1):
@@ -614,7 +650,7 @@ def build_cape_mesh(cat_nodes, skin):
         s_ = r / (CAPE_ROWS - 1); z = zc - CAPE_LENGTH * s_
         row = section(z, top_half * (1 - s_) + (CAPE_WIDTH / 2) * s_)
         if row is None:                                                              # past the rump: the row hangs off the last one
-            row = [[rows[-1][c][0], rows[-1][c][1] - CAPE_HANG, z] for c in range(cols)]
+            row = [[rows[-1][c][0], rows[-1][c][1] - CAPE_HANG * (CAPE_LENGTH / (CAPE_ROWS - 1)), z] for c in range(cols)]
         rows.append(row)
 
     # ── per-row lifts. A cloth spans a hollow instead of sinking into it, so the SPINE's profile is raised onto its own upper

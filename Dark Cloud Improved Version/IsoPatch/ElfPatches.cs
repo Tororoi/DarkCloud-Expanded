@@ -109,6 +109,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatGlowDraw(fs, ElfOff);                 // Divine Beast cat: blue torch-glow at its torso (dun.bin hooks in DunPatches)
             PatchCatSpherePercent(fs, ElfOff);            // Divine Beast cat: a hurt sphere may admit the cat's kick (spare[1]) at its own % (spare[0]) — Minotaur Joe's face
             PatchCatGuardBypass(fs, ElfOff);              // Divine Beast cat: its hits pass an enemy's guard window (mimics re-register theirs faster than the mod can crush them)
+            PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
@@ -386,6 +387,33 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(HookAddr), jump);                 // j cave
             WrU32(fs, ElfOff(HookAddr + 4), 0);                // delay slot nop (was the lh the cave now performs)
+        }
+
+        // Divine Beast cat: the Super Steve cape draws under its own ambient (tools/stubs/cat_cape_tint.s). Draw__10CCharacter
+        // saves the global ambient, adds the CHARACTER's tint, then draws its meshes AND its cloth list inside that window — so a
+        // cloth is lit by the character's colour and has none of its own (writing its material's colour rows does nothing). The
+        // cave wraps the cloth-draw call and, for the one cloth the mod names in Mailbox.CatCapeCloth, adds Mailbox.CatCapeTint
+        // to the ambient for that draw alone; every other cloth in the game is untouched.
+        internal static void PatchCatCapeTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatCapeTint;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catCapeTint.bin")
+                ?? throw new IOException("Embedded EE function missing: catCapeTint.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 44 words, opens `addiu sp,sp,-0x50`, and calls Draw__6CCloth (0x13B640) on both paths.
+            if (b.Length != 176 || U32(b, 0) != 0x27BDFFB0u || U32(b, 124) != Jal(0x0013B640u) || U32(b, 156) != Jal(0x0013B640u))
+                throw new IOException($"catCapeTint.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catCapeTint.bin overruns its cave — move ElfCave.NextFree.");
+            const uint HookAddr = 0x00139694;              // `jal Draw__6CCloth` in Draw__10CCharacter's cloth-list loop
+            uint jal = Jal(CaveAddr), vanilla = Jal(0x0013B640u);
+            uint cur = RdU32(fs, ElfOff(HookAddr));
+            if (!(cur == vanilla || cur == jal) || RdU32(fs, ElfOff(HookAddr - 8)) != 0x10800003u)
+                throw new IOException($"Cloth-draw hook site 0x{HookAddr:X} is not vanilla `beq a0,zero,+3; nop; jal Draw__6CCloth` — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jal);              // the cave calls Draw__6CCloth itself, on both paths
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)

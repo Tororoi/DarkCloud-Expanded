@@ -348,11 +348,22 @@ namespace Dark_Cloud_Improved_Version
                 int i = entry; uint obj = template;
                 byte[] o = Memory.ReadBytesBatch(Memory.ToMmu(obj), CCloth.ClothObjSize);
                 if (o == null) { Console.WriteLine(Tag + "cape: template read failed"); return; }
-                int rows = BitConverter.ToInt32(o, 0x2C), cols = BitConverter.ToInt32(o, 0x30);   // outer (width) × inner (hang; index 0 pinned)
+                int wide = BitConverter.ToInt32(o, 0x2C), hang = BitConverter.ToInt32(o, 0x30);   // outer (across the back) × inner (down the cape; index 0 pinned)
                 uint b0 = (uint)BitConverter.ToInt32(o, CCloth.ClothBuf0) & Memory.PhysAddrMask, b1 = (uint)BitConverter.ToInt32(o, CCloth.ClothBuf0 + 4) & Memory.PhysAddrMask;
-                int bufSize = (int)(b1 - b0);
-                if (bufSize <= 0 || bufSize > 0x4000) bufSize = 0x2000;
+                // How big a draw packet this cloth builds. Take it from the cloth's OWN figure (+0x1C, what CreateVUData returned
+                // at init, in 16-byte units) and never from a guess: the packet is rebuilt into these buffers from scratch every
+                // draw, so one byte short is an overrun straight through the rest of the cave. A 12 × 16 lattice needs 17,760 B and
+                // a hardcoded 0x2000 fallback handed it 8,192 — the engine wrote 9.5 KB past the end and the game jumped into
+                // garbage (user 2026-09-14). The pointer gap is only a cross-check; the packet figure wins.
+                int packet = BitConverter.ToInt32(o, CCloth.ClothPacketUnits) * 16;
+                int gap = (int)(b1 - b0);
+                int bufSize = Math.Max(packet, gap > 0 && gap < 0x20000 ? gap : 0);
                 bufSize = (bufSize + 0x3F) & ~0x3F;
+                if (packet <= 0 || bufSize > 0x20000)
+                {
+                    Console.WriteLine(Tag + $"cape: refusing to clone — packet {packet} B, pointer gap {gap} B, neither is a sane buffer size");
+                    return;
+                }
                 long cObj = TakeCave(CCloth.ClothObjSize, out uint cObjG);
                 long cB0 = TakeCave(bufSize, out uint cB0G), cB1 = TakeCave(bufSize, out uint cB1G), cList = TakeCave(16, out uint cListG);
                 if (cObj == 0 || cB0 == 0 || cB1 == 0 || cList == 0) { Console.WriteLine(Tag + "cape: no cave room — no cape"); return; }
@@ -373,10 +384,21 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(cList, list);
                 Memory.WriteUInt(SlotAddr() + CCharacter.ClothList, cListG);
                 if (i >= 0) Memory.WriteInt(Memory.ToMmu(herList) + i * 4, 0);                 // she neither steps nor draws the template
-                _capeObj = cObj; _capeTemplate = obj; _capeWatch = 0; _capeCols = rows; _capeRows = cols;   // outer × inner
+                _capeObj = cObj; _capeTemplate = obj; _capeWatch = 0; _capeWide = wide; _capeHang = hang;
+                // The wind's taper watches ONE particle — the middle of the hem, the point that swings furthest from the shape the
+                // cape is meant to hold. Its slot is (column × 0x100 + row × 0x10), and BOTH indices come from the cloth itself, so
+                // re-tessellating the cape in the bake cannot leave the runtime watching some point up its middle.
+                _capeHemParticle = (_capeWide / 2) * 0x100 + (_capeHang - 1) * 0x10;
+                _capeRest = Memory.ReadBytesBatch(cObj + CCloth.ClothRest, _capeWide * 0x100);   // read ONCE: the wind rides on it
+                if (_capeRest != null)                                                   // its own length, for the lift's geometry
+                {
+                    int mid = (_capeWide / 2) * 0x100;
+                    _capeSpan = Math.Abs(BitConverter.ToSingle(_capeRest, mid) - BitConverter.ToSingle(_capeRest, mid + (_capeHang - 1) * 0x10));
+                }
+                TintCape();
                 string V(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
                 Console.WriteLine(Tag + $"cape physics: K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cape: {rows}×{cols} cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2, packet 0x{BitConverter.ToInt32(o, 0x1C):X} blocks), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
             }
         }
 
@@ -452,80 +474,225 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"cape watch: anchor LW rows {rows} | cat at ({Memory.ReadFloat(s + CCharacter.CharPos):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 4):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 8):F1}) yaw {Memory.ReadFloat(s + CCharacter.CharRotY):F2} scale {Memory.ReadFloat(s + CCharacter.CharScale):F2} opacity {Memory.ReadFloat(s + CCharacter.NpcOpacity):F0}");
         }
 
-        /// <summary>A steady breeze in the cat's face, so the cape billows instead of lying scrunched on its back.
+        /// <summary>The wind, as a SHAPE rather than a force.
         ///
-        /// The engine gives a cloth no directional wind: its CWind term is noise, and it is scaled by how squarely the particle is
-        /// ALREADY moving along its own normal, so it only ever adds flutter. GRAVITY, though, is a plain per-step add to every
-        /// particle's velocity — so that is the field to aim. The runtime writes it each tick as a vector blowing from the cat's
-        /// face toward its tail (the cat's own facing, negated) plus a little lift, turned with the cat so the cape always streams
-        /// back whichever way it looks. The .clo bakes GRAVITY 0 and this is its only writer.
+        /// It was a force for a long time — GRAVITY aimed from the cat's face, since the engine's own wind is undirected noise —
+        /// and every version of it bunched the cape. The reason is structural: the collar edge is pinned, so the sheet cannot move
+        /// downwind bodily, and its displacement from the rest shape therefore grows from nothing at the collar to everything at
+        /// the hem. The spring pulls each particle toward its OWN place in that shape, so it pulls hardest exactly where the wind
+        /// has carried the cloth furthest. The tail is hauled back while the middle is still being pushed out, the sheet goes into
+        /// compression along its length, and a sheet in compression buckles. No amount of tuning removes that: the wind and the
+        /// spring are pulling against each other by construction, and the crumple lives between them (user 2026-09-14, a cape
+        /// crushed into a vertical spike).
         ///
-        /// It also fixes the scrunching for a second reason: the rest shape is authored in the BIND pose and pinned to ONE spine
-        /// bone, so when the cat sits — back vertical, spine folded — the shape no longer matches the body, and the spring pulling
-        /// it onto a body that moved fights the capsules pushing it off. Holding the sheet off the back sidesteps that entirely.
+        /// So move the target instead of pushing the cloth. Each tick the REST SHAPE is rewritten as the blown shape — every row
+        /// carried back along the cape and lifted off the back, eased in along the hang so the collar stays put and the hem moves
+        /// most, with the travelling ripple on top. The spring now has nothing to fight: it pulls the cloth toward a shape that is
+        /// already streaming, which is the shape we want it in, and what is left for the simulation is exactly what it is good at
+        /// — lag, collision against the body, and the swing when the cat moves. GRAVITY stays zero.
         ///
-        /// THE PUSH TAPERS WITH DISTANCE, and it has to: the engine damps a particle's velocity only across the cloth's normal,
-        /// never along the sheet, so an unchecked push accumulates forever. The hem's drift from the shape it is meant to hold is
-        /// measured each tick and the push faded out as it approaches <see cref="CapeBreezeDrift"/> — so the cape streams out to
-        /// about that distance, the push stops feeding it there, and it rides at full extension instead of either collapsing back
-        /// or winding up. Set the drift near the cape's own length and it flies out behind like a cloak; set it small and the cape
-        /// only breathes on the back. The cape's resting curve is authored in the bake (cat_wings.CAPE_BILLOW).
-        ///
-        /// Tune here, not in the bake: these are runtime values, so they cost a rebuild rather than a re-patch.</summary>
-        private const float CapeBreezeBack = 0.060f, CapeBreezeUp = 0.030f, CapeBreezeDrift = 3.6f;
-        private const int   CapeHemParticle = 2 * 0x100 + 6 * 0x10;          // the hem's middle: width index 2, hang index 6
+        /// Everything is in the ANCHOR's frame, so it follows the cat's spine without any facing maths: −x runs down the cape away
+        /// from the collar, −y lifts off the back.</summary>
+        // The sheet cannot LENGTHEN — its rest distances were fixed from the baked lattice when the cloth loaded, and the distance
+        // constraints enforce them. A row that rises therefore has to draw IN toward the collar by as much as the geometry demands,
+        // or the target sits further away than the cloth can reach and the lift spends itself pulling against those constraints.
+        // That trim is not a constant: a row d down the cape, raised by l, spans √(d² − l²), so it is computed per row from the
+        // cape's own measured length. Raise the lift as far as you like and the shape stays reachable.
+        private const float CapeWindLift = 2.6f;         // how far the hem flies off the back — this is the wind's real strength
+        private const float CapeWindEase = 1.6f;         // the profile along the hang: > 1 keeps the shoulders down and flies the tail
+        // A torn sheet is measured BY THE SHEET, not by where the cat is. Distance from the rest shape does not distinguish the
+        // two: a cat riding its pellet covers 5 units a frame, so the cloth legitimately trails far behind it — testing that put
+        // the cape into a reseat 16 times a second for the whole flight, which is its own kind of stretching (user 2026-09-14).
+        // The cape's own collar-to-hem span is about 5 units and the distance constraints hold it near that however fast the cat
+        // moves; only a sheet that has been left behind by a teleport, with its pinned edge snapped away from the rest, spans the
+        // room. So: compare the cloth against itself.
+        private const float CapeTearSpan = 20f;          // collar corner to mid-hem. Its real span is ~5 units and a hard flight
+                                                         // stretches it to maybe 10 while the 4 constraint passes catch up;
+                                                         // the tears in the log were 40–54, so this sits clear of both
+        private static int _capeTearLog;
+        private static int  _capeHemParticle;                                // the hem's middle, from the cloth's own dimensions
+        private static byte[] _capeRest;                                     // the rest shape as baked — the wind's baseline
+        private static float _capeSpan;                                      // collar to hem along the cape, measured from that shape
         // The gust that runs down it. A single force on the whole sheet cannot ripple — it moves every particle at once, and what
-        // that produces is the sheet rocking from one side to the other. A wave has to be written per particle, and the velocity
-        // array takes it: the engine only ever ADDS gravity there, so a wave with no mean rides along and drags the cape nowhere.
-        // Each row gets the same push, later rows lag, and the crest travels from the collar to the hem — along the cat, never
-        // across it (user 2026-09-14).
-        private const float CapeRippleAmp = 0.045f;      // units/step at the crest
-        private const float CapeRippleRows = 4.0f;       // rows per wavelength — over one wavelength the cape shows a single swell
-        private const float CapeRippleSeconds = 1.3f;    // one crest, collar to hem
+        // that produces is the sheet rocking from one side to the other, so the wave has to be written per particle.
+        //
+        // It goes into the REST SHAPE (+0x110), not the velocity array, and that distinction matters more than it looks. The rest
+        // is the only per-particle field the engine reads and never writes during play, so a wave written there cannot race it:
+        // the cloth simply chases a shape that is already rippling, and the spring's own lag smooths the result. Writing the
+        // VELOCITY instead means reading 3 KB the engine owns, computing, and writing it back several engine steps later — every
+        // tick clobbers the integrator with stale values, and on the frame the cat binds to its pellet the engine ZEROES those
+        // velocities for the teleport and we hand the pre-teleport ones straight back. That is a cloth explosion, and it is what
+        // stretched the cape across the screen when the cat was fired (user 2026-09-14). It also halves the traffic: the baseline
+        // is read once at spawn, so the tick only writes.
+        private const float CapeRippleAmp = 0.65f;       // units of swell at the crest, once the swell is at full strength
+        private const float CapeRippleReach = 0.5f;      // how far down the cape it gets there: the swell ramps from nothing at the
+                                                        // pinned collar to full at this fraction, and holds full over the rest. It
+                                                        // has to ramp at all for two reasons — a pinned sheet flutters least at its
+                                                        // pinned end, and a swell larger than a row's own distance from the collar
+                                                        // would make the draw-in geometry below collapse that row onto it
+        // Wavelength matters for BUNCHING as much as for looks: neighbouring rows differ in velocity by roughly the amplitude
+        // times 2π/wavelength, and where that difference points them at each other the sheet is in compression and buckles — the
+        // pile-up at the hem (user 2026-09-14). A longer wave flattens that gradient; the rest spring (CAPE_PHYSICS K) is the
+        // other half of the answer, since each particle is pulled toward its OWN place in the shape and that restores spacing.
+        private const float CapeRippleRows = 10.0f;      // rows per wavelength — over one wavelength the cape shows a single swell
+        private const float CapeRippleSeconds = 0.5f;    // one crest, collar to hem
         private static double _ripplePhase;
-        private static int _capeCols, _capeRows;
+        private static int _capeWide, _capeHang;      // the cloth's own dimensions: across the back × down the cape
         private static void BreezeCape()
         {
-            if (_capeObj == 0) return;
-            float push = 1f;
-            byte[] cur = Memory.ReadBytesBatch(_capeObj + CCloth.ClothCur + CapeHemParticle, 12);
-            byte[] tgt = Memory.ReadBytesBatch(_capeObj + CCloth.ClothTarget + CapeHemParticle, 12);
-            if (cur != null && tgt != null)
+            if (_capeObj == 0 || _capeRest == null) return;
+            if (_capeWide <= 0 || _capeWide > 16 || _capeHang <= 1 || _capeHang > 16) return;   // the engine's grid is 16 × 16
+            byte[] cur = Memory.ReadBytesBatch(_capeObj + CCloth.ClothCur + _capeHemParticle, 12);
+            byte[] pin = Memory.ReadBytesBatch(_capeObj + CCloth.ClothCur, 12);       // the pinned corner: the sheet's own anchor end
+            if (cur != null && pin != null)
             {
-                float dx = BitConverter.ToSingle(cur, 0) - BitConverter.ToSingle(tgt, 0);
-                float dy = BitConverter.ToSingle(cur, 4) - BitConverter.ToSingle(tgt, 4);
-                float dz = BitConverter.ToSingle(cur, 8) - BitConverter.ToSingle(tgt, 8);
-                float drift = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                push = Math.Max(0f, 1f - drift / CapeBreezeDrift);                    // fades out as the cape reaches full stretch
-            }
-            byte[] g = new byte[12];
-            BitConverter.GetBytes(-_dirX * CapeBreezeBack * push).CopyTo(g, 0);
-            BitConverter.GetBytes(CapeBreezeUp * push).CopyTo(g, 4);
-            BitConverter.GetBytes(-_dirY * CapeBreezeBack * push).CopyTo(g, 8);
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothGravity, g);
-            if (_capeCols <= 0 || _capeRows <= 1) return;
-            _ripplePhase += 2 * Math.PI * (TickMs / 1000.0) / CapeRippleSeconds;
-            byte[] vel = Memory.ReadBytesBatch(_capeObj + CCloth.ClothVel, _capeCols * 0x100);
-            if (vel == null) return;
-            for (int b = 1; b < _capeRows; b++)                                       // b = 0 is pinned: the engine owns it
-            {
-                float w = CapeRippleAmp * (float)Math.Sin(_ripplePhase - b * 2 * Math.PI / CapeRippleRows);
-                for (int a = 0; a < _capeCols; a++)
+                float sx = BitConverter.ToSingle(cur, 0) - BitConverter.ToSingle(pin, 0);
+                float sy = BitConverter.ToSingle(cur, 4) - BitConverter.ToSingle(pin, 4);
+                float sz = BitConverter.ToSingle(cur, 8) - BitConverter.ToSingle(pin, 8);
+                float span = (float)Math.Sqrt(sx * sx + sy * sy + sz * sz);
+                if (span > CapeTearSpan || float.IsNaN(span))
                 {
-                    int o = a * 0x100 + b * 0x10 + 4;                                  // the lift component
-                    BitConverter.GetBytes(BitConverter.ToSingle(vel, o) + w).CopyTo(vel, o);
+                    if (--_capeTearLog <= 0) { _capeTearLog = 60; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
+                    ReseedCape();
+                    return;
                 }
             }
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, vel);
+            StiffenCape();
+            _ripplePhase += 2 * Math.PI * (TickMs / 1000.0) / CapeRippleSeconds;
+            byte[] rest = (byte[])_capeRest.Clone();
+            for (int b = 1; b < _capeHang; b++)                                       // b = 0 is the pinned collar edge: leave it
+            {
+                float t = (float)b / (_capeHang - 1);
+                float f = (float)Math.Pow(t, CapeWindEase);                            // nothing at the collar, everything at the hem
+                float swell = CapeRippleAmp * Math.Min(1f, t / CapeRippleReach);
+                float lift = CapeWindLift * f + swell * (float)Math.Sin(_ripplePhase - b * 2 * Math.PI / CapeRippleRows);
+                float d = _capeSpan * t;                                               // how far down the cape this row sits
+                float trim = d - (float)Math.Sqrt(Math.Max(0f, d * d - lift * lift));  // …and how much it must draw in to rise that far
+                for (int a = 0; a < _capeWide; a++)
+                {
+                    int o = a * 0x100 + b * 0x10;
+                    BitConverter.GetBytes(BitConverter.ToSingle(_capeRest, o) + trim).CopyTo(rest, o);          // +x = back toward the collar
+                    BitConverter.GetBytes(BitConverter.ToSingle(_capeRest, o + 4) - lift).CopyTo(rest, o + 4);  // −y = up off the back
+                }
+            }
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothRest, rest);
         }
 
-        /// <summary>After the copy teleports (the bind to the pellet's birth frame): previous = current, so the cloth does not
-        /// whip from where it last was (the Toan-cape blow-up).</summary>
+        /// <summary>Stiff across the cape, soft along it — so the wind can lift it and run a ripple down its length while the
+        /// flare keeps its width instead of collapsing into a rectangle.
+        ///
+        /// The spring the engine pulls each particle home with is a VECTOR (CCloth +0xE0/+0xE4/+0xE8), applied component-wise to
+        /// the correction, not a single number — so it can be stiff on one axis and slack on another. The catch is that those are
+        /// WORLD axes, and the cat turns, so a constant would put the stiff axis across the cape only while the cat happened to
+        /// face one way. Instead it is rebuilt every tick from the cat's own facing: the stiff value goes on the axis that is
+        /// currently sideways-on to the cat and the slack one on its fore-and-aft axis, mixed by the squares of the facing so the
+        /// pair rotates smoothly through the diagonals (an axis-aligned diagonal is all the engine can express — the off-diagonal
+        /// terms of the true rotated tensor have nowhere to go, and at 45° the two values simply meet in the middle).
+        ///
+        /// The baked .clo carries <see cref="CapeSpringAlong"/> as its seed, which is what the cloth uses for the frame or two
+        /// before the first tick lands.</summary>
+        private const float CapeSpringSide = 0.42f;      // across the cape: holds the width, and with it the authored flare
+        private const float CapeSpringAlong = 0.12f;     // along it: low, so the wind can lift the sheet and carry a wave down it
+        private const float CapeSpringUp = 0.16f;        // vertical: between the two — it fights the lift, but also the sagging
+        /// <summary>The cat's facing as a GUARANTEED unit vector. It is (0, 0) until something aims the cat, and with no target
+        /// in range nothing ever does — the cave only writes a direction when it has somewhere to go. Everything here that leans
+        /// on the facing must survive that: <see cref="StiffenCape"/> mixes the stiff and slack spring values by the squares of
+        /// these, which only sums to the intended pair when they are normalised. Feed it (0, 0) and BOTH horizontal axes of the
+        /// spring come out zero — the cape loses its restoring force entirely and wanders off, which is what "goes crazy when
+        /// there's no target" was (user 2026-09-14).</summary>
+        private static void Facing(out float dx, out float dz)
+        {
+            float l = (float)Math.Sqrt(_dirX * _dirX + _dirY * _dirY);
+            if (l > 1e-3f) { dx = _dirX / l; dz = _dirY / l; } else { dx = 0f; dz = 1f; }
+        }
+
+        private static void StiffenCape()
+        {
+            Facing(out float fdx, out float fdz);
+            float fx = fdx * fdx, fz = fdz * fdz;                                      // normalised, so fx + fz = 1 always
+            byte[] k = new byte[12];
+            BitConverter.GetBytes(CapeSpringAlong * fx + CapeSpringSide * fz).CopyTo(k, 0);
+            BitConverter.GetBytes(CapeSpringUp).CopyTo(k, 4);
+            BitConverter.GetBytes(CapeSpringAlong * fz + CapeSpringSide * fx).CopyTo(k, 8);
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothK, k);
+        }
+
+        /// <summary>The cape's own colour. The cat is lit by an ambient ADD on its CCharacter (its weapon's Tint), but a cloth is
+        /// drawn on its own — CCloth::Draw builds a bare frame and hands it to MGDraw — so none of that reaches the cape, and in a
+        /// dark dungeon it rendered a dull maroon beside a glowing cat (user 2026-09-14).
+        ///
+        /// Draw__10CCharacter saves the global ambient, adds the CHARACTER's tint (+0xCE0, what <see cref="Looks"/> sets per
+        /// weapon), draws its meshes AND THEN its cloth list inside that same window, and only then restores. So a cloth is lit by
+        /// whatever ambient is standing when it draws — the character's colour, never one of its own. That is why writing the
+        /// cape's material colour rows did nothing, twice: the colour does not come from the material at all.
+        ///
+        /// ElfCave.CatCapeTint wraps that cloth-draw call. For the one cloth named here it adds this delta to the ambient for that
+        /// draw alone and puts the ambient straight back, so the cape carries a red of its own while the cat keeps its blue and
+        /// every other cloth in the game is untouched. The delta is ON TOP of the cat's tint, which is already in the ambient by
+        /// then — so it is written as (what the cape should have) − (what the cat has), and the cat's colour does not leak in.</summary>
+        private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint
+                                                                                       // (the cat's blue is 12/24/48)
+        private static void TintCape()
+        {
+            if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
+            WriteCapeTint(1f);
+            Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, (uint)(_capeObj - 0x20000000));
+            Console.WriteLine(Tag + $"cape tint: ambient ({CapeTint[0]:F0},{CapeTint[1]:F0},{CapeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
+        }
+
+        /// <summary>The cape's ambient delta, faded with the cat so the two never drift apart mid-fade.</summary>
+        private static void WriteCapeTint(float lit)
+        {
+            for (int i = 0; i < 3; i++)
+                Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (CapeTint[i] - _look.Tint[i]) * lit);
+        }
+
+        /// <summary>Put the whole cloth exactly on its rest shape at the cat's new place. Called when the copy teleports — the
+        /// bind to the pellet's birth frame — where the anchor jumps the length of the room in one step.
+        ///
+        /// The engine has its own guard for that (Step teleports the sheet bodily when the anchor's centroid moves more than 10
+        /// units) but it did NOT save the cape when the cat was fired: the pinned collar edge is re-pinned to the anchor on every
+        /// constraint pass, so the instant it snaps to the new position while the rest of the sheet is still at the old one, the
+        /// cape is stretched the width of the screen and the constraints tear it apart from there (user 2026-09-14). Rather than
+        /// work out why the heuristic misses, place every particle ourselves: current AND previous = LW(anchor) × rest, velocities
+        /// zeroed, and the mark the teleport test compares against moved to match — the same state Clear__6CCloth builds, which is
+        /// what the engine itself does when a cloth is reset.</summary>
         private static void ReseedCape()
         {
-            if (_capeObj == 0) return;
-            byte[] cur = Memory.ReadBytesBatch(_capeObj + 0x1110, 0x1000);
-            if (cur != null) Memory.WriteBytesBatch(_capeObj + 0x2110, cur);
+            if (_capeObj == 0 || _capeRest == null) return;
+            uint anchor = (uint)Memory.ReadInt(_capeObj + CCloth.ClothAttach) & Memory.PhysAddrMask;
+            byte[] lw = Memory.IsValidGuest(anchor) ? Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40) : null;
+            if (lw == null) { Console.WriteLine(Tag + "cape: cannot reseed — the anchor's matrix did not read"); return; }
+            float[] m = new float[16];
+            for (int i = 0; i < 16; i++) m[i] = BitConverter.ToSingle(lw, i * 4);
+            // row-vector convention, as everywhere in this engine: world = x·row0 + y·row1 + z·row2 + row3
+            void Place(byte[] dst, int o, float x, float y, float z)
+            {
+                BitConverter.GetBytes(x * m[0] + y * m[4] + z * m[8] + m[12]).CopyTo(dst, o);
+                BitConverter.GetBytes(x * m[1] + y * m[5] + z * m[9] + m[13]).CopyTo(dst, o + 4);
+                BitConverter.GetBytes(x * m[2] + y * m[6] + z * m[10] + m[14]).CopyTo(dst, o + 8);
+                BitConverter.GetBytes(1f).CopyTo(dst, o + 12);
+            }
+            byte[] cur = new byte[_capeWide * 0x100];
+            for (int a = 0; a < _capeWide; a++)
+                for (int b = 0; b < _capeHang; b++)
+                {
+                    int o = a * 0x100 + b * 0x10;
+                    Place(cur, o, BitConverter.ToSingle(_capeRest, o), BitConverter.ToSingle(_capeRest, o + 4), BitConverter.ToSingle(_capeRest, o + 8));
+                }
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothCur, cur);
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothPrev, cur);                  // no history: nothing to whip back toward
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, new byte[_capeWide * 0x100]);
+            byte[] c = Memory.ReadBytesBatch(_capeObj + CCloth.ClothAnchorLocal, 12);  // and the mark the teleport test compares to
+            if (c != null)
+            {
+                byte[] w = new byte[12];
+                float lx = BitConverter.ToSingle(c, 0), ly = BitConverter.ToSingle(c, 4), lz = BitConverter.ToSingle(c, 8);
+                BitConverter.GetBytes(lx * m[0] + ly * m[4] + lz * m[8] + m[12]).CopyTo(w, 0);
+                BitConverter.GetBytes(lx * m[1] + ly * m[5] + lz * m[9] + m[13]).CopyTo(w, 4);
+                BitConverter.GetBytes(lx * m[2] + ly * m[6] + lz * m[10] + m[14]).CopyTo(w, 8);
+                Memory.WriteBytesBatch(_capeObj + CCloth.ClothAnchorWorld, w);
+            }
         }
 
         internal static void Start()
@@ -1904,6 +2071,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.CharaTint,     _look.Tint[0] * lit);   // ambient ADD, per weapon (Looks)
             Memory.WriteFloat(s + CCharacter.CharaTint + 4, _look.Tint[1] * lit);
             Memory.WriteFloat(s + CCharacter.CharaTint + 8, _look.Tint[2] * lit);
+            if (_capeObj != 0) WriteCapeTint(lit);                                  // the cape rides the same fade, one step further red
             Memory.WriteFloat(s + CCharacter.CharRot,     0f);
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
             Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
@@ -1936,7 +2104,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaMotionA, 0);
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteUInt (s + CCharacter.CharModel, 0);
-            Memory.WriteInt  (s + CCharacter.ClothList, 0); _capeObj = 0;        // the cape list lives in OUR cave: never leave it on a slot we hand back
+            Memory.WriteInt  (s + CCharacter.ClothList, 0); _capeObj = 0; _capeRest = null;        // the cape list lives in OUR cave: never leave it on a slot we hand back
+            Memory.WriteUInt (CodeCaves.Mailbox.CatCapeCloth, 0);                // …and the recolour cave stops matching a dead pointer
             RetagCatTextures(SlotTextureGroup, HerTextureBlock);
             Active = false; _key = -1; _target = -1; _weapon = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again

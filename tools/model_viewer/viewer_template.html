@@ -687,7 +687,7 @@ function render(){
       // wing meshes (grafted parts) draw white so their intersection with the grey body reads clearly
       const wing=(curDec.nodes[me.node].name||'').toLowerCase().includes('wing');
       if(me.tag==='bound'){ if(!showBound) continue; gl.uniform3f(MESH_uC, 0.05,0.16,0.30); }   // the cape's collision ellipsoids (added over the body)
-      else if(me.tag==='cape') gl.uniform3f(MESH_uC, 0.89,0.10,0.10);                // the Super Steve cape: solid bright red (build_cat_pack.CAPE_RGBA)
+      else if(me.tag==='cape') gl.uniform3f(MESH_uC, 1.0,0.19,0.19);                 // the Super Steve cape: solid bright red (build_cat_pack.CAPE_RGBA)
       else if(wing) gl.uniform3f(MESH_uC, 1.0,1.0,1.0); else gl.uniform3f(MESH_uC, isDark?0.72:0.80, isDark?0.74:0.82, isDark?0.80:0.86);
       gl.bindBuffer(gl.ARRAY_BUFFER,meshVBO);
       const n=me.nt*9;

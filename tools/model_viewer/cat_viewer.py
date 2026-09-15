@@ -180,7 +180,7 @@ def main():
                        extra_meshes=lambda ms: [cw.build_cape_mesh(nodes, next(m for m in ms if nodes[m['node']]['name'] == 'cat_skin'))]
                        + cw.build_bound_meshes(nodes))
     caped['group'] = 'Xiao'
-    print(f"caped cat: cape {len(cw.CAPE_COLLAR)}×{cw.CAPE_ROWS} lattice on collar verts {cw.CAPE_COLLAR}, hem width {cw.CAPE_WIDTH:g}, length {cw.CAPE_LENGTH:g}, lift {cw.CAPE_LIFT:g}")
+    print(f"caped cat: cape {cw.CAPE_COLS} wide × {cw.CAPE_ROWS} down, pinned edge resampled from collar verts {cw.CAPE_COLLAR}, hem width {cw.CAPE_WIDTH:g}, length {cw.CAPE_LENGTH:g}, lift {cw.CAPE_LIFT:g}")
     wg = cw.build_winged_cat(nodes, mds, pack, motions, dnodes, dmds, dran, dmot_name)
     winged = serialize("Divine Beast cat + Dran's wings — leap = charge loop, land = flare + fold (experiment)", 'c04b+cat+wings',
                        'viewer experiment on the wingless pack', wg['nodes'], wg['meshes'], wg['tracks'], motions,
