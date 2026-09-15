@@ -63,14 +63,6 @@ GLOW_VARIANTS = {"catgloww": ((255, 255, 255), (215, 225, 255)),   # white, a co
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
-MASK_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cat's mask. It cannot borrow the cape's red: that red is an
-                                                 # ambient the runtime adds around the CLOTH draw alone (ElfCave.CatCapeTint
-                                                 # wraps jal Draw__6CCloth), and the mask is an ordinary mesh on the cat. The
-                                                 # tint reaching a mesh is ADDED to its lit colour, not multiplied through its
-                                                 # texture, which is why a red mask under the cat's old blue tint came out pink
-                                                 # and why no texture could fix it — DivineBeastCat zeroes Super Steve's tint
-                                                 # instead. With nothing added, the mask's whole colour is this texture, so it
-                                                 # sits brighter than the cape's base to land near the cape's lit red.
 CAPE_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cape's flat texture: a deep red, tuned in the viewer's cape panel
                                                  # The red comes from the ambient the runtime gives the cloth (DivineBeastCat
                                                  # .CapeTint), and a light base serves that better twice over — the tint reads
@@ -449,10 +441,9 @@ def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes, dran_bytes=None, wi
     base.replace_payload(HOST_BBP, base.find(HOST_BBP).payload + crow)
     base.replace_payload("cat.bbp", base.find("cat.bbp").payload + crow)
     bank2 = Bank(base.find(HOST_IMG).payload)
-    items2 = [(n, bank2.block(n)) for n, _ in bank2.entries] + [(cape["texture"], flat_tim2(cimg.block("c04cat01"), CAPE_RGBA)),
-                                                                (wd["mask"]["texture"], flat_tim2(cimg.block("c04cat01"), MASK_RGBA))]
+    items2 = [(n, bank2.block(n)) for n, _ in bank2.entries] + [(cape["texture"], flat_tim2(cimg.block("c04cat01"), CAPE_RGBA))]
     if len({n for n, _ in items2}) != len(items2):
-        raise SystemExit("texture entry name clash (cape / mask)")
+        raise SystemExit("texture entry name clash (cape)")
     base.replace_payload(HOST_IMG, Bank.build(bank2.magic, items2))
     rep["textures"] = [n for n, _ in items2]
     base.records.append(_new_record(CAPE_CLO_NAME, cape["clo"]))
@@ -547,9 +538,7 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
         assert {wings["texture"], *GLOW_VARIANTS} <= names, "wing / glow textures"
     if C:
         assert wings["cape"]["texture"] in names, "cape texture"
-        assert wings["mask"]["texture"] in names, "mask texture"
-        mi = im.tim2_info(bank.block(wings["mask"]["texture"]), 0)
-        assert mi["w"] == 32 and mi["h"] == 32, "flat mask texture"
+        assert wings["mask"]["texture"] == wings["cape"]["texture"], "the mask shares the cape's texture — a private one does not resolve"
         inf = im.tim2_info(bank.block(wings["texture"]), 0)
         assert inf["w"] == 32 and inf["h"] == 32, "flat wing texture"
     assert {n for n, _ in Bank(old.find(HOST_IMG).payload).entries} <= names, "host textures kept"

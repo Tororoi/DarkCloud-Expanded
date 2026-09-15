@@ -110,6 +110,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatSpherePercent(fs, ElfOff);            // Divine Beast cat: a hurt sphere may admit the cat's kick (spare[1]) at its own % (spare[0]) — Minotaur Joe's face
             PatchCatGuardBypass(fs, ElfOff);              // Divine Beast cat: its hits pass an enemy's guard window (mimics re-register theirs faster than the mod can crush them)
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
+            PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
@@ -414,6 +415,26 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
             WrU32(fs, ElfOff(HookAddr), jal);              // the cave calls Draw__6CCloth itself, on both paths
+        }
+
+        /// <summary>The Super Steve cat's MASK under the cape's ambient. Unlike every other cave here this one patches NO hook
+        /// site: a mesh draws through a C++ virtual call, so there is no `jal` to take. The bytes just have to exist, and
+        /// DivineBeastCat.MaskTint reaches them at runtime by giving the mask's own copied CVisualMDT a private vtable whose
+        /// two DrawVu1 slots point in here. Nothing else in the game can arrive at it.</summary>
+        internal static void PatchCatMaskTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatMaskTint;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin")
+                ?? throw new IOException("Embedded EE function missing: catMaskTint.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 57 words, two entries that load the real DrawVu1 overloads (0x1360E0 / 0x136200) and fall into one body.
+            if (b.Length != 228 || U32(b, 0) != 0x3C190013u || U32(b, 8) != 0x373960E0u || U32(b, 20) != 0x37396200u)
+                throw new IOException($"catMaskTint.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catMaskTint.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)

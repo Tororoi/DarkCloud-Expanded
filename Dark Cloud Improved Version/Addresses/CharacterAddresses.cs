@@ -254,6 +254,9 @@ namespace Dark_Cloud_Improved_Version
     internal static class CVisualMDT
     {
         internal const int  VisualSize   = 0x30;        // the visual struct itself
+        internal const int  VisVtable    = 0x08;        // → its C++ vtable (__vt__13CVisualMDTVu1 0x2A11A0). NOT offset 0 as
+                                                        // single inheritance usually puts it — __ct__13CVisualMDTVu1 stores it
+                                                        // with `sw v0,8(s0)` (0x134FC8), and word 0 reads back ZERO in game.
         internal const int  VisVU        = 0x18;        // → VU data ptr; +0x1C = its size
         internal const int  VisMDT       = 0x20;        // → MDT block
         internal const uint MdtMagic     = 0x0054444D;  // "MDT\0" at MDT+0x00

@@ -496,7 +496,8 @@ namespace Dark_Cloud_Improved_Version
             /// (address order, size, end) so the next placement can see it.</summary>
             internal const uint CatGuardBypass     = 0x01FB2250;   // 108 B → 0x1FB22BC: the cat's hits ignore an enemy's guard window
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
-            internal const uint NextFree = 0x01FB2370;   // after the guard-bypass cave; the band runs to 0x1FB4000 (7488 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
+            internal const uint NextFree = 0x01FB2480;   // after the mask-tint cave; the band runs to 0x1FB4000 (7040 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

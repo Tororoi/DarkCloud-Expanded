@@ -203,6 +203,7 @@ namespace Dark_Cloud_Improved_Version
         private static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
         private const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
         private static int _maskMeshIdx = -1;                                              // cat's domino mask, rigid to cat_kao
+        private static long _maskVisual;                                                   // …and its own copied CVisualMDT
         private const string CapeNodeName = "cat_cape", CapeAnchorName = "cat_sebone2";     // wing_bake.CAPE_NODE / cat_wings.CAPE_ANCHOR
         /// <summary>The cape's body-collision capsules, in the order the .clo lists them — IN STEP WITH cat_wings.CAPE_BOUNDS.
         /// Every BOUND in the record names the cape node (the only name that resolves in HER tree at load); at spawn each cloned
@@ -894,7 +895,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Wings) hide.AddRange(_wingMeshIdx);
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
-            if (_look.Cape) SpawnCape();
+            if (_look.Cape) { SpawnCape(); MaskTint(); }
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow {_look.Glow}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
@@ -1679,7 +1680,7 @@ namespace Dark_Cloud_Improved_Version
             FindHead(block);
             _wingMeshIdx.Clear();
             foreach (string nm in WingMeshNodes) { int wi = FindNode(block, nm); if (wi >= 0) _wingMeshIdx.Add(wi); }
-            _maskMeshIdx = FindNode(block, MaskNodeName);
+            _maskMeshIdx = FindNode(block, MaskNodeName); _maskVisual = 0;
 
             if (!CopyMeshes()) return false;
             if (!RegisterSlot(min, blockSize)) return false;
@@ -1758,6 +1759,40 @@ namespace Dark_Cloud_Improved_Version
             if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = (uint)(a - 0x20000000); return a; }
             guest = 0; return 0;
         }
+        /// <summary>The mask wears the CAPE's colour, not the cat's.
+        ///
+        /// A cloth is easy: Draw__10CCharacter walks its cloth list calling Draw__6CCloth, so ElfCave.CatCapeTint wraps that one
+        /// call. A mesh has no such seam — the ambient is set once, MGDraw is called on the whole frame tree, and it is put back.
+        /// And a mesh's tint is ADDED to its lit colour rather than multiplied through its texture, so the cat's blue lands on
+        /// the mask and turns red to pink, with no texture able to undo it (user 2026-09-15).
+        ///
+        /// Meshes draw through C++ virtual calls, and CopyMeshes has already given every cat mesh a PRIVATE CVisualMDT in the
+        /// mod's cave. So instead of patching a shared function and testing the node on every mesh in the game, this copies
+        /// __vt__13CVisualMDTVu1, points its two DrawVu1 slots at ElfCave.CatMaskTint, and writes that copy into the mask's
+        /// visual alone. No engine code is touched, and nothing else can reach the cave: the only pointer to it is in an object
+        /// the mod allocated. The cave adds Mailbox.CatCapeTint — the very delta the cape uses — so the two match by
+        /// construction. Refuses unless the visual really holds the stock vtable, so a layout surprise is a no-op — which is
+        /// how the first attempt was caught: the vptr is at +0x08, not the offset 0 single inheritance usually puts it at, and
+        /// the guard reported word 0 reading back as zero instead of silently pointing the engine at nothing.</summary>
+        private const uint VisualMDTVu1Vtable = 0x002A11A0;   // __vt__13CVisualMDTVu1, 32 B: slot 6/7 (+0x18/+0x1C) = DrawVu1
+        private const int  VtableBytes = 32, VtableDrawSlot = 0x18;
+        private static void MaskTint()
+        {
+            if (_maskVisual == 0) { Console.WriteLine(Tag + "mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
+            uint vt = (uint)Memory.ReadInt(_maskVisual + CVisualMDT.VisVtable) & Memory.PhysAddrMask;
+            if (vt != VisualMDTVu1Vtable)
+            { Console.WriteLine(Tag + $"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{VisualMDTVu1Vtable:X} — leaving it alone"); return; }
+            byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(VisualMDTVu1Vtable), VtableBytes);
+            if (tbl == null) { Console.WriteLine(Tag + "mask tint: could not read the vtable"); return; }
+            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint).CopyTo(tbl, VtableDrawSlot);           // the uint* overload
+            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, VtableDrawSlot + 4);  // the packet overload
+            long cave = TakeCave(VtableBytes, out uint caveG);
+            if (cave == 0) { Console.WriteLine(Tag + "mask tint: no cave room for the vtable copy"); return; }
+            Memory.WriteBytesBatch(cave, tbl);
+            Memory.WriteUInt(_maskVisual + CVisualMDT.VisVtable, caveG);
+            Console.WriteLine(Tag + $"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
+        }
+
         private static bool CopyMeshes()
         {
             long cave = CodeCaves.MeshCave, caveGuest = CodeCaves.MeshCaveGuest;
@@ -1800,6 +1835,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(cMDT, mdtB);
                 Memory.WriteBytesBatch(cVis, visB);
                 Memory.WriteUInt(node + CFrameVu1.GeomPtr, cVisG);
+                if (i == _maskMeshIdx) _maskVisual = cVis;                           // the mask's visual is ours alone — MaskTint retints it
                 cave += need; caveGuest += need; copied++;
                 _skinNodes.Add((i, cMDT, mdtSz, cVU, 0L, vuSz));
                 second.Add((cVis, vuB, vuSz, _skinNodes.Count - 1));
