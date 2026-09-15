@@ -289,7 +289,14 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothMaxPieces = 4;       // length of the CCharacter +0xC74 list
         internal const int  ClothActive    = 0x18;    // active draw-packet ptr (engine sets it each frame)
         internal const int  ClothBuf0      = 0x24;    // DBuffID0 packet; +0x28 = DBuffID1 (double-buffered)
+        internal const int  ClothPacketUnits = 0x1C;  // size of the draw packet CreateVUData builds, in 16-byte units — the ONLY
+                                                      // honest measure of how big those two buffers must be (Initialize 0x13cbf0
+                                                      // builds the packet first, then Allocs this many units for each)
         internal const int  ClothAttach    = 0x3C;    // anchor CFrame — drives the SIM when the cloth is stepped
+        internal const int  ClothMaterial  = 0x60;    // the MDT_MATERIAL the packet builder copies from every draw (SetMaterial
+                                                      // 0x134D40 takes its first three 16-byte rows): +0x00 diffuse RGBA,
+                                                      // +0x10 second colour (w = 0), +0x20 third — zero in every model on the
+                                                      // disc, so it reads as the emissive/ambient term; +0x34 is the texture name
         internal const int  ClothBounds    = 0x44;    // → CBound linked list (body collision; 0 = the cloth passes through the body)
         internal const int  ClothWindScale = 0x54;    // WINDEFFECT (+0x50 = the CWind the character hands it each step)
         internal const int  ClothNormal    = 0x58;    // NORMAL: sign of the generated normals
@@ -298,6 +305,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothK         = 0xE0;    // K: per-step pull toward LW(anchor) × rest — a POSITION correction, no momentum
         internal const int  ClothRest      = 0x110;   // per particle: the shape it holds, in the anchor's space (a*0x100 + b*0x10)
         internal const int  ClothCur       = 0x1110;  // per particle: where it is now, world
+        internal const int  ClothPrev      = 0x2110;  // per particle: where it was last step (the Verlet history)
+        internal const int  ClothAnchorWorld = 0xF0;  // the anchor's world centroid as of last step — Step compares the new one
+                                                      // against it and TELEPORTS the whole sheet when they differ by > 10
+        internal const int  ClothAnchorLocal = 0x100; // …the same centroid in the anchor's own frame (set once at init)
         internal const int  ClothVel       = 0x4110;  // per particle: its velocity — the engine only ever ADDS gravity here, so a
                                                       // zero-mean wave written in rides along without dragging the cloth anywhere
         internal const int  ClothTarget    = 0x7550;  // per particle: LW(anchor) × rest, i.e. where the rest shape wants it (a*0x100 + b*0x10)
