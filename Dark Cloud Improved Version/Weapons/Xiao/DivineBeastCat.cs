@@ -649,6 +649,83 @@ namespace Dark_Cloud_Improved_Version
         private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint —
                                                                                        // tuned against the texture in the viewer's cape panel
                                                                                        // (the cat's blue is 12/24/48)
+        // ── the cape and mask follow the equipped weapon's ELEMENT ────────────────────────────────────────
+        // Two knobs move together per element: the flat texture's COLOUR and the ambient tint above.
+        //
+        // The texture is a colour, not artwork: build_cat_pack.flat_tim2 bakes 32x32 pixels that are ALL palette index 0
+        // followed by 256 identical entries, so the whole cape is one palette entry. Repainting that palette in the
+        // manager's own copy recolours the cape live — the dungeon draw loop re-uploads the cat's texture group before it
+        // draws the slot, so the change lands on the next frame (the same trick WeaponTextureSwap uses on Super Steve).
+        // Painting all 256 entries also makes it immune to CLUT ordering, since every entry is the same colour anyway.
+        // The mask SHARES catcape (wing_bake.MASK_TEX), so it follows without any work of its own.
+        private const string CapeTexture = "catcape";
+        private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
+        private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
+        private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
+        /// <summary>Xiao's weapon-slot 0 element byte, + 0xF8 per bag slot (Player.Xiao.WeaponSlot0.elementHUD). It lives in
+        /// the status block, well clear of the dungeon pools, so it needs no DungeonPools resolution.</summary>
+        private static readonly long XiaoElementHud = Player.Xiao.WeaponSlot0.elementHUD;
+        private const int WeaponSlotStride = 0xF8;
+
+        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
+        /// <summary>Per element: the cape/mask texture colour, and the ambient it draws under. Both are tunable — the
+        /// starting values follow the element bars in the weapon menu (user 2026-09-15).</summary>
+        private static readonly ElementLook[] ElementLooks =
+        {
+            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },   // as tuned for the original red cape
+            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
+            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f } },
+            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] { 8f, 46f,  37f } },
+            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f } },
+            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] { 0f,  0f,   0f } },
+        };
+        private static int _element = -1;                // the look last applied (-1 = none yet)
+
+        /// <summary>The element Xiao's EQUIPPED weapon is set to, or None when it cannot be read.</summary>
+        private static int ElementNow()
+        {
+            int slot = Memory.ReadByte(DngStatusData.Base + DngStatusData.EquipSlotArrayOffset + Player.XiaoId);
+            if ((uint)slot > 9) return NoElement;
+            int e = Memory.ReadByte(XiaoElementHud + (long)WeaponSlotStride * slot);
+            return (uint)e < ElementLooks.Length ? e : NoElement;
+        }
+
+        /// <summary>Follow the equipped weapon's element: repaint the cape/mask texture and swap the ambient. The tint is
+        /// picked up by the next <see cref="WriteCapeTint"/> the fade already runs every tick, so it keeps fading in step.</summary>
+        private static void WatchElementLook(bool force = false)
+        {
+            int e = ElementNow();
+            if (e == _element && !force) return;
+            var look = ElementLooks[e];
+            Array.Copy(look.Tint, CapeTint, 3);
+            bool painted = PaintCapePalette(look.Rgb);
+            if (e != _element)
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
+                                  + $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
+                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0})" + (painted ? "" : " — texture not in the manager yet"));
+            if (painted) _element = e;                                   // only latch once the colour actually landed
+        }
+
+        /// <summary>Paint the flat texture's palette. Cheap to re-assert: one 4-byte read, and the 1 KB write only when the
+        /// colour is not already there (the entries are recreated from the pack whenever a script event wipes them).</summary>
+        private static bool PaintCapePalette(byte[] rgb)
+        {
+            long entry = FindTexEntry(CapeTexture);
+            if (entry == 0) return false;
+            uint clut = (uint)Memory.ReadInt(entry + EntryClutPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(clut)) return false;
+            long at = Memory.ToMmu(clut);
+            byte[] cur = Memory.ReadBytesBatch(at, 4);
+            if (cur != null && cur[0] == rgb[0] && cur[1] == rgb[1] && cur[2] == rgb[2] && cur[3] == CapeAlpha) return true;
+            var pal = new byte[256 * 4];
+            for (int i = 0; i < 256; i++)
+            {
+                pal[i * 4] = rgb[0]; pal[i * 4 + 1] = rgb[1]; pal[i * 4 + 2] = rgb[2]; pal[i * 4 + 3] = CapeAlpha;
+            }
+            Memory.WriteByteArray(at, pal);
+            return true;
+        }
+
         private static void TintCape()
         {
             if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
@@ -760,7 +837,12 @@ namespace Dark_Cloud_Improved_Version
                         sleep = TickMs;
                         Resume();
                         WatchHerCatChannel();
-                        if (Active && ++_texCheckTick >= 30) { _texCheckTick = 0; CheckTexturesStillOurs(); }
+                                    if (Active && ++_texCheckTick >= 30)
+                        {
+                            _texCheckTick = 0;
+                            CheckTexturesStillOurs();
+                            if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
+                        }
                         if (_armedSince == DateTime.MinValue) _armedSince = Now;
                         // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
                         // a moment. This was 1.0 s, which was a tenth of a 9.4 s build and a THIRD of the 1.7 s one the copy
@@ -770,7 +852,7 @@ namespace Dark_Cloud_Improved_Version
                         if (!Active && (Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
                         TrackCharge();
                         if (_native) PollCave(); else WatchPellets();
-                        if (Active) { Step(); BreezeCape(); WatchCape(); }
+                        if (Active) { Step(); BreezeCape(); WatchCape(); if (_look.Cape) WatchElementLook(); }
                     }
                     if (!paused) RetirePlanted();
                 }
@@ -906,7 +988,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Wings) hide.AddRange(_wingMeshIdx);
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
-            if (_look.Cape) { SpawnCape(); MaskTint(); }
+            if (_look.Cape) { SpawnCape(); MaskTint(); WatchElementLook(force: true); }   // colour before the first frame draws
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow {_look.Glow}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
