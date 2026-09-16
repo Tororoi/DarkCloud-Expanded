@@ -49,6 +49,9 @@
     <EmbeddedResource Include="Resources\isoPatch\catMaskTint.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catPalette.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
     </EmbeddedResource>

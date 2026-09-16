@@ -698,7 +698,11 @@ namespace Dark_Cloud_Improved_Version
             if (e == _element && !force) return;
             var look = ElementLooks[e];
             Array.Copy(look.Tint, CapeTint, 3);
-            bool painted = PaintCapePalette(look.Rgb);
+            // The TEXTURE colour is the cave's when this ISO has one (ElfCave.CatPalette, called from the copy-queue cave
+            // every dungeon frame): it reads the element itself, so the cape is right even with the app closed — and the
+            // mod stops re-walking the texture manager by name, which cost up to 195 round trips per re-assert. The TINT
+            // stays here: it rides the fade the mod already drives.
+            bool painted = _native || PaintCapePalette(look.Rgb);
             if (e != _element)
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
                                   + $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
