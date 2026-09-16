@@ -840,14 +840,6 @@ namespace Dark_Cloud_Improved_Version
                     int weapon = inDun ? LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)) : -1;   // Super Steve: by its sphere
                     bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
                     bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
-                    if (inDun)   // DIAGNOSTIC (2026-09-16): which signal marks the ELEMENT menu, and do the textures survive it?
-                    {
-                        // Trigger on selectedMenu TOO, not just `menu`: `menu` is the ITEM menu (mode 3 / dungeonMode 2), so if
-                        // the weapon menu leaves those alone this would never fire during an element switch — the one case the
-                        // probe exists for.
-                        byte sel = Memory.ReadByte(Addresses.selectedMenu);
-                        if (menu != _menuLast || sel != _selLast) { _menuLast = menu; _selLast = sel; MenuProbe(menu); }
-                    }
                     // her own copy of the cape hangs off her cloth list from the moment the model loads — whatever the weapon is
                     if (inDun && Player.CurrentCharacterNum() == XiaoId && ++_capeSweepTick >= 4) { _capeSweepTick = 0; TakeHerCape(); }
                     bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
@@ -860,16 +852,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (!armed)
                     {
-                        if (Active)
-                        {
-                            string why = !Enabled ? "disabled"
-                                       : !inDun ? "left the dungeon floor"
-                                       : Player.CurrentCharacterNum() != XiaoId ? "character is no longer Xiao"
-                                       : (weapon < 0 && weapon != SuperSteveAngelKey) ? $"weapon {weapon} has no look"
-                                       : "a dungeon script event (BtEventMode)";
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"standing down — {why}");
-                            Despawn();
-                        }
+                        if (Active) Despawn();
                         Resume();
                         _armedSince = DateTime.MinValue;
                         _holding = false; _holdSeconds = 0;
@@ -958,26 +941,6 @@ namespace Dark_Cloud_Improved_Version
         private const long EffectsTightBytes = 32 * 1024;
         private static int _effectPeak, _effectCapLast, _weaponCapLast;
         private static DateTime _effectTightAt = DateTime.MinValue;
-        /// <summary>DIAGNOSTIC. Opening the weapon menu to change element currently despawns the cat, because `menu` gates
-        /// `armed` and the menu can rebuild the texture manager under the copy. To persist ONLY through the element switch we
-        /// have to tell that menu from the item menu, and three overlapping globals claim to say so — mode/dungeonMode (what
-        /// CheckDunIsPausedOrMenu uses), selectedMenu (CheckIsWeaponMenu), and 0x202A2010 (what Dungeon.CheckWepLvlUp uses for
-        /// weapon-menu open/close). This logs all four on every transition, plus whether the cat's textures actually survived,
-        /// which decides whether persisting needs RecreateCatEntries at all. Remove once the gate is settled.</summary>
-        private static void MenuProbe(bool open)
-        {
-            int present = 0;
-            foreach (string nm in CatTextureNames) if (FindTexEntry(nm) != 0) present++;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
-                + $"menu {(open ? "OPEN " : "CLOSE")}: mode {Memory.ReadByte(Addresses.mode)}, dungeonMode {Memory.ReadByte(Addresses.dungeonMode)}, "
-                + $"selectedMenu {Memory.ReadByte(Addresses.selectedMenu)} (= the 0x202A2010 Dungeon calls menuMode), "
-                + $"weaponsMode {Memory.ReadByte(Addresses.weaponsMode)}; "
-                + $"cat {(Active ? "resident" : "down")}, {present}/{CatTextureNames.Length} textures still in the manager");
-        }
-
-        private static bool _menuLast;
-        private static byte _selLast = 0xFF;          // 0xFF = "not sampled yet", so the first tick in a dungeon always reports
-
         private static void HeapWatch()
         {
             int c = Memory.ReadInt(HeapChara + 8), w = Memory.ReadInt(HeapWeapon + 8), e = Memory.ReadInt(HeapEffect + 8);
