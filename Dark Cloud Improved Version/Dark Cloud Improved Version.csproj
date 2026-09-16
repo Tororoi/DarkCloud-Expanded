@@ -52,6 +52,12 @@
     <EmbeddedResource Include="Resources\isoPatch\catPalette.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowPalette.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalette.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowPalettes.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
     </EmbeddedResource>

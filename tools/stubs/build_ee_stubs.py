@@ -46,6 +46,7 @@ STUBS = [
     ('cat_mask_tint.s',          'catMaskTint.bin',          0x1FB2370),
     ('cat_copy_queue.s',         'catCopyQueue.bin',         0x1FB2480),
     ('cat_palette.s',            'catPalette.bin',           0x1FB2700),
+    ('cat_glow_palette.s',       'catGlowPalette.bin',       0x1FB3480),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]
