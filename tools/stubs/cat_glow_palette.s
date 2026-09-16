@@ -24,6 +24,12 @@
 #   0x01C75870  CTextureManager: last entry index at +0, entries at +0x10F8 stride 0x50, name +8, palette ptr +0x48
 #   0x01FB42A0  the cat mailbox word caching the CTexture entry we found (verified by name every frame)
 #
+# ⚠ THE NAME WORDS ARE LITTLE-ENDIAN. "catglowp" sits at entry+8 as the bytes 63 61 74 67 6C 6F 77 70, so the two words
+# to compare are 0x67746163 ("catg") and 0x70776F6C ("lowp") — the LAST byte of each group is the HIGH half of the word.
+# Getting the second one wrong costs nothing visible: the scan matches "catg", fails, finds no entry and returns, and the
+# glow just stays the colour it was baked with. It was written 0x706F776C ("lwop") first time and did exactly that
+# (2026-09-16). ElfPatches.PatchCatGlowPalette now refuses a stub that does not contain the right word.
+#
 # ONE PALETTE WORD IS THE STATE, the way the cape cave uses its first. It cannot BE the first here: word 0 is the disc's
 # transparent rim and is identical in all six ramps, so this reads the BRIGHTEST level instead — table slot 114, which the
 # index map puts at CLUT index 226. Holding the element's core colour already means there is nothing to do, and an entry
@@ -61,8 +67,8 @@ resolve:
     bne   $t7, $t8, search
     nop
     lw    $t7, 0xC($t6)
-    lui   $t8, 0x706F
-    ori   $t8, $t8, 0x776C       # "lowp"
+    lui   $t8, 0x7077
+    ori   $t8, $t8, 0x6F6C       # "lowp"
     beq   $t7, $t8, paint
     nop
 search:
@@ -83,8 +89,8 @@ scan:
     bne   $t7, $t8, scan_next
     nop
     lw    $t7, 0xC($t6)
-    lui   $t8, 0x706F
-    ori   $t8, $t8, 0x776C
+    lui   $t8, 0x7077
+    ori   $t8, $t8, 0x6F6C
     beq   $t7, $t8, found
     nop
 scan_next:

@@ -666,6 +666,10 @@ namespace Dark_Cloud_Improved_Version
         /// cape is. Per-element 32-bit discs cost 16 KB each and froze the game (user 2026-09-16); this one is 5,184 B for
         /// every colour. The colours live in build_cat_pack.GLOW_ELEMENTS, not here — tune them there and re-bake.</summary>
         private const string ElementGlowDisc = "catglowp";
+        /// <summary>Byte offset of the glow palette's STATE word — the brightest level, CLUT index 226 (see
+        /// cat_glow_palette.s). Read back purely as a diagnostic: it says whether the cave actually repainted, which
+        /// no other log line can distinguish from a ramp that was simply authored too pale.</summary>
+        private const int GlowStateWord = 226 * 4;
         private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
         private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
         private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
@@ -727,10 +731,45 @@ namespace Dark_Cloud_Improved_Version
                 WriteGlowName();                                  // every element binds the SAME disc now; clearing CatGlowReady re-binds it
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
                                   + $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
-                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0}), glow {look.Glow} (coloured by its palette cave)"
+                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0}), glow {look.Glow} core {GlowCoreNow()} [{CaveWiringNow()}]"
                                   + (painted ? "" : " — texture not in the manager yet"));
             }
             if (painted) _element = e;                                   // only latch once the colour actually landed
+        }
+
+        /// <summary>Is the glow-palette cave actually WIRED into the running ELF? Reads the three words the ISO patch is
+        /// supposed to have written: the copy-queue tail's second `jal`, the stub's opening instruction, and Fire's state
+        /// word in the tables. A missing `jal` means the cave is simply never called — which on screen is indistinguishable
+        /// from a cave that runs and decides there is nothing to do, and that ambiguity is what this resolves.</summary>
+        private static string CaveWiringNow()
+        {
+            uint jal  = (uint)Memory.ReadInt(Memory.ToMmu(CodeCaves.ElfCave.CatCopyQueue + 0x238));
+            uint stub = (uint)Memory.ReadInt(Memory.ToMmu(CodeCaves.ElfCave.CatGlowPalette));
+            uint fire = (uint)Memory.ReadInt(Memory.ToMmu(CodeCaves.ElfCave.CatGlowPalTables + 114 * 4));
+            uint want = 0x0C000000u | (CodeCaves.ElfCave.CatGlowPalette >> 2);
+            return $"jal {(jal == want ? "ok" : $"MISSING 0x{jal:X8}")}"
+                 + $", stub {(stub == 0x3C0801CDu ? "ok" : $"MISSING 0x{stub:X8}")}"
+                 + $", tables {(fire == 0x364D9CFDu ? "ok" : $"BAD 0x{fire:X8}")}";
+        }
+
+        /// <summary>The glow disc's brightest palette entry as it stands in the manager RIGHT NOW. "none" means the entry is
+        /// not registered; a colour that never changes with the element means the cave is not repainting; a colour that DOES
+        /// change means the cave works and the ramp itself is what needs tuning.</summary>
+        private static string GlowCoreNow()
+        {
+            long e = FindTexEntry(ElementGlowDisc);
+            // Which entry did the CAVE settle on? It caches the row it found (guest address) in the mailbox. Empty means
+            // its by-name scan never matched; a row OTHER than the live one means it is faithfully painting a dead entry.
+            uint cached = (uint)Memory.ReadInt(CodeCaves.Mailbox.CatGlowPalTexEntry);
+            string who = cached == 0 ? "cave found NOTHING"
+                       : e == 0 ? $"cave has 0x{Memory.ToMmu(cached):X}, mod has none"
+                       : Memory.ToMmu(cached) == e ? "cave row == mod row"
+                       : $"cave row 0x{Memory.ToMmu(cached):X} != mod row 0x{e:X} (STALE)";
+            if (e == 0) return $"(no entry; {who})";
+            uint clut = (uint)Memory.ReadInt(e + EntryClutPtr) & Memory.PhysAddrMask;
+            if (!Memory.IsValidGuest(clut)) return $"(no palette; {who})";
+            byte[] w = Memory.ReadBytesBatch(Memory.ToMmu(clut) + GlowStateWord, 4);
+            return (w == null ? "(unreadable)" : $"({w[0]},{w[1]},{w[2]})") + $"; {who}";
         }
 
         /// <summary>Paint the flat texture's palette. Cheap to re-assert: one 4-byte read, and the 1 KB write only when the

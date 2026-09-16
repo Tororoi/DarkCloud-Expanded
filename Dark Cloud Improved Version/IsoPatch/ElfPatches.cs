@@ -511,6 +511,13 @@ namespace Dark_Cloud_Improved_Version
             // Shape: all code, opening `lui t0,0x01CD` (Xiao's equipped-slot byte) — no leading data table, unlike CatPalette.
             if (b.Length < 8 || U32(b, 0) != 0x3C0801CDu)
                 throw new IOException($"catGlowPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The by-name scan is the one part of this cave that fails INVISIBLY: a mistyped name word matches nothing, the
+            // cave returns, and the glow silently keeps its baked colour (2026-09-16 — "lowp" was written 0x706F776C, which
+            // spells "lwop"). So require the compare's own immediate to be present, twice: cached-entry check and scan loop.
+            int nameWords = 0;
+            for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == 0x37186F6Cu) nameWords++;
+            if (nameWords < 2)
+                throw new IOException("catGlowPalette.bin does not spell \"lowp\" (0x70776F6C) — its by-name scan would match nothing.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("catGlowPalette.bin overruns its cave — move ElfCave.NextFree.");
             for (int i = 0; i < b.Length; i += 4)
