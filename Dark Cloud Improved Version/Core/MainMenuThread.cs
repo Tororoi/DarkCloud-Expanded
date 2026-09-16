@@ -33,7 +33,6 @@ namespace Dark_Cloud_Improved_Version
             GuardianReflector.ArmBlockPatch();   // Angel Gear shield: MoveCheck2's enemy-block addend becomes a data word (cold; enemy code never ran yet)
             GuardianReflector.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch
             WeaponTextureSwap.StartSwapThread();   // Super Steve wears the attached sphere weapon's palette (dungeon + menus)
-            FontWatch.Start();   // DIAGNOSTIC (temporary): struck dungeon glyphs — texture manager layout + font texture dumps per floor
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             GuardianGrace.Start();   // Xiao's Angel Shooter guard-heal + spring sparkle (roadmap PR 2)

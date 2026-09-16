@@ -1086,7 +1086,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         public static bool IsBypassBoneDoor()
         {
-            return Memory.ReadByte(Addresses.BoneDoorOpenType) == 5 ? true: false;
+            return Memory.ReadByte(DungeonPools.Resolve(Addresses.BoneDoorOpenType)) == BoneDoorBypass;
         }
 
         /// <summary>
@@ -1095,24 +1095,42 @@ namespace Dark_Cloud_Improved_Version
         /// <param name="flag">True if to activate the door</param>
         public static void SetBypassBoneDoor(bool flag)
         {
-            byte n;
-            if (flag) n = 5;
-            else n = 21;
-            Memory.WriteByte(Addresses.BoneDoorOpenType, n);
+            // The door type sits in a dungeon pool, so its address moves with the character heap (see DungeonPools) — the
+            // cat's heap growth is what silently killed this. Only write when the byte really holds one of the engine's two
+            // values: writing blind into a moved pool is what struck a line through every letter in the game's text.
+            long addr = DungeonPools.Resolve(Addresses.BoneDoorOpenType);
+            int now = Memory.ReadByte(addr);
+            if (now != BoneDoorNormal && now != BoneDoorBypass)
+            {
+                if (!boneDoorWarned)
+                {
+                    boneDoorWarned = true;
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog()
+                                      + $"Bone door: 0x{addr:X} holds {now}, not {BoneDoorNormal}/{BoneDoorBypass} — bypass skipped");
+                }
+                return;
+            }
+            Memory.WriteByte(addr, flag ? BoneDoorBypass : BoneDoorNormal);
         }
+        private const byte BoneDoorNormal = 21, BoneDoorBypass = 5;   // the engine's own door-open types
+        private static bool boneDoorWarned;
 
         public static void FixUngagaDoors(byte currentdng)
         {
+            // Vanilla-layout addresses inside a dungeon pool: resolve them (DungeonPools — the cat's heap growth moved these
+            // pools 880,000 B and this quietly logged "couldn't fix" on every floor), and keep the 150.0 read as the proof
+            // that we are looking at the real door distance and not at whatever else now occupies the address.
+            long R(long a) => DungeonPools.Resolve(a);
             switch (currentdng)
             {
                 case 3:
-                    if (Memory.ReadFloat(0x20928670) == 150)
+                    if (Memory.ReadFloat(R(0x20928670)) == 150)
                     {
-                        Memory.WriteByte(0x20985E0, 30);
-                        Memory.WriteFloat(0x20928670, 50);
-                        Memory.WriteFloat(0x20928928, 50);
-                        Memory.WriteByte(0x20928B14, 30);
-                        Memory.WriteByte(0x20928AE4, 30);
+                        Memory.WriteByte(R(0x20985E0), 30);   // ⚠ 7 hex digits in the original — suspect, unverified
+                        Memory.WriteFloat(R(0x20928670), 50);
+                        Memory.WriteFloat(R(0x20928928), 50);
+                        Memory.WriteByte(R(0x20928B14), 30);
+                        Memory.WriteByte(R(0x20928AE4), 30);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
                     }
                     else
@@ -1122,13 +1140,13 @@ namespace Dark_Cloud_Improved_Version
                     break;
 
                 case 4:
-                    if (Memory.ReadFloat(0x2092FA08) == 150)
+                    if (Memory.ReadFloat(R(0x2092FA08)) == 150)
                     {
-                        Memory.WriteByte(0x2092F978, 30);
-                        Memory.WriteFloat(0x2092FA08, 50);
-                        Memory.WriteFloat(0x2092FCC0, 50);
-                        Memory.WriteByte(0x2092FEAC, 30);
-                        Memory.WriteByte(0x2092FE7C, 30);
+                        Memory.WriteByte(R(0x2092F978), 30);
+                        Memory.WriteFloat(R(0x2092FA08), 50);
+                        Memory.WriteFloat(R(0x2092FCC0), 50);
+                        Memory.WriteByte(R(0x2092FEAC), 30);
+                        Memory.WriteByte(R(0x2092FE7C), 30);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
                     }
                     else
@@ -1138,13 +1156,13 @@ namespace Dark_Cloud_Improved_Version
                     break;
 
                 case 5:
-                    if (Memory.ReadFloat(0x209244AC) == 150)
+                    if (Memory.ReadFloat(R(0x209244AC)) == 150)
                     {
-                        Memory.WriteByte(0x2092441C, 30);
-                        Memory.WriteFloat(0x209244AC, 50);
-                        Memory.WriteFloat(0x20924764, 50);
-                        Memory.WriteByte(0x20924920, 30);
-                        Memory.WriteByte(0x20924950, 30);
+                        Memory.WriteByte(R(0x2092441C), 30);
+                        Memory.WriteFloat(R(0x209244AC), 50);
+                        Memory.WriteFloat(R(0x20924764), 50);
+                        Memory.WriteByte(R(0x20924920), 30);
+                        Memory.WriteByte(R(0x20924950), 30);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Fixed Ungaga Doors");
                     }
                     else
@@ -1168,6 +1186,10 @@ namespace Dark_Cloud_Improved_Version
                 if (currentCharCursor == 4)
                 {
                     int timer = 0;
+                    // Both markers live in a dungeon pool, so they move with the character heap (DungeonPools). The 12850
+                    // check now also gates the WRITE — it used to fire even when the wait timed out, which after the pools
+                    // moved meant stamping 52 into whatever had taken that address.
+                    long swapA = DungeonPools.Resolve(0x2193A013), swapB = DungeonPools.Resolve(0x217E5453);
                     while (timer < 10)
                     {
                         Thread.Sleep(100);
@@ -1175,14 +1197,14 @@ namespace Dark_Cloud_Improved_Version
 
                         if (Memory.ReadByte(0x202A2010) == 3)
                         {
-                            if (Memory.ReadUShort(0x2193A013) == 12850)
+                            if (Memory.ReadUShort(swapA) == 12850)
                             {
                                 break;
                             }
                         }
                         else
                         {
-                            if (Memory.ReadUShort(0x217E5453) == 12850)
+                            if (Memory.ReadUShort(swapB) == 12850)
                             {
                                 break;
                             }
@@ -1191,15 +1213,15 @@ namespace Dark_Cloud_Improved_Version
 
                     }
 
-                    if (Memory.ReadByte(0x202A2010) == 3)
+                    long swap = Memory.ReadByte(0x202A2010) == 3 ? swapA : swapB;
+                    if (Memory.ReadUShort(swap) == 12850)
                     {
-                        Memory.WriteByte(0x2193A013, 52);
-                        Memory.WriteByte(0x2193A014, 52);
+                        Memory.WriteByte(swap, 52);
+                        Memory.WriteByte(swap + 1, 52);
                     }
                     else
                     {
-                        Memory.WriteByte(0x217E5453, 52);
-                        Memory.WriteByte(0x217E5454, 52);
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"Ungaga swap marker missing at 0x{swap:X} — skipped");
                     }
                 }
             }
