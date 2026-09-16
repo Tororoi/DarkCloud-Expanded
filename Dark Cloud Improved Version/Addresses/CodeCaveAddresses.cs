@@ -385,6 +385,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatCapeCloth     = CatBase + 0x288; // uint: the cape's CCloth (guest) — the ONE cloth ElfCave.CatCapeTint recolours (mod; 0 = none)
             internal const long CatCapeTint      = CatBase + 0x28C; // float3: added to the global ambient for that cloth alone, so the cape carries a colour of its own (mod)
             internal const long CatApexH         = CatBase + 0x270; // float: the pounce's launch height, then the highest height while rising = the apex (cave)
+            internal const long CatPaletteTexEntry = CatBase + 0x29C; // uint, the CTexture entry ElfCave.CatPalette last found for catcape (cave; verified by name each frame, so a stale one costs one re-scan)
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
 
@@ -497,8 +498,12 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatGuardBypass     = 0x01FB2250;   // 108 B → 0x1FB22BC: the cat's hits ignore an enemy's guard window
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
-            internal const uint CatCopyQueue       = 0x01FB2480;   // 560 B → 0x1FB26B0: the cat's mesh copy, done inside the machine
-            internal const uint NextFree = 0x01FB26C0;   // after the copy-queue cave; the band runs to 0x1FB4000 (6464 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
+            /// <summary>The cape/mask element colour, repainted in the machine (cat_palette.s). The six colours are the
+            /// cave's first six words and the CODE starts at +0x18 — that offset is what the copy-queue cave calls.</summary>
+            internal const uint CatPalette         = 0x01FB2700;   // 344 B → 0x1FB2858
+            internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
+            internal const uint NextFree = 0x01FB2880;   // after the palette cave; the band runs to 0x1FB4000 (6016 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

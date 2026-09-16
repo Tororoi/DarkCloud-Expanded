@@ -177,5 +177,13 @@ job_next:
     lw    $s6, 0x20($sp)
     addiu $sp, $sp, 0x50
 tail:
+    # The cape/mask element colour rides this same once-per-frame hook (cat_palette.s @0x01FB2700, entry +0x18).
+    # It is a leaf that returns through $ra, so $ra is saved across it — the `j` below still needs the caller's.
+    addiu $sp, $sp, -0x10
+    sw    $ra, 0x0($sp)
+    jal   0x01FB2718
+    nop
+    lw    $ra, 0x0($sp)
+    addiu $sp, $sp, 0x10
     j     0x01FB0D90               # CatPelletFollow — a0 and ra untouched, so it behaves exactly as before
     nop

@@ -112,6 +112,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
+            PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
@@ -448,11 +449,30 @@ namespace Dark_Cloud_Improved_Version
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin")
                 ?? throw new IOException("Embedded EE function missing: catCopyQueue.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            // Shape: 140 words, opens by materialising the queue address and ends `j CatPelletFollow`.
-            if (b.Length != 560 || U32(b, 0) != 0x3C0801FAu || U32(b, b.Length - 8) != (0x08000000u | (CodeCaves.ElfCave.CatPelletFollow >> 2)))
+            // Shape: opens by materialising the queue address and ends `j CatPelletFollow` (its tail calls CatPalette first).
+            if (b.Length != 584 || U32(b, 0) != 0x3C0801FAu || U32(b, b.Length - 8) != (0x08000000u | (CodeCaves.ElfCave.CatPelletFollow >> 2)))
                 throw new IOException($"catCopyQueue.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("catCopyQueue.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The cape/mask element colour, repainted in the machine (tools/stubs/cat_palette.s). Called once per
+        /// dungeon frame from the copy-queue cave's tail; the first six words are the colour table, so the code — and the
+        /// call target — start at +0x18.</summary>
+        internal static void PatchCatPalette(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatPalette;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin")
+                ?? throw new IOException("Embedded EE function missing: catPalette.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: six colour words, then `lui t0,0x01CD` (Xiao's equipped-slot byte) at the entry point.
+            if (b.Length < 0x18 + 8 || U32(b, 0x18) != 0x3C0801CDu)
+                throw new IOException($"catPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catPalette.bin overruns its cave — move ElfCave.NextFree.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
