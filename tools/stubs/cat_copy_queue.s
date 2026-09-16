@@ -178,10 +178,12 @@ job_next:
     addiu $sp, $sp, 0x50
 tail:
     # The cape/mask element colour rides this same once-per-frame hook (cat_palette.s @0x01FB2700, entry +0x18).
-    # It is a leaf that returns through $ra, so $ra is saved across it — the `j` below still needs the caller's.
+    # Both are leaves that return through $ra, so $ra is saved across them — the `j` below still needs the caller's.
     addiu $sp, $sp, -0x10
     sw    $ra, 0x0($sp)
     jal   0x01FB2718
+    nop
+    jal   0x01FB3480               # …and the GLOW disc's palette (cat_glow_palette.s), same once-per-frame ride
     nop
     lw    $ra, 0x0($sp)
     addiu $sp, $sp, 0x10

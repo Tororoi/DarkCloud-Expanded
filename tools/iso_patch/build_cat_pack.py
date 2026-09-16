@@ -58,8 +58,38 @@ GLOW_OUTER = (60, 67, 255)                      # … to this at the disc's edge
 GLOW_CROSS = 0.125                              # radius fraction where the mix is halfway (0.5 = linear); smaller = the blue reaches further in (user 2026-09-12)
 # Per-weapon glows (user 2026-09-13): the Divine Beast Title keeps the blue disc; the Angel Shooter's cat glows WHITE, the
 # Angel Gear's GOLD. Same disc, re-tinted; the runtime names the one to draw (mailbox CatGlowName → the glow cave).
-GLOW_VARIANTS = {"catgloww": ((255, 255, 255), (215, 225, 255)),   # white, a cool edge
-                 "catglowg": ((255, 238, 180), (255, 176, 40))}    # gold
+# ⚠ ALL glow discs must be 64x64. DrawFire__9CFireOmni (0x161AC0) builds its two sprite layers with a FIXED
+# texel rect — (0,0,64,64) and (2,2,124,124) — so a smaller disc is sampled outside itself and simply does not
+# draw: authored at 32x32 to save heap, Fire/Thunder/Wind/Holy showed no glow at all while the two 64x64 discs
+# (Ice, None) were fine (user 2026-09-16). glow_tim2 keeps its `size` knob, but nothing may use it here.
+GLOW_VARIANTS = {"catgloww": ((215, 215, 215), (180, 190, 215)),   # white, a cool edge, dimmed a little — Angel Shooter, and "no element"
+                 "catglowg": ((255, 238, 180), (255, 176, 40)),    # gold — Angel Gear
+                 }
+# ⚠ NO MORE 64x64 DISCS FIT. Four per-element discs (orange/yellow/green/purple) were added here and FROZE the game:
+# each is 16 KB in Xiao's character pack, and the weapons/effects pools are whatever the heap has left after her
+# character data — with them loaded the log read `chara 3,899,600/4,240,000 ... effects 70,144/115,168`, i.e. 45 KB
+# free, and opening the menu overflowed the effects pool into CDataAlloc2's silent spin (user 2026-09-16). Raising
+# the heap is not the way out either: that is what moved the dungeon pools and painted message text over the glyph
+# sheet (see memory dungeon-pool-addresses-shift). The way to per-element glows is ONE 8-bit disc plus a palette
+# ramp, the way the cape works — 16 KB + 1 KB for every colour instead of 16 KB each. That is GLOW_T8_NAME below.
+GLOW_T8_NAME = "catglowp"                       # the per-ELEMENT glow: ONE 8-bit disc, 5,184 B, whose CLUT the cave repaints
+# The GS reads a PSMT8 palette in CSM1 order, which exchanges bits 3 and 4 of the index (EnterTexture 0x1313B0 memcpy's the
+# file's 1024 B to CTexture+0x48 and ReloadTexture blits them to VRAM verbatim — nothing de-swizzles them on the way, and
+# every one of the game's 8712 T8 pictures ships clutType 3 with that bit clear). Rather than permute the table, the disc
+# only ever uses indices the permutation LEAVES ALONE — the 128 values whose bits 3 and 4 match — so the cave can copy its
+# table straight down. That is the same immunity the flat cape palette gets from having all 256 entries identical, except
+# it costs nothing: the disc needs 115 levels and 128 are available.
+CLUT_FIXED = [i for i in range(256) if (i & 0x18) in (0x00, 0x18)]
+# Per element, indexed by the element byte (00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None): the radial gradient's
+# centre and edge, in the style of the discs above. ⚠ STARTING values (Claude 2026-09-16) — ElementLooks.Rgb is one CAPE
+# colour and a gradient needs two, so these were derived, not authored; tune them here and re-run --palettes. "None" is the
+# dimmed white the Angel Shooter wears (user 2026-09-16).
+GLOW_ELEMENTS = [((255, 200, 120), (255,  90,  10)),   # 0 Fire     orange
+                 ((150, 225, 255), ( 40, 110, 255)),   # 1 Ice      blue
+                 ((255, 245, 170), (255, 200,  20)),   # 2 Thunder  yellow
+                 ((190, 255, 170), ( 60, 200,  50)),   # 3 Wind     green
+                 ((245, 190, 255), (190,  70, 230)),   # 4 Holy     purple
+                 ((215, 215, 215), (180, 190, 215))]   # 5 None     the dimmed white
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
@@ -185,7 +215,7 @@ def flat_tim2(template, rgba, size=32):
 
 
 # ───────────────────────────────────────────── the graft ────────────────────────────────────────────────
-def glow_tim2(lightling, core=GLOW_CORE, outer=GLOW_OUTER, cross=GLOW_CROSS):
+def glow_tim2(lightling, core=GLOW_CORE, outer=GLOW_OUTER, cross=GLOW_CROSS, size=None):
     """The torch glow disc (a 64x64 RGBA32 TIM2, no CLUT) re-coloured as a radial gradient: every pixel keeps its alpha
     and its share of the disc's peak luminance (the soft falloff), and its hue runs from `core` at the centre to `outer`
     at the disc's visible edge — the Gallery's purple becomes our cyan-cored blue."""
@@ -206,7 +236,104 @@ def glow_tim2(lightling, core=GLOW_CORE, outer=GLOW_OUTER, cross=GLOW_CROSS):
         t = t ** (math.log(0.5) / math.log(cross))                                      # biased: halfway at radius `cross` (user: more blue, sooner)
         for c in range(3):
             px[k + c] = min(255, int((core[c] * (1.0 - t) + outer[c] * t) * l))
+    if size and size < w:
+        # Box-filter down (64x64 -> 32x32 = 4 KB instead of 16). The disc is a soft blob drawn small, so resolution is
+        # not what sells it — but four more 64x64 discs cost 64 KB of the character heap and 256 VRAM blocks in Xiao's
+        # group (user 2026-09-15). These discs carry no CLUT, so the picture is header + pixels and nothing follows.
+        n = w // size
+        small = bytearray(size * size * 4)
+        for y in range(size):
+            for x in range(size):
+                for c in range(4):
+                    acc = sum(px[(((y * n + dy) * w) + (x * n + dx)) * 4 + c] for dy in range(n) for dx in range(n))
+                    small[(y * size + x) * 4 + c] = acc // (n * n)
+        hdr = bytearray(lightling[:0x10 + hs])
+        struct.pack_into("<3I", hdr, 0x10, hs + len(small) + cs, cs, len(small))   # total, clut, image
+        struct.pack_into("<2H", hdr, 0x10 + 0x14, size, size)
+        return bytes(hdr) + bytes(small)
     return lightling[:0x10 + hs] + bytes(px) + lightling[0x10 + hs + isz:]
+
+
+def _glow_levels(lightling):
+    """The source disc's luminance per texel, and its sorted distinct levels. Luminance is what the index encodes: it
+    falls monotonically from the disc's centre (measured 118 at the middle to 0 at the rim), so it stands in for radius
+    and ONE baked index map serves every colour — the pixels carry position in the gradient, the palette carries hue."""
+    hs = struct.unpack_from("<H", lightling, 0x1C)[0]
+    isz = struct.unpack_from("<I", lightling, 0x18)[0]
+    px = lightling[0x10 + hs:0x10 + hs + isz]
+    key = [(px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) // 1000 for i in range(0, len(px), 4)]
+    return key, sorted(set(key))
+
+
+def glow_indices(lightling):
+    """One byte per texel: the pixel's luminance RANK, mapped onto a permutation-safe CLUT index (see CLUT_FIXED)."""
+    key, levels = _glow_levels(lightling)
+    if len(levels) > len(CLUT_FIXED):
+        raise SystemExit(f"glow disc needs {len(levels)} palette entries; only {len(CLUT_FIXED)} are permutation-safe")
+    slot = {v: CLUT_FIXED[i] for i, v in enumerate(levels)}
+    return bytes(slot[k] for k in key), levels
+
+
+def glow_palette(lightling, core, outer):
+    """The 128 permutation-safe CLUT words for ONE colour, in ascending index order — exactly the 512 B the cave copies.
+    Each word is the mean of what glow_tim2 would have produced for the texels at that luminance, so the disc matches the
+    32-bit original to a measured mean of 0.28/255 (max 8) instead of being re-derived by some other formula."""
+    key, levels = _glow_levels(lightling)
+    hs = struct.unpack_from("<H", lightling, 0x1C)[0]
+    isz = struct.unpack_from("<I", lightling, 0x18)[0]
+    px = glow_tim2(lightling, core=core, outer=outer)[0x10 + hs:0x10 + hs + isz]
+    acc = {}
+    for i, k in enumerate(key):
+        a = acc.setdefault(k, [0, 0, 0, 0, 0])
+        for c in range(4):
+            a[c] += px[i * 4 + c]
+        a[4] += 1
+    out = bytearray(len(CLUT_FIXED) * 4)
+    for r, v in enumerate(levels):
+        a = acc[v]
+        for c in range(4):
+            out[r * 4 + c] = a[c] // a[4]
+    return bytes(out)
+
+
+def glow_palettes(lightling):
+    """All six element palettes back to back — the blob ElfPatches.PatchCatGlowPalettes writes into the data cave.
+    ⚠ The cave decides "already painted" from ONE word, and the two offsets it reads are BAKED INTO cat_glow_palette.s.
+    Word 0 cannot serve: it is the disc's transparent rim, identical in all six ramps. The stub reads the brightest level
+    instead — table slot 114, CLUT index 226 — so both of the facts that make that valid are asserted here."""
+    _, levels = _glow_levels(lightling)
+    last = len(levels) - 1
+    if last != 114 or CLUT_FIXED[last] != 226:
+        raise SystemExit(f"the glow disc now has {len(levels)} levels (brightest at CLUT index {CLUT_FIXED[last]}) — update the "
+                         f"state-check offsets in tools/stubs/cat_glow_palette.s to table 0x{last * 4:X} / CLUT 0x{CLUT_FIXED[last] * 4:X}")
+    tabs = [glow_palette(lightling, core, outer) for core, outer in GLOW_ELEMENTS]
+    if len({t[last * 4:last * 4 + 4] for t in tabs}) != len(tabs):
+        raise SystemExit("two GLOW_ELEMENTS ramps end on the same brightest colour — the cave could not tell those elements "
+                         "apart and would stop repainting between them; tune one of the cores")
+    return b"".join(tabs)
+
+
+def glow_t8_tim2(template, lightling, core, outer):
+    """The per-element glow disc as an 8-bit TIM2 (64x64 indices + a 256-entry CLUT) built off a vanilla 8-bit picture's
+    headers, the way flat_tim2 builds the cape. 5,184 B holds EVERY colour, where a 32-bit disc costs 16,448 B each — four
+    of those is what froze the game. The CLUT baked here is only the resting look; the cave repaints it per element."""
+    info = im.tim2_info(template, 0)
+    if info["bpp"] != 5 or info["hdr"] != 0x30:
+        raise SystemExit("glow_t8_tim2: template is not an 8-bit TIM2 with a 0x30 picture header")
+    w, h = struct.unpack_from("<2H", lightling, 0x24)
+    idx, _ = glow_indices(lightling)
+    if (w, h) != (64, 64) or len(idx) != w * h:
+        raise SystemExit(f"glow_t8_tim2: source disc is {w}x{h} — DrawFire's texel rect is hardcoded to 64x64")
+    pal = bytearray(256 * 4)
+    tab = glow_palette(lightling, core, outer)
+    for r, e in enumerate(CLUT_FIXED):
+        pal[e * 4:e * 4 + 4] = tab[r * 4:r * 4 + 4]
+    pic = 0x10
+    hdr = bytearray(template[:pic + 0x30])
+    struct.pack_into("<3I", hdr, pic, 0x30 + len(idx) + len(pal), len(pal), len(idx))
+    struct.pack_into("<2H", hdr, pic + 0x14, w, h)
+    hdr[pic + 0x18:pic + 0x30] = bytes(0x18)   # GS regs stay zero: the engine derives them (see flat_tim2)
+    return bytes(hdr) + bytes(idx) + bytes(pal)
 
 
 def cat_name(orig, index):
@@ -419,6 +546,9 @@ def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes, dran_bytes=None, wi
     light = Bank(glow_img.payload).block("lightling")
     for nm, (core, outer) in GLOW_VARIANTS.items():
         items.append((nm, glow_tim2(light, core=core, outer=outer)))
+    # The element glow: one 8-bit disc for all six colours. Its resting CLUT is "None", so it looks right even if the
+    # palette cave never runs. ⚠ add it to DivineBeastCat.CatTextureNames too, or it keeps pages in her block.
+    items.append((GLOW_T8_NAME, glow_t8_tim2(cimg.block("c04cat01"), light, *GLOW_ELEMENTS[5])))
     if len({n for n, _ in items}) != len(items):
         raise SystemExit("texture entry name clash (wings)")
     base.replace_payload(HOST_IMG, Bank.build(bank.magic, items))
@@ -662,6 +792,12 @@ def main():
     print(rep)
     if "--out" in a:
         open(a[a.index("--out") + 1], "wb").write(out); print("wrote", a[a.index("--out") + 1])
+    if "--palettes" in a:
+        dest = a[a.index("--palettes") + 1]
+        _, gl = mc.load_pack(GLOW_SRC, dc)
+        blob = glow_palettes(Bank(gl.find("fire.img").payload).block("lightling"))
+        open(dest, "wb").write(blob)
+        print(f"wrote {dest} ({len(blob)} B = {len(GLOW_ELEMENTS)} x {len(CLUT_FIXED) * 4} B)")
     if "--test" in a:
         print("self-check ok")
 

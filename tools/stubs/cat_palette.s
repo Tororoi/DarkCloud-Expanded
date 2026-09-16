@@ -2,15 +2,20 @@
 # Assembled at 0x01FB2700 (ElfCave.CatPalette). The six colours are the first six words; the code starts at +0x18,
 # which is what the copy-queue cave calls once per dungeon frame.
 #
-# WHY NATIVE. The colour belongs on the disc, not in the mod: baked in, a patched ISO shows the right cape with the
-# app closed, and nothing crosses PINE per frame. The C# version re-walked the texture manager BY NAME every half
-# second — up to 195 round trips — and wrote a kilobyte whenever the element changed (user 2026-09-15).
+# WHY NATIVE. Nothing crosses PINE per frame and the colour is right on the cat's first drawn frame. The C#
+# version re-walked the texture manager BY NAME every half second — up to 195 round trips — and wrote a kilobyte
+# whenever the element changed (user 2026-09-15).
 #
 # HOW. build_cat_pack.flat_tim2 bakes the cape texture as 32x32 pixels that are ALL palette index 0 followed by 256
 # identical entries, so the whole cape is ONE palette entry — and the mask SHARES catcape (wing_bake.MASK_TEX), so
 # both change together. Repaint the manager's own palette copy (CTexture entry +0x48) and the dungeon draw loop
 # re-uploads the cat's texture group before it draws the slot, so the colour lands on the next frame. This is the
 # same live-recolour path WeaponTextureSwap uses on Super Steve.
+#
+# The GLOW now gets the same treatment next door, in cat_glow_palette.s (0x01FB3480, called immediately after this
+# cave): its disc is 8-bit too, so ONE `catglowp` carries all six element colours in its palette. It used to take a
+# separate 32-bit disc per element — four of those exhausted the character heap and froze the weapon menu
+# (2026-09-16). Tinting the sprite through DrawFire's shared colour word was tried first and did not take (2026-09-15).
 #
 # The palette's FIRST WORD IS THE STATE: holding the element's colour already means there is nothing to do, and a
 # rebuilt entry (a script event wipes them) comes back carrying the baked red and repaints itself. The only thing

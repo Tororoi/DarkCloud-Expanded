@@ -263,7 +263,10 @@ namespace Dark_Cloud_Improved_Version
         /// to bind again (CatGlowReady = 0).</summary>
         private static void WriteGlowName()
         {
-            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(_look.Glow).CopyTo(nm, 0);
+            // The cape look glows in its ELEMENT's colour: one authored disc per element, since the discs are 32-bit and
+            // have no palette to repaint (user 2026-09-15). Clearing CatGlowReady below makes the cave bind the new one.
+            string disc = _look.Cape ? ElementLooks[ElementNow()].Glow : _look.Glow;
+            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(disc).CopyTo(nm, 0);
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
         }
@@ -659,6 +662,10 @@ namespace Dark_Cloud_Improved_Version
         // Painting all 256 entries also makes it immune to CLUT ordering, since every entry is the same colour anyway.
         // The mask SHARES catcape (wing_bake.MASK_TEX), so it follows without any work of its own.
         private const string CapeTexture = "catcape";
+        /// <summary>The element glow: ONE 8-bit disc for all six colours, repainted by ElfCave.CatGlowPalette the way the
+        /// cape is. Per-element 32-bit discs cost 16 KB each and froze the game (user 2026-09-16); this one is 5,184 B for
+        /// every colour. The colours live in build_cat_pack.GLOW_ELEMENTS, not here — tune them there and re-bake.</summary>
+        private const string ElementGlowDisc = "catglowp";
         private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
         private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
         private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
@@ -667,18 +674,29 @@ namespace Dark_Cloud_Improved_Version
         private static readonly long XiaoElementHud = Player.Xiao.WeaponSlot0.elementHUD;
         private const int WeaponSlotStride = 0xF8;
 
-        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
+        /// <summary>Per element: the cape/mask texture colour, the ambient the CAPE draws under (authored per element by the
+        /// user), and the glow disc to bind. The CAT's own ambient is the same for every element — <see cref="ElementAmbient"/>.</summary>
+        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; public string Glow; }
         /// <summary>Per element: the cape/mask texture colour, and the ambient it draws under. Both are tunable — the
         /// starting values follow the element bars in the weapon menu (user 2026-09-15).</summary>
         private static readonly ElementLook[] ElementLooks =
         {
-            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },   // as tuned for the original red cape
-            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
-            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f } },
-            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] { 8f, 46f,  37f } },
-            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f } },
-            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] { 0f,  0f,   0f } },
+            // Every element now binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
+            // it — so the glow colour is tuned in build_cat_pack.GLOW_ELEMENTS, not by naming a different texture here.
+            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f }, Glow = ElementGlowDisc },
+            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f }, Glow = ElementGlowDisc },
+            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f }, Glow = ElementGlowDisc },
+            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] {  8f, 46f, 37f }, Glow = ElementGlowDisc },
+            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f }, Glow = ElementGlowDisc },
+            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] {  0f,  0f,  0f }, Glow = ElementGlowDisc },
         };
+        /// <summary>The cat's OWN ambient as drawn — <see cref="WeaponLook.Tint"/> for every other look, the element's for
+        /// the cape one. Never write through _look.Tint: those arrays are shared by the Looks table.</summary>
+        private static readonly float[] CatTint = new float[3];
+        /// <summary>The CAT's ambient while the element look is on — the Angel Shooter's own 20/20/20, the same for every
+        /// element (user 2026-09-16: darker read too dull). The cape and mask keep their authored per-element ambients
+        /// (<see cref="ElementLook.Tint"/>); only the cat is unified.</summary>
+        private static readonly float[] ElementAmbient = { 20f, 20f, 20f };
         private static int _element = -1;                // the look last applied (-1 = none yet)
 
         /// <summary>The element Xiao's EQUIPPED weapon is set to, or None when it cannot be read.</summary>
@@ -697,16 +715,21 @@ namespace Dark_Cloud_Improved_Version
             int e = ElementNow();
             if (e == _element && !force) return;
             var look = ElementLooks[e];
-            Array.Copy(look.Tint, CapeTint, 3);
+            Array.Copy(look.Tint, CapeTint, 3);                   // the cape and mask keep their authored per-element ambient
+            Array.Copy(ElementAmbient, CatTint, 3);               // the CAT alone is the same under every element (user 2026-09-15)
             // The TEXTURE colour is the cave's when this ISO has one (ElfCave.CatPalette, called from the copy-queue cave
             // every dungeon frame): it reads the element itself, so the cape is right even with the app closed — and the
             // mod stops re-walking the texture manager by name, which cost up to 195 round trips per re-assert. The TINT
             // stays here: it rides the fade the mod already drives.
             bool painted = _native || PaintCapePalette(look.Rgb);
             if (e != _element)
+            {
+                WriteGlowName();                                  // every element binds the SAME disc now; clearing CatGlowReady re-binds it
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
                                   + $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
-                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0})" + (painted ? "" : " — texture not in the manager yet"));
+                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0}), glow {look.Glow} (coloured by its palette cave)"
+                                  + (painted ? "" : " — texture not in the manager yet"));
+            }
             if (painted) _element = e;                                   // only latch once the colour actually landed
         }
 
@@ -742,7 +765,7 @@ namespace Dark_Cloud_Improved_Version
         private static void WriteCapeTint(float lit)
         {
             for (int i = 0; i < 3; i++)
-                Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (CapeTint[i] - _look.Tint[i]) * lit);
+                Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (CapeTint[i] - CatTint[i]) * lit);
         }
 
         /// <summary>Put the whole cloth exactly on its rest shape at the cat's new place. Called when the copy teleports — the
@@ -985,6 +1008,7 @@ namespace Dark_Cloud_Improved_Version
             _y = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
             _weapon = LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord));   // the look key (Super Steve: by its sphere)
             _look = Looks.TryGetValue(_weapon, out var lk) ? lk : Looks[Items.divinebeasttitle];
+            Array.Copy(_look.Tint, CatTint, 3);                   // the weapon's own ambient; the element may override it below
             if (!Spawn()) { _spawnFailedAt = Now; return; }
             _spawnFailedAt = DateTime.MinValue;
             WriteGlowName();
@@ -2365,9 +2389,9 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours (a plain fade, no shrink — user 2026-09-12)
             float lit = Math.Max(0f, Math.Min(1f, _alpha));
-            Memory.WriteFloat(s + CCharacter.CharaTint,     _look.Tint[0] * lit);   // ambient ADD, per weapon (Looks)
-            Memory.WriteFloat(s + CCharacter.CharaTint + 4, _look.Tint[1] * lit);
-            Memory.WriteFloat(s + CCharacter.CharaTint + 8, _look.Tint[2] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint,     CatTint[0] * lit);   // ambient ADD, per weapon (Looks) and per element
+            Memory.WriteFloat(s + CCharacter.CharaTint + 4, CatTint[1] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint + 8, CatTint[2] * lit);
             if (_capeObj != 0) WriteCapeTint(lit);                                  // the cape rides the same fade, one step further red
             Memory.WriteFloat(s + CCharacter.CharRot,     0f);
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
@@ -2423,7 +2447,11 @@ namespace Dark_Cloud_Improved_Version
         private const int  TexEntries = 0x10F8, TexStride = 0x50, TexMaxEntries = 0xC4, TexName = 8;
         private const short HerTextureBlock = 0x11;
         private const short SlotTextureGroup = (short)(DungeonCharaDraw.CharaTexBase + Slot);
-        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catglow", "catwing", "catgloww", "catglowg", "catcape" };   // catglow = the blue torch-glow disc (build_cat_pack.GLOW_NAME); catwing = the wings' flat white; catgloww/g = the white / gold discs
+        // ⚠ EVERY texture the cat pack carries must be listed here. These are the entries re-tagged into the slot's group
+        // and moved into the cat's VRAM window while the copy is up; one left out keeps her block's pages after that block
+        // has been cut back, so it samples stale VRAM — four per-element glow discs added to the pack but not to this list
+        // drew as garbage and then not at all (user 2026-09-16).
+        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catglow", "catwing", "catgloww", "catglowg", "catcape", "catglowp" };   // catglow = the blue torch-glow disc (build_cat_pack.GLOW_NAME); catwing = the wings' flat white; catgloww/g = the white / gold discs; catglowp = the 8-bit per-element disc
         // A block descriptor (CTextureBlock, 0x3C bytes at manager+0x18+block*0x3C): +0x20 VRAM base, +0x24 VRAM top,
         // +0x28 loaded flag, +0x30 dirty watermark. ReloadTexture re-uploads an entry only if its VRAM address is at or
         // below the watermark (capped by the block's top) or the loaded flag is 0 — so a block whose base/top are 0
