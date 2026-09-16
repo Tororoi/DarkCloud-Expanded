@@ -380,12 +380,16 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatAimPos        = CatBase + 0x244; // float3 x,h,z: the point the cat walks to / jumps at — the target's biggest body sphere (mod, per tick); CatTargetPtr points here
             internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave keeps the ready crouch looping instead of leaping (mod: the target is a mimic that has not opened yet — user 2026-09-12)
             internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastCat.CatScale at spawn; 0 = unset → the cave uses 1.0)
-            internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — "catglow" (blue, Divine Beast Title), "catgloww" (white, Angel Shooter), "catglowg" (gold, Angel Gear); the glow cave binds it (mod writes it, then clears CatGlowReady)
+            internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — always "catglowp" now, because every look shares one 8-bit disc and differs only in the palette row (see CatGlowPalRow); the glow cave binds it (mod writes it, then clears CatGlowReady)
             internal const long CatTrackHalf     = CatBase + 0x268; // float: 0 = the flying pounce re-aims until the apex; > 0 = keep re-aiming past the apex until halfway down to the floor (the winged cat, mod)
             internal const long CatCapeCloth     = CatBase + 0x288; // uint: the cape's CCloth (guest) — the ONE cloth ElfCave.CatCapeTint recolours (mod; 0 = none)
             internal const long CatCapeTint      = CatBase + 0x28C; // float3: added to the global ambient for that cloth alone, so the cape carries a colour of its own (mod)
             internal const long CatApexH         = CatBase + 0x270; // float: the pounce's launch height, then the highest height while rising = the apex (cave)
             internal const long CatPaletteTexEntry = CatBase + 0x29C; // uint, the CTexture entry ElfCave.CatPalette last found for catcape (cave; verified by name each frame, so a stale one costs one re-scan)
+            internal const long CatGlowPalRow     = CatBase + 0x2A4; // int, ONE-based palette row the glow cave should paint
+                                                                     // (0 = derive it from the equipped element, which is what the
+                                                                     // cape look wants); 7/8/9 = Divine Beast Title / Angel Shooter /
+                                                                     // Angel Gear, which used to own a 32-bit disc each
             internal const long CatGlowPalTexEntry = CatBase + 0x2A0; // uint, the CTexture entry ElfCave.CatGlowPalette last found for catglowp (cave; same by-name verification) — ⚠ the page ends at CatBase + 0x300
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
@@ -508,9 +512,9 @@ namespace Dark_Cloud_Improved_Version
             /// DATA, written at patch time by ElfPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
             /// bakes off the same index map as the disc — regenerate BOTH together or the ramp no longer matches the
             /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
-            internal const uint CatGlowPalTables   = 0x01FB2880;   // 3072 B → 0x1FB3480
-            internal const uint CatGlowPalette     = 0x01FB3480;   // the cave that copies one table into the disc's CLUT
-            internal const uint NextFree = 0x01FB3620;   // after the glow-palette tables and cave; the band runs to 0x1FB4000 (2528 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
+            internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
+            internal const uint NextFree = 0x01FB3C40;   // after the glow-palette tables and cave; the band runs to 0x1FB4000 (960 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

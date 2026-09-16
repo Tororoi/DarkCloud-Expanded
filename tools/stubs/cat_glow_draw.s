@@ -3,8 +3,9 @@
 # `jal DrawFireFreeStyle__11CDungeonMap`): each entry performs the original call untouched, then — if the mod says the
 # cat is up (CatGlowOn) — draws our glow at the middle of the cat's torso with DrawFire__9CFireOmni (0x161AC0), exactly
 # as the wall torches are drawn, using the glow disc the cat pack bakes (the Gallery of Time's purple torch disc re-tinted:
-# `catglow` blue for the Divine Beast Title, `catgloww` white for the Angel Shooter, `catglowg` gold for the Angel Gear —
-# the mod names the one to draw in the mailbox, CatGlowName +0x258, 16 B NUL-terminated) for BOTH sprite layers, so no
+# `catglowp`, the ONE 8-bit disc every look now shares — the per-weapon and per-element colours are palette ROWS that
+# cat_glow_palette.s paints into it (2026-09-16), not discs of their own; the mod still names it in the mailbox,
+# CatGlowName +0x258, 16 B NUL-terminated) for BOTH sprite layers, so no
 # dungeon flame haze leaks in. (This cave's own first 8 bytes still spell "catglow": the ELF patcher checks them.) A CFireOmni object (0x40 B) lives in the
 # cat mailbox at 0x01FB4200; its textures are bound once per charge (CatGlowReady) since the copy's texture entries are
 # re-made per spawn. Runs inside the map's own draw pass, so the VIF1 packet is already open for sprites.

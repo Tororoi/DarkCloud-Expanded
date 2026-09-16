@@ -64,10 +64,20 @@ def palettes():
         print(f"{TAG} glow palettes: up to date")
     else:
         open(dest, "wb").write(blob)
-        names = ["Fire", "Ice", "Thunder", "Wind", "Holy", "None"]
-        changed = [n for i, n in enumerate(names)
-                   if old is None or old[i * 512:(i + 1) * 512] != blob[i * 512:(i + 1) * 512]]
-        print(f"{TAG} glow palettes: REGENERATED from GLOW_ELEMENTS ({', '.join(changed)})")
+        # ⚠ Name EVERY row, including the three weapon looks — a message that cannot name what it changed is worse than
+        # none, and this listed "()" the day rows 6-8 were added because the name list stopped at the six elements.
+        names = ["Fire", "Ice", "Thunder", "Wind", "Holy", "None",
+                 "DivineBeastTitle", "AngelShooter", "AngelGear"]
+        rows = len(blob) // 512
+        if old is None:
+            what = f"all {rows} rows"
+        elif len(old) != len(blob):
+            what = f"table resized, {len(old) // 512} -> {rows} rows"
+        else:
+            changed = [names[i] if i < len(names) else f"row {i}" for i in range(rows)
+                       if old[i * 512:(i + 1) * 512] != blob[i * 512:(i + 1) * 512]]
+            what = ", ".join(changed) if changed else "content identical, rewritten"
+        print(f"{TAG} glow palettes: REGENERATED from GLOW_ROWS ({what})")
 
 
 if __name__ == "__main__":

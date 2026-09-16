@@ -486,7 +486,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void PatchCatGlowPalettes(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = CodeCaves.ElfCave.CatGlowPalTables;
-            const int Expected = 6 * 128 * 4;         // six elements x the 128 permutation-safe CLUT words
+            const int Expected = 9 * 128 * 4;         // nine rows (6 elements + 3 weapon looks) x the 128 permutation-safe CLUT words
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin")
                 ?? throw new IOException("Embedded data missing: catGlowPalettes.bin (run build_cat_pack.py --palettes and rebuild)");
@@ -508,8 +508,9 @@ namespace Dark_Cloud_Improved_Version
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalette.bin")
                 ?? throw new IOException("Embedded EE function missing: catGlowPalette.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            // Shape: all code, opening `lui t0,0x01CD` (Xiao's equipped-slot byte) — no leading data table, unlike CatPalette.
-            if (b.Length < 8 || U32(b, 0) != 0x3C0801CDu)
+            // Shape: all code, opening `lui t5,0x01FB` (the mailbox page, for the row the mod asks for) — no leading
+            // data table, unlike CatPalette.
+            if (b.Length < 8 || U32(b, 0) != 0x3C0D01FBu)
                 throw new IOException($"catGlowPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             // The by-name scan is the one part of this cave that fails INVISIBLY: a mistyped name word matches nothing, the
             // cave returns, and the glow silently keeps its baked colour (2026-09-16 — "lowp" was written 0x706F776C, which

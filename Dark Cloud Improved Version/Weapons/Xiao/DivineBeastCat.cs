@@ -177,9 +177,10 @@ namespace Dark_Cloud_Improved_Version
         // (user 2026-09-12); scaled by the fade so the cat dims as it goes.
         // Per-weapon look (user 2026-09-13): the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel
         // Shooter's cat wears the wings with a WHITE glow and a neutral ("dark grey") add; the Angel Gear's the wings with a
-        // GOLD glow and a gold-white add. The glow discs are baked textures (build_cat_pack.GLOW_VARIANTS) the glow cave binds by
-        // the name written to Mailbox.CatGlowName; the wings are two mesh nodes the copy hides by zeroing their geometry pointer.
-        private sealed class WeaponLook { public string Glow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; }
+        // GOLD glow and a gold-white add. Those three glows are no longer textures of their own: every look draws the SAME
+        // 8-bit disc and differs only in the palette row the cave paints into it (WeaponLook.PalRow → Mailbox.CatGlowPalRow;
+        // build_cat_pack.GLOW_LOOKS holds rows 6-8). The wings are two mesh nodes the copy hides by zeroing their geometry.
+        private sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; }
         // Super Steve inherits the cat from its attached SynthSphere (user 2026-09-13): a Divine Beast Title sphere = the Title's
         // cat exactly; an Angel Shooter / Angel Gear sphere = the BLUE cat (the Title's look, no wings) wearing a solid-yellow
         // cloth cape from its collar, with the winged cat's range and tracking. Keyed under a private id so the sphere swap
@@ -187,13 +188,13 @@ namespace Dark_Cloud_Improved_Version
         private const int SuperSteveAngelKey = -2;
         private static readonly Dictionary<int, WeaponLook> Looks = new Dictionary<int, WeaponLook>
         {
-            { Items.divinebeasttitle, new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false } },   // user 2026-09-12
-            { Items.angelshooter,     new WeaponLook { Glow = "catgloww", Tint = new[] { 20f, 20f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
-            { Items.angelgear,        new WeaponLook { Glow = "catglowg", Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
+            { Items.divinebeasttitle, new WeaponLook { PalRow = 7, Tint = new[] { 12f, 24f, 48f }, Wings = false } },   // user 2026-09-12
+            { Items.angelshooter,     new WeaponLook { PalRow = 8, Tint = new[] { 20f, 20f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
+            { Items.angelgear,        new WeaponLook { PalRow = 9, Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
             // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
             // mesh has its tint ADDED to its lit colour, so this blue lands on the mask too and turns red to pink. The mask is
             // meant to be lit like the CAPE instead, which needs a per-node tint (see CapeTint below) (user 2026-09-15).
-            { SuperSteveAngelKey,     new WeaponLook { Glow = "catglow",  Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true } },
+            { SuperSteveAngelKey,     new WeaponLook { PalRow = 0, Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true } },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
         /// <summary>The look key for the equipped weapon: its own id, or for Super Steve the one its attached sphere grants
@@ -260,14 +261,16 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {_pauseOffset.TotalSeconds:F1} s in all");
         }
 
-        /// <summary>The glow disc for this weapon: written where the glow cave reads it (CatGlowName), and the cave is told
-        /// to bind again (CatGlowReady = 0).</summary>
+        /// <summary>Point the glow cave at this look: the palette ROW it should paint (CatGlowPalRow), the disc to bind —
+        /// always the same one now — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade
+        /// per spawn.</summary>
         private static void WriteGlowName()
         {
-            // The cape look glows in its ELEMENT's colour: one authored disc per element, since the discs are 32-bit and
-            // have no palette to repaint (user 2026-09-15). Clearing CatGlowReady below makes the cave bind the new one.
-            string disc = _look.Cape ? ElementLooks[ElementNow()].Glow : _look.Glow;
-            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(disc).CopyTo(nm, 0);
+            // EVERY look now draws the same 8-bit disc and differs only in the palette row the cave paints into it — the
+            // three weapon looks used to own a 32-bit disc each, 16,448 B apiece out of the heap the cat already strains
+            // (user 2026-09-16). Row 0 means "derive it from the equipped element", which is what the cape look wants.
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, _look.Cape ? 0 : _look.PalRow);
+            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(ElementGlowDisc).CopyTo(nm, 0);
             Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
         }
@@ -677,19 +680,19 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Per element: the cape/mask texture colour, the ambient the CAPE draws under (authored per element by the
         /// user), and the glow disc to bind. The CAT's own ambient is the same for every element — <see cref="ElementAmbient"/>.</summary>
-        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; public string Glow; }
+        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
         /// <summary>Per element: the cape/mask texture colour, and the ambient it draws under. Both are tunable — the
         /// starting values follow the element bars in the weapon menu (user 2026-09-15).</summary>
         private static readonly ElementLook[] ElementLooks =
         {
             // Every element now binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
             // it — so the glow colour is tuned in build_cat_pack.GLOW_ELEMENTS, not by naming a different texture here.
-            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f }, Glow = ElementGlowDisc },
-            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f }, Glow = ElementGlowDisc },
-            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f }, Glow = ElementGlowDisc },
-            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] {  8f, 46f, 37f }, Glow = ElementGlowDisc },
-            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f }, Glow = ElementGlowDisc },
-            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] {  0f,  0f,  0f }, Glow = ElementGlowDisc },
+            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },
+            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
+            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f } },
+            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] {  8f, 46f, 37f } },
+            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f } },
+            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] {  0f,  0f,  0f } },
         };
         /// <summary>The cat's OWN ambient as drawn — <see cref="WeaponLook.Tint"/> for every other look, the element's for
         /// the cape one. Never write through _look.Tint: those arrays are shared by the Looks table.</summary>
@@ -728,7 +731,7 @@ namespace Dark_Cloud_Improved_Version
                 WriteGlowName();                                  // every element binds the SAME disc now; clearing CatGlowReady re-binds it
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
                                   + $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
-                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0}), glow {look.Glow}"
+                                  + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0})"
                                   + (painted ? "" : " — texture not in the manager yet"));
             }
             if (painted) _element = e;                                   // only latch once the colour actually landed
@@ -1024,7 +1027,7 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
             if (_look.Cape) { SpawnCape(); MaskTint(); WatchElementLook(force: true); }   // colour before the first frame draws
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow {_look.Glow}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
@@ -2458,7 +2461,7 @@ namespace Dark_Cloud_Improved_Version
         // and moved into the cat's VRAM window while the copy is up; one left out keeps her block's pages after that block
         // has been cut back, so it samples stale VRAM — four per-element glow discs added to the pack but not to this list
         // drew as garbage and then not at all (user 2026-09-16).
-        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catglow", "catwing", "catgloww", "catglowg", "catcape", "catglowp" };   // catglow = the blue torch-glow disc (build_cat_pack.GLOW_NAME); catwing = the wings' flat white; catgloww/g = the white / gold discs; catglowp = the 8-bit per-element disc
+        private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catwing", "catcape", "catglowp" };   // catwing = the wings' flat white; catglowp = the ONE 8-bit glow disc every look now shares (its palette row carries the colour)
         // A block descriptor (CTextureBlock, 0x3C bytes at manager+0x18+block*0x3C): +0x20 VRAM base, +0x24 VRAM top,
         // +0x28 loaded flag, +0x30 dirty watermark. ReloadTexture re-uploads an entry only if its VRAM address is at or
         // below the watermark (capped by the block's top) or the loaded flag is 0 — so a block whose base/top are 0

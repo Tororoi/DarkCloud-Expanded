@@ -1,5 +1,5 @@
 # cat_glow_palette.s — the Divine Beast cat's GLOW takes the equipped weapon's element colour, natively.
-# Assembled at 0x01FB3480 (ElfCave.CatGlowPalette); the copy-queue cave calls it once per dungeon frame, right after
+# Assembled at 0x01FB3A80 (ElfCave.CatGlowPalette); the copy-queue cave calls it once per dungeon frame, right after
 # cat_palette.s does the same job for the cape and mask.
 #
 # WHY A PALETTE AND NOT MORE DISCS. A 64x64 RGBA32 glow disc is 16,448 B inside Xiao's character pack, and the weapons
@@ -13,7 +13,8 @@
 # LEAVES ALONE — the 128 whose bits 3 and 4 match — and the 128 words of each table land at those same CLUT words:
 # eight words, skip sixteen, eight words, repeated eight times. The disc needs 115 levels, so they all fit.
 #
-# THE TABLES are six 512-byte blocks at 0x01FB2880 (ElfCave.CatGlowPalTables), in element order, written at PATCH time by
+# THE TABLES are NINE 512-byte blocks at 0x01FB2880 (ElfCave.CatGlowPalTables) — rows 0-5 the elements, 6-8 the Divine
+# Beast Title / Angel Shooter / Angel Gear looks that used to own a 32-bit disc each — written at PATCH time by
 # ElfPatches.PatchCatGlowPalettes from a blob build_cat_pack --palettes bakes off the same index map as the disc itself.
 # Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2 (see the Mailbox note).
 #
@@ -38,6 +39,18 @@
 #
 # Leaf routine — calls nothing, touches only $t registers, returns through $ra, so it needs no frame.
 
+    lui   $t5, 0x01FB
+    lw    $t4, 0x42A4($t5)       # Mailbox.CatGlowPalRow — the row the mod asked for, ONE-based …
+    beq   $t4, $zero, byelement  # … and 0 (a zero-filled page) means "work it out from the element" instead
+    nop
+    addiu $t4, $t4, -1
+    sltiu $t2, $t4, 9            # nine rows: six elements, then the three weapon looks
+    bne   $t2, $zero, resolve
+    nop
+    addiu $t4, $zero, 5          # a bogus row falls back to "None" rather than reading past the tables
+    b     resolve
+    nop
+byelement:
     lui   $t0, 0x01CD
     ori   $t0, $t0, 0xD88D
     lbu   $t1, 0x0($t0)          # Xiao's equipped bag slot
