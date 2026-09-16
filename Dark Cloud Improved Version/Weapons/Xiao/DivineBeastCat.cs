@@ -2349,46 +2349,6 @@ namespace Dark_Cloud_Improved_Version
         private const int  TexCursor = 0x14;
         private static uint _texCursorSaved, _texCursorTaken;
         private static uint _herTopSaved;
-        /// <summary>Every texture block's VRAM range and every entry's page, once, at the moment the cat claims its window.
-        /// The fonts kept coming back speckled through two different theories about WHEN the window is taken, so this is here
-        /// to settle WHERE it lands instead of reasoning about it (user 2026-09-15).</summary>
-        private static void DumpVramMap(uint newBase, uint size)
-        {
-            var sb = new System.Text.StringBuilder();
-            for (int b = 0; b < 0x48; b++)
-            {
-                long bl = TextureManager + TexBlocks + (long)b * TexBlockStride;
-                uint bb = Memory.ReadUInt(bl + BlkBase), bt = Memory.ReadUInt(bl + BlkTop);
-                if (bb == 0 && bt == 0) continue;
-                sb.Append($" [{b:X2}] 0x{bb:X}-0x{bt:X}{(bt > newBase && bb < newBase + size ? "  <-- OVERLAPS the cat's window" : "")}");
-            }
-            Console.WriteLine(Tag + $"vram: cursor was 0x{_texCursorSaved:X}, cat window 0x{newBase:X}-0x{newBase + size:X}; blocks:" + sb);
-            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
-            var hi = new List<string>();
-            for (int i = 0; i < count; i++)
-            {
-                long e = TextureManager + TexEntries + (long)i * TexStride;
-                uint tbp = Memory.ReadUInt(e + 0x28) & 0x3FFF;
-                if (tbp < newBase) continue;                                   // only what sits in or above our window
-                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
-                int len = 0; while (nb != null && len < nb.Length && nb[len] != 0) len++;
-                hi.Add($"{(nb == null ? "?" : System.Text.Encoding.ASCII.GetString(nb, 0, len))}@0x{tbp:X}(blk 0x{Memory.ReadShort(e):X})");
-            }
-            Console.WriteLine(Tag + $"vram: {hi.Count} entr(y/ies) at or above 0x{newBase:X}: " + string.Join(", ", hi));
-            Console.WriteLine(Tag + "vram: " + FontState());
-        }
-
-        /// <summary>The message font's manager entry, verbatim. "fontbase" is what DrawMesWin__6ClsMes looks up to draw every
-        /// glyph, so if its page or its TEX0 moves between a spawn and a despawn, the mod moved it — which is the one thing
-        /// that would put the cat's red where letters ought to be (user 2026-09-15).</summary>
-        internal static string FontState()
-        {
-            long e = FindTexEntry("fontbase");
-            if (e == 0) return "fontbase is not in the manager";
-            ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
-            return $"fontbase entry 0x{e:X} blk 0x{Memory.ReadShort(e):X} page 0x{t & 0x3FFF:X} clut 0x{(t >> 37) & 0x3FFF:X} tex0 0x{t:X16}; manager holds {Memory.ReadInt(TextureManager)} entr(y/ies)";
-        }
-
         private static void RetagCatTextures(short from, short to)
         {
             int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
@@ -2454,7 +2414,6 @@ namespace Dark_Cloud_Improved_Version
                 // whole question of WHEN we claim it — which no amount of waiting could settle — stops mattering.
                 _texCursorSaved = limit; _texCursorTaken = newBase;
                 Memory.WriteUInt(TextureManager + TexCursor, newBase);
-                DumpVramMap(newBase, size);
                 int patched = RelocateCatTextures(minTbp, newBase);
                 Memory.WriteUInt(grp + BlkBase, newBase);
                 Memory.WriteUInt(grp + BlkTop, newBase + size);
@@ -2473,7 +2432,6 @@ namespace Dark_Cloud_Improved_Version
                     else Console.WriteLine(Tag + $"texture cursor moved to 0x{cur:X} under our reservation (0x{_texCursorTaken:X}) — leaving it, the window stays reserved");
                     _texCursorTaken = 0; _texCursorSaved = 0;
                 }
-                Console.WriteLine(Tag + "vram (restore): " + FontState());
                 if (_herTopSaved != 0) Memory.WriteUInt(her + BlkTop, _herTopSaved);
                 Memory.WriteUInt(grp + BlkBase, 0);
                 Memory.WriteUInt(grp + BlkTop, 0);

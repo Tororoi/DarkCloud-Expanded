@@ -109,7 +109,7 @@ namespace Dark_Cloud_Improved_Version
         public const int dunMessageDuration = 0x21EA7694;       //How long to show the message
         public const int dunMessageDelay = 0x21EA7698;          //How long to wait until the message is shown
         public const int healingSpeed = 0x202A2B88;             //Counts every 10 frames when the player is inside a fountain
-        public const int BoneDoorOpenType = 0x20931768;         //Default value is 21, change it to 5 and the bone door will open by pressing Square
+        public const int BoneDoorOpenType = 0x20931768;         //Default 21, set 5 to open the bone door with Square. VANILLA-LAYOUT: it sits in a dungeon pool, so resolve with DungeonPools.Resolve before reading/writing
         public const int dungDoorType = 0x21D56770;             //Tells us the type of door when interacting with X or Square
         public const int checkFloor = 0x21CD954E;               //Tells the current floor player is on, updates when entering the floor (0-indexed: displayed floor = checkFloor+1)
         public const int checkDungeon = 0x202A3594;             //Tells what dungeon we are in. DBC = 0, Wise Owl = 1 etc.

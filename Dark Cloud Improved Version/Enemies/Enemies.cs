@@ -657,6 +657,11 @@ namespace Dark_Cloud_Improved_Version
 
 
 
+
+        /// <summary>Earth/Moon Digger's max jump distance — an address the original author recorded while testing
+        /// (eccfe62, 2020-08-30) and never wired up. Kept as a breadcrumb, NOT a working constant: it is a vanilla-layout
+        /// address inside a dungeon pool, so it moved when the character heap grew (see DungeonPools). Anything that uses
+        /// it must resolve it, and re-confirm the value live first.</summary>
         internal class Digger
         {
             public const int maxJumpDistance = 0x213F3D70;
