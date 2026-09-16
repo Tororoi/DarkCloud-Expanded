@@ -183,7 +183,7 @@ tail:
     sw    $ra, 0x0($sp)
     jal   0x01FB2718
     nop
-    jal   0x01FB3480               # …and the GLOW disc's palette (cat_glow_palette.s), same once-per-frame ride
+    jal   0x01FB3A80               # …and the GLOW disc's palette (cat_glow_palette.s), same once-per-frame ride
     nop
     lw    $ra, 0x0($sp)
     addiu $sp, $sp, 0x10

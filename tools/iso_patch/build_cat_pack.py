@@ -52,7 +52,6 @@ CAT_CHR   = r"gedit\s86\chara\c04cat.chr"
 FLOAT_CHR = r"gedit\e01\chara\e04c04cat.chr"   # the town cat's vertical float/hop-up (its #5 clip, frames 160..169)
 FLOAT_SRC, FLOAT_DST = (160, 169), (285, 294)  # grafted into cat.mot where s86 has no keys (assemble_town_model.py slot 12)
 GLOW_SRC  = r"dun\mpd_pack\d06main_a.mpd"     # the Gallery of Time map pack: its own fire.img holds the PURPLE torch glow disc
-GLOW_NAME = "catglow"                           # the cat's glow: that 64x64 RGBA32 disc re-tinted (CFireOmni draws it additively)
 GLOW_CORE  = (15, 219, 255)                     # radial gradient: this at the centre …
 GLOW_OUTER = (60, 67, 255)                      # … to this at the disc's edge (user 2026-09-12)
 GLOW_CROSS = 0.125                              # radius fraction where the mix is halfway (0.5 = linear); smaller = the blue reaches further in (user 2026-09-12)
@@ -62,9 +61,13 @@ GLOW_CROSS = 0.125                              # radius fraction where the mix 
 # texel rect — (0,0,64,64) and (2,2,124,124) — so a smaller disc is sampled outside itself and simply does not
 # draw: authored at 32x32 to save heap, Fire/Thunder/Wind/Holy showed no glow at all while the two 64x64 discs
 # (Ice, None) were fine (user 2026-09-16). glow_tim2 keeps its `size` knob, but nothing may use it here.
-GLOW_VARIANTS = {"catgloww": ((215, 215, 215), (180, 190, 215)),   # white, a cool edge, dimmed a little — Angel Shooter, and "no element"
-                 "catglowg": ((255, 238, 180), (255, 176, 40)),    # gold — Angel Gear
-                 }
+# The three per-WEAPON looks are palette ROWS of the same 8-bit disc now, not textures of their own: three 64x64 RGBA32
+# discs cost 49,344 B of the character heap between them, and that heap's leftover IS the weapons/effects pools the cat
+# is already squeezing (2026-09-16). Rows 0-5 are the elements below; the mod picks the row through
+# Mailbox.CatGlowPalRow (ONE-based, 0 = let the cave derive it from the equipped element).
+GLOW_LOOKS = [(GLOW_CORE, GLOW_OUTER),                 # 6 Divine Beast Title — the authored blue
+              ((215, 215, 215), (180, 190, 215)),      # 7 Angel Shooter — white, a cool edge (user 2026-09-16: good as is)
+              ((255, 238, 180), (255, 176, 40))]       # 8 Angel Gear — gold
 # ⚠ NO MORE 64x64 DISCS FIT. Four per-element discs (orange/yellow/green/purple) were added here and FROZE the game:
 # each is 16 KB in Xiao's character pack, and the weapons/effects pools are whatever the heap has left after her
 # character data — with them loaded the log read `chara 3,899,600/4,240,000 ... effects 70,144/115,168`, i.e. 45 KB
@@ -91,6 +94,7 @@ GLOW_ELEMENTS = [((128, 118, 52), (200,   5,   0)),   # 0 Fire     orange
                  ((128, 255, 113), (  0, 86,  126)),   # 3 Wind     green
                  ((211, 73, 236), ( 33,   0, 175)),   # 4 Holy     purple, richer (user 2026-09-16)
                  ((50, 50, 50), (160, 160, 160))]   # 5 None     the dimmed white
+GLOW_ROWS = GLOW_ELEMENTS + GLOW_LOOKS          # exactly what the cave's table holds, in row order
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
@@ -307,10 +311,10 @@ def glow_palettes(lightling):
     if last != 114 or CLUT_FIXED[last] != 226:
         raise SystemExit(f"the glow disc now has {len(levels)} levels (brightest at CLUT index {CLUT_FIXED[last]}) — update the "
                          f"state-check offsets in tools/stubs/cat_glow_palette.s to table 0x{last * 4:X} / CLUT 0x{CLUT_FIXED[last] * 4:X}")
-    tabs = [glow_palette(lightling, core, outer) for core, outer in GLOW_ELEMENTS]
+    tabs = [glow_palette(lightling, core, outer) for core, outer in GLOW_ROWS]
     if len({t[last * 4:last * 4 + 4] for t in tabs}) != len(tabs):
-        raise SystemExit("two GLOW_ELEMENTS ramps end on the same brightest colour — the cave could not tell those elements "
-                         "apart and would stop repainting between them; tune one of the cores")
+        raise SystemExit("two glow ramps end on the same brightest colour — the cave tells 'already painted' from that one "
+                         "word, so it could not distinguish those looks and would stop repainting between them; tune a core")
     return b"".join(tabs)
 
 
@@ -506,7 +510,6 @@ def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes, dran_bytes=None, wi
         items += [(n, flat_tim2(template, FLAT_RGBA)) for n, _ in cimg.entries]
     else:
         items += [(n, cimg.block(n)) for n, _ in cimg.entries]
-    items.append((GLOW_NAME, glow_tim2(Bank(glow_img.payload).block("lightling"))))
     if len({n for n, _ in items}) != len(items):
         raise SystemExit("texture entry name clash")
     base.replace_payload(HOST_IMG, Bank.build(himg.magic, items))
@@ -545,8 +548,6 @@ def assemble(base_bytes, cat_bytes, float_bytes, glow_bytes, dran_bytes=None, wi
     items = [(n, bank.block(n)) for n, _ in bank.entries]
     items.append((wd["texture"], flat_tim2(cimg.block("c04cat01"), WING_RGBA)))
     light = Bank(glow_img.payload).block("lightling")
-    for nm, (core, outer) in GLOW_VARIANTS.items():
-        items.append((nm, glow_tim2(light, core=core, outer=outer)))
     # The element glow: one 8-bit disc for all six colours. Its resting CLUT is "None", so it looks right even if the
     # palette cave never runs. ⚠ add it to DivineBeastCat.CatTextureNames too, or it keeps pages in her block.
     items.append((GLOW_T8_NAME, glow_t8_tim2(cimg.block("c04cat01"), light, *GLOW_ELEMENTS[5])))
@@ -666,7 +667,7 @@ def verify(base_bytes, new_bytes, cat_bytes, wings=None):
     names = {n for n, _ in bank.entries}
     assert {"c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05"} <= names, "cat textures"
     if wings:
-        assert {wings["texture"], *GLOW_VARIANTS} <= names, "wing / glow textures"
+        assert {wings["texture"], GLOW_T8_NAME} <= names, "wing / glow textures"
     if C:
         assert wings["cape"]["texture"] in names, "cape texture"
         assert wings["mask"]["texture"] == wings["cape"]["texture"], "the mask shares the cape's texture — a private one does not resolve"
