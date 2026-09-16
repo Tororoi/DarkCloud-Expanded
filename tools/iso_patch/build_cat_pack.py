@@ -85,12 +85,12 @@ CLUT_FIXED = [i for i in range(256) if (i & 0x18) in (0x00, 0x18)]
 # still derived starting values — ElementLooks.Rgb is one CAPE colour and a gradient needs two. Tune here, re-run
 # --palettes, re-patch. "None" is the dimmed white the Angel Shooter wears. NOTE the OUTER colour is what mostly shows:
 # GLOW_CROSS 0.125 puts the mix halfway at an eighth of the radius, so ~80% of the disc is outer-weighted.
-GLOW_ELEMENTS = [((255, 155, 101), (175,   4,   0)),   # 0 Fire     orange
+GLOW_ELEMENTS = [((128, 118, 52), (200,   5,   0)),   # 0 Fire     orange
                  ((  0, 200, 215), (  0,  4, 183)),   # 1 Ice      blue (user 2026-09-16)
                  ((255, 248, 190), (156, 131,  43)),   # 2 Thunder  yellow, a touch lighter (user 2026-09-16)
                  ((128, 255, 113), (  0, 86,  126)),   # 3 Wind     green
                  ((211, 73, 236), ( 33,   0, 175)),   # 4 Holy     purple, richer (user 2026-09-16)
-                 ((150, 150, 150), (75, 81, 93))]   # 5 None     the dimmed white
+                 ((50, 50, 50), (160, 160, 160))]   # 5 None     the dimmed white
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
