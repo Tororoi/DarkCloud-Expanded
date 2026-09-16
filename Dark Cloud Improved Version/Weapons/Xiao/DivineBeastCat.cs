@@ -158,7 +158,8 @@ namespace Dark_Cloud_Improved_Version
         private static int   _pelletSlot = -1;               // its pellet's slot while that pellet lives, else −1
         private static bool  _native;                        // the ISO carries the pellet catcher/follower cave
         private static bool  _nativeWarned;
-        private static bool  _armedThisCharge;               // this charge already armed the cave (retry until the copy is up)
+        private const  double ArmPendingSeconds = 1.0;       // how long a released charge keeps trying to arm while the copy rebuilds
+        private static DateTime _armPendingUntil = DateTime.MinValue;
         private static bool  _caveOwns;                      // cave armed (waiting) or following: slot 1's pos/scale/opacity are its
         private static int   _disarmTicks;                   // after a shot-less release: ticks until the waiting cave is disarmed
         private static DateTime _spawnFailedAt = DateTime.MinValue;
@@ -1048,24 +1049,36 @@ namespace Dark_Cloud_Improved_Version
             bool holding = state == PlayerAction.XiaoShotDraw || state == PlayerAction.XiaoShotHold;
             if (holding)
             {
-                if (!_holding) { _holding = true; _holdStart = Now; _flashed = false; _armedThisCharge = false; }
+                if (!_holding) { _holding = true; _holdStart = Now; _flashed = false; }
                 _holdSeconds = (Now - _holdStart).TotalSeconds;
-                if (_holdSeconds >= ChargeSeconds)
-                {
-                    if (!_flashed) { Player.FlashChargeComplete(); _flashed = true; }
-                    // Arming is RETRIED every tick the charge is held, not done once when it completes. Changing element
-                    // means visiting the weapon menu, which stands the cat down (menu → !armed → Despawn) and only
-                    // rebuilds it after SettleSeconds plus ~250 ms of copying — well past ChargeSeconds. A charge that
-                    // completed in that window used to be dropped silently: the flash fired and no cat followed
-                    // (user 2026-09-16). Now it arms the moment the copy is back, for as long as the shot is still held.
-                    if (_native && Active && !_armedThisCharge) { ArmCave(); _armedThisCharge = true; }
-                }
+                if (_holdSeconds >= ChargeSeconds && !_flashed) { Player.FlashChargeComplete(); _flashed = true; }
             }
             else
             {
-                if (_holding) _armedThisCharge = false;
-                if (_holding && _caveOwns && _phase != Phase.Flying) _disarmTicks = 30;  // released: ~0.5 s for the shoot motion to spawn the pellet, else the charge was cancelled
+                if (_holding)
+                {
+                    // Arm on RELEASE, not when the charge completes. Arming HIDES the cat that is already out (scale 0,
+                    // opacity 0) and resets the cave's state, and there is only ONE copy — so a cat in flight used to
+                    // vanish the instant the NEXT shot became ready. It should last until the shot is actually fired
+                    // (user 2026-09-16). The shoot motion takes ~0.5 s to spawn the pellet and the tick is 16 ms, so the
+                    // cave is waiting long before its birth frame. (Nothing is torn down here: the copy persists either
+                    // way — only its visibility moves.)
+                    if (_holdSeconds >= ChargeSeconds) _armPendingUntil = Now.AddSeconds(ArmPendingSeconds);
+                    else if (_caveOwns && _phase != Phase.Flying) _disarmTicks = 30;   // a cancelled charge, nothing coming
+                }
                 _holding = false;
+                if (_armPendingUntil != DateTime.MinValue)
+                {
+                    // Retried until the copy is up: a charge released while it is still rebuilding — just after a menu
+                    // close — would otherwise be dropped silently, the flash firing with no cat behind it (2026-09-16).
+                    if (_native && Active)
+                    {
+                        ArmCave();
+                        _disarmTicks = 30;                        // AFTER ArmCave, which zeroes it: no pellet within ~0.5 s = the shot never happened
+                        _armPendingUntil = DateTime.MinValue;
+                    }
+                    else if (Now >= _armPendingUntil) _armPendingUntil = DateTime.MinValue;
+                }
             }
         }
 
@@ -1193,7 +1206,7 @@ namespace Dark_Cloud_Improved_Version
             _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
             _phase = Phase.Resident; _phaseStart = Now;
             Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "charge complete — the cave binds the next pellet on its birth frame");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shot released — the cave binds the next pellet on its birth frame");
         }
 
         private static void DisarmCave()
