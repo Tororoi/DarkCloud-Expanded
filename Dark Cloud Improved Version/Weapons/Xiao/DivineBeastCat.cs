@@ -839,11 +839,18 @@ namespace Dark_Cloud_Improved_Version
                     int weapon = inDun ? LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)) : -1;   // Super Steve: by its sphere
                     bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
                     bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
+                    if (inDun)   // DIAGNOSTIC (2026-09-16): which signal marks the ELEMENT menu, and do the textures survive it?
+                    {
+                        // Trigger on selectedMenu TOO, not just `menu`: `menu` is the ITEM menu (mode 3 / dungeonMode 2), so if
+                        // the weapon menu leaves those alone this would never fire during an element switch — the one case the
+                        // probe exists for.
+                        byte sel = Memory.ReadByte(Addresses.selectedMenu);
+                        if (menu != _menuLast || sel != _selLast) { _menuLast = menu; _selLast = sel; MenuProbe(menu); }
+                    }
                     // her own copy of the cape hangs off her cloth list from the moment the model loads — whatever the weapon is
                     if (inDun && Player.CurrentCharacterNum() == XiaoId && ++_capeSweepTick >= 4) { _capeSweepTick = 0; TakeHerCape(); }
                     bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
                               && (weapon >= 0 || weapon == SuperSteveAngelKey)
-                              && !menu
                               && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
                     if (armed && Active && weapon != _weapon)
                     {
@@ -852,7 +859,16 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (!armed)
                     {
-                        if (Active) Despawn();
+                        if (Active)
+                        {
+                            string why = !Enabled ? "disabled"
+                                       : !inDun ? "left the dungeon floor"
+                                       : Player.CurrentCharacterNum() != XiaoId ? "character is no longer Xiao"
+                                       : (weapon < 0 && weapon != SuperSteveAngelKey) ? $"weapon {weapon} has no look"
+                                       : "a dungeon script event (BtEventMode)";
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"standing down — {why}");
+                            Despawn();
+                        }
                         Resume();
                         _armedSince = DateTime.MinValue;
                         _holding = false; _holdSeconds = 0;
@@ -862,6 +878,24 @@ namespace Dark_Cloud_Improved_Version
                     {
                         sleep = TickMs;
                         if (Active) { FreezeForPause(); Maintain(); }                       // hold the copy's frame; keep re-asserting it
+                    }
+                    else if (menu)
+                    {
+                        // The menu used to stand the cat down, on the grounds that it "can rebuild the texture manager under
+                        // the copy". MEASURED 2026-09-16: it does not — the probe read 8/8 cat textures still registered for
+                        // the whole menu session, on open, throughout, and on close. So hold the cat exactly as the PAUSE
+                        // screen does instead (user: it should persist, and only a weapon change or a character switch should
+                        // take it away — both of which still fall through to the !armed branch above). The despawn also fired
+                        // at the menu ROOT (selectedMenu 255), before the weapon pane is ever reached, so gating on "is this
+                        // the weapon menu" would not have helped: it has to survive `menu` as a whole.
+                        sleep = TickMs;
+                        if (Active)
+                        {
+                            FreezeForPause();
+                            Maintain();
+                            CheckTexturesStillOurs();                                       // safety net: a menu that DOES rebuild the manager still tears down
+                            if (Active && _look.Cape) WatchElementLook();                   // recolour cape, mask and glow WHILE the element is being changed
+                        }
                     }
                     else
                     {
@@ -918,11 +952,64 @@ namespace Dark_Cloud_Improved_Version
         };
         private const long BgReadInfo = 0x21CBB0C0;          // bg_read_info[32], stride 0x9C: +0 active, +0xC name, +0x8C dest, +0x90 size
         private static string _heapLast = "", _bgLast = "";
+        /// <summary>Free bytes below which the effects pool is reported as TIGHT. An effect that cannot allocate does not
+        /// warn — it simply never appears, which is what "Pirate's Chariot and Alexander fired nothing" looks like.</summary>
+        private const long EffectsTightBytes = 32 * 1024;
+        private static int _effectPeak, _effectCapLast, _weaponCapLast;
+        private static DateTime _effectTightAt = DateTime.MinValue;
+        /// <summary>DIAGNOSTIC. Opening the weapon menu to change element currently despawns the cat, because `menu` gates
+        /// `armed` and the menu can rebuild the texture manager under the copy. To persist ONLY through the element switch we
+        /// have to tell that menu from the item menu, and three overlapping globals claim to say so — mode/dungeonMode (what
+        /// CheckDunIsPausedOrMenu uses), selectedMenu (CheckIsWeaponMenu), and 0x202A2010 (what Dungeon.CheckWepLvlUp uses for
+        /// weapon-menu open/close). This logs all four on every transition, plus whether the cat's textures actually survived,
+        /// which decides whether persisting needs RecreateCatEntries at all. Remove once the gate is settled.</summary>
+        private static void MenuProbe(bool open)
+        {
+            int present = 0;
+            foreach (string nm in CatTextureNames) if (FindTexEntry(nm) != 0) present++;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
+                + $"menu {(open ? "OPEN " : "CLOSE")}: mode {Memory.ReadByte(Addresses.mode)}, dungeonMode {Memory.ReadByte(Addresses.dungeonMode)}, "
+                + $"selectedMenu {Memory.ReadByte(Addresses.selectedMenu)} (= the 0x202A2010 Dungeon calls menuMode), "
+                + $"weaponsMode {Memory.ReadByte(Addresses.weaponsMode)}; "
+                + $"cat {(Active ? "resident" : "down")}, {present}/{CatTextureNames.Length} textures still in the manager");
+        }
+
+        private static bool _menuLast;
+        private static byte _selLast = 0xFF;          // 0xFF = "not sampled yet", so the first tick in a dungeon always reports
+
         private static void HeapWatch()
         {
             int c = Memory.ReadInt(HeapChara + 8), w = Memory.ReadInt(HeapWeapon + 8), e = Memory.ReadInt(HeapEffect + 8);
             int cCap = Memory.ReadInt(HeapChara + 12), wCap = Memory.ReadInt(HeapWeapon + 12), eCap = Memory.ReadInt(HeapEffect + 12);
             int poolUsed = Memory.ReadInt(GlobalPoolUsed);
+            // ── effects-pool high-water mark ──────────────────────────────────────────────────────────────────────
+            // The effects pool is only what the character heap has left after chara and weapons, so with the cat resident
+            // it is a FRACTION of what Toan gets — measured 70,144/175,904 B as Xiao against 190,272/1,907,968 as Toan
+            // (2026-09-16). Enemy projectiles are effects. The summary line below only prints when the whole string
+            // CHANGES, so a spike that empties the pool and drains again leaves no trace at all; the peak does.
+            if (eCap != _effectCapLast || wCap != _weaponCapLast)
+            {
+                _effectCapLast = eCap; _weaponCapLast = wCap; _effectPeak = 0;   // the caps move with chara: start a fresh peak
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    $"effects pool now caps at {eCap * 16L:N0} B (weapons {wCap * 16L:N0} B) — char {Player.CurrentCharacterNum()}, cat {(Active ? "resident" : "down")}");
+            }
+            if (e > _effectPeak)
+            {
+                _effectPeak = e;
+                long freeB = (eCap - e) * 16L;
+                if (e * 2 >= eCap)                                                // only once it is worth knowing about
+                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        $"effects pool peak {e * 16L:N0} of {eCap * 16L:N0} B (free {freeB:N0})");
+            }
+            // Separately from the peak, and rate-limited: the pool being tight RIGHT NOW is the thing that makes an enemy
+            // projectile silently not appear, and it can happen on a floor whose peak never exceeds an earlier floor's.
+            if ((eCap - e) * 16L < EffectsTightBytes && (Now - _effectTightAt).TotalSeconds >= 5)
+            {
+                _effectTightAt = Now;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    $"effects pool TIGHT: {e * 16L:N0} of {eCap * 16L:N0} B used, only {(eCap - e) * 16L:N0} free — "
+                    + "an effect that cannot allocate never appears, and enemy projectiles are effects");
+            }
             string heap = $"chara {c * 16L:N0}/{cCap * 16L:N0}, weapons {w * 16L:N0}/{wCap * 16L:N0}, effects {e * 16L:N0}/{eCap * 16L:N0} — total {(c + w + e) * 16L:N0} of {cCap * 16L:N0} B (free {(cCap - c - w - e) * 16L:N0}); global pool {poolUsed * 16L:N0} of {GlobalPoolCap * 16L:N0} B (free {(GlobalPoolCap - poolUsed) * 16L:N0})";
             if (heap != _heapLast)
             {
