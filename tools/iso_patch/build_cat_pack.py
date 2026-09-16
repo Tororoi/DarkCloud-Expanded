@@ -81,15 +81,16 @@ GLOW_T8_NAME = "catglowp"                       # the per-ELEMENT glow: ONE 8-bi
 # it costs nothing: the disc needs 115 levels and 128 are available.
 CLUT_FIXED = [i for i in range(256) if (i & 0x18) in (0x00, 0x18)]
 # Per element, indexed by the element byte (00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None): the radial gradient's
-# centre and edge, in the style of the discs above. ⚠ STARTING values (Claude 2026-09-16) — ElementLooks.Rgb is one CAPE
-# colour and a gradient needs two, so these were derived, not authored; tune them here and re-run --palettes. "None" is the
-# dimmed white the Angel Shooter wears (user 2026-09-16).
-GLOW_ELEMENTS = [((255, 200, 120), (255,  90,  10)),   # 0 Fire     orange
-                 ((150, 225, 255), ( 40, 110, 255)),   # 1 Ice      blue
-                 ((255, 245, 170), (255, 200,  20)),   # 2 Thunder  yellow
-                 ((190, 255, 170), ( 60, 200,  50)),   # 3 Wind     green
-                 ((245, 190, 255), (190,  70, 230)),   # 4 Holy     purple
-                 ((215, 215, 215), (180, 190, 215))]   # 5 None     the dimmed white
+# centre and edge, in the style of the discs above. Ice, Thunder and Holy are the user's calls (2026-09-16); the rest are
+# still derived starting values — ElementLooks.Rgb is one CAPE colour and a gradient needs two. Tune here, re-run
+# --palettes, re-patch. "None" is the dimmed white the Angel Shooter wears. NOTE the OUTER colour is what mostly shows:
+# GLOW_CROSS 0.125 puts the mix halfway at an eighth of the radius, so ~80% of the disc is outer-weighted.
+GLOW_ELEMENTS = [((255, 155, 101), (175,   4,   0)),   # 0 Fire     orange
+                 ((  0, 200, 215), (  0,  4, 183)),   # 1 Ice      blue (user 2026-09-16)
+                 ((255, 248, 190), (156, 131,  43)),   # 2 Thunder  yellow, a touch lighter (user 2026-09-16)
+                 ((128, 255, 113), (  0, 86,  126)),   # 3 Wind     green
+                 ((211, 73, 236), ( 33,   0, 175)),   # 4 Holy     purple, richer (user 2026-09-16)
+                 ((150, 150, 150), (75, 81, 93))]   # 5 None     the dimmed white
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
 WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
@@ -755,6 +756,7 @@ def run(iso, log=print):
             f.seek(slot); f.write(struct.pack("<IIII", *vanilla))
             log(f"reverted {name} to its vanilla record (earlier weapon-pack bake removed)")
 
+        refuse_if_palette_blob_stale(read_src(GLOW_SRC), log)
         base = read_src(HOST_CHR)
         if is_current_bake(base):
             log("cat already in dun\\mainchara\\c04b.chr — skipped"); return
@@ -770,6 +772,28 @@ def run(iso, log=print):
             f"cat.mot {rep['mot_bytes']:,} B ({rep['mot_keys']} keys), {rep['size'][0]:,}->{rep['size'][1]:,} B")
         redirect(HOST_CHR, new_chr)
         log("DONE (Divine Beast Title cat pack)")
+
+
+def refuse_if_palette_blob_stale(glow_bytes, log=print):
+    """The six element ramps reach the game as a COMMITTED resource — Resources/isoPatch/catGlowPalettes.bin, embedded
+    into the mod at build time and written into the ELF by ElfPatches.PatchCatGlowPalettes. The PACK is re-baked on every
+    patch, but that .bin is NOT: editing GLOW_ELEMENTS and re-patching therefore changes nothing, and the glow keeps its
+    previous colours while every diagnostic reports success. That cost a full patch-and-test cycle (user 2026-09-16), so
+    a bake against a stale blob is refused rather than performed."""
+    blob = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                        "Dark Cloud Improved Version", "Resources", "isoPatch", "catGlowPalettes.bin")
+    if not os.path.exists(blob):
+        return                                            # not building against the repo: nothing to keep in step
+    img = mc.Pack.parse(glow_bytes).find("fire.img")
+    if img is None:
+        return
+    if open(blob, "rb").read() != glow_palettes(Bank(img.payload).block("lightling")):
+        raise SystemExit(
+            "GLOW_ELEMENTS has changed but Resources/isoPatch/catGlowPalettes.bin has not.\n"
+            "The patch writes that .bin, not this table, so the glow would keep its OLD colours. Re-run:\n"
+            "    python3 tools/iso_patch/build_cat_pack.py --dc-dir <extracted disc> \\\n"
+            "        --palettes \"Dark Cloud Improved Version/Resources/isoPatch/catGlowPalettes.bin\"\n"
+            "then rebuild the mod so the new .bin is embedded, and patch again.")
 
 
 def _from_dc_dir(dc_dir):
@@ -788,16 +812,20 @@ def main():
     dc = a[a.index("--dc-dir") + 1] if "--dc-dir" in a else os.environ.get("DC1_DATA_DIR")
     if not dc:
         raise SystemExit("--iso <iso> | --dc-dir <extracted disc dir> [--out <file>] [--test]")
-    out, rep = _from_dc_dir(dc)
-    print(rep)
-    if "--out" in a:
-        open(a[a.index("--out") + 1], "wb").write(out); print("wrote", a[a.index("--out") + 1])
     if "--palettes" in a:
+        # The ramps come from GLOW_ELEMENTS and the source disc ALONE, so this needs no pack bake — it is the fast path
+        # the mod build calls on every compile (tools/build_resources.py).
         dest = a[a.index("--palettes") + 1]
         _, gl = mc.load_pack(GLOW_SRC, dc)
         blob = glow_palettes(Bank(gl.find("fire.img").payload).block("lightling"))
         open(dest, "wb").write(blob)
         print(f"wrote {dest} ({len(blob)} B = {len(GLOW_ELEMENTS)} x {len(CLUT_FIXED) * 4} B)")
+        if "--out" not in a and "--test" not in a:
+            return
+    out, rep = _from_dc_dir(dc)
+    print(rep)
+    if "--out" in a:
+        open(a[a.index("--out") + 1], "wb").write(out); print("wrote", a[a.index("--out") + 1])
     if "--test" in a:
         print("self-check ok")
 

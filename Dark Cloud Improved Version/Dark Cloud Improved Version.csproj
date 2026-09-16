@@ -127,4 +127,14 @@
     <Content Include="ModIcon.ico" />
     <AvaloniaResource Include="Resources\d06o_out_result.png" />
   </ItemGroup>
+  <!-- The embedded binaries above are GENERATED from sources in tools/ (the EE cave stubs' .s files, and the glow
+       ramp tables from build_cat_pack.GLOW_ELEMENTS). Editing a source without re-running its generator embeds stale
+       bytes and fails SILENTLY — the glow kept its old colours through a whole patch-and-test cycle that way
+       (2026-09-16) — so the build regenerates them first. Missing prerequisites skip with a message rather than
+       failing, which keeps a checkout without the extracted disc buildable. -->
+  <Target Name="RegenerateGeneratedResources" BeforeTargets="BeforeBuild">
+    <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/../tools/build_resources.py&quot;"
+          StandardOutputImportance="high" />
+  </Target>
+
 </Project>
