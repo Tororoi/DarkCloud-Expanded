@@ -1244,7 +1244,8 @@ namespace Dark_Cloud_Improved_Version
             {
                 Memory.WriteInt(CodeCaves.Mailbox.CatHitEntry, 0);
                 lock (_planted) _planted.Add((ent - 1, PlantedLifeTicks, true));
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr):X})");
+                int hitAttr = Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr);
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
             }
             if (state >= 4 && state <= 11 && state != 9)                        // every cave-owned state: face the cave's live direction (it re-aims in the ready crouch, the float wind-up and the take-off)
             {
@@ -1550,8 +1551,20 @@ namespace Dark_Cloud_Improved_Version
             return best;
         }
 
+        /// <summary>The element a stamped attr bit stands for. Named in the contact log so "did the DAMAGE follow the
+        /// element, or only the hit visual?" is answerable from the log alone, without decoding a hex bit (user 2026-09-16:
+        /// "it may also be that the visual hit effect was ice even if the damage was thunder").</summary>
+        private static string ElementNameOf(int attr) => attr switch
+        {
+            0x01 => "Fire", 0x02 => "Ice", 0x04 => "Thunder", 0x08 => "Wind", 0x10 => "Holy",
+            0 => "none (no element, or the selected one has no build-up level)",
+            _ => "unexpected — more than one bit"
+        };
+
         /// <summary>The damage entry the cave plants at a contact carries the pellet's damage plus the weapon's attack
-        /// (the "attack doubled" rule) and the weapon's element — written once per flight, at bind.</summary>
+        /// (the "attack doubled" rule) and the weapon's element. Written at bind, and re-written by <see cref="Maintain"/>
+        /// whenever the live element stops matching the stamped one while a cat is already flying — the attack and the
+        /// element are read LIVE here, so re-calling is all that is needed; only _pelletDamage is captured, at bind.</summary>
         private static void WriteHitStamps()
         {
             int attack = Memory.ReadShort(BattleWeaponAttack);
@@ -1666,6 +1679,8 @@ namespace Dark_Cloud_Improved_Version
             _phase = Phase.Fading; _phaseStart = Now; _fade = 0;
         }
         private static int _pelletDamage;
+        private const  int HitElemEvery = 6;          // ticks between element-drift checks (~100 ms at TickMs 16)
+        private static int _hitElemTick;
         private static bool _pounceLogged, _sitLogged;
         private static int _retargetTick;
         private static int _pounceKind;               // 1 ground, 2 flying (log only)
@@ -2472,6 +2487,24 @@ namespace Dark_Cloud_Improved_Version
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "her model changed — cat despawned");
                 Despawn();
                 return;
+            }
+            // The hit stamp is written at BIND, so a cat already in flight kept the element it was FIRED with: an ice cat
+            // switched to thunder still hit for ice. CONFIRMED in the log — the contact stamped attr 0x2 four seconds after
+            // switching to thunder, so the DAMAGE was wrong, not merely the hit visual (user 2026-09-16). Re-stamp whenever
+            // the live element stops matching what is stamped. This belongs HERE and not in WatchElementLook, which only runs
+            // for the cape look, while the weapon's element drives damage for EVERY look. ⚠ Only while a stamp is LIVE:
+            // CatHitDamage is deliberately 0 until bind, and a non-zero value on a hidden copy once let it deal a 1-damage
+            // hit on its first frame (2026-09-12). Rate-limited: an element change mid-flight is not frame-critical, and the
+            // full check is six PINE reads that would otherwise run every 16 ms for the whole flight.
+            if (++_hitElemTick >= HitElemEvery)
+            {
+                _hitElemTick = 0;
+                if (Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage) != 0)
+                {
+                    uint live = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
+                    uint want = (live != 0 && (live & (live - 1)) == 0) ? live : 0u;      // one pure element bit or none
+                    if (Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr) != (int)want) WriteHitStamps();
+                }
             }
             long s = SlotAddr();
             if (!_caveOwns)                                                      // armed/following: position, scale and opacity are the cave's
