@@ -19,10 +19,11 @@
 # Queue layout (guest 0x01FAE620): +0x00 job count (0 = idle), jobs from +0x10, 0x30 bytes each. +0x24 is the job's OP:
 #   op 0 — copy and re-point.  +0x00 src  +0x04 dst  +0x08 size, then two rebase specs of (src, size, dst) at +0x0C and +0x18.
 #          A rebase spec with size 0 is skipped.
-#   op 1 — find and replace a 64-bit value in place, which is how the cat's textures are relocated: the copy's draw packets
+#   op 1 — find and replace 64-bit values in place, which is how the cat's textures are relocated: the copy's draw packets
 #          carry absolute TEX0 register words, and moving the cat's VRAM block means rewriting each one. +0x04 block, +0x08 its
-#          length, old value at +0x0C/+0x10 and new at +0x14/+0x18. This was the last part of the build still crossing PINE —
-#          3.5 s of a 4.6 s spawn, because it re-read every packet to scan it (2026-09-15).
+#          length, +0x0C how many old→new pairs, +0x10 where the pair table is (16 B each: old lo/hi, new lo/hi). ALL the pairs
+#          are tried at each position, so a block is walked ONCE — one job per block per texture walked the same 300 KB five
+#          times over, 3.8 MB of scanning for 300 KB of data (2026-09-15).
     lui   $t0, 0x01FA
     ori   $t0, $t0, 0xE620
     lw    $t1, 0x0($t0)            # how many jobs are waiting
@@ -123,23 +124,37 @@ findrep:
     lw    $s2, 0x04($s0)           # the block
     lw    $s4, 0x08($s0)           # its length…
     addiu $s4, $s4, -4             # …less one word, so the 64-bit read never runs off the end
-    lw    $t6, 0x0C($s0)           # old, low half
-    lw    $t7, 0x10($s0)           # old, high half
-    lw    $t8, 0x14($s0)           # new, low half
-    lw    $t9, 0x18($s0)           # new, high half
+    lw    $s5, 0x0C($s0)           # how many pairs
+    lw    $s6, 0x10($s0)           # where they are
     or    $t2, $zero, $zero
 fr:
     beq   $t2, $s4, job_next
     nop
     addu  $t3, $s2, $t2
     lw    $v0, 0x0($t3)
-    bne   $v0, $t6, fr_next
-    nop
     lw    $v1, 0x4($t3)
-    bne   $v1, $t7, fr_next
+    or    $t4, $zero, $zero        # every pair is tried here, so the block is walked once
+    or    $t5, $s6, $zero
+pair:
+    beq   $t4, $s5, fr_next
     nop
+    lw    $t6, 0x0($t5)
+    bne   $v0, $t6, pair_next
+    nop
+    lw    $t7, 0x4($t5)
+    bne   $v1, $t7, pair_next
+    nop
+    lw    $t8, 0x8($t5)
+    lw    $t9, 0xC($t5)
     sw    $t8, 0x0($t3)
     sw    $t9, 0x4($t3)
+    b     fr_next
+    nop
+pair_next:
+    addiu $t4, $t4, 1
+    addiu $t5, $t5, 16
+    b     pair
+    nop
 fr_next:
     addiu $t2, $t2, 4
     b     fr

@@ -497,8 +497,8 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatGuardBypass     = 0x01FB2250;   // 108 B → 0x1FB22BC: the cat's hits ignore an enemy's guard window
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
-            internal const uint CatCopyQueue       = 0x01FB2480;   // 512 B → 0x1FB2680: the cat's mesh copy, done inside the machine
-            internal const uint NextFree = 0x01FB2690;   // after the copy-queue cave; the band runs to 0x1FB4000 (6512 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatCopyQueue       = 0x01FB2480;   // 560 B → 0x1FB26B0: the cat's mesh copy, done inside the machine
+            internal const uint NextFree = 0x01FB26C0;   // after the copy-queue cave; the band runs to 0x1FB4000 (6464 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -665,6 +665,13 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatCopyQueueJobs  = 48;            // 48 × 0x30 + 0x10 = 0x910 B of the span below — the
                                                                // texture relocation needs one job per block per moved texture
         internal const int  CatCopyJobStride  = 0x30;
+        /// <summary>Where a find/replace job's old→new pairs live, just past the jobs: 16 B each.</summary>
+        internal const int  CatCopyPairsOff   = 0x10 + CatCopyQueueJobs * CatCopyJobStride;   // 0x910
+        /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in DivineBeastCat.CatTextureNames —
+        /// there are TEN, and a first cut of 8 silently dropped the last two. One of them was catcape, which the MASK draws
+        /// with, so its register never moved, it kept pointing into her old block and the mask came out black (2026-09-15).
+        /// The count is checked against this now rather than truncated.</summary>
+        internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
 
         // ── FREE: 0x21FAEF30 .. 0x21FB0000 (~0x10D0 B) ───────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still

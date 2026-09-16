@@ -349,8 +349,16 @@ namespace Dark_Cloud_Improved_Version
         /// than a few bytes). <paramref name="address"/> may be unaligned; alignment is handled
         /// internally.
         /// </summary>
+        /// <summary>How many times we have crossed to the emulator, and how many bytes went with it. Round trips are the thing
+        /// that costs: a 300 KB batch lands in tens of milliseconds while a few hundred four-byte reads take over a second, and
+        /// the per-trip latency swings so much between runs that wall-clock timings of the same code varied by 16× (2026-09-15).
+        /// The trip count does not move, so it is what to optimise against.</summary>
+        internal static long Trips, TripBytes;
+        internal static void ResetTrips() { Trips = 0; TripBytes = 0; }
+
         internal static byte[] ReadBytesBatch(long address, int numBytes)
         {
+            Trips++; TripBytes += numBytes;
             const int ChunkWords = 2048;   // 8KB of data per round-trip
             long alignedStart = address & ~3L;
             int alignedLen = (int)(((address + numBytes + 3) & ~3L) - alignedStart);
@@ -497,12 +505,14 @@ namespace Dark_Cloud_Improved_Version
 
         internal static uint ReadUInt(long address)
         {
+            Trips++; TripBytes += 4;
             var r = SendBatch(BuildReadPacket(0x02, address));
             return r.Length >= 4 ? BitConverter.ToUInt32(r, 0) : 0u;
         }
 
         internal static int ReadInt(long address)
         {
+            Trips++; TripBytes += 4;
             var r = SendBatch(BuildReadPacket(0x02, address));
             return r.Length >= 4 ? BitConverter.ToInt32(r, 0) : 0;
         }
@@ -552,6 +562,7 @@ namespace Dark_Cloud_Improved_Version
         // pixels) where per-byte round-trips would take seconds and alignment rules out 32-bit packing.
         internal static void WriteBytesBatch(long startAddr, byte[] data)
         {
+            Trips++; TripBytes += data.Length;
             const int chunk = 500;                 // 500*6+4 = 3004 bytes/packet — well under the PINE buffer
             byte op = OpWrite8;
             for (int start = 0; start < data.Length; start += chunk)
@@ -579,6 +590,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool WriteInt(long address, int value)
         {
+            Trips++; TripBytes += 4;
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;
         }
@@ -610,12 +622,14 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool WriteUInt(long address, uint value)
         {
+            Trips++; TripBytes += 4;
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;
         }
 
         internal static bool WriteFloat(long address, float value)
         {
+            Trips++; TripBytes += 4;
             // No dedicated WriteFloat opcode in current PINE spec — write raw bytes as Write32
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;

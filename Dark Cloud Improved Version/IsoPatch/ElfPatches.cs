@@ -448,8 +448,8 @@ namespace Dark_Cloud_Improved_Version
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin")
                 ?? throw new IOException("Embedded EE function missing: catCopyQueue.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            // Shape: 128 words, opens by materialising the queue address and ends `j CatPelletFollow`.
-            if (b.Length != 512 || U32(b, 0) != 0x3C0801FAu || U32(b, b.Length - 8) != (0x08000000u | (CodeCaves.ElfCave.CatPelletFollow >> 2)))
+            // Shape: 140 words, opens by materialising the queue address and ends `j CatPelletFollow`.
+            if (b.Length != 560 || U32(b, 0) != 0x3C0801FAu || U32(b, b.Length - 8) != (0x08000000u | (CodeCaves.ElfCave.CatPelletFollow >> 2)))
                 throw new IOException($"catCopyQueue.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("catCopyQueue.bin overruns its cave — move ElfCave.NextFree.");

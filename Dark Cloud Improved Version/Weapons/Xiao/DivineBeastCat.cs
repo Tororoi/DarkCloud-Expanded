@@ -37,6 +37,12 @@ namespace Dark_Cloud_Improved_Version
         private const int  Slot   = 1;                 // DungeonCharaDraw host (0 = Mirage clone, 3 = Angel Gear slingshot)
         private const int  CharCopySize = 0xD60, MotionStructSize = 0xC0;
         private const int  TickMs = 16, IdleMs = 100;
+        /// <summary>How long after arming the build waits for the texture manager to settle. Cut to 0.35 s when the build took
+        /// seconds and this was a third of the wait — but the cat's VRAM window is claimed by writing a block's base and top
+        /// DIRECTLY rather than through the allocator, so claiming it before the manager has finished handing out addresses
+        /// lets later textures land on top of it. Corrupted glyphs and a wrong shot effect followed (user 2026-09-15). The
+        /// build is now under a second, so the 0.65 s this costs buys a lot of safety for very little.</summary>
+        private const double SettleSeconds = 1.0;
 
         // The cat's motion channel on HER (build_cat_pack.py: MOTION 1 in c04b.chr's base.cfg, KEY_START 64; track
         // bone ids are relative to the cat root, which is the copy's node 0).
@@ -756,7 +762,12 @@ namespace Dark_Cloud_Improved_Version
                         WatchHerCatChannel();
                         if (Active && ++_texCheckTick >= 30) { _texCheckTick = 0; CheckTexturesStillOurs(); }
                         if (_armedSince == DateTime.MinValue) _armedSince = Now;
-                        if (!Active && (Now - _armedSince).TotalSeconds >= 1.0) SpawnResident();   // built once, hidden — after the switch/menu has settled (textures still register for a moment)
+                        // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
+                        // a moment. This was 1.0 s, which was a tenth of a 9.4 s build and a THIRD of the 1.7 s one the copy
+                        // cave left behind, so it became worth trimming (user 2026-09-15). It is not the real guard: Spawn
+                        // itself refuses and retries while the cat textures are absent from the manager, so arriving early
+                        // costs a retry rather than a broken cat.
+                        if (!Active && (Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
                         TrackCharge();
                         if (_native) PollCave(); else WatchPellets();
                         if (Active) { Step(); BreezeCape(); WatchCape(); }
@@ -1596,12 +1607,19 @@ namespace Dark_Cloud_Improved_Version
         /// the switch and a firable cat are mostly real work, not a wait — but which part of it was guesswork until these
         /// stamps existed (user 2026-09-15). Every milestone reports milliseconds since Spawn began.</summary>
         private static System.Diagnostics.Stopwatch _buildClock;
-        private static void BuildStep(string what) { if (_buildClock != null) Console.WriteLine(Tag + $"  build +{_buildClock.ElapsedMilliseconds,5} ms  {what}"); }
+        private static long _tripMark;
+        private static void BuildStep(string what)
+        {
+            if (_buildClock == null) return;
+            Console.WriteLine(Tag + $"  build +{_buildClock.ElapsedMilliseconds,5} ms  {Memory.Trips - _tripMark,5} trip(s)  {what}");
+            _tripMark = Memory.Trips;
+        }
 
         private static bool Spawn()
         {
             if (Active) return true;
             _buildClock = System.Diagnostics.Stopwatch.StartNew();
+            Memory.ResetTrips(); _tripMark = 0;
             if (FindTexEntry(CatTextureNames[0]) == 0 && RecreateCatEntries() < CatTextureNames.Length)
             {
                 if (!_texDeferLogged) { _texDeferLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
@@ -1694,8 +1712,9 @@ namespace Dark_Cloud_Improved_Version
             if (!RegisterSlot(min, blockSize)) return false;
             Active = true;
             BuildStep("channel + slot registered");
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms");
-            return true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms over {Memory.Trips:N0} round trip(s), {Memory.TripBytes:N0} B");
+            _buildClock = null;                    // the stamps are for the BUILD: left running they reported a despawn's
+            return true;                           // texture restore as a 70 s, half-million-trip step (it was 70 s of play)
         }
 
         /// <summary>The head's rest position in the cat's own space (row-vector chain of local matrices from
@@ -1810,20 +1829,29 @@ namespace Dark_Cloud_Improved_Version
             _ovFree = CodeCaves.CatOverflowCave;
             int copied = 0;
             var second = new List<(long vis, byte[] vuB, int vuSz, int idx)>();
+            byte[] pool = Memory.ReadBytesBatch(CodeCaves.NodePool, _nodeCount * CFrameVu1.NodeStride);   // every node in one read
+            if (pool == null) { Console.WriteLine(Tag + "could not read the copy's node pool"); return false; }
             for (int i = 0; i < _nodeCount; i++)
             {
                 long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
+                int po = i * CFrameVu1.NodeStride;
+                uint vis = (uint)BitConverter.ToInt32(pool, po + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(vis)) continue;
                 if (!_look.Wings && _wingMeshIdx.Contains(i)) continue;              // a wingless look: the wings are never copied (HideMeshes unlinks their runs and nulls their geometry)
                 if (!_look.Cape && i == _maskMeshIdx) continue;                      // and the mask belongs to Super Steve alone
-                uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
-                if (!Memory.IsValidGuest(mdt) || (uint)Memory.ReadInt(Memory.ToMmu(mdt)) != CVisualMDT.MdtMagic) continue;
-                uint vu   = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
-                int vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
-                int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
-                if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
                 int visSz = CVisualMDT.VisualSize;
+                // One read for the whole visual, one for the MDT's header. Each field used to be its own round trip, and at a
+                // few ms each that was most of a 1.4 s copy step once the bulk data moved into the machine (2026-09-15).
+                byte[] visB = Memory.ReadBytesBatch(Memory.ToMmu(vis), visSz);
+                if (visB == null) continue;
+                uint mdt  = (uint)BitConverter.ToInt32(visB, CVisualMDT.VisMDT) & Memory.PhysAddrMask;
+                uint vu   = (uint)BitConverter.ToInt32(visB, CVisualMDT.VisVU)  & Memory.PhysAddrMask;
+                int  vuSz = BitConverter.ToInt32(visB, CVisualMDT.VisVU + 4) * 16;
+                if (!Memory.IsValidGuest(mdt)) continue;
+                byte[] mdtHdr = Memory.ReadBytesBatch(Memory.ToMmu(mdt), 16);
+                if (mdtHdr == null || (uint)BitConverter.ToInt32(mdtHdr, 0) != CVisualMDT.MdtMagic) continue;
+                int mdtSz = BitConverter.ToInt32(mdtHdr, CVisualMDT.MdtSizeField);
+                if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
                 int need = A16(visSz) + A16(vuSz) + A16(mdtSz);
                 if (cave + need > caveEnd) { Console.WriteLine(Tag + "cat meshes do not fit the MeshCave"); return false; }
                 long cVis = cave;              uint cVisG = (uint)caveGuest;
@@ -1833,10 +1861,8 @@ namespace Dark_Cloud_Improved_Version
                 // stays here. A job carries the copy and both rebases, exactly what RebaseRange does to vuB/mdtB below.
                 _jobs.Add(new CopyJob(vu, cVUG, vuSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
                 _jobs.Add(new CopyJob(mdt, cMDTG, mdtSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
-                byte[] visB = Memory.ReadBytesBatch(Memory.ToMmu(vis), visSz);
-                if (visB == null) continue;
                 RebaseRange(visB, vu, vuSz, cVUG); RebaseRange(visB, mdt, mdtSz, cMDTG);
-                byte[] vuB = null, mdtB = null;
+                byte[] vuB = null;
                 // The engine writes the skinned draw packet into buffer[DBuffID] (+0x28 / +0x2C) every frame while
                 // the GIF is still reading the other. A single-buffered copy tears (flicker); give the copy both — the
                 // second one is placed after every mesh's primary data has a home (second pass below).
@@ -1850,7 +1876,8 @@ namespace Dark_Cloud_Improved_Version
                 cave += need; caveGuest += need; copied++;
                 _skinNodes.Add((i, cMDT, mdtSz, cVU, 0L, vuSz));
                 second.Add((cVis, vuB, vuSz, _skinNodes.Count - 1));
-                Console.WriteLine(Tag + $"mesh n{i} ({ReadName((uint)(CodeCaves.NodePoolGuest + i * CFrameVu1.NodeStride))}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
+                int nl = 0; while (nl < 0x20 && pool[po + CFrameVu1.Name + nl] != 0) nl++;     // the name is in the pool we read
+                Console.WriteLine(Tag + $"mesh n{i} ({System.Text.Encoding.ASCII.GetString(pool, po + CFrameVu1.Name, nl)}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
             }
             _caveFree = cave;
             if (copied == 0) { Console.WriteLine(Tag + "no software-skinned cat mesh found — refusing to share her collapsed copy of the skin"); return false; }
@@ -1894,13 +1921,13 @@ namespace Dark_Cloud_Improved_Version
             public readonly int Op;                                                  // 0 = copy + re-point, 1 = find/replace 64-bit
             public CopyJob(uint src, uint dst, int size, uint r1s, int r1n, uint r1d, uint r2s, int r2n, uint r2d)
             { Src = src; Dst = dst; Size = size; R1Src = r1s; R1Size = r1n; R1Dst = r1d; R2Src = r2s; R2Size = r2n; R2Dst = r2d; Op = 0; }
-            /// <summary>Rewrite every occurrence of a 64-bit value inside one block — the cat's TEX0 registers, after its
-            /// textures move. The old value rides in the first rebase slot, the new one in the second.</summary>
-            public CopyJob(uint block, int size, ulong oldV, ulong newV)
-            { Src = 0; Dst = block; Size = size; R1Src = (uint)oldV; R1Size = (int)(oldV >> 32); R1Dst = (uint)newV;
-              R2Src = (uint)(newV >> 32); R2Size = 0; R2Dst = 0; Op = 1; }
+            /// <summary>Sweep one block for every old→new pair in <see cref="_pairs"/> — the cat's TEX0 registers, after its
+            /// textures move. The pair count and table address are filled in when the queue is written.</summary>
+            public CopyJob(uint block, int size)
+            { Src = 0; Dst = block; Size = size; R1Src = 0; R1Size = 0; R1Dst = 0; R2Src = 0; R2Size = 0; R2Dst = 0; Op = 1; }
         }
         private static readonly List<CopyJob> _jobs = new();
+        private static readonly List<(ulong oldV, ulong newV)> _pairs = new();          // shared by every find/replace job
         private static readonly List<(long cVU, int vuSz, long cMDT, int mdtSz, long vis, uint vu, uint mdt, uint cVUG, uint cMDTG)> _pending = new();
 
         /// <summary>The old path, kept whole as the fallback: read each source block, rebase it here, write the copy. Only runs
@@ -1913,10 +1940,13 @@ namespace Dark_Cloud_Improved_Version
                 {
                     byte[] blk = Memory.ReadBytesBatch(0x20000000L + j.Dst, j.Size);
                     if (blk == null) continue;
-                    ulong oldV = j.R1Src | ((ulong)(uint)j.R1Size << 32), newV = j.R1Dst | ((ulong)j.R2Src << 32);
                     bool hit = false;
                     for (int o = 0; o + 8 <= blk.Length; o += 4)
-                        if (BitConverter.ToUInt64(blk, o) == oldV) { BitConverter.GetBytes(newV).CopyTo(blk, o); hit = true; o += 4; }
+                    {
+                        ulong w = BitConverter.ToUInt64(blk, o);
+                        foreach (var (oldV, newV) in _pairs)
+                            if (w == oldV) { BitConverter.GetBytes(newV).CopyTo(blk, o); hit = true; o += 4; break; }
+                    }
                     if (hit) Memory.WriteBytesBatch(0x20000000L + j.Dst, blk);
                     continue;
                 }
@@ -1953,17 +1983,34 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(j.R2Src).CopyTo(buf, o + 0x18); BitConverter.GetBytes(j.R2Size).CopyTo(buf, o + 0x1C);
                 BitConverter.GetBytes(j.R2Dst).CopyTo(buf, o + 0x20);
                 BitConverter.GetBytes(j.Op).CopyTo(buf, o + 0x24);
+                if (j.Op == 1)
+                {
+                    BitConverter.GetBytes(_pairs.Count).CopyTo(buf, o + 0x0C);
+                    BitConverter.GetBytes(CodeCaves.CatCopyQueueGuest + (uint)CodeCaves.CatCopyPairsOff).CopyTo(buf, o + 0x10);
+                }
+            }
+            if (_pairs.Count > 0)
+            {
+                var pb = new byte[_pairs.Count * 16];
+                for (int i = 0; i < _pairs.Count; i++)
+                { BitConverter.GetBytes(_pairs[i].oldV).CopyTo(pb, i * 16); BitConverter.GetBytes(_pairs[i].newV).CopyTo(pb, i * 16 + 8); }
+                Memory.WriteBytesBatch(CodeCaves.CatCopyQueue + CodeCaves.CatCopyPairsOff, pb);
             }
             Memory.WriteBytesBatch(CodeCaves.CatCopyQueue, buf);                        // jobs first…
             Memory.WriteInt(CodeCaves.CatCopyQueue, _jobs.Count);                       // …then the count: the cave's go signal
-            for (int spin = 0; spin < 120; spin++)                                      // ~2 s at 16 ms — it is one frame's work
+            // The cave services the whole queue in the frame it next runs, so the only cost here is noticing. Poll tightly:
+            // sleeping 4 ms between checks put a floor of several hundred ms on a build that is otherwise one frame of work.
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            for (int spin = 0; spin < 4000; spin++)
             {
                 if (Memory.ReadInt(CodeCaves.CatCopyQueue) == 0)
                 {
-                    Console.WriteLine(Tag + $"copy queue: {_jobs.Count} job(s) run in the machine ({_jobs.Sum(j => j.Size):N0} B)");
+                    Console.WriteLine(Tag + $"copy queue: {_jobs.Count} job(s) run in the machine ({_jobs.Sum(j => j.Size):N0} B) — "
+                                          + $"{waited.ElapsedMilliseconds} ms, {spin + 1} poll(s)");
                     _jobs.Clear(); return true;
                 }
-                Thread.Sleep(4);
+                if (spin >= 40) Thread.Sleep(1);                                        // first 40 are back to back
+                if (waited.ElapsedMilliseconds > 2000) break;
             }
             Memory.WriteInt(CodeCaves.CatCopyQueue, 0);
             Console.WriteLine(Tag + "copy queue: the cave did not answer — falling back to copying over PINE");
@@ -2297,7 +2344,51 @@ namespace Dark_Cloud_Improved_Version
         // uploads nothing. The re-tagged entries keep the VRAM addresses they were given in HER window, so slot 1's
         // block takes over that tail of her window (and hers shrinks to just before it) while the copy is up.
         private const int  TexBlocks = 0x18, TexBlockStride = 0x3C, BlkBase = 0x20, BlkTop = 0x24, BlkLoaded = 0x28, BlkDirty = 0x30;
+        /// <summary>manager+0x14 — the VRAM bump cursor, and it counts DOWN (Initialize sets it, EnterFixTexture subtracts
+        /// from it at 0x132354). Everything below it is free; the cat reserves its window by moving it.</summary>
+        private const int  TexCursor = 0x14;
+        private static uint _texCursorSaved, _texCursorTaken;
         private static uint _herTopSaved;
+        /// <summary>Every texture block's VRAM range and every entry's page, once, at the moment the cat claims its window.
+        /// The fonts kept coming back speckled through two different theories about WHEN the window is taken, so this is here
+        /// to settle WHERE it lands instead of reasoning about it (user 2026-09-15).</summary>
+        private static void DumpVramMap(uint newBase, uint size)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int b = 0; b < 0x48; b++)
+            {
+                long bl = TextureManager + TexBlocks + (long)b * TexBlockStride;
+                uint bb = Memory.ReadUInt(bl + BlkBase), bt = Memory.ReadUInt(bl + BlkTop);
+                if (bb == 0 && bt == 0) continue;
+                sb.Append($" [{b:X2}] 0x{bb:X}-0x{bt:X}{(bt > newBase && bb < newBase + size ? "  <-- OVERLAPS the cat's window" : "")}");
+            }
+            Console.WriteLine(Tag + $"vram: cursor was 0x{_texCursorSaved:X}, cat window 0x{newBase:X}-0x{newBase + size:X}; blocks:" + sb);
+            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+            var hi = new List<string>();
+            for (int i = 0; i < count; i++)
+            {
+                long e = TextureManager + TexEntries + (long)i * TexStride;
+                uint tbp = Memory.ReadUInt(e + 0x28) & 0x3FFF;
+                if (tbp < newBase) continue;                                   // only what sits in or above our window
+                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
+                int len = 0; while (nb != null && len < nb.Length && nb[len] != 0) len++;
+                hi.Add($"{(nb == null ? "?" : System.Text.Encoding.ASCII.GetString(nb, 0, len))}@0x{tbp:X}(blk 0x{Memory.ReadShort(e):X})");
+            }
+            Console.WriteLine(Tag + $"vram: {hi.Count} entr(y/ies) at or above 0x{newBase:X}: " + string.Join(", ", hi));
+            Console.WriteLine(Tag + "vram: " + FontState());
+        }
+
+        /// <summary>The message font's manager entry, verbatim. "fontbase" is what DrawMesWin__6ClsMes looks up to draw every
+        /// glyph, so if its page or its TEX0 moves between a spawn and a despawn, the mod moved it — which is the one thing
+        /// that would put the cat's red where letters ought to be (user 2026-09-15).</summary>
+        internal static string FontState()
+        {
+            long e = FindTexEntry("fontbase");
+            if (e == 0) return "fontbase is not in the manager";
+            ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
+            return $"fontbase entry 0x{e:X} blk 0x{Memory.ReadShort(e):X} page 0x{t & 0x3FFF:X} clut 0x{(t >> 37) & 0x3FFF:X} tex0 0x{t:X16}; manager holds {Memory.ReadInt(TextureManager)} entr(y/ies)";
+        }
+
         private static void RetagCatTextures(short from, short to)
         {
             int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
@@ -2341,7 +2432,7 @@ namespace Dark_Cloud_Improved_Version
             }
             long her = TextureManager + TexBlocks + (long)HerTextureBlock * TexBlockStride;
             long grp = TextureManager + TexBlocks + (long)SlotTextureGroup * TexBlockStride;
-            if (to == SlotTextureGroup && done > 0 && minTbp != uint.MaxValue)
+            if (to == SlotTextureGroup && done > 0 && minTbp != uint.MaxValue && MoveCatVram)
             {
                 // The slot loop's group reload is written into the main frame packet, but the slot's draw goes
                 // into the chara packet the GS consumes EARLIER in the frame (GS dump 2026-09-10: the cat's binds
@@ -2350,22 +2441,39 @@ namespace Dark_Cloud_Improved_Version
                 // block's top. Entries, the copy's packet buffers and MDT get the new addresses; hers are untouched.
                 _herTopSaved = Memory.ReadUInt(her + BlkTop);
                 uint size = _herTopSaved - minTbp;
-                uint limit = Memory.ReadUInt(TextureManager + 0x14);
+                uint limit = Memory.ReadUInt(TextureManager + TexCursor);
                 uint newBase = (limit - size) & ~0x1Fu;
                 uint highest = 0;
                 for (int b = 0; b < 0x48; b++) highest = Math.Max(highest, Memory.ReadUInt(TextureManager + TexBlocks + (long)b * TexBlockStride + BlkTop));
                 if (highest > newBase) Console.WriteLine(Tag + $"WARNING: a texture block tops at 0x{highest:X}, inside the cat's window 0x{newBase:X}..0x{newBase + size:X}");
+                // RESERVE the window instead of squatting under the cursor. manager+0x14 is a DOWNWARD bump allocator —
+                // EnterFixTexture does `lw v0,0x14(s6); subu v0,v0,size; sw v0,0x14(s6)` (0x132354) — so the space just below
+                // it is precisely what the game hands out NEXT. Taking the window without moving the cursor meant any texture
+                // entered afterwards landed on top of the cat's; fonts are entered that way, and their glyphs came back
+                // speckled (user 2026-09-15). Moving the cursor down by the same amount makes this a real allocation, and the
+                // whole question of WHEN we claim it — which no amount of waiting could settle — stops mattering.
+                _texCursorSaved = limit; _texCursorTaken = newBase;
+                Memory.WriteUInt(TextureManager + TexCursor, newBase);
+                DumpVramMap(newBase, size);
                 int patched = RelocateCatTextures(minTbp, newBase);
                 Memory.WriteUInt(grp + BlkBase, newBase);
                 Memory.WriteUInt(grp + BlkTop, newBase + size);
                 Memory.WriteUInt(grp + BlkLoaded, 0);
                 Memory.WriteUInt(grp + BlkDirty, 0);
                 Memory.WriteUInt(her + BlkTop, minTbp);
-                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} texture sweep(s) over the copy); her block now tops at 0x{minTbp:X}");
+                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} block(s) swept); her block now tops at 0x{minTbp:X}");
             }
             else if (to == HerTextureBlock)
             {
                 if (_texMoved.Count > 0) RelocateCatTextures(0, 0);          // back to their original addresses
+                if (_texCursorTaken != 0)                                    // give the reservation back, if nobody built below it
+                {
+                    uint cur = Memory.ReadUInt(TextureManager + TexCursor);
+                    if (cur == _texCursorTaken) Memory.WriteUInt(TextureManager + TexCursor, _texCursorSaved);
+                    else Console.WriteLine(Tag + $"texture cursor moved to 0x{cur:X} under our reservation (0x{_texCursorTaken:X}) — leaving it, the window stays reserved");
+                    _texCursorTaken = 0; _texCursorSaved = 0;
+                }
+                Console.WriteLine(Tag + "vram (restore): " + FontState());
                 if (_herTopSaved != 0) Memory.WriteUInt(her + BlkTop, _herTopSaved);
                 Memory.WriteUInt(grp + BlkBase, 0);
                 Memory.WriteUInt(grp + BlkTop, 0);
@@ -2409,6 +2517,14 @@ namespace Dark_Cloud_Improved_Version
             if (made > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
             return present;
         }
+        /// <summary>Whether the cat's textures are RELOCATED to their own VRAM window, as opposed to just being re-tagged into
+        /// the slot's group where they sit. The move exists so nothing else uploads over the cat's pages mid-frame. It is also
+        /// the only thing the mod does that writes VRAM addresses at all, and the message font has been coming back with a red
+        /// strike through some of its glyphs, so this was switched OFF for one build to see whether the move was involved. It
+        /// was not: the glyphs stayed struck, and in that run Xiao was never switched in, so no cat was built and nothing here
+        /// ran at all (log 2026-09-15 14:35). Left ON — without the move the cat's textures are unreliable.</summary>
+        private const bool MoveCatVram = true;
+
         private const uint StuckFloor = 0x3000;          // no vanilla block reaches this high (max seen 0x3920 is the manager's own top area)
 
         /// <summary>The manager entry for a cat texture, found by name (0 if absent).</summary>
@@ -2452,7 +2568,16 @@ namespace Dark_Cloud_Improved_Version
                     if (e == 0) continue;
                     ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
                     uint tbp = (uint)(t & 0x3FFF), cbp = (uint)((t >> 37) & 0x3FFF);
-                    ulong n = (t & ~0x3FFFUL & ~(0x3FFFUL << 37)) | (ulong)(newBase + (tbp - oldBase)) | ((ulong)(newBase + (cbp - oldBase)) << 37);
+                    // Shift a field ONLY if it is inside the window being moved. A TEX0 carries the texture's page AND its
+                    // CLUT's, and a CLUT can sit below the textures: `newBase + (cbp - oldBase)` then underflows, and the
+                    // GS keeps 14 bits of it, so the CLUT is uploaded to an essentially arbitrary page. A cat CLUT at 0x0E60
+                    // lands exactly on the message font at 0x2BC0, and one at 0x1060 on the font's own CLUT at 0x2DC0. That
+                    // is a 1 KB band of flat cape red dropped across part of the glyph atlas — which is why the strike-through
+                    // was red, and why it hit only some letters (user 2026-09-15).
+                    uint nt = (tbp >= oldBase && tbp < _herTopSaved) ? newBase + (tbp - oldBase) : tbp;
+                    uint nc = (cbp >= oldBase && cbp < _herTopSaved) ? newBase + (cbp - oldBase) : cbp;
+                    if (nc == cbp && nt != tbp) Console.WriteLine(Tag + $"texture {name}: CLUT 0x{cbp:X} is outside the moved window 0x{oldBase:X}..0x{_herTopSaved:X} — left where it is");
+                    ulong n = (t & ~0x3FFFUL & ~(0x3FFFUL << 37)) | nt | ((ulong)nc << 37);
                     _texMoved.Add((name, t));
                     moves.Add((t, n));
                     Memory.WriteUInt(e + 0x28, (uint)n); Memory.WriteUInt(e + 0x2C, (uint)(n >> 32));
@@ -2479,12 +2604,29 @@ namespace Dark_Cloud_Improved_Version
             // The machine does the hunting. Every one of these blocks is a draw packet the copy just placed, and scanning them
             // from here meant reading all 300 KB back over PINE — 3.5 s of a 4.6 s build once the copy itself moved inside
             // (2026-09-15). One find/replace job per block per moved texture; the cave sweeps them all in a frame.
-            _jobs.Clear();
-            foreach (var (addr, size) in blocks)
+            _jobs.Clear(); _pairs.Clear();
+            if (moves.Count > CodeCaves.CatCopyMaxPairs)   // never truncate: a dropped pair leaves a texture pointing at nothing
             {
-                if (addr == 0 || size <= 0) continue;
-                foreach (var (oldT, newT) in moves) _jobs.Add(new CopyJob((uint)(addr - 0x20000000), size, oldT, newT));
+                Console.WriteLine(Tag + $"texture relocation: {moves.Count} moves exceed the sweep table ({CodeCaves.CatCopyMaxPairs}) — using the slow path");
+                foreach (var (addr, size) in blocks)
+                {
+                    if (addr == 0 || size <= 0) continue;
+                    byte[] blk = Memory.ReadBytesBatch(addr, size);
+                    if (blk == null) continue;
+                    bool dirty = false;
+                    for (int o = 0; o + 8 <= blk.Length; o += 4)
+                    {
+                        ulong w = BitConverter.ToUInt64(blk, o);
+                        foreach (var (oldT, newT) in moves)
+                            if (w == oldT) { BitConverter.GetBytes(newT).CopyTo(blk, o); dirty = true; patched++; o += 4; break; }
+                    }
+                    if (dirty) Memory.WriteBytesBatch(addr, blk);
+                }
+                return patched;
             }
+            _pairs.AddRange(moves);
+            foreach (var (addr, size) in blocks)
+                if (addr != 0 && size > 0) _jobs.Add(new CopyJob((uint)(addr - 0x20000000), size));
             patched = _jobs.Count;
             if (_jobs.Count > 0 && !RunCopyJobs() && !CopyJobsBySocket())
                 Console.WriteLine(Tag + "texture relocation: neither path completed — the copy may draw with her texture block");
