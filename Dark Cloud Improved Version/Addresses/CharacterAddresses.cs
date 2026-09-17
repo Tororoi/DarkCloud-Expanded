@@ -309,7 +309,12 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothGravity   = 0xC0;    // GRAVITY, added to every particle's velocity each step
         internal const int  ClothFollow    = 0xD0;    // FOLLOW: share of the anchor's movement applied straight to each particle
         internal const int  ClothK         = 0xE0;    // K: per-step pull toward LW(anchor) × rest — a POSITION correction, no momentum
-        internal const int  ClothRest      = 0x110;   // per particle: the shape it holds, in the anchor's space (a*0x100 + b*0x10)
+        // The per-particle arrays below are lattices: particle (a, b) = a * ClothColumnStride + b * ClothParticleStride, a
+        // counting across the collar and b down the hang; each array spans ClothArrayBytes (16 columns of 16 vec4s).
+        internal const int  ClothColumnStride   = 0x100;
+        internal const int  ClothParticleStride = 0x10;
+        internal const int  ClothArrayBytes     = 0x1000;
+        internal const int  ClothRest      = 0x110;   // per particle: the shape it holds, in the anchor's space
         internal const int  ClothCur       = 0x1110;  // per particle: where it is now, world
         internal const int  ClothPrev      = 0x2110;  // per particle: where it was last step (the Verlet history)
         internal const int  ClothAnchorWorld = 0xF0;  // the anchor's world centroid as of last step — Step compares the new one
@@ -317,7 +322,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothAnchorLocal = 0x100; // …the same centroid in the anchor's own frame (set once at init)
         internal const int  ClothVel       = 0x4110;  // per particle: its velocity — the engine only ever ADDS gravity here, so a
                                                       // zero-mean wave written in rides along without dragging the cloth anywhere
-        internal const int  ClothTarget    = 0x7550;  // per particle: LW(anchor) × rest, i.e. where the rest shape wants it (a*0x100 + b*0x10)
+        internal const int  ClothTarget    = 0x7550;  // per particle: LW(anchor) × rest, i.e. where the rest shape wants it
     }
 
     /// <summary><c>CBound</c> — a body collision capsule the cloth sim collides against. Linked list off

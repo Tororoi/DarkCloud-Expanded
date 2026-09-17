@@ -453,7 +453,7 @@ namespace Dark_Cloud_Improved_Version
                 uint bounds = CloneBounds((uint)BitConverter.ToInt32(o, CCloth.ClothBounds) & Memory.PhysAddrMask, out int nb);
                 BitConverter.GetBytes(bounds).CopyTo(o, CCloth.ClothBounds);                 // the cat's own body capsules
                 BitConverter.GetBytes(0).CopyTo(o, 0x50);                                    // wind: the step refreshes it from the character
-                Array.Copy(o, 0x1110, o, 0x2110, 0x1000);                                    // previous = current: a quiet first step
+                Array.Copy(o, CCloth.ClothCur, o, CCloth.ClothPrev, CCloth.ClothArrayBytes);                                    // previous = current: a quiet first step
                 Memory.WriteBytesBatch(cObj, o);
                 Memory.WriteBytesBatch(cB0, Memory.ReadBytesBatch(Memory.ToMmu(b0), bufSize) ?? new byte[bufSize]);
                 Memory.WriteBytesBatch(cB1, Memory.ReadBytesBatch(Memory.ToMmu(b0), bufSize) ?? new byte[bufSize]);
@@ -465,11 +465,11 @@ namespace Dark_Cloud_Improved_Version
                 // The wind's taper watches ONE particle — the middle of the hem, the point that swings furthest from the shape the
                 // cape is meant to hold. Its slot is (column × 0x100 + row × 0x10), and BOTH indices come from the cloth itself, so
                 // re-tessellating the cape in the bake cannot leave the runtime watching some point up its middle.
-                _capeHemParticle = (_capeWide / 2) * 0x100 + (_capeHang - 1) * 0x10;
-                _capeRest = Memory.ReadBytesBatch(cObj + CCloth.ClothRest, _capeWide * 0x100);   // read ONCE: the wind rides on it
+                _capeHemParticle = (_capeWide / 2) * CCloth.ClothColumnStride + (_capeHang - 1) * CCloth.ClothParticleStride;
+                _capeRest = Memory.ReadBytesBatch(cObj + CCloth.ClothRest, _capeWide * CCloth.ClothColumnStride);   // read ONCE: the wind rides on it
                 if (_capeRest != null)                                                   // its own length, for the lift's geometry
                 {
-                    int mid = (_capeWide / 2) * 0x100;
+                    int mid = (_capeWide / 2) * CCloth.ClothColumnStride;
                     _capeSpan = Math.Abs(BitConverter.ToSingle(_capeRest, mid) - BitConverter.ToSingle(_capeRest, mid + (_capeHang - 1) * 0x10));
                 }
                 TintCape();
@@ -516,13 +516,15 @@ namespace Dark_Cloud_Improved_Version
         private static void WatchCape()
         {
             if (_capeObj == 0 || ++_capeWatch % 60 != 0) return;
-            byte[] o = Memory.ReadBytesBatch(_capeObj, 0x1120 + 0x700);
+            byte[] o = Memory.ReadBytesBatch(_capeObj, CCloth.ClothCur + _capeWide * CCloth.ClothColumnStride);   // through the last current position
             if (o == null) return;
             string P(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
             uint active = (uint)BitConverter.ToInt32(o, CCloth.ClothActive), anchor = (uint)BitConverter.ToInt32(o, CCloth.ClothAttach);
             long s = SlotAddr();
-            // the lattice: slot = a*16 + b — a = width (0..4 across the collar), b = hang (0 = the collar edge, 6 = the hem)
-            Log($"cape watch: cur a0b0 {P(0x1110)} a0b1 {P(0x1120)} a0b6 {P(0x1170)} a4b0 {P(0x1510)} a4b6 {P(0x1570)} | rest p0 {P(0x110)} p1 {P(0x120)} p16 {P(0x210)} | anchor-centroid {P(0xF0)} local {P(0x100)} active 0x{active:X}");
+            int Rest(int a, int b) => CCloth.ClothRest + a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
+            int Cur(int a, int b)  => CCloth.ClothCur  + a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
+            int aEnd = _capeWide - 1, bEnd = _capeHang - 1;   // the lattice: a across the collar, b down the hang (0 = the collar edge, bEnd = the hem)
+            Log($"cape watch: cur a0b0 {P(Cur(0, 0))} a0b1 {P(Cur(0, 1))} a0b{bEnd} {P(Cur(0, bEnd))} a{aEnd}b0 {P(Cur(aEnd, 0))} a{aEnd}b{bEnd} {P(Cur(aEnd, bEnd))} | rest a0b0 {P(Rest(0, 0))} a0b1 {P(Rest(0, 1))} a1b0 {P(Rest(1, 0))} | anchor-centroid {P(CCloth.ClothAnchorWorld)} local {P(CCloth.ClothAnchorLocal)} active 0x{active:X}");
             uint bnd = (uint)BitConverter.ToInt32(o, CCloth.ClothBounds) & Memory.PhysAddrMask;
             var caps = new List<string>();
             while (Memory.IsValidGuest(bnd) && caps.Count < 4)
@@ -534,17 +536,19 @@ namespace Dark_Cloud_Improved_Version
             }
             Log("cape watch: capsules " + (caps.Count == 0 ? "none" : string.Join(" | ", caps)));
             // how far each particle is from the rest shape the engine is pulling it to (+0x7550 = LW(anchor) × rest, refreshed every step)
-            byte[] tg = Memory.ReadBytesBatch(_capeObj + CCloth.ClothTarget, 0x80);
+            byte[] tg = Memory.ReadBytesBatch(_capeObj + CCloth.ClothTarget, _capeHang * CCloth.ClothParticleStride);   // column 0
             if (tg != null)
             {
                 float Sag(int b)
                 {
-                    float dx = BitConverter.ToSingle(tg, b * 16) - BitConverter.ToSingle(o, 0x1110 + b * 16);
-                    float dy = BitConverter.ToSingle(tg, b * 16 + 4) - BitConverter.ToSingle(o, 0x1114 + b * 16);
-                    float dz = BitConverter.ToSingle(tg, b * 16 + 8) - BitConverter.ToSingle(o, 0x1118 + b * 16);
+                    int t = b * CCloth.ClothParticleStride, c = Cur(0, b);
+                    float dx = BitConverter.ToSingle(tg, t)     - BitConverter.ToSingle(o, c);
+                    float dy = BitConverter.ToSingle(tg, t + 4) - BitConverter.ToSingle(o, c + 4);
+                    float dz = BitConverter.ToSingle(tg, t + 8) - BitConverter.ToSingle(o, c + 8);
                     return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
                 }
-                Log($"cape watch: column 0 off the rest shape by b1 {Sag(1):F2} b3 {Sag(3):F2} b6 {Sag(6):F2} | b6 target ({BitConverter.ToSingle(tg, 0x60):F1},{BitConverter.ToSingle(tg, 0x64):F1},{BitConverter.ToSingle(tg, 0x68):F1})");
+                int hem = bEnd * CCloth.ClothParticleStride;
+                Log($"cape watch: column 0 off the rest shape by b1 {Sag(1):F2} b3 {Sag(3):F2} b{bEnd} {Sag(bEnd):F2} | b{bEnd} target ({BitConverter.ToSingle(tg, hem):F1},{BitConverter.ToSingle(tg, hem + 4):F1},{BitConverter.ToSingle(tg, hem + 8):F1})");
             }
             byte[] lw = Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40);
             string rows = lw == null ? "?" : string.Join(" | ", new[] { 0, 1, 2, 3 }.Select(r => $"({BitConverter.ToSingle(lw, r * 16):F2},{BitConverter.ToSingle(lw, r * 16 + 4):F2},{BitConverter.ToSingle(lw, r * 16 + 8):F2},{BitConverter.ToSingle(lw, r * 16 + 12):F2})"));
@@ -601,7 +605,7 @@ namespace Dark_Cloud_Improved_Version
                 float trim = d - (float)Math.Sqrt(Math.Max(0f, d * d - lift * lift));  // …and how much it must draw in to rise that far
                 for (int a = 0; a < _capeWide; a++)
                 {
-                    int o = a * 0x100 + b * 0x10;
+                    int o = a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
                     BitConverter.GetBytes(BitConverter.ToSingle(_capeRest, o) + trim).CopyTo(rest, o);          // +x = back toward the collar
                     BitConverter.GetBytes(BitConverter.ToSingle(_capeRest, o + 4) - lift).CopyTo(rest, o + 4);  // −y = up off the back
                 }
@@ -658,16 +662,16 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(x * m[2] + y * m[6] + z * m[10] + m[14]).CopyTo(dst, o + 8);
                 BitConverter.GetBytes(1f).CopyTo(dst, o + 12);
             }
-            byte[] cur = new byte[_capeWide * 0x100];
+            byte[] cur = new byte[_capeWide * CCloth.ClothColumnStride];
             for (int a = 0; a < _capeWide; a++)
                 for (int b = 0; b < _capeHang; b++)
                 {
-                    int o = a * 0x100 + b * 0x10;
+                    int o = a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
                     Place(cur, o, BitConverter.ToSingle(_capeRest, o), BitConverter.ToSingle(_capeRest, o + 4), BitConverter.ToSingle(_capeRest, o + 8));
                 }
             Memory.WriteBytesBatch(_capeObj + CCloth.ClothCur, cur);
             Memory.WriteBytesBatch(_capeObj + CCloth.ClothPrev, cur);                  // no history: nothing to whip back toward
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, new byte[_capeWide * 0x100]);
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, new byte[_capeWide * CCloth.ClothColumnStride]);
             byte[] c = Memory.ReadBytesBatch(_capeObj + CCloth.ClothAnchorLocal, 12);  // and the mark the teleport test compares to
             if (c != null)
             {
