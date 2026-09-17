@@ -390,7 +390,13 @@ namespace Dark_Cloud_Improved_Version
                                                                      // cape look wants); 7/8/9 = Divine Beast Title / Angel Shooter /
                                                                      // Angel Gear
             internal const long CatGlowPalTexEntry = CatBase + 0x2A0; // uint, the CTexture entry ElfCave.CatGlowPalette last found for catglowp (cave; same by-name verification) — ⚠ the page ends at CatBase + 0x300
-            internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
+            /// <summary>Mirage's heat shimmer, drawn by ElfCave.MirageHazeDraw at the clone: 1 = draw it (written LAST);
+            /// the clone's root CFrame (guest) whose posed world translation places it; a height added to that
+            /// (negative lowers it — the raster is built to rise above its anchor).</summary>
+            internal const long MirageHazeOn   = Base + 0x94;
+            internal const long MirageHazeNode = Base + 0x98;
+            internal const long MirageHazeLift = Base + 0x9C;
+            internal const long NextFree = Base + 0xA0;   // +0xA0..+0xFF are free (⚠ +0x100 = AiStubBase)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -513,7 +519,8 @@ namespace Dark_Cloud_Improved_Version
             /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
             internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
             internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
-            internal const uint NextFree = 0x01FB3C40;   // after the glow-palette tables and cave; the band runs to 0x1FB4000 (960 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint MirageHazeDraw     = 0x01FB3C40;   // 144 B → 0x1FB3CD0: one more raster, at the Mirage clone (dun hook in DunPatches)
+            internal const uint NextFree = 0x01FB3CE0;   // after the glow-palette tables and cave; the band runs to 0x1FB4000 (960 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

@@ -114,6 +114,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
+            PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
@@ -521,6 +522,29 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException("catGlowPalette.bin does not spell \"lowp\" (0x70776F6C) — its by-name scan would match nothing.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("catGlowPalette.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        // The dungeon draw loop's raster pass (dun 0x1DAEBCC, hooked by DunPatches) comes here; the cave performs it and then
+        // draws one raster at the Mirage clone's root when the mailbox says so.
+        internal static void PatchMirageHazeDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.MirageHazeDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: mirageHazeDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u)   // opens its frame: addiu sp,sp,-0x20
+                throw new IOException($"mirageHazeDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The two words that make it THIS cave: the "alpha01" string's address (ori a1,a1,0xA0E8) and the draw call
+            // (jal DrawRaster__9CFireOmni 0x162310). A wrong immediate in either fails invisibly — nothing drawn, no error.
+            bool name = false, draw = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x34A5A0E8u) name = true; if (w == 0x0C0588C4u) draw = true; }
+            if (!name || !draw)
+                throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }

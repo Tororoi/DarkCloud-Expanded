@@ -47,6 +47,7 @@ STUBS = [
     ('cat_copy_queue.s',         'catCopyQueue.bin',         0x1FB2480),
     ('cat_palette.s',            'catPalette.bin',           0x1FB2700),
     ('cat_glow_palette.s',       'catGlowPalette.bin',       0x1FB3A80),
+    ('mirage_haze_draw.s',       'mirageHazeDraw.bin',       0x1FB3C40),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

@@ -73,6 +73,9 @@ namespace Dark_Cloud_Improved_Version
             // and then draw the cat's glow disc with the same routine (ElfPatches.PatchCatGlowDraw writes the cave).
             new(0x01DAEBF8, 0x0C071030, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryA >> 2), "cat glow hook A (jal DrawFire__11CDungeonMap → cave)"),
             new(0x01DAEC10, 0x0C070F30, 0x0C000000u | (CodeCaves.ElfCave.CatGlowDrawEntryB >> 2), "cat glow hook B (jal DrawFireFreeStyle → cave)"),
+            // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
+            // the clone's root (ElfPatches.PatchMirageHazeDraw writes the cave).
+            new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
         };
 
         /// <summary>The patched form of the first gauge word — what the runtime checks to know the patch is live.</summary>
@@ -87,6 +90,11 @@ namespace Dark_Cloud_Improved_Version
         // CatPelletFollow. Every frame but the one after a spawn it reads a single zero word and falls straight through.
         internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.CatCopyQueue >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
+
+        internal const uint MirageHazeHookAddr = 0x01DAEBCC;
+        internal const uint MirageHazeHookOrig = 0x0C071184;                                   // jal 0x1C4610 DrawRaster__11CDungeonMap
+        internal const uint MirageHazeHookNew  = 0x0C000000u | (CodeCaves.ElfCave.MirageHazeDraw >> 2);
+        internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
 
         internal static void Apply(FileStream fs, Rec dun, Action<string> progress)
         {
