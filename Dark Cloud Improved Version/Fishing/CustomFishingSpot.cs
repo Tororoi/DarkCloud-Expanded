@@ -591,7 +591,7 @@ namespace Dark_Cloud_Improved_Version
             if (param != _lastParam)
             {
                 _lastParam = param;
-                uint pt = Memory.ReadUInt(EventPoints.MatchedPoint) & Memory.PhysAddrMask;
+                uint pt = Memory.ReadGuestPtr(EventPoints.MatchedPoint);
                 long e = Memory.IsValidGuest(pt) ? Memory.ToMmu(pt) : 0;
 
                 if (param > 0 || e != 0)
@@ -662,7 +662,7 @@ namespace Dark_Cloud_Improved_Version
             if (!live) { _shallowFishApplied = false; _fishCPolySynced = false; }
             else
             {
-                uint fp = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+                uint fp = Memory.ReadGuestPtr(FishingSpot.Fish);
                 bool fishPlaced = Memory.IsValidGuest(fp) && Memory.ReadInt(FishingSpot.FishNum) > 0;
 
                 // Queens medium/high tide: the water is deep enough for VANILLA fish depths (and the hang is

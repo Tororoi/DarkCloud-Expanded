@@ -54,7 +54,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Re-read the bank's index when the pointer changes (every dungeon load, and any time the pools move).</summary>
         private static bool Refresh()
         {
-            uint bank = Memory.ReadUInt(ClsMesDungeon + BuffPtr) & Memory.PhysAddrMask;
+            uint bank = Memory.ReadGuestPtr(ClsMesDungeon + BuffPtr);
             if (bank != 0 && bank == _bank && _ids != null) return true;
             _bank = 0; _ids = null; _offs = null;
             if (!Memory.IsValidGuest(bank)) return false;

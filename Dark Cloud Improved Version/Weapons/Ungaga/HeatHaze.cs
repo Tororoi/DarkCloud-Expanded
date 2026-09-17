@@ -52,7 +52,7 @@ namespace Dark_Cloud_Improved_Version
         /// Returns false if the dungeon has no fire to hijack (nothing is drawn; this is not an error).</summary>
         internal static bool Show(float worldX, float worldY, float worldZ, float gain01)
         {
-            uint dngMap = (uint)Memory.ReadInt(DungeonAddresses.Map.NowDngMapPtr) & Memory.PhysAddrMask;
+            uint dngMap = Memory.ReadGuestPtr(DungeonAddresses.Map.NowDngMapPtr);
             if (!Memory.IsValidGuest(dngMap)) return false;
             if (_fireIdx == -2) return false;               // already established there's no fire in this dungeon
 
@@ -79,7 +79,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Hand the torch back and restore the vanilla distortion gain. Safe to call when not showing.</summary>
         internal static void Hide()
         {
-            uint dngMap = (uint)Memory.ReadInt(DungeonAddresses.Map.NowDngMapPtr) & Memory.PhysAddrMask;
+            uint dngMap = Memory.ReadGuestPtr(DungeonAddresses.Map.NowDngMapPtr);
             RestoreAnchor(dngMap);
             if (_gainOrig > 0f) Memory.WriteFloat(FireRaster.DistortionGain, _gainOrig);
             _fireIdx = -1; _tileIdx = -1; _saved = null;

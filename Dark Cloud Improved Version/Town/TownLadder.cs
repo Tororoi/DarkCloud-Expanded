@@ -200,7 +200,7 @@ namespace Dark_Cloud_Improved_Version
             if (_refusalLeft > 0)
             {
                 bool moved = false;
-                uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+                uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
                 if (Memory.IsValidGuest(chara))
                 {
                     int m = Memory.ReadInt(Memory.ToMmu(chara) + 0xc68);
@@ -284,7 +284,7 @@ namespace Dark_Cloud_Improved_Version
             int type = Memory.ReadInt(LadderParam);
             if (type != 4 && type != 5) return false;
 
-            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
             if (!Memory.IsValidGuest(chara)) return false;
             long c = Memory.ToMmu(chara);
             float px = Memory.ReadFloat(c + EditLoop.CharaPosition);
@@ -561,7 +561,7 @@ namespace Dark_Cloud_Improved_Version
             int type = Memory.ReadInt(LadderParam);
             if (type != 4 && type != 5) return false;
 
-            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
             if (!Memory.IsValidGuest(chara)) return false;
             long c = Memory.ToMmu(chara);
             float px = Memory.ReadFloat(c + EditLoop.CharaPosition);
@@ -650,7 +650,7 @@ namespace Dark_Cloud_Improved_Version
             int type = Memory.ReadInt(LadderParam);
             if (type != 4 && type != 5) return false;
 
-            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
             if (!Memory.IsValidGuest(chara)) return false;
             long c = Memory.ToMmu(chara);
             float px = Memory.ReadFloat(c + EditLoop.CharaPosition);
@@ -780,7 +780,7 @@ namespace Dark_Cloud_Improved_Version
             int type = Memory.ReadInt(LadderParam);
             if (type != 4 && type != 5) return false;
 
-            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
             if (!Memory.IsValidGuest(chara)) return false;
             long c = Memory.ToMmu(chara);
             float px = Memory.ReadFloat(c + EditLoop.CharaPosition);

@@ -1067,7 +1067,7 @@ namespace Dark_Cloud_Improved_Version
         {
             float len = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy);
             if (len < 1e-4f) return;
-            uint frame = (uint)Memory.ReadInt(obj + CCharacter.CharModel) & Memory.PhysAddrMask;
+            uint frame = Memory.ReadGuestPtr(obj + CCharacter.CharModel);
             if (!Memory.IsValidGuest(frame)) return;
             float zx = dx / len, zh = dh / len, zy = dy / len;          // Z = direction of travel
             float xx, xh, xy;                                            // X = up × Z (up = +height)

@@ -185,7 +185,7 @@ namespace Dark_Cloud_Improved_Version
         // can be pinned down; EditInfo.Base is logged for reference.
         private static long FindMizuFrame()
         {
-            uint ei = Memory.ReadUInt(EditInfo.EditInfoPtr) & Memory.PhysAddrMask;
+            uint ei = Memory.ReadGuestPtr(EditInfo.EditInfoPtr);
             Log($"EditInfo.Base=0x{ei:X} — broad-scanning for mizu__a01…");
             const long START = 0x20300000, END = 0x21E00000;
             const int PAGE = 0x40000;                              // 256 KB pages, overlapped by the needle
@@ -220,7 +220,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static void LadderGateApply(bool low)
         {
-            uint arrGuest = Memory.ReadUInt(EvArrPtr) & Memory.PhysAddrMask;
+            uint arrGuest = Memory.ReadGuestPtr(EvArrPtr);
             if (!Memory.IsValidGuest(arrGuest)) return;
             long arr = Memory.ToMmu(arrGuest);
             int count = Memory.ReadInt(EvCountAddr);
