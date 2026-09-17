@@ -270,6 +270,14 @@ namespace Dark_Cloud_Improved_Version
         internal static uint ToGuest(long mmuAddr) => (uint)(mmuAddr - Pcsx2Base);   // the inverse, for a word the console will read
         internal static uint ReadGuestPtr(long addr) => (uint)ReadInt(addr) & PhysAddrMask;   // a native pointer field, as a guest address
 
+        /// <summary>Three floats at <paramref name="addr"/> in one write — a position, scale, rotation or colour.</summary>
+        internal static void WriteVec3(long addr, float x, float y, float z)
+        {
+            var b = new byte[12];
+            BitConverter.GetBytes(x).CopyTo(b, 0); BitConverter.GetBytes(y).CopyTo(b, 4); BitConverter.GetBytes(z).CopyTo(b, 8);
+            WriteBytesBatch(addr, b);
+        }
+
         /// <summary>Is <paramref name="guestPtr"/> a usable PS2 pointer — non-null and inside the EE's 32 MB of
         /// RAM? Pointers chased out of live game memory (model trees, map/fire structs, cloth lists) are null or
         /// stale garbage during loads and transitions, so guard before dereferencing: without this we'd compute
