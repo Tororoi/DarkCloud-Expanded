@@ -166,9 +166,17 @@ namespace Dark_Cloud_Improved_Version
         private static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
         private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
         private const string HeadNodeName = "cat_kao";
+        // ── how the cat LOOKS: the glow's geometry, then the per-weapon and per-element looks ─────────────
         private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
         private const float  GlowScale = 0.5f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
         private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
+        private const float  GlowLift  = 0f;           // units added to the glow's height (negative lowers it)
+        private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
+        private const string CapeTexture = "catcape";  // the cape AND the mask draw from it (wing_bake.MASK_TEX)
+        /// <summary>The element glow: ONE 8-bit disc carrying all six colours, repainted by ElfCave.CatGlowPalette the way
+        /// the cape is — 5,184 B for every colour, against 16,448 B for a single 32-bit disc. The colours live in
+        /// build_cat_pack.GLOW_ELEMENTS, not here: tune them there and re-bake.</summary>
+        private const string ElementGlowDisc = "catglowp";
         // Per weapon: the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel Shooter wears the wings
         // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
         // draws the SAME 8-bit disc, differing only in the palette row (PalRow → Mailbox.CatGlowPalRow; the rows themselves
@@ -182,7 +190,7 @@ namespace Dark_Cloud_Improved_Version
             { Items.angelgear,        new WeaponLook { PalRow = 9, Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
             // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
             // mesh has its tint ADDED to its lit colour, so this blue lands on the mask too and turns red to pink. The mask is
-            // meant to be lit like the CAPE instead, which needs a per-node tint (see CapeTint below).
+            // meant to be lit like the CAPE instead, which needs a per-node tint (see _capeTint).
             { SuperSteveAngelKey,     new WeaponLook { PalRow = 0, Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true } },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
@@ -199,6 +207,28 @@ namespace Dark_Cloud_Improved_Version
             if (sphere == Items.angelshooter || sphere == Items.angelgear) return SuperSteveAngelKey;
             return -1;
         }
+        /// <summary>Per element: the cape/mask texture colour and the ambient the CAPE draws under. The CAT's own ambient is
+        /// the same for every element — <see cref="ElementAmbient"/>.</summary>
+        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
+        /// <summary>The authored per-element appearance. ⚠ Each element's look is split across two files: the cape/mask
+        /// colour and ambient here, its GLOW colour in build_cat_pack.GLOW_ELEMENTS (row per element) — tuning an element
+        /// means touching both, and the glow half needs a re-bake and an ISO re-patch.</summary>
+        private static readonly ElementLook[] ElementLooks =
+        {
+            // Every element binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
+            // it — so the glow colour is tuned in build_cat_pack.GLOW_ELEMENTS, not by naming a different texture here.
+            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },
+            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
+            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f } },
+            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] {  8f, 46f, 37f } },
+            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f } },
+            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] {  0f,  0f,  0f } },
+        };
+        /// <summary>The CAT's ambient while the element look is on — the Angel Shooter's own 20/20/20, the same for every
+        /// element — darker read too dull. The cape and mask keep their authored per-element ambients
+        /// (<see cref="ElementLook.Tint"/>); only the cat is unified.</summary>
+        private static readonly float[] ElementAmbient = { 20f, 20f, 20f };
+        private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
         private static int _weapon = -1;                                    // the weapon the resident copy was built for
         private static readonly string[] WingMeshNodes = { "cat_rwingm", "cat_lwingm" };   // build_cat_pack / wing_bake.MESH_NAMES
         private const string MaskNodeName = "cat_mask";                                    // wing_bake.MASK_NODE — the Super Steve
@@ -210,8 +240,6 @@ namespace Dark_Cloud_Improved_Version
         /// CBound is re-pointed at the cat copy's own bone, so the capsules ride the cat's spine and the cape drapes over it.</summary>
         private static readonly string[] CapeBoundBones = { "cat_sebone2", "cat_sebone1", "cat_kosibone", "cat_kao" };
         private static readonly List<int> _wingMeshIdx = new List<int>();
-        private const float  GlowLift  = 0f;        // units added to the glow's height (negative lowers it)
-        private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
         private const float  HeadFallbackHeight = 6f;
         private static bool  _hitDone;
         private static int   _fade;
@@ -566,46 +594,20 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(_capeObj + CCloth.ClothK, k);
         }
 
-        private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint
         // ── the cape and mask follow the equipped weapon's ELEMENT ────────────────────────────────────────
-        // Two knobs move together per element: the flat texture's COLOUR and the ambient tint above.
-        //
-        private const string CapeTexture = "catcape";
-        /// <summary>The element glow: ONE 8-bit disc carrying all six colours, repainted by ElfCave.CatGlowPalette the way
-        /// the cape is — 5,184 B for every colour, against 16,448 B for a single 32-bit disc. The colours live in
-        /// build_cat_pack.GLOW_ELEMENTS, not here: tune them there and re-bake.</summary>
-        private const string ElementGlowDisc = "catglowp";
+        // The colours are authored in ElementLooks, beside the per-weapon looks; what follows is the plumbing
+        // that reads the element and the live slots it fills.
         private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
         private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
-        private const int  NoElement = 5;                // elementHUD: 00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None
         /// <summary>Xiao's weapon-slot 0 element byte, + 0xF8 per bag slot (Player.Xiao.WeaponSlot0.elementHUD). It lives in
         /// the status block, well clear of the dungeon pools, so it needs no DungeonPools resolution.</summary>
         private static readonly long XiaoElementHud = Player.Xiao.WeaponSlot0.elementHUD;
         private const int WeaponSlotStride = 0xF8;
 
-        /// <summary>Per element: the cape/mask texture colour, the ambient the CAPE draws under (authored per element by the
-        /// user), and the glow disc to bind. The CAT's own ambient is the same for every element — <see cref="ElementAmbient"/>.</summary>
-        private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
-        /// <summary>Per element: the cape/mask texture colour, and the ambient it draws under. Both are tunable — the
-        /// starting values follow the element bars in the weapon menu.</summary>
-        private static readonly ElementLook[] ElementLooks =
-        {
-            // Every element binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
-            // it — so the glow colour is tuned in build_cat_pack.GLOW_ELEMENTS, not by naming a different texture here.
-            new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },
-            new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
-            new ElementLook { Name = "Thunder", Rgb = new byte[] { 180,  148,  0 }, Tint = new[] { 34f, 31f,  6f } },
-            new ElementLook { Name = "Wind",    Rgb = new byte[] {   30, 100, 15 }, Tint = new[] {  8f, 46f, 37f } },
-            new ElementLook { Name = "Holy",    Rgb = new byte[] {  193, 79, 160 }, Tint = new[] { 32f, 11f, 66f } },
-            new ElementLook { Name = "None",    Rgb = new byte[] {   0,   0,   0 }, Tint = new[] {  0f,  0f,  0f } },
-        };
         /// <summary>The cat's OWN ambient as drawn — <see cref="WeaponLook.Tint"/> for every other look, the element's for
         /// the cape one. Never write through _look.Tint: those arrays are shared by the Looks table.</summary>
-        private static readonly float[] CatTint = new float[3];
-        /// <summary>The CAT's ambient while the element look is on — the Angel Shooter's own 20/20/20, the same for every
-        /// element — darker read too dull. The cape and mask keep their authored per-element ambients
-        /// (<see cref="ElementLook.Tint"/>); only the cat is unified.</summary>
-        private static readonly float[] ElementAmbient = { 20f, 20f, 20f };
+        private static readonly float[] _catTint = new float[3];
+        private static readonly float[] _capeTint = new float[3];   // the cape's, from ElementLooks[e].Tint
         private static int _element = -1;                // the look last applied (-1 = none yet)
 
         /// <summary>The element Xiao's EQUIPPED weapon is set to, or None when it cannot be read.</summary>
@@ -624,8 +626,8 @@ namespace Dark_Cloud_Improved_Version
             int e = ElementNow();
             if (e == _element && !force) return;
             var look = ElementLooks[e];
-            Array.Copy(look.Tint, CapeTint, 3);                   // the cape and mask keep their authored per-element ambient
-            Array.Copy(ElementAmbient, CatTint, 3);               // the CAT alone is the same under every element
+            Array.Copy(look.Tint, _capeTint, 3);                   // the cape and mask keep their authored per-element ambient
+            Array.Copy(ElementAmbient, _catTint, 3);               // the CAT alone is the same under every element
             // The TEXTURE colour is the cave's when this ISO has one (ElfCave.CatPalette, called from the copy-queue cave
             // every dungeon frame): it reads the element itself, so the cape is right even with the app closed — and the
             // mod stops re-walking the texture manager by name, which cost up to 195 round trips per re-assert. The TINT
@@ -670,21 +672,22 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Give the cape a colour of its own. A cloth is drawn inside the CHARACTER's ambient window
         /// (Draw__10CCharacter adds the tint at +0xCE0, draws meshes then the cloth list, then restores), so it is lit by the
         /// cat's colour and not by anything of its own — the material rows do nothing. ElfCave.CatCapeTint wraps that one
-        /// cloth's draw and adds <see cref="CapeTint"/> as a delta on top of the cat's, so it is written as
+        /// cloth's draw and adds <see cref="_capeTint"/> as a delta on top of the cat's, so it is written as
         /// (cape − cat); every other cloth in the game is untouched.</summary>
         private static void TintCape()
         {
             if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
-            WriteCapeTint(1f);
+            Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: SpawnCape calls this
+            WriteCapeTint(1f);                                           // before WatchElementLook has run
             Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, (uint)(_capeObj - 0x20000000));
-            Console.WriteLine(Tag + $"cape tint: ambient ({CapeTint[0]:F0},{CapeTint[1]:F0},{CapeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
+            Console.WriteLine(Tag + $"cape tint: ambient ({_capeTint[0]:F0},{_capeTint[1]:F0},{_capeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
         }
 
         /// <summary>The cape's ambient delta (cape − cat), faded with the cat so the two never drift apart mid-fade.</summary>
         private static void WriteCapeTint(float lit)
         {
             for (int i = 0; i < 3; i++)
-                Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (CapeTint[i] - CatTint[i]) * lit);
+                Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (_capeTint[i] - _catTint[i]) * lit);
         }
 
         /// <summary>Put the whole cloth exactly on its rest shape at the cat's new place. Called when the copy teleports — the
@@ -991,7 +994,7 @@ namespace Dark_Cloud_Improved_Version
             _y = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 8);
             _weapon = LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord));   // the look key (Super Steve: by its sphere)
             _look = Looks.TryGetValue(_weapon, out var lk) ? lk : Looks[Items.divinebeasttitle];
-            Array.Copy(_look.Tint, CatTint, 3);                   // the weapon's own ambient; the element may override it below
+            Array.Copy(_look.Tint, _catTint, 3);                   // the weapon's own ambient; the element may override it below
             if (!Spawn()) { _spawnFailedAt = Now; return; }
             _spawnFailedAt = DateTime.MinValue;
             WriteGlowName();
@@ -2407,9 +2410,9 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours (a plain fade, no shrink)
             float lit = Math.Max(0f, Math.Min(1f, _alpha));
-            Memory.WriteFloat(s + CCharacter.CharaTint,     CatTint[0] * lit);   // ambient ADD, per weapon (Looks) and per element
-            Memory.WriteFloat(s + CCharacter.CharaTint + 4, CatTint[1] * lit);
-            Memory.WriteFloat(s + CCharacter.CharaTint + 8, CatTint[2] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint,     _catTint[0] * lit);   // ambient ADD, per weapon (Looks) and per element
+            Memory.WriteFloat(s + CCharacter.CharaTint + 4, _catTint[1] * lit);
+            Memory.WriteFloat(s + CCharacter.CharaTint + 8, _catTint[2] * lit);
             if (_capeObj != 0) WriteCapeTint(lit);                                  // the cape rides the same fade, one step further red
             Memory.WriteFloat(s + CCharacter.CharRot,     0f);
             Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
