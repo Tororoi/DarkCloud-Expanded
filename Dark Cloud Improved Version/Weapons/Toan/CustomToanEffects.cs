@@ -628,18 +628,10 @@ namespace Dark_Cloud_Improved_Version
             // "blade" name — Heaven's Cloud's is "w14" (c01w14), which is why hardcoding that found nothing here.
             string kkCode = haveKk ? kk.Code : "c01w08";
 
-            DateTime lastTick = DateTime.UtcNow;
             while (Player.Weapon.GetCurrentWeaponId() == Items.kitchenknife && Player.InDungeonFloor())
             {
                 Thread.Sleep(100);
-                DateTime now = DateTime.UtcNow;
-                TimeSpan dt = now - lastTick;
-                lastTick = now;
-                if (Player.CheckDunIsPaused())
-                {
-                    if (boosted) deadline += dt;   // freeze the countdown while paused
-                    continue;
-                }
+                if (Player.CheckDunIsPaused()) continue;   // the countdown is on GameClock, so it holds on its own
 
                 // InZoneFlag is a 16-bit field (the engine writes it with `sh`) — reading it as an int pulls in
                 // the adjacent halfword, so the == 1 test fails whenever that neighbour is non-zero.
@@ -656,12 +648,12 @@ namespace Dark_Cloud_Improved_Version
                         boosted = true;
                         Dayuppy.DisplayMessage("The spring's blessing surges\nthrough the Kitchen Knife!", 2, 30, 4000);
                     }
-                    deadline = DateTime.UtcNow.AddSeconds(KkBoostSeconds);   // standing in the water keeps it fresh
+                    deadline = GameClock.Now.AddSeconds(KkBoostSeconds);   // standing in the water keeps it fresh
                 }
 
                 if (boosted)
                 {
-                    if (DateTime.UtcNow > deadline)
+                    if (GameClock.Now > deadline)
                     {
                         ushort cur = Memory.ReadUShort(atkAddr);
                         if (cur == (ushort)Math.Min(baseAtk * KkAttackMult, ushort.MaxValue))
@@ -1041,16 +1033,16 @@ namespace Dark_Cloud_Improved_Version
         public static void HeavensCloudEffect()
         {
             const float maxScale = 3.0f;       // blade grows up to 3x
-            const double growSeconds = 4.0;    // wall-clock time to grow from 1x to maxScale
+            const double growSeconds = 4.0;    // play time to grow from 1x to maxScale
             // Growth CURVE. factor = 1 + (maxScale-1) * t^growExponent, t = 0..1 over growSeconds. An exponent
             // > 1 makes the curve convex: the blade creeps at the start of the hold and accelerates into the
             // last second, so committing to a long charge feels like it pays off. Total duration is unchanged —
             // only the shape is. (1.0 = the old linear ramp; raise it for a later, sharper surge.)
             const float growExponent = 2.5f;
-            var growTimer = new System.Diagnostics.Stopwatch();
+            DateTime growStart = DateTime.MinValue;   // when this windup began, on the play clock — so a hold does not grow the blade
             float factor = 1.0f;
             bool active = false;               // a non-base scale is applied and still needs resetting
-            bool charging = false;             // in a whirlwind windup (survives a pause; growTimer does not)
+            bool charging = false;             // in a whirlwind windup
             bool flashedMax = false;           // max-size flash already fired for THIS charge
             bool warnedNoBlade = false;
 
@@ -1059,24 +1051,17 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Weapons.IsChargingWhirlwind())      // whirlwind charge specifically → grow the blade over time
                 {
-                    // The game's charge freezes while paused, so ours must too — otherwise the blade jumps a
-                    // chunk of its ramp the moment you unpause. Hold the stopwatch, keep `charging` set so the
-                    // resume below doesn't mistake this for a fresh charge and restart the ramp at zero.
-                    if (Player.CheckDunIsPausedOrMenu())
-                    {
-                        if (growTimer.IsRunning) growTimer.Stop();
-                        Thread.Sleep(30);
-                        continue;
-                    }
+                    // The game's charge freezes while held, and so does the ramp: growStart is on GameClock. Keep
+                    // `charging` set so the resume is not mistaken for a fresh charge.
+                    if (Player.CheckDunIsPausedOrMenu()) { Thread.Sleep(30); continue; }
 
                     if (!charging)                                   // whirlwind charge just began
                     {
                         charging = true; flashedMax = false;
-                        growTimer.Restart();
+                        growStart = GameClock.Now;
                     }
-                    else if (!growTimer.IsRunning) growTimer.Start();   // resuming after a pause
 
-                    float t = (float)Math.Min(1.0, growTimer.Elapsed.TotalSeconds / growSeconds);
+                    float t = (float)Math.Min(1.0, (GameClock.Now - growStart).TotalSeconds / growSeconds);
                     factor = 1.0f + (float)Math.Pow(t, growExponent) * (maxScale - 1.0f);
                     active = true;
 
@@ -1091,13 +1076,11 @@ namespace Dark_Cloud_Improved_Version
                 }
                 else if (Weapons.IsWhirlwindActive())   // whirlwind executing → hold the size reached during the charge
                 {
-                    growTimer.Stop();
                     charging = false;
                     active = true;
                 }
                 else if (active)                        // charge finished → snap the blade back to its original size
                 {
-                    growTimer.Reset();
                     charging = false;
                     factor = 1.0f;
                     Weapons.ResetHeavensCloudReach();
@@ -1286,7 +1269,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 int cap = RolloverFactor * max;
                 _machoTrueAbs = Math.Min(_machoTrueAbs + grants, cap);
-                _machoLastGrantAt = DateTime.UtcNow;
+                _machoLastGrantAt = GameClock.Now;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"Macho Sword: +{grants} ABS (kill) — weapon {id} at {_machoTrueAbs}/{max}");
             }
@@ -1298,7 +1281,7 @@ namespace Dark_Cloud_Improved_Version
             //    adopting down in that window loses the in-flight amount if the NEXT kill
             //    crosses max). The carry watcher re-applies level-up carries on its own.
             else if (cur < _machoTrueAbs && grants == 0 &&
-                     DateTime.UtcNow - _machoLastGrantAt > TimeSpan.FromSeconds(4))
+                     GameClock.Now - _machoLastGrantAt > TimeSpan.FromSeconds(4))
                 _machoTrueAbs = cur;
 
             // 4) Materialize the rollover. Only ever needed above the vanilla max; a value ≥ max
@@ -1732,7 +1715,7 @@ namespace Dark_Cloud_Improved_Version
             if (!st.Applied)
             {
                 // Equip: apply curse immediately, but not while in NearDeath.
-                st.Applied = true; st.Resolved = false; st.LastDrain = DateTime.UtcNow;
+                st.Applied = true; st.Resolved = false; st.LastDrain = GameClock.Now;
                 st.LastFloor = Memory.ReadByte(Addresses.checkFloor);
                 st.WasNearDeath = (cur & ToanState.StatusNearDeath) != 0;
                 if (!st.WasNearDeath)
@@ -1781,9 +1764,9 @@ namespace Dark_Cloud_Improved_Version
             }
 
             // Blood price: 1 HP -> 1 WHP per second while in the native low-WHP warning state.
-            if (DateTime.UtcNow - st.LastDrain >= TimeSpan.FromSeconds(1))
+            if (GameClock.Now - st.LastDrain >= TimeSpan.FromSeconds(1))
             {
-                st.LastDrain = DateTime.UtcNow;
+                st.LastDrain = GameClock.Now;
                 float  whp    = Memory.ReadFloat(weaponRecord + WeaponHave.InventoryWeaponWhpOffset);
                 short  maxWhp = Memory.ReadShort(weaponRecord + WeaponHave.InventoryWeaponMaxWhpOffset);
                 ushort hp     = Memory.ReadUShort(a.Hp);
