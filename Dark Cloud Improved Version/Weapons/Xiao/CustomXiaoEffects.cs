@@ -7,60 +7,48 @@ namespace Dark_Cloud_Improved_Version
     {
 
         // ── Angel Gear ─────────────────────────────────────────────────────────────────────
-        /// <summary>
-        /// Triggers Angel Gear effect: Applies the Heal regeneration effect to all allies
-        /// </summary>
+        /// <summary>Xiao's Angel Gear thread: runs while the weapon is equipped and hands every tick to
+        /// <see cref="DriveAngelGear"/>, which owns the cadence — so a pause, a menu, a chest or a conversation only
+        /// holds the interval, never restarts it.</summary>
         public static void AngelGearEffect()
         {
-            //Initialize variables
-            ushort HpValueAdd = 1;
-            ushort Delay = 5000;
-            ushort XiaoHp = 0;
-            ushort XiaoMaxHp = 0;
-            bool isHealXiao = false;
-
-            //Run while Angel Gear is equipped and Player is in valid state
-            while (Player.Weapon.GetCurrentWeaponId() == Items.angelgear &&
-                    !Player.CheckDunIsInteracting() &&
-                    !Player.CheckDunIsOpeningChest() &&
-                    !Player.CheckDunIsPaused() &&
-                    Player.CheckDunIsWalkingMode())
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.angelgear)
             {
-                //Fetch HP values for characters
-                ushort ToanHp = Player.Toan.GetHp();
-                ushort ToanMaxHp = Player.Toan.GetMaxHp();
-                ushort GoroHp = Player.Goro.GetHp();
-                ushort GoroMaxHp = Player.Goro.GetMaxHp();
-                ushort RubyHp = Player.Ruby.GetHp();
-                ushort RubyMaxHp = Player.Ruby.GetMaxHp();
-                ushort UngagaHp = Player.Ungaga.GetHp();
-                ushort UngagaMaxHp = Player.Ungaga.GetMaxHp();
-                ushort OsmondHp = Player.Osmond.GetHp();
-                ushort OsmondMaxHp = Player.Osmond.GetMaxHp();
-
-                //Check for the Heal special attribute on the weapon
-                if (Player.Weapon.GetCurrentWeaponSpecial2() % 16 < 8 ||
-                    Player.Weapon.GetCurrentWeaponSpecial2() % 16 > 11)
-                {
-                    isHealXiao = true;
-                    XiaoHp = Player.Xiao.GetHp();
-                    XiaoMaxHp = Player.Xiao.GetMaxHp();
-                }
-
-                //Add the HP value to the characters current HP
-                if (ToanHp < ToanMaxHp && ToanHp > 0) Player.Toan.SetHp((ushort)(ToanHp + HpValueAdd));
-                //Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "Toan HP add: " + (ToanHp + HpValueAdd));
-                if (GoroHp < GoroMaxHp && GoroHp > 0) Player.Goro.SetHp((ushort)(GoroHp + HpValueAdd));
-                if (RubyHp < RubyMaxHp && RubyHp > 0) Player.Ruby.SetHp((ushort)(RubyHp + HpValueAdd));
-                if (UngagaHp < UngagaMaxHp && UngagaHp > 0) Player.Ungaga.SetHp((ushort)(UngagaHp + HpValueAdd));
-                if (OsmondHp < OsmondMaxHp && OsmondHp > 0) Player.Osmond.SetHp((ushort)(OsmondHp + HpValueAdd));
-
-                //Only affect Xiao if Angel Gear does not have the Heal attribute already
-                if (isHealXiao && XiaoHp < XiaoMaxHp && XiaoHp > 0) Player.Xiao.SetHp((ushort)(XiaoHp + HpValueAdd));
-
-                //Wait in between additions
-                Thread.Sleep(Delay);
+                DriveAngelGear(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
             }
+        }
+
+        private const double AngelGearHealSeconds = 5.0;
+        private const ushort AngelGearHealAmount  = 1;
+        private static DateTime _angelGearNextHeal = DateTime.MinValue;
+
+        /// <summary>Angel Gear's regen, driven every tick by Xiao's own thread and by Super Steve's when it inherits the
+        /// weapon: while <paramref name="active"/> and in walking mode, every <see cref="AngelGearHealSeconds"/> of
+        /// PLAY time heal each ally by <see cref="AngelGearHealAmount"/> (skipping the dead and the already-full). Xiao is
+        /// healed too UNLESS the equipped weapon carries the native Heal build-up attribute (Special2 % 16 in 8..11),
+        /// which already regenerates her. Stateless apart from the interval, so it no-ops when inactive.</summary>
+        internal static void DriveAngelGear(bool active)
+        {
+            if (!active || !Player.CheckDunIsWalkingMode()) return;
+            if (GameClock.Now < _angelGearNextHeal) return;
+            _angelGearNextHeal = GameClock.Now.AddSeconds(AngelGearHealSeconds);
+
+            HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
+            HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
+            HealAlly(Player.Ruby.GetHp(),   Player.Ruby.GetMaxHp(),   Player.Ruby.SetHp);
+            HealAlly(Player.Ungaga.GetHp(), Player.Ungaga.GetMaxHp(), Player.Ungaga.SetHp);
+            HealAlly(Player.Osmond.GetHp(), Player.Osmond.GetMaxHp(), Player.Osmond.SetHp);
+
+            // Xiao only if the equipped weapon lacks the native Heal attribute (else the game already regens her).
+            int special2 = Player.Weapon.GetCurrentWeaponSpecial2() % 16;
+            if (special2 < 8 || special2 > 11)
+                HealAlly(Player.Xiao.GetHp(), Player.Xiao.GetMaxHp(), Player.Xiao.SetHp);
+        }
+
+        private static void HealAlly(ushort hp, int maxHp, Action<ushort> setHp)
+        {
+            if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
         }
 
         // ── Super Steve "Sphere Inheritance" ───────────────────────────────────────────────
@@ -146,7 +134,7 @@ namespace Dark_Cloud_Improved_Version
                 // Xiao Effects
 
                 // Angel Gear: slow party-wide HP regen.
-                SuperSteveAbilities.DriveAngelGear(active && sphere == Items.angelgear);
+                DriveAngelGear(active && sphere == Items.angelgear);
 
                 // Goro Effects
 

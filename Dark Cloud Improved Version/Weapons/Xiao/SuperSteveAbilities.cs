@@ -108,39 +108,6 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort(Player.Xiao.status, (ushort)(status & ~resistMask));
         }
 
-        // ── Angel Gear (Xiao's own weapon: slow party-wide HP regen) ──
-        private const double AngelGearHealSeconds = 5.0;   // matches CustomXiaoEffects.AngelGearEffect's 5000ms cadence
-        private const ushort AngelGearHealAmount  = 1;
-        private static DateTime _angelGearNextHeal = DateTime.MinValue;
-
-        /// <summary>Angel Gear: while <paramref name="active"/> and in walking mode, every
-        /// <see cref="AngelGearHealSeconds"/> heal each ally by <see cref="AngelGearHealAmount"/> (skipping the
-        /// dead and the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal
-        /// build-up attribute (Special2 % 16 in 8..11), which already regenerates her — avoids double-healing.
-        /// Stateless apart from the interval timer, so it just no-ops when inactive.</summary>
-        internal static void DriveAngelGear(bool active)
-        {
-            if (!active || !Player.CheckDunIsWalkingMode()) return;
-            if (GameClock.Now < _angelGearNextHeal) return;
-            _angelGearNextHeal = GameClock.Now.AddSeconds(AngelGearHealSeconds);
-
-            HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
-            HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
-            HealAlly(Player.Ruby.GetHp(),   Player.Ruby.GetMaxHp(),   Player.Ruby.SetHp);
-            HealAlly(Player.Ungaga.GetHp(), Player.Ungaga.GetMaxHp(), Player.Ungaga.SetHp);
-            HealAlly(Player.Osmond.GetHp(), Player.Osmond.GetMaxHp(), Player.Osmond.SetHp);
-
-            // Xiao only if the equipped weapon lacks the native Heal attribute (else the game already regens her).
-            int special2 = Player.Weapon.GetCurrentWeaponSpecial2() % 16;
-            if (special2 < 8 || special2 > 11)
-                HealAlly(Player.Xiao.GetHp(), Player.Xiao.GetMaxHp(), Player.Xiao.SetHp);
-        }
-
-        private static void HealAlly(ushort hp, int maxHp, Action<ushort> setHp)
-        {
-            if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
-        }
-
         // ── Moonlit Focus + Heaven's Cloud (two-stage charge → a wind-gem crowd-control blast) ──
         // Faithful to the real Heaven's Cloud: the payoff is CONTROL, not raw damage. Xiao's hold has TWO stages,
         // each announced by the game's own charge flash:
