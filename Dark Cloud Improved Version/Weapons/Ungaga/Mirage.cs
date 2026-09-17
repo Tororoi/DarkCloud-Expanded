@@ -328,6 +328,7 @@ namespace Dark_Cloud_Improved_Version
 
                         bool mirageArmed = MirageArmed();
                         bool paused = Player.CheckDunIsPausedOrMenu();   // "PAUSE" screen OR the in-dungeon item menu — freeze the decoy for both
+                        CharacterClone.Held = paused;                    // the clone's slot is drawn but not stepped while held
 
                         if (mirageArmed && !paused)
                         {
@@ -357,10 +358,10 @@ namespace Dark_Cloud_Improved_Version
                         }
                         else if (_decoyActive && paused)
                         {
-                            // Held: keep the clone drawn — the flag-3 gate below freezes its step + cloth — for both
-                            // hold types: the item menu (the engine already freezes the clone there) and the PAUSE
-                            // screen (where the chara loop otherwise keeps stepping it). The decoy timer, a hand-off
-                            // and its aggro lag all stand still on their own: they read GameClock.
+                            // Held: keep the clone drawn; its slot is marked skip-step (CharacterClone.Held), which
+                            // freezes body and cloth for both hold types — the item menu (the engine already freezes
+                            // the clone there) and the PAUSE screen (where the chara loop otherwise keeps stepping
+                            // it). The decoy timer, a hand-off and its aggro lag stand still on their own: GameClock.
                             PoseClone();
                             ShowDecoyHaze();
                         }
@@ -376,14 +377,14 @@ namespace Dark_Cloud_Improved_Version
                         // PNACH gate flag: 1 = clone drawn → NOP the chara-loop gates; 2 = in a dungeon w/o a decoy
                         // → RESTORE the vanilla gates (they don't auto-revert). 0 (town) is set below so the shared
                         // town overlay at those addresses is never touched.
-                        // 1 = decoy up & running (NOP scene+step gates); 3 = decoy up but PAUSED (NOP scene only →
-                        // clone still drawn but frozen); 2 = dungeon, no decoy (restore vanilla).
+                        // 1 = decoy up (NOP scene+step gates; a hold freezes the clone's own slot instead, so the
+                        // PNACH's 3 = "up but paused" state is no longer written); 2 = dungeon, no decoy (restore vanilla).
                         // Guardian Reflector's slingshot prop and Divine Beast Title's cat share this gate flag
                         // (and the chara slots / caves): while either copy is up, IT drives the flag — stand down.
                         // (Mirage and Xiao's weapons can never be wielded simultaneously.) A competing 2 here made
                         // the slot loop run only on the frames the other writer won — the cat flickered (2026-09-10).
                         if (!SlingshotProp.Active && !DivineBeastCat.Active)
-                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? (paused ? 3 : 1) : 2);
+                            Memory.WriteInt(CodeCaves.MirageSceneGateFlag, (_decoyActive && CharacterClone.IsActive) ? 1 : 2);
                         sleep = FastTickMs;
                     }
                     else

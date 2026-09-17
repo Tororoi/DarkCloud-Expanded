@@ -32,6 +32,9 @@ namespace Dark_Cloud_Improved_Version
     internal static class SlingshotProp
     {
         internal static bool Active { get; private set; }
+        /// <summary>Held: the prop's slot is drawn but not stepped and the orbit stands still — a PAUSE screen or menu.
+        /// Owned by <see cref="OrbitLoop"/>, which runs whether or not the reflector is calling <see cref="Maintain"/>.</summary>
+        internal static bool Held { get; private set; }
 
         private const string Tag = "[SlingshotProp] ";
         private const int  Slot         = 3;
@@ -117,6 +120,9 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     if (!Active) { Thread.Sleep(100); continue; }
+                    bool held = Player.CheckDunIsPausedOrMenu();
+                    if (held != Held) { Held = held; Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, held ? 1 : 0); }
+                    if (held) { Thread.Sleep(OrbitTickMs); continue; }
                     float d = Wrap(_orbitTarget - _orbit);
                     if (Math.Abs(d) > 0.003f)
                     {
@@ -247,7 +253,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampA, 0);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
-            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
+            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, Held ? 1 : 0);
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);            // scene + chara step unlocked
             long r = Memory.ToMmu(_rootGuest);
             if ((Memory.ReadGuestPtr(r + CFrameVu1.Parent)) != _playerRoot)
@@ -708,7 +714,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA, 0);
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
-            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
+            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, Held ? 1 : 0);
             Console.WriteLine(Tag + $"slot {Slot}: {chans} channel(s) cloned, FrameInf 0x{fiSize:X}");
             return true;
         }

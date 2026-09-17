@@ -340,33 +340,25 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── the PAUSE screen ───────────────────────────────────────────────────────────────────────────────
-        private static bool  _held;                                           // the copy's motion is stopped for a hold
-        private static float _pausedBlend = -1f;                              // the channel's blend increment before the stop (the stop zeroes it for good)
-        /// <summary>Hold the copy while the pause screen is up. The engine keeps stepping a chara-slot character there, so
-        /// the copy's motion is STOPPED (flags bit 0: rate 0, blend increment 0 — it holds its frame). The cave hooks the
-        /// shot-pool step, which the pause screen does not run; the clock is <see cref="GameClock"/>'s to hold.</summary>
+        private static bool _held;   // the slot is drawn but not stepped: motion, cape cloth and shadow all stand still
+        /// <summary>Hold the copy while the PAUSE screen or a menu is up. The engine keeps stepping a chara-slot character
+        /// there, so the slot is marked skip-step in the loop's own table (<see cref="DungeonCharaDraw.StepSkipTable"/>):
+        /// still drawn, nothing inside it touched. <see cref="Maintain"/> keeps the mark while held. The cave hooks the
+        /// shot-pool step, which a hold does not run; the clock is <see cref="GameClock"/>'s to hold.</summary>
         private static void FreezeForPause()
         {
             if (_held) return;
             _held = true;
-            _pausedBlend = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateSpeed);   // read BEFORE the stop: Step writes 0 there while stopped
-            SetMotionFlags(set: CCharacter.MotionStop);
-            Log($"paused — cat held (blend increment {_pausedBlend:F3})");
+            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 1);
+            Log("paused — cat held");
         }
 
-        /// <summary>Come back from a pause or menu hold: clear the motion-stop flag and put back the channel's blend
-        /// increment (the stop leaves it at 0 and nothing re-seeds it, so the next cross-fade would never finish).</summary>
+        /// <summary>Come back from a hold: let the loop step the slot again.</summary>
         private static void Resume()
         {
             if (!_held) return;
             _held = false;
-            if (Active)
-            {
-                SetMotionFlags(clear: CCharacter.MotionStop);
-                // The stop leaves the blend increment at 0 and nothing re-seeds it (MOTION_END does so at load only), so the
-                // next key cross-fade would never finish. Put back what it was, or the engine's default.
-                Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, _pausedBlend > 0f ? _pausedBlend : BlendDefault);
-            }
+            if (Active) Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
             Log($"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
         }
 
@@ -2303,7 +2295,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA, 0);
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
-            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
+            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);
             Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 1);
             RetagCatTextures(HerTextureBlock, SlotTextureGroup);
             uint boneHead = (uint)BitConverter.ToInt32(mstr, MotListHead) & Memory.PhysAddrMask, skinHead = (uint)BitConverter.ToInt32(mstr, MotionType.MotionSkinList) & Memory.PhysAddrMask;
@@ -2378,7 +2370,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampA, 0);
             Memory.WriteInt  (s + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
-            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
+            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, _held ? 1 : 0);   // a hold keeps the slot unstepped
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);
         }
 
