@@ -19,20 +19,21 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
-        private const double AngelGearHealSeconds = 5.0;
-        private const ushort AngelGearHealAmount  = 1;
-        private static DateTime _angelGearNextHeal = DateTime.MinValue;
+        private const ushort AngelGearHealAmount = 1;
+        private static int _healTickPrev = -1;   // the counter last seen; -1 = not watching, re-seed on the next tick
 
         /// <summary>Angel Gear's regen, driven every tick by Xiao's own thread and by Super Steve's when it inherits the
-        /// weapon: while <paramref name="active"/> and in walking mode, every <see cref="AngelGearHealSeconds"/> of
-        /// PLAY time heal each ally by <see cref="AngelGearHealAmount"/> (skipping the dead and the already-full). Xiao is
-        /// healed too UNLESS the equipped weapon carries the native Heal build-up attribute (Special2 % 16 in 8..11),
-        /// which already regenerates her. Stateless apart from the interval, so it no-ops when inactive.</summary>
+        /// weapon. It rides the native HEAL ability's own cadence: each wrap of <see cref="HealAbility.TickCounter"/> —
+        /// the frame the game grants its +1 — heals each ally by <see cref="AngelGearHealAmount"/> (skipping the dead and
+        /// the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal build-up attribute
+        /// (Special2 % 16 in 8..11), which already regenerates her. Opening mid-cycle never procs retroactively.</summary>
         internal static void DriveAngelGear(bool active)
         {
-            if (!active || !Player.CheckDunIsWalkingMode()) return;
-            if (GameClock.Now < _angelGearNextHeal) return;
-            _angelGearNextHeal = GameClock.Now.AddSeconds(AngelGearHealSeconds);
+            if (!active || Player.CheckDunIsPausedOrMenu() || !Player.CheckDunIsWalkingMode()) { _healTickPrev = -1; return; }
+            int c = Memory.ReadInt(HealAbility.TickCounter);
+            bool wrapped = _healTickPrev >= 0 && c < _healTickPrev - 60;   // the native +1 just fired
+            _healTickPrev = c;
+            if (!wrapped) return;
 
             HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
             HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);

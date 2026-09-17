@@ -216,6 +216,15 @@ namespace Dark_Cloud_Improved_Version
         internal const long InZoneFlag = 0x21DC4514;   // short (16-bit)
     }
 
+    /// <summary>The passive HEAL ability (weapon flag 0x800): the dun overlay's per-frame loop (0x1DB8240) counts frames
+    /// here and, when the count reaches its period, grants +1 HP through AddNowLife and starts over. The period is 240
+    /// frames as shipped and 180 with DunPatches' cadence patch. Frame-driven, so it stands still whenever the floor's
+    /// loop does — a hold, the menu — and a wrap is the one moment the native heal has just fired.</summary>
+    internal static class HealAbility
+    {
+        internal const long TickCounter = 0x202A3684;   // int, gp-0x616C
+    }
+
     /// <summary>
     /// The active floor's 20×20 minimap tile grid, RE'd from CDungeonMap (checkMask 0x1C39C0 gives the
     /// world→tile transform; DrawMiniMap 0x1C3180 gives the per-tile struct). World→tile:
