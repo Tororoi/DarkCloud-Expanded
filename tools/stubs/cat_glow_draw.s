@@ -4,7 +4,7 @@
 # cat is up (CatGlowOn) — draws our glow at the middle of the cat's torso with DrawFire__9CFireOmni (0x161AC0), exactly
 # as the wall torches are drawn, using the glow disc the cat pack bakes (the Gallery of Time's purple torch disc re-tinted:
 # `catglowp`, the ONE 8-bit disc every look now shares — the per-weapon and per-element colours are palette ROWS that
-# cat_glow_palette.s paints into it (2026-09-16), not discs of their own; the mod still names it in the mailbox,
+# cat_glow_palette.s paints into it, not discs of their own; the mod still names it in the mailbox,
 # CatGlowName +0x258, 16 B NUL-terminated) for BOTH sprite layers, so no
 # dungeon flame haze leaks in. (This cave's own first 8 bytes still spell "catglow": the ELF patcher checks them.) A CFireOmni object (0x40 B) lives in the
 # cat mailbox at 0x01FB4200; its textures are bound once per charge (CatGlowReady) since the copy's texture entries are
@@ -98,7 +98,7 @@ add.s $f6, $f6, $f8
 lwc1  $f4, 0x0188($t7)
 lwc1  $f8, 0x0188($t8)
 add.s $f4, $f4, $f8
-mul.s $f2, $f2, $f10           # the midpoint = the middle of the torso (user 2026-09-11)
+mul.s $f2, $f2, $f10           # the midpoint = the middle of the torso
 mul.s $f6, $f6, $f10
 mul.s $f4, $f4, $f10
 swc1  $f2, 0x0020($t6)

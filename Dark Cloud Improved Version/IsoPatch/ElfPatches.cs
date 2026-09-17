@@ -313,7 +313,7 @@ namespace Dark_Cloud_Improved_Version
         // ── Blizzard: immune to ice ──────────────────────────────────────────────────────────────────────
         // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
         // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
-        // like Ice Gemron (2026-09-12). EnemyData.cs carries the patched value so the mod's tables agree with the disc.
+        // like Ice Gemron. EnemyData.cs carries the patched value so the mod's tables agree with the disc.
         internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
         {
             const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex
@@ -364,7 +364,7 @@ namespace Dark_Cloud_Improved_Version
         // purely from the defender — a window flag (slot*0x20 + 0x60550) and the enemy's live motion frame inside that window's
         // [start, end] — and consults nothing on the attacking entry, so the mod could only zero the windows, which a script
         // re-registers with `_SET_GUARD_FRAME` whenever its label runs. Chest mimics do exactly that (their wake IS a guard, from
-        // our own disc patch), and the 20 Hz crush kept losing the race (user 2026-09-14). The cave takes over the flag load and
+        // our own disc patch), and the 20 Hz crush kept losing the race. The cave takes over the flag load and
         // reports "no window" when the entry is Xiao's with the cat's kick type (+0x58 == 1, +0x98 == 2).
         internal static void PatchCatGuardBypass(FileStream fs, Func<uint, long> ElfOff)
         {
@@ -513,7 +513,7 @@ namespace Dark_Cloud_Improved_Version
             if (b.Length < 8 || U32(b, 0) != 0x3C0D01FBu)
                 throw new IOException($"catGlowPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             // The by-name scan is the one part of this cave that fails INVISIBLY: a mistyped name word matches nothing, the
-            // cave returns, and the glow silently keeps its baked colour (2026-09-16 — "lowp" was written 0x706F776C, which
+            // cave returns, and the glow silently keeps its baked colour (0x706F776C spells "lwop", which
             // spells "lwop"). So require the compare's own immediate to be present, twice: cached-entry check and scan loop.
             int nameWords = 0;
             for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == 0x37186F6Cu) nameWords++;

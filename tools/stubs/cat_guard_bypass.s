@@ -7,7 +7,7 @@
 # attacking entry to decide it, so the only lever is zeroing the window — and a script re-registers its windows with
 # `_SET_GUARD_FRAME` whenever its label runs. The mod's 20 Hz Guard Crush kept losing that race against chest mimics,
 # whose wake label (our own disc patch, patch_monster_scripts.py) IS a guard: the log showed the crush landing, the
-# window coming straight back, and the pounce clinking off (user 2026-09-14).
+# window coming straight back, and the pounce clinking off.
 #
 # THE HOOK. 0x1DAC7C `lh v0,0x550(at)` — the window-flag load, with at = (a2*2 + v1) + 0x60000 (a2 = window index,
 # v1 = slot*0x20 + monster base). The next instruction branches to 0x1DAFC8 when the flag is zero, i.e. "no guard on

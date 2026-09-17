@@ -6,7 +6,7 @@ Two generators, both of which used to be manual steps a person had to remember:
   build_cat_pack.glow_palettes()  — the six element glow ramps (GLOW_ELEMENTS -> catGlowPalettes.bin)
 
 WHY THE BUILD DOES THIS. Editing a source and forgetting its generator ships stale bytes, and the failure is SILENT: the
-glow palette kept its previous colours through an entire patch-and-test cycle that way (user 2026-09-16), because the
+glow palette kept its previous colours through an entire patch-and-test cycle that way, because the
 cave faithfully paints whatever the tables hold and every diagnostic reports success. The csproj runs this before each
 build so the embedded resources cannot drift from the code that defines them.
 
@@ -34,7 +34,7 @@ def stubs():
         # has to come first: a missing module also exits non-zero, which would otherwise hit the fatal path below.
         print(f"{TAG} assembler unavailable (keystone not installed) — stubs left as committed"); return
     if r.returncode != 0:
-        # A stub that no longer ASSEMBLES is a real error: its .bin on disk is now older than the .s it came from.
+        # A stub that fails to ASSEMBLE is a real error: its .bin on disk is then older than the .s it came from.
         print(out)
         raise SystemExit(f"{TAG} stub assembly FAILED — a .s no longer assembles (see above)")
     wrote = [l.split()[1] for l in r.stdout.splitlines() if l.strip().startswith("WROTE")]

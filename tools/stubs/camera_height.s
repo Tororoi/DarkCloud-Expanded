@@ -36,7 +36,7 @@ add.s $f6, $f6, $f2           # desired eye WORLD y
 lui   $t3, 0x01f1
 ori   $t3, $t3, 0x0050
 lwc1  $f3, 0x4($t3)           # E_prev.y (last frame's constrained eye, world)
-# XZ warp-skip (2026-08): a cross-map warp can land at nearly the SAME world y (Queens→Brownboo Δy≈110,
+# XZ warp-skip: a cross-map warp can land at nearly the SAME world y (Queens→Brownboo Δy≈110,
 # under the 400 y-break), leaving the y-only test blind — the bound then grinds the eye down from the
 # SOURCE map's height at H_FALL_RATE for seconds (the warp-arrival pan; it self-perpetuates because
 # E_prev re-inherits the bounded eye each frame). E_prev further than 128u from the REF in X or Z =

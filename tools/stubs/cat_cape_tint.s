@@ -4,7 +4,7 @@
 # (+0xCE0, what the mod writes per weapon) to it, sets it, draws the character's meshes AND THEN WALKS ITS CLOTH LIST (+0xC74)
 # calling Draw__6CCloth inside that same window, and only afterwards restores the ambient. So a cloth is lit by whatever ambient
 # is standing when it draws — the character's tint, never its own. That is why writing the cape's MDT_MATERIAL colour rows did
-# nothing: the colour comes from the ambient, not from the material (user 2026-09-14, two attempts).
+# nothing: the colour comes from the ambient, not from the material.
 #
 # THIS CAVE takes the `jal Draw__6CCloth` at 0x139694 (a0 = the CCloth about to draw, the loop's own load). For the ONE cloth whose
 # pointer the mod publishes at Mailbox.CatCapeCloth it adds Mailbox.CatCapeTint to the ambient, draws, and puts the ambient back;

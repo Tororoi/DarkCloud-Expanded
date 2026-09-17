@@ -1,7 +1,7 @@
 # cat_sphere_percent.s — CheckDmg__12CMonstorUnit (main ELF 0x1D9F10) scales every hit by the hurt sphere's per-attacker
 # percentage: `dmg = dmg/100 * pct[owner]`, pct at MainMonstorUnit + slot*0x510 + sphere*0x18 + 0x555D0 + owner*4
 # (script `_SET_BODY_COL_PARA(10+char, %)`). Minotaur Joe's face is 0 % for Xiao, so her pellets bounce off it — but
-# the Divine Beast cat should be able to hit it (user 2026-09-12). Each sphere also owns a SPARE 5-int table at
+# the Divine Beast cat should be able to hit it. Each sphere also owns a SPARE 5-int table at
 # +0x55490 + sphere*0x14 (`_SET_BODY_COL_PARA(0..4, v)`; every _SET_BODY_COL resets it to 100; no vanilla engine
 # reader, no vanilla script writer). This stub, reached by a `j` from ELF 0x1DC084 (the `lui at,5; addu at,v1,at`
 # that forms the pct address), keeps the vanilla address unless the hit is Xiao's (s3 == 1) AND its kick type

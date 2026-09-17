@@ -1,4 +1,4 @@
-# Divine Beast cat — pellet catcher, follower, fall and run (v3, 2026-09-10), the mod's ELF cave segment
+# Divine Beast cat — pellet catcher, follower, fall and run. The mod's ELF cave segment
 # @0x1FB0D90 (ElfCave.CatPelletFollow).
 #
 # WHY NATIVE: the charged shot's cat must appear ON THE FRAME its pellet is born, grow over a handful of frames with
@@ -17,15 +17,15 @@
 #   Flying targets (target height − floor > CatFlyThreshold): straight from the ready into the ballistic arc of state 4
 #   (vh = Δh/T + g·T/2) in the float-up pose (CatFloatKey, +0x154) until the apex, the fall pose after — the town
 #   ladder jump's ready → vertical leap → fall → land sequence.
-# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.Mailbox.CatBase; the
-# offsets 0x94.. are historical: the words FIRST sat in the PNACH mailbox page, whose 0x100+ span turned out to be
-# the AI-stub table (2026-09-11: clobbered clip frames, range, hit slot). $t0 = 0x01FB0000, offsets 0x40xx.):
+# MAILBOX (the cat's own block at guest 0x01FB4000 + the offsets below — CodeCaveAddresses.Mailbox.CatBase. The
+# offsets start at 0x94 for historical reasons; ⚠ they must NOT be read from the PNACH mailbox page, whose 0x100+
+# span is the AI-stub table. $t0 = 0x01FB0000, offsets 0x40xx.):
 #   +0x94 CatPelletSlot int  bound pellet slot + 1 (0 = none; page boots zero-filled)      +0x9C CatGrowFrames int
 #   +0xA0 CatGrowInv float 1/N (mod)   +0xA4/+0xA8/+0xAC CatHeadX/H/Z float head rest offset, CAT space (mod)
 #   +0x250 CatScaleMul float the cat's full size, multiplied into the growth k (mod; 0 = unset → 1.0)
 #   +0x268 CatTrackHalf float (mod): 0 = the flying pounce re-aims only until the apex (below); > 0 = the WINGED cat keeps
 #         re-solving its horizontal speed at the target's live position past the apex, until it has fallen HALFWAY from the
-#         apex to the floor (user 2026-09-13) — in the fall block and on in the landing block (the land clip starts a lead
+#         apex to the floor — in the fall block and on in the landing block (the land clip starts a lead
 #         before the floor), the horizon being the frames left to the floor; then the trajectory is committed
 #   +0x270 CatApexH float (cave): the pounce's launch height, then the highest height while rising = the apex
 #   +0x254 CatHoldReady int 1 = keep looping the ready crouch instead of leaping (mod: the target is a dormant chest-mimic);
@@ -45,7 +45,7 @@
 #   key's first frame; it is used at the seams of the one authored jump (take-off 204 → leap 205, leap 214 → land 215,
 #   where a fade would freeze the cat mid-air for 10 steps between two near-identical poses) and at fall → land, whose
 #   lead-in is tuned for an instant start. Every other switch (land → walk, walk → take-off/ready/sit, sit → walk,
-#   ready → float-up, float-up → fall) fades (2026-09-11).
+#   ready → float-up, float-up → fall) fades.
 #   +0xEC CatMoveKey int the key played while moving after the landing (mod: the brisk walk, 70).
 #   +0xF0 CatMoveFrac float ground speed after the landing as a fraction of the pellet's horizontal speed (mod);
 #   +0x194 CatMoveAbs float overrides it with an absolute units/frame when > 0 (mod).
@@ -54,7 +54,7 @@
 #   +0x19C CatHitSphere int the enemy body sphere the touch test met (cave → mod: the hit entry is planted on it).
 #   +0x1A0 CatSitKey int the sit clip's key: with no target the cat sits in place instead of walking straight (mod, 72).
 #   (+0x1A4/+0x1A8/+0x1AC and the take-off words +0x124/+0x134..+0x148/+0x164..+0x16C are unused since the take-off path
-#   was removed: every pounce is the ready crouch + float-up vertical leap, user 2026-09-11.)
+#   was removed: every pounce is the ready crouch + float-up vertical leap.)
 #   +0x1B0 CatFloatLaunch float the float-up frame where the feet leave the ground (mod, 297): state 11 stands in the
 #   float-up's wind-up turning to the target until then, and the vertical leap is computed THERE   +0x1B4 CatFloatStart.
 #   +0x1B8 CatFloatRate float (raw) the float-up's motion-speed override (mod)   +0x1BC CatFallBlend float the channel's
@@ -272,7 +272,7 @@ lw    $t5, 0x40D8($t0)         # N
 slt   $t3, $t8, $t5            # frames (before this one) < N → still growing
 bne   $t3, $zero, done         # growing: NO touch test. The head point below is the copy's LAST-DRAWN pose — after a hit the
 nop                            # hidden cat is not drawn, so on the next shot's first frames it still sits where it struck:
-                               # Witch Hellza took a 1-damage (unstamped) hit from that stale point (user 2026-09-12). By
+                               # Witch Hellza took a 1-damage (unstamped) hit from that stale point. By
                                # state 4 the copy has been drawn at the pellet for N frames; states 4/5 test it.
 # ── BREAKAWAY at full size: keep the pellet's velocity, expire the pellet, start the fall ──
 sw    $zero, 0x4150($t0)       # CatPounceFly = 0: this descent came from the PELLET, so nothing below it re-aims
@@ -515,7 +515,7 @@ keepfalling:
 lw    $t5, 0x4150($t0)         # flying pounce?
 beq   $t5, $zero, fallpose
 nop
-# ── TRACKING until the apex (user 2026-09-11): while still rising (0 < vh), whichever clip is showing, re-solve the
+# ── TRACKING until the apex: while still rising (0 < vh), whichever clip is showing, re-solve the
 # horizontal speed every frame from the target's LIVE position and the frames still to fly (t, f10 — the same
 # prediction the landing uses), so the cat arrives over the enemy at touchdown even if it walks away; the facing
 # follows. The vertical arc is untouched. (f6/f12 = the cat's position after this frame's step; f0-f4 free here.)
@@ -950,13 +950,13 @@ nop
 nop
 bc1t  readydone
 nop
-readyhold:                     # ── every frame of the crouch: face the target where it is NOW (user 2026-09-11) ──
+readyhold:                     # ── every frame of the crouch: face the target where it is NOW ──
 lw    $t5, 0x4254($t0)         # CatHoldReady still up? (a mimic still shut)
 bne   $t5, $zero, readyface
 nop
 lw    $t5, 0x0C64($t6)
 andi  $t5, $t5, 2              # play-once still set = the crouch's FIRST pass, the wind-up itself: let it finish
-beq   $t5, $zero, readygo      # released while looping: the cat is already wound up → the float-up NOW (user 2026-09-12)
+beq   $t5, $zero, readygo      # released while looping: the cat is already wound up → the float-up NOW
 nop
 readyface:
 lw    $t5, 0x40CC($t0)         # target position vector
@@ -990,7 +990,7 @@ sw    $t5, 0x0C68($t6)         # hold the ready clip, in place
 b     done
 nop
 readydone:                     # ── crouch done: the float-up starts IN PLACE (state 11); the jump is decided at its feet-off frame ──
-lw    $t5, 0x4254($t0)         # CatHoldReady (mod): 1 = the target is a mimic still shut → stay crouched, looping (user 2026-09-12)
+lw    $t5, 0x4254($t0)         # CatHoldReady (mod): 1 = the target is a mimic still shut → stay crouched, looping
 beq   $t5, $zero, readygo
 nop
 lw    $t5, 0x0C64($t6)
@@ -1012,7 +1012,7 @@ sw    $zero, 0x40E4($t0)
 addiu $t5, $zero, 11
 b     done
 sw    $t5, 0x4098($t0)         # state = float wind-up (delay slot)
-floatwait:                     # ── state 11: standing in the float-up's wind-up, turning to the target every frame (user 2026-09-11) ──
+floatwait:                     # ── state 11: standing in the float-up's wind-up, turning to the target every frame ──
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
 lw    $t7, 0x0C20($t6)
@@ -1144,8 +1144,8 @@ sw    $t5, 0x4098($t0)
 # ── TOUCH: the pellet's own recipe (step__5CSHOT 0x1ABD10) — checkCollision sweeps a 2.0 point against every live
 # enemy's active body spheres; on contact a 3.0 damage entry is planted at that point with the pellet's stamps (owner
 # Xiao, kind 0, element, weapon flags/anti-enemy pointer) plus the cat's melee-type kick, and the mod is told which
-# entry (CatHitEntry) so it can fade the cat when — and only when — the enemy's CheckDmg consumes it (user
-# 2026-09-11: contact with an invulnerable enemy must not spend the cat; the hitspark is CheckDmg's own). Reached only
+# entry (CatHitEntry) so it can fade the cat when — and only when — the enemy's CheckDmg consumes it: contact with an
+# invulnerable enemy must not spend the cat, and the hitspark is CheckDmg's own. Reached only
 # from the pellet ride (fall pose), the fall/float-up (state 4) and the landing (state 5). Clobbers everything.
 touch:
 lui   $t0, 0x01FB
@@ -1157,7 +1157,7 @@ beq   $t5, $zero, done
 nop
 lui   $t6, 0x01EA
 ori   $t6, $t6, 0x9900
-lw    $t7, 0x41DC($t0)         # CatHeadNode: the copy's cat_kao frame (mod) — the "pellet" is the middle of the head (user 2026-09-11)
+lw    $t7, 0x41DC($t0)         # CatHeadNode: the copy's cat_kao frame (mod) — the "pellet" is the middle of the head
 beq   $t7, $zero, rootpoint
 nop
 lwc1  $f6, 0x0180($t7)         # its world matrix's translation row (+0x150 + 0x30): the posed head, as of the last draw
