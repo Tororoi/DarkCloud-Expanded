@@ -215,10 +215,10 @@ namespace Dark_Cloud_Improved_Version
         internal static void Maintain(float alpha01)
         {
             if (!Active) return;
-            uint wpnObj = (uint)Memory.ReadInt(EquippedWeapon.WeaponObjGlobal) & Memory.PhysAddrMask;
-            if (((uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask) != _playerRoot
+            uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
+            if ((Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel)) != _playerRoot
                 || !Memory.IsValidGuest(wpnObj)
-                || ((uint)Memory.ReadInt(Memory.ToMmu(wpnObj) + 0xBC) & Memory.PhysAddrMask) != _liveRoot)
+                || (Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC)) != _liveRoot)
             {
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "model/weapon changed — despawning");
                 Despawn();
@@ -250,7 +250,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, 0);
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);            // scene + chara step unlocked
             long r = Memory.ToMmu(_rootGuest);
-            if (((uint)Memory.ReadInt(r + CFrameVu1.Parent) & Memory.PhysAddrMask) != _playerRoot)
+            if ((Memory.ReadGuestPtr(r + CFrameVu1.Parent)) != _playerRoot)
                 Memory.WriteUInt(r + CFrameVu1.Parent, _playerRoot);
 
         }
@@ -276,11 +276,11 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool CopyTree()
         {
-            uint wpnObj = (uint)Memory.ReadInt(EquippedWeapon.WeaponObjGlobal) & Memory.PhysAddrMask;
+            uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
             if (!Memory.IsValidGuest(wpnObj)) { Console.WriteLine(Tag + "no weapon object"); return false; }
-            _liveRoot = (uint)Memory.ReadInt(Memory.ToMmu(wpnObj) + 0xBC) & Memory.PhysAddrMask;
+            _liveRoot = Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC);
             if (!Memory.IsValidGuest(_liveRoot)) { Console.WriteLine(Tag + "no weapon model"); return false; }
-            _playerRoot = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
+            _playerRoot = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
 
             uint min = _liveRoot, max = _liveRoot;
             var seen = new System.Collections.Generic.HashSet<uint>();
@@ -292,9 +292,9 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(n) || !seen.Add(n)) continue;
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > MaxNodes) { Console.WriteLine(Tag + "weapon tree too large"); return false; }
-                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootChild) & Memory.PhysAddrMask;
+                for (uint c = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootChild);
                      Memory.IsValidGuest(c);
-                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + CFrameVu1.RootSibling) & Memory.PhysAddrMask)
+                     c = Memory.ReadGuestPtr(Memory.ToMmu(c) + CFrameVu1.RootSibling))
                     work.Push(c);
             }
             if ((max - min) % CFrameVu1.NodeStride != 0) { Console.WriteLine(Tag + "span not node-aligned"); return false; }
@@ -400,11 +400,11 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < _nodeCount; i++)
             {
                 long node = CodeCaves.WeaponCave + (long)i * CFrameVu1.NodeStride;
-                uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
+                uint vis = Memory.ReadGuestPtr(node + CFrameVu1.GeomPtr);
                 if (!Memory.IsValidGuest(vis)) continue;
-                uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
+                uint mdt = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisMDT);
                 if (!Memory.IsValidGuest(mdt) || (uint)Memory.ReadInt(Memory.ToMmu(mdt)) != CVisualMDT.MdtMagic) continue;
-                uint vu   = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
+                uint vu   = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisVU);
                 int vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
                 int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
                 if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
@@ -598,7 +598,7 @@ namespace Dark_Cloud_Improved_Version
                 float[] q = new float[4];
                 for (int c = 0; c < 4; c++) q[c] = p[0] * m[c] + p[1] * m[4 + c] + p[2] * m[8 + c] + p[3] * m[12 + c];
                 p = q;
-                n = (uint)Memory.ReadInt(a + CFrameVu1.Parent) & Memory.PhysAddrMask;
+                n = Memory.ReadGuestPtr(a + CFrameVu1.Parent);
             }
             float tx = p[0], ty = p[1] - PlayerBodyLift / Math.Max(0.01f, _scale), tz = p[2];
             long s = Memory.ToMmu(_shotNodeGuest);
@@ -613,7 +613,7 @@ namespace Dark_Cloud_Improved_Version
         /// copied tree, with its channel cloned (own FrameInf/BoneMtx) and the skin list kept.</summary>
         private static bool RegisterSlot()
         {
-            uint wpnObj = (uint)Memory.ReadInt(EquippedWeapon.WeaponObjGlobal) & Memory.PhysAddrMask;
+            uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
             byte[] buf = Memory.ReadBytesBatch(Memory.ToMmu(wpnObj), CharCopySize);
             if (buf == null) return false;
             BitConverter.GetBytes((uint)CodeCaves.ClothStubGuest).CopyTo(buf, CCharacter.ClothList);

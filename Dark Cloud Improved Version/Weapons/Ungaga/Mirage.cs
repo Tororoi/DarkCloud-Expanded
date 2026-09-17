@@ -112,7 +112,7 @@ namespace Dark_Cloud_Improved_Version
         private static bool CharacterSettled()
         {
             int  ch   = Player.CurrentCharacterNum();
-            uint root = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
+            uint root = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
             if (ch != _seenChar || root != _seenRoot)
             {
                 _seenChar = ch; _seenRoot = root; _seenSince = DateTime.UtcNow;

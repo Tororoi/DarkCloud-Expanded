@@ -247,9 +247,9 @@ namespace Dark_Cloud_Improved_Version
         /// if the weapon flickers it's software-skinned (MDT) and needs the CopyMeshNodes double-buffer copy.</summary>
         private static void GraftWeapon()
         {
-            uint wpnObj = (uint)Memory.ReadInt(EquippedWeapon.WeaponObjGlobal) & Memory.PhysAddrMask;
+            uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
             if (!Memory.IsValidGuest(wpnObj)) { Console.WriteLine("[Clone/wpn] no weapon object"); return; }
-            uint wRoot = (uint)Memory.ReadInt(Memory.ToMmu(wpnObj) + 0xBC) & Memory.PhysAddrMask;   // weapon model root
+            uint wRoot = Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + 0xBC);   // weapon model root
             if (!Memory.IsValidGuest(wRoot)) { Console.WriteLine("[Clone/wpn] no weapon model"); return; }
 
             // DFS child/sibling for the tree's contiguous 0x270-stride address span (same layout as the body).
@@ -263,9 +263,9 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(n) || !seen.Add(n)) continue;
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > 64) { Console.WriteLine("[Clone/wpn] weapon tree > 64 nodes — bailing"); return; }
-                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootChild) & Memory.PhysAddrMask;
+                for (uint c = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootChild);
                      Memory.IsValidGuest(c);
-                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + CFrameVu1.RootSibling) & Memory.PhysAddrMask)
+                     c = Memory.ReadGuestPtr(Memory.ToMmu(c) + CFrameVu1.RootSibling))
                     work.Push(c);
             }
             if ((max - min) % CFrameVu1.NodeStride != 0)
@@ -303,7 +303,7 @@ namespace Dark_Cloud_Improved_Version
             // (39), and every character has a different skeleton — Xiao's tree is 79 nodes to Ungaga's 67, so
             // index 39 is simply a different bone on her, and the weapon grafted somewhere that isn't a hand.
             uint pModelRoot = _srcModelRoot & Memory.PhysAddrMask;
-            uint pHand  = (uint)Memory.ReadInt(Memory.ToMmu(wRoot) + CFrameVu1.Parent) & Memory.PhysAddrMask;
+            uint pHand  = Memory.ReadGuestPtr(Memory.ToMmu(wRoot) + CFrameVu1.Parent);
             uint treeLo = pModelRoot;
             uint treeHi = pModelRoot + (uint)(_cloneNodeCount * CFrameVu1.NodeStride);
             if (!Memory.IsValidGuest(pHand) || pHand < treeLo || pHand >= treeHi)
@@ -389,16 +389,16 @@ namespace Dark_Cloud_Improved_Version
                 if (catRoot == 0 && IsCatRoot(n))
                 {
                     catRoot = n;
-                    catSibling = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootSibling) & Memory.PhysAddrMask;
+                    catSibling = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootSibling);
                     continue;                                   // skip the whole cat subtree
                 }
                 seen.Add(n);
                 if (n < min) min = n; if (n > max) max = n;
                 if (seen.Count > CodeCaves.MaxNodes)
                 { Console.WriteLine($"[Clone] clone tree > {CodeCaves.MaxNodes} nodes — aborting"); return false; }
-                for (uint c = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.RootChild) & Memory.PhysAddrMask;
+                for (uint c = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootChild);
                      Memory.IsValidGuest(c);
-                     c = (uint)Memory.ReadInt(Memory.ToMmu(c) + CFrameVu1.RootSibling) & Memory.PhysAddrMask)
+                     c = Memory.ReadGuestPtr(Memory.ToMmu(c) + CFrameVu1.RootSibling))
                     work.Push(c);
             }
 
@@ -461,14 +461,14 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < _cloneNodeCount; i++)
             {
                 long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
+                uint vis = Memory.ReadGuestPtr(node + CFrameVu1.GeomPtr);
                 if (!Memory.IsValidGuest(vis)) continue;
-                uint mdt = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisMDT) & Memory.PhysAddrMask;
+                uint mdt = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisMDT);
                 uint magic = (Memory.IsValidGuest(mdt)) ? (uint)Memory.ReadInt(Memory.ToMmu(mdt)) : 0xDEAD;
                 if (!Memory.IsValidGuest(mdt)) continue;
                 if (magic != CVisualMDT.MdtMagic) continue;   // not software-skinned
 
-                uint vu    = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
+                uint vu    = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisVU);
                 int  vuSz  = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;   // field is in QWORDS
                 int  mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
                 if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
@@ -536,7 +536,7 @@ namespace Dark_Cloud_Improved_Version
         /// on any read failure so the clone simply gets no cloth rather than a bad pointer.</summary>
         private static uint CopyCloth()
         {
-            uint listGuest = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.ClothList) & Memory.PhysAddrMask;
+            uint listGuest = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.ClothList);
             if (!Memory.IsValidGuest(listGuest)) return (uint)CodeCaves.ClothStubGuest;
 
             // Character-adaptive: walk the WHOLE +0xC74 list (up to ClothMaxPieces) rather than a hardcoded count,
@@ -546,12 +546,12 @@ namespace Dark_Cloud_Improved_Version
             uint[] cloneList = new uint[CCloth.ClothMaxPieces];   // guest ptrs; 0 = empty (Draw skips)
             int copied = 0, bufOff = 0, anchorOff = 0, boundOff = 0;
             int bufCap = CodeCaves.ClothBufSize;   // the cave declares its own capacity
-            uint modelRoot = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
+            uint modelRoot = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
             var boundDedupe = new System.Collections.Generic.Dictionary<uint, uint>();   // player bound-head → clone head
 
             for (int i = 0; i < CCloth.ClothMaxPieces; i++)
             {
-                uint srcObj = (uint)Memory.ReadInt(Memory.ToMmu(listGuest) + i * 4) & Memory.PhysAddrMask;
+                uint srcObj = Memory.ReadGuestPtr(Memory.ToMmu(listGuest) + i * 4);
                 if (!Memory.IsValidGuest(srcObj)) continue;   // empty list slot
 
                 if (copied >= CodeCaves.ClothObjSlots)
@@ -632,7 +632,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 outChain.Add(n);
                 if (outChain.Count > 32) return 0;   // runaway guard
-                n = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.Parent) & Memory.PhysAddrMask;
+                n = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.Parent);
             }
             if (outChain.Count == 0) return CloneOf(playerAttach);   // attach itself is in-tree
             uint inTreeAncestor = n;
@@ -654,7 +654,7 @@ namespace Dark_Cloud_Improved_Version
             foreach (uint f in outChain)
             {
                 long copyMmu = CodeCaves.ClothAnchorCave + (long)(map[f] - CodeCaves.ClothAnchorGuest);
-                uint parent  = (uint)Memory.ReadInt(Memory.ToMmu(f) + CFrameVu1.Parent) & Memory.PhysAddrMask;
+                uint parent  = Memory.ReadGuestPtr(Memory.ToMmu(f) + CFrameVu1.Parent);
                 uint newParent = map.TryGetValue(parent, out uint mp) ? mp : CloneOf(parent);
                 Memory.WriteUInt(copyMmu + CFrameVu1.Parent,      newParent);
                 Memory.WriteInt (copyMmu + CFrameVu1.RootChild,   0);
@@ -677,7 +677,7 @@ namespace Dark_Cloud_Improved_Version
 
             var list = new System.Collections.Generic.List<uint>();
             for (uint b = playerHead; Memory.IsValidGuest(b) && list.Count < 48;
-                 b = (uint)Memory.ReadInt(Memory.ToMmu(b) + CBound.BoundNext) & Memory.PhysAddrMask)
+                 b = Memory.ReadGuestPtr(Memory.ToMmu(b) + CBound.BoundNext))
                 list.Add(b);
 
             var map = new System.Collections.Generic.Dictionary<uint, uint>();
@@ -701,7 +701,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(copyMmu + CBound.BoundNext, next);
                 foreach (int fo in new[] { CBound.BoundFrameA, CBound.BoundFrameB })
                 {
-                    uint pf = (uint)Memory.ReadInt(Memory.ToMmu(list[i]) + fo) & Memory.PhysAddrMask;
+                    uint pf = Memory.ReadGuestPtr(Memory.ToMmu(list[i]) + fo);
                     if (pf == 0) continue;
                     uint cf = ResolveCloneAttach(pf, modelRoot, ref anchorOff);
                     if (cf != 0) Memory.WriteUInt(copyMmu + fo, cf);

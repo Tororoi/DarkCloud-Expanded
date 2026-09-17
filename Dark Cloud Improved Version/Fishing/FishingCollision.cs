@@ -26,7 +26,7 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         internal static void DropLadderTopFloors(int mapNo)
         {
-            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(FishingSpot.CPoly);
             if (!Memory.IsValidGuest(p)) { Log("   ladder-top filter: cpoly ptr invalid — skipping"); return; }
             long buf = Memory.ToMmu(p);
 
@@ -90,7 +90,7 @@ namespace Dark_Cloud_Improved_Version
         /// freed by the dropped walls.</summary>
         internal static void AppendCustomCollision(int mapNo)
         {
-            uint p = Memory.ReadUInt(FishingSpot.CPoly) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(FishingSpot.CPoly);
             if (!Memory.IsValidGuest(p)) { Log("   rocks: cpoly ptr invalid — skipping"); return; }
             long buf = Memory.ToMmu(p);
 
@@ -130,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
         /// and only when the value actually differs).</summary>
         internal static void SyncFishCPolyCount()
         {
-            uint fishBase = Memory.ReadUInt(FishPtr) & Memory.PhysAddrMask;
+            uint fishBase = Memory.ReadGuestPtr(FishPtr);
             if (!Memory.IsValidGuest(fishBase)) return;
             int num = Memory.ReadInt(FishNumAddr);
             if (num <= 0 || num > 6) return;
@@ -262,7 +262,7 @@ namespace Dark_Cloud_Improved_Version
         /// loop — one write to the real translation sticks (we also mirror the cache for the same-frame visual).</summary>
         internal static void ApplyFishDepth(float fishDepth)
         {
-            uint p = Memory.ReadUInt(FishingSpot.Fish) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(FishingSpot.Fish);
             if (!Memory.IsValidGuest(p)) return;
             long baseAddr = Memory.ToMmu(p);
             float depth = Memory.ReadFloat(FishingSpot.WaterLevel) - fishDepth;

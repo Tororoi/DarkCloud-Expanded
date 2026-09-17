@@ -103,7 +103,7 @@ namespace Dark_Cloud_Improved_Version
             float x = Memory.ReadFloat(ePos), ht = Memory.ReadFloat(ePos + 4), z = Memory.ReadFloat(ePos + 8);
 
             // The explosion visual: replicate SetBomb into a free pool slot (all five active flags clear).
-            long poolNative = (uint)Memory.ReadInt(BombEffect.PoolPtr) & Memory.PhysAddrMask;
+            long poolNative = Memory.ReadGuestPtr(BombEffect.PoolPtr);
             if (Memory.IsValidGuest(poolNative))
             {
                 long pool = Memory.ToMmu(poolNative);
@@ -133,7 +133,7 @@ namespace Dark_Cloud_Improved_Version
                 }
 
                 // The ground shockwave ring (the native path adds it when scale > 1).
-                long swNative = (uint)Memory.ReadInt(BombEffect.ShockWavePtr) & Memory.PhysAddrMask;
+                long swNative = Memory.ReadGuestPtr(BombEffect.ShockWavePtr);
                 if (BigBangScale > 1f && Memory.IsValidGuest(swNative))
                 {
                     long sw = Memory.ToMmu(swNative);

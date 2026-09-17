@@ -382,13 +382,13 @@ namespace Dark_Cloud_Improved_Version
         /// the cat's copy is cloned from.</summary>
         private static void TakeHerCape()
         {
-            uint herList = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.ClothList) & Memory.PhysAddrMask;
+            uint herList = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.ClothList);
             if (!Memory.IsValidGuest(herList)) return;
             for (int i = 0; i < CCloth.ClothMaxPieces; i++)
             {
-                uint obj = (uint)Memory.ReadInt(Memory.ToMmu(herList) + i * 4) & Memory.PhysAddrMask;
+                uint obj = Memory.ReadGuestPtr(Memory.ToMmu(herList) + i * 4);
                 if (!Memory.IsValidGuest(obj)) continue;
-                uint frame = (uint)Memory.ReadInt(Memory.ToMmu(obj) + CCloth.ClothAttach) & Memory.PhysAddrMask;
+                uint frame = Memory.ReadGuestPtr(Memory.ToMmu(obj) + CCloth.ClothAttach);
                 if (!Memory.IsValidGuest(frame) || ReadName(frame) != CapeNodeName) continue;
                 Memory.WriteInt(Memory.ToMmu(herList) + i * 4, 0);
                 if (_capeTemplate != obj) Log( $"cape: took her own copy out of her cloth list (entry {i}, 0x{obj:X}) — it is the clone template");
@@ -407,19 +407,19 @@ namespace Dark_Cloud_Improved_Version
         {
             _capeObj = 0;
             TakeHerCape();                                                        // a reload rebuilds her copy: re-cache it first
-            uint herList = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.ClothList) & Memory.PhysAddrMask;
+            uint herList = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.ClothList);
             if (!Memory.IsValidGuest(herList)) { Log("cape: she has no cloth list — is the ISO patched with the cape?"); return; }
             uint template = 0; int entry = -1;
             for (int i = 0; i < CCloth.ClothMaxPieces; i++)
             {
-                uint obj = (uint)Memory.ReadInt(Memory.ToMmu(herList) + i * 4) & Memory.PhysAddrMask;
+                uint obj = Memory.ReadGuestPtr(Memory.ToMmu(herList) + i * 4);
                 if (!Memory.IsValidGuest(obj)) continue;
-                uint frame = (uint)Memory.ReadInt(Memory.ToMmu(obj) + CCloth.ClothAttach) & Memory.PhysAddrMask;
+                uint frame = Memory.ReadGuestPtr(Memory.ToMmu(obj) + CCloth.ClothAttach);
                 if (Memory.IsValidGuest(frame) && ReadName(frame) == CapeNodeName) { template = obj; entry = i; break; }
             }
             if (template == 0 && Memory.IsValidGuest(_capeTemplate))              // cleared from her list by an earlier spawn: still hers, still intact
             {
-                uint frame = (uint)Memory.ReadInt(Memory.ToMmu(_capeTemplate) + CCloth.ClothAttach) & Memory.PhysAddrMask;
+                uint frame = Memory.ReadGuestPtr(Memory.ToMmu(_capeTemplate) + CCloth.ClothAttach);
                 if (Memory.IsValidGuest(frame) && ReadName(frame) == CapeNodeName) template = _capeTemplate;
             }
             if (template == 0) { Log("cape: no cloth anchored to " + CapeNodeName + " in her list — is the ISO patched with the cape?"); return; }
@@ -646,7 +646,7 @@ namespace Dark_Cloud_Improved_Version
         private static void ReseedCape()
         {
             if (_capeObj == 0 || _capeRest == null) return;
-            uint anchor = (uint)Memory.ReadInt(_capeObj + CCloth.ClothAttach) & Memory.PhysAddrMask;
+            uint anchor = Memory.ReadGuestPtr(_capeObj + CCloth.ClothAttach);
             byte[] lw = Memory.IsValidGuest(anchor) ? Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40) : null;
             if (lw == null) { Log("cape: cannot reseed — the anchor's matrix did not read"); return; }
             float[] m = new float[16];
@@ -754,7 +754,7 @@ namespace Dark_Cloud_Improved_Version
         {
             long entry = FindTexEntry(CapeTexture);
             if (entry == 0) return false;
-            uint clut = (uint)Memory.ReadInt(entry + TextureManager.EntryClut) & Memory.PhysAddrMask;
+            uint clut = Memory.ReadGuestPtr(entry + TextureManager.EntryClut);
             if (!Memory.IsValidGuest(clut)) return false;
             long at = Memory.ToMmu(clut);
             byte[] cur = Memory.ReadBytesBatch(at, 4);
@@ -1677,7 +1677,7 @@ namespace Dark_Cloud_Improved_Version
                 return false;
             }
             _texDeferLogged = false;
-            uint playerRoot = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
+            uint playerRoot = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel);
             if (!Memory.IsValidGuest(playerRoot)) { Log("no player model"); return false; }
             _liveRoot = playerRoot;
 
@@ -1691,7 +1691,7 @@ namespace Dark_Cloud_Improved_Version
                 uint n = playerRoot + (uint)(i * CFrameVu1.NodeStride);
                 if (!Memory.IsValidGuest(n)) break;
                 string nm = ReadName(n);
-                uint par = (uint)Memory.ReadInt(Memory.ToMmu(n) + CFrameVu1.Parent) & Memory.PhysAddrMask;
+                uint par = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.Parent);
                 // Every body node's parent is inside the array; the cat root is UNPARENTED (the bake gives it parent
                 // -1 so she never draws or skins it) and its children parent back into the cat run.
                 bool parOk = i == 0 || nm == CatRootName || (par >= playerRoot && par < n && (par - playerRoot) % CFrameVu1.NodeStride == 0);
@@ -1705,7 +1705,7 @@ namespace Dark_Cloud_Improved_Version
             string chanInfo = "";
             for (int c = 0; c < CCharacter.MotionSlots; c++)
             {
-                uint cp = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + c * 4) & Memory.PhysAddrMask;
+                uint cp = Memory.ReadGuestPtr(CCharacter.Base + CCharacter.MotionSlotBase + c * 4);
                 if (!Memory.IsValidGuest(cp)) continue;
                 chanInfo += $" ch{c}=0x{cp:X} keys {Memory.ReadInt(CCharacter.Base + ChanKeyStart + c * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + c * 4)}";
             }
@@ -1853,7 +1853,7 @@ namespace Dark_Cloud_Improved_Version
         private static void MaskTint()
         {
             if (_maskVisual == 0) { Log("mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
-            uint vt = (uint)Memory.ReadInt(_maskVisual + CVisualMDT.VisVtable) & Memory.PhysAddrMask;
+            uint vt = Memory.ReadGuestPtr(_maskVisual + CVisualMDT.VisVtable);
             if (vt != CVisualMDT.Vu1Vtable)
             { Log($"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{CVisualMDT.Vu1Vtable:X} — leaving it alone"); return; }
             byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(CVisualMDT.Vu1Vtable), CVisualMDT.Vu1VtableBytes);
@@ -1986,7 +1986,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (hide.Count == 0) return;
             long chan = CodeCaves.MotionCave;                                              // the copy's channel struct
-            uint head = (uint)Memory.ReadInt(chan + MotionType.MotionSkinList) & Memory.PhysAddrMask;
+            uint head = Memory.ReadGuestPtr(chan + MotionType.MotionSkinList);
             var nodes = new List<byte[]>();
             for (uint p = head; Memory.IsValidGuest(p) && nodes.Count < 256;)
             {
@@ -2167,8 +2167,8 @@ namespace Dark_Cloud_Improved_Version
         private static bool RepairHerCatChannel(ref byte[] buf)
         {
             long inline = CCharacter.Base + ChanInlineBase + CatChannel * ChanInlineStride;
-            uint keyTable = (uint)Memory.ReadInt(inline + MotionType.MotionInfoPtr) & Memory.PhysAddrMask;
-            uint boneRows = (uint)Memory.ReadInt(inline + MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
+            uint keyTable = Memory.ReadGuestPtr(inline + MotionType.MotionInfoPtr);
+            uint boneRows = Memory.ReadGuestPtr(inline + MotionType.BoneMtxPtr);
             if (!Memory.IsValidGuest(keyTable) || !Memory.IsValidGuest(boneRows))
             {
                 Log($"her MOTION 1 struct @0x{inline & Memory.PhysAddrMask:X} is empty too (KEY 0x{keyTable:X}, rows 0x{boneRows:X}) — cannot repair");
@@ -2212,7 +2212,7 @@ namespace Dark_Cloud_Improved_Version
                 for (int i = 0; i < _nodeCount; i++)
                 {
                     long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                    uint par = (uint)Memory.ReadInt(node + CFrameVu1.Parent) & Memory.PhysAddrMask;
+                    uint par = Memory.ReadGuestPtr(node + CFrameVu1.Parent);
                     int rel = (par >= poolG && par < poolG + (uint)blockSize) ? (int)((par - poolG) / CFrameVu1.NodeStride) : 0;
                     int e = i * MotionType.FrameInfEntry;
                     BitConverter.GetBytes(rel).CopyTo(fib, e);
@@ -2334,7 +2334,7 @@ namespace Dark_Cloud_Improved_Version
         /// Runs every tick in all three active states, so anything that must hold regardless of state belongs here.</summary>
         private static void Maintain()
         {
-            if (((uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask) != _liveRoot)
+            if ((Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel)) != _liveRoot)
             {
                 Log( "her model changed — cat despawned");
                 Despawn();
@@ -2648,12 +2648,12 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_skinNodes.Exists(sn => sn.node == i)) continue;
                 long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
-                uint vis = (uint)Memory.ReadInt(node + CFrameVu1.GeomPtr) & Memory.PhysAddrMask;
+                uint vis = Memory.ReadGuestPtr(node + CFrameVu1.GeomPtr);
                 if (!Memory.IsValidGuest(vis)) continue;
-                uint vu = (uint)Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU) & Memory.PhysAddrMask;
+                uint vu = Memory.ReadGuestPtr(Memory.ToMmu(vis) + CVisualMDT.VisVU);
                 int vuSz = Memory.ReadInt(Memory.ToMmu(vis) + CVisualMDT.VisVU + 4) * 16;
                 if (Memory.IsValidGuest(vu) && vuSz > 0 && vuSz < 0x40000) blocks.Add((Memory.ToMmu(vu), vuSz));
-                uint vuB = (uint)Memory.ReadInt(Memory.ToMmu(vis) + 0x2C) & Memory.PhysAddrMask;
+                uint vuB = Memory.ReadGuestPtr(Memory.ToMmu(vis) + 0x2C);
                 if (vuB != vu && Memory.IsValidGuest(vuB) && vuSz > 0) blocks.Add((Memory.ToMmu(vuB), vuSz));
             }
             // The machine does the hunting. Every one of these blocks is a draw packet the copy just placed, and scanning them
