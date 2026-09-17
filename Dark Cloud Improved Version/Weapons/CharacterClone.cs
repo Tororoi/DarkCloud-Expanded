@@ -40,6 +40,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool IsActive => _cloneSlot >= 0;
         internal static int  Slot     => _cloneSlot;
+        internal static uint RootGuest => IsActive ? _cloneRootGuest : 0u;   // the clone's root CFrame, for anything drawn at it
 
         private static float _x, _z, _y, _yaw, _alpha;   // pose + opacity, supplied by the caller each tick
 

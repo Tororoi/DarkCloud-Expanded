@@ -161,28 +161,14 @@ namespace Dark_Cloud_Improved_Version
         }
 
 
-        // ── Clone heat-haze by HIJACKING an existing torch's fire-raster (pure data; no cave, no crash) ──
-        // The ONLY framebuffer distortion in the game is CFireOmni::DrawRaster (0x162310, via
-        // blendTextuerTest + MGGetFBuffTex); it's driven by DrawRaster__11CDungeonMap (0x1C4610), which
-        // iterates the 20×20 fire-tile array at dngMap+0x9C50 (0x10/entry: +0=fireIdx, +4=rot,
-        // +8=dist(≤240 draws), +C=enabled) and, per enabled tile, draws the raster emitters of the fire
-        // struct at dngMap+fireIdx*0x1D0 (raster count @+0x4A2, emitter[0] local pos @+0x4B0/4B4/4B8) at
-        // world (localX*10 + col*160, localY*10, localZ*10 + row*160).
+        // ── Clone heat-haze: the game's fire-raster distortion, drawn at the clone by ElfCave.MirageHazeDraw ──
+        // HeatHaze names the clone's root CFrame in the mailbox and ramps the strength; the cave draws one raster
+        // there every frame, in the map's own raster pass. (The mechanisms tried before it: docs/mirage.md.)
         //
-        // The earlier "make a NEW fire tile" version broke floor collision (marking a floor tile as a
-        // fire made the engine treat it as fire-tile geometry) — the tile-array write, NOT the struct
-        // write, was the culprit (the ForceRaster probe wrote +0x4A2 on a real torch struct with NO
-        // collision effect). So instead we reuse an EXISTING enabled torch tile's struct: set its raster
-        // count=1 and point emitter[0] at the CLONE (using that tile's col/row as the anchor, so any tile
-        // works no matter how far). The torch keeps its flame (flame emitters live at +0x490, untouched,
-        // and the raster is now positioned at the clone, not overlapping the torch). Only struct writes —
-        // the collision-safe ones. Prefer a torch whose fireIdx no OTHER enabled tile shares (else every
-        // sharer would draw a second raster at its own offset). Restored on despawn.
         // Clone materialize / dematerialize. The clone fades IN over FadeSeconds, holds at full, then fades
-        // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE rather than a
-        // wall-clock start, so it inherits the pause semantics for free (while paused the deadline is pushed
-        // forward, so the envelope freezes with it) and a re-cast that re-plants the decoy restarts the fade
-        // in naturally. The heat-haze is deliberately NOT gated by this — it runs the clone's full lifetime.
+        // OUT over the last FadeSeconds before the decoy expires. Derived from the DEADLINE, which is on GameClock,
+        // so the envelope holds through a pause, and a re-cast that re-plants the decoy restarts the fade in
+        // naturally. The heat-haze is deliberately NOT gated by this — it runs the clone's full lifetime.
         // Sequencing is mirrored: on cast the HAZE leads and the clone resolves into it; on expiry the CLONE
         // dissolves FIRST and the haze tails off after it, so the shimmer is the last thing to go.
         //   0 .. 0.5s          haze 0→full, clone invisible
@@ -237,8 +223,7 @@ namespace Dark_Cloud_Improved_Version
         // Envelope: 0 → full over HazeRampSeconds on cast (leading the clone in), full through the decoy's life,
         // then back to 0 as the clone dissolves — so the shimmer is the first thing to appear and the last to go.
         private const double HazeRampSeconds = 0.25;
-        private const float  HazeBack  = 8f;    // pull the shimmer BACK along the clone's facing (the raster renders forward)
-        private const float  HazeBodyY = -15f;  // and DOWN onto the body (the raster is built to rise above a flame)
+        private const float  HazeBodyY = -15f;  // the shimmer's anchor sits this far DOWN the clone (the raster is built to rise above a flame)
         private static float _decoyYaw;               // clone's heading, latched at cast and PINNED onto the clone each tick
         private static float _decoyFwdX, _decoyFwdY;  // forward vector derived from _decoyYaw
 
@@ -256,7 +241,7 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Drive the shimmer at the clone: pushed back along its facing and down onto its body.</summary>
         private static void ShowDecoyHaze()
-            => HeatHaze.Show(_dx - HazeBack * _decoyFwdX, _dz + HazeBodyY, _dy - HazeBack * _decoyFwdY, HazeGain01());
+            => HeatHaze.Show(CharacterClone.RootGuest, HazeBodyY, HazeGain01());   // pinned to the clone's root by the haze cave
 
 
         // ── The decoy's cave payload ─────────────────────────────────────────────────────────────────
