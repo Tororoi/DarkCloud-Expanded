@@ -49,20 +49,9 @@ namespace Dark_Cloud_Improved_Version
         // Top-half check window (used to self-heal pixels an older build's "shirt swap" may have left).
         private const int TopSigOffset = 0x1D80;
 
-        // ── the global CTextureManager (RE'd: SearchTextureName 0x131180 / GetTexture(int) 0x131290) ──
-        // ONE instance at main-BSS 0x1C75870 serves everything: the dungeon effect loader AND the menu
-        // weapon-preview loader (EnterWeaponModel 0x20D4C0) both pass it explicitly. Layout: +0 = last
-        // entry index; entries at +0x10F8, stride 0x50; per entry: +0x00 u16 block id, +0x08 name (inline,
-        // NUL-terminated), +0x38 native ptr to PIXELS, +0x48 native ptr to CLUT (LoadTexture 0x154950 DMAs
-        // the GS upload FROM those pointers — which is why writing them re-skins live). Walking this table
-        // resolves every live copy of the weapon texture BY NAME in ~4 PINE round-trips — dungeon copy and
-        // menu preview alike — replacing the slow 32MB signature scan (kept only as a fallback).
-        private const long TexMgr         = 0x21C75870;
-        private const int  MgrEntry0      = 0x10F8;
-        private const int  MgrEntryStride = 0x50;
-        private const int  EntryNameOff   = 0x08;
-        private const int  EntryPixOff    = 0x38;
-        private const int  MgrMaxEntries  = 2048;   // sanity bound on the count field
+        // Walking TextureManager's entry table resolves every live copy of the weapon texture BY NAME in ~4 PINE
+        // round-trips — dungeon copy and menu preview alike — replacing the slow 32MB signature scan (kept only as a
+        // fallback).
         private static readonly byte[] TexName = System.Text.Encoding.ASCII.GetBytes("c04w13");   // Super Steve's registered texture name (prefix match)
 
         private static bool _initTried, _filesOk;
@@ -187,22 +176,22 @@ namespace Dark_Cloud_Improved_Version
         private static List<long> ResolveCopies()
         {
             var found = new List<long>();
-            int count = Memory.ReadInt(TexMgr);
-            if (count < 0 || count > MgrMaxEntries) return found;
+            int count = Memory.ReadInt(TextureManager.Base);
+            if (count < 0 || count > TextureManager.MaxEntries) return found;
 
-            byte[] table = Memory.ReadBytesBatch(TexMgr + MgrEntry0, (count + 1) * MgrEntryStride);
+            byte[] table = Memory.ReadBytesBatch(TextureManager.Base + TextureManager.Entries, (count + 1) * TextureManager.EntryStride);
             if (table == null) return found;
 
             for (int i = 0; i <= count; i++)
             {
-                int o = i * MgrEntryStride;
+                int o = i * TextureManager.EntryStride;
                 // Name prefix match at entry+0x08 ("c04w13", however the loader suffixed it).
                 bool match = true;
                 for (int j = 0; j < TexName.Length && match; j++)
-                    match = table[o + EntryNameOff + j] == TexName[j];
+                    match = table[o + TextureManager.EntryName + j] == TexName[j];
                 if (!match) continue;
 
-                uint pixNative = BitConverter.ToUInt32(table, o + EntryPixOff);
+                uint pixNative = BitConverter.ToUInt32(table, o + TextureManager.EntryPixels);
                 if (!Memory.IsValidGuest(pixNative)) continue;
                 long pix = Memory.ToMmu(pixNative);
                 if (found.Contains(pix) || _pixBases.Contains(pix)) { if (!found.Contains(pix)) found.Add(pix); continue; }

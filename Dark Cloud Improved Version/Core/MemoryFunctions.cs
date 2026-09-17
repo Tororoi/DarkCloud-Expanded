@@ -309,6 +309,22 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        /// <summary>Re-point ONE link word of a copied block: a value inside [<paramref name="min"/>, <paramref name="max"/>]
+        /// moves to the same offset from <paramref name="dst"/>; anything else — an external reference, or the word
+        /// <paramref name="forceZero"/> names — is zeroed. For known pointer fields only (tree links): unlike
+        /// <see cref="RebaseRange"/> it does not test the word's segment first.</summary>
+        internal static void Rebase(byte[] block, int off, uint min, uint max, uint dst, bool forceZero)
+        {
+            uint old = (uint)BitConverter.ToInt32(block, off) & PhysAddrMask;
+            uint neu = 0;
+            if (!forceZero && old >= min && old <= max) neu = dst + (old - min);
+            BitConverter.GetBytes(neu).CopyTo(block, off);
+        }
+
+        /// <summary>Round up to the 16-byte quadword the cave allocators hand out in.</summary>
+        internal static int  Align16(int n)  => (n + 15) & ~15;
+        internal static long Align16(long n) => (n + 15) & ~15L;
+
         private static byte[] BuildReadPacket(byte opcode, long address)
         {
             var pkt = new byte[9];

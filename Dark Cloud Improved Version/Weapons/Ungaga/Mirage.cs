@@ -463,7 +463,7 @@ namespace Dark_Cloud_Improved_Version
             Array.Clear(_brokenThisDecoy, 0, _brokenThisDecoy.Length);
             _prevHp = ReusableFunctions.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
-                if (IsLiveEnemy(s)) _fooled[s] = true;
+                if (Enemies.IsLive(s)) _fooled[s] = true;
         }
 
         /// <summary>Re-cast with a clone already up. The new decoy is created RIGHT NOW and normally (timer,
@@ -511,7 +511,7 @@ namespace Dark_Cloud_Improved_Version
             int[] hp = ReusableFunctions.GetEnemiesHp();
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count && s < MaxSlots; s++)
             {
-                if (!IsLiveEnemy(s)) { _fooled[s] = false; continue; }
+                if (!Enemies.IsLive(s)) { _fooled[s] = false; continue; }
                 if (_prevHp != null && s < _prevHp.Length && hp[s] < _prevHp[s])
                 { _fooled[s] = false; _brokenThisDecoy[s] = true; continue; }
                 if (!_fooled[s] && !_brokenThisDecoy[s]) _fooled[s] = true;
@@ -555,13 +555,6 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(hold ? _oldDy : _dy).CopyTo(b, 8);
             BitConverter.GetBytes(1.0f).CopyTo(b, 12);
             Memory.WriteBytesBatch(CodeCaves.DecoyPos, b);
-        }
-
-        private static bool IsLiveEnemy(int s)
-        {
-            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-            if (id == 0 || id == 0xFFFF) return false;
-            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
         }
     }
 }

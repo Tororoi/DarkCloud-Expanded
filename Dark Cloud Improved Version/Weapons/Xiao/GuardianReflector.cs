@@ -92,13 +92,9 @@ namespace Dark_Cloud_Improved_Version
         // pos vec4, +0x10 life 0x10, +0x14 timer 0, +0x18 active 1 — entry 0 for guards) and plays
         // SndSePlay(0xA2), the guard clink. The slingshot does the same at frame rate against its own
         // volume, then dispels and cools down.
-        private const long   NowColDataPtr = 0x202A35E0;
-        private const int    ColEntries = 96, ColStride = 0xA0, ColActiveOff = 0x3C00;
-        private const int    ColRadius = 0x3C, ColMask = 0x48, ColOwner = 0x58, ColGateA = 0x70, ColGateB = 0x74;
         // Set's 2nd arg → entry +0x38: 0 for MELEE/contact planters (CheckDmg, player swings, bombs, status
         // powders) and 1.0f for PROJECTILE/effect planters (CSHOT_EFFECT impacts, MACHINGUN, FIREBAR, thrown
         // items) — the discriminator that keeps a shot detonating near the slingshot from reading as a swing.
-        private const int    ColClass = 0x38;
         private const int    ColColIdx = 0x60;
         // ── REFLECTED DAMAGE (Stage C, RE doc §C; formula agreed 2026-09-09) ──
         // A reflected shot stays a latched visual (its own mask is the enemy-shot one, so the engine never
@@ -111,8 +107,6 @@ namespace Dark_Cloud_Improved_Version
         //   +0x58 = 1 (Xiao: ranged falloff + kill credit), +0x64 = her stats block, +0x6C = her ability flags
         // and CMonstorUnit::CheckDmg does defense, anti-category, resistance, No Effect, statuses, numbers.
         private const long   BattleWeaponAttack  = WeaponHave.BattleWeaponRecord + 0x04;   // short (BattleActionPlay_Jinn's pellet damage)
-        private const long   BattleWeaponStats   = WeaponHave.BattleWeaponRecord + 0x1C;   // anti-category bytes (entry +0x64 points here)
-        private const long   BattleWeaponFlags   = WeaponHave.BattleWeaponRecord + 0xEE;   // ability flags (entry +0x6C)
         private const float  TierDivisor = 14f;
         private const uint   ShotElementMask = 0x1F, ShotEnemyStatusMask = 0x100 | 0x200 | 0x800;
         private const int    CfgFlags = 0x40, CfgRadiusFlying = 0x2C;                    // BT_SHOT_EFFECT fields
@@ -122,7 +116,6 @@ namespace Dark_Cloud_Improved_Version
         // RULE (user 2026-09-09): melee is melee — any melee-class player-hurting sphere on the slingshot
         // dispels it. Shots are shots — a pool shot whose BODY reaches the slingshot is caught there and
         // re-fired (see CatchAtProp), and a shot's impact sphere landing on it is swallowed, never a hit.
-        private const uint   HurtsPlayerMask = 1;
         private const long   HitMarkPool = 0x21EC4940;
         private const int    HitMarkLife = 0x10;
         private const ushort GuardClinkSe = 0xA2;
@@ -731,7 +724,7 @@ namespace Dark_Cloud_Improved_Version
             for (int s = 0; s < RingSlots; s++)
             {
                 uint ptr = StbExternCmd.PlayerPosGuest;
-                if (s < EnemyAddresses.FloorSlots.Count && IsLiveEnemy(s))
+                if (s < EnemyAddresses.FloorSlots.Count && Enemies.IsLive(s))
                 {
                     long p = EnemyAddresses.CharObjects.PosAddr(s);
                     float dx = Memory.ReadFloat(p) - xx, dy = Memory.ReadFloat(p + 8) - xy;
@@ -766,13 +759,6 @@ namespace Dark_Cloud_Improved_Version
             if (_blockArmed) Memory.WriteFloat(CodeCaves.Mailbox.ShieldBlockAddend, VanillaBlockAddend);
             RingActive = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shield ring released");
-        }
-
-        private static bool IsLiveEnemy(int s)
-        {
-            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-            if (id == 0 || id == 0xFFFF) return false;
-            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
         }
 
         // ─────────────────────────────────── attack gauge ───────────────────────────────────────
@@ -883,8 +869,8 @@ namespace Dark_Cloud_Improved_Version
                 var (idx, ticks) = _planted[q];
                 if (ticks <= 0)
                 {
-                    long pool = Memory.ReadInt(NowColDataPtr);
-                    if (pool > 0) Memory.WriteInt(pool + 0x20000000 + ColActiveOff + idx * 4, 0);
+                    long pool = Memory.ReadInt(CollisionPool.Pointer);
+                    if (pool > 0) CollisionPool.Deactivate(pool + 0x20000000, idx);
                     _planted.RemoveAt(q);
                 }
                 else _planted[q] = (idx, ticks - 1);
@@ -930,12 +916,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>One pellet-style CollisionData entry at the impact, fields per the RE doc §C.</summary>
         private static void PlantReflectedHit(float x, float h, float y, float radius, uint shotFlags, int enemySlot)
         {
-            long pool = Memory.ReadInt(NowColDataPtr);
-            if (pool <= 0) return;
-            pool += 0x20000000;
-            int slot = -1;
-            for (int i = ColEntries - 1; i >= 0; i--)                                          // from the top: real swings fill from 0
-                if (Memory.ReadInt(pool + ColActiveOff + i * 4) == 0) { slot = i; break; }
+            long pool = CollisionPool.Resolve();
+            if (pool == 0) return;
+            int slot = CollisionPool.TakeFreeSlot(pool);
             if (slot < 0) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "no free collision entry — reflected hit lost"); return; }
 
             int dungeon = Math.Max(0, Math.Min(6, (int)Memory.ReadByte(Addresses.checkDungeon)));
@@ -948,18 +931,7 @@ namespace Dark_Cloud_Improved_Version
             uint attr = (elem != 0 && (shotFlags & 0xFF00) == 0) ? elem : 0u;
             string statusNote = stat != 0 ? ApplyReflectedStatus(enemySlot, stat) : "";
 
-            var e = new byte[ColStride];
-            void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-            void I(int o, int v)   => BitConverter.GetBytes(v).CopyTo(e, o);
-            F(0x00, x); F(0x04, h); F(0x08, y); F(0x0C, 1f);
-            F(0x1C, 1f); F(0x20, 1f);                                                        // Set's vec w's
-            I(0x34, baseDmg); I(0x38, 0); F(0x3C, radius);
-            I(0x44, 1); I(0x48, 2); I(0x4C, 2); I(0x50, (int)attr); I(0x54, 0);
-            I(0x58, 1); I(0x5C, -1); I(0x60, 0);
-            I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
-            I(0x70, 0); I(0x74, 0); F(0x8C, 1f); I(0x98, 0);
-            Memory.WriteBytesBatch(pool + slot * ColStride, e);
-            Memory.WriteInt(pool + ColActiveOff + slot * 4, 1);                               // active LAST
+            CollisionPool.Plant(pool, slot, CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, attr));
             _planted.Add((slot, PlantedLifeTicks));
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"reflected hit on slot {enemySlot}: base {baseDmg} (atk {attack:F0} × {dungeon + 1}/{TierDivisor:F0}), attr 0x{attr:X} ({(attr != 0 ? "element" : "none")}){statusNote}, r={radius:F1} → entry {slot}");
@@ -1013,27 +985,27 @@ namespace Dark_Cloud_Improved_Version
                 {
                     bool quiet = _dispelling;                       // fading out: still eat the swing that broke it, silently
                     if (!SlingshotProp.Active || (_alpha < 1f && !quiet)) { Thread.Sleep(50); continue; }
-                    long pool = Memory.ReadInt(NowColDataPtr);
+                    long pool = Memory.ReadInt(CollisionPool.Pointer);
                     if (pool <= 0) { Thread.Sleep(50); continue; }
                     pool += 0x20000000;
                     if (!SlingshotProp.RootWorld(out float rx, out float rh, out float ry)) { Thread.Sleep(50); continue; }
-                    byte[] flags = Memory.ReadBytesBatch(pool + ColActiveOff, ColEntries * 4);
+                    byte[] flags = Memory.ReadBytesBatch(pool + CollisionPool.ActiveOff, CollisionPool.Entries * 4);
                     if (flags == null) { Thread.Sleep(50); continue; }
-                    for (int i = 0; i < ColEntries; i++)
+                    for (int i = 0; i < CollisionPool.Entries; i++)
                     {
                         if (BitConverter.ToInt32(flags, i * 4) == 0) continue;
-                        byte[] e = Memory.ReadBytesBatch(pool + i * ColStride, ColStride);
+                        byte[] e = Memory.ReadBytesBatch(pool + i * CollisionPool.Stride, CollisionPool.Stride);
                         if (e == null) continue;
-                        if ((BitConverter.ToUInt32(e, ColMask) & HurtsPlayerMask) == 0) continue;
-                        if (BitConverter.ToInt32(e, ColGateA) != BitConverter.ToInt32(e, ColGateB)) continue;
+                        if ((BitConverter.ToUInt32(e, CollisionPool.Mask) & CollisionPool.HurtsPlayerMask) == 0) continue;
+                        if (BitConverter.ToInt32(e, CollisionPool.GateA) != BitConverter.ToInt32(e, CollisionPool.GateB)) continue;
                         float ex = BitConverter.ToSingle(e, 0), eh = BitConverter.ToSingle(e, 4), ey = BitConverter.ToSingle(e, 8);
-                        float r  = BitConverter.ToSingle(e, ColRadius);
+                        float r  = BitConverter.ToSingle(e, CollisionPool.Radius);
                         float dx = ex - rx, dy = ey - ry;
                         if (dx * dx + dy * dy > (r + PropHitRadius) * (r + PropHitRadius)) continue;
                         if (eh + r < rh - PropHitBelow || eh - r > rh + PropHitHeight) continue;
 
-                        Memory.WriteInt(pool + ColActiveOff + i * 4, 0);            // spent itself on the shield
-                        if (BitConverter.ToSingle(e, ColClass) != 0f)
+                        Memory.WriteInt(pool + CollisionPool.ActiveOff + i * 4, 0);            // spent itself on the shield
+                        if (BitConverter.ToSingle(e, CollisionPool.EntryClass) != 0f)
                         {
                             // A SHOT's impact sphere landing on the slingshot: swallowed, never a hit.
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"swallowed a shot impact on the slingshot (entry {i}, r={r:F1})");
@@ -1047,7 +1019,7 @@ namespace Dark_Cloud_Improved_Version
                         BitConverter.GetBytes(1).CopyTo(hm, 0x18);                  // active last
                         Memory.WriteBytesBatch(HitMarkPool, hm);
                         SeSeq.Play(GuardClinkSe, 30);
-                        int owner = BitConverter.ToInt32(e, ColOwner), col = BitConverter.ToInt32(e, ColColIdx);
+                        int owner = BitConverter.ToInt32(e, CollisionPool.Owner), col = BitConverter.ToInt32(e, ColColIdx);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                             $"melee hit on the slingshot: entry {i} col {col}, r={r:F1}, owner {(owner >= 200 ? "slot " + (owner - 200) / 5 : owner.ToString())}");
                         _hitFlag = true;

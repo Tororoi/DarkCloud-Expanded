@@ -126,11 +126,7 @@ namespace Dark_Cloud_Improved_Version
         private const int    PlantedLifeTicks = 4;   // ~4 frames for the enemy's CheckDmg to find the entry
 
         // Hit-entry plumbing (CCollisionData pool, as GuardianReflector.PlantReflectedHit).
-        private const long NowColDataPtr = 0x202A35E0;
-        private const int  ColEntries = 96, ColStride = 0xA0, ColActiveOff = 0x3C00;
         private const long BattleWeaponAttack = WeaponHave.BattleWeaponRecord + 0x04;
-        private const long BattleWeaponStats  = WeaponHave.BattleWeaponRecord + 0x1C;
-        private const long BattleWeaponFlags  = WeaponHave.BattleWeaponRecord + 0xEE;
 
         private enum Phase { Resident, Flying, Falling, Landing, Running, TakeOff, Leaping, LandEnd, Fading }   // Resident = built, hidden, waiting
 
@@ -692,7 +688,6 @@ namespace Dark_Cloud_Improved_Version
         // ── the cape, mask and GLOW follow the equipped weapon's ELEMENT ───────────────────────────────────
         // The colours are authored in ElementLooks, beside the per-weapon looks; what follows is the plumbing
         // that reads the element and the live slots it fills.
-        private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
         private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
         /// <summary>Xiao's weapon-slot 0 element byte, + 0xF8 per bag slot (Player.Xiao.WeaponSlot0.elementHUD). It lives in
         /// the status block, well clear of the dungeon pools, so it needs no DungeonPools resolution.</summary>
@@ -763,7 +758,7 @@ namespace Dark_Cloud_Improved_Version
         {
             long entry = FindTexEntry(CapeTexture);
             if (entry == 0) return false;
-            uint clut = (uint)Memory.ReadInt(entry + EntryClutPtr) & Memory.PhysAddrMask;
+            uint clut = (uint)Memory.ReadInt(entry + TextureManager.EntryClut) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(clut)) return false;
             long at = Memory.ToMmu(clut);
             byte[] cur = Memory.ReadBytesBatch(at, 4);
@@ -1174,7 +1169,7 @@ namespace Dark_Cloud_Improved_Version
                     _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
                     double rt = (Now - _phaseStart).TotalSeconds;
                     float dist = float.MaxValue;
-                    if (_target >= 0 && !IsLiveEnemy(_target))
+                    if (_target >= 0 && !Enemies.IsLive(_target))
                     {
                         int was = _target;
                         _target = PickTarget();                                   // the next nearest, if any
@@ -1389,7 +1384,7 @@ namespace Dark_Cloud_Improved_Version
         private static void RetargetToLockOn(int state)
         {
             int locked = LockedTarget();
-            if (locked < 0 || locked == _target || !IsLiveEnemy(locked)) return;
+            if (locked < 0 || locked == _target || !Enemies.IsLive(locked)) return;
             int was = _target; _target = locked;
             WriteTargetAim(); CrushGuard(_target); ApplyFlightTime();
             _gaitLogged = false; _pounceLogged = false; _sitLogged = false;
@@ -1411,7 +1406,7 @@ namespace Dark_Cloud_Improved_Version
             int best = -1; float bestD = float.MaxValue;
             for (int s = 0; s < EnemyAddresses.FloorSlots.Count; s++)
             {
-                if (!IsLiveEnemy(s)) continue;
+                if (!Enemies.IsLive(s)) continue;
                 long p = EnemyAddresses.CharObjects.PosAddr(s);
                 float dx = Memory.ReadFloat(p) - px, dy = Memory.ReadFloat(p + 8) - py, d = dx * dx + dy * dy;
                 if (d < bestD && d <= MaxTargetDistance * MaxTargetDistance) { bestD = d; best = s; }
@@ -1424,17 +1419,7 @@ namespace Dark_Cloud_Improved_Version
         {
             int s = Memory.ReadInt(PlayerAction.LockOnTargetSlot);
             if (s < 0 || s >= EnemyAddresses.FloorSlots.Count) return -1;
-            return IsLiveEnemy(s) ? s : -1;
-        }
-
-        /// <summary>Whether this slot holds an enemy the cat can chase: a real species id, RenderStatus at least 1 — not yet
-        /// on the floor, or already gone, both read as 0 — and HP above zero.</summary>
-        private static bool IsLiveEnemy(int s)
-        {
-            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-            if (id == 0 || id == 0xFFFF) return false;
-            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) < 1) return false;   // not on the floor yet / gone
-            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
+            return Enemies.IsLive(s) ? s : -1;
         }
 
         // ───────────────────────────── the hit's element, and the guard crush ──────────────────────────────
@@ -1574,7 +1559,7 @@ namespace Dark_Cloud_Improved_Version
                 _fade++; _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
                 if (_fade >= FadeTicks) { DisarmCave(); Hide(); return; }      // the cave stops driving the (now invisible) cat
             }
-            if (_target >= 0 && !IsLiveEnemy(_target)) _target = -1;
+            if (_target >= 0 && !Enemies.IsLive(_target)) _target = -1;
             float tx = 0, th = 0, ty = 0;
             if (_target >= 0)
             {
@@ -1763,9 +1748,9 @@ namespace Dark_Cloud_Improved_Version
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = o == 0;
-                Rebase(block, o + CFrameVu1.Parent,      min, max, poolG, isRoot);   // cat root's parent (her root) → none
-                Rebase(block, o + CFrameVu1.RootChild,   min, max, poolG, false);
-                Rebase(block, o + CFrameVu1.RootSibling, min, max, poolG, isRoot);   // ...and its sibling chain → none
+                Memory.Rebase(block, o + CFrameVu1.Parent,      min, max, poolG, isRoot);   // cat root's parent (her root) → none
+                Memory.Rebase(block, o + CFrameVu1.RootChild,   min, max, poolG, false);
+                Memory.Rebase(block, o + CFrameVu1.RootSibling, min, max, poolG, isRoot);   // ...and its sibling chain → none
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
                 Array.Clear(block, o + CFrameVu1.WorldMatrix, 0x40);
@@ -1868,7 +1853,7 @@ namespace Dark_Cloud_Improved_Version
         /// the active character. Returns 0 when neither has room.</summary>
         private static long TakeCave(int bytes, out uint guest)
         {
-            long need = A16L(bytes);
+            long need = Memory.Align16(bytes);
             if (_caveFree + need <= CodeCaves.CatMeshCaveEnd) { long a = _caveFree; _caveFree += need; guest = (uint)(a - 0x20000000); return a; }
             if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = (uint)(a - 0x20000000); return a; }
             guest = 0; return 0;
@@ -1934,16 +1919,16 @@ namespace Dark_Cloud_Improved_Version
                 if (mdtHdr == null || (uint)BitConverter.ToInt32(mdtHdr, 0) != CVisualMDT.MdtMagic) continue;
                 int mdtSz = BitConverter.ToInt32(mdtHdr, CVisualMDT.MdtSizeField);
                 if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
-                int need = A16(visSz) + A16(vuSz) + A16(mdtSz);
+                int need = Memory.Align16(visSz) + Memory.Align16(vuSz) + Memory.Align16(mdtSz);
                 if (cave + need > caveEnd) { Console.WriteLine(Tag + "cat meshes do not fit the MeshCave"); return false; }
                 long cVis = cave;              uint cVisG = (uint)caveGuest;
-                long cVU  = cave + A16(visSz); uint cVUG  = (uint)(caveGuest + A16(visSz));
-                long cMDT = cVU + A16(vuSz);   uint cMDTG = (uint)(caveGuest + A16(visSz) + A16(vuSz));
+                long cVU  = cave + Memory.Align16(visSz); uint cVUG  = (uint)(caveGuest + Memory.Align16(visSz));
+                long cMDT = cVU + Memory.Align16(vuSz);   uint cMDTG = (uint)(caveGuest + Memory.Align16(visSz) + Memory.Align16(vuSz));
                 // The two BIG blocks go to the machine; the visual is 0x30 B and needs fields poked into it anyway, so it
                 // stays here. A job carries the copy and both rebases, exactly what RebaseRange does to vuB/mdtB below.
                 _jobs.Add(new CopyJob(vu, cVUG, vuSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
                 _jobs.Add(new CopyJob(mdt, cMDTG, mdtSz, vu, vuSz, cVUG, mdt, mdtSz, cMDTG));
-                RebaseRange(visB, vu, vuSz, cVUG); RebaseRange(visB, mdt, mdtSz, cMDTG);
+                Memory.RebaseRange(visB, vu, vuSz, cVUG); Memory.RebaseRange(visB, mdt, mdtSz, cMDTG);
                 byte[] vuB = null;
                 // The engine writes the skinned draw packet into buffer[DBuffID] (+0x28 / +0x2C) every frame while
                 // the GIF is still reading the other. A single-buffered copy tears (flicker); give the copy both — the
@@ -2067,8 +2052,8 @@ namespace Dark_Cloud_Improved_Version
                 }
                 byte[] b = Memory.ReadBytesBatch(0x20000000L + j.Src, j.Size);
                 if (b == null) { Console.WriteLine(Tag + $"copy fallback: could not read 0x{j.Src:X}"); return false; }
-                if (j.R1Size > 0) RebaseRange(b, j.R1Src, j.R1Size, j.R1Dst);
-                if (j.R2Size > 0) RebaseRange(b, j.R2Src, j.R2Size, j.R2Dst);
+                if (j.R1Size > 0) Memory.RebaseRange(b, j.R1Src, j.R1Size, j.R1Dst);
+                if (j.R2Size > 0) Memory.RebaseRange(b, j.R2Src, j.R2Size, j.R2Dst);
                 Memory.WriteBytesBatch(0x20000000L + j.Dst, b);
                 _copied[0x20000000L + j.Dst] = b;                                   // the texture pass scans these instead of re-reading
             }
@@ -2172,8 +2157,6 @@ namespace Dark_Cloud_Improved_Version
             }
             return true;
         }
-
-        private static long A16L(long n) => (n + 15) & ~15L;
 
         // ── Her MOTION 1 channel: watchdog + repair ────────────────────────────────────────────────────────
         private const int  ChanInlineBase = 0x420, ChanInlineStride = 0x80;   // CommandMOTION's inline channel: character + 0x420 + 0x80·n
@@ -2280,7 +2263,7 @@ namespace Dark_Cloud_Improved_Version
             // the KEY rate overshoots the last frame and the clip wraps, so the float loops instead of holding.
             // The table is her hidden cat channel's, played by nobody but this copy.
             Memory.WriteFloat(Memory.ToMmu(keyTable) + (KeyFloat - KeyBase) * CCharacter.MotionEntryStride + 8, FloatRate);
-            RebaseRange(mstr, min, blockSize, poolG);
+            Memory.RebaseRange(mstr, min, blockSize, poolG);
             Memory.WriteBytesBatch(CodeCaves.MotionCave, mstr);
 
             BitConverter.GetBytes((uint)CodeCaves.MotionCaveGuest).CopyTo(buf, CCharacter.MotionSlotBase);
@@ -2456,24 +2439,15 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
-        // CTextureManager: entry count @+0, entries @+0x10F8 at 0x50 apart, block tag = the first short, name @+8.
-        private const long TextureManager = 0x21C75870;
-        private const int  TexEntries = 0x10F8, TexStride = 0x50, TexMaxEntries = 0xC4, TexName = 8;
         private const short HerTextureBlock = 0x11;
         private const short SlotTextureGroup = (short)(DungeonCharaDraw.CharaTexBase + Slot);
         // ⚠ EVERY texture the cat pack carries must be listed here. These are the entries re-tagged into the slot's group
         // and moved into the cat's VRAM window while the copy is up; one left out keeps her block's pages after that block
         // has been cut back, so it samples stale VRAM and draws as garbage, or not at all.
         private static readonly string[] CatTextureNames = { "c04cat01", "c04cat02", "c04cat03", "c04cat04", "c04cat05", "catwing", "catcape", "catglowp" };   // catwing = the wings' flat white; catglowp = the ONE 8-bit glow disc every look now shares (its palette row carries the colour)
-        // A block descriptor (CTextureBlock, 0x3C bytes at manager+0x18+block*0x3C): +0x20 VRAM base, +0x24 VRAM top,
-        // +0x28 loaded flag, +0x30 dirty watermark. ReloadTexture re-uploads an entry only if its VRAM address is at or
-        // below the watermark (capped by the block's top) or the loaded flag is 0 — so a block whose base/top are 0
-        // uploads nothing. The re-tagged entries keep the VRAM addresses they were given in HER window, so slot 1's
-        // block takes over that tail of her window (and hers shrinks to just before it) while the copy is up.
-        private const int  TexBlocks = 0x18, TexBlockStride = 0x3C, BlkBase = 0x20, BlkTop = 0x24, BlkLoaded = 0x28, BlkDirty = 0x30;
-        /// <summary>manager+0x14 — the VRAM bump cursor, and it counts DOWN (Initialize sets it, EnterFixTexture subtracts
-        /// from it at 0x132354). Everything below it is free; the cat reserves its window by moving it.</summary>
-        private const int  TexCursor = 0x14;
+        // The re-tagged entries keep the VRAM addresses they were given in HER window, so slot 1's block takes over that
+        // tail of her window (and hers shrinks to just before it) while the copy is up; the cat reserves its window by
+        // moving TextureManager.Cursor.
         private static uint _texCursorSaved, _texCursorTaken;
         private static uint _herTopSaved;
         private static int _texCheckTick;
@@ -2498,20 +2472,20 @@ namespace Dark_Cloud_Improved_Version
         /// above every other block's top.</summary>
         private static void RetagCatTextures(short from, short to)
         {
-            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base));
             int done = 0; uint minTbp = uint.MaxValue;
             for (int i = 0; i < count; i++)
             {
-                long e = TextureManager + TexEntries + (long)i * TexStride;
+                long e = TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride;
                 if (Memory.ReadShort(e) != from) continue;
-                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
+                byte[] nb = Memory.ReadBytesBatch(e + TextureManager.EntryName, 32);
                 if (nb == null) continue;
                 int len = 0; while (len < nb.Length && nb[len] != 0) len++;
                 string nm = System.Text.Encoding.ASCII.GetString(nb, 0, len);
                 if (Array.IndexOf(CatTextureNames, nm) < 0) continue;
                 if (to == SlotTextureGroup && (Memory.ReadUInt(e + 0x28) & 0x3FFF) < StuckFloor)
                 {
-                    byte[] snap = Memory.ReadBytesBatch(e, TexStride);           // the whole entry at rest: block, name, image pointers, TEX0
+                    byte[] snap = Memory.ReadBytesBatch(e, TextureManager.EntryStride);           // the whole entry at rest: block, name, image pointers, TEX0
                     if (snap != null) _texSnapshot[nm] = snap;                   // a script event's slot clean-up wipes it; RecreateCatEntries puts it back
                 }
                 Memory.WriteUShort(e, (ushort)to);
@@ -2536,8 +2510,8 @@ namespace Dark_Cloud_Improved_Version
                 }
                 done++;
             }
-            long her = TextureManager + TexBlocks + (long)HerTextureBlock * TexBlockStride;
-            long grp = TextureManager + TexBlocks + (long)SlotTextureGroup * TexBlockStride;
+            long her = TextureManager.Base + TextureManager.Blocks + (long)HerTextureBlock * TextureManager.BlockStride;
+            long grp = TextureManager.Base + TextureManager.Blocks + (long)SlotTextureGroup * TextureManager.BlockStride;
             if (to == SlotTextureGroup && done > 0 && minTbp != uint.MaxValue && MoveCatVram)
             {
                 // The slot loop's group reload is written into the main frame packet, but the slot's draw goes
@@ -2545,12 +2519,12 @@ namespace Dark_Cloud_Improved_Version
                 // another block can overwrite the pages in between. So the cat's textures live where nothing else uploads: the
                 // top of the manager's VRAM range, above every block's top. Entries, the copy's packet buffers and MDT get the
                 // new addresses; hers are untouched.
-                _herTopSaved = Memory.ReadUInt(her + BlkTop);
+                _herTopSaved = Memory.ReadUInt(her + TextureManager.BlkTop);
                 uint size = _herTopSaved - minTbp;
-                uint limit = Memory.ReadUInt(TextureManager + TexCursor);
+                uint limit = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
                 uint newBase = (limit - size) & ~0x1Fu;
                 uint highest = 0;
-                for (int b = 0; b < 0x48; b++) highest = Math.Max(highest, Memory.ReadUInt(TextureManager + TexBlocks + (long)b * TexBlockStride + BlkTop));
+                for (int b = 0; b < 0x48; b++) highest = Math.Max(highest, Memory.ReadUInt(TextureManager.Base + TextureManager.Blocks + (long)b * TextureManager.BlockStride + TextureManager.BlkTop));
                 if (highest > newBase) Console.WriteLine(Tag + $"WARNING: a texture block tops at 0x{highest:X}, inside the cat's window 0x{newBase:X}..0x{newBase + size:X}");
                 // RESERVE the window instead of squatting under the cursor. manager+0x14 is a DOWNWARD bump allocator —
                 // EnterFixTexture does `lw v0,0x14(s6); subu v0,v0,size; sw v0,0x14(s6)` (0x132354) — so the space just below
@@ -2558,13 +2532,13 @@ namespace Dark_Cloud_Improved_Version
                 // entered afterwards would land on top of the cat's — fonts are entered that way. Moving the cursor down by
                 // the same amount makes this a real allocation.
                 _texCursorSaved = limit; _texCursorTaken = newBase;
-                Memory.WriteUInt(TextureManager + TexCursor, newBase);
+                Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, newBase);
                 int patched = RelocateCatTextures(minTbp, newBase);
-                Memory.WriteUInt(grp + BlkBase, newBase);
-                Memory.WriteUInt(grp + BlkTop, newBase + size);
-                Memory.WriteUInt(grp + BlkLoaded, 0);
-                Memory.WriteUInt(grp + BlkDirty, 0);
-                Memory.WriteUInt(her + BlkTop, minTbp);
+                Memory.WriteUInt(grp + TextureManager.BlkBase, newBase);
+                Memory.WriteUInt(grp + TextureManager.BlkTop, newBase + size);
+                Memory.WriteUInt(grp + TextureManager.BlkLoaded, 0);
+                Memory.WriteUInt(grp + TextureManager.BlkDirty, 0);
+                Memory.WriteUInt(her + TextureManager.BlkTop, minTbp);
                 Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} block(s) swept); her block now tops at 0x{minTbp:X}");
             }
             else if (to == HerTextureBlock)
@@ -2572,16 +2546,16 @@ namespace Dark_Cloud_Improved_Version
                 if (_texMoved.Count > 0) RelocateCatTextures(0, 0);          // back to their original addresses
                 if (_texCursorTaken != 0)                                    // give the reservation back, if nobody built below it
                 {
-                    uint cur = Memory.ReadUInt(TextureManager + TexCursor);
-                    if (cur == _texCursorTaken) Memory.WriteUInt(TextureManager + TexCursor, _texCursorSaved);
+                    uint cur = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
+                    if (cur == _texCursorTaken) Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _texCursorSaved);
                     else Console.WriteLine(Tag + $"texture cursor moved to 0x{cur:X} under our reservation (0x{_texCursorTaken:X}) — leaving it, the window stays reserved");
                     _texCursorTaken = 0; _texCursorSaved = 0;
                 }
-                if (_herTopSaved != 0) Memory.WriteUInt(her + BlkTop, _herTopSaved);
-                Memory.WriteUInt(grp + BlkBase, 0);
-                Memory.WriteUInt(grp + BlkTop, 0);
-                Memory.WriteUInt(grp + BlkLoaded, 1);
-                Memory.WriteUInt(her + BlkLoaded, 0);                          // she re-uploads her whole window next frame
+                if (_herTopSaved != 0) Memory.WriteUInt(her + TextureManager.BlkTop, _herTopSaved);
+                Memory.WriteUInt(grp + TextureManager.BlkBase, 0);
+                Memory.WriteUInt(grp + TextureManager.BlkTop, 0);
+                Memory.WriteUInt(grp + TextureManager.BlkLoaded, 1);
+                Memory.WriteUInt(her + TextureManager.BlkLoaded, 0);                          // she re-uploads her whole window next frame
                 Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}; her block restored to top 0x{_herTopSaved:X}");
             }
             else Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
@@ -2609,11 +2583,11 @@ namespace Dark_Cloud_Improved_Version
                 if (FindTexEntry(nm) != 0) { present++; continue; }
                 if (!_texSnapshot.TryGetValue(nm, out byte[] snap)) continue;
                 int idx = -1;
-                for (int i = 1; i < TexMaxEntries; i++)
-                    if (Memory.ReadByte(TextureManager + TexEntries + (long)i * TexStride + TexName) == 0) { idx = i; break; }
+                for (int i = 1; i < TextureManager.MaxEntries; i++)
+                    if (Memory.ReadByte(TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride + TextureManager.EntryName) == 0) { idx = i; break; }
                 if (idx < 0) { Console.WriteLine(Tag + "texture manager full — cannot recreate " + nm); break; }
-                Memory.WriteBytesBatch(TextureManager + TexEntries + (long)idx * TexStride, snap);
-                if (idx + 1 > Memory.ReadInt(TextureManager)) Memory.WriteInt(TextureManager, idx + 1);
+                Memory.WriteBytesBatch(TextureManager.Base + TextureManager.Entries + (long)idx * TextureManager.EntryStride, snap);
+                if (idx + 1 > Memory.ReadInt(TextureManager.Base)) Memory.WriteInt(TextureManager.Base, idx + 1);
                 present++; made++;
             }
             if (made > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
@@ -2631,11 +2605,11 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The manager entry for a cat texture, found by name (0 if absent).</summary>
         private static long FindTexEntry(string name)
         {
-            int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
+            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base));
             for (int i = 0; i < count; i++)
             {
-                long e = TextureManager + TexEntries + (long)i * TexStride;
-                byte[] nb = Memory.ReadBytesBatch(e + TexName, 32);
+                long e = TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride;
+                byte[] nb = Memory.ReadBytesBatch(e + TextureManager.EntryName, 32);
                 if (nb == null) continue;
                 int len = 0; while (len < nb.Length && nb[len] != 0) len++;
                 if (System.Text.Encoding.ASCII.GetString(nb, 0, len) == name) return e;
@@ -2744,29 +2718,18 @@ namespace Dark_Cloud_Improved_Version
         /// hit reaction (flinch + shove) runs exactly as for a melee hit. A pellet's entry has type 0: no reaction.</param>
         private static void PlantHit(float x, float h, float y, float radius, int baseDmg, float ox, float oh, float oy)
         {
-            long pool = Memory.ReadInt(NowColDataPtr);
-            if (pool <= 0) return;
-            pool += 0x20000000;
-            int slot = -1;
-            for (int i = ColEntries - 1; i >= 0; i--)
-                if (Memory.ReadInt(pool + ColActiveOff + i * 4) == 0) { slot = i; break; }
+            long pool = CollisionPool.Resolve();
+            if (pool == 0) return;
+            int slot = CollisionPool.TakeFreeSlot(pool);
             if (slot < 0) { Console.WriteLine(Tag + "no free collision entry — pounce lost"); return; }
             uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
-            var e = new byte[ColStride];
+            byte[] e = CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, attr);
             void F(int o, float v) => BitConverter.GetBytes(v).CopyTo(e, o);
-            void I(int o, int v)   => BitConverter.GetBytes(v).CopyTo(e, o);
-            F(0x00, x); F(0x04, h); F(0x08, y); F(0x0C, 1f);
-            F(0x1C, 1f); F(0x20, 1f);
-            I(0x34, baseDmg); I(0x38, 0); F(0x3C, radius);
-            I(0x44, 1); I(0x48, 2); I(0x4C, 2); I(0x50, (int)attr); I(0x54, 0);
-            I(0x58, 1); I(0x5C, -1); I(0x60, 0);
-            I(0x64, (int)(BattleWeaponStats - 0x20000000)); I(0x68, -1); I(0x6C, Memory.ReadShort(BattleWeaponFlags));
-            I(0x70, 0); I(0x74, 0);
-            F(0x80, ox); F(0x84, oh); F(0x88, oy); F(0x8C, 1f);                   // kick origin (a point)
-            F(0x90, KickStrength); F(0x94, KickDecay); I(0x98, CatKickType);       // kick strength, decay, type 2 = melee-style reaction
-            Memory.WriteBytesBatch(pool + slot * ColStride, e);
-            Memory.WriteInt(pool + ColActiveOff + slot * 4, 1);
+            F(0x80, ox); F(0x84, oh); F(0x88, oy);                                  // kick origin (a point)
+            F(0x90, KickStrength); F(0x94, KickDecay);                              // kick strength, decay
+            BitConverter.GetBytes(CatKickType).CopyTo(e, 0x98);                     // type 2 = melee-style reaction
+            CollisionPool.Plant(pool, slot, e);
             lock (_planted) _planted.Add((slot, PlantedLifeTicks, false));
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"hit entry at ({x:F1},{h:F1},{y:F1}) r={radius:F0}: base {baseDmg}, attr 0x{attr:X} → entry {slot}");
@@ -2789,11 +2752,11 @@ namespace Dark_Cloud_Improved_Version
                     _guardRestore.RemoveAt(i);
                 }
                 if (_planted.Count == 0) return;
-                long pool = Memory.ReadInt(NowColDataPtr);
+                long pool = CollisionPool.Resolve();
                 for (int i = _planted.Count - 1; i >= 0; i--)
                 {
                     var (idx, ticks, native) = _planted[i];
-                    if (native && pool > 0 && Memory.ReadInt(pool + 0x20000000 + ColActiveOff + idx * 4) == 0)
+                    if (native && pool != 0 && !CollisionPool.IsActive(pool, idx))
                     {
                         // The entry is gone. Accepted = some enemy's CheckDmg overwrote the −1 the cave stamped into every
                         // slot's "last hit sphere" word (+0x55750) at the plant — it only does so past its guard and
@@ -2817,7 +2780,7 @@ namespace Dark_Cloud_Improved_Version
                         _planted.RemoveAt(i); continue;
                     }
                     if (--ticks > 0) { _planted[i] = (idx, ticks, native); continue; }
-                    if (pool > 0) Memory.WriteInt(pool + 0x20000000 + ColActiveOff + idx * 4, 0);
+                    if (pool != 0) CollisionPool.Deactivate(pool, idx);
                     if (native)
                     {   // never consumed: the enemy was invulnerable or the sphere's hurt window was closed — not spent; the cave may contact again
                         Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
@@ -2830,22 +2793,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────────────────────── utils ───────────────────────────────────────────────
 
-        private static int A16(int n) => (n + 15) & ~15;
-
         private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
 
-        /// <summary>Re-point one word of a copied block: if it lands in [min, max] it moves to the same offset in the cave,
-        /// otherwise it is zeroed.</summary>
-        private static void Rebase(byte[] block, int off, uint min, uint max, uint caveG, bool forceZero)
-        {
-            uint old = (uint)BitConverter.ToInt32(block, off) & Memory.PhysAddrMask;
-            uint neu = 0;
-            if (!forceZero && old >= min && old <= max) neu = caveG + (old - min);
-            BitConverter.GetBytes(neu).CopyTo(block, off);
-        }
-
-        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (see Memory.RebaseRange: the
-        /// old mask-first version re-pointed five vertex floats of the MDT copy into the cave).</summary>
-        private static void RebaseRange(byte[] b, uint src, int size, uint dst) => Memory.RebaseRange(b, src, size, dst);
     }
 }
