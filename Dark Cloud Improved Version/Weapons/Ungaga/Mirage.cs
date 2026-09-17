@@ -220,10 +220,10 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_handoff)   // outgoing clone dissolving in place; the incoming one is still invisible
             {
-                double ht = (DateTime.UtcNow - _handoffStart).TotalSeconds;
+                double ht = (GameClock.Now - _handoffStart).TotalSeconds;
                 return (float)Math.Clamp(1.0 - ht / HandoffFade, 0.0, 1.0);
             }
-            double remaining = (_decoyDeadline - DateTime.UtcNow).TotalSeconds;
+            double remaining = (_decoyDeadline - GameClock.Now).TotalSeconds;
             double elapsed   = DecoySeconds - remaining;
             double a = 1.0;
             double inT  = elapsed   - HazeRampSeconds;   // materialize only AFTER the haze has ramped in
@@ -246,7 +246,7 @@ namespace Dark_Cloud_Improved_Version
         {
             // No hand-off case needed: a re-cast resets the deadline, so this reads elapsed≈0 and ramps up from
             // zero AT THE NEW DECOY — i.e. the shimmer vanishes from the old spot the instant we cast.
-            double remaining = (_decoyDeadline - DateTime.UtcNow).TotalSeconds;
+            double remaining = (_decoyDeadline - GameClock.Now).TotalSeconds;
             double elapsed   = DecoySeconds - remaining;
             double g = 1.0;
             if (elapsed   < HazeRampSeconds) g = elapsed / HazeRampSeconds;                 // ramp in  (leads the clone)
@@ -305,20 +305,11 @@ namespace Dark_Cloud_Improved_Version
         {
             bool guardLatched = false;
             DateTime guardPoseSince = default;
-            DateTime lastTick = DateTime.UtcNow;
             while (true)
             {
                 int sleep = IdleTickMs;
                 try
                 {
-                    // REAL elapsed wall time since the previous iteration. A tick can take substantially
-                    // longer than FastTickMs (MaintainClone batch-reads the whole fire-tile grid and does a
-                    // pile of PINE writes), so freezing the decoy timer by pushing the deadline a hardcoded
-                    // FastTickMs under-compensates and the timer keeps draining while paused. Push by this.
-                    DateTime nowTick = DateTime.UtcNow;
-                    TimeSpan dt = nowTick - lastTick;
-                    lastTick = nowTick;
-
                     bool inDun = Player.InDungeonFloor();
                     if (!_armed && !inDun) ArmColdPatch();
 
@@ -352,8 +343,8 @@ namespace Dark_Cloud_Improved_Version
                             {
                                 // Hold the guard pose for GuardChargeMs, THEN flash the player (Mobius-charge
                                 // style) and plant the decoy at that same moment. One flash+decoy per guard-hold.
-                                if (guardPoseSince == default) guardPoseSince = DateTime.UtcNow;
-                                else if (DateTime.UtcNow - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
+                                if (guardPoseSince == default) guardPoseSince = GameClock.Now;
+                                else if (GameClock.Now - guardPoseSince >= TimeSpan.FromMilliseconds(GuardChargeMs))
                                 {
                                     Player.FlashChargeComplete();
                                     if (_handoff) { }                           // a hand-off is already running — ignore
@@ -366,13 +357,10 @@ namespace Dark_Cloud_Improved_Version
                         }
                         else if (_decoyActive && paused)
                         {
-                            // Freeze while paused: hold the deadline (timer stops) and keep the clone drawn — the
-                            // flag-3 gate below freezes its step + cloth. Covers BOTH pause types: the item menu
-                            // (engine already freezes the clone there) and the PAUSE screen (where the chara loop
-                            // otherwise keeps stepping the clone).
-                            _decoyDeadline += dt;   // hold the timer: push by the REAL tick delta, not a fixed FastTickMs
-                            if (_handoff) _handoffStart += dt;                      // freeze a hand-off mid-dissolve
-                            if (_aggroHoldUntil != default) _aggroHoldUntil += dt;   // ...and its aggro lag
+                            // Held: keep the clone drawn — the flag-3 gate below freezes its step + cloth — for both
+                            // hold types: the item menu (the engine already freezes the clone there) and the PAUSE
+                            // screen (where the chara loop otherwise keeps stepping it). The decoy timer, a hand-off
+                            // and its aggro lag all stand still on their own: they read GameClock.
                             PoseClone();
                             ShowDecoyHaze();
                         }
@@ -444,7 +432,7 @@ namespace Dark_Cloud_Improved_Version
             if (refreshAggro) RefreshAggro();
             _decoyActive = true;
             _decoyChar = Player.CurrentCharacterNum();   // the clone is bound to THIS character's model
-            _decoyDeadline = DateTime.UtcNow.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
+            _decoyDeadline = GameClock.Now.AddSeconds(DecoySeconds);   // timer + haze ramp start HERE
             if (spawnClone)
             {
                 CharacterClone.Despawn();   // clear any stale slot from a previous decoy
@@ -474,7 +462,7 @@ namespace Dark_Cloud_Improved_Version
         {
             _oldDx = _dx; _oldDz = _dz; _oldDy = _dy; _oldYaw = _decoyYaw;   // hold the outgoing clone in place
             _handoff = true;
-            _handoffStart = DateTime.UtcNow;
+            _handoffStart = GameClock.Now;
             _aggroHoldUntil = _handoffStart.AddSeconds(AggroHoldSeconds);    // aggro lags on the old spot past the swap
             var o = ReadDecoyOrigin();
             PlaceDecoyAt(o.dx, o.dz, o.dy, o.yaw, spawnClone: false, refreshAggro: false);   // new decoy live now; aggro state preserved
@@ -491,16 +479,16 @@ namespace Dark_Cloud_Improved_Version
 
         private static void UpdateDecoyState()
         {
-            if (_handoff && (DateTime.UtcNow - _handoffStart).TotalSeconds >= HandoffFade)
+            if (_handoff && (GameClock.Now - _handoffStart).TotalSeconds >= HandoffFade)
                 CompleteHandoff();   // outgoing clone hit alpha 0 → respawn it at the new decoy and fade it in
-            if (_aggroHoldUntil != default && DateTime.UtcNow >= _aggroHoldUntil)
+            if (_aggroHoldUntil != default && GameClock.Now >= _aggroHoldUntil)
             {
                 _aggroHoldUntil = default;   // new clone is fully materialized → enemies finally notice the switch
                 RefreshAggro();              // incl. the ones that had broken the old illusion: they only fall for the NEW clone
                 WriteDecoyPos();
                 Console.WriteLine("[Mirage] hand-off: new clone fully faded in — enemies re-target it");
             }
-            if (DateTime.UtcNow > _decoyDeadline)
+            if (GameClock.Now > _decoyDeadline)
             {
                 EndDecoy();
                 Console.WriteLine("[Mirage] decoy faded; enemies re-target the player");
@@ -548,7 +536,7 @@ namespace Dark_Cloud_Improved_Version
             // new clone has fully materialized (AggroHoldSeconds) — deliberately outliving the clone swap, so
             // enemies commit to the body they were fighting and only notice the switch once the new one is
             // actually there, instead of psychically peeling off the instant we cast.
-            bool hold = DateTime.UtcNow < _aggroHoldUntil;
+            bool hold = GameClock.Now < _aggroHoldUntil;
             var b = new byte[16];
             BitConverter.GetBytes(hold ? _oldDx : _dx).CopyTo(b, 0);
             BitConverter.GetBytes(hold ? _oldDz : _dz).CopyTo(b, 4);

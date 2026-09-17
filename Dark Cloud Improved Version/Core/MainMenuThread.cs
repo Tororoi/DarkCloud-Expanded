@@ -34,6 +34,7 @@ namespace Dark_Cloud_Improved_Version
             GuardianReflector.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch
             WeaponTextureSwap.StartSwapThread();   // Super Steve wears the attached sphere weapon's palette (dungeon + menus)
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
+            GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
             GuardianGrace.Start();   // Xiao's Angel Shooter guard-heal + spring sparkle (roadmap PR 2)
             GuardianReflector.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
