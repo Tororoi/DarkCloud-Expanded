@@ -81,7 +81,7 @@ namespace Dark_Cloud_Improved_Version
         // caves make _GET_POSITION/_GET_DISTANCE read a per-slot POINTER (CodeCaves.PtrTable); the ring
         // points each live enemy's pointer at its own ring position. Enemies already inside the ring see her
         // real position (they are past the shield). Released → every pointer back to the live player.
-        private const float RingRadius   = PropAhead + 2f;   // the slingshot's reach plus its own thickness
+        private const float RingRadius   = PropAhead + PropHitRadius;   // the slingshot's far face: bodies stop at the volume a swing is tested against
         private const int   RingSlots    = 20;               // per-slot entries managed (Mirage manages the same 20)
         // MELEE HIT ON THE SLINGSHOT (user 2026-09-09): enemy swings are CCollisionData spheres in the
         // NowColData pool, planted by CMonstorUnit::CheckDmg (0x1D9F10) only during an attack's damage
@@ -243,9 +243,9 @@ namespace Dark_Cloud_Improved_Version
                     if (!_blockArmed && !Player.InDungeonFloor()) ArmBlockPatch();
                     if (!_shotArmed && !Player.InDungeonFloor()) ArmShotPatch();
                     if (inDun) sleep = FastTickMs;
+                    bool held  = inDun && Player.CheckDunIsPausedOrMenu();   // PAUSE screen or menu: everything stands still
                     bool armed = inDun
                               && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.angelgear
-                              && !Player.CheckDunIsPausedOrMenu()
                               && GuardWatch.IsGuarding();
 
                     long pack = inDun ? Memory.ReadInt(NowShotEffectPtr) : 0;
@@ -256,6 +256,8 @@ namespace Dark_Cloud_Improved_Version
                         continue;
                     }
                     pack += 0x20000000;
+                    if (held) { Thread.Sleep(sleep); continue; }   // the prop holds its own slot; nothing here may advance
+
 
                     float xx = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos);
                     float xh = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
@@ -280,7 +282,7 @@ namespace Dark_Cloud_Improved_Version
                             else
                             {
                                 _dispelling = true; _cooling = true;
-                                _cooldownUntil = DateTime.UtcNow.AddSeconds(CooldownSeconds);
+                                _cooldownUntil = GameClock.Now.AddSeconds(CooldownSeconds);
                                 SeSeq.Play(SeSeq.WeaponBreak, 60);                 // the game's own weapon-break sound (WHP → 0)
                                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slingshot broken (weapon-break SE) — bar refills over {CooldownSeconds:0.#} s");
                             }
@@ -302,7 +304,7 @@ namespace Dark_Cloud_Improved_Version
                             SetGaugeRate(RefillMultiplier());
                             if (Memory.ReadFloat(GaugeAddr) >= 99.5f) { _cooling = false; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "bar full — slingshot ready"); }
                         }
-                        else if (DateTime.UtcNow >= _cooldownUntil) _cooling = false;
+                        else if (GameClock.Now >= _cooldownUntil) _cooling = false;
                     }
                     else SetGaugeRate(VanillaXiaoRefillMul);
 
@@ -1013,7 +1015,14 @@ namespace Dark_Cloud_Improved_Version
                         }
                         if (quiet) continue;                                        // no second spark/clink while dispelling
                         Array.Clear(hm, 0, hm.Length);
-                        Array.Copy(e, 0, hm, 0, 16);                                // hit-mark at the sphere's center
+                        Array.Copy(e, 0, hm, 0, 16);                                // the sphere's centre …
+                        float cdx = rx - ex, cdh = rh - eh, cdy = ry - ey, cl = (float)Math.Sqrt(cdx * cdx + cdh * cdh + cdy * cdy);
+                        if (cl > 1e-3f)                                             // … moved to its surface toward the prop: the contact point
+                        {
+                            BitConverter.GetBytes(ex + cdx / cl * r).CopyTo(hm, 0);
+                            BitConverter.GetBytes(eh + cdh / cl * r).CopyTo(hm, 4);
+                            BitConverter.GetBytes(ey + cdy / cl * r).CopyTo(hm, 8);
+                        }
                         BitConverter.GetBytes(HitMarkLife).CopyTo(hm, 0x10);
                         BitConverter.GetBytes(0).CopyTo(hm, 0x14);
                         BitConverter.GetBytes(1).CopyTo(hm, 0x18);                  // active last

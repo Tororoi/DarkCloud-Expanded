@@ -180,7 +180,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionSlotBase = 0xC20;   // channel[i] MOTION_TYPE ptr at +0xC20 + i*4
         internal const int  MotionSlots    = 8;
         internal const int  MotionFlags    = 0xC64;   // per-step motion flags: 0x1 stop, 0x2 play once + hold the last frame, 0x4 restart (Step clears 0x4)
-        internal const int  MotionStop     = 0x1;     //   bit0 = hold the frame: rate 0, blend increment 0
+        internal const int  MotionStop     = 0x1;     //   bit0 = hold the frame: rate 0 — and Step zeroes the channel's blend
+                                                      //   increment (MotionType.StateSpeed) while it is set; nothing re-seeds it
+                                                      //   (MOTION_END does so at load only), so clearing the bit without writing
+                                                      //   it back leaves every later cross-fade unable to finish. To hold a chara
+                                                      //   slot, DungeonCharaDraw.StepSkipTable freezes it without this cost.
         internal const int  MotionPlayOnce = 0x2;
         internal const int  MotionRestart  = 0x4;     //   bit2 = clean restart (frame 0, no blend); consumed once
         internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN

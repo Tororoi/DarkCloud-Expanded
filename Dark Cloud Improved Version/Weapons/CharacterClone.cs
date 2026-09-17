@@ -34,6 +34,9 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Motion id pinned onto the clone every tick (-1 = leave whatever the engine's step chose).
         /// The clone's step reads +0xC68 each frame, so pinning holds a stable pose regardless of the player.</summary>
         internal static int HoldMotion = -1;
+        /// <summary>Held: the clone's slot stays drawn but the dungeon loop does not step it — motion, cloth and shadow all
+        /// stand still. The owner sets it for a PAUSE screen or menu; <see cref="Maintain"/> keeps the mark while it is set.</summary>
+        internal static bool Held;
 
         internal static bool IsActive => _cloneSlot >= 0;
         internal static int  Slot     => _cloneSlot;
@@ -232,7 +235,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampA, 0);     // opacity-ramp amount = 0 (no fade drift)
             Memory.WriteInt(slot + DungeonCharaDraw.CharaRampB, 0);
             Memory.WriteInt(DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 1);   // register → dungeon draw draws it
-            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, 0);   // un-skip → dungeon step loop steps it (clear the 1 a prior DespawnClone left)
+            Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, Held ? 1 : 0);   // un-skip → dungeon step loop steps it (clear the 1 a prior DespawnClone left)
             Console.WriteLine($"[Clone] clone in chara slot {_cloneSlot} (texgroup 0x{DungeonCharaDraw.CharaTexBase + _cloneSlot:X}) @({_x:0.#},{_z:0.#},{_y:0.#}) root=0x{_cloneRootGuest:X}");
 
             if (WeaponEnabled) RegisterWeaponChara();   // clone weapon in its own slot 3 / texgroup 0x1d pass
@@ -378,19 +381,21 @@ namespace Dark_Cloud_Improved_Version
             // DFS over child/sibling to find the tree's address SPAN (the bones form a contiguous 0x270 array
             // rooted at the model root, so min == rootPhys and the block is [min, max+0x270)).
             uint min = rootPhys, max = rootPhys;
-            uint catRoot = 0, catSibling = 0;   // Xiao's baked cat subtree (DivineBeastCat): never part of the clone
+            // Xiao's pack bakes the Divine Beast cat into her model: the cat subtree under `catroot`, and after it the
+            // cape's cloth frame `cat_cape`, parented into HER tree. None of it is hers to clone — each such node is
+            // left out (its subtree with it) and the link that reached it is re-pointed past it.
+            var skip = new System.Collections.Generic.Dictionary<uint, uint>();   // skipped node → its next sibling
             var seen = new System.Collections.Generic.HashSet<uint>();
             var work = new System.Collections.Generic.Stack<uint>();
             work.Push(rootPhys);
             while (work.Count > 0)
             {
                 uint n = work.Pop();
-                if (!Memory.IsValidGuest(n) || seen.Contains(n)) continue;
-                if (catRoot == 0 && IsCatRoot(n))
+                if (!Memory.IsValidGuest(n) || seen.Contains(n) || skip.ContainsKey(n)) continue;
+                if (IsCatNode(n))
                 {
-                    catRoot = n;
-                    catSibling = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootSibling);
-                    continue;                                   // skip the whole cat subtree
+                    skip[n] = Memory.ReadGuestPtr(Memory.ToMmu(n) + CFrameVu1.RootSibling);
+                    continue;
                 }
                 seen.Add(n);
                 if (n < min) min = n; if (n > max) max = n;
@@ -406,6 +411,8 @@ namespace Dark_Cloud_Improved_Version
             int blockSize = nodeCount * CFrameVu1.NodeStride;
             if ((max - min) % CFrameVu1.NodeStride != 0)
             { Console.WriteLine($"[Clone] tree span 0x{max - min:X} not 0x270-aligned — bailing"); return false; }
+            if (nodeCount > CodeCaves.MaxNodes)                 // the SPAN is what gets written, not just the reached nodes
+            { Console.WriteLine($"[Clone] tree span of {nodeCount} nodes exceeds the {CodeCaves.MaxNodes}-node pool — aborting"); return false; }
 
             byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
             if (block == null) return false;
@@ -413,14 +420,23 @@ namespace Dark_Cloud_Improved_Version
             // Re-base every link pointer by (clonePool − playerBase); zero external refs and the root's
             // parent/sibling; invalidate world caches. Same-offset translation keeps array indexing valid.
             uint rootOff = rootPhys - min;
+            int skipped = 0;
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
-                if (catRoot != 0)                                   // link AROUND the skipped cat subtree
+                if (skip.Count > 0)                                 // link PAST every skipped node, through runs of them
                 {
                     foreach (int lo in new[] { CFrameVu1.RootChild, CFrameVu1.RootSibling })
-                        if (((uint)BitConverter.ToInt32(block, o + lo) & Memory.PhysAddrMask) == catRoot)
-                            BitConverter.GetBytes(catSibling).CopyTo(block, o + lo);
+                    {
+                        uint link = (uint)BitConverter.ToInt32(block, o + lo) & Memory.PhysAddrMask, orig = link;
+                        while (skip.TryGetValue(link, out uint next)) link = next;
+                        if (link != orig) BitConverter.GetBytes(link).CopyTo(block, o + lo);
+                    }
+                }
+                if (!seen.Contains(min + (uint)o))                  // in the span but not in the tree: no geometry, so
+                {                                                   // CopyMeshNodes leaves its meshes alone too
+                    BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.GeomPtr);
+                    skipped++;
                 }
                 Memory.Rebase(block, o + CFrameVu1.Parent,      min, max, (uint)CodeCaves.NodePoolGuest, isRoot);   // root's parent → 0
                 Memory.Rebase(block, o + CFrameVu1.RootChild,   min, max, (uint)CodeCaves.NodePoolGuest, false);
@@ -432,15 +448,17 @@ namespace Dark_Cloud_Improved_Version
 
             _cloneNodeCount = nodeCount;
             _cloneRootGuest = (uint)(CodeCaves.NodePoolGuest + rootOff);   // clone root = pool + root offset
-            Console.WriteLine($"[Clone] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}");
+            Console.WriteLine($"[Clone] contiguous {nodeCount}-node clone tree (0x270 stride) → root 0x{_cloneRootGuest:X}" + (skipped > 0 ? $" ({skipped} in the skipped cat subtree)" : ""));
             return true;
         }
 
-        private static bool IsCatRoot(uint node)
+        /// <summary>A node the cat pack added to Xiao's model: `catroot`, or any `cat_` name (build_cat_pack prefixes
+        /// every grafted node so; her own rig has no such names).</summary>
+        private static bool IsCatNode(uint node)
         {
             byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(node) + CFrameVu1.Name, 8);
-            return b != null && b[0] == (byte)'c' && b[1] == (byte)'a' && b[2] == (byte)'t' && b[3] == (byte)'r'
-                && b[4] == (byte)'o' && b[5] == (byte)'o' && b[6] == (byte)'t' && b[7] == 0;
+            if (b == null || b[0] != (byte)'c' || b[1] != (byte)'a' || b[2] != (byte)'t') return false;
+            return b[3] == (byte)'_' || (b[3] == (byte)'r' && b[4] == (byte)'o' && b[5] == (byte)'o' && b[6] == (byte)'t' && b[7] == 0);
         }
 
         /// <summary>Give the clone its own copy of every SOFTWARE-SKINNED mesh (CVisualMDTVu1). Those are the
@@ -743,7 +761,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(slot + CCharacter.DimFactor,   GhostSilhouette ? GhostDim : 1.0f);   // re-assert like opacity/tint (spawn-only would drift)
             WriteGhostTint(slot);
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)_cloneSlot * 4, 1);   // draw loop draws it
-            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
+            Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)_cloneSlot * 4, Held ? 1 : 0);   // step loop STEPS it (DespawnClone set this to 1; must clear on re-cast or physics only works once)
 
             // Engine-driven animation: the engine's own chara-step (unlocked via the PNACH step-gate NOP) poses
             // the clone tree at 60fps — no polling. Re-assert the step flags (game may reset between our ticks)
