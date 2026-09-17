@@ -277,7 +277,7 @@ namespace Dark_Cloud_Improved_Version
                               && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
                     if (armed && Active && weapon != _weapon)
                     {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
+                        Log( $"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
                         Despawn();
                     }
                     if (!armed)
@@ -332,7 +332,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(Tag + "tick failed: " + e.Message);
+                    Log("tick failed: " + e.Message);
                     try { if (Active) Despawn(); } catch { }
                 }
                 Thread.Sleep(sleep);
@@ -352,7 +352,7 @@ namespace Dark_Cloud_Improved_Version
             _pausedBlend = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateSpeed);   // read BEFORE the stop: Step writes 0 there while stopped
             long f = SlotAddr() + CCharacter.MotionFlags;
             Memory.WriteInt(f, Memory.ReadInt(f) | CCharacter.MotionStop);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"paused — cat held (blend increment {_pausedBlend:F3})");
+            Log( $"paused — cat held (blend increment {_pausedBlend:F3})");
         }
 
         /// <summary>Come back from a pause or menu hold: clear the motion-stop flag and put back the channel's blend
@@ -368,7 +368,7 @@ namespace Dark_Cloud_Improved_Version
                 // next key cross-fade would never finish. Put back what it was, or the engine's default.
                 Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, _pausedBlend > 0f ? _pausedBlend : BlendDefault);
             }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
+            Log( $"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
         }
 
         // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ namespace Dark_Cloud_Improved_Version
                 uint frame = (uint)Memory.ReadInt(Memory.ToMmu(obj) + CCloth.ClothAttach) & Memory.PhysAddrMask;
                 if (!Memory.IsValidGuest(frame) || ReadName(frame) != CapeNodeName) continue;
                 Memory.WriteInt(Memory.ToMmu(herList) + i * 4, 0);
-                if (_capeTemplate != obj) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cape: took her own copy out of her cloth list (entry {i}, 0x{obj:X}) — it is the clone template");
+                if (_capeTemplate != obj) Log( $"cape: took her own copy out of her cloth list (entry {i}, 0x{obj:X}) — it is the clone template");
                 _capeTemplate = obj;
                 return;
             }
@@ -408,7 +408,7 @@ namespace Dark_Cloud_Improved_Version
             _capeObj = 0;
             TakeHerCape();                                                        // a reload rebuilds her copy: re-cache it first
             uint herList = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.ClothList) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(herList)) { Console.WriteLine(Tag + "cape: she has no cloth list — is the ISO patched with the cape?"); return; }
+            if (!Memory.IsValidGuest(herList)) { Log("cape: she has no cloth list — is the ISO patched with the cape?"); return; }
             uint template = 0; int entry = -1;
             for (int i = 0; i < CCloth.ClothMaxPieces; i++)
             {
@@ -422,11 +422,11 @@ namespace Dark_Cloud_Improved_Version
                 uint frame = (uint)Memory.ReadInt(Memory.ToMmu(_capeTemplate) + CCloth.ClothAttach) & Memory.PhysAddrMask;
                 if (Memory.IsValidGuest(frame) && ReadName(frame) == CapeNodeName) template = _capeTemplate;
             }
-            if (template == 0) { Console.WriteLine(Tag + "cape: no cloth anchored to " + CapeNodeName + " in her list — is the ISO patched with the cape?"); return; }
+            if (template == 0) { Log("cape: no cloth anchored to " + CapeNodeName + " in her list — is the ISO patched with the cape?"); return; }
             {
                 int i = entry; uint obj = template;
                 byte[] o = Memory.ReadBytesBatch(Memory.ToMmu(obj), CCloth.ClothObjSize);
-                if (o == null) { Console.WriteLine(Tag + "cape: template read failed"); return; }
+                if (o == null) { Log("cape: template read failed"); return; }
                 int wide = BitConverter.ToInt32(o, 0x2C), hang = BitConverter.ToInt32(o, 0x30);   // outer (across the back) × inner (down the cape; index 0 pinned)
                 uint b0 = (uint)BitConverter.ToInt32(o, CCloth.ClothBuf0) & Memory.PhysAddrMask, b1 = (uint)BitConverter.ToInt32(o, CCloth.ClothBuf0 + 4) & Memory.PhysAddrMask;
                 // How big a draw packet this cloth builds. Take it from the cloth's OWN figure (+0x1C, what CreateVUData returned
@@ -439,14 +439,14 @@ namespace Dark_Cloud_Improved_Version
                 bufSize = (bufSize + 0x3F) & ~0x3F;
                 if (packet <= 0 || bufSize > 0x20000)
                 {
-                    Console.WriteLine(Tag + $"cape: refusing to clone — packet {packet} B, pointer gap {gap} B, neither is a sane buffer size");
+                    Log($"cape: refusing to clone — packet {packet} B, pointer gap {gap} B, neither is a sane buffer size");
                     return;
                 }
                 long cObj = TakeCave(CCloth.ClothObjSize, out uint cObjG);
                 long cB0 = TakeCave(bufSize, out uint cB0G), cB1 = TakeCave(bufSize, out uint cB1G), cList = TakeCave(16, out uint cListG);
-                if (cObj == 0 || cB0 == 0 || cB1 == 0 || cList == 0) { Console.WriteLine(Tag + "cape: no cave room — no cape"); return; }
+                if (cObj == 0 || cB0 == 0 || cB1 == 0 || cList == 0) { Log("cape: no cave room — no cape"); return; }
                 int anchor = NodeIndexOf(CapeAnchorName);
-                if (anchor < 0) { Console.WriteLine(Tag + "cape: no " + CapeAnchorName + " in the copy — no cape"); return; }
+                if (anchor < 0) { Log("cape: no " + CapeAnchorName + " in the copy — no cape"); return; }
                 BitConverter.GetBytes(cB0G).CopyTo(o, CCloth.ClothActive);
                 BitConverter.GetBytes(cB0G).CopyTo(o, CCloth.ClothBuf0);
                 BitConverter.GetBytes(cB1G).CopyTo(o, CCloth.ClothBuf0 + 4);
@@ -475,8 +475,8 @@ namespace Dark_Cloud_Improved_Version
                 }
                 TintCape();
                 string V(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
-                Console.WriteLine(Tag + $"cape physics: K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
+                Log($"cape physics: K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
+                Log( $"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
             }
         }
 
@@ -499,9 +499,9 @@ namespace Dark_Cloud_Improved_Version
                 if (b == null) break;
                 uint next = (uint)BitConverter.ToInt32(b, CBound.BoundNext) & Memory.PhysAddrMask;
                 int bone = NodeIndexOf(CapeBoundBones[count]);
-                if (bone < 0) { Console.WriteLine(Tag + "cape: no " + CapeBoundBones[count] + " in the copy — capsule skipped"); break; }
+                if (bone < 0) { Log("cape: no " + CapeBoundBones[count] + " in the copy — capsule skipped"); break; }
                 long cB = TakeCave(CBound.BoundSize, out uint cBG);
-                if (cB == 0) { Console.WriteLine(Tag + "cape: no cave room for the body capsules"); break; }
+                if (cB == 0) { Log("cape: no cave room for the body capsules"); break; }
                 BitConverter.GetBytes((uint)(CodeCaves.NodePoolGuest + bone * CFrameVu1.NodeStride)).CopyTo(b, CBound.BoundFrameA);
                 BitConverter.GetBytes(0).CopyTo(b, CBound.BoundFrameB);                       // A alone carries both endpoints
                 BitConverter.GetBytes(0).CopyTo(b, CBound.BoundNext);                         // the chain is re-linked below
@@ -523,7 +523,7 @@ namespace Dark_Cloud_Improved_Version
             uint active = (uint)BitConverter.ToInt32(o, CCloth.ClothActive), anchor = (uint)BitConverter.ToInt32(o, CCloth.ClothAttach);
             long s = SlotAddr();
             // the lattice: slot = a*16 + b — a = width (0..4 across the collar), b = hang (0 = the collar edge, 6 = the hem)
-            Console.WriteLine(Tag + $"cape watch: cur a0b0 {P(0x1110)} a0b1 {P(0x1120)} a0b6 {P(0x1170)} a4b0 {P(0x1510)} a4b6 {P(0x1570)} | rest p0 {P(0x110)} p1 {P(0x120)} p16 {P(0x210)} | anchor-centroid {P(0xF0)} local {P(0x100)} active 0x{active:X}");
+            Log($"cape watch: cur a0b0 {P(0x1110)} a0b1 {P(0x1120)} a0b6 {P(0x1170)} a4b0 {P(0x1510)} a4b6 {P(0x1570)} | rest p0 {P(0x110)} p1 {P(0x120)} p16 {P(0x210)} | anchor-centroid {P(0xF0)} local {P(0x100)} active 0x{active:X}");
             uint bnd = (uint)BitConverter.ToInt32(o, CCloth.ClothBounds) & Memory.PhysAddrMask;
             var caps = new List<string>();
             while (Memory.IsValidGuest(bnd) && caps.Count < 4)
@@ -533,7 +533,7 @@ namespace Dark_Cloud_Improved_Version
                 caps.Add($"{ReadName((uint)BitConverter.ToInt32(b, CBound.BoundFrameA) & Memory.PhysAddrMask)} c({BitConverter.ToSingle(b, CBound.BoundCentre):F1},{BitConverter.ToSingle(b, CBound.BoundCentre + 4):F1},{BitConverter.ToSingle(b, CBound.BoundCentre + 8):F1}) r({BitConverter.ToSingle(b, CBound.BoundRadii):F1},{BitConverter.ToSingle(b, CBound.BoundRadii + 4):F1},{BitConverter.ToSingle(b, CBound.BoundRadii + 8):F1})");
                 bnd = (uint)BitConverter.ToInt32(b, CBound.BoundNext) & Memory.PhysAddrMask;
             }
-            Console.WriteLine(Tag + "cape watch: capsules " + (caps.Count == 0 ? "none" : string.Join(" | ", caps)));
+            Log("cape watch: capsules " + (caps.Count == 0 ? "none" : string.Join(" | ", caps)));
             // how far each particle is from the rest shape the engine is pulling it to (+0x7550 = LW(anchor) × rest, refreshed every step)
             byte[] tg = Memory.ReadBytesBatch(_capeObj + CCloth.ClothTarget, 0x80);
             if (tg != null)
@@ -545,11 +545,11 @@ namespace Dark_Cloud_Improved_Version
                     float dz = BitConverter.ToSingle(tg, b * 16 + 8) - BitConverter.ToSingle(o, 0x1118 + b * 16);
                     return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
                 }
-                Console.WriteLine(Tag + $"cape watch: column 0 off the rest shape by b1 {Sag(1):F2} b3 {Sag(3):F2} b6 {Sag(6):F2} | b6 target ({BitConverter.ToSingle(tg, 0x60):F1},{BitConverter.ToSingle(tg, 0x64):F1},{BitConverter.ToSingle(tg, 0x68):F1})");
+                Log($"cape watch: column 0 off the rest shape by b1 {Sag(1):F2} b3 {Sag(3):F2} b6 {Sag(6):F2} | b6 target ({BitConverter.ToSingle(tg, 0x60):F1},{BitConverter.ToSingle(tg, 0x64):F1},{BitConverter.ToSingle(tg, 0x68):F1})");
             }
             byte[] lw = Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40);
             string rows = lw == null ? "?" : string.Join(" | ", new[] { 0, 1, 2, 3 }.Select(r => $"({BitConverter.ToSingle(lw, r * 16):F2},{BitConverter.ToSingle(lw, r * 16 + 4):F2},{BitConverter.ToSingle(lw, r * 16 + 8):F2},{BitConverter.ToSingle(lw, r * 16 + 12):F2})"));
-            Console.WriteLine(Tag + $"cape watch: anchor LW rows {rows} | cat at ({Memory.ReadFloat(s + CCharacter.CharPos):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 4):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 8):F1}) yaw {Memory.ReadFloat(s + CCharacter.CharRotY):F2} scale {Memory.ReadFloat(s + CCharacter.CharScale):F2} opacity {Memory.ReadFloat(s + CCharacter.NpcOpacity):F0}");
+            Log($"cape watch: anchor LW rows {rows} | cat at ({Memory.ReadFloat(s + CCharacter.CharPos):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 4):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 8):F1}) yaw {Memory.ReadFloat(s + CCharacter.CharRotY):F2} scale {Memory.ReadFloat(s + CCharacter.CharScale):F2} opacity {Memory.ReadFloat(s + CCharacter.NpcOpacity):F0}");
         }
 
         private const float CapeWindLift = 2.6f;         // how far the hem flies off the back
@@ -584,7 +584,7 @@ namespace Dark_Cloud_Improved_Version
                 float span = (float)Math.Sqrt(sx * sx + sy * sy + sz * sz);
                 if (span > CapeTearSpan || float.IsNaN(span))
                 {
-                    if (--_capeTearLog <= 0) { _capeTearLog = 60; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
+                    if (--_capeTearLog <= 0) { _capeTearLog = 60; Log( $"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
                     ReseedCape();
                     return;
                 }
@@ -648,7 +648,7 @@ namespace Dark_Cloud_Improved_Version
             if (_capeObj == 0 || _capeRest == null) return;
             uint anchor = (uint)Memory.ReadInt(_capeObj + CCloth.ClothAttach) & Memory.PhysAddrMask;
             byte[] lw = Memory.IsValidGuest(anchor) ? Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40) : null;
-            if (lw == null) { Console.WriteLine(Tag + "cape: cannot reseed — the anchor's matrix did not read"); return; }
+            if (lw == null) { Log("cape: cannot reseed — the anchor's matrix did not read"); return; }
             float[] m = new float[16];
             for (int i = 0; i < 16; i++) m[i] = BitConverter.ToSingle(lw, i * 4);
             // row-vector convention, as everywhere in this engine: world = x·row0 + y·row1 + z·row2 + row3
@@ -722,8 +722,8 @@ namespace Dark_Cloud_Improved_Version
             if (e != _element)
             {
                 WriteGlowName();                                  // every element binds the SAME disc now; clearing CatGlowReady re-binds it
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
-                                  + $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
+                Log(
+                                  $"element {look.Name}: cape/mask ({look.Rgb[0]},{look.Rgb[1]},{look.Rgb[2]}) under ambient "
                                   + $"({look.Tint[0]:F0},{look.Tint[1]:F0},{look.Tint[2]:F0})"
                                   + (painted ? "" : " — texture not in the manager yet"));
             }
@@ -779,7 +779,7 @@ namespace Dark_Cloud_Improved_Version
             Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: SpawnCape calls this
             WriteCapeTint(1f);                                           // before WatchElementLook has run
             Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, Memory.ToGuest(_capeObj));
-            Console.WriteLine(Tag + $"cape tint: ambient ({_capeTint[0]:F0},{_capeTint[1]:F0},{_capeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
+            Log($"cape tint: ambient ({_capeTint[0]:F0},{_capeTint[1]:F0},{_capeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
         }
 
         /// <summary>The cape's ambient delta (cape − cat), faded with the cat so the two never drift apart mid-fade.</summary>
@@ -815,7 +815,7 @@ namespace Dark_Cloud_Improved_Version
             if (eCap != _effectCapLast || wCap != _weaponCapLast)
             {
                 _effectCapLast = eCap; _weaponCapLast = wCap; _effectPeak = 0;   // the caps move with chara: start a fresh peak
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                Log(
                     $"effects pool now caps at {eCap * 16L:N0} B (weapons {wCap * 16L:N0} B) — char {Player.CurrentCharacterNum()}, cat {(Active ? "resident" : "down")}");
             }
             if (e > _effectPeak)
@@ -823,7 +823,7 @@ namespace Dark_Cloud_Improved_Version
                 _effectPeak = e;
                 long freeB = (eCap - e) * 16L;
                 if (e * 2 >= eCap)                                                // only once it is worth knowing about
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                    Log(
                         $"effects pool peak {e * 16L:N0} of {eCap * 16L:N0} B (free {freeB:N0})");
             }
             // Separately from the peak, and rate-limited: the pool being tight RIGHT NOW is the thing that makes an enemy
@@ -831,7 +831,7 @@ namespace Dark_Cloud_Improved_Version
             if ((eCap - e) * 16L < EffectsTightBytes && (GameClock.Now - _effectTightAt).TotalSeconds >= 5)
             {
                 _effectTightAt = GameClock.Now;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                Log(
                     $"effects pool TIGHT: {e * 16L:N0} of {eCap * 16L:N0} B used, only {(eCap - e) * 16L:N0} free — "
                     + "an effect that cannot allocate never appears, and enemy projectiles are effects");
             }
@@ -839,11 +839,11 @@ namespace Dark_Cloud_Improved_Version
             if (heap != _heapLast)
             {
                 _heapLast = heap;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"heap (char {Player.CurrentCharacterNum()}): " + heap);
+                Log( $"heap (char {Player.CurrentCharacterNum()}): " + heap);
                 var pools = new System.Text.StringBuilder();
                 foreach (var (addr, name) in DataPools.InCarveOrder)
                     pools.Append($" {name} {Memory.ReadInt(addr + DataPools.Used) * 16L:N0}/{Memory.ReadInt(addr + DataPools.Cap) * 16L:N0}");
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "pools (used/cap B):" + pools);
+                Log( "pools (used/cap B):" + pools);
             }
             var bg = new System.Text.StringBuilder();
             for (int i = 0; i < 6; i++)
@@ -859,7 +859,7 @@ namespace Dark_Cloud_Improved_Version
             if (bgs != _bgLast)
             {
                 _bgLast = bgs;
-                if (bgs.Length > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "bg reads:" + bgs);
+                if (bgs.Length > 0) Log( "bg reads:" + bgs);
             }
         }
 
@@ -950,14 +950,14 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
             if (_look.Cape) { SpawnCape(); MaskTint(); WatchElementLook(force: true); }   // colour before the first frame draws
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
+            Log( $"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
-            if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
+            if (!_native && !_nativeWarned) { _nativeWarned = true; Log("pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
             _phase = Phase.Resident; _phaseStart = GameClock.Now; _hitDone = false; _fade = 0;
             SetKey(KeyLeap);
             Maintain();
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
+            Log( "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
         }
 
         // ─────────────────────────────────────── the cave handshake ────────────────────────────────────────
@@ -1031,7 +1031,7 @@ namespace Dark_Cloud_Improved_Version
             _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
             _phase = Phase.Resident; _phaseStart = GameClock.Now;
             Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shot released — the cave binds the next pellet on its birth frame");
+            Log( "shot released — the cave binds the next pellet on its birth frame");
         }
 
         private static void DisarmCave()
@@ -1049,7 +1049,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (!Active) return;
             int state = Memory.ReadInt(CodeCaves.Mailbox.CatState);
-            if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Console.WriteLine(Tag + "charge released without a shot — cat stays hidden"); return; }
+            if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Log("charge released without a shot — cat stays hidden"); return; }
             if (_target >= 0 && state >= 4) WriteTargetAim();                                                  // the aim point follows the target's body every tick
             // A lock-on made after the cat picked its target wins, or it keeps a far one: checked every ~0.5 s
             // while walking or crouched. A closed mimic keeps the cat crouched (the cave loops the ready clip on CatHoldReady).
@@ -1062,7 +1062,7 @@ namespace Dark_Cloud_Improved_Version
             if (hold != _holdLogged)
             {
                 _holdLogged = hold;
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
+                Log( (hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
                 // Released: a chest-mimic's init label ran when it woke (its guard windows — the disc bake makes the wake a
                 // guard — are registered only now); crush them for this flight so the leap lands through the guard.
                 if (!hold && _target >= 0) CrushGuard(_target, again: true);
@@ -1085,7 +1085,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt(CodeCaves.Mailbox.CatHitEntry, 0);
                 lock (_planted) _planted.Add((ent - 1, PlantedLifeTicks, true));
                 int hitAttr = Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr);
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
+                Log( $"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
             }
             if (state >= 4 && state <= 11 && state != 9)                        // every cave-owned state: face the cave's live direction (it re-aims in the ready crouch, the float wind-up and the take-off)
             {
@@ -1115,7 +1115,7 @@ namespace Dark_Cloud_Improved_Version
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                         Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
                         WriteTargetAim();
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        Log(
                             $"cat bound to pellet slot {slot} on its birth frame" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + $" (motion frame {_flightFrame0:F1})");
                     }
                     break;
@@ -1125,10 +1125,10 @@ namespace Dark_Cloud_Improved_Version
                         _phase = Phase.Falling; _phaseStart = GameClock.Now;
                         if (Memory.ReadInt(CodeCaves.Mailbox.CatPounceFly) != 0)
                         {
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
+                            Log( $"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
                             break;
                         }
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+                        Log(
                             $"full size after {Memory.ReadInt(CodeCaves.Mailbox.CatGrowFrames)} frames — off the pellet's line, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame, run speed {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F2}");
                     }
                     break;
@@ -1137,7 +1137,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         _phase = Phase.Landing; _phaseStart = GameClock.Now;
                         long lp = SlotAddr() + CCharacter.CharPos;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
+                        Log( $"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
                     }
                     break;
                 case 6:                                                          // running (cave moves it); face along its direction, decide the end
@@ -1145,7 +1145,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_phase != Phase.Running)
                     {
                         _phase = Phase.Running; _phaseStart = GameClock.Now; _pounceLogged = false; _pounceKind = 0;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
+                        Log( $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
                     }
                     long rp = SlotAddr() + CCharacter.CharPos;
                     _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
@@ -1157,7 +1157,7 @@ namespace Dark_Cloud_Improved_Version
                         _target = PickTarget();                                   // the next nearest, if any
                         WriteTargetAim();
                         CrushGuard(_target); ApplyFlightTime();
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
+                        Log( $"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
                     }
                     if (_target >= 0)
                     {
@@ -1166,7 +1166,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (_target < 0)
                     {
-                        if (!_sitLogged) { _sitLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"no enemy within {MaxTargetDistance:F0} — sitting"); }
+                        if (!_sitLogged) { _sitLogged = true; Log( $"no enemy within {MaxTargetDistance:F0} — sitting"); }
                         if (++_retargetTick >= 30)                                 // look again every ~0.5 s
                         {
                             _retargetTick = 0;
@@ -1176,32 +1176,32 @@ namespace Dark_Cloud_Improved_Version
                                 WriteTargetAim();
                                 CrushGuard(_target); ApplyFlightTime();
                                 _sitLogged = false; _gaitLogged = false;
-                                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"enemy slot {_target} came within range — up and after it");
+                                Log( $"enemy slot {_target} came within range — up and after it");
                             }
                         }
                     }
                     else if (!_gaitLogged && Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) == 0)
                     {
                         _gaitLogged = true;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
+                        Log( $"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
                     }
                     bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
-                    if (blocked && !_blockedLogged) { _blockedLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "a wall stops the cat — waiting"); }
+                    if (blocked && !_blockedLogged) { _blockedLogged = true; Log( "a wall stops the cat — waiting"); }
                     if (!blocked) _blockedLogged = false;
                     if ((GameClock.Now - _boundAt).TotalSeconds >= LifetimeSeconds)
                     {
                         Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                         _scale = 1f; _caveOwns = false;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "20 s lifetime over — shrinking away");
+                        Log( "20 s lifetime over — shrinking away");
                         FadeKeepingPose();                                       // sitting, walking or blocked: shrink + fade as it is (Phase.Fading; the glow follows)
                     }
                     break;
                 }
                 case 11:                                                         // float-up wind-up: in place, turning, until the feet-off frame launches the leap
-                    if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
+                    if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Log( $"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
                     break;
                 case 10:                                                         // ready: in place before the jump
-                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
+                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log( $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
                     break;
                 case 2:
                 {
@@ -1212,7 +1212,7 @@ namespace Dark_Cloud_Improved_Version
                     _scale = 1f; _pelletSlot = -1;
                     Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                     _caveOwns = false;
-                    Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
+                    Log( $"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
                     Enter(Phase.Fading, KeyLeap);
                     break;
                 }
@@ -1232,7 +1232,7 @@ namespace Dark_Cloud_Improved_Version
             PlaceRootUnderHead();
             _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false;
             Maintain();
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+            Log(
                 $"cat pinned to pellet slot {slot} from ({_px:F1},{_ph:F1},{_py:F1})" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + " [thread follower]");
         }
 
@@ -1282,7 +1282,7 @@ namespace Dark_Cloud_Improved_Version
                 else if (MiniBoss.miniBossEnemyNumbers.Contains(_target) || scale >= 1.25f) { frames = PounceFramesTall; why = $"miniboss (model scale {scale:F2})"; }
             }
             Memory.WriteFloat(CodeCaves.Mailbox.CatPounceFrames, frames);
-            if (why.Length > 0) Console.WriteLine(Tag + $"target slot {_target}: {frames:F0}-frame leap ({why})");
+            if (why.Length > 0) Log($"target slot {_target}: {frames:F0}-frame leap ({why})");
         }
 
         /// <summary>The pounce range for this target: the look's (50 for the winged cat) — but a dormant chest-mimic is
@@ -1308,7 +1308,7 @@ namespace Dark_Cloud_Improved_Version
                 // The root is the chest's spot (SetMimicEvent places the box at the enemy's spawn position).
                 Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos, x); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
                 Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
-                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
+                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log( $"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
                 return;
             }
             long tbl = BodyCollision.SlotBase(_target);
@@ -1338,7 +1338,7 @@ namespace Dark_Cloud_Improved_Version
                         if (r > best + 0.01f || (Math.Abs(r - best) <= 0.01f && fwd > bestFwd)) { best = r; bestFwd = fwd; x = cx; h = ch; y = cy; anyDamaging = pass == 0; }
                     }
                 }
-                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
+                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log( $"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
             }
             Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos,     x);
             Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h);
@@ -1377,7 +1377,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt(flags, Memory.ReadInt(flags) & ~2);
                 Memory.WriteInt(CodeCaves.Mailbox.CatState, 6);
             }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
+            Log( $"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
         }
 
         /// <summary>Locked-on enemy first; otherwise the live enemy nearest to Xiao; −1 when none.</summary>
@@ -1452,7 +1452,7 @@ namespace Dark_Cloud_Improved_Version
                         ushort cur = Memory.ReadUShort(a);
                         if (cur != 0) { Memory.WriteUShort(a, 0); if (snap[w] == 0) snap[w] = cur; more = true; }
                     }
-                    if (more) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
+                    if (more) Log( $"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
                     return;
                 }
             }
@@ -1466,7 +1466,7 @@ namespace Dark_Cloud_Improved_Version
             }
             if (!any) return;
             lock (_planted) _guardRestore.Add((enemy, (int)(LifetimeSeconds * 60) + 120, snap0));
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
+            Log( $"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
         }
 
         private const float GuardCrushRadius = 30f;      // the cat's reach while it is airborne
@@ -1507,7 +1507,7 @@ namespace Dark_Cloud_Improved_Version
                     if (i < 0)
                     {
                         _guardRestore.Add((slot, GuardSweepTicks, cur));
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard windows of enemy slot {slot} zeroed (in the cat's reach)");
+                        Log( $"guard windows of enemy slot {slot} zeroed (in the cat's reach)");
                     }
                     else
                     {
@@ -1658,7 +1658,7 @@ namespace Dark_Cloud_Improved_Version
         private static void BuildStep(string what)
         {
             if (_buildClock == null) return;
-            Console.WriteLine(Tag + $"  build +{_buildClock.ElapsedMilliseconds,5} ms  {Memory.Trips - _tripMark,5} trip(s)  {what}");
+            Log($"  build +{_buildClock.ElapsedMilliseconds,5} ms  {Memory.Trips - _tripMark,5} trip(s)  {what}");
             _tripMark = Memory.Trips;
         }
 
@@ -1673,12 +1673,12 @@ namespace Dark_Cloud_Improved_Version
             Memory.ResetTrips(); _tripMark = 0;
             if (FindTexEntry(CatTextureNames[0]) == 0 && RecreateCatEntries() < CatTextureNames.Length)
             {
-                if (!_texDeferLogged) { _texDeferLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
+                if (!_texDeferLogged) { _texDeferLogged = true; Log( "her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
                 return false;
             }
             _texDeferLogged = false;
             uint playerRoot = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(playerRoot)) { Console.WriteLine(Tag + "no player model"); return false; }
+            if (!Memory.IsValidGuest(playerRoot)) { Log("no player model"); return false; }
             _liveRoot = playerRoot;
 
             // Her frames are ONE contiguous 0x270 array from the model root (.mds node order): walk it while the
@@ -1709,12 +1709,12 @@ namespace Dark_Cloud_Improved_Version
                 if (!Memory.IsValidGuest(cp)) continue;
                 chanInfo += $" ch{c}=0x{cp:X} keys {Memory.ReadInt(CCharacter.Base + ChanKeyStart + c * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + c * 4)}";
             }
-            Console.WriteLine(Tag + $"live player tree @0x{playerRoot:X}: {names.Count} node(s); channels:{chanInfo}");
+            Log($"live player tree @0x{playerRoot:X}: {names.Count} node(s); channels:{chanInfo}");
             BuildStep("player tree scanned");
             if (catIdx < 0)
             {
-                Console.WriteLine(Tag + "nodes: " + string.Join(",", names));
-                Console.WriteLine(Tag + "no '" + CatRootName + "' in her tree — the loaded c04b.chr has no cat (ISO not patched, or PCSX2 still on the old image)");
+                Log("nodes: " + string.Join(",", names));
+                Log("no '" + CatRootName + "' in her tree — the loaded c04b.chr has no cat (ISO not patched, or PCSX2 still on the old image)");
                 return false;
             }
             _catIndex  = catIdx;
@@ -1722,7 +1722,7 @@ namespace Dark_Cloud_Improved_Version
             uint min = playerRoot + (uint)(catIdx * CFrameVu1.NodeStride);
             uint max = min + (uint)((_nodeCount - 1) * CFrameVu1.NodeStride);
             int blockSize = _nodeCount * CFrameVu1.NodeStride;
-            if (_nodeCount > CodeCaves.MaxNodes) { Console.WriteLine(Tag + $"{_nodeCount} cat nodes exceed the NodePool"); return false; }
+            if (_nodeCount > CodeCaves.MaxNodes) { Log($"{_nodeCount} cat nodes exceed the NodePool"); return false; }
             byte[] block = Memory.ReadBytesBatch(Memory.ToMmu(min), blockSize);
             if (block == null) return false;
 
@@ -1763,7 +1763,7 @@ namespace Dark_Cloud_Improved_Version
             if (!RegisterSlot(min, blockSize)) return false;
             Active = true;
             BuildStep("channel + slot registered");
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms over {Memory.Trips:N0} round trip(s), {Memory.TripBytes:N0} B");
+            Log( $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms over {Memory.Trips:N0} round trip(s), {Memory.TripBytes:N0} B");
             _buildClock = null;                    // the stamps are for the BUILD: left running they reported a despawn's
             return true;                           // texture restore as a 70 s, half-million-trip step (it was 70 s of play)
         }
@@ -1800,7 +1800,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeA, ga >= 0 ? (int)(CodeCaves.NodePoolGuest + ga * CFrameVu1.NodeStride) : 0);
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowNodeB, gb >= 0 ? (int)(CodeCaves.NodePoolGuest + gb * CFrameVu1.NodeStride) : 0);
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
-            if (ga < 0 || gb < 0) Console.WriteLine(Tag + $"glow anchors: {GlowNodeA} n{ga}, {GlowNodeB} n{gb} — falling back to the root");
+            if (ga < 0 || gb < 0) Log($"glow anchors: {GlowNodeA} n{ga}, {GlowNodeB} n{gb} — falling back to the root");
             if (head < 0) return;
             uint poolG = (uint)CodeCaves.NodePoolGuest;
             float[] p = { 0f, 0f, 0f, 1f };
@@ -1817,7 +1817,7 @@ namespace Dark_Cloud_Improved_Version
                 n = par >= poolG ? (int)((par - poolG) / CFrameVu1.NodeStride) : 0;
             }
             _headX = p[0]; _headH = p[1]; _headZ = p[2];
-            Console.WriteLine(Tag + $"head ({HeadNodeName}, n{head}) rests at ({_headX:F2},{_headH:F2},{_headZ:F2}) in cat space");
+            Log($"head ({HeadNodeName}, n{head}) rests at ({_headX:F2},{_headH:F2},{_headZ:F2}) in cat space");
         }
 
         /// <summary>A frame's name (0x20 bytes, NUL-terminated); empty when the read fails.</summary>
@@ -1852,19 +1852,19 @@ namespace Dark_Cloud_Improved_Version
         /// +0x08, not offset 0; refuses unless the visual really holds the stock vtable, so a layout surprise is a no-op.</summary>
         private static void MaskTint()
         {
-            if (_maskVisual == 0) { Console.WriteLine(Tag + "mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
+            if (_maskVisual == 0) { Log("mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
             uint vt = (uint)Memory.ReadInt(_maskVisual + CVisualMDT.VisVtable) & Memory.PhysAddrMask;
             if (vt != CVisualMDT.Vu1Vtable)
-            { Console.WriteLine(Tag + $"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{CVisualMDT.Vu1Vtable:X} — leaving it alone"); return; }
+            { Log($"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{CVisualMDT.Vu1Vtable:X} — leaving it alone"); return; }
             byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(CVisualMDT.Vu1Vtable), CVisualMDT.Vu1VtableBytes);
-            if (tbl == null) { Console.WriteLine(Tag + "mask tint: could not read the vtable"); return; }
+            if (tbl == null) { Log("mask tint: could not read the vtable"); return; }
             BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot);           // the uint* overload
             BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot + 4);  // the packet overload
             long cave = TakeCave(CVisualMDT.Vu1VtableBytes, out uint caveG);
-            if (cave == 0) { Console.WriteLine(Tag + "mask tint: no cave room for the vtable copy"); return; }
+            if (cave == 0) { Log("mask tint: no cave room for the vtable copy"); return; }
             Memory.WriteBytesBatch(cave, tbl);
             Memory.WriteUInt(_maskVisual + CVisualMDT.VisVtable, caveG);
-            Console.WriteLine(Tag + $"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
+            Log($"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
         }
 
         /// <summary>Give the cat's software-skinned meshes their own copies in the MeshCave (CopyMeshNodes' recipe). HER copy
@@ -1879,7 +1879,7 @@ namespace Dark_Cloud_Improved_Version
             int copied = 0;
             var second = new List<(long vis, byte[] vuB, int vuSz, int idx)>();
             byte[] pool = Memory.ReadBytesBatch(CodeCaves.NodePool, _nodeCount * CFrameVu1.NodeStride);   // every node in one read
-            if (pool == null) { Console.WriteLine(Tag + "could not read the copy's node pool"); return false; }
+            if (pool == null) { Log("could not read the copy's node pool"); return false; }
             for (int i = 0; i < _nodeCount; i++)
             {
                 long node = CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride;
@@ -1901,7 +1901,7 @@ namespace Dark_Cloud_Improved_Version
                 int mdtSz = BitConverter.ToInt32(mdtHdr, CVisualMDT.MdtSizeField);
                 if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
                 int need = Memory.Align16(visSz) + Memory.Align16(vuSz) + Memory.Align16(mdtSz);
-                if (cave + need > caveEnd) { Console.WriteLine(Tag + "cat meshes do not fit the MeshCave"); return false; }
+                if (cave + need > caveEnd) { Log("cat meshes do not fit the MeshCave"); return false; }
                 long cVis = cave;              uint cVisG = (uint)caveGuest;
                 long cVU  = cave + Memory.Align16(visSz); uint cVUG  = (uint)(caveGuest + Memory.Align16(visSz));
                 long cMDT = cVU + Memory.Align16(vuSz);   uint cMDTG = (uint)(caveGuest + Memory.Align16(visSz) + Memory.Align16(vuSz));
@@ -1925,21 +1925,21 @@ namespace Dark_Cloud_Improved_Version
                 _skinNodes.Add((i, cMDT, mdtSz, cVU, 0L, vuSz));
                 second.Add((cVis, vuB, vuSz, _skinNodes.Count - 1));
                 int nl = 0; while (nl < 0x20 && pool[po + CFrameVu1.Name + nl] != 0) nl++;     // the name is in the pool we read
-                Console.WriteLine(Tag + $"mesh n{i} ({System.Text.Encoding.ASCII.GetString(pool, po + CFrameVu1.Name, nl)}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
+                Log($"mesh n{i} ({System.Text.Encoding.ASCII.GetString(pool, po + CFrameVu1.Name, nl)}): vis 0x{visSz:X} + vu 0x{vuSz:X} + mdt 0x{mdtSz:X} copied");
             }
             _caveFree = cave;
-            if (copied == 0) { Console.WriteLine(Tag + "no software-skinned cat mesh found — refusing to share her collapsed copy of the skin"); return false; }
+            if (copied == 0) { Log("no software-skinned cat mesh found — refusing to share her collapsed copy of the skin"); return false; }
             foreach (var (vis, vuB, vuSz, idx) in second)                          // second VU buffers: MeshCave remainder, else the overflow cave
             {
                 long cVU2 = TakeCave(vuSz, out uint cVU2G);
-                if (cVU2 == 0) { Console.WriteLine(Tag + $"mesh n{_skinNodes[idx].node}: no room for a second VU buffer — single-buffered (may flicker)"); continue; }
+                if (cVU2 == 0) { Log($"mesh n{_skinNodes[idx].node}: no room for a second VU buffer — single-buffered (may flicker)"); continue; }
                 var pe = _pending[idx];
                 _jobs.Add(new CopyJob(pe.vu, Memory.ToGuest(cVU2), vuSz, pe.vu, vuSz, pe.cVUG, pe.mdt, pe.mdtSz, pe.cMDTG));
                 Memory.WriteUInt(vis + 0x2c, cVU2G);
                 var e = _skinNodes[idx]; _skinNodes[idx] = (e.node, e.mdt, e.mdtSz, e.vu, cVU2, e.vuSz);
             }
             if (!RunCopyJobs() && !CopyJobsBySocket()) return false;               // the machine does it, or we do it the slow way
-            Console.WriteLine(Tag + $"mesh caves: main {_caveFree - CodeCaves.MeshCave:N0} of {CodeCaves.CatMeshCaveEnd - CodeCaves.MeshCave:N0} B, overflow {_ovFree - CodeCaves.CatOverflowCave:N0} of {CodeCaves.CatOverflowCaveSize:N0} B");
+            Log($"mesh caves: main {_caveFree - CodeCaves.MeshCave:N0} of {CodeCaves.CatMeshCaveEnd - CodeCaves.MeshCave:N0} B, overflow {_ovFree - CodeCaves.CatOverflowCave:N0} of {CodeCaves.CatOverflowCaveSize:N0} B");
             BuildStep("meshes copied");
             return true;
         }
@@ -1995,12 +1995,12 @@ namespace Dark_Cloud_Improved_Version
                 nodes.Add(n);
                 p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
             }
-            if (nodes.Count == 0) { Console.WriteLine(Tag + $"{what}-off: the copy's skin list is unreadable — they stay visible"); return; }
+            if (nodes.Count == 0) { Log($"{what}-off: the copy's skin list is unreadable — they stay visible"); return; }
             var keep = new List<byte[]>();
             foreach (byte[] n in nodes) if (!hide.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
-            if (keep.Count == nodes.Count) { Console.WriteLine(Tag + $"{what}-off: no such runs in the skin list — they stay visible"); return; }
+            if (keep.Count == nodes.Count) { Log($"{what}-off: no such runs in the skin list — they stay visible"); return; }
             long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
-            if (cave == 0) { Console.WriteLine(Tag + $"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
+            if (cave == 0) { Log($"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
             for (int i = 0; i < keep.Count; i++)
             {
                 BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
@@ -2008,7 +2008,7 @@ namespace Dark_Cloud_Improved_Version
             }
             Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
             foreach (int i in hide) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
-            Console.WriteLine(Tag + $"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
+            Log($"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
         }
 
         /// <summary>The old path, kept whole as the fallback: read each source block, rebase it here, write the copy. Only runs
@@ -2032,7 +2032,7 @@ namespace Dark_Cloud_Improved_Version
                     continue;
                 }
                 byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(j.Src), j.Size);
-                if (b == null) { Console.WriteLine(Tag + $"copy fallback: could not read 0x{j.Src:X}"); return false; }
+                if (b == null) { Log($"copy fallback: could not read 0x{j.Src:X}"); return false; }
                 if (j.R1Size > 0) Memory.RebaseRange(b, j.R1Src, j.R1Size, j.R1Dst);
                 if (j.R2Size > 0) Memory.RebaseRange(b, j.R2Src, j.R2Size, j.R2Dst);
                 Memory.WriteBytesBatch(Memory.ToMmu(j.Dst), b);
@@ -2089,7 +2089,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (Memory.ReadInt(CodeCaves.CatCopyQueue) == 0)
                 {
-                    Console.WriteLine(Tag + $"copy queue: {_jobs.Count} job(s) run in the machine ({_jobs.Sum(j => j.Size):N0} B) — "
+                    Log($"copy queue: {_jobs.Count} job(s) run in the machine ({_jobs.Sum(j => j.Size):N0} B) — "
                                           + $"{waited.ElapsedMilliseconds} ms, {spin + 1} poll(s)");
                     _jobs.Clear(); return true;
                 }
@@ -2097,7 +2097,7 @@ namespace Dark_Cloud_Improved_Version
                 if (waited.ElapsedMilliseconds > 2000) break;
             }
             Memory.WriteInt(CodeCaves.CatCopyQueue, 0);
-            Console.WriteLine(Tag + "copy queue: the cave did not answer — falling back to copying over PINE");
+            Log("copy queue: the cave did not answer — falling back to copying over PINE");
             return false;
         }
 
@@ -2114,10 +2114,10 @@ namespace Dark_Cloud_Improved_Version
             {
                 int count = Memory.ReadInt(mdt + CVisualMDT.MdtVertCount);
                 int vOff  = Memory.ReadInt(mdt + CVisualMDT.MdtVertOffset);
-                if (count <= 0 || count > 3000 || vOff <= 0) { Console.WriteLine(Tag + $"skin n{node}: odd MDT header (count {count}, verts @+0x{vOff:X})"); return false; }
+                if (count <= 0 || count > 3000 || vOff <= 0) { Log($"skin n{node}: odd MDT header (count {count}, verts @+0x{vOff:X})"); return false; }
                 int bytes = count * 16;
                 long cave = TakeCave(bytes, out uint caveG);
-                if (cave == 0) { Console.WriteLine(Tag + "skin source vertices do not fit the mesh caves"); return false; }
+                if (cave == 0) { Log("skin source vertices do not fit the mesh caves"); return false; }
                 byte[] src = Memory.ReadBytesBatch(mdt + vOff, bytes);
                 if (src == null) return false;
                 int e = node * MotionType.FrameInfEntry;
@@ -2133,7 +2133,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteBytesBatch(cave, dst);
                 BitConverter.GetBytes(count).CopyTo(fib, e + 4);
                 BitConverter.GetBytes(caveG).CopyTo(fib, e + 8);
-                Console.WriteLine(Tag + $"skin n{node}: {count} source vertices built at 0x{caveG:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
+                Log($"skin n{node}: {count} source vertices built at 0x{caveG:X} from bind [{m[0]:F2} {m[5]:F2} {m[10]:F2} | {m[12]:F2},{m[13]:F2},{m[14]:F2}]");
                 BuildStep($"skin n{node} built ({count} vertices)");
             }
             return true;
@@ -2154,11 +2154,11 @@ namespace Dark_Cloud_Improved_Version
             bool valid = Memory.IsValidGuest(raw & Memory.PhysAddrMask);
             if (valid == _herChanValid) return;
             _herChanValid = valid;
-            if (valid) { Console.WriteLine(Tag + $"her MOTION 1 pointer is back (0x{raw:X8})"); return; }
+            if (valid) { Log($"her MOTION 1 pointer is back (0x{raw:X8})"); return; }
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < CCharacter.MotionSlots; i++)
                 sb.Append($" ch{i}=0x{(uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + i * 4):X8}/{Memory.ReadInt(CCharacter.Base + ChanKeyStart + i * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + i * 4)}");
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+            Log(
                 $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(GameClock.Now - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
         }
 
@@ -2171,13 +2171,13 @@ namespace Dark_Cloud_Improved_Version
             uint boneRows = (uint)Memory.ReadInt(inline + MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(keyTable) || !Memory.IsValidGuest(boneRows))
             {
-                Console.WriteLine(Tag + $"her MOTION 1 struct @0x{inline & Memory.PhysAddrMask:X} is empty too (KEY 0x{keyTable:X}, rows 0x{boneRows:X}) — cannot repair");
+                Log($"her MOTION 1 struct @0x{inline & Memory.PhysAddrMask:X} is empty too (KEY 0x{keyTable:X}, rows 0x{boneRows:X}) — cannot repair");
                 return false;
             }
             Memory.WriteUInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4, (uint)(inline & Memory.PhysAddrMask));
             Memory.WriteInt (CCharacter.Base + ChanKeyStart + CatChannel * 4, KeyBase);
             Memory.WriteInt (CCharacter.Base + ChanKeyEnd   + CatChannel * 4, KeyBase + KeyCount);
-            Console.WriteLine(Tag + $"her MOTION 1 pointer repaired → 0x{inline & Memory.PhysAddrMask:X} (keys {KeyBase}..{KeyBase + KeyCount})");
+            Log($"her MOTION 1 pointer repaired → 0x{inline & Memory.PhysAddrMask:X} (keys {KeyBase}..{KeyBase + KeyCount})");
             buf = Memory.ReadBytesBatch(CCharacter.Base, CharCopySize) ?? buf;
             return true;
         }
@@ -2194,12 +2194,12 @@ namespace Dark_Cloud_Improved_Version
             uint chan = (uint)BitConverter.ToInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4) & Memory.PhysAddrMask;
             if (!Memory.IsValidGuest(chan) && RepairHerCatChannel(ref buf))
                 chan = (uint)BitConverter.ToInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(chan)) { Console.WriteLine(Tag + $"she has no MOTION 1 channel (raw 0x{BitConverter.ToUInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4):X8}) — the loaded c04b.chr has no cat"); return false; }
+            if (!Memory.IsValidGuest(chan)) { Log($"she has no MOTION 1 channel (raw 0x{BitConverter.ToUInt32(buf, CCharacter.MotionSlotBase + CatChannel * 4):X8}) — the loaded c04b.chr has no cat"); return false; }
             byte[] mstr = Memory.ReadBytesBatch(Memory.ToMmu(chan), MotionStructSize);
             if (mstr == null) return false;
             int fiSize = (_nodeCount + 1) * MotionType.FrameInfEntry;
             int bmSize = (_nodeCount + 1) * MotionType.BoneMtxEntry;
-            if (fiSize > CodeCaves.CatFrameInfCaveSize || bmSize > CodeCaves.CatBoneMtxCaveSize) { Console.WriteLine(Tag + "bone buffers exceed the caves"); return false; }
+            if (fiSize > CodeCaves.CatFrameInfCaveSize || bmSize > CodeCaves.CatBoneMtxCaveSize) { Log("bone buffers exceed the caves"); return false; }
             uint poolG = (uint)CodeCaves.NodePoolGuest;
             // FRAME_INF is indexed by NODE (AnimeDataInit 0x1493A0: entry i = {parent index, skin vertex count, →
             // bind-vertex copy, bind matrix @+0x10, two scratch matrices @+0x50/+0x90}). The initializer fills the
@@ -2230,7 +2230,7 @@ namespace Dark_Cloud_Improved_Version
             // are. (The .mds local matrices are NOT the same thing: initializing from them stretched every blended
             // joint — neck, shoulders, tail tip.)
             uint bm = (uint)BitConverter.ToInt32(mstr, MotionType.BoneMtxPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(bm)) { Console.WriteLine(Tag + "her cat channel has no bind rows"); return false; }
+            if (!Memory.IsValidGuest(bm)) { Log("her cat channel has no bind rows"); return false; }
             {
                 byte[] bmb = Memory.ReadBytesBatch(Memory.ToMmu(bm), bmSize);
                 if (bmb == null) return false;
@@ -2238,7 +2238,7 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes((uint)(CodeCaves.BoneMtxCave & Memory.PhysAddrMask)).CopyTo(mstr, MotionType.BoneMtxPtr);
             }
             uint keyTable = (uint)BitConverter.ToInt32(mstr, MotionType.MotionInfoPtr) & Memory.PhysAddrMask;
-            if (!Memory.IsValidGuest(keyTable)) { Console.WriteLine(Tag + "cat KEY table unreadable"); return false; }
+            if (!Memory.IsValidGuest(keyTable)) { Log("cat KEY table unreadable"); return false; }
             // The float-up's play rate goes into its KEY entry, not the speed override: Step's play-once stop test
             // (0x138530) looks ahead by the KEY rate while the advance uses the override, so an override faster than
             // the KEY rate overshoots the last frame and the clip wraps, so the float loops instead of holding.
@@ -2309,7 +2309,7 @@ namespace Dark_Cloud_Improved_Version
             uint boneHead = (uint)BitConverter.ToInt32(mstr, MotListHead) & Memory.PhysAddrMask, skinHead = (uint)BitConverter.ToInt32(mstr, MotionType.MotionSkinList) & Memory.PhysAddrMask;
             string heads = $"bone list 0x{boneHead:X}" + (Memory.IsValidGuest(boneHead) ? $" (w0 {Memory.ReadInt(Memory.ToMmu(boneHead))}, type {Memory.ReadInt(Memory.ToMmu(boneHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(boneHead) + 0xC)})" : "")
                          + $", skin list 0x{skinHead:X}" + (Memory.IsValidGuest(skinHead) ? $" (mesh {Memory.ReadInt(Memory.ToMmu(skinHead))}, bone {Memory.ReadInt(Memory.ToMmu(skinHead) + 4)}, type {Memory.ReadInt(Memory.ToMmu(skinHead) + 8)}, keys {Memory.ReadInt(Memory.ToMmu(skinHead) + 0xC)})" : "");
-            Console.WriteLine(Tag + $"slot {Slot}: cat channel cloned (keys {KeyBase}..{KeyBase + KeyCount - 1}, KEY table 0x{keyTable:X}), FrameInf 0x{fiSize:X}; {heads}");
+            Log($"slot {Slot}: cat channel cloned (keys {KeyBase}..{KeyBase + KeyCount - 1}, KEY table 0x{keyTable:X}), FrameInf 0x{fiSize:X}; {heads}");
             return true;
         }
 
@@ -2336,7 +2336,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if (((uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask) != _liveRoot)
             {
-                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "her model changed — cat despawned");
+                Log( "her model changed — cat despawned");
                 Despawn();
                 return;
             }
@@ -2416,7 +2416,7 @@ namespace Dark_Cloud_Improved_Version
             Active = false; _key = -1; _target = -1; _weapon = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
             _lastDespawn = GameClock.Now;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
+            Log( "cat copy down");
         }
 
         // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
@@ -2440,7 +2440,7 @@ namespace Dark_Cloud_Improved_Version
             long e = FindTexEntry(CatTextureNames[0]);
             uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + TextureManager.EntryTex0) & TextureManager.Tex0AddrMask);
             if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
+            Log( (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
             _texMoved.Clear();                                                   // nothing of ours is in there to restore
             Despawn();
         }
@@ -2481,10 +2481,10 @@ namespace Dark_Cloud_Improved_Version
                         if (_texOriginal.TryGetValue(nm, out ulong orig))
                         {
                             Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)orig); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(orig >> 32));
-                            Console.WriteLine(Tag + $"texture {nm} was left at 0x{tbp:X} by an earlier despawn — restored to 0x{orig & TextureManager.Tex0AddrMask:X}");
+                            Log($"texture {nm} was left at 0x{tbp:X} by an earlier despawn — restored to 0x{orig & TextureManager.Tex0AddrMask:X}");
                             t = orig; tbp = (uint)(t & TextureManager.Tex0AddrMask);
                         }
-                        else Console.WriteLine(Tag + $"WARNING: texture {nm} sits at 0x{tbp:X} with no remembered original — its relocation will be wrong this spawn");
+                        else Log($"WARNING: texture {nm} sits at 0x{tbp:X} with no remembered original — its relocation will be wrong this spawn");
                     }
                     else _texOriginal[nm] = t;
                     minTbp = Math.Min(minTbp, tbp);
@@ -2506,7 +2506,7 @@ namespace Dark_Cloud_Improved_Version
                 uint newBase = (limit - size) & ~0x1Fu;
                 uint highest = 0;
                 for (int b = 0; b < 0x48; b++) highest = Math.Max(highest, Memory.ReadUInt(TextureManager.Base + TextureManager.Blocks + (long)b * TextureManager.BlockStride + TextureManager.BlkTop));
-                if (highest > newBase) Console.WriteLine(Tag + $"WARNING: a texture block tops at 0x{highest:X}, inside the cat's window 0x{newBase:X}..0x{newBase + size:X}");
+                if (highest > newBase) Log($"WARNING: a texture block tops at 0x{highest:X}, inside the cat's window 0x{newBase:X}..0x{newBase + size:X}");
                 // RESERVE the window instead of squatting under the cursor. manager+0x14 is a DOWNWARD bump allocator —
                 // EnterFixTexture does `lw v0,0x14(s6); subu v0,v0,size; sw v0,0x14(s6)` (0x132354) — so the space just below
                 // it is precisely what the game hands out NEXT. Taking the window without moving the cursor meant any texture
@@ -2520,7 +2520,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(grp + TextureManager.BlkLoaded, 0);
                 Memory.WriteUInt(grp + TextureManager.BlkDirty, 0);
                 Memory.WriteUInt(her + TextureManager.BlkTop, minTbp);
-                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} block(s) swept); her block now tops at 0x{minTbp:X}");
+                Log($"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X} and moved 0x{minTbp:X}..0x{_herTopSaved:X} → 0x{newBase:X}..0x{newBase + size:X} ({patched} block(s) swept); her block now tops at 0x{minTbp:X}");
             }
             else if (to == HerTextureBlock)
             {
@@ -2529,7 +2529,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     uint cur = Memory.ReadUInt(TextureManager.Base + TextureManager.Cursor);
                     if (cur == _texCursorTaken) Memory.WriteUInt(TextureManager.Base + TextureManager.Cursor, _texCursorSaved);
-                    else Console.WriteLine(Tag + $"texture cursor moved to 0x{cur:X} under our reservation (0x{_texCursorTaken:X}) — leaving it, the window stays reserved");
+                    else Log($"texture cursor moved to 0x{cur:X} under our reservation (0x{_texCursorTaken:X}) — leaving it, the window stays reserved");
                     _texCursorTaken = 0; _texCursorSaved = 0;
                 }
                 if (_herTopSaved != 0) Memory.WriteUInt(her + TextureManager.BlkTop, _herTopSaved);
@@ -2537,9 +2537,9 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUInt(grp + TextureManager.BlkTop, 0);
                 Memory.WriteUInt(grp + TextureManager.BlkLoaded, 1);
                 Memory.WriteUInt(her + TextureManager.BlkLoaded, 0);                          // she re-uploads her whole window next frame
-                Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}; her block restored to top 0x{_herTopSaved:X}");
+                Log($"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}; her block restored to top 0x{_herTopSaved:X}");
             }
-            else Console.WriteLine(Tag + $"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
+            else Log($"textures: {done} cat entries re-tagged block 0x{from:X} → 0x{to:X}");
             BuildStep("textures re-tagged");
         }
 
@@ -2566,12 +2566,12 @@ namespace Dark_Cloud_Improved_Version
                 int idx = -1;
                 for (int i = 1; i < TextureManager.MaxEntries; i++)
                     if (Memory.ReadByte(TextureManager.Base + TextureManager.Entries + (long)i * TextureManager.EntryStride + TextureManager.EntryName) == 0) { idx = i; break; }
-                if (idx < 0) { Console.WriteLine(Tag + "texture manager full — cannot recreate " + nm); break; }
+                if (idx < 0) { Log("texture manager full — cannot recreate " + nm); break; }
                 Memory.WriteBytesBatch(TextureManager.Base + TextureManager.Entries + (long)idx * TextureManager.EntryStride, snap);
                 if (idx + 1 > Memory.ReadInt(TextureManager.Base)) Memory.WriteInt(TextureManager.Base, idx + 1);
                 present++; made++;
             }
-            if (made > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
+            if (made > 0) Log( $"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
             return present;
         }
 
@@ -2609,7 +2609,7 @@ namespace Dark_Cloud_Improved_Version
                 foreach (var (name, tex0) in _texMoved)
                 {
                     long entry = FindTexEntry(name);
-                    if (entry == 0) { Console.WriteLine(Tag + $"WARNING: texture {name} is gone from the manager — nothing to restore"); continue; }
+                    if (entry == 0) { Log($"WARNING: texture {name} is gone from the manager — nothing to restore"); continue; }
                     ulong cur = (ulong)Memory.ReadUInt(entry + 0x28) | ((ulong)Memory.ReadUInt(entry + 0x2C) << 32);
                     moves.Add((cur, tex0));
                     Memory.WriteUInt(entry + 0x28, (uint)tex0); Memory.WriteUInt(entry + 0x2C, (uint)(tex0 >> 32));
@@ -2631,7 +2631,7 @@ namespace Dark_Cloud_Improved_Version
                     // a 1 KB band of cape colour dropped across the glyph atlas.
                     uint nt = (tbp >= oldBase && tbp < _herTopSaved) ? newBase + (tbp - oldBase) : tbp;
                     uint nc = (cbp >= oldBase && cbp < _herTopSaved) ? newBase + (cbp - oldBase) : cbp;
-                    if (nc == cbp && nt != tbp) Console.WriteLine(Tag + $"texture {name}: CLUT 0x{cbp:X} is outside the moved window 0x{oldBase:X}..0x{_herTopSaved:X} — left where it is");
+                    if (nc == cbp && nt != tbp) Log($"texture {name}: CLUT 0x{cbp:X} is outside the moved window 0x{oldBase:X}..0x{_herTopSaved:X} — left where it is");
                     ulong n = (t & ~(ulong)TextureManager.Tex0AddrMask & ~((ulong)TextureManager.Tex0AddrMask << TextureManager.Tex0CbpShift)) | nt | ((ulong)nc << TextureManager.Tex0CbpShift);
                     _texMoved.Add((name, t));
                     moves.Add((t, n));
@@ -2662,7 +2662,7 @@ namespace Dark_Cloud_Improved_Version
             _jobs.Clear(); _pairs.Clear();
             if (moves.Count > CodeCaves.CatCopyMaxPairs)   // never truncate: a dropped pair leaves a texture pointing at nothing
             {
-                Console.WriteLine(Tag + $"texture relocation: {moves.Count} moves exceed the sweep table ({CodeCaves.CatCopyMaxPairs}) — using the slow path");
+                Log($"texture relocation: {moves.Count} moves exceed the sweep table ({CodeCaves.CatCopyMaxPairs}) — using the slow path");
                 foreach (var (addr, size) in blocks)
                 {
                     if (addr == 0 || size <= 0) continue;
@@ -2684,7 +2684,7 @@ namespace Dark_Cloud_Improved_Version
                 if (addr != 0 && size > 0) _jobs.Add(new CopyJob(Memory.ToGuest(addr), size));
             patched = _jobs.Count;
             if (_jobs.Count > 0 && !RunCopyJobs() && !CopyJobsBySocket())
-                Console.WriteLine(Tag + "texture relocation: neither path completed — the copy may draw with her texture block");
+                Log("texture relocation: neither path completed — the copy may draw with her texture block");
             _jobs.Clear();
             return patched;
         }
@@ -2702,7 +2702,7 @@ namespace Dark_Cloud_Improved_Version
             long pool = CollisionPool.Resolve();
             if (pool == 0) return;
             int slot = CollisionPool.TakeFreeSlot(pool);
-            if (slot < 0) { Console.WriteLine(Tag + "no free collision entry — pounce lost"); return; }
+            if (slot < 0) { Log("no free collision entry — pounce lost"); return; }
             uint elem = (uint)Weapons.SelectedElementBits(Weapons.EquippedRecord()) & 0x1F;
             uint attr = (elem != 0 && (elem & (elem - 1)) == 0) ? elem : 0u;      // one pure element bit or none
             byte[] e = CollisionPool.PlayerHitEntry(x, h, y, radius, baseDmg, attr);
@@ -2712,7 +2712,7 @@ namespace Dark_Cloud_Improved_Version
             BitConverter.GetBytes(CatKickType).CopyTo(e, 0x98);                     // type 2 = melee-style reaction
             CollisionPool.Plant(pool, slot, e);
             lock (_planted) _planted.Add((slot, PlantedLifeTicks, false));
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
+            Log(
                 $"hit entry at ({x:F1},{h:F1},{y:F1}) r={radius:F0}: base {baseDmg}, attr 0x{attr:X} → entry {slot}");
         }
 
@@ -2750,13 +2750,13 @@ namespace Dark_Cloud_Improved_Version
                         {
                             // Accepted: damage, hitspark, kick and (via the patched flinch rule) the stagger are all the engine's.
                             // Only now is the cat spent.
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"hit landed on enemy slot {hitSlot} (entry {idx}) — fading out");
+                            Log( $"hit landed on enemy slot {hitSlot} (entry {idx}) — fading out");
                             _hitFade = true; _fade = 0; _alpha = 1f;
                         }
                         else
                         {
                             Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
-                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"contact was not accepted (entry {idx} gone, no enemy took it — invincible or guarding) — no hit, still flying");
+                            Log( $"contact was not accepted (entry {idx} gone, no enemy took it — invincible or guarding) — no hit, still flying");
                         }
                         _planted.RemoveAt(i); continue;
                     }
@@ -2765,7 +2765,7 @@ namespace Dark_Cloud_Improved_Version
                     if (native)
                     {   // never consumed: the enemy was invulnerable or the sphere's hurt window was closed — not spent; the cave may contact again
                         Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"contact did not connect within {PlantedLifeTicks} ticks (entry {idx}) — no hit, still flying");
+                        Log( $"contact did not connect within {PlantedLifeTicks} ticks (entry {idx}) — no hit, still flying");
                     }
                     _planted.RemoveAt(i);
                 }
@@ -2775,6 +2775,7 @@ namespace Dark_Cloud_Improved_Version
         // ───────────────────────────────────────────── utils ───────────────────────────────────────────────
 
         private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
+        private static void Log(string message) => Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + message);
 
     }
 }
