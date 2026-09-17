@@ -56,8 +56,8 @@ namespace Dark_Cloud_Improved_Version
     /// A SECOND band holds the ISO-baked ELF caves: a mod-created PT_LOAD segment at guest
     /// 0x01FB0000–0x01FB2000 (the hijacked phdr3 — see <see cref="ElfCave"/>). Loader-loaded at boot,
     /// so direct j/jal into it is legal; the scanner's heap-tail claim already covers it, and THIS FILE
-    /// is its only registry. (The caves USED to live in 0x228BB0–0x22A210, believed-dead CharaChange
-    /// code — which turned out to be the LIVE dungeon character-change screen. Never again.)
+    /// is its only registry. ⚠ 0x228BB0–0x22A210 is NOT free: it is the live dungeon character-change screen,
+    /// however dead it looks.
     /// ⚠ PAGE-ISOLATION RULE: the segment's HOST PAGES (16KB granularity — Apple Silicon; 4KB on Intel)
     /// must contain NO runtime-written data. Once any cave on a page executes, PCSX2 compiles and
     /// WRITE-PROTECTS that page; the next PINE write to any address sharing it SIGBUSes the PINE server
@@ -149,8 +149,7 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>Fishing rope BELOW-bobber rest length (float). The split caves (IsoPatcher.PatchFishLineSplit)
             /// select this vs the existing distp @0x202A1FA4 (=above) per segment at anchor 18, so hook depth
             /// (bobber→hook) is tuned independently of cast reach (rod→bobber). The cave bakes the guest form
-            /// 0x01F10048. Mod seeds/tunes it while fishing; MUST be > 0 (0 collapses the hang). See
-            /// game_data/docs/fishing-line-split-and-cast-feasibility.md.</summary>
+            /// 0x01F10048. Mod seeds/tunes it while fishing; MUST be > 0 (0 collapses the hang).</summary>
             internal const long LineDistpBelow = Base + 0x48;
 
             /// <summary>Canal tide-evict flag (relocated from 0x40 — see <see cref="CameraStick"/> for why).
@@ -259,14 +258,14 @@ namespace Dark_Cloud_Improved_Version
             /// overlay refill `gauge += max(1, speed/30) × THIS` instead of the immediate 1.5 (@0x1DB8090/94).
             /// 1.5 = vanilla, 0 = hold (the shield's HP bar), small = slow refill after a break. Guest 0x01F10090.
             /// ⚠ LIVES HERE, NOT IN THE ELF CAVE SEGMENT: a PINE write into a page holding executed cave code
-            /// SIGBUSes PCSX2 (2026-09-09 crash when the word was at 0x01FB0D90). The mailbox page holds no code.</summary>
+            /// SIGBUSes PCSX2. The mailbox page holds no code.</summary>
             internal const long ShieldGaugeRate = Base + 0x90;
 
             /// <summary>The next unclaimed slot. Take it, then MOVE THIS — the whole point of the map.</summary>
             /// <summary>The Divine Beast cat's runtime block: guest 0x01FB4094..0x01FB4193 inside the spare 0x1FB4000 span
             /// (only BobberPtr uses its first four bytes). The cat's words were first laid out in THIS mailbox page from
             /// +0x94, and grew past +0x100 — which is the AI-stub table (AiStubBase 0x1F10100): clip frames, range,
-            /// hit slot and diagnostics were being shared with and wiped by it (2026-09-11). Same offsets, new base.</summary>
+            /// hit slot and diagnostics were being shared with and wiped by it. Same offsets, new base.</summary>
             internal const long CatBase = 0x21FB4000;
 
             /// <summary>Divine Beast cat ↔ the native pellet catcher/follower (ElfCave.CatPelletFollow; DivineBeastCat.cs).
@@ -378,7 +377,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatGlowObject    = CatBase + 0x200; // the cave's CFireOmni object, 0x40 B
             internal const long CatGlowLift      = CatBase + 0x240; // float, added to the glow's height (mod; negative lowers it)
             internal const long CatAimPos        = CatBase + 0x244; // float3 x,h,z: the point the cat walks to / jumps at — the target's biggest body sphere (mod, per tick); CatTargetPtr points here
-            internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave keeps the ready crouch looping instead of leaping (mod: the target is a mimic that has not opened yet — user 2026-09-12)
+            internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave keeps the ready crouch looping instead of leaping (mod: the target is a mimic that has not opened yet)
             internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastCat.CatScale at spawn; 0 = unset → the cave uses 1.0)
             internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — always "catglowp" now, because every look shares one 8-bit disc and differs only in the palette row (see CatGlowPalRow); the glow cave binds it (mod writes it, then clears CatGlowReady)
             internal const long CatTrackHalf     = CatBase + 0x268; // float: 0 = the flying pounce re-aims until the apex; > 0 = keep re-aiming past the apex until halfway down to the floor (the winged cat, mod)
@@ -389,7 +388,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatGlowPalRow     = CatBase + 0x2A4; // int, ONE-based palette row the glow cave should paint
                                                                      // (0 = derive it from the equipped element, which is what the
                                                                      // cape look wants); 7/8/9 = Divine Beast Title / Angel Shooter /
-                                                                     // Angel Gear, which used to own a 32-bit disc each
+                                                                     // Angel Gear
             internal const long CatGlowPalTexEntry = CatBase + 0x2A0; // uint, the CTexture entry ElfCave.CatGlowPalette last found for catglowp (cave; same by-name verification) — ⚠ the page ends at CatBase + 0x300
             internal const long NextFree = Base + 0x94;   // the cat's words moved to CatBase; +0x94..+0xFF are free again (⚠ +0x100 = AiStubBase)
         }
@@ -409,7 +408,7 @@ namespace Dark_Cloud_Improved_Version
         /// [0x1FB0000, 0x1FB4000) (16KB granularity — Apple Silicon; 4KB on Intel) must NEVER hold
         /// runtime-written data: once any cave on a page executes, PCSX2 compiles + WRITE-PROTECTS the
         /// page, and the app's next PINE write to anything sharing it SIGBUSes the PINE server thread —
-        /// a hard crash. This happened (2026-09): the segment's first home 0x01FAE700 shared its 4KB page
+        /// a hard crash. This happened: the segment's first home 0x01FAE700 shared its 4KB page
         /// with the live mizu mailboxes @0x01FAE600-610; QueensSpray ran every Queens frame, and the next
         /// MizuRedrawTexGroup write faulted at 0x1FAE60C. So 0x1FB2000..0x1FB4000 is reserved for future
         /// SEGMENT growth or ISO-baked read-only data ONLY — never hand it out as a runtime mailbox/cave.
@@ -421,7 +420,7 @@ namespace Dark_Cloud_Improved_Version
         /// SELECT quick-menu's character-change screen: CharaChangeLoop @0x228BB0 / CharaChangeKey @0x228E90 /
         /// CharaChangeDraw @0x229740, CALLED FROM THE dun.bin OVERLAY (file offset 0x1DD0) — which is why
         /// main-ELF-only xref analysis mislabeled it unreachable. The caves overwrote it and broke the
-        /// dungeon SELECT menu (2026-09). The region must stay byte-for-byte VANILLA.
+        /// dungeon SELECT menu. The region must stay byte-for-byte VANILLA.
         ///
         /// ⚠ THE OVERLAP FAILURE MODE IS ALSO REAL: PatchIdleMotionOverride was first placed at what is now
         /// FishLineSplit+0x40 — inside fishlineSplitCaves.bin — and every Queens fishing session hung on a
@@ -449,7 +448,7 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>Guest bounds of the hijacked-phdr3 segment; RegionEnd − RegionStart is its p_filesz/p_memsz.
             /// RegionStart must stay 16KB-aligned (page isolation — see the class doc) and 0x80-aligned (p_align).</summary>
             internal const uint RegionStart = 0x01FB0000;
-            internal const uint RegionEnd   = 0x01FB4000;   // grown from 0x1FB2000 (2026-09-12): the second band holds the cat glow cave
+            internal const uint RegionEnd   = 0x01FB4000;   // grown from 0x1FB2000: the second band holds the cat glow cave
             /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
             /// time; formerly .reldun debug bytes — outside every phdr's file extent, never read at runtime).</summary>
             internal const uint SegmentFileOff = 0x002AD000;   // 0x4000 B of dead .reldun (0x29FE60..0x2B11C8) — was 0x2AF000 for 0x2000
@@ -510,7 +509,7 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatPaletteEntry    = CatPalette + 0x18;   // the entry point, past the colour table
             /// <summary>The GLOW disc's six per-element palettes: 512 B each, in element order (00 Fire … 05 None). Pure
             /// DATA, written at patch time by ElfPatches.PatchCatGlowPalettes from the blob `build_cat_pack.py --palettes`
-            /// bakes off the same index map as the disc — regenerate BOTH together or the ramp no longer matches the
+            /// bakes off the same index map as the disc — regenerate BOTH together, or the ramp will not match the
             /// pixels. Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2.</summary>
             internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
             internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
@@ -584,9 +583,8 @@ namespace Dark_Cloud_Improved_Version
         /// Capacity: 3 × CCloth(0x8550) = 0x18FF0 → ends 0x21F430F0, safely BELOW ClothBufCave @0x21F44000.</summary>
         internal const int  ClothObjSlots  = 3;
 
-        /// <summary>Cloth draw buffers. The size is declared HERE, next to the address — CharacterClone used to
-        /// back-compute it as (ClothAnchorCave − ClothBufCave), i.e. "how big is it" lived somewhere else, which
-        /// is the exact split this file exists to prevent.</summary>
+        /// <summary>Cloth draw buffers. The size is declared HERE, beside the address: a size back-computed from the gap
+        /// to the next cave puts "how big is it" in a different file, which is the split this registry exists to prevent.</summary>
         internal const long ClothBufCave   = 0x21F44000;
         internal const int  ClothBufSize   = 0x5000;       // → ends 0x21F49000 = ClothAnchorCave
         internal const uint ClothBufGuest  = 0x01F44000;
@@ -622,10 +620,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int MaxCloneNodes = MaxNodes;
 
         // ── EnemyModelInjector: NO CAVE. ────────────────────────────────────────────────────────────
-        // It used to claim 0x01400000 in main BSS, "verified" only by eyeballing a zero block — it PREDATES the
-        // code-cave scanner and was never swept by it. Rather than launder that into CodeCaveScanner.ModReserved
-        // (which would have made the sweeper treat the region as ours and stop telling us the truth about it),
-        // the cave is REMOVED. The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
+        // ⚠ 0x01400000 in main BSS is NOT verified free — it was only ever eyeballed as a zero block, never swept by the
+        // code-cave scanner. It is deliberately NOT laundered into CodeCaveScanner.ModReserved, which would make the
+        // sweeper treat the region as ours and stop reporting the truth about it.
+        // The feature is dormant (EnemyModelInjector.Enabled == false) and must be given a
         // scanner-verified cave from this file before it is ever switched on.
 
         /// <summary>Software-skinned meshes. Sized for the WORST CASE character — GORO at 0x57B30 — so ALL SIX
@@ -635,7 +633,7 @@ namespace Dark_Cloud_Improved_Version
         internal const long MeshCaveGuest  = 0x01F56400;
         internal const int  MeshCaveSize   = 0x58000;    // → ends 0x21FAE400, 0x5F00 clear of the band top (0x1FB4300)
 
-        // ── The Divine Beast cat and the Angel Gear slingshot prop are up TOGETHER (both arm on the Angel Gear, user 2026-09-13):
+        // ── The Divine Beast cat and the Angel Gear slingshot prop are up TOGETHER (both arm on the Angel Gear):
         //    the cat keeps the BOTTOM of the motion / FrameInf / BoneMtx / mesh caves, the prop the TOP (under the prop's own
         //    0x1000 track cave at the very top of the MeshCave). Sizes: the prop is ≤ 8 nodes (WeaponCave), the cat 47 + 1. ──
         internal const int  PropMeshReserve       = 0xC000;                                             // the prop's mesh region
@@ -649,7 +647,7 @@ namespace Dark_Cloud_Improved_Version
         internal const long PropBoneMtxCave       = BoneMtxCave + BoneMtxCaveSize - PropBoneMtxCaveSize;
         internal const int  CatBoneMtxCaveSize    = BoneMtxCaveSize - PropBoneMtxCaveSize;                // 0x1680 → 90 bones
         internal const int  PropMotionSlot0       = 4;                                                  // the prop's channels sit at MotionCave slots 4..7
-        // ── The cat's OVERFLOW mesh space (2026-09-13): with the wings the cat's copies need ~407 KB (skin 0x30 + 2×0x180E0 +
+        // ── The cat's OVERFLOW mesh space: with the wings the cat's copies need ~407 KB (skin 0x30 + 2×0x180E0 +
         //    0xB2B0, each wing 0x30 + 2×0x7B60 + ~0x3300, + 16 B/vertex of skin sources) — more than the whole MeshCave. The
         //    cat borrows CharacterClone's cloth caves (ClothObjCave .. MotionCave, 0x23F00 B) for SECOND VU buffers and the
         //    skin sources: a cloth clone (the town ally switch, Mirage's Ungaga clone) can never be up while Xiao's cat is —
@@ -685,7 +683,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CatCopyPairsOff   = 0x10 + CatCopyQueueJobs * CatCopyJobStride;   // 0x910
         /// <summary>How many old→new pairs a sweep can carry. MUST cover every name in DivineBeastCat.CatTextureNames —
         /// there are TEN, and a first cut of 8 silently dropped the last two. One of them was catcape, which the MASK draws
-        /// with, so its register never moved, it kept pointing into her old block and the mask came out black (2026-09-15).
+        /// with, so its register never moved, it kept pointing into her old block and the mask came out black.
         /// The count is checked against this now rather than truncated.</summary>
         internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
 

@@ -4,7 +4,7 @@
 # loop, so ElfCave.CatCapeTint wraps that one `jal` and gives the cape its own ambient. A MESH has no such seam — the same
 # function sets the ambient ONCE, calls MGDraw on the whole frame tree, and restores. So the mask, an ordinary mesh on the cat,
 # is stuck with the cat's tint, and because a mesh's tint is ADDED to its lit colour rather than multiplied through its texture,
-# the cat's blue lands on the mask and turns its red to pink — with no texture able to undo it (user 2026-09-15).
+# the cat's blue lands on the mask and turns its red to pink — with no texture able to undo it.
 #
 # WHY NOT PATCH THE DRAW. Meshes reach the screen through C++ VIRTUAL calls: __vt__13CVisualMDTVu1 (0x002A11A0, 32 B) holds the
 # two DrawVu1 overloads in slots 6 and 7. There is no direct `jal` to hook, and patching the functions themselves would put a

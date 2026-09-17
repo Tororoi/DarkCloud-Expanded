@@ -4,7 +4,7 @@
 #
 # WHY A PALETTE AND NOT MORE DISCS. A 64x64 RGBA32 glow disc is 16,448 B inside Xiao's character pack, and the weapons
 # and effects pools are only what the character heap has left after her character data. Four per-element discs took the
-# free space down to 45,024 B and opening the weapon menu tipped CDataAlloc2 into its silent spin (user 2026-09-16).
+# free space down to 45,024 B and opening the weapon menu tipped CDataAlloc2 into its silent spin.
 # One 8-bit disc is 5,184 B and holds EVERY colour: the pixels are luminance ranks, the palette carries the hue.
 #
 # WHY THE TABLE IS COPIED STRAIGHT DOWN. The GS reads a PSMT8 palette in CSM1 order, which exchanges bits 3 and 4 of the
@@ -14,7 +14,7 @@
 # eight words, skip sixteen, eight words, repeated eight times. The disc needs 115 levels, so they all fit.
 #
 # THE TABLES are NINE 512-byte blocks at 0x01FB2880 (ElfCave.CatGlowPalTables) — rows 0-5 the elements, 6-8 the Divine
-# Beast Title / Angel Shooter / Angel Gear looks that used to own a 32-bit disc each — written at PATCH time by
+# Beast Title / Angel Shooter / Angel Gear looks — written at PATCH time by
 # ElfPatches.PatchCatGlowPalettes from a blob build_cat_pack --palettes bakes off the same index map as the disc itself.
 # Patch-time data in a code page is fine; a RUNTIME write here would SIGBUS PCSX2 (see the Mailbox note).
 #
@@ -29,7 +29,7 @@
 # to compare are 0x67746163 ("catg") and 0x70776F6C ("lowp") — the LAST byte of each group is the HIGH half of the word.
 # Getting the second one wrong costs nothing visible: the scan matches "catg", fails, finds no entry and returns, and the
 # glow just stays the colour it was baked with. It was written 0x706F776C ("lwop") first time and did exactly that
-# (2026-09-16). ElfPatches.PatchCatGlowPalette now refuses a stub that does not contain the right word.
+# ElfPatches.PatchCatGlowPalette refuses a stub that does not contain the right word.
 #
 # ONE PALETTE WORD IS THE STATE, the way the cape cave uses its first. It cannot BE the first here: word 0 is the disc's
 # transparent rim and is identical in all six ramps, so this reads the BRIGHTEST level instead — table slot 114, which the

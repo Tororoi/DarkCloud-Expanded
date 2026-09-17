@@ -1,7 +1,7 @@
 # cat_copy_queue.s — the cat's mesh copy, done INSIDE the machine.
 #
 # WHY. Building the cat copies ~300 KB into the mod's cave, and reading her model to do it makes ~600 KB of traffic. Over PINE
-# that is about 100 KB/s, so the build measured 8.7 s (stamps, 2026-09-15) and the player waits that long after every switch to
+# that is about 100 KB/s, so the build measured 8.7 s and the player waits that long after every switch to
 # Xiao before the charged shot works. The console would memcpy the same bytes in well under a frame. Nothing about the work is
 # expensive — only the fact that it was being done from outside the emulator, a word at a time down a debug socket.
 #
@@ -23,7 +23,7 @@
 #          carry absolute TEX0 register words, and moving the cat's VRAM block means rewriting each one. +0x04 block, +0x08 its
 #          length, +0x0C how many old→new pairs, +0x10 where the pair table is (16 B each: old lo/hi, new lo/hi). ALL the pairs
 #          are tried at each position, so a block is walked ONCE — one job per block per texture walked the same 300 KB five
-#          times over, 3.8 MB of scanning for 300 KB of data (2026-09-15).
+#          times over, 3.8 MB of scanning for 300 KB of data.
     lui   $t0, 0x01FA
     ori   $t0, $t0, 0xE620
     lw    $t1, 0x0($t0)            # how many jobs are waiting

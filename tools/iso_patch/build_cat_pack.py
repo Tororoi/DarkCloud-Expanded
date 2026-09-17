@@ -13,7 +13,7 @@ the channel on the copy, where the cat root IS node 0.
 
 Why not the weapon pack: the weapon MENU rebuilds every carried weapon into a 944 KB arena (MenuExCashBuffer,
 0xEC00 units) and copies each weapon's whole texture bank into it; a +290 KB weapon pack overflowed it and froze
-the game (2026-09-10). The character pack is never rebuilt by the menu.
+the game. The character pack is never rebuilt by the menu.
 
 What goes in (from gedit\s86\chara\c04cat.chr — the cat rig with the leap clips):
   .mds  37 nodes appended after Xiao's 79, names prefixed `cat_` (her rig already has `kao` and `skin`), the
@@ -53,17 +53,17 @@ FLOAT_CHR = r"gedit\e01\chara\e04c04cat.chr"   # the town cat's vertical float/h
 FLOAT_SRC, FLOAT_DST = (160, 169), (285, 294)  # grafted into cat.mot where s86 has no keys (assemble_town_model.py slot 12)
 GLOW_SRC  = r"dun\mpd_pack\d06main_a.mpd"     # the Gallery of Time map pack: its own fire.img holds the PURPLE torch glow disc
 GLOW_CORE  = (15, 219, 255)                     # radial gradient: this at the centre …
-GLOW_OUTER = (60, 67, 255)                      # … to this at the disc's edge (user 2026-09-12)
-GLOW_CROSS = 0.125                              # radius fraction where the mix is halfway (0.5 = linear); smaller = the blue reaches further in (user 2026-09-12)
-# Per-weapon glows (user 2026-09-13): the Divine Beast Title keeps the blue disc; the Angel Shooter's cat glows WHITE, the
+GLOW_OUTER = (60, 67, 255)                      # … to this at the disc's edge
+GLOW_CROSS = 0.125                              # radius fraction where the mix is halfway (0.5 = linear); smaller = the blue reaches further in
+# Per-weapon glows: the Divine Beast Title keeps the blue disc; the Angel Shooter's cat glows WHITE, the
 # Angel Gear's GOLD. Same disc, re-tinted; the runtime names the one to draw (mailbox CatGlowName → the glow cave).
 # ⚠ ALL glow discs must be 64x64. DrawFire__9CFireOmni (0x161AC0) builds its two sprite layers with a FIXED
 # texel rect — (0,0,64,64) and (2,2,124,124) — so a smaller disc is sampled outside itself and simply does not
 # draw: authored at 32x32 to save heap, Fire/Thunder/Wind/Holy showed no glow at all while the two 64x64 discs
-# (Ice, None) were fine (user 2026-09-16). glow_tim2 keeps its `size` knob, but nothing may use it here.
+# (Ice, None) were fine. glow_tim2 keeps its `size` knob, but nothing may use it here.
 # The three per-WEAPON looks are palette ROWS of the same 8-bit disc now, not textures of their own: three 64x64 RGBA32
 # discs cost 49,344 B of the character heap between them, and that heap's leftover IS the weapons/effects pools the cat
-# is already squeezing (2026-09-16). Rows 0-5 are the elements below; the mod picks the row through
+# is already squeezing. Rows 0-5 are the elements below; the mod picks the row through
 # Mailbox.CatGlowPalRow (ONE-based, 0 = let the cave derive it from the equipped element).
 GLOW_LOOKS = [(GLOW_CORE, GLOW_OUTER),                 # 6 Divine Beast Title — the authored blue
               ((215, 215, 215), (180, 190, 215)),      # 7 Angel Shooter — white, a cool edge (user 2026-09-16: good as is)
@@ -71,7 +71,7 @@ GLOW_LOOKS = [(GLOW_CORE, GLOW_OUTER),                 # 6 Divine Beast Title �
 # ⚠ NO MORE 64x64 DISCS FIT. Four per-element discs (orange/yellow/green/purple) were added here and FROZE the game:
 # each is 16 KB in Xiao's character pack, and the weapons/effects pools are whatever the heap has left after her
 # character data — with them loaded the log read `chara 3,899,600/4,240,000 ... effects 70,144/115,168`, i.e. 45 KB
-# free, and opening the menu overflowed the effects pool into CDataAlloc2's silent spin (user 2026-09-16). Raising
+# free, and opening the menu overflowed the effects pool into CDataAlloc2's silent spin. Raising
 # the heap is not the way out either: that is what moved the dungeon pools and painted message text over the glyph
 # sheet (see memory dungeon-pool-addresses-shift). The way to per-element glows is ONE 8-bit disc plus a palette
 # ramp, the way the cape works — 16 KB + 1 KB for every colour instead of 16 KB each. That is GLOW_T8_NAME below.
@@ -84,26 +84,25 @@ GLOW_T8_NAME = "catglowp"                       # the per-ELEMENT glow: ONE 8-bi
 # it costs nothing: the disc needs 115 levels and 128 are available.
 CLUT_FIXED = [i for i in range(256) if (i & 0x18) in (0x00, 0x18)]
 # Per element, indexed by the element byte (00 Fire, 01 Ice, 02 Thunder, 03 Wind, 04 Holy, 05 None): the radial gradient's
-# centre and edge, in the style of the discs above. Ice, Thunder and Holy are the user's calls (2026-09-16); the rest are
+# centre and edge, in the style of the discs above. Ice, Thunder and Holy are the user's calls; the rest are
 # still derived starting values — ElementLooks.Rgb is one CAPE colour and a gradient needs two. Tune here, re-run
 # --palettes, re-patch. "None" is the dimmed white the Angel Shooter wears. NOTE the OUTER colour is what mostly shows:
 # GLOW_CROSS 0.125 puts the mix halfway at an eighth of the radius, so ~80% of the disc is outer-weighted.
 GLOW_ELEMENTS = [((128, 118, 52), (200,   5,   0)),   # 0 Fire     orange
-                 ((  0, 200, 215), (  0,  4, 183)),   # 1 Ice      blue (user 2026-09-16)
-                 ((255, 248, 190), (156, 131,  43)),   # 2 Thunder  yellow, a touch lighter (user 2026-09-16)
+                 ((  0, 200, 215), (  0,  4, 183)),   # 1 Ice      blue
+                 ((255, 248, 190), (156, 131,  43)),   # 2 Thunder  yellow, a touch lighter
                  ((128, 255, 113), (  0, 86,  126)),   # 3 Wind     green
-                 ((211, 73, 236), ( 33,   0, 175)),   # 4 Holy     purple, richer (user 2026-09-16)
+                 ((211, 73, 236), ( 33,   0, 175)),   # 4 Holy     purple, richer
                  ((50, 50, 50), (160, 160, 160))]   # 5 None     the dimmed white
 GLOW_ROWS = GLOW_ELEMENTS + GLOW_LOOKS          # exactly what the cave's table holds, in row order
 CAPE_CLO_NAME = "catcape.clo"                   # the cape's cloth definition record (wing_bake.CAPE_CLO)
 DRAN_CHR  = r"dun\monstor\c12a.chr"              # the wing donor (tools/lib/cat_wings.py grafts its wings, wing_bake.py bakes them; read from the ISO)
-WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque (user 2026-09-13)
-CAPE_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cape's flat texture: a deep red, tuned in the viewer's cape panel
-                                                 # The red comes from the ambient the runtime gives the cloth (DivineBeastCat
-                                                 # .CapeTint), and a light base serves that better twice over — the tint reads
-                                                 # as its own colour instead of compounding with a red texture, and the scene's
-                                                 # shading (which is what makes the ripples visible) is multiplied by a bright
-                                                 # base rather than crushed by a dark one (user 2026-09-14)
+WING_RGBA = (255, 255, 255, 0x80)                # the wings' flat texture: solid white, GS alpha 0x80 = opaque
+CAPE_RGBA = (128, 28, 0, 0x80)                   # the Super Steve cape's flat texture. The colour on screen comes from the
+                                                 # ambient the runtime gives the cloth (DivineBeastCat.CapeTint); a LIGHT base
+                                                 # serves that twice over — the tint reads as its own colour instead of
+                                                 # compounding with the texture, and the scene shading that shows the ripples
+                                                 # multiplies a bright base instead of a crushed dark one
 
 NODE_PREFIX   = "cat_"             # every cat bone (her rig already carries `kao`, `skin`, …)
 CAT_ROOT_NAME = "catroot"          # what the runtime looks for in her tree
@@ -131,7 +130,7 @@ CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat
 MOT_WINDOWS = [(k[0], k[1]) for k in CAT_KEYS]
 REC_TAG = 0x00140E02               # word at record +0x4C on every vanilla record
 
-# The earlier (2026-09-09) bake put the cat into the WEAPON packs, which froze the weapon menu. Their vanilla
+# ⚠ The cat must NOT go into the WEAPON packs — that overflows the weapon menu's model arena. Their vanilla
 # DATA.HD2 records (USA disc), so an ISO patched by that version is put back before the character bake.
 HOST_VANILLA = (0x195D5800, 0x218220, 0x32BAB, 0x431)   # vanilla DATA.HD2 record of c04b.chr (USA disc)
 WEAPON_REVERT = {
@@ -214,7 +213,7 @@ def flat_tim2(template, rgba, size=32):
     struct.pack_into("<2H", hdr, pic + 0x14, size, size)
     # GsTex0 / GsTex1 / GsRegs / GsTexClut stay ZERO like every vanilla picture: the engine derives the GS
     # register values itself at load (a hand-set buffer width here made the GS sample the wrong VRAM columns —
-    # a shimmering cat, 2026-09-10).
+    # a shimmering cat).
     hdr[pic + 0x18:pic + 0x30] = bytes(0x18)
     return bytes(hdr) + bytes(img_sz) + bytes(rgba) * 256
 
@@ -244,7 +243,7 @@ def glow_tim2(lightling, core=GLOW_CORE, outer=GLOW_OUTER, cross=GLOW_CROSS, siz
     if size and size < w:
         # Box-filter down (64x64 -> 32x32 = 4 KB instead of 16). The disc is a soft blob drawn small, so resolution is
         # not what sells it — but four more 64x64 discs cost 64 KB of the character heap and 256 VRAM blocks in Xiao's
-        # group (user 2026-09-15). These discs carry no CLUT, so the picture is header + pixels and nothing follows.
+        # group. These discs carry no CLUT, so the picture is header + pixels and nothing follows.
         n = w // size
         small = bytearray(size * size * 4)
         for y in range(size):
@@ -779,7 +778,7 @@ def refuse_if_palette_blob_stale(glow_bytes, log=print):
     """The six element ramps reach the game as a COMMITTED resource — Resources/isoPatch/catGlowPalettes.bin, embedded
     into the mod at build time and written into the ELF by ElfPatches.PatchCatGlowPalettes. The PACK is re-baked on every
     patch, but that .bin is NOT: editing GLOW_ELEMENTS and re-patching therefore changes nothing, and the glow keeps its
-    previous colours while every diagnostic reports success. That cost a full patch-and-test cycle (user 2026-09-16), so
+    previous colours while every diagnostic reports success. That cost a full patch-and-test cycle, so
     a bake against a stale blob is refused rather than performed."""
     blob = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
                         "Dark Cloud Improved Version", "Resources", "isoPatch", "catGlowPalettes.bin")
