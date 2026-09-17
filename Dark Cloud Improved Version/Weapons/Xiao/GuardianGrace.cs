@@ -44,7 +44,6 @@ namespace Dark_Cloud_Improved_Version
         private const string Tag = "[GuardianGrace] ";
 
         private const int  XiaoId          = 1;
-        private const long HealTickCounter = 0x202A3684;   // dun overlay heal-tick counter (gp-0x616C)
         private const int  HealFlagOffset  = 0xEE;         // WEAPON_HAVE live ability flags (halfword)
         private const int  HealFlagBit     = 0x800;        // HEAL — the same bit the native tick gates on
 
@@ -123,7 +122,7 @@ namespace Dark_Cloud_Improved_Version
                                  && GuardWatch.IsGuarding();
                         if (open)
                         {
-                            int c = Memory.ReadInt(HealTickCounter);
+                            int c = Memory.ReadInt(HealAbility.TickCounter);
                             if (prevCounter < 0)
                             {
                                 prevCounter = c;   // channel just opened mid-cycle — no retroactive proc
