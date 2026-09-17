@@ -342,7 +342,6 @@ namespace Dark_Cloud_Improved_Version
         // ── the PAUSE screen ───────────────────────────────────────────────────────────────────────────────
         private static bool  _held;                                           // the copy's motion is stopped for a hold
         private static float _pausedBlend = -1f;                              // the channel's blend increment before the stop (the stop zeroes it for good)
-        private const int MotionStop = 0x1;                                   // CCharacter.MotionFlags bit 0 (CharacterAddresses: stop)
         /// <summary>Hold the copy while the pause screen is up. The engine keeps stepping a chara-slot character there, so
         /// the copy's motion is STOPPED (flags bit 0: rate 0, blend increment 0 — it holds its frame). The cave hooks the
         /// shot-pool step, which the pause screen does not run; the clock is <see cref="GameClock"/>'s to hold.</summary>
@@ -352,7 +351,7 @@ namespace Dark_Cloud_Improved_Version
             _held = true;
             _pausedBlend = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateSpeed);   // read BEFORE the stop: Step writes 0 there while stopped
             long f = SlotAddr() + CCharacter.MotionFlags;
-            Memory.WriteInt(f, Memory.ReadInt(f) | MotionStop);
+            Memory.WriteInt(f, Memory.ReadInt(f) | CCharacter.MotionStop);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"paused — cat held (blend increment {_pausedBlend:F3})");
         }
 
@@ -364,7 +363,7 @@ namespace Dark_Cloud_Improved_Version
             _held = false;
             if (Active)
             {
-                long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~MotionStop);
+                long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~CCharacter.MotionStop);
                 // The stop leaves the blend increment at 0 and nothing re-seeds it (MOTION_END does so at load only), so the
                 // next key cross-fade would never finish. Put back what it was, or the engine's default.
                 Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, _pausedBlend > 0f ? _pausedBlend : BlendDefault);
@@ -779,7 +778,7 @@ namespace Dark_Cloud_Improved_Version
             if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
             Array.Copy(ElementLooks[ElementNow()].Tint, _capeTint, 3);   // seed before the first write: SpawnCape calls this
             WriteCapeTint(1f);                                           // before WatchElementLook has run
-            Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, (uint)(_capeObj - 0x20000000));
+            Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, Memory.ToGuest(_capeObj));
             Console.WriteLine(Tag + $"cape tint: ambient ({_capeTint[0]:F0},{_capeTint[1]:F0},{_capeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
         }
 
@@ -791,21 +790,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ─────────────────────────────────────── character heap watch ──────────────────────────────────────
-        // LoadChara2's three counters; the chara cap @+12 is the pool size, the others take what is left.
-        private const long HeapChara = 0x21F06660, HeapWeapon = 0x21F06670, HeapEffect = 0x21F06680;
         private const int  WatchMs = 50;
-        // The 27 MB global buffer every pool is carved from (GlobalDataBuffer @0x2AB080, cap 0x19C98F units; its
-        // bump counter sits at the array's end). Raising the character heap (DunPatches) must leave room here.
-        private const long GlobalPoolUsed = 0x21C74980;
-        private const int  GlobalPoolCap  = 0x19C98F;
-        // Every CDataAlloc2 GameInit (dun 0x1DAC1C0) carves from it, in carve order — used @+8, cap @+12 (units).
-        private static readonly (long addr, string name)[] Pools =
-        {
-            (0x21F06640, "common"), (0x202AB020, "motion"), (0x21F06660, "chara"), (0x21F06690, "shotfx"),
-            (0x202AB030, "texture"), (0x21F06870, "p870"), (0x21F066A0, "p6a0"), (0x21F066B0, "p6b0"),
-            (0x21F066C0, "p6c0"), (0x21F06840, "p840"), (0x21F066D0, "monstor"), (0x21F06650, "map"),
-        };
-        private const long BgReadInfo = 0x21CBB0C0;          // bg_read_info[32], stride 0x9C: +0 active, +0xC name, +0x8C dest, +0x90 size
         private static string _heapLast = "", _bgLast = "";
         /// <summary>Free bytes below which the effects pool is reported as TIGHT. An effect that cannot allocate does not
         /// warn — it simply never appears, which is what "Pirate's Chariot and Alexander fired nothing" looks like.</summary>
@@ -819,9 +804,9 @@ namespace Dark_Cloud_Improved_Version
         /// projectiles allocate from whatever the chara data leaves.</summary>
         private static void HeapWatch()
         {
-            int c = Memory.ReadInt(HeapChara + 8), w = Memory.ReadInt(HeapWeapon + 8), e = Memory.ReadInt(HeapEffect + 8);
-            int cCap = Memory.ReadInt(HeapChara + 12), wCap = Memory.ReadInt(HeapWeapon + 12), eCap = Memory.ReadInt(HeapEffect + 12);
-            int poolUsed = Memory.ReadInt(GlobalPoolUsed);
+            int c = Memory.ReadInt(DataPools.Chara + DataPools.Used), w = Memory.ReadInt(DataPools.Weapon + DataPools.Used), e = Memory.ReadInt(DataPools.Effect + DataPools.Used);
+            int cCap = Memory.ReadInt(DataPools.Chara + DataPools.Cap), wCap = Memory.ReadInt(DataPools.Weapon + DataPools.Cap), eCap = Memory.ReadInt(DataPools.Effect + DataPools.Cap);
+            int poolUsed = Memory.ReadInt(DataPools.GlobalUsed);
             // ── effects-pool high-water mark ──────────────────────────────────────────────────────────────────────
             // The effects pool is only what the character heap has left after chara and weapons, so with the cat resident
             // it is a FRACTION of what Toan gets — measured 70,144/175,904 B as Xiao against 190,272/1,907,968 as Toan.
@@ -850,25 +835,25 @@ namespace Dark_Cloud_Improved_Version
                     $"effects pool TIGHT: {e * 16L:N0} of {eCap * 16L:N0} B used, only {(eCap - e) * 16L:N0} free — "
                     + "an effect that cannot allocate never appears, and enemy projectiles are effects");
             }
-            string heap = $"chara {c * 16L:N0}/{cCap * 16L:N0}, weapons {w * 16L:N0}/{wCap * 16L:N0}, effects {e * 16L:N0}/{eCap * 16L:N0} — total {(c + w + e) * 16L:N0} of {cCap * 16L:N0} B (free {(cCap - c - w - e) * 16L:N0}); global pool {poolUsed * 16L:N0} of {GlobalPoolCap * 16L:N0} B (free {(GlobalPoolCap - poolUsed) * 16L:N0})";
+            string heap = $"chara {c * 16L:N0}/{cCap * 16L:N0}, weapons {w * 16L:N0}/{wCap * 16L:N0}, effects {e * 16L:N0}/{eCap * 16L:N0} — total {(c + w + e) * 16L:N0} of {cCap * 16L:N0} B (free {(cCap - c - w - e) * 16L:N0}); global pool {poolUsed * 16L:N0} of {DataPools.GlobalCap * 16L:N0} B (free {(DataPools.GlobalCap - poolUsed) * 16L:N0})";
             if (heap != _heapLast)
             {
                 _heapLast = heap;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"heap (char {Player.CurrentCharacterNum()}): " + heap);
                 var pools = new System.Text.StringBuilder();
-                foreach (var (addr, name) in Pools)
-                    pools.Append($" {name} {Memory.ReadInt(addr + 8) * 16L:N0}/{Memory.ReadInt(addr + 12) * 16L:N0}");
+                foreach (var (addr, name) in DataPools.InCarveOrder)
+                    pools.Append($" {name} {Memory.ReadInt(addr + DataPools.Used) * 16L:N0}/{Memory.ReadInt(addr + DataPools.Cap) * 16L:N0}");
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "pools (used/cap B):" + pools);
             }
             var bg = new System.Text.StringBuilder();
             for (int i = 0; i < 6; i++)
             {
-                long ent = BgReadInfo + i * 0x9C;
+                long ent = BgRead.Table + i * BgRead.Stride;
                 if (Memory.ReadInt(ent) == 0) continue;
-                byte[] nb = Memory.ReadBytesBatch(ent + 0xC, 48);
+                byte[] nb = Memory.ReadBytesBatch(ent + BgRead.Name, 48);
                 int len = 0; while (nb != null && len < nb.Length && nb[len] != 0) len++;
                 string nm = nb == null ? "?" : System.Text.Encoding.ASCII.GetString(nb, 0, len);
-                bg.Append($" [{i}] {nm} → 0x{Memory.ReadInt(ent + 0x8C):X} ({Memory.ReadInt(ent + 0x90):N0} B)");
+                bg.Append($" [{i}] {nm} → 0x{Memory.ReadInt(ent + BgRead.Dest):X} ({Memory.ReadInt(ent + BgRead.Size):N0} B)");
             }
             string bgs = bg.ToString();
             if (bgs != _bgLast)
@@ -1322,14 +1307,15 @@ namespace Dark_Cloud_Improved_Version
                 // is whatever the slot's previous occupant left — aiming at that sent the cat wandering off.
                 // The root is the chest's spot (SetMimicEvent places the box at the enemy's spawn position).
                 Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos, x); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
-                Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)(CodeCaves.Mailbox.CatAimPos - 0x20000000));
+                Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
                 if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
                 return;
             }
-            long tbl = EnemyAddresses.MainMonstorUnit.Base + (long)_target * 0x510;
-            byte[] active = Memory.ReadBytesBatch(tbl + 0x55450, 16 * 4), radii = Memory.ReadBytesBatch(tbl + 0x55390, 16 * 4), centres = Memory.ReadBytesBatch(tbl + 0x55250, 16 * 0x10);
-            byte[] pct = Memory.ReadBytesBatch(tbl + 0x555D0, 16 * 0x18);           // per sphere: damage % by attacker character (_SET_BODY_COL_PARA 10+char); Xiao = +4
-            byte[] spare = Memory.ReadBytesBatch(tbl + 0x55490, 16 * 0x14);         // per sphere: the spare 5-int table — [1] = kick type admitted for Xiao at [0] % (disc-baked on Joe's face; ELF PatchCatSpherePercent)
+            long tbl = BodyCollision.SlotBase(_target);
+            const int n = BodyCollision.MaxBodyParts;
+            byte[] active = Memory.ReadBytesBatch(tbl + BodyCollision.ActiveArray, n * 4), radii = Memory.ReadBytesBatch(tbl + BodyCollision.RadiusArray, n * BodyCollision.BodyPartStride), centres = Memory.ReadBytesBatch(tbl + BodyCollision.CentreArray, n * BodyCollision.CentreStride);
+            byte[] pct = Memory.ReadBytesBatch(tbl + BodyCollision.DamagePctArray, n * BodyCollision.DamagePctStride);           // per sphere: damage % by attacker character (_SET_BODY_COL_PARA 10+char); Xiao = +4
+            byte[] spare = Memory.ReadBytesBatch(tbl + BodyCollision.SpareArray, n * BodyCollision.SpareStride);         // per sphere: the spare 5-int table — [1] = kick type admitted for Xiao at [0] % (disc-baked on Joe's face; ELF PatchCatSpherePercent)
             if (active != null && radii != null && centres != null)
             {
                 // The biggest hurt sphere that can actually damage (Xiao % > 0 — Master Utan's neck/face/hands are 0 for her,
@@ -1357,7 +1343,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos,     x);
             Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h);
             Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
-            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)(CodeCaves.Mailbox.CatAimPos - 0x20000000));
+            Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
         }
 
         // A chest-mimic waits as a DORMANT slot; while the cat's target is one, the cat crouches and waits.
@@ -1851,12 +1837,10 @@ namespace Dark_Cloud_Improved_Version
         private static long TakeCave(int bytes, out uint guest)
         {
             long need = Memory.Align16(bytes);
-            if (_caveFree + need <= CodeCaves.CatMeshCaveEnd) { long a = _caveFree; _caveFree += need; guest = (uint)(a - 0x20000000); return a; }
-            if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = (uint)(a - 0x20000000); return a; }
+            if (_caveFree + need <= CodeCaves.CatMeshCaveEnd) { long a = _caveFree; _caveFree += need; guest = Memory.ToGuest(a); return a; }
+            if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = Memory.ToGuest(a); return a; }
             guest = 0; return 0;
         }
-        private const uint VisualMDTVu1Vtable = 0x002A11A0;   // __vt__13CVisualMDTVu1, 32 B: slot 6/7 (+0x18/+0x1C) = DrawVu1
-        private const int  VtableBytes = 32, VtableDrawSlot = 0x18;
         /// <summary>Give the mask the CAPE's colour rather than the cat's. A cloth is easy — Draw__10CCharacter walks its cloth
         /// list calling Draw__6CCloth, so ElfCave.CatCapeTint wraps that one call — but a mesh has no such seam: the ambient is
         /// set once, MGDraw runs over the whole frame tree, and a mesh's tint is ADDED to its lit colour rather than multiplied
@@ -1870,13 +1854,13 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_maskVisual == 0) { Console.WriteLine(Tag + "mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
             uint vt = (uint)Memory.ReadInt(_maskVisual + CVisualMDT.VisVtable) & Memory.PhysAddrMask;
-            if (vt != VisualMDTVu1Vtable)
-            { Console.WriteLine(Tag + $"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{VisualMDTVu1Vtable:X} — leaving it alone"); return; }
-            byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(VisualMDTVu1Vtable), VtableBytes);
+            if (vt != CVisualMDT.Vu1Vtable)
+            { Console.WriteLine(Tag + $"mask tint: the mask visual's vtable is 0x{vt:X}, not the expected 0x{CVisualMDT.Vu1Vtable:X} — leaving it alone"); return; }
+            byte[] tbl = Memory.ReadBytesBatch(Memory.ToMmu(CVisualMDT.Vu1Vtable), CVisualMDT.Vu1VtableBytes);
             if (tbl == null) { Console.WriteLine(Tag + "mask tint: could not read the vtable"); return; }
-            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint).CopyTo(tbl, VtableDrawSlot);           // the uint* overload
-            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, VtableDrawSlot + 4);  // the packet overload
-            long cave = TakeCave(VtableBytes, out uint caveG);
+            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot);           // the uint* overload
+            BitConverter.GetBytes(CodeCaves.ElfCave.CatMaskTint + 0x0Cu).CopyTo(tbl, CVisualMDT.Vu1VtableDrawSlot + 4);  // the packet overload
+            long cave = TakeCave(CVisualMDT.Vu1VtableBytes, out uint caveG);
             if (cave == 0) { Console.WriteLine(Tag + "mask tint: no cave room for the vtable copy"); return; }
             Memory.WriteBytesBatch(cave, tbl);
             Memory.WriteUInt(_maskVisual + CVisualMDT.VisVtable, caveG);
@@ -1950,7 +1934,7 @@ namespace Dark_Cloud_Improved_Version
                 long cVU2 = TakeCave(vuSz, out uint cVU2G);
                 if (cVU2 == 0) { Console.WriteLine(Tag + $"mesh n{_skinNodes[idx].node}: no room for a second VU buffer — single-buffered (may flicker)"); continue; }
                 var pe = _pending[idx];
-                _jobs.Add(new CopyJob(pe.vu, (uint)(cVU2 - 0x20000000), vuSz, pe.vu, vuSz, pe.cVUG, pe.mdt, pe.mdtSz, pe.cMDTG));
+                _jobs.Add(new CopyJob(pe.vu, Memory.ToGuest(cVU2), vuSz, pe.vu, vuSz, pe.cVUG, pe.mdt, pe.mdtSz, pe.cMDTG));
                 Memory.WriteUInt(vis + 0x2c, cVU2G);
                 var e = _skinNodes[idx]; _skinNodes[idx] = (e.node, e.mdt, e.mdtSz, e.vu, cVU2, e.vuSz);
             }
@@ -2035,7 +2019,7 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (j.Op == 1)
                 {
-                    byte[] blk = Memory.ReadBytesBatch(0x20000000L + j.Dst, j.Size);
+                    byte[] blk = Memory.ReadBytesBatch(Memory.ToMmu(j.Dst), j.Size);
                     if (blk == null) continue;
                     bool hit = false;
                     for (int o = 0; o + 8 <= blk.Length; o += 4)
@@ -2044,15 +2028,15 @@ namespace Dark_Cloud_Improved_Version
                         foreach (var (oldV, newV) in _pairs)
                             if (w == oldV) { BitConverter.GetBytes(newV).CopyTo(blk, o); hit = true; o += 4; break; }
                     }
-                    if (hit) Memory.WriteBytesBatch(0x20000000L + j.Dst, blk);
+                    if (hit) Memory.WriteBytesBatch(Memory.ToMmu(j.Dst), blk);
                     continue;
                 }
-                byte[] b = Memory.ReadBytesBatch(0x20000000L + j.Src, j.Size);
+                byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(j.Src), j.Size);
                 if (b == null) { Console.WriteLine(Tag + $"copy fallback: could not read 0x{j.Src:X}"); return false; }
                 if (j.R1Size > 0) Memory.RebaseRange(b, j.R1Src, j.R1Size, j.R1Dst);
                 if (j.R2Size > 0) Memory.RebaseRange(b, j.R2Src, j.R2Size, j.R2Dst);
-                Memory.WriteBytesBatch(0x20000000L + j.Dst, b);
-                _copied[0x20000000L + j.Dst] = b;                                   // the texture pass scans these instead of re-reading
+                Memory.WriteBytesBatch(Memory.ToMmu(j.Dst), b);
+                _copied[Memory.ToMmu(j.Dst)] = b;                                   // the texture pass scans these instead of re-reading
             }
             _jobs.Clear(); return true;
         }
@@ -2454,7 +2438,7 @@ namespace Dark_Cloud_Improved_Version
         private static void CheckTexturesStillOurs()
         {
             long e = FindTexEntry(CatTextureNames[0]);
-            uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + 0x28) & 0x3FFF);
+            uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + TextureManager.EntryTex0) & TextureManager.Tex0AddrMask);
             if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
             _texMoved.Clear();                                                   // nothing of ours is in there to restore
@@ -2480,7 +2464,7 @@ namespace Dark_Cloud_Improved_Version
                 int len = 0; while (len < nb.Length && nb[len] != 0) len++;
                 string nm = System.Text.Encoding.ASCII.GetString(nb, 0, len);
                 if (Array.IndexOf(CatTextureNames, nm) < 0) continue;
-                if (to == SlotTextureGroup && (Memory.ReadUInt(e + 0x28) & 0x3FFF) < StuckFloor)
+                if (to == SlotTextureGroup && (Memory.ReadUInt(e + TextureManager.EntryTex0) & TextureManager.Tex0AddrMask) < StuckFloor)
                 {
                     byte[] snap = Memory.ReadBytesBatch(e, TextureManager.EntryStride);           // the whole entry at rest: block, name, image pointers, TEX0
                     if (snap != null) _texSnapshot[nm] = snap;                   // a script event's slot clean-up wipes it; RecreateCatEntries puts it back
@@ -2490,15 +2474,15 @@ namespace Dark_Cloud_Improved_Version
                 {
                     // An entry still sitting in the relocation window is one an earlier despawn failed to put back.
                     // Put its remembered original back first.
-                    ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
-                    uint tbp = (uint)(t & 0x3FFF);
+                    ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
+                    uint tbp = (uint)(t & TextureManager.Tex0AddrMask);
                     if (tbp >= StuckFloor)
                     {
                         if (_texOriginal.TryGetValue(nm, out ulong orig))
                         {
-                            Memory.WriteUInt(e + 0x28, (uint)orig); Memory.WriteUInt(e + 0x2C, (uint)(orig >> 32));
-                            Console.WriteLine(Tag + $"texture {nm} was left at 0x{tbp:X} by an earlier despawn — restored to 0x{orig & 0x3FFF:X}");
-                            t = orig; tbp = (uint)(t & 0x3FFF);
+                            Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)orig); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(orig >> 32));
+                            Console.WriteLine(Tag + $"texture {nm} was left at 0x{tbp:X} by an earlier despawn — restored to 0x{orig & TextureManager.Tex0AddrMask:X}");
+                            t = orig; tbp = (uint)(t & TextureManager.Tex0AddrMask);
                         }
                         else Console.WriteLine(Tag + $"WARNING: texture {nm} sits at 0x{tbp:X} with no remembered original — its relocation will be wrong this spawn");
                     }
@@ -2638,8 +2622,8 @@ namespace Dark_Cloud_Improved_Version
                 {
                     long e = FindTexEntry(name);
                     if (e == 0) continue;
-                    ulong t = (ulong)Memory.ReadUInt(e + 0x28) | ((ulong)Memory.ReadUInt(e + 0x2C) << 32);
-                    uint tbp = (uint)(t & 0x3FFF), cbp = (uint)((t >> 37) & 0x3FFF);
+                    ulong t = (ulong)Memory.ReadUInt(e + TextureManager.EntryTex0) | ((ulong)Memory.ReadUInt(e + TextureManager.EntryTex0 + 4) << 32);
+                    uint tbp = (uint)(t & TextureManager.Tex0AddrMask), cbp = (uint)((t >> TextureManager.Tex0CbpShift) & TextureManager.Tex0AddrMask);
                     // Shift a field ONLY if it is inside the window being moved. A TEX0 carries the texture's page AND its
                     // CLUT's, and a CLUT can sit below the textures: `newBase + (cbp - oldBase)` then underflows, and the
                     // GS keeps 14 bits of it, so the CLUT is uploaded to an essentially arbitrary page. A cat CLUT at 0x0E60
@@ -2648,10 +2632,10 @@ namespace Dark_Cloud_Improved_Version
                     uint nt = (tbp >= oldBase && tbp < _herTopSaved) ? newBase + (tbp - oldBase) : tbp;
                     uint nc = (cbp >= oldBase && cbp < _herTopSaved) ? newBase + (cbp - oldBase) : cbp;
                     if (nc == cbp && nt != tbp) Console.WriteLine(Tag + $"texture {name}: CLUT 0x{cbp:X} is outside the moved window 0x{oldBase:X}..0x{_herTopSaved:X} — left where it is");
-                    ulong n = (t & ~0x3FFFUL & ~(0x3FFFUL << 37)) | nt | ((ulong)nc << 37);
+                    ulong n = (t & ~(ulong)TextureManager.Tex0AddrMask & ~((ulong)TextureManager.Tex0AddrMask << TextureManager.Tex0CbpShift)) | nt | ((ulong)nc << TextureManager.Tex0CbpShift);
                     _texMoved.Add((name, t));
                     moves.Add((t, n));
-                    Memory.WriteUInt(e + 0x28, (uint)n); Memory.WriteUInt(e + 0x2C, (uint)(n >> 32));
+                    Memory.WriteUInt(e + TextureManager.EntryTex0, (uint)n); Memory.WriteUInt(e + TextureManager.EntryTex0 + 4, (uint)(n >> 32));
                 }
             }
             int patched = 0;
@@ -2697,7 +2681,7 @@ namespace Dark_Cloud_Improved_Version
             }
             _pairs.AddRange(moves);
             foreach (var (addr, size) in blocks)
-                if (addr != 0 && size > 0) _jobs.Add(new CopyJob((uint)(addr - 0x20000000), size));
+                if (addr != 0 && size > 0) _jobs.Add(new CopyJob(Memory.ToGuest(addr), size));
             patched = _jobs.Count;
             if (_jobs.Count > 0 && !RunCopyJobs() && !CopyJobsBySocket())
                 Console.WriteLine(Tag + "texture relocation: neither path completed — the copy may draw with her texture block");
@@ -2761,7 +2745,7 @@ namespace Dark_Cloud_Improved_Version
                         // (a mimic wakes with 100 invincibility frames): not spent, the latch is freed.
                         int hitSlot = -1;
                         for (int s2 = 0; s2 < 16 && hitSlot < 0; s2++)
-                            if (Memory.ReadInt(EnemyAddresses.MainMonstorUnit.Base + (long)s2 * 0x510 + 0x55750) != -1) hitSlot = s2;
+                            if (Memory.ReadInt(BodyCollision.SlotBase(s2) + BodyCollision.LastHitSphere) != -1) hitSlot = s2;
                         if (hitSlot >= 0)
                         {
                             // Accepted: damage, hitspark, kick and (via the patched flinch rule) the stagger are all the engine's.

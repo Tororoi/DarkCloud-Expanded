@@ -267,6 +267,7 @@ namespace Dark_Cloud_Improved_Version
 
         // Convert a PS2-native pointer (read from PS2 RAM) to a PCSX2-addressable address.
         internal static long ToMmu(long nativePtr) => (nativePtr & PhysAddrMask) | Pcsx2Base;
+        internal static uint ToGuest(long mmuAddr) => (uint)(mmuAddr - Pcsx2Base);   // the inverse, for a word the console will read
 
         /// <summary>Is <paramref name="guestPtr"/> a usable PS2 pointer — non-null and inside the EE's 32 MB of
         /// RAM? Pointers chased out of live game memory (model trees, map/fire structs, cloth lists) are null or

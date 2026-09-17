@@ -720,6 +720,9 @@ namespace Dark_Cloud_Improved_Version
 
         internal const int InUse    = 0x00;        // set when QUEUED — NOT a completion signal
         internal const int Complete = 0x08;        // entry[2] — set when the read has actually landed
+        internal const int Name     = 0x0C;        // the file, inline
+        internal const int Dest     = 0x8C;        // where it lands
+        internal const int Size     = 0x90;
     }
 
     /// <summary>

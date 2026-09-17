@@ -27,5 +27,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int  EntryName   = 0x08;     // inline, NUL-terminated
         internal const int  EntryPixels = 0x38;     // native pointer
         internal const int  EntryClut   = 0x48;     // native pointer to the palette copy
+        internal const int  EntryTex0    = 0x28;    // u64 GS TEX0 register
+        internal const uint Tex0AddrMask = 0x3FFF;  // its two VRAM addresses are 14-bit fields: TBP at bit 0, CBP at Tex0CbpShift
+        internal const int  Tex0CbpShift = 37;
     }
 }

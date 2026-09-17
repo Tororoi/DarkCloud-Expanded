@@ -21,9 +21,6 @@ namespace Dark_Cloud_Improved_Version
     internal static class DungeonPools
     {
         private const string Tag = "[DunPools] ";
-        /// <summary>The character heap's CDataAlloc2 (base +0, used +8, cap +0xC — the last two in 16-byte units).</summary>
-        private const long CharaPool = 0x21F06660;
-        private const int  CapField = 0xC;
         /// <summary>The heap an UNPATCHED dungeon carves: the layout every hardcoded address in the mod was captured from.</summary>
         internal const int VanillaCharaUnits = 210000;
 
@@ -34,7 +31,7 @@ namespace Dark_Cloud_Improved_Version
         /// last known value while no dungeon is loaded).</summary>
         internal static long Shift()
         {
-            int cap = Memory.ReadInt(CharaPool + CapField);
+            int cap = Memory.ReadInt(DataPools.Chara + DataPools.Cap);
             if (cap <= 0 || cap > 0x100000) return _shift;              // no dungeon loaded — keep what we last measured
             if (cap != _capSeen)
             {

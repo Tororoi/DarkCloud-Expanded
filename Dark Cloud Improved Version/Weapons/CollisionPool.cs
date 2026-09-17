@@ -32,7 +32,7 @@ namespace Dark_Cloud_Improved_Version
         internal static long Resolve()
         {
             long p = Memory.ReadInt(Pointer);
-            return p > 0 ? p + 0x20000000 : 0;
+            return p > 0 ? Memory.ToMmu(p) : 0;
         }
 
         /// <summary>The highest free entry, or −1: the engine's own spheres fill from 0, so planting from the top keeps clear
