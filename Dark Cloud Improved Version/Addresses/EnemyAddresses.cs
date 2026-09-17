@@ -279,9 +279,18 @@ namespace Dark_Cloud_Improved_Version
         internal const long RadiusArray   = 0x55390; // ★ float — the sphere radius = the hittable size (the knob)
         internal const long Param1Array   = 0x553D0; // float — _SET_BODY_COL 3rd arg (0 unless argc==4); height band?
         internal const long Param2Array   = 0x55410; // float — _SET_BODY_COL 4th arg (0 unless argc==4)
+        internal const long CentreArray   = 0x55250; // vec4 (CentreStride) — the sphere's world centre, rebuilt each frame
+        internal const long ActiveArray   = 0x55450; // int — 1 while the sphere is in use
+        internal const long SpareArray    = 0x55490; // 5 ints (SpareStride) — _SET_BODY_COL_PARA's spare table; [1] = the kick type admitted at [0] %
+        internal const long DamagePctArray = 0x555D0; // 6 ints (DamagePctStride) — damage % by attacker character (_SET_BODY_COL_PARA 10+char)
+        internal const long LastHitSphere = 0x55750; // int per SLOT — the sphere the last accepted hit landed on; CheckDmg writes it past its guard and invincibility gates
         internal const int  SlotStride     = 0x510;
         internal const int  BodyPartStride = 4;
+        internal const int  CentreStride   = 0x10, SpareStride = 0x14, DamagePctStride = 0x18;
         internal const int  MaxBodyParts   = 16;     // each sub-array spans 0x40 (= 16 floats) before the next one
+
+        /// <summary>EE address of a slot's body-collision block: add the array and the part's stride.</summary>
+        internal static long SlotBase(int slot) => EnemyAddresses.MainMonstorUnit.Base + (long)slot * SlotStride;
 
         /// <summary>EE address of (slot, bodyPart)'s hitbox sphere radius. Write once at/after spawn to resize it.</summary>
         internal static long RadiusAddr(int slot, int bodyPart = 0) =>

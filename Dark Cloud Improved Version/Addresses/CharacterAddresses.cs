@@ -180,6 +180,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  MotionSlotBase = 0xC20;   // channel[i] MOTION_TYPE ptr at +0xC20 + i*4
         internal const int  MotionSlots    = 8;
         internal const int  MotionFlags    = 0xC64;   // per-step motion flags: 0x1 stop, 0x2 play once + hold the last frame, 0x4 restart (Step clears 0x4)
+        internal const int  MotionStop     = 0x1;     //   bit0 = hold the frame: rate 0, blend increment 0
         internal const int  MotionPlayOnce = 0x2;
         internal const int  MotionRestart  = 0x4;     //   bit2 = clean restart (frame 0, no blend); consumed once
         internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN
@@ -260,6 +261,8 @@ namespace Dark_Cloud_Improved_Version
         internal const int  VisVU        = 0x18;        // → VU data ptr; +0x1C = its size
         internal const int  VisMDT       = 0x20;        // → MDT block
         internal const uint MdtMagic     = 0x0054444D;  // "MDT\0" at MDT+0x00
+        internal const uint Vu1Vtable    = 0x002A11A0;  // __vt__13CVisualMDTVu1: 32 B, slots 6/7 (+0x18/+0x1C) = DrawVu1
+        internal const int  Vu1VtableBytes = 32, Vu1VtableDrawSlot = 0x18;
         internal const int  MdtSizeField = 0x08;        // MDT+0x08 = total block size
         internal const int  MdtVertCount = 0x0C;        // MDT+0x0C = vertex count (AnimeDataInit 0x1493A0 loops over it)
         internal const int  MdtVertOffset = 0x10;       // MDT+0x10 = offset of the 16-byte vertex table from the MDT start
