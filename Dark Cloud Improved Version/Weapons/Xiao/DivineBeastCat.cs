@@ -319,11 +319,11 @@ namespace Dark_Cloud_Improved_Version
                             CheckTexturesStillOurs();
                             if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
                         }
-                        if (_armedSince == DateTime.MinValue) _armedSince = Now;
+                        if (_armedSince == DateTime.MinValue) _armedSince = GameClock.Now;
                         // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
                         // a moment. Not the real guard: Spawn refuses and retries while they are absent from the manager, so
                         // arriving early costs a retry rather than a broken cat.
-                        if (!Active && (Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
+                        if (!Active && (GameClock.Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
                         TrackCharge();
                         if (_native) PollCave(); else WatchPellets();
                         if (Active) { Step(); BreezeCape(); WatchCape(); if (_look.Cape) WatchElementLook(); }
@@ -340,31 +340,28 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── the PAUSE screen ───────────────────────────────────────────────────────────────────────────────
-        private static DateTime _pausedAt = DateTime.MinValue;
-        private static TimeSpan _pauseOffset = TimeSpan.Zero;
+        private static bool  _held;                                           // the copy's motion is stopped for a hold
         private static float _pausedBlend = -1f;                              // the channel's blend increment before the stop (the stop zeroes it for good)
-        private static DateTime Now => DateTime.UtcNow - _pauseOffset;       // the cat's clock: stands still through the PAUSE screen
         private const int MotionStop = 0x1;                                   // CCharacter.MotionFlags bit 0 (CharacterAddresses: stop)
         /// <summary>Hold the copy while the pause screen is up. The engine keeps stepping a chara-slot character there, so
-        /// the copy's motion is STOPPED (flags bit 0: rate 0, blend increment 0 — it holds its frame) and the mod's wall-clock
-        /// offset grows by the pause. The cave hooks the shot-pool step, which the pause screen does not run.</summary>
+        /// the copy's motion is STOPPED (flags bit 0: rate 0, blend increment 0 — it holds its frame). The cave hooks the
+        /// shot-pool step, which the pause screen does not run; the clock is <see cref="GameClock"/>'s to hold.</summary>
         private static void FreezeForPause()
         {
-            if (_pausedAt != DateTime.MinValue) return;
-            _pausedAt = DateTime.UtcNow;
+            if (_held) return;
+            _held = true;
             _pausedBlend = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateSpeed);   // read BEFORE the stop: Step writes 0 there while stopped
             long f = SlotAddr() + CCharacter.MotionFlags;
             Memory.WriteInt(f, Memory.ReadInt(f) | MotionStop);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"paused — cat held (blend increment {_pausedBlend:F3})");
         }
 
-        /// <summary>Come back from a pause or menu hold: clear the motion-stop flag, put back the channel's blend increment
-        /// (the stop leaves it at 0 and nothing re-seeds it, so the next cross-fade would never finish) and advance the
-        /// wall-clock offset by the time held.</summary>
+        /// <summary>Come back from a pause or menu hold: clear the motion-stop flag and put back the channel's blend
+        /// increment (the stop leaves it at 0 and nothing re-seeds it, so the next cross-fade would never finish).</summary>
         private static void Resume()
         {
-            if (_pausedAt == DateTime.MinValue) return;
-            _pauseOffset += DateTime.UtcNow - _pausedAt; _pausedAt = DateTime.MinValue;
+            if (!_held) return;
+            _held = false;
             if (Active)
             {
                 long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~MotionStop);
@@ -372,7 +369,7 @@ namespace Dark_Cloud_Improved_Version
                 // next key cross-fade would never finish. Put back what it was, or the engine's default.
                 Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, _pausedBlend > 0f ? _pausedBlend : BlendDefault);
             }
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {_pauseOffset.TotalSeconds:F1} s in all");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
         }
 
         // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
@@ -846,9 +843,9 @@ namespace Dark_Cloud_Improved_Version
             }
             // Separately from the peak, and rate-limited: the pool being tight RIGHT NOW is the thing that makes an enemy
             // projectile silently not appear, and it can happen on a floor whose peak never exceeds an earlier floor's.
-            if ((eCap - e) * 16L < EffectsTightBytes && (Now - _effectTightAt).TotalSeconds >= 5)
+            if ((eCap - e) * 16L < EffectsTightBytes && (GameClock.Now - _effectTightAt).TotalSeconds >= 5)
             {
-                _effectTightAt = Now;
+                _effectTightAt = GameClock.Now;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                     $"effects pool TIGHT: {e * 16L:N0} of {eCap * 16L:N0} B used, only {(eCap - e) * 16L:N0} free — "
                     + "an effect that cannot allocate never appears, and enemy projectiles are effects");
@@ -891,8 +888,8 @@ namespace Dark_Cloud_Improved_Version
             bool holding = state == PlayerAction.XiaoShotDraw || state == PlayerAction.XiaoShotHold;
             if (holding)
             {
-                if (!_holding) { _holding = true; _holdStart = Now; _flashed = false; }
-                _holdSeconds = (Now - _holdStart).TotalSeconds;
+                if (!_holding) { _holding = true; _holdStart = GameClock.Now; _flashed = false; }
+                _holdSeconds = (GameClock.Now - _holdStart).TotalSeconds;
                 if (_holdSeconds >= ChargeSeconds && !_flashed) { Player.FlashChargeComplete(); _flashed = true; }
             }
             else
@@ -904,7 +901,7 @@ namespace Dark_Cloud_Improved_Version
                     // the next shot is actually fired. The shoot motion takes ~0.5 s to spawn the pellet against a 16 ms
                     // tick, so the cave is waiting long before its birth frame. Nothing is torn down: the copy persists
                     // either way — only its visibility moves.
-                    if (_holdSeconds >= ChargeSeconds) _armPendingUntil = Now.AddSeconds(ArmPendingSeconds);
+                    if (_holdSeconds >= ChargeSeconds) _armPendingUntil = GameClock.Now.AddSeconds(ArmPendingSeconds);
                     else if (_caveOwns && _phase != Phase.Flying) _disarmTicks = 30;   // a cancelled charge, nothing coming
                 }
                 _holding = false;
@@ -918,7 +915,7 @@ namespace Dark_Cloud_Improved_Version
                         _disarmTicks = 30;                        // AFTER ArmCave, which zeroes it: no pellet within ~0.5 s = the shot never happened
                         _armPendingUntil = DateTime.MinValue;
                     }
-                    else if (Now >= _armPendingUntil) _armPendingUntil = DateTime.MinValue;
+                    else if (GameClock.Now >= _armPendingUntil) _armPendingUntil = DateTime.MinValue;
                 }
             }
         }
@@ -951,7 +948,7 @@ namespace Dark_Cloud_Improved_Version
         /// retried after a pause rather than every tick.</summary>
         private static void SpawnResident()
         {
-            if (_spawnFailedAt != DateTime.MinValue && (Now - _spawnFailedAt).TotalSeconds < 5) return;
+            if (_spawnFailedAt != DateTime.MinValue && (GameClock.Now - _spawnFailedAt).TotalSeconds < 5) return;
             _scale = 0f; _alpha = 0f; _target = -1; _pelletSlot = -1; _caveOwns = false; _disarmTicks = 0;
             _yaw = Memory.ReadFloat(CCharacter.Base + CCharacter.CharRotY);
             _x = Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos);
@@ -960,7 +957,7 @@ namespace Dark_Cloud_Improved_Version
             _weapon = LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord));   // the look key (Super Steve: by its sphere)
             _look = Looks.TryGetValue(_weapon, out var lk) ? lk : Looks[Items.divinebeasttitle];
             Array.Copy(_look.Tint, _catTint, 3);                   // the weapon's own ambient; the element may override it below
-            if (!Spawn()) { _spawnFailedAt = Now; return; }
+            if (!Spawn()) { _spawnFailedAt = GameClock.Now; return; }
             _spawnFailedAt = DateTime.MinValue;
             WriteGlowName();
             var hide = new List<int>();
@@ -972,7 +969,7 @@ namespace Dark_Cloud_Improved_Version
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Console.WriteLine(Tag + "pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
-            _phase = Phase.Resident; _phaseStart = Now; _hitDone = false; _fade = 0;
+            _phase = Phase.Resident; _phaseStart = GameClock.Now; _hitDone = false; _fade = 0;
             SetKey(KeyLeap);
             Maintain();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
@@ -1047,7 +1044,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
             _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
-            _phase = Phase.Resident; _phaseStart = Now;
+            _phase = Phase.Resident; _phaseStart = GameClock.Now;
             Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "shot released — the cave binds the next pellet on its birth frame");
         }
@@ -1129,7 +1126,7 @@ namespace Dark_Cloud_Improved_Version
                         WriteHitStamps();                                         // the entry the cave will plant: pellet + attack, the weapon's element
                         CrushGuard(_target);                                      // Guard Crush: the target's guard windows are dropped for this flight
                         ApplyFlightTime();
-                        _phase = Phase.Flying; _phaseStart = Now; _hitDone = false; _boundAt = Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
+                        _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false; _boundAt = GameClock.Now; _gaitLogged = false; _blockedLogged = false; _pounceLogged = false; _pounceKind = 0; _sitLogged = false; _retargetTick = 0;
                         _flightFrame0 = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame);
                         Memory.WriteFloat(CodeCaves.Mailbox.CatFloorH, _floor);
                         WriteTargetAim();
@@ -1140,7 +1137,7 @@ namespace Dark_Cloud_Improved_Version
                 case 4:                                                          // falling: off the pellet's line, or a flying pounce's arc
                     if (_phase != Phase.Falling)
                     {
-                        _phase = Phase.Falling; _phaseStart = Now;
+                        _phase = Phase.Falling; _phaseStart = GameClock.Now;
                         if (Memory.ReadInt(CodeCaves.Mailbox.CatPounceFly) != 0)
                         {
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
@@ -1153,7 +1150,7 @@ namespace Dark_Cloud_Improved_Version
                 case 5:                                                          // land clip started (ahead of touchdown); the cave stops momentum at paw contact and runs at clip end
                     if (_phase != Phase.Landing)
                     {
-                        _phase = Phase.Landing; _phaseStart = Now;
+                        _phase = Phase.Landing; _phaseStart = GameClock.Now;
                         long lp = SlotAddr() + CCharacter.CharPos;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
                     }
@@ -1162,12 +1159,12 @@ namespace Dark_Cloud_Improved_Version
                 {
                     if (_phase != Phase.Running)
                     {
-                        _phase = Phase.Running; _phaseStart = Now; _pounceLogged = false; _pounceKind = 0;
+                        _phase = Phase.Running; _phaseStart = GameClock.Now; _pounceLogged = false; _pounceKind = 0;
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
                     }
                     long rp = SlotAddr() + CCharacter.CharPos;
                     _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
-                    double rt = (Now - _phaseStart).TotalSeconds;
+                    double rt = (GameClock.Now - _phaseStart).TotalSeconds;
                     float dist = float.MaxValue;
                     if (_target >= 0 && !Enemies.IsLive(_target))
                     {
@@ -1206,7 +1203,7 @@ namespace Dark_Cloud_Improved_Version
                     bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
                     if (blocked && !_blockedLogged) { _blockedLogged = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "a wall stops the cat — waiting"); }
                     if (!blocked) _blockedLogged = false;
-                    if ((Now - _boundAt).TotalSeconds >= LifetimeSeconds)
+                    if ((GameClock.Now - _boundAt).TotalSeconds >= LifetimeSeconds)
                     {
                         Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                         _scale = 1f; _caveOwns = false;
@@ -1219,7 +1216,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
                     break;
                 case 10:                                                         // ready: in place before the jump
-                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = Now; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
+                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
                     break;
                 case 2:
                 {
@@ -1248,7 +1245,7 @@ namespace Dark_Cloud_Improved_Version
                                   : Memory.ReadFloat(CCharacter.Base + CCharacter.CharPos + 4);
             _pool = pool; _pelletSlot = slot; _scale = 0f; _alpha = 1f; _fade = 0; _glowFade = -1;
             PlaceRootUnderHead();
-            _phase = Phase.Flying; _phaseStart = Now; _hitDone = false;
+            _phase = Phase.Flying; _phaseStart = GameClock.Now; _hitDone = false;
             Maintain();
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                 $"cat pinned to pellet slot {slot} from ({_px:F1},{_ph:F1},{_py:F1})" + (_target >= 0 ? $", locked enemy slot {_target}" : "") + " [thread follower]");
@@ -1259,7 +1256,7 @@ namespace Dark_Cloud_Improved_Version
         {
             _alpha = 0f; _scale = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = false; _hitFade = false;
             RestoreGuardsNow();
-            _phase = Phase.Resident; _phaseStart = Now;
+            _phase = Phase.Resident; _phaseStart = GameClock.Now;
             SetKey(KeyLeap);
             Maintain();
         }
@@ -1268,7 +1265,7 @@ namespace Dark_Cloud_Improved_Version
         private static void FadeKeepingPose()
         {
             _key = Memory.ReadInt(SlotAddr() + CCharacter.MotionId);
-            _phase = Phase.Fading; _phaseStart = Now; _fade = 0;
+            _phase = Phase.Fading; _phaseStart = GameClock.Now; _fade = 0;
         }
 
         // ───────────────────────────────────────── aim + targeting ─────────────────────────────────────────
@@ -1553,7 +1550,7 @@ namespace Dark_Cloud_Improved_Version
         /// ending in <see cref="Maintain"/> either way.</summary>
         private static void Step()
         {
-            double t = (Now - _phaseStart).TotalSeconds;
+            double t = (GameClock.Now - _phaseStart).TotalSeconds;
             if (_hitFade)                                                        // after a landed hit: keep flying/landing under the cave, fade out meanwhile
             {
                 _fade++; _alpha = Math.Max(0f, 1f - _fade / (float)FadeTicks);
@@ -1661,7 +1658,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Enter a flight phase: stamp the phase clock and play its clip.</summary>
         private static void Enter(Phase p, int key)
         {
-            _phase = p; _phaseStart = Now;
+            _phase = p; _phaseStart = GameClock.Now;
             SetKey(key);
         }
 
@@ -2178,7 +2175,7 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i < CCharacter.MotionSlots; i++)
                 sb.Append($" ch{i}=0x{(uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + i * 4):X8}/{Memory.ReadInt(CCharacter.Base + ChanKeyStart + i * 4)}..{Memory.ReadInt(CCharacter.Base + ChanKeyEnd + i * 4)}");
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(Now - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
+                $"her MOTION 1 pointer LOST (raw 0x{raw:X8}) — phase {(Active ? _phase.ToString() : "idle")}, {(GameClock.Now - _lastDespawn).TotalSeconds:F2} s after the last despawn, event mode {Memory.ReadInt(DungeonScriptEvent.BtEventMode)}; table:{sb}");
         }
 
         /// <summary>Put her channel-1 pointer and key range back when the inline MOTION struct still holds its data
@@ -2434,7 +2431,7 @@ namespace Dark_Cloud_Improved_Version
             RetagCatTextures(SlotTextureGroup, HerTextureBlock);
             Active = false; _key = -1; _target = -1; _weapon = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
-            _lastDespawn = Now;
+            _lastDespawn = GameClock.Now;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
         }
 
