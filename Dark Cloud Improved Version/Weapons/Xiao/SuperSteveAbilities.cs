@@ -121,8 +121,8 @@ namespace Dark_Cloud_Improved_Version
         internal static void DriveAngelGear(bool active)
         {
             if (!active || !Player.CheckDunIsWalkingMode()) return;
-            if (DateTime.UtcNow < _angelGearNextHeal) return;
-            _angelGearNextHeal = DateTime.UtcNow.AddSeconds(AngelGearHealSeconds);
+            if (GameClock.Now < _angelGearNextHeal) return;
+            _angelGearNextHeal = GameClock.Now.AddSeconds(AngelGearHealSeconds);
 
             HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
             HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
@@ -245,8 +245,8 @@ namespace Dark_Cloud_Improved_Version
             // Hold time → 0..1 charge fraction; frozen on release (draw 0xB / nocked-hold 0xC), base on a tap.
             if (holding)
             {
-                if (!_ssHolding) { _ssHoldStart = DateTime.UtcNow; _ssHolding = true; }
-                _ssHoldFrac = (float)Math.Min(1.0, (DateTime.UtcNow - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
+                if (!_ssHolding) { _ssHoldStart = GameClock.Now; _ssHolding = true; }
+                _ssHoldFrac = (float)Math.Min(1.0, (GameClock.Now - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
             }
             else _ssHolding = false;
 
@@ -419,8 +419,8 @@ namespace Dark_Cloud_Improved_Version
             bool holding = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
             if (holding)
             {
-                if (!_mrHolding) { _mrHoldStart = DateTime.UtcNow; _mrHolding = true; _mrCycles = 0; }
-                int cycles = (int)((DateTime.UtcNow - _mrHoldStart).TotalSeconds / MobiusCycleSeconds);
+                if (!_mrHolding) { _mrHoldStart = GameClock.Now; _mrHolding = true; _mrCycles = 0; }
+                int cycles = (int)((GameClock.Now - _mrHoldStart).TotalSeconds / MobiusCycleSeconds);
                 if (cycles > _mrCycles)
                 {
                     _mrCycles = cycles;
