@@ -24,8 +24,6 @@ namespace Dark_Cloud_Improved_Version
     /// and clips are already resident in her tree. Summoning it follows the Angel Gear / Mirage recipe: deep-copy the
     /// subtree into the mod's caves, give the copy its own skin buffers and motion channel, host it in a dungeon
     /// chara slot, and let the engine step and draw it natively. Her own model is never touched.
-    ///
-    /// Design history and rejected approaches: game_data/docs/divine-beast-cat-re.md.
     /// </summary>
     internal static class DivineBeastCat
     {
@@ -171,20 +169,12 @@ namespace Dark_Cloud_Improved_Version
         private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
         private const float  GlowScale = 0.5f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
         private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
-        // The cat's own light: Draw__10CCharacter (0x137xxx) adds this float3 (CCharacter +0xCE0) to the scene ambient it lights
-        // the model with (0..255 scale; the dungeon's own key lights are ~100-120). Brightness with a slight cyan lean,
-        // scaled by the fade so the cat dims as it goes.
-        // Per-weapon look: the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel
-        // Shooter's cat wears the wings with a WHITE glow and a neutral ("dark grey") add; the Angel Gear's the wings with a
-        // GOLD glow and a gold-white add. Those three glows are no longer textures of their own: every look draws the SAME
-        // 8-bit disc and differs only in the palette row the cave paints into it (WeaponLook.PalRow → Mailbox.CatGlowPalRow;
-        // build_cat_pack.GLOW_LOOKS holds rows 6-8). The wings are two mesh nodes the copy hides by zeroing their geometry.
+        // Per weapon: the Divine Beast Title keeps its blue glow, cyan tint and NO wings; the Angel Shooter wears the wings
+        // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
+        // draws the SAME 8-bit disc, differing only in the palette row (PalRow → Mailbox.CatGlowPalRow; the rows themselves
+        // are build_cat_pack.GLOW_LOOKS 6-8). Wings are two mesh nodes the copy hides by zeroing their geometry.
         private sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; }
-        // Super Steve inherits the cat from its attached SynthSphere: a Divine Beast Title sphere = the Title's
-        // cat exactly; an Angel Shooter / Angel Gear sphere = the BLUE cat (the Title's look, no wings) wearing a solid-yellow
-        // cloth cape from its collar, with the winged cat's range and tracking. Keyed under a private id so the sphere swap
-        // rebuilds the copy like a weapon change.
-        private const int SuperSteveAngelKey = -2;
+        private const int SuperSteveAngelKey = -2;   // Super Steve's look, keyed privately so a sphere swap rebuilds the copy
         private static readonly Dictionary<int, WeaponLook> Looks = new Dictionary<int, WeaponLook>
         {
             { Items.divinebeasttitle, new WeaponLook { PalRow = 7, Tint = new[] { 12f, 24f, 48f }, Wings = false } },
@@ -196,8 +186,11 @@ namespace Dark_Cloud_Improved_Version
             { SuperSteveAngelKey,     new WeaponLook { PalRow = 0, Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true } },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
-        /// <summary>The look key for the equipped weapon: its own id, or for Super Steve the one its attached sphere grants
-        /// (−1 = none: the cat stays down).</summary>
+        /// <summary>The look key for the equipped weapon: its own id, or −1 for none — the cat stays down. Super Steve
+        /// inherits the cat from its attached SynthSphere: a Divine Beast Title sphere gives the Title's cat exactly, while an
+        /// Angel Shooter or Angel Gear sphere gives the BLUE cat (the Title's look, no wings) wearing a solid-yellow cloth
+        /// cape, with the winged cat's range and tracking — keyed as <see cref="SuperSteveAngelKey"/> so a sphere swap
+        /// rebuilds the copy like a weapon change.</summary>
         private static int LookKeyFor(int weapon)
         {
             if (weapon != Items.supersteve) return Looks.ContainsKey(weapon) ? weapon : -1;
@@ -227,15 +220,14 @@ namespace Dark_Cloud_Improved_Version
         private static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
 
         // ── the PAUSE screen ────────────────────────────────────────────────────────────────────────────────
-        // The mod's clocks are wall-clock; the copy is a chara-slot character the engine keeps stepping on the pause screen
-        // (Player.CheckDunIsPausedOrMenu's note). So on entry the copy's motion is STOPPED (flags bit 0: rate 0, blend
-        // increment 0 — it holds its frame) and the clock offset grows by the pause; nothing else ticks. The cave hooks the
-        // shot-pool step, which the pause screen does not run.
         private static DateTime _pausedAt = DateTime.MinValue;
         private static TimeSpan _pauseOffset = TimeSpan.Zero;
         private static float _pausedBlend = -1f;                              // the channel's blend increment before the stop (the stop zeroes it for good)
         private static DateTime Now => DateTime.UtcNow - _pauseOffset;       // the cat's clock: stands still through the PAUSE screen
         private const int MotionStop = 0x1;                                   // CCharacter.MotionFlags bit 0 (CharacterAddresses: stop)
+        /// <summary>Hold the copy while the pause screen is up. The engine keeps stepping a chara-slot character there, so
+        /// the copy's motion is STOPPED (flags bit 0: rate 0, blend increment 0 — it holds its frame) and the mod's wall-clock
+        /// offset grows by the pause. The cave hooks the shot-pool step, which the pause screen does not run.</summary>
         private static void FreezeForPause()
         {
             if (_pausedAt != DateTime.MinValue) return;
@@ -245,6 +237,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(f, Memory.ReadInt(f) | MotionStop);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"paused — cat held (blend increment {_pausedBlend:F3})");
         }
+        /// <summary>Come back from a pause or menu hold: clear the motion-stop flag, put back the channel's blend increment
+        /// (the stop leaves it at 0 and nothing re-seeds it, so the next cross-fade would never finish) and advance the
+        /// wall-clock offset by the time held.</summary>
         private static void Resume()
         {
             if (_pausedAt == DateTime.MinValue) return;
@@ -260,8 +255,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>Point the glow cave at this look: the palette ROW it should paint (CatGlowPalRow), the disc to bind —
-        /// always the same one now — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade
-        /// per spawn.</summary>
+        /// always the same one — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade per
+        /// spawn.</summary>
         private static void WriteGlowName()
         {
             // EVERY look draws the same 8-bit disc and differs only in the palette row the cave paints into it. Row 0
@@ -272,13 +267,12 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
         }
 
-        /// <summary>Meshes this look does not wear — the wings on a wingless weapon, the mask on anything but Super Steve. They
-        /// are all SKINNED frames, so nulling their geometry alone is unsafe (MotionProc2 writes every mesh's .wgt run through
-        /// its visual each frame). So the copy's channel gets a PRIVATE clone of the skin list (the same 0x18-byte nodes the
-        /// .mot list uses: {mesh, bone, type 20, count, keys, next}) with those meshes' runs left out — the keys still point at
-        /// her data, only the chain is ours — and THEN their geometry pointers are cleared so nothing draws them. Her own list
-        /// is untouched. One pass for all of them, so the clone is built once.</summary>
-        private const int SkinNodeSize = 0x18;
+        private const int SkinNodeSize = 0x18;   // one skin-list node: {mesh, bone, type 20, count, keys, next}
+        /// <summary>Hide the meshes this look does not wear — the wings on a wingless weapon, the mask on anything but Super
+        /// Steve. They are all SKINNED frames, so nulling their geometry alone is unsafe (MotionProc2 writes every mesh's .wgt
+        /// run through its visual each frame). The copy's channel gets a PRIVATE clone of the skin list with those meshes' runs
+        /// left out — the keys still point at her data, only the chain is ours — and THEN their geometry pointers are cleared
+        /// so nothing draws them. Her own list is untouched; one pass builds the clone once.</summary>
         private static void HideMeshes(List<int> hide, string what)
         {
             if (hide.Count == 0) return;
@@ -308,14 +302,7 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
         }
 
-        // ── the Super Steve cape: the engine's cloth (CCloth 0x8550), built by HER pack load from the baked cat_cape node + catcape.clo
-        // (the .clo's FRAME finds the node in her tree; its bind 3×3 is HIDE_SCALE'd so on her the cloth is a point) and CLONED onto
-        // the cat copy here, CharacterClone.CopyCloth's recipe: the whole object, two private draw packets (the engine rebuilds the
-        // packet from the particles every draw), the anchor re-pointed at the copy's cat_sebone2 (the rest lattice was authored in
-        // that bone's space), no body capsules for now, the Verlet "previous" seeded from "current" so the first step is quiet, and
-        // the copy's +0xC74 pointing at a one-entry list. Her own list entry is zeroed so she neither steps nor draws it. The
-        // dungeon chara loop steps every slot's cloth while MirageSceneGateFlag == 1 (the Mirage pnach's ClothStep swap), which
-        // the cat already sets; Draw__10CCharacter draws the list. ──
+        // ── the Super Steve cape (CCloth 0x8550) ─────────────────────────────────────────────────────────
         private static long _capeObj;
         private static uint _capeTemplate;                                    // her CCloth for cat_cape, taken out of her draw list by TakeHerCape
         private static int _capeSweepTick;
@@ -341,6 +328,12 @@ namespace Dark_Cloud_Improved_Version
             }
         }
         private static int  _capeWatch;
+        /// <summary>Clone her cape's CCloth onto the copy, CharacterClone.CopyCloth's recipe: the whole object, two private
+        /// draw packets (the engine rebuilds the packet from the particles every draw), the anchor re-pointed at the copy's
+        /// cat_sebone2 where the rest lattice was authored, no body capsules, the Verlet "previous" seeded from "current" so
+        /// the first step is quiet, and the copy's +0xC74 pointing at a one-entry list. Her own list entry is zeroed so she
+        /// neither steps nor draws it. The dungeon chara loop steps every slot's cloth while MirageSceneGateFlag == 1 (the
+        /// Mirage pnach's ClothStep swap), which the cat already sets; Draw__10CCharacter draws the list.</summary>
         private static void SpawnCape()
         {
             _capeObj = 0;
@@ -490,61 +483,24 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"cape watch: anchor LW rows {rows} | cat at ({Memory.ReadFloat(s + CCharacter.CharPos):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 4):F1},{Memory.ReadFloat(s + CCharacter.CharPos + 8):F1}) yaw {Memory.ReadFloat(s + CCharacter.CharRotY):F2} scale {Memory.ReadFloat(s + CCharacter.CharScale):F2} opacity {Memory.ReadFloat(s + CCharacter.NpcOpacity):F0}");
         }
 
-        /// <summary>The wind, as a SHAPE rather than a force.
-        ///
-        /// The collar edge is pinned, so the sheet cannot move downwind bodily and its displacement from the rest shape grows
-        /// from nothing at the collar to everything at the hem. A force therefore fights the spring — which pulls each particle
-        /// toward its OWN place in that shape, hardest where the wind has carried the cloth furthest — putting the sheet into
-        /// compression along its length, and a sheet in compression buckles.
-        ///
-        /// So move the target instead of pushing the cloth. Each tick the REST SHAPE is rewritten as the blown shape — every row
-        /// carried back along the cape and lifted off the back, eased in along the hang so the collar stays put and the hem moves
-        /// most, with the travelling ripple on top. The spring now has nothing to fight: it pulls the cloth toward a shape that is
-        /// already streaming, which is the shape we want it in, and what is left for the simulation is exactly what it is good at
-        /// — lag, collision against the body, and the swing when the cat moves. GRAVITY stays zero.
-        ///
-        /// Everything is in the ANCHOR's frame, so it follows the cat's spine without any facing maths: −x runs down the cape away
-        /// from the collar, −y lifts off the back.</summary>
-        // The sheet cannot LENGTHEN — its rest distances were fixed from the baked lattice when the cloth loaded, and the distance
-        // constraints enforce them. A row that rises therefore has to draw IN toward the collar by as much as the geometry demands,
-        // or the target sits further away than the cloth can reach and the lift spends itself pulling against those constraints.
-        // That trim is not a constant: a row d down the cape, raised by l, spans √(d² − l²), so it is computed per row from the
-        // cape's own measured length. Raise the lift as far as you like and the shape stays reachable.
-        private const float CapeWindLift = 2.6f;         // how far the hem flies off the back — this is the wind's real strength
-        private const float CapeWindEase = 1.6f;         // the profile along the hang: > 1 keeps the shoulders down and flies the tail
-        // A torn sheet is measured BY THE SHEET, not by where the cat is: a cat riding its pellet covers 5 units a frame, so
-        // the cloth legitimately trails far behind it. The cape's own collar-to-hem span is about 5 units and the distance
-        // constraints hold it near that however fast the cat moves; only a sheet left behind by a teleport, its pinned edge
-        // snapped away from the rest, spans the room.
-        private const float CapeTearSpan = 20f;          // collar corner to mid-hem. Its real span is ~5 units and a hard flight
-                                                         // stretches it to maybe 10 while the 4 constraint passes catch up;
-                                                         // the tears in the log were 40–54, so this sits clear of both
+        private const float CapeWindLift = 2.6f;         // how far the hem flies off the back
+        private const float CapeWindEase = 1.6f;         // profile along the hang: > 1 keeps the shoulders down, flies the tail
+        private const float CapeTearSpan = 20f;          // collar corner to mid-hem; past this the cloth is torn and gets reseated
         private static int _capeTearLog;
         private static int  _capeHemParticle;                                // the hem's middle, from the cloth's own dimensions
         private static byte[] _capeRest;                                     // the rest shape as baked — the wind's baseline
         private static float _capeSpan;                                      // collar to hem along the cape, measured from that shape
-        // The gust that runs down it, written per particle: a single force moves every particle at once and only rocks the
-        // sheet from side to side.
-        //
-        // It goes into the REST SHAPE (+0x110), not the velocity array. The rest is the only per-particle field the engine reads
-        // and never writes during play, so a wave written there cannot race it — the cloth chases a shape that is already
-        // rippling and the spring's own lag smooths it. Writing VELOCITY instead races the integrator with stale values and
-        // hands back pre-teleport velocities on the bind frame, which explodes the cloth. It also halves the traffic: the
-        // baseline is read once at spawn, so the tick only writes.
-        private const float CapeRippleAmp = 0.65f;       // units of swell at the crest, once the swell is at full strength
-        private const float CapeRippleReach = 0.5f;      // how far down the cape it gets there: the swell ramps from nothing at the
-                                                        // pinned collar to full at this fraction, and holds full over the rest. It
-                                                        // has to ramp at all for two reasons — a pinned sheet flutters least at its
-                                                        // pinned end, and a swell larger than a row's own distance from the collar
-                                                        // would make the draw-in geometry below collapse that row onto it.
-        // Wavelength matters for BUNCHING as much as for looks: neighbouring rows differ in velocity by roughly the amplitude
-        // times 2π/wavelength, and where that difference points them at each other the sheet is in compression and buckles — the
-        // pile-up at the hem. A longer wave flattens that gradient; the rest spring (CAPE_PHYSICS K) is the other half,
-        // since each particle is pulled toward its OWN place in the shape and that restores spacing.
-        private const float CapeRippleRows = 10.0f;      // rows per wavelength — over one wavelength the cape shows a single swell
+        private const float CapeRippleAmp = 0.65f;       // units of swell at the crest
+        private const float CapeRippleReach = 0.5f;      // fraction down the cape where the swell reaches full
+        private const float CapeRippleRows = 10.0f;      // rows per wavelength — one swell visible at a time
         private const float CapeRippleSeconds = 0.5f;    // one crest, collar to hem
         private static double _ripplePhase;
         private static int _capeWide, _capeHang;      // the cloth's own dimensions: across the back × down the cape
+        /// <summary>The wind: the cloth's REST SHAPE is rewritten each tick as the blown shape — every row carried back along
+        /// the cape and lifted off the back, eased along the hang, with a travelling ripple on top — rather than a force being
+        /// applied, which a pinned sheet answers by buckling. Rows draw in as they rise so the sheet never has to lengthen.
+        /// All in the anchor's frame (+x toward the collar, −y off the back); gravity stays zero. Reseats the cloth if it has
+        /// been left behind by a teleport.</summary>
         private static void BreezeCape()
         {
             if (_capeObj == 0 || _capeRest == null) return;
@@ -585,32 +541,20 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(_capeObj + CCloth.ClothRest, rest);
         }
 
-        /// <summary>Stiff across the cape, soft along it — so the wind can lift it and run a ripple down its length while the
-        /// flare keeps its width instead of collapsing into a rectangle.
-        ///
-        /// The spring the engine pulls each particle home with is a VECTOR (CCloth +0xE0/+0xE4/+0xE8), applied component-wise to
-        /// the correction, not a single number — so it can be stiff on one axis and slack on another. The catch is that those are
-        /// WORLD axes, and the cat turns, so a constant would put the stiff axis across the cape only while the cat happened to
-        /// face one way. Instead it is rebuilt every tick from the cat's own facing: the stiff value goes on the axis that is
-        /// currently sideways-on to the cat and the slack one on its fore-and-aft axis, mixed by the squares of the facing so the
-        /// pair rotates smoothly through the diagonals (an axis-aligned diagonal is all the engine can express — the off-diagonal
-        /// terms of the true rotated tensor have nowhere to go, and at 45° the two values simply meet in the middle).
-        ///
-        /// The baked .clo carries <see cref="CapeSpringAlong"/> as its seed for the first frame or two.</summary>
         private const float CapeSpringSide = 0.42f;      // across the cape: holds the width, and with it the authored flare
         private const float CapeSpringAlong = 0.12f;     // along it: low, so the wind can lift the sheet and carry a wave down it
         private const float CapeSpringUp = 0.16f;        // vertical: between the two — it fights the lift, but also the sagging
-        /// <summary>The cat's facing as a GUARANTEED unit vector. It is (0, 0) until something aims the cat, and with no target
-        /// in range nothing ever does — the cave only writes a direction when it has somewhere to go. Everything here that leans
-        /// on the facing must survive that: <see cref="StiffenCape"/> mixes the stiff and slack spring values by the squares of
-        /// these, which only sums to the intended pair when they are normalised. Feed it (0, 0) and BOTH horizontal axes of the
-        /// spring come out zero, leaving the cape with no restoring force.</summary>
+        /// <summary>The cat's facing as a GUARANTEED unit vector — the cave leaves it (0, 0) with no target in range, and
+        /// <see cref="StiffenCape"/> mixes by the squares of these, which only sums correctly when they are normalised.</summary>
         private static void Facing(out float dx, out float dz)
         {
             float l = (float)Math.Sqrt(_dirX * _dirX + _dirY * _dirY);
             if (l > 1e-3f) { dx = _dirX / l; dz = _dirY / l; } else { dx = 0f; dz = 1f; }
         }
 
+        /// <summary>Rebuild the cloth's spring (CCloth +0xE0/+0xE4/+0xE8, a per-axis vector) from the cat's facing: stiff
+        /// across the cape, slack fore-and-aft, mixed by the squares of the facing so the pair rotates through the diagonals.
+        /// The engine's axes are WORLD axes, so a constant would only be right while the cat faced one way.</summary>
         private static void StiffenCape()
         {
             Facing(out float fdx, out float fdz);
@@ -622,38 +566,14 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(_capeObj + CCloth.ClothK, k);
         }
 
-        /// <summary>The cape's own colour. The cat is lit by an ambient ADD on its CCharacter (its weapon's Tint), but a cloth is
-        /// drawn on its own — CCloth::Draw builds a bare frame and hands it to MGDraw — so none of that reaches the cape, and in a
-        /// dark dungeon it renders a dull maroon beside a glowing cat.
-        ///
-        /// Draw__10CCharacter saves the global ambient, adds the CHARACTER's tint (+0xCE0, what <see cref="Looks"/> sets per
-        /// weapon), draws its meshes AND THEN its cloth list inside that same window, and only then restores. So a cloth is lit
-        /// by whatever ambient is standing when it draws — the character's colour, never one of its own, and never the
-        /// material's.
-        ///
-        /// ElfCave.CatCapeTint wraps that cloth-draw call. For the one cloth named here it adds this delta to the ambient for that
-        /// draw alone and puts the ambient straight back, so the cape carries a red of its own while the cat keeps its blue and
-        /// every other cloth in the game is untouched. The delta is ON TOP of the cat's tint, which is already in the ambient by
-        /// then — so it is written as (what the cape should have) − (what the cat has), and the cat's colour does not leak in.</summary>
-        // Ambient is FLAT — it lifts every part of the cape by the same amount, so the more of it there is, the less the scene's
-        // own lighting (the part that varies with each particle's normal, and therefore the only part that SHOWS the ripples)
-        // counts for. Enough to be clearly red in a dark dungeon, not so much that it washes the shading out.
-        private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint —
-                                                                                       // tuned against the texture in the viewer's cape panel
-                                                                                       // (the cat's blue is 12/24/48)
+        private static readonly float[] CapeTint = { 80f, 20f, 10f };                  // the cape's own ambient, same scale as Look.Tint
         // ── the cape and mask follow the equipped weapon's ELEMENT ────────────────────────────────────────
         // Two knobs move together per element: the flat texture's COLOUR and the ambient tint above.
         //
-        // The texture is a colour, not artwork: build_cat_pack.flat_tim2 bakes 32x32 pixels that are ALL palette index 0
-        // followed by 256 identical entries, so the whole cape is one palette entry. Repainting that palette in the
-        // manager's own copy recolours the cape live — the dungeon draw loop re-uploads the cat's texture group before it
-        // draws the slot, so the change lands on the next frame (the same trick WeaponTextureSwap uses on Super Steve).
-        // Painting all 256 entries also makes it immune to CLUT ordering, since every entry is the same colour anyway.
-        // The mask SHARES catcape (wing_bake.MASK_TEX), so it follows without any work of its own.
         private const string CapeTexture = "catcape";
-        /// <summary>The element glow: ONE 8-bit disc for all six colours, repainted by ElfCave.CatGlowPalette the way the
-        /// cape is. One 8-bit disc is 5,184 B where a 32-bit disc costs 16,448 B each, so this is
-        /// every colour. The colours live in build_cat_pack.GLOW_ELEMENTS, not here — tune them there and re-bake.</summary>
+        /// <summary>The element glow: ONE 8-bit disc carrying all six colours, repainted by ElfCave.CatGlowPalette the way
+        /// the cape is — 5,184 B for every colour, against 16,448 B for a single 32-bit disc. The colours live in
+        /// build_cat_pack.GLOW_ELEMENTS, not here: tune them there and re-bake.</summary>
         private const string ElementGlowDisc = "catglowp";
         private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
         private const byte CapeAlpha = 0x80;             // PS2 convention: 0x80 = fully opaque, as build_cat_pack bakes it
@@ -670,7 +590,7 @@ namespace Dark_Cloud_Improved_Version
         /// starting values follow the element bars in the weapon menu.</summary>
         private static readonly ElementLook[] ElementLooks =
         {
-            // Every element now binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
+            // Every element binds the SAME disc (ElementGlowDisc) and differs only in the palette the cave paints into
             // it — so the glow colour is tuned in build_cat_pack.GLOW_ELEMENTS, not by naming a different texture here.
             new ElementLook { Name = "Fire",    Rgb = new byte[] { 128,  15,   0 }, Tint = new[] { 80f, 20f, 10f } },
             new ElementLook { Name = "Ice",     Rgb = new byte[] {   9,  45, 104 }, Tint = new[] { 12f, 40f, 48f } },
@@ -722,8 +642,13 @@ namespace Dark_Cloud_Improved_Version
             if (painted) _element = e;                                   // only latch once the colour actually landed
         }
 
-        /// <summary>Paint the flat texture's palette. Cheap to re-assert: one 4-byte read, and the 1 KB write only when the
-        /// colour is not already there (the entries are recreated from the pack whenever a script event wipes them).</summary>
+        /// <summary>Paint the flat texture's palette. build_cat_pack.flat_tim2 bakes the cape as 32×32 pixels that are ALL
+        /// palette index 0 followed by 256 identical entries, so the whole cape is ONE palette entry: repainting the manager's
+        /// own copy recolours it live, because the dungeon draw loop re-uploads the cat's texture group before drawing the
+        /// slot — the same path WeaponTextureSwap uses on Super Steve. Writing all 256 entries also makes it immune to CLUT
+        /// ordering. The mask SHARES catcape (wing_bake.MASK_TEX), so it follows with no work of its own. Cheap to re-assert:
+        /// one 4-byte read, and the 1 KB write only when the colour is not already there (a script event can wipe the
+        /// entries, and they come back from the pack).</summary>
         private static bool PaintCapePalette(byte[] rgb)
         {
             long entry = FindTexEntry(CapeTexture);
@@ -742,6 +667,11 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>Give the cape a colour of its own. A cloth is drawn inside the CHARACTER's ambient window
+        /// (Draw__10CCharacter adds the tint at +0xCE0, draws meshes then the cloth list, then restores), so it is lit by the
+        /// cat's colour and not by anything of its own — the material rows do nothing. ElfCave.CatCapeTint wraps that one
+        /// cloth's draw and adds <see cref="CapeTint"/> as a delta on top of the cat's, so it is written as
+        /// (cape − cat); every other cloth in the game is untouched.</summary>
         private static void TintCape()
         {
             if (_capeObj == 0) { Memory.WriteUInt(CodeCaves.Mailbox.CatCapeCloth, 0); return; }
@@ -750,7 +680,7 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"cape tint: ambient ({CapeTint[0]:F0},{CapeTint[1]:F0},{CapeTint[2]:F0}) for its draw alone, as a delta off the cat's ({_look.Tint[0]:F0},{_look.Tint[1]:F0},{_look.Tint[2]:F0})");
         }
 
-        /// <summary>The cape's ambient delta, faded with the cat so the two never drift apart mid-fade.</summary>
+        /// <summary>The cape's ambient delta (cape − cat), faded with the cat so the two never drift apart mid-fade.</summary>
         private static void WriteCapeTint(float lit)
         {
             for (int i = 0; i < 3; i++)
@@ -810,6 +740,10 @@ namespace Dark_Cloud_Improved_Version
             _thread.Start();
         }
 
+        /// <summary>The mod's tick. Decides each pass whether the cat may exist at all — Xiao, in a dungeon floor, a weapon
+        /// with a look, no script event — and then which of four states applies: stood down, held for the PAUSE screen, held
+        /// through a menu, or playing. A weapon change or a character switch tears the copy down; a menu does not. Runs at
+        /// <see cref="TickMs"/> while armed and <see cref="IdleMs"/> otherwise.</summary>
         private static void Loop()
         {
             while (true)
@@ -892,12 +826,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ─────────────────────────────────────── character heap watch ──────────────────────────────────────
-        // The dungeon's character/weapon/effect data share ONE CDataAlloc2 pool of 210000 × 16 B vanilla (265000 × 16 =
-        // 4.24 MB with DunPatches' heap raise; LoadChara2: chara @0x1F06660, weapons @0x1F06670, effects @0x1F06680; the
-        // chara cap @+12 is the pool size, the others are whatever the earlier ones left). An
-        // overflow is a SILENT spin (Alloc__14CDataAlloc2<1>Fi: printf + while(true)) — i.e. a freeze. Xiao only
-        // ever loads through the party switch, so the watch runs on every floor for every character and logs the
-        // counters and the background reads whenever they change: the last line before a freeze is the verdict.
+        // LoadChara2's three counters; the chara cap @+12 is the pool size, the others take what is left.
         private const long HeapChara = 0x21F06660, HeapWeapon = 0x21F06670, HeapEffect = 0x21F06680;
         private const int  WatchMs = 50;
         // The 27 MB global buffer every pool is carved from (GlobalDataBuffer @0x2AB080, cap 0x19C98F units; its
@@ -918,6 +847,11 @@ namespace Dark_Cloud_Improved_Version
         private const long EffectsTightBytes = 32 * 1024;
         private static int _effectPeak, _effectCapLast, _weaponCapLast;
         private static DateTime _effectTightAt = DateTime.MinValue;
+        /// <summary>Watch the character heap. Chara, weapons and effects share ONE CDataAlloc2 pool (210000 × 16 B vanilla,
+        /// 265000 × 16 = 4.24 MB with DunPatches' raise) and an overflow is a SILENT spin — Alloc__14CDataAlloc2&lt;1&gt;Fi is
+        /// printf + while(true), i.e. a freeze — so the counters and the background reads are logged whenever they change and
+        /// the last line before a freeze is the verdict. Also tracks the effects pool's high-water mark, since enemy
+        /// projectiles allocate from whatever the chara data leaves.</summary>
         private static void HeapWatch()
         {
             int c = Memory.ReadInt(HeapChara + 8), w = Memory.ReadInt(HeapWeapon + 8), e = Memory.ReadInt(HeapEffect + 8);
@@ -997,12 +931,11 @@ namespace Dark_Cloud_Improved_Version
             {
                 if (_holding)
                 {
-                    // Arm on RELEASE, not when the charge completes. Arming HIDES the cat that is already out (scale 0,
-                    // opacity 0) and resets the cave's state, and there is only ONE copy — so a cat in flight used to
-                    // vanish the instant the NEXT shot became ready. It should last until the shot is actually fired.
-                    // The shoot motion takes ~0.5 s to spawn the pellet and the tick is 16 ms, so the
-                    // cave is waiting long before its birth frame. (Nothing is torn down here: the copy persists either
-                    // way — only its visibility moves.)
+                    // Arm on RELEASE, not when the charge completes: arming HIDES the cat that is already out (scale 0,
+                    // opacity 0) and resets the cave's state, and there is only ONE copy, so a cat in flight lasts until
+                    // the next shot is actually fired. The shoot motion takes ~0.5 s to spawn the pellet against a 16 ms
+                    // tick, so the cave is waiting long before its birth frame. Nothing is torn down: the copy persists
+                    // either way — only its visibility moves.
                     if (_holdSeconds >= ChargeSeconds) _armPendingUntil = Now.AddSeconds(ArmPendingSeconds);
                     else if (_caveOwns && _phase != Phase.Flying) _disarmTicks = 30;   // a cancelled charge, nothing coming
                 }
@@ -1559,14 +1492,14 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
         }
 
-        /// <summary>Guard Crush, every tick the cat can deal damage. <see cref="CrushGuard"/> only covers the chosen target and
-        /// only at the moment it is called, but an enemy re-registers its guard windows whenever its script runs
-        /// <c>_SET_GUARD_FRAME</c> again, and the cat's contact test hits whatever body sphere it touches — which need not be the
-        /// target. CheckDmg (0x1D9F10) offers the attacker no "unguardable" flag: the window IS the guard, so it has to be down at
-        /// the instant of contact. So: read every slot's window flags in one block, and crush the ones that are live and near
-        /// enough for the cat to reach (the target always counts). Everything crushed is restored by RetirePlanted.</summary>
         private const float GuardCrushRadius = 30f;      // the cat's reach while it is airborne
         private const int   GuardSweepTicks  = 45;       // how long a swept crush holds after the last sweep (~1.5 s)
+        /// <summary>Guard Crush, every tick the cat can deal damage. <see cref="CrushGuard"/> covers only the chosen target and
+        /// only when called, but an enemy re-registers its guard windows whenever its script runs <c>_SET_GUARD_FRAME</c>, and
+        /// the cat's contact test hits whatever body sphere it touches — which need not be the target. CheckDmg (0x1D9F10)
+        /// offers the attacker no "unguardable" flag: the window IS the guard, so it has to be down at the instant of contact.
+        /// Reads every slot's window flags in one block and crushes those live and within <see cref="GuardCrushRadius"/> (the
+        /// target always counts); <see cref="RetirePlanted"/> restores them.</summary>
         private static void CrushGuardsNearCat()
         {
             int n = EnemyAddresses.FloorSlots.Count, wc = EnemyAddresses.GuardWindows.WindowCount;
@@ -1641,6 +1574,8 @@ namespace Dark_Cloud_Improved_Version
             return IsLiveEnemy(s) ? s : -1;
         }
 
+        /// <summary>Whether this slot holds an enemy the cat can chase: a real species id, RenderStatus at least 1 — not yet
+        /// on the floor, or already gone, both read as 0 — and HP above zero.</summary>
         private static bool IsLiveEnemy(int s)
         {
             int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
@@ -1651,6 +1586,9 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
 
+        /// <summary>The thread-side flight state machine, used when the ISO has no pellet-catcher cave. With the cave present
+        /// nearly every phase returns immediately (<c>if (_native) break;</c>) and this only mirrors what the cave drives,
+        /// ending in <see cref="Maintain"/> either way.</summary>
         private static void Step()
         {
             double t = (Now - _phaseStart).TotalSeconds;
@@ -1758,6 +1696,7 @@ namespace Dark_Cloud_Improved_Version
             _h = _ph - k * _headH;
         }
 
+        /// <summary>Enter a flight phase: stamp the phase clock and play its clip.</summary>
         private static void Enter(Phase p, int key)
         {
             _phase = p; _phaseStart = Now;
@@ -1897,6 +1836,10 @@ namespace Dark_Cloud_Improved_Version
             return -1;
         }
 
+        /// <summary>Locate the frames the cave needs and measure the head's rest offset. Publishes the pool addresses of
+        /// <see cref="HeadNodeName"/> (the cave's contact point) and the two glow anchors to the mailbox, clears CatGlowReady
+        /// so the glow rebinds, then walks the head's local matrices up to the root for its position in cat space — the
+        /// offset the flight keeps on the pellet's line. Falls back to the root height if the head is missing.</summary>
         private static void FindHead(byte[] block)
         {
             _headX = 0f; _headH = HeadFallbackHeight; _headZ = 0f;
@@ -1932,6 +1875,7 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"head ({HeadNodeName}, n{head}) rests at ({_headX:F2},{_headH:F2},{_headZ:F2}) in cat space");
         }
 
+        /// <summary>A frame's name (0x20 bytes, NUL-terminated); empty when the read fails.</summary>
         private static string ReadName(uint node)
         {
             byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(node) + CFrameVu1.Name, 0x20);
@@ -1940,13 +1884,11 @@ namespace Dark_Cloud_Improved_Version
             return System.Text.Encoding.ASCII.GetString(b, 0, len);
         }
 
-        /// <summary>The cat's software-skinned meshes get their own copies in the MeshCave (CopyMeshNodes'
-        /// recipe). HER copy of the cat skin sits collapsed under the hidden root, and MotionProc2 would skin a
-        /// shared buffer for whichever character stepped last — the copy must own it, or the spawn is refused.</summary>
-        // Two arenas, since the wings: every mesh's visual + first VU buffer + MDT goes in the MeshCave (below the Angel
-        // Gear prop's region); the SECOND VU buffers and the skin sources go wherever they fit — the MeshCave's remainder,
-        // else the overflow cave borrowed from CharacterClone's cloth caves (idle while Xiao is the active character).
         private static long _ovFree;
+        /// <summary>Hand out cave space from two arenas: every mesh's visual, first VU buffer and MDT go in the MeshCave
+        /// (below the Angel Gear prop's region); the SECOND VU buffers and the skin sources take whatever fits — the
+        /// MeshCave's remainder, else the overflow cave borrowed from CharacterClone's cloth caves, idle while Xiao is
+        /// the active character. Returns 0 when neither has room.</summary>
         private static long TakeCave(int bytes, out uint guest)
         {
             long need = A16L(bytes);
@@ -1954,22 +1896,17 @@ namespace Dark_Cloud_Improved_Version
             if (_ovFree + need <= CodeCaves.CatOverflowCave + CodeCaves.CatOverflowCaveSize) { long a = _ovFree; _ovFree += need; guest = (uint)(a - 0x20000000); return a; }
             guest = 0; return 0;
         }
-        /// <summary>The mask wears the CAPE's colour, not the cat's.
-        ///
-        /// A cloth is easy: Draw__10CCharacter walks its cloth list calling Draw__6CCloth, so ElfCave.CatCapeTint wraps that one
-        /// call. A mesh has no such seam — the ambient is set once, MGDraw is called on the whole frame tree, and it is put back.
-        /// And a mesh's tint is ADDED to its lit colour rather than multiplied through its texture, so the cat's blue lands on
-        /// the mask and turns red to pink.
-        ///
-        /// Meshes draw through C++ virtual calls, and CopyMeshes has already given every cat mesh a PRIVATE CVisualMDT in the
-        /// mod's cave. So instead of patching a shared function and testing the node on every mesh in the game, this copies
-        /// __vt__13CVisualMDTVu1, points its two DrawVu1 slots at ElfCave.CatMaskTint, and writes that copy into the mask's
-        /// visual alone. No engine code is touched, and nothing else can reach the cave: the only pointer to it is in an object
-        /// the mod allocated. The cave adds Mailbox.CatCapeTint — the same delta the cape uses — so the two match by
-        /// construction. ⚠ The vptr is at +0x08, not offset 0; the guard refuses unless the visual really holds the stock
-        /// vtable, so a layout surprise is a no-op.</summary>
         private const uint VisualMDTVu1Vtable = 0x002A11A0;   // __vt__13CVisualMDTVu1, 32 B: slot 6/7 (+0x18/+0x1C) = DrawVu1
         private const int  VtableBytes = 32, VtableDrawSlot = 0x18;
+        /// <summary>Give the mask the CAPE's colour rather than the cat's. A cloth is easy — Draw__10CCharacter walks its cloth
+        /// list calling Draw__6CCloth, so ElfCave.CatCapeTint wraps that one call — but a mesh has no such seam: the ambient is
+        /// set once, MGDraw runs over the whole frame tree, and a mesh's tint is ADDED to its lit colour rather than multiplied
+        /// through its texture, so the cat's blue lands on the mask and turns red to pink. Meshes draw through C++ virtual
+        /// calls and <see cref="CopyMeshes"/> has already given every cat mesh a PRIVATE CVisualMDT in the mod's cave, so this
+        /// copies __vt__13CVisualMDTVu1, points its two DrawVu1 slots at ElfCave.CatMaskTint, and writes that copy into the
+        /// mask's visual alone — no engine code touched, and the only pointer to the cave is in an object the mod allocated.
+        /// The cave adds Mailbox.CatCapeTint, the same delta the cape uses, so the two match by construction. ⚠ The vptr is at
+        /// +0x08, not offset 0; refuses unless the visual really holds the stock vtable, so a layout surprise is a no-op.</summary>
         private static void MaskTint()
         {
             if (_maskVisual == 0) { Console.WriteLine(Tag + "mask tint: the mask has no copied visual — it keeps the cat's colour"); return; }
@@ -1987,6 +1924,9 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(Tag + $"mask tint: the mask draws through its own vtable at 0x{caveG:X} → cave 0x{CodeCaves.ElfCave.CatMaskTint:X}, under the cape's ambient");
         }
 
+        /// <summary>Give the cat's software-skinned meshes their own copies in the MeshCave (CopyMeshNodes' recipe). HER copy
+        /// of the cat skin sits collapsed under the hidden root, and MotionProc2 would skin a shared buffer for whichever
+        /// character stepped last, so the copy must own it or the spawn is refused.</summary>
         private static bool CopyMeshes()
         {
             _copied.Clear(); _jobs.Clear(); _pending.Clear();
@@ -2123,6 +2063,9 @@ namespace Dark_Cloud_Improved_Version
             _jobs.Clear(); return true;
         }
 
+        /// <summary>Hand the queued copy jobs to the cave, draining in queue-sized batches when there are more jobs than the
+        /// queue holds. Refuses outright if this ISO lacks the hook, and on a failed batch restores the full list — the jobs
+        /// already done plus the untouched tail — so the caller can fall back to the C# path with nothing half-applied.</summary>
         private static bool RunCopyJobs()
         {
             if (_jobs.Count == 0) return true;
@@ -2221,11 +2164,7 @@ namespace Dark_Cloud_Improved_Version
         private static long A16L(long n) => (n + 15) & ~15L;
 
         // ── Her MOTION 1 channel: watchdog + repair ─────────────────────────────────────────────────────────
-        // Her channel-1 pointer (+0xC24) can read invalid, and every later shot then fails. No engine writer of that
-        // word runs mid-floor (DeleteExtendMotion is town-only, Initialize/CommandMOTION only on loads, operator= only
-        // for town NPCs) and the mod never writes her table, so the watchdog logs the tick it changes with the raw
-        // words, and the spawn repairs it while the inline channel struct (character + 0x420 + 0x80·1) is intact.
-        private const int  ChanInlineBase = 0x420, ChanInlineStride = 0x80;
+        private const int  ChanInlineBase = 0x420, ChanInlineStride = 0x80;   // CommandMOTION's inline channel: character + 0x420 + 0x80·n
         private static bool _herChanValid = true;
         private static DateTime _lastDespawn = DateTime.MinValue;
 
@@ -2243,6 +2182,10 @@ namespace Dark_Cloud_Improved_Version
             Despawn();
         }
 
+        /// <summary>Watch her channel-1 pointer (+0xC24): when it reads invalid every later shot fails. No engine writer of
+        /// that word runs mid-floor — DeleteExtendMotion is town-only, Initialize/CommandMOTION run on loads, operator= only
+        /// for town NPCs — and the mod never writes her table, so this logs the tick it changes along with the raw words.
+        /// <see cref="RepairHerCatChannel"/> puts it back while the inline channel struct is still intact.</summary>
         private static void WatchHerCatChannel()
         {
             uint raw = (uint)Memory.ReadInt(CCharacter.Base + CCharacter.MotionSlotBase + CatChannel * 4);
@@ -2408,6 +2351,8 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
+        /// <summary>Play a clip on the copy: motion id, play-once cleared and restart set so a fresh key loops from its start
+        /// (the hit sets play-once instead), and the rate returned to the KEY's own.</summary>
         private static void SetKey(int key)
         {
             if (!Active) return;
@@ -2418,8 +2363,11 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CharacterMotion.MotionSpeedOffset, CharacterMotion.MotionSpeedUseKey);
         }
 
-        /// <summary>Re-assert the copy every tick: pose, opacity, model, key and the draw/step registration
-        /// (the engine resets some of these between our ticks).</summary>
+        /// <summary>Re-assert everything the engine or another system could take back: the copy's model pointer, position,
+        /// scale, opacity, facing and motion key (all except those the cave owns mid-flight), and the cat's own light —
+        /// Draw__10CCharacter adds CharaTint (+0xCE0) to the scene ambient on a 0..255 scale where the dungeon's key lights
+        /// are ~100-120, scaled here by the fade so the cat dims as it goes. Despawns if her model changed underneath us.
+        /// Runs every tick in all three active states, so anything that must hold regardless of state belongs here.</summary>
         private static void Maintain()
         {
             if (((uint)Memory.ReadInt(CCharacter.Base + CCharacter.CharModel) & Memory.PhysAddrMask) != _liveRoot)
@@ -2478,6 +2426,9 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);
         }
 
+        /// <summary>Take the cat off screen: unregister the draw slot, zero its opacity and model pointer, detach the cape
+        /// cloth list (it lives in the mod's cave and must never be left on a slot handed back), disarm the cave and return
+        /// the textures to her block. Frees nothing — the copy, its meshes and its caves stay allocated for the next spawn.</summary>
         internal static void Despawn()
         {
             if (!Active) return;
@@ -2507,12 +2458,7 @@ namespace Dark_Cloud_Improved_Version
         private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
 
         // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
-        // The dungeon draw loop re-uploads texture group 0x20+slot to VRAM right before it draws chara slot i
-        // (ReloadTexture 0x133070 uploads every CTexture entry tagged with that block). The cat's textures sit in
-        // HER block, whose VRAM pages are gone by then (the upload window is paged and shared), so the copy sampled
-        // whatever was there — a shimmering cat. Re-tag the cat's entries (CatTextureNames) to the slot's group while the copy is
-        // up (CTextureManager @0x1C75870: entry count @+0, entries @+0x10F8, 0x50 apart, block tag = first short,
-        // name @+8) and hand them back on despawn.
+        // CTextureManager: entry count @+0, entries @+0x10F8 at 0x50 apart, block tag = the first short, name @+8.
         private const long TextureManager = 0x21C75870;
         private const int  TexEntries = 0x10F8, TexStride = 0x50, TexMaxEntries = 0xC4, TexName = 8;
         private const short HerTextureBlock = 0x11;
@@ -2532,6 +2478,12 @@ namespace Dark_Cloud_Improved_Version
         private const int  TexCursor = 0x14;
         private static uint _texCursorSaved, _texCursorTaken;
         private static uint _herTopSaved;
+        /// <summary>Re-tag the cat's entries (<see cref="CatTextureNames"/>) into the slot's texture group while the copy is
+        /// up, and hand them back on despawn. The dungeon draw loop re-uploads group 0x20+slot to VRAM right before it draws
+        /// chara slot i (ReloadTexture 0x133070 uploads every entry tagged with that block); the cat's textures sit in HER
+        /// block, whose VRAM pages are gone by then because the upload window is paged and shared, so the copy would sample
+        /// whatever replaced them. With <see cref="MoveCatVram"/> on, the entries are also relocated into a reserved window
+        /// above every other block's top.</summary>
         private static void RetagCatTextures(short from, short to)
         {
             int count = Math.Min(TexMaxEntries, Memory.ReadInt(TextureManager));
@@ -2808,6 +2760,11 @@ namespace Dark_Cloud_Improved_Version
                 $"hit entry at ({x:F1},{h:F1},{y:F1}) r={radius:F0}: base {baseDmg}, attr 0x{attr:X} → entry {slot}");
         }
 
+        /// <summary>Per-tick housekeeping for the hit. Restores crushed guard windows once their countdown expires, and
+        /// decides the fate of each planted damage entry: an entry that vanished AND left some slot's "last hit sphere" word
+        /// (+0x55750) no longer −1 was ACCEPTED — CheckDmg only overwrites that sentinel past its guard and invincibility
+        /// gates, right before applying damage — so the cat is spent and fades. An entry that vanished without it was merely
+        /// dropped by the engine, and the latch is freed so the cat may touch again.</summary>
         private static void RetirePlanted()
         {
             lock (_planted)
@@ -2863,6 +2820,8 @@ namespace Dark_Cloud_Improved_Version
 
         private static int A16(int n) => (n + 15) & ~15;
 
+        /// <summary>Re-point one word of a copied block: if it lands in [min, max] it moves to the same offset in the cave,
+        /// otherwise it is zeroed.</summary>
         private static void Rebase(byte[] block, int off, uint min, uint max, uint caveG, bool forceZero)
         {
             uint old = (uint)BitConverter.ToInt32(block, off) & Memory.PhysAddrMask;
