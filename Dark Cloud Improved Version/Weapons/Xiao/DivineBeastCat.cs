@@ -277,7 +277,7 @@ namespace Dark_Cloud_Improved_Version
                               && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
                     if (armed && Active && weapon != _weapon)
                     {
-                        Log( $"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
+                        Log($"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
                         Despawn();
                     }
                     if (!armed)
@@ -350,9 +350,8 @@ namespace Dark_Cloud_Improved_Version
             if (_held) return;
             _held = true;
             _pausedBlend = Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateSpeed);   // read BEFORE the stop: Step writes 0 there while stopped
-            long f = SlotAddr() + CCharacter.MotionFlags;
-            Memory.WriteInt(f, Memory.ReadInt(f) | CCharacter.MotionStop);
-            Log( $"paused — cat held (blend increment {_pausedBlend:F3})");
+            SetMotionFlags(set: CCharacter.MotionStop);
+            Log($"paused — cat held (blend increment {_pausedBlend:F3})");
         }
 
         /// <summary>Come back from a pause or menu hold: clear the motion-stop flag and put back the channel's blend
@@ -363,12 +362,12 @@ namespace Dark_Cloud_Improved_Version
             _held = false;
             if (Active)
             {
-                long f = SlotAddr() + CCharacter.MotionFlags; Memory.WriteInt(f, Memory.ReadInt(f) & ~CCharacter.MotionStop);
+                SetMotionFlags(clear: CCharacter.MotionStop);
                 // The stop leaves the blend increment at 0 and nothing re-seeds it (MOTION_END does so at load only), so the
                 // next key cross-fade would never finish. Put back what it was, or the engine's default.
                 Memory.WriteFloat(CodeCaves.MotionCave + MotionType.StateSpeed, _pausedBlend > 0f ? _pausedBlend : BlendDefault);
             }
-            Log( $"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
+            Log($"resumed — clocks held for {GameClock.HeldTotal.TotalSeconds:F1} s in all");
         }
 
         // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
@@ -391,7 +390,7 @@ namespace Dark_Cloud_Improved_Version
                 uint frame = Memory.ReadGuestPtr(Memory.ToMmu(obj) + CCloth.ClothAttach);
                 if (!Memory.IsValidGuest(frame) || ReadName(frame) != CapeNodeName) continue;
                 Memory.WriteInt(Memory.ToMmu(herList) + i * 4, 0);
-                if (_capeTemplate != obj) Log( $"cape: took her own copy out of her cloth list (entry {i}, 0x{obj:X}) — it is the clone template");
+                if (_capeTemplate != obj) Log($"cape: took her own copy out of her cloth list (entry {i}, 0x{obj:X}) — it is the clone template");
                 _capeTemplate = obj;
                 return;
             }
@@ -476,7 +475,7 @@ namespace Dark_Cloud_Improved_Version
                 TintCape();
                 string V(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
                 Log($"cape physics: K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
-                Log( $"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
+                Log($"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
             }
         }
 
@@ -584,7 +583,7 @@ namespace Dark_Cloud_Improved_Version
                 float span = (float)Math.Sqrt(sx * sx + sy * sy + sz * sz);
                 if (span > CapeTearSpan || float.IsNaN(span))
                 {
-                    if (--_capeTearLog <= 0) { _capeTearLog = 60; Log( $"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
+                    if (--_capeTearLog <= 0) { _capeTearLog = 60; Log($"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
                     ReseedCape();
                     return;
                 }
@@ -839,11 +838,11 @@ namespace Dark_Cloud_Improved_Version
             if (heap != _heapLast)
             {
                 _heapLast = heap;
-                Log( $"heap (char {Player.CurrentCharacterNum()}): " + heap);
+                Log($"heap (char {Player.CurrentCharacterNum()}): " + heap);
                 var pools = new System.Text.StringBuilder();
                 foreach (var (addr, name) in DataPools.InCarveOrder)
                     pools.Append($" {name} {Memory.ReadInt(addr + DataPools.Used) * 16L:N0}/{Memory.ReadInt(addr + DataPools.Cap) * 16L:N0}");
-                Log( "pools (used/cap B):" + pools);
+                Log("pools (used/cap B):" + pools);
             }
             var bg = new System.Text.StringBuilder();
             for (int i = 0; i < 6; i++)
@@ -859,7 +858,7 @@ namespace Dark_Cloud_Improved_Version
             if (bgs != _bgLast)
             {
                 _bgLast = bgs;
-                if (bgs.Length > 0) Log( "bg reads:" + bgs);
+                if (bgs.Length > 0) Log("bg reads:" + bgs);
             }
         }
 
@@ -950,14 +949,14 @@ namespace Dark_Cloud_Improved_Version
             if (!_look.Cape && _maskMeshIdx >= 0) hide.Add(_maskMeshIdx);
             HideMeshes(hide, !_look.Wings && !_look.Cape ? "wings and mask" : !_look.Wings ? "wings" : "mask");
             if (_look.Cape) { SpawnCape(); MaskTint(); WatchElementLook(force: true); }   // colour before the first frame draws
-            Log( $"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
+            Log($"look for weapon {_weapon}: glow row {(_look.Cape ? "element" : _look.PalRow.ToString())}, wings {(_look.Wings ? "on" : "off")} ({_wingMeshIdx.Count} wing meshes in the copy), mask {(_look.Cape ? "on" : "off")} (n{_maskMeshIdx})");
             _native = (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew;
             if (!_native && !_nativeWarned) { _nativeWarned = true; Log("pellet-catcher cave not in this ISO (re-patch) — using the thread follower"); }
             if (_native) { Memory.WriteInt(CodeCaves.Mailbox.CatPelletSlot, 0); Memory.WriteInt(CodeCaves.Mailbox.CatState, 0); }
             _phase = Phase.Resident; _phaseStart = GameClock.Now; _hitDone = false; _fade = 0;
             SetKey(KeyLeap);
             Maintain();
-            Log( "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
+            Log("cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
         }
 
         // ─────────────────────────────────────── the cave handshake ────────────────────────────────────────
@@ -1026,12 +1025,12 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.CatReadyStart, ReadyStartFrame);
             Memory.WriteFloat(CodeCaves.Mailbox.CatPounceMaxDist, RangeFor(_target) * 2f);
             long sl = SlotAddr();
-            Memory.WriteFloat(sl + CCharacter.CharScale, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 4, 0f); Memory.WriteFloat(sl + CCharacter.CharScale + 8, 0f);
+            Memory.WriteVec3(sl + CCharacter.CharScale, 0f, 0f, 0f);
             Memory.WriteFloat(sl + CCharacter.NpcOpacity, 0f);
             _scale = 0f; _alpha = 0f; _pelletSlot = -1; _fade = 0; _caveOwns = true; _disarmTicks = 0;
             _phase = Phase.Resident; _phaseStart = GameClock.Now;
             Memory.WriteInt  (CodeCaves.Mailbox.CatState, 3);                   // waiting — armed
-            Log( "shot released — the cave binds the next pellet on its birth frame");
+            Log("shot released — the cave binds the next pellet on its birth frame");
         }
 
         private static void DisarmCave()
@@ -1062,7 +1061,7 @@ namespace Dark_Cloud_Improved_Version
             if (hold != _holdLogged)
             {
                 _holdLogged = hold;
-                Log( (hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
+                Log((hold ? $"target slot {_target} cannot be hit yet (shut mimic / invincibility frames) — crouching until it can" : "target hittable — leaping"));
                 // Released: a chest-mimic's init label ran when it woke (its guard windows — the disc bake makes the wake a
                 // guard — are registered only now); crush them for this flight so the leap lands through the guard.
                 if (!hold && _target >= 0) CrushGuard(_target, again: true);
@@ -1085,7 +1084,7 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteInt(CodeCaves.Mailbox.CatHitEntry, 0);
                 lock (_planted) _planted.Add((ent - 1, PlantedLifeTicks, true));
                 int hitAttr = Memory.ReadInt(CodeCaves.Mailbox.CatHitAttr);
-                Log( $"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
+                Log($"cat contact — damage entry {ent - 1} planted natively (base {Memory.ReadInt(CodeCaves.Mailbox.CatHitDamage)}, attr 0x{hitAttr:X} = {ElementNameOf(hitAttr)})");
             }
             if (state >= 4 && state <= 11 && state != 9)                        // every cave-owned state: face the cave's live direction (it re-aims in the ready crouch, the float wind-up and the take-off)
             {
@@ -1125,7 +1124,7 @@ namespace Dark_Cloud_Improved_Version
                         _phase = Phase.Falling; _phaseStart = GameClock.Now;
                         if (Memory.ReadInt(CodeCaves.Mailbox.CatPounceFly) != 0)
                         {
-                            Log( $"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
+                            Log($"vertical leap at flying enemy slot {_target}, v=({Memory.ReadFloat(CodeCaves.Mailbox.CatVx):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVh):F2},{Memory.ReadFloat(CodeCaves.Mailbox.CatVz):F2})/frame (decided at distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1})");
                             break;
                         }
                         Log(
@@ -1137,7 +1136,7 @@ namespace Dark_Cloud_Improved_Version
                     {
                         _phase = Phase.Landing; _phaseStart = GameClock.Now;
                         long lp = SlotAddr() + CCharacter.CharPos;
-                        Log( $"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
+                        Log($"land clip started at ({Memory.ReadFloat(lp):F1},{Memory.ReadFloat(lp + 4):F1},{Memory.ReadFloat(lp + 8):F1}), {Memory.ReadFloat(lp + 4) - Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2} above the floor, motion frame {Memory.ReadFloat(CodeCaves.MotionCave + MotionType.StateFrame):F1}");
                     }
                     break;
                 case 6:                                                          // running (cave moves it); face along its direction, decide the end
@@ -1145,7 +1144,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_phase != Phase.Running)
                     {
                         _phase = Phase.Running; _phaseStart = GameClock.Now; _pounceLogged = false; _pounceKind = 0;
-                        Log( $"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
+                        Log($"land clip done (frame {Memory.ReadFloat(CodeCaves.Mailbox.CatPrevFrame):F1}) — moving off, floor {Memory.ReadFloat(CodeCaves.Mailbox.CatFloorH):F2}");
                     }
                     long rp = SlotAddr() + CCharacter.CharPos;
                     _x = Memory.ReadFloat(rp); _h = Memory.ReadFloat(rp + 4); _y = Memory.ReadFloat(rp + 8);
@@ -1157,7 +1156,7 @@ namespace Dark_Cloud_Improved_Version
                         _target = PickTarget();                                   // the next nearest, if any
                         WriteTargetAim();
                         CrushGuard(_target); ApplyFlightTime();
-                        Log( $"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
+                        Log($"target slot {was} is gone — now {(_target >= 0 ? $"slot {_target}" : "none (walking straight)")}");
                     }
                     if (_target >= 0)
                     {
@@ -1166,7 +1165,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     if (_target < 0)
                     {
-                        if (!_sitLogged) { _sitLogged = true; Log( $"no enemy within {MaxTargetDistance:F0} — sitting"); }
+                        if (!_sitLogged) { _sitLogged = true; Log($"no enemy within {MaxTargetDistance:F0} — sitting"); }
                         if (++_retargetTick >= 30)                                 // look again every ~0.5 s
                         {
                             _retargetTick = 0;
@@ -1176,32 +1175,32 @@ namespace Dark_Cloud_Improved_Version
                                 WriteTargetAim();
                                 CrushGuard(_target); ApplyFlightTime();
                                 _sitLogged = false; _gaitLogged = false;
-                                Log( $"enemy slot {_target} came within range — up and after it");
+                                Log($"enemy slot {_target} came within range — up and after it");
                             }
                         }
                     }
                     else if (!_gaitLogged && Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) == 0)
                     {
                         _gaitLogged = true;
-                        Log( $"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
+                        Log($"walking at {Memory.ReadFloat(CodeCaves.Mailbox.CatRunSpeed):F3}/frame, clip rate {Memory.ReadFloat(SlotAddr() + CharacterMotion.MotionSpeedOffset):F2} (town mapping)");
                     }
                     bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
-                    if (blocked && !_blockedLogged) { _blockedLogged = true; Log( "a wall stops the cat — waiting"); }
+                    if (blocked && !_blockedLogged) { _blockedLogged = true; Log("a wall stops the cat — waiting"); }
                     if (!blocked) _blockedLogged = false;
                     if ((GameClock.Now - _boundAt).TotalSeconds >= LifetimeSeconds)
                     {
                         Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                         _scale = 1f; _caveOwns = false;
-                        Log( "20 s lifetime over — shrinking away");
+                        Log("20 s lifetime over — shrinking away");
                         FadeKeepingPose();                                       // sitting, walking or blocked: shrink + fade as it is (Phase.Fading; the glow follows)
                     }
                     break;
                 }
                 case 11:                                                         // float-up wind-up: in place, turning, until the feet-off frame launches the leap
-                    if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Log( $"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
+                    if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Log($"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
                     break;
                 case 10:                                                         // ready: in place before the jump
-                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log( $"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
+                    if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log($"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
                     break;
                 case 2:
                 {
@@ -1212,7 +1211,7 @@ namespace Dark_Cloud_Improved_Version
                     _scale = 1f; _pelletSlot = -1;
                     Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
                     _caveOwns = false;
-                    Log( $"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
+                    Log($"pellet ended after {frames} frames; motion frame {_flightFrame0:F1} → {mf:F1}");
                     Enter(Phase.Fading, KeyLeap);
                     break;
                 }
@@ -1306,9 +1305,9 @@ namespace Dark_Cloud_Improved_Version
                 // Dormant (a chest-mimic that has not opened): its script has not declared any spheres, so the sphere table
                 // is whatever the slot's previous occupant left — aiming at that sent the cat wandering off.
                 // The root is the chest's spot (SetMimicEvent places the box at the enemy's spawn position).
-                Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos, x); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h); Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
+                Memory.WriteVec3(CodeCaves.Mailbox.CatAimPos, x, h, y);
                 Memory.WriteInt(CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
-                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log( $"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
+                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log($"aim at enemy slot {_target}: dormant (chest) — its root at ({x:F1},{h:F1},{y:F1})"); }
                 return;
             }
             long tbl = BodyCollision.SlotBase(_target);
@@ -1338,11 +1337,9 @@ namespace Dark_Cloud_Improved_Version
                         if (r > best + 0.01f || (Math.Abs(r - best) <= 0.01f && fwd > bestFwd)) { best = r; bestFwd = fwd; x = cx; h = ch; y = cy; anyDamaging = pass == 0; }
                     }
                 }
-                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log( $"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
+                if (_target != _aimLoggedFor) { _aimLoggedFor = _target; Log($"aim at enemy slot {_target}: sphere r={best:F1} at ({x:F1},{h:F1},{y:F1}){(anyDamaging ? "" : " — NO sphere can take Xiao's damage; aiming at the biggest anyway")}"); }
             }
-            Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos,     x);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 4, h);
-            Memory.WriteFloat(CodeCaves.Mailbox.CatAimPos + 8, y);
+            Memory.WriteVec3(CodeCaves.Mailbox.CatAimPos, x, h, y);
             Memory.WriteInt  (CodeCaves.Mailbox.CatTargetPtr, (int)Memory.ToGuest(CodeCaves.Mailbox.CatAimPos));
         }
 
@@ -1373,11 +1370,10 @@ namespace Dark_Cloud_Improved_Version
             _gaitLogged = false; _pounceLogged = false; _sitLogged = false;
             if (state == 10)
             {
-                long flags = SlotAddr() + CCharacter.MotionFlags;
-                Memory.WriteInt(flags, Memory.ReadInt(flags) & ~2);
+                SetMotionFlags(clear: CCharacter.MotionPlayOnce);
                 Memory.WriteInt(CodeCaves.Mailbox.CatState, 6);
             }
-            Log( $"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
+            Log($"lock-on moved: target slot {was} → {locked}{(state == 10 ? " (leaving the crouch, walking)" : "")}");
         }
 
         /// <summary>Locked-on enemy first; otherwise the live enemy nearest to Xiao; −1 when none.</summary>
@@ -1452,7 +1448,7 @@ namespace Dark_Cloud_Improved_Version
                         ushort cur = Memory.ReadUShort(a);
                         if (cur != 0) { Memory.WriteUShort(a, 0); if (snap[w] == 0) snap[w] = cur; more = true; }
                     }
-                    if (more) Log( $"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
+                    if (more) Log($"guard windows of enemy slot {enemy} zeroed again (registered since the first crush)");
                     return;
                 }
             }
@@ -1466,7 +1462,7 @@ namespace Dark_Cloud_Improved_Version
             }
             if (!any) return;
             lock (_planted) _guardRestore.Add((enemy, (int)(LifetimeSeconds * 60) + 120, snap0));
-            Log( $"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
+            Log($"guard windows of enemy slot {enemy} zeroed for this flight (Guard Crush)");
         }
 
         private const float GuardCrushRadius = 30f;      // the cat's reach while it is airborne
@@ -1507,7 +1503,7 @@ namespace Dark_Cloud_Improved_Version
                     if (i < 0)
                     {
                         _guardRestore.Add((slot, GuardSweepTicks, cur));
-                        Log( $"guard windows of enemy slot {slot} zeroed (in the cat's reach)");
+                        Log($"guard windows of enemy slot {slot} zeroed (in the cat's reach)");
                     }
                     else
                     {
@@ -1673,7 +1669,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.ResetTrips(); _tripMark = 0;
             if (FindTexEntry(CatTextureNames[0]) == 0 && RecreateCatEntries() < CatTextureNames.Length)
             {
-                if (!_texDeferLogged) { _texDeferLogged = true; Log( "her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
+                if (!_texDeferLogged) { _texDeferLogged = true; Log("her cat textures are not in the manager and none are remembered — spawn deferred (retrying)"); }
                 return false;
             }
             _texDeferLogged = false;
@@ -1763,7 +1759,7 @@ namespace Dark_Cloud_Improved_Version
             if (!RegisterSlot(min, blockSize)) return false;
             Active = true;
             BuildStep("channel + slot registered");
-            Log( $"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms over {Memory.Trips:N0} round trip(s), {Memory.TripBytes:N0} B");
+            Log($"cat copy up: {_nodeCount} nodes (her n{_catIndex}..n{_catIndex + _nodeCount - 1}) → 0x{_copyRoot:X}, slot {Slot}, built in {_buildClock.ElapsedMilliseconds:N0} ms over {Memory.Trips:N0} round trip(s), {Memory.TripBytes:N0} B");
             _buildClock = null;                    // the stamps are for the BUILD: left running they reported a despawn's
             return true;                           // texture restore as a 70 s, half-million-trip step (it was 70 s of play)
         }
@@ -2321,7 +2317,7 @@ namespace Dark_Cloud_Improved_Version
             _key = key;
             long s = SlotAddr();
             Memory.WriteInt  (s + CCharacter.MotionId, key);
-            Memory.WriteInt  (s + CCharacter.MotionFlags, (Memory.ReadInt(s + CCharacter.MotionFlags) & ~CCharacter.MotionPlayOnce) | CCharacter.MotionRestart);   // a fresh key loops again (the hit sets play-once)
+            SetMotionFlags(set: CCharacter.MotionRestart, clear: CCharacter.MotionPlayOnce);   // a fresh key loops again (the hit sets play-once)
             Memory.WriteFloat(s + CharacterMotion.MotionSpeedOffset, CharacterMotion.MotionSpeedUseKey);
         }
 
@@ -2336,7 +2332,7 @@ namespace Dark_Cloud_Improved_Version
         {
             if ((Memory.ReadGuestPtr(CCharacter.Base + CCharacter.CharModel)) != _liveRoot)
             {
-                Log( "her model changed — cat despawned");
+                Log("her model changed — cat despawned");
                 Despawn();
                 return;
             }
@@ -2361,23 +2357,15 @@ namespace Dark_Cloud_Improved_Version
             long s = SlotAddr();
             if (!_caveOwns)                                                      // armed/following: position, scale and opacity are the cave's
             {
-                Memory.WriteFloat(s + CCharacter.CharPos,     _x);
-                Memory.WriteFloat(s + CCharacter.CharPos + 4, _h);
-                Memory.WriteFloat(s + CCharacter.CharPos + 8, _y);
-                Memory.WriteFloat(s + CCharacter.CharScale,     CatScale * _scale);
-                Memory.WriteFloat(s + CCharacter.CharScale + 4, CatScale * _scale);
-                Memory.WriteFloat(s + CCharacter.CharScale + 8, CatScale * _scale);
+                Memory.WriteVec3(s + CCharacter.CharPos, _x, _h, _y);
+                Memory.WriteVec3(s + CCharacter.CharScale, CatScale * _scale, CatScale * _scale, CatScale * _scale);
                 Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));
             }
             else if (_hitFade) Memory.WriteFloat(s + CCharacter.NpcOpacity, 128f * Math.Max(0f, Math.Min(1f, _alpha)));   // the cave keeps the pose; only the opacity is ours (a plain fade, no shrink)
             float lit = Math.Max(0f, Math.Min(1f, _alpha));
-            Memory.WriteFloat(s + CCharacter.CharaTint,     _catTint[0] * lit);   // ambient ADD, per weapon (Looks) and per element
-            Memory.WriteFloat(s + CCharacter.CharaTint + 4, _catTint[1] * lit);
-            Memory.WriteFloat(s + CCharacter.CharaTint + 8, _catTint[2] * lit);
+            Memory.WriteVec3(s + CCharacter.CharaTint, _catTint[0] * lit, _catTint[1] * lit, _catTint[2] * lit);   // ambient ADD, per weapon (Looks) and per element
             if (_capeObj != 0) WriteCapeTint(lit);                                  // the cape rides the same fade, one step further red
-            Memory.WriteFloat(s + CCharacter.CharRot,     0f);
-            Memory.WriteFloat(s + CCharacter.CharRotY,    _yaw);
-            Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
+            Memory.WriteVec3(s + CCharacter.CharRot, 0f, _yaw, 0f);   // Euler x, yaw, z
             Memory.WriteUInt (s + CCharacter.CharModel, _copyRoot);
             if (!_caveOwns) Memory.WriteInt(s + CCharacter.MotionId, _key);      // the cave sets leap/land/run keys on its own frames
             Memory.WriteInt  (s + DungeonCharaDraw.CharaActive, 1);
@@ -2416,7 +2404,7 @@ namespace Dark_Cloud_Improved_Version
             Active = false; _key = -1; _target = -1; _weapon = -1;
             if (!SlingshotProp.Active) Memory.WriteInt(CodeCaves.MirageSceneGateFlag, 2);   // after Active=false: Mirage's loop owns it again
             _lastDespawn = GameClock.Now;
-            Log( "cat copy down");
+            Log("cat copy down");
         }
 
         // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
@@ -2440,7 +2428,7 @@ namespace Dark_Cloud_Improved_Version
             long e = FindTexEntry(CatTextureNames[0]);
             uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + TextureManager.EntryTex0) & TextureManager.Tex0AddrMask);
             if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
-            Log( (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
+            Log((e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
             _texMoved.Clear();                                                   // nothing of ours is in there to restore
             Despawn();
         }
@@ -2571,7 +2559,7 @@ namespace Dark_Cloud_Improved_Version
                 if (idx + 1 > Memory.ReadInt(TextureManager.Base)) Memory.WriteInt(TextureManager.Base, idx + 1);
                 present++; made++;
             }
-            if (made > 0) Log( $"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
+            if (made > 0) Log($"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
             return present;
         }
 
@@ -2750,13 +2738,13 @@ namespace Dark_Cloud_Improved_Version
                         {
                             // Accepted: damage, hitspark, kick and (via the patched flinch rule) the stagger are all the engine's.
                             // Only now is the cat spent.
-                            Log( $"hit landed on enemy slot {hitSlot} (entry {idx}) — fading out");
+                            Log($"hit landed on enemy slot {hitSlot} (entry {idx}) — fading out");
                             _hitFade = true; _fade = 0; _alpha = 1f;
                         }
                         else
                         {
                             Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
-                            Log( $"contact was not accepted (entry {idx} gone, no enemy took it — invincible or guarding) — no hit, still flying");
+                            Log($"contact was not accepted (entry {idx} gone, no enemy took it — invincible or guarding) — no hit, still flying");
                         }
                         _planted.RemoveAt(i); continue;
                     }
@@ -2765,7 +2753,7 @@ namespace Dark_Cloud_Improved_Version
                     if (native)
                     {   // never consumed: the enemy was invulnerable or the sphere's hurt window was closed — not spent; the cave may contact again
                         Memory.WriteInt(CodeCaves.Mailbox.CatHitLatch, 0);
-                        Log( $"contact did not connect within {PlantedLifeTicks} ticks (entry {idx}) — no hit, still flying");
+                        Log($"contact did not connect within {PlantedLifeTicks} ticks (entry {idx}) — no hit, still flying");
                     }
                     _planted.RemoveAt(i);
                 }
@@ -2776,6 +2764,13 @@ namespace Dark_Cloud_Improved_Version
 
         private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
         private static void Log(string message) => Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + message);
+
+        /// <summary>Read-modify-write the copy's MotionFlags: <paramref name="clear"/> bits off, then <paramref name="set"/> bits on.</summary>
+        private static void SetMotionFlags(int set = 0, int clear = 0)
+        {
+            long f = SlotAddr() + CCharacter.MotionFlags;
+            Memory.WriteInt(f, (Memory.ReadInt(f) & ~clear) | set);
+        }
 
     }
 }
