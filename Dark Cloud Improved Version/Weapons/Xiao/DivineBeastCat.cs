@@ -166,7 +166,8 @@ namespace Dark_Cloud_Improved_Version
         private static float _px, _ph, _py;                 // the flight POINT (where the pellet would be) — the head rides it
         private static float _headX, _headH, _headZ;        // head rest offset in cat space (FindHead)
         private const string HeadNodeName = "cat_kao";
-        // ── how the cat LOOKS: the glow's geometry, then the per-weapon and per-element looks ─────────────
+
+        // ── how the cat LOOKS: the glow's geometry, then the per-weapon and per-element looks ──────────────
         private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
         private const float  GlowScale = 0.5f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
         private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
@@ -207,6 +208,7 @@ namespace Dark_Cloud_Improved_Version
             if (sphere == Items.angelshooter || sphere == Items.angelgear) return SuperSteveAngelKey;
             return -1;
         }
+
         /// <summary>Per element: the cape/mask texture colour and the ambient the CAPE draws under. The CAT's own ambient is
         /// the same for every element — <see cref="ElementAmbient"/>.</summary>
         private sealed class ElementLook { public string Name; public byte[] Rgb; public float[] Tint; }
@@ -247,7 +249,101 @@ namespace Dark_Cloud_Improved_Version
         private static bool _hitFade;                        // the hit landed: the flight follows through while the cat fades out
         private static int  _aimLoggedFor = -1;              // last target the aim choice was logged for
 
-        // ── the PAUSE screen ────────────────────────────────────────────────────────────────────────────────
+        // ──────────────────────────────────────── the mod's thread ─────────────────────────────────────────
+
+        internal static void Start()
+        {
+            if (_thread != null && _thread.IsAlive) return;
+            _thread = new Thread(Loop) { IsBackground = true, Name = "DivineBeastCat" };
+            _thread.Start();
+        }
+
+        /// <summary>The mod's tick. Decides each pass whether the cat may exist at all — Xiao, in a dungeon floor, a weapon
+        /// with a look, no script event — and then which of four states applies: stood down, held for the PAUSE screen, held
+        /// through a menu, or playing. A weapon change or a character switch tears the copy down; a menu does not. Runs at
+        /// <see cref="TickMs"/> while armed and <see cref="IdleMs"/> otherwise.</summary>
+        private static void Loop()
+        {
+            while (true)
+            {
+                int sleep = IdleMs;
+                try
+                {
+                    bool inDun = Player.InDungeonFloor();
+                    if (inDun) { HeapWatch(); sleep = WatchMs; }
+                    int weapon = inDun ? LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)) : -1;   // Super Steve: by its sphere
+                    bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
+                    bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
+                    // her own copy of the cape hangs off her cloth list from the moment the model loads — whatever the weapon is
+                    if (inDun && Player.CurrentCharacterNum() == XiaoId && ++_capeSweepTick >= 4) { _capeSweepTick = 0; TakeHerCape(); }
+                    bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
+                              && (weapon >= 0 || weapon == SuperSteveAngelKey)
+                              && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
+                    if (armed && Active && weapon != _weapon)
+                    {
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
+                        Despawn();
+                    }
+                    if (!armed)
+                    {
+                        if (Active) Despawn();
+                        Resume();
+                        _armedSince = DateTime.MinValue;
+                        _holding = false; _holdSeconds = 0;
+                        Array.Clear(_seenPellet, 0, _seenPellet.Length);
+                    }
+                    else if (paused)
+                    {
+                        sleep = TickMs;
+                        if (Active) { FreezeForPause(); Maintain(); }                       // hold the copy's frame; keep re-asserting it
+                    }
+                    else if (menu)
+                    {
+                        // The menu does NOT wipe the cat's texture entries, so the cat is held here exactly as the PAUSE
+                        // screen holds it. Only a weapon change or a character switch takes it away — both fall through to
+                        // the !armed branch above. `menu` covers the menu ROOT, not just the weapon pane, which is what the
+                        // cat has to survive.
+                        sleep = TickMs;
+                        if (Active)
+                        {
+                            FreezeForPause();
+                            Maintain();
+                            CheckTexturesStillOurs();                                       // safety net: a menu that DOES rebuild the manager still tears down
+                            if (Active && _look.Cape) WatchElementLook();                   // recolour cape, mask and glow WHILE the element is being changed
+                        }
+                    }
+                    else
+                    {
+                        sleep = TickMs;
+                        Resume();
+                        WatchHerCatChannel();
+                                    if (Active && ++_texCheckTick >= 30)
+                        {
+                            _texCheckTick = 0;
+                            CheckTexturesStillOurs();
+                            if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
+                        }
+                        if (_armedSince == DateTime.MinValue) _armedSince = Now;
+                        // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
+                        // a moment. Not the real guard: Spawn refuses and retries while they are absent from the manager, so
+                        // arriving early costs a retry rather than a broken cat.
+                        if (!Active && (Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
+                        TrackCharge();
+                        if (_native) PollCave(); else WatchPellets();
+                        if (Active) { Step(); BreezeCape(); WatchCape(); if (_look.Cape) WatchElementLook(); }
+                    }
+                    if (!paused) RetirePlanted();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(Tag + "tick failed: " + e.Message);
+                    try { if (Active) Despawn(); } catch { }
+                }
+                Thread.Sleep(sleep);
+            }
+        }
+
+        // ── the PAUSE screen ───────────────────────────────────────────────────────────────────────────────
         private static DateTime _pausedAt = DateTime.MinValue;
         private static TimeSpan _pauseOffset = TimeSpan.Zero;
         private static float _pausedBlend = -1f;                              // the channel's blend increment before the stop (the stop zeroes it for good)
@@ -265,6 +361,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(f, Memory.ReadInt(f) | MotionStop);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"paused — cat held (blend increment {_pausedBlend:F3})");
         }
+
         /// <summary>Come back from a pause or menu hold: clear the motion-stop flag, put back the channel's blend increment
         /// (the stop leaves it at 0 and nothing re-seeds it, so the next cross-fade would never finish) and advance the
         /// wall-clock offset by the time held.</summary>
@@ -282,55 +379,7 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"resumed — clocks held for {_pauseOffset.TotalSeconds:F1} s in all");
         }
 
-        /// <summary>Point the glow cave at this look: the palette ROW it should paint (CatGlowPalRow), the disc to bind —
-        /// always the same one — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade per
-        /// spawn.</summary>
-        private static void WriteGlowName()
-        {
-            // EVERY look draws the same 8-bit disc and differs only in the palette row the cave paints into it. Row 0
-            // means "derive it from the equipped element", which is what the cape look wants.
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, _look.Cape ? 0 : _look.PalRow);
-            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(ElementGlowDisc).CopyTo(nm, 0);
-            Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
-            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
-        }
-
-        private const int SkinNodeSize = 0x18;   // one skin-list node: {mesh, bone, type 20, count, keys, next}
-        /// <summary>Hide the meshes this look does not wear — the wings on a wingless weapon, the mask on anything but Super
-        /// Steve. They are all SKINNED frames, so nulling their geometry alone is unsafe (MotionProc2 writes every mesh's .wgt
-        /// run through its visual each frame). The copy's channel gets a PRIVATE clone of the skin list with those meshes' runs
-        /// left out — the keys still point at her data, only the chain is ours — and THEN their geometry pointers are cleared
-        /// so nothing draws them. Her own list is untouched; one pass builds the clone once.</summary>
-        private static void HideMeshes(List<int> hide, string what)
-        {
-            if (hide.Count == 0) return;
-            long chan = CodeCaves.MotionCave;                                              // the copy's channel struct
-            uint head = (uint)Memory.ReadInt(chan + MotionType.MotionSkinList) & Memory.PhysAddrMask;
-            var nodes = new List<byte[]>();
-            for (uint p = head; Memory.IsValidGuest(p) && nodes.Count < 256;)
-            {
-                byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), SkinNodeSize);
-                if (n == null) break;
-                nodes.Add(n);
-                p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
-            }
-            if (nodes.Count == 0) { Console.WriteLine(Tag + $"{what}-off: the copy's skin list is unreadable — they stay visible"); return; }
-            var keep = new List<byte[]>();
-            foreach (byte[] n in nodes) if (!hide.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
-            if (keep.Count == nodes.Count) { Console.WriteLine(Tag + $"{what}-off: no such runs in the skin list — they stay visible"); return; }
-            long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
-            if (cave == 0) { Console.WriteLine(Tag + $"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
-            for (int i = 0; i < keep.Count; i++)
-            {
-                BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
-                Memory.WriteBytesBatch(cave + i * SkinNodeSize, keep[i]);
-            }
-            Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
-            foreach (int i in hide) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
-            Console.WriteLine(Tag + $"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
-        }
-
-        // ── the Super Steve cape (CCloth 0x8550) ─────────────────────────────────────────────────────────
+        // ── the Super Steve cape (CCloth 0x8550) ───────────────────────────────────────────────────────────
         private static long _capeObj;
         private static uint _capeTemplate;                                    // her CCloth for cat_cape, taken out of her draw list by TakeHerCape
         private static int _capeSweepTick;
@@ -594,7 +643,53 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(_capeObj + CCloth.ClothK, k);
         }
 
-        // ── the cape and mask follow the equipped weapon's ELEMENT ────────────────────────────────────────
+        /// <summary>Put the whole cloth exactly on its rest shape at the cat's new place. Called when the copy teleports — the
+        /// bind to the pellet's birth frame — where the anchor jumps the length of the room in one step.
+        ///
+        /// The engine's own guard (Step teleports the sheet when the anchor's centroid moves more than 10 units) does not cover
+        /// this: the pinned collar is re-pinned to the anchor on every constraint pass, so the instant it snaps to the new
+        /// position while the rest of the sheet is still at the old one, the cape is stretched and the constraints tear it
+        /// apart. So place every particle here — current AND previous = LW(anchor) × rest, velocities zeroed, and the mark the
+        /// teleport test compares against moved to match: the state Clear__6CCloth builds.</summary>
+        private static void ReseedCape()
+        {
+            if (_capeObj == 0 || _capeRest == null) return;
+            uint anchor = (uint)Memory.ReadInt(_capeObj + CCloth.ClothAttach) & Memory.PhysAddrMask;
+            byte[] lw = Memory.IsValidGuest(anchor) ? Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40) : null;
+            if (lw == null) { Console.WriteLine(Tag + "cape: cannot reseed — the anchor's matrix did not read"); return; }
+            float[] m = new float[16];
+            for (int i = 0; i < 16; i++) m[i] = BitConverter.ToSingle(lw, i * 4);
+            // row-vector convention, as everywhere in this engine: world = x·row0 + y·row1 + z·row2 + row3
+            void Place(byte[] dst, int o, float x, float y, float z)
+            {
+                BitConverter.GetBytes(x * m[0] + y * m[4] + z * m[8] + m[12]).CopyTo(dst, o);
+                BitConverter.GetBytes(x * m[1] + y * m[5] + z * m[9] + m[13]).CopyTo(dst, o + 4);
+                BitConverter.GetBytes(x * m[2] + y * m[6] + z * m[10] + m[14]).CopyTo(dst, o + 8);
+                BitConverter.GetBytes(1f).CopyTo(dst, o + 12);
+            }
+            byte[] cur = new byte[_capeWide * 0x100];
+            for (int a = 0; a < _capeWide; a++)
+                for (int b = 0; b < _capeHang; b++)
+                {
+                    int o = a * 0x100 + b * 0x10;
+                    Place(cur, o, BitConverter.ToSingle(_capeRest, o), BitConverter.ToSingle(_capeRest, o + 4), BitConverter.ToSingle(_capeRest, o + 8));
+                }
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothCur, cur);
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothPrev, cur);                  // no history: nothing to whip back toward
+            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, new byte[_capeWide * 0x100]);
+            byte[] c = Memory.ReadBytesBatch(_capeObj + CCloth.ClothAnchorLocal, 12);  // and the mark the teleport test compares to
+            if (c != null)
+            {
+                byte[] w = new byte[12];
+                float lx = BitConverter.ToSingle(c, 0), ly = BitConverter.ToSingle(c, 4), lz = BitConverter.ToSingle(c, 8);
+                BitConverter.GetBytes(lx * m[0] + ly * m[4] + lz * m[8] + m[12]).CopyTo(w, 0);
+                BitConverter.GetBytes(lx * m[1] + ly * m[5] + lz * m[9] + m[13]).CopyTo(w, 4);
+                BitConverter.GetBytes(lx * m[2] + ly * m[6] + lz * m[10] + m[14]).CopyTo(w, 8);
+                Memory.WriteBytesBatch(_capeObj + CCloth.ClothAnchorWorld, w);
+            }
+        }
+
+        // ── the cape, mask and GLOW follow the equipped weapon's ELEMENT ───────────────────────────────────
         // The colours are authored in ElementLooks, beside the per-weapon looks; what follows is the plumbing
         // that reads the element and the live slots it fills.
         private const int  EntryClutPtr = 0x48;          // CTexture entry: native pointer to the palette copy (pixels at +0x38)
@@ -644,6 +739,19 @@ namespace Dark_Cloud_Improved_Version
             if (painted) _element = e;                                   // only latch once the colour actually landed
         }
 
+        /// <summary>Point the glow cave at this look: the palette ROW it should paint (CatGlowPalRow), the disc to bind —
+        /// always the same one — and CatGlowReady = 0 so it binds again, since the copy's texture entries are remade per
+        /// spawn.</summary>
+        private static void WriteGlowName()
+        {
+            // EVERY look draws the same 8-bit disc and differs only in the palette row the cave paints into it. Row 0
+            // means "derive it from the equipped element", which is what the cape look wants.
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowPalRow, _look.Cape ? 0 : _look.PalRow);
+            byte[] nm = new byte[16]; Encoding.ASCII.GetBytes(ElementGlowDisc).CopyTo(nm, 0);
+            Memory.WriteBytesBatch(CodeCaves.Mailbox.CatGlowName, nm);
+            Memory.WriteInt(CodeCaves.Mailbox.CatGlowReady, 0);
+        }
+
         /// <summary>Paint the flat texture's palette. build_cat_pack.flat_tim2 bakes the cape as 32×32 pixels that are ALL
         /// palette index 0 followed by 256 identical entries, so the whole cape is ONE palette entry: repainting the manager's
         /// own copy recolours it live, because the dungeon draw loop re-uploads the cat's texture group before drawing the
@@ -688,144 +796,6 @@ namespace Dark_Cloud_Improved_Version
         {
             for (int i = 0; i < 3; i++)
                 Memory.WriteFloat(CodeCaves.Mailbox.CatCapeTint + i * 4, (_capeTint[i] - _catTint[i]) * lit);
-        }
-
-        /// <summary>Put the whole cloth exactly on its rest shape at the cat's new place. Called when the copy teleports — the
-        /// bind to the pellet's birth frame — where the anchor jumps the length of the room in one step.
-        ///
-        /// The engine's own guard (Step teleports the sheet when the anchor's centroid moves more than 10 units) does not cover
-        /// this: the pinned collar is re-pinned to the anchor on every constraint pass, so the instant it snaps to the new
-        /// position while the rest of the sheet is still at the old one, the cape is stretched and the constraints tear it
-        /// apart. So place every particle here — current AND previous = LW(anchor) × rest, velocities zeroed, and the mark the
-        /// teleport test compares against moved to match: the state Clear__6CCloth builds.</summary>
-        private static void ReseedCape()
-        {
-            if (_capeObj == 0 || _capeRest == null) return;
-            uint anchor = (uint)Memory.ReadInt(_capeObj + CCloth.ClothAttach) & Memory.PhysAddrMask;
-            byte[] lw = Memory.IsValidGuest(anchor) ? Memory.ReadBytesBatch(Memory.ToMmu(anchor) + CFrameVu1.WorldMatrix, 0x40) : null;
-            if (lw == null) { Console.WriteLine(Tag + "cape: cannot reseed — the anchor's matrix did not read"); return; }
-            float[] m = new float[16];
-            for (int i = 0; i < 16; i++) m[i] = BitConverter.ToSingle(lw, i * 4);
-            // row-vector convention, as everywhere in this engine: world = x·row0 + y·row1 + z·row2 + row3
-            void Place(byte[] dst, int o, float x, float y, float z)
-            {
-                BitConverter.GetBytes(x * m[0] + y * m[4] + z * m[8] + m[12]).CopyTo(dst, o);
-                BitConverter.GetBytes(x * m[1] + y * m[5] + z * m[9] + m[13]).CopyTo(dst, o + 4);
-                BitConverter.GetBytes(x * m[2] + y * m[6] + z * m[10] + m[14]).CopyTo(dst, o + 8);
-                BitConverter.GetBytes(1f).CopyTo(dst, o + 12);
-            }
-            byte[] cur = new byte[_capeWide * 0x100];
-            for (int a = 0; a < _capeWide; a++)
-                for (int b = 0; b < _capeHang; b++)
-                {
-                    int o = a * 0x100 + b * 0x10;
-                    Place(cur, o, BitConverter.ToSingle(_capeRest, o), BitConverter.ToSingle(_capeRest, o + 4), BitConverter.ToSingle(_capeRest, o + 8));
-                }
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothCur, cur);
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothPrev, cur);                  // no history: nothing to whip back toward
-            Memory.WriteBytesBatch(_capeObj + CCloth.ClothVel, new byte[_capeWide * 0x100]);
-            byte[] c = Memory.ReadBytesBatch(_capeObj + CCloth.ClothAnchorLocal, 12);  // and the mark the teleport test compares to
-            if (c != null)
-            {
-                byte[] w = new byte[12];
-                float lx = BitConverter.ToSingle(c, 0), ly = BitConverter.ToSingle(c, 4), lz = BitConverter.ToSingle(c, 8);
-                BitConverter.GetBytes(lx * m[0] + ly * m[4] + lz * m[8] + m[12]).CopyTo(w, 0);
-                BitConverter.GetBytes(lx * m[1] + ly * m[5] + lz * m[9] + m[13]).CopyTo(w, 4);
-                BitConverter.GetBytes(lx * m[2] + ly * m[6] + lz * m[10] + m[14]).CopyTo(w, 8);
-                Memory.WriteBytesBatch(_capeObj + CCloth.ClothAnchorWorld, w);
-            }
-        }
-
-        internal static void Start()
-        {
-            if (_thread != null && _thread.IsAlive) return;
-            _thread = new Thread(Loop) { IsBackground = true, Name = "DivineBeastCat" };
-            _thread.Start();
-        }
-
-        /// <summary>The mod's tick. Decides each pass whether the cat may exist at all — Xiao, in a dungeon floor, a weapon
-        /// with a look, no script event — and then which of four states applies: stood down, held for the PAUSE screen, held
-        /// through a menu, or playing. A weapon change or a character switch tears the copy down; a menu does not. Runs at
-        /// <see cref="TickMs"/> while armed and <see cref="IdleMs"/> otherwise.</summary>
-        private static void Loop()
-        {
-            while (true)
-            {
-                int sleep = IdleMs;
-                try
-                {
-                    bool inDun = Player.InDungeonFloor();
-                    if (inDun) { HeapWatch(); sleep = WatchMs; }
-                    int weapon = inDun ? LookKeyFor(Memory.ReadUShort(WeaponHave.BattleWeaponRecord)) : -1;   // Super Steve: by its sphere
-                    bool paused = inDun && Player.CheckDunIsPaused();                       // the PAUSE screen: the world stops, the cat waits
-                    bool menu = inDun && !paused && Player.CheckDunIsPausedOrMenu();        // the item menu: it can rebuild the texture manager under the copy — stand down
-                    // her own copy of the cape hangs off her cloth list from the moment the model loads — whatever the weapon is
-                    if (inDun && Player.CurrentCharacterNum() == XiaoId && ++_capeSweepTick >= 4) { _capeSweepTick = 0; TakeHerCape(); }
-                    bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
-                              && (weapon >= 0 || weapon == SuperSteveAngelKey)
-                              && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
-                    if (armed && Active && weapon != _weapon)
-                    {
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon {_weapon} → {weapon}: rebuilding the cat with its look");
-                        Despawn();
-                    }
-                    if (!armed)
-                    {
-                        if (Active) Despawn();
-                        Resume();
-                        _armedSince = DateTime.MinValue;
-                        _holding = false; _holdSeconds = 0;
-                        Array.Clear(_seenPellet, 0, _seenPellet.Length);
-                    }
-                    else if (paused)
-                    {
-                        sleep = TickMs;
-                        if (Active) { FreezeForPause(); Maintain(); }                       // hold the copy's frame; keep re-asserting it
-                    }
-                    else if (menu)
-                    {
-                        // The menu does NOT wipe the cat's texture entries, so the cat is held here exactly as the PAUSE
-                        // screen holds it. Only a weapon change or a character switch takes it away — both fall through to
-                        // the !armed branch above. `menu` covers the menu ROOT, not just the weapon pane, which is what the
-                        // cat has to survive.
-                        sleep = TickMs;
-                        if (Active)
-                        {
-                            FreezeForPause();
-                            Maintain();
-                            CheckTexturesStillOurs();                                       // safety net: a menu that DOES rebuild the manager still tears down
-                            if (Active && _look.Cape) WatchElementLook();                   // recolour cape, mask and glow WHILE the element is being changed
-                        }
-                    }
-                    else
-                    {
-                        sleep = TickMs;
-                        Resume();
-                        WatchHerCatChannel();
-                                    if (Active && ++_texCheckTick >= 30)
-                        {
-                            _texCheckTick = 0;
-                            CheckTexturesStillOurs();
-                            if (Active && _look.Cape) WatchElementLook(force: true);   // re-assert the colour if the entries were remade
-                        }
-                        if (_armedSince == DateTime.MinValue) _armedSince = Now;
-                        // Built once, hidden, after the switch or menu has settled — her cat textures are still registering for
-                        // a moment. Not the real guard: Spawn refuses and retries while they are absent from the manager, so
-                        // arriving early costs a retry rather than a broken cat.
-                        if (!Active && (Now - _armedSince).TotalSeconds >= SettleSeconds) SpawnResident();
-                        TrackCharge();
-                        if (_native) PollCave(); else WatchPellets();
-                        if (Active) { Step(); BreezeCape(); WatchCape(); if (_look.Cape) WatchElementLook(); }
-                    }
-                    if (!paused) RetirePlanted();
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(Tag + "tick failed: " + e.Message);
-                    try { if (Active) Despawn(); } catch { }
-                }
-                Thread.Sleep(sleep);
-            }
         }
 
         // ─────────────────────────────────────── character heap watch ──────────────────────────────────────
@@ -1013,6 +983,8 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat resident (hidden) — " + (_native ? "native catcher" : "thread follower"));
         }
 
+        // ─────────────────────────────────────── the cave handshake ────────────────────────────────────────
+
         /// <summary>At the charge threshold: give the cave the growth reciprocal and the head rest offset (cat space ×
         /// scale), zero its counters, hide the copy (scale 0 — the cave owns position/scale/opacity from here) and set
         /// state 3: the next NEW pellet binds on its birth frame. Arming while a previous cat still rides its pellet
@@ -1091,6 +1063,9 @@ namespace Dark_Cloud_Improved_Version
             _caveOwns = false; _disarmTicks = 0;
         }
 
+        private static bool _pounceLogged, _sitLogged;
+        private static int _retargetTick;
+        private static int _pounceKind;               // 1 ground, 2 flying (log only)
         /// <summary>Follow the cave's state: 1 = it bound a pellet (note it, face along the pellet, log), 2 = that
         /// pellet ended (hold the last placed spot, fade, then hide again). A shot-less release disarms it.</summary>
         private static void PollCave()
@@ -1294,6 +1269,15 @@ namespace Dark_Cloud_Improved_Version
             Maintain();
         }
 
+        /// <summary>Fade out from the current pose without restarting the clip (the cave left the key as it stood).</summary>
+        private static void FadeKeepingPose()
+        {
+            _key = Memory.ReadInt(SlotAddr() + CCharacter.MotionId);
+            _phase = Phase.Fading; _phaseStart = Now; _fade = 0;
+        }
+
+        // ───────────────────────────────────────── aim + targeting ─────────────────────────────────────────
+
         /// <summary>Yaw the cat along a horizontal direction; a pellet going straight up or down keeps her facing.</summary>
         private static void FaceAlong(float vx, float vy)
         {
@@ -1435,6 +1419,26 @@ namespace Dark_Cloud_Improved_Version
             return best;
         }
 
+        /// <summary>The locked-on enemy slot, if it is still alive.</summary>
+        private static int LockedTarget()
+        {
+            int s = Memory.ReadInt(PlayerAction.LockOnTargetSlot);
+            if (s < 0 || s >= EnemyAddresses.FloorSlots.Count) return -1;
+            return IsLiveEnemy(s) ? s : -1;
+        }
+
+        /// <summary>Whether this slot holds an enemy the cat can chase: a real species id, RenderStatus at least 1 — not yet
+        /// on the floor, or already gone, both read as 0 — and HP above zero.</summary>
+        private static bool IsLiveEnemy(int s)
+        {
+            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
+            if (id == 0 || id == 0xFFFF) return false;
+            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) < 1) return false;   // not on the floor yet / gone
+            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
+        }
+
+        // ───────────────────────────── the hit's element, and the guard crush ──────────────────────────────
+
         /// <summary>The element a stamped attr bit stands for. Named in the contact log so "did the DAMAGE follow the
         /// element, or only the hit visual?" is answerable from the log alone, without decoding a hex bit.</summary>
         private static string ElementNameOf(int attr) => attr switch
@@ -1444,6 +1448,7 @@ namespace Dark_Cloud_Improved_Version
             _ => "unexpected — more than one bit"
         };
 
+        private static int _pelletDamage;
         /// <summary>The damage entry the cave plants at a contact carries the pellet's damage plus the weapon's attack
         /// (the "attack doubled" rule) and the weapon's element. Written at bind, and re-written by <see cref="Maintain"/>
         /// whenever the live element stops matching the stamped one while a cat is already flying — the attack and the
@@ -1457,6 +1462,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.Mailbox.CatHitAttr, (int)attr);
         }
 
+        private static readonly List<(int slot, int ticks, ushort[] flags)> _guardRestore = new();
         /// <summary>Guard Crush for the cat: the target's guard-frame windows are zeroed for the flight (a guarding enemy
         /// would otherwise take the hit on its guard); restored by <see cref="RetirePlanted"/> after the cat's lifetime
         /// or at once by <see cref="RestoreGuardsNow"/>.</summary>
@@ -1553,38 +1559,6 @@ namespace Dark_Cloud_Improved_Version
                     for (int w = 0; w < flags.Length; w++) if (flags[w] != 0) Memory.WriteUShort(EnemyAddresses.GuardWindows.FlagAddr(slot, w), flags[w]);
                 _guardRestore.Clear();
             }
-        }
-
-        /// <summary>Fade out from the current pose without restarting the clip (the cave left the key as it stood).</summary>
-        private static void FadeKeepingPose()
-        {
-            _key = Memory.ReadInt(SlotAddr() + CCharacter.MotionId);
-            _phase = Phase.Fading; _phaseStart = Now; _fade = 0;
-        }
-        private static int _pelletDamage;
-        private const  int HitElemEvery = 6;          // ticks between element-drift checks (~100 ms at TickMs 16)
-        private static int _hitElemTick;
-        private static bool _pounceLogged, _sitLogged;
-        private static int _retargetTick;
-        private static int _pounceKind;               // 1 ground, 2 flying (log only)
-        private static readonly List<(int slot, int ticks, ushort[] flags)> _guardRestore = new();
-
-        /// <summary>The locked-on enemy slot, if it is still alive.</summary>
-        private static int LockedTarget()
-        {
-            int s = Memory.ReadInt(PlayerAction.LockOnTargetSlot);
-            if (s < 0 || s >= EnemyAddresses.FloorSlots.Count) return -1;
-            return IsLiveEnemy(s) ? s : -1;
-        }
-
-        /// <summary>Whether this slot holds an enemy the cat can chase: a real species id, RenderStatus at least 1 — not yet
-        /// on the floor, or already gone, both read as 0 — and HP above zero.</summary>
-        private static bool IsLiveEnemy(int s)
-        {
-            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.EnemySpeciesId));
-            if (id == 0 || id == 0xFFFF) return false;
-            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.RenderStatus)) < 1) return false;   // not on the floor yet / gone
-            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(s, EnemySlotOffsets.Hp)) > 0;
         }
 
         // ───────────────────────────────────────────── flight ──────────────────────────────────────────────
@@ -2036,6 +2010,41 @@ namespace Dark_Cloud_Improved_Version
         private static readonly List<(ulong oldV, ulong newV)> _pairs = new();          // shared by every find/replace job
         private static readonly List<(long cVU, int vuSz, long cMDT, int mdtSz, long vis, uint vu, uint mdt, uint cVUG, uint cMDTG)> _pending = new();
 
+        private const int SkinNodeSize = 0x18;   // one skin-list node: {mesh, bone, type 20, count, keys, next}
+        /// <summary>Hide the meshes this look does not wear — the wings on a wingless weapon, the mask on anything but Super
+        /// Steve. They are all SKINNED frames, so nulling their geometry alone is unsafe (MotionProc2 writes every mesh's .wgt
+        /// run through its visual each frame). The copy's channel gets a PRIVATE clone of the skin list with those meshes' runs
+        /// left out — the keys still point at her data, only the chain is ours — and THEN their geometry pointers are cleared
+        /// so nothing draws them. Her own list is untouched; one pass builds the clone once.</summary>
+        private static void HideMeshes(List<int> hide, string what)
+        {
+            if (hide.Count == 0) return;
+            long chan = CodeCaves.MotionCave;                                              // the copy's channel struct
+            uint head = (uint)Memory.ReadInt(chan + MotionType.MotionSkinList) & Memory.PhysAddrMask;
+            var nodes = new List<byte[]>();
+            for (uint p = head; Memory.IsValidGuest(p) && nodes.Count < 256;)
+            {
+                byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), SkinNodeSize);
+                if (n == null) break;
+                nodes.Add(n);
+                p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
+            }
+            if (nodes.Count == 0) { Console.WriteLine(Tag + $"{what}-off: the copy's skin list is unreadable — they stay visible"); return; }
+            var keep = new List<byte[]>();
+            foreach (byte[] n in nodes) if (!hide.Contains(BitConverter.ToInt32(n, 0))) keep.Add(n);
+            if (keep.Count == nodes.Count) { Console.WriteLine(Tag + $"{what}-off: no such runs in the skin list — they stay visible"); return; }
+            long cave = TakeCave(keep.Count * SkinNodeSize, out uint caveG);
+            if (cave == 0) { Console.WriteLine(Tag + $"{what}-off: no cave room for the skin list clone — they stay visible"); return; }
+            for (int i = 0; i < keep.Count; i++)
+            {
+                BitConverter.GetBytes(i + 1 < keep.Count ? caveG + (uint)((i + 1) * SkinNodeSize) : 0u).CopyTo(keep[i], 0x14);
+                Memory.WriteBytesBatch(cave + i * SkinNodeSize, keep[i]);
+            }
+            Memory.WriteUInt(chan + MotionType.MotionSkinList, caveG);
+            foreach (int i in hide) Memory.WriteUInt(CodeCaves.NodePool + (long)i * CFrameVu1.NodeStride + CFrameVu1.GeomPtr, 0);
+            Console.WriteLine(Tag + $"{what} hidden: skin list {nodes.Count} → {keep.Count} runs (private clone at 0x{caveG:X}), {hide.Count} geometry pointers cleared");
+        }
+
         /// <summary>The old path, kept whole as the fallback: read each source block, rebase it here, write the copy. Only runs
         /// when the cave is absent or silent.</summary>
         private static bool CopyJobsBySocket()
@@ -2166,24 +2175,10 @@ namespace Dark_Cloud_Improved_Version
 
         private static long A16L(long n) => (n + 15) & ~15L;
 
-        // ── Her MOTION 1 channel: watchdog + repair ─────────────────────────────────────────────────────────
+        // ── Her MOTION 1 channel: watchdog + repair ────────────────────────────────────────────────────────
         private const int  ChanInlineBase = 0x420, ChanInlineStride = 0x80;   // CommandMOTION's inline channel: character + 0x420 + 0x80·n
         private static bool _herChanValid = true;
         private static DateTime _lastDespawn = DateTime.MinValue;
-
-        private static int _texCheckTick;
-        /// <summary>A dungeon script event or a menu can rebuild the texture manager under the resident copy: the cat's
-        /// entries come back at their vanilla addresses (or vanish) while the copy's packets still name the relocated
-        /// ones — garbled fur until a rebuild. Notice it and tear the copy down; it re-spawns clean after the 1 s gate.</summary>
-        private static void CheckTexturesStillOurs()
-        {
-            long e = FindTexEntry(CatTextureNames[0]);
-            uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + 0x28) & 0x3FFF);
-            if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
-            _texMoved.Clear();                                                   // nothing of ours is in there to restore
-            Despawn();
-        }
 
         /// <summary>Watch her channel-1 pointer (+0xC24): when it reads invalid every later shot fails. No engine writer of
         /// that word runs mid-floor — DeleteExtendMotion is town-only, Initialize/CommandMOTION run on loads, operator= only
@@ -2366,6 +2361,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CharacterMotion.MotionSpeedOffset, CharacterMotion.MotionSpeedUseKey);
         }
 
+        private const  int HitElemEvery = 6;          // ticks between element-drift checks (~100 ms at TickMs 16)
+        private static int _hitElemTick;
         /// <summary>Re-assert everything the engine or another system could take back: the copy's model pointer, position,
         /// scale, opacity, facing and motion key (all except those the cave owns mid-flight), and the cat's own light —
         /// Draw__10CCharacter adds CharaTint (+0xCE0) to the scene ambient on a 0..255 scale where the dungeon's key lights
@@ -2458,8 +2455,6 @@ namespace Dark_Cloud_Improved_Version
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "cat copy down");
         }
 
-        private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
-
         // ─────────────────────────────────────────── textures ──────────────────────────────────────────────
         // CTextureManager: entry count @+0, entries @+0x10F8 at 0x50 apart, block tag = the first short, name @+8.
         private const long TextureManager = 0x21C75870;
@@ -2481,6 +2476,20 @@ namespace Dark_Cloud_Improved_Version
         private const int  TexCursor = 0x14;
         private static uint _texCursorSaved, _texCursorTaken;
         private static uint _herTopSaved;
+        private static int _texCheckTick;
+        /// <summary>A dungeon script event or a menu can rebuild the texture manager under the resident copy: the cat's
+        /// entries come back at their vanilla addresses (or vanish) while the copy's packets still name the relocated
+        /// ones — garbled fur until a rebuild. Notice it and tear the copy down; it re-spawns clean after the 1 s gate.</summary>
+        private static void CheckTexturesStillOurs()
+        {
+            long e = FindTexEntry(CatTextureNames[0]);
+            uint tbp = e == 0 ? 0u : (Memory.ReadUInt(e + 0x28) & 0x3FFF);
+            if (e != 0 && tbp >= StuckFloor && Memory.ReadShort(e) == SlotTextureGroup) return;   // still relocated and ours
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + (e == 0 ? "texture manager rebuilt (cat entries gone)" : $"texture manager rebuilt (cat entry back at 0x{tbp:X}, block 0x{Memory.ReadShort(e):X})") + " — rebuilding the copy");
+            _texMoved.Clear();                                                   // nothing of ours is in there to restore
+            Despawn();
+        }
+
         /// <summary>Re-tag the cat's entries (<see cref="CatTextureNames"/>) into the slot's texture group while the copy is
         /// up, and hand them back on despawn. The dungeon draw loop re-uploads group 0x20+slot to VRAM right before it draws
         /// chara slot i (ReloadTexture 0x133070 uploads every entry tagged with that block); the cat's textures sit in HER
@@ -2610,6 +2619,7 @@ namespace Dark_Cloud_Improved_Version
             if (made > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"cat textures recreated in the manager ({made} put back, {present} of {CatTextureNames.Length} present) after a script event wiped them");
             return present;
         }
+
         /// <summary>Whether the cat's textures are RELOCATED to their own VRAM window, as opposed to just being re-tagged into
         /// the slot's group where they sit. The move exists so nothing else uploads over the cat's pages mid-frame. It is also
         /// the only thing the mod does that writes VRAM addresses at all. Left ON — without the move the cat's textures are
@@ -2724,7 +2734,6 @@ namespace Dark_Cloud_Improved_Version
             return patched;
         }
 
-
         // ─────────────────────────────────────────── the hit ───────────────────────────────────────────────
 
         /// <summary>One pellet-style CollisionData entry at the pounce (GuardianReflector.PlantReflectedHit's
@@ -2822,6 +2831,8 @@ namespace Dark_Cloud_Improved_Version
         // ───────────────────────────────────────────── utils ───────────────────────────────────────────────
 
         private static int A16(int n) => (n + 15) & ~15;
+
+        private static long SlotAddr() => DungeonCharaDraw.CharaArray + (long)Slot * DungeonCharaDraw.CharaStride;
 
         /// <summary>Re-point one word of a copied block: if it lands in [min, max] it moves to the same offset in the cave,
         /// otherwise it is zeroed.</summary>
