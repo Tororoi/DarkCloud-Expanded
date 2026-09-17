@@ -283,9 +283,9 @@ namespace Dark_Cloud_Improved_Version
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
-                WpnRebase(block, o + CFrameVu1.Parent,      min, max, wCaveG, isRoot);   // root parent → set below
-                WpnRebase(block, o + CFrameVu1.RootChild,   min, max, wCaveG, false);
-                WpnRebase(block, o + CFrameVu1.RootSibling, min, max, wCaveG, isRoot);   // root sibling → set below
+                Memory.Rebase(block, o + CFrameVu1.Parent,      min, max, wCaveG, isRoot);   // root parent → set below
+                Memory.Rebase(block, o + CFrameVu1.RootChild,   min, max, wCaveG, false);
+                Memory.Rebase(block, o + CFrameVu1.RootSibling, min, max, wCaveG, isRoot);   // root sibling → set below
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
             }
@@ -362,16 +362,6 @@ namespace Dark_Cloud_Improved_Version
                 $"rootParent=0x{(uint)Memory.ReadInt(wr + CFrameVu1.Parent):X} opacity={Memory.ReadFloat(dst + CCharacter.NpcOpacity):0.#}");
         }
 
-        /// <summary>Re-base a weapon-tree link into WeaponCave (mirror of Rebase but for the weapon cave); zero
-        /// external refs and, when forceZero, the root's parent/sibling (set explicitly by the graft splice).</summary>
-        private static void WpnRebase(byte[] block, int off, uint min, uint max, uint caveGuest, bool forceZero)
-        {
-            uint old = (uint)BitConverter.ToInt32(block, off) & Memory.PhysAddrMask;
-            uint neu = 0;
-            if (!forceZero && old >= min && old <= max) neu = (uint)(caveGuest + (old - min));
-            BitConverter.GetBytes(neu).CopyTo(block, off);
-        }
-
         /// <summary>Deep-copy the source model's CFrame tree into the cave pool as a CONTIGUOUS 0x270-stride
         /// array preserving the player's memory order. This is REQUIRED for engine posing: MotionProc
         /// (0x147d20) addresses bones as <c>root + boneIndex*0x270</c> — raw array indexing, NOT pointer walks.
@@ -432,9 +422,9 @@ namespace Dark_Cloud_Improved_Version
                         if (((uint)BitConverter.ToInt32(block, o + lo) & Memory.PhysAddrMask) == catRoot)
                             BitConverter.GetBytes(catSibling).CopyTo(block, o + lo);
                 }
-                Rebase(block, o + CFrameVu1.Parent,      min, max, isRoot);   // root's parent → 0
-                Rebase(block, o + CFrameVu1.RootChild,   min, max, false);
-                Rebase(block, o + CFrameVu1.RootSibling, min, max, isRoot);   // root's sibling → 0
+                Memory.Rebase(block, o + CFrameVu1.Parent,      min, max, (uint)CodeCaves.NodePoolGuest, isRoot);   // root's parent → 0
+                Memory.Rebase(block, o + CFrameVu1.RootChild,   min, max, (uint)CodeCaves.NodePoolGuest, false);
+                Memory.Rebase(block, o + CFrameVu1.RootSibling, min, max, (uint)CodeCaves.NodePoolGuest, isRoot);   // root's sibling → 0
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
             }
@@ -451,18 +441,6 @@ namespace Dark_Cloud_Improved_Version
             byte[] b = Memory.ReadBytesBatch(Memory.ToMmu(node) + CFrameVu1.Name, 8);
             return b != null && b[0] == (byte)'c' && b[1] == (byte)'a' && b[2] == (byte)'t' && b[3] == (byte)'r'
                 && b[4] == (byte)'o' && b[5] == (byte)'o' && b[6] == (byte)'t' && b[7] == 0;
-        }
-
-        /// <summary>Re-base a node link pointer: if it targets a node inside the copied block [min, max+0x270),
-        /// rewrite it to the clone pool at the same offset; otherwise (external ref, or forceZero for the
-        /// root's parent/sibling) zero it.</summary>
-        private static void Rebase(byte[] block, int off, uint min, uint max, bool forceZero)
-        {
-            uint old = (uint)BitConverter.ToInt32(block, off) & Memory.PhysAddrMask;
-            uint neu = 0;
-            if (!forceZero && old >= min && old <= max)
-                neu = (uint)(CodeCaves.NodePoolGuest + (old - min));
-            BitConverter.GetBytes(neu).CopyTo(block, off);
         }
 
         /// <summary>Give the clone its own copy of every SOFTWARE-SKINNED mesh (CVisualMDTVu1). Those are the
@@ -516,12 +494,12 @@ namespace Dark_Cloud_Improved_Version
                 if (visB == null || vuB == null || mdtB == null) continue;
 
                 // The visual ALWAYS repoints to the clone copies (+0x18 → clone VU, +0x20 → clone MDT).
-                RebaseRange(visB, vu, vuSz, cVUG);
-                RebaseRange(visB, mdt, mdtSz, cMDTG);
+                Memory.RebaseRange(visB, vu, vuSz, cVUG);
+                Memory.RebaseRange(visB, mdt, mdtSz, cMDTG);
                 foreach (byte[] b in new[] { vuB, mdtB })
                 {
-                    RebaseRange(b, vu,  vuSz,  cVUG);
-                    RebaseRange(b, mdt, mdtSz, cMDTG);
+                    Memory.RebaseRange(b, vu,  vuSz,  cVUG);
+                    Memory.RebaseRange(b, mdt, mdtSz, cMDTG);
                 }
 
                 // Force BOTH double-buffer slots (+0x28/+0x2c) and the current ptr (+0x18) to the clone's single
@@ -548,12 +526,6 @@ namespace Dark_Cloud_Improved_Version
         }
 
         private static int Align16(int n) => (n + 15) & ~15;
-
-        /// <summary>Rewrite every 4-byte word in <paramref name="b"/> whose value points into [oldBase,
-        /// oldBase+size) to the corresponding offset in the clone copy at newBaseGuest.</summary>
-        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (Memory.RebaseRange: a float whose
-        /// low 29 bits fall inside the source range must NOT be re-pointed; the mask-first version did).</summary>
-        private static void RebaseRange(byte[] b, uint oldBase, int size, uint newBaseGuest) => Memory.RebaseRange(b, oldBase, size, newBaseGuest);
 
         /// <summary>Snapshot the player's cloth pieces into clone-owned copies (frozen drape) and return the guest
         /// address of a cloth-ptr list to hang off the clone's +0xC74. Each CCloth is a self-contained 0x8550 object

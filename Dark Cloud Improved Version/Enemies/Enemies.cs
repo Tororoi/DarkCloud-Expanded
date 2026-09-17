@@ -668,6 +668,18 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
+        /// Whether a floor slot holds an enemy that can be targeted or hit: a real species id, RenderStatus at least 1
+        /// (0 both before the enemy is placed on the floor and after it is gone) and HP above zero.
+        /// </summary>
+        internal static bool IsLive(int slot)
+        {
+            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
+            if (id == 0 || id == 0xFFFF) return false;
+            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.RenderStatus)) < 1) return false;
+            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0;
+        }
+
+        /// <summary>
         /// An area-of-effect KNOCKBACK centred on a world point: launch every live enemy within
         /// <paramref name="radius"/> radially OUTWARD, away from the centre. Returns how many it caught.
         ///

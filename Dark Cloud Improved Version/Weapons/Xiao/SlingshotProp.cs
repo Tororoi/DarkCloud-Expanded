@@ -307,9 +307,9 @@ namespace Dark_Cloud_Improved_Version
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {
                 bool isRoot = (uint)o == rootOff;
-                Rebase(block, o + CFrameVu1.Parent,      min, max, caveG, isRoot);
-                Rebase(block, o + CFrameVu1.RootChild,   min, max, caveG, false);
-                Rebase(block, o + CFrameVu1.RootSibling, min, max, caveG, isRoot);
+                Memory.Rebase(block, o + CFrameVu1.Parent,      min, max, caveG, isRoot);
+                Memory.Rebase(block, o + CFrameVu1.RootChild,   min, max, caveG, false);
+                Memory.Rebase(block, o + CFrameVu1.RootSibling, min, max, caveG, isRoot);
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheA);
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
                 Array.Clear(block, o + CFrameVu1.WorldMatrix, 0x40);
@@ -409,17 +409,17 @@ namespace Dark_Cloud_Improved_Version
                 int mdtSz = Memory.ReadInt(Memory.ToMmu(mdt) + CVisualMDT.MdtSizeField);
                 if (vu == 0 || vuSz <= 0 || vuSz > 0x40000 || mdtSz <= 0 || mdtSz > 0x40000) continue;
                 int visSz = CVisualMDT.VisualSize;
-                int need = A16(visSz) + A16(vuSz) + A16(mdtSz);
+                int need = Memory.Align16(visSz) + Memory.Align16(vuSz) + Memory.Align16(mdtSz);
                 if (cave + need > caveEnd) { Console.WriteLine(Tag + "mesh does not fit MeshCave"); return false; }
                 long cVis = cave;                  uint cVisG = (uint)caveGuest;
-                long cVU  = cave + A16(visSz);     uint cVUG  = (uint)(caveGuest + A16(visSz));
-                long cMDT = cVU + A16(vuSz);       uint cMDTG = (uint)(caveGuest + A16(visSz) + A16(vuSz));
+                long cVU  = cave + Memory.Align16(visSz);     uint cVUG  = (uint)(caveGuest + Memory.Align16(visSz));
+                long cMDT = cVU + Memory.Align16(vuSz);       uint cMDTG = (uint)(caveGuest + Memory.Align16(visSz) + Memory.Align16(vuSz));
                 byte[] visB = Memory.ReadBytesBatch(Memory.ToMmu(vis), visSz);
                 byte[] vuB  = Memory.ReadBytesBatch(Memory.ToMmu(vu),  vuSz);
                 byte[] mdtB = Memory.ReadBytesBatch(Memory.ToMmu(mdt), mdtSz);
                 if (visB == null || vuB == null || mdtB == null) continue;
-                RebaseRange(visB, vu, vuSz, cVUG); RebaseRange(visB, mdt, mdtSz, cMDTG);
-                foreach (byte[] b in new[] { vuB, mdtB }) { RebaseRange(b, vu, vuSz, cVUG); RebaseRange(b, mdt, mdtSz, cMDTG); }
+                Memory.RebaseRange(visB, vu, vuSz, cVUG); Memory.RebaseRange(visB, mdt, mdtSz, cMDTG);
+                foreach (byte[] b in new[] { vuB, mdtB }) { Memory.RebaseRange(b, vu, vuSz, cVUG); Memory.RebaseRange(b, mdt, mdtSz, cMDTG); }
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x18);
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x28);
                 BitConverter.GetBytes(cVUG).CopyTo(visB, 0x2c);
@@ -474,8 +474,8 @@ namespace Dark_Cloud_Improved_Version
             }
             if (nodes.Count == 0) return 0;
             long cave = TrackCave; uint caveG = TrackCaveGuest; long caveEnd = KeyTableCave;
-            long keyCave = cave + A16(nodes.Count * TrackNodeSize);
-            uint keyCaveG = caveG + (uint)A16(nodes.Count * TrackNodeSize);
+            long keyCave = cave + Memory.Align16(nodes.Count * TrackNodeSize);
+            uint keyCaveG = caveG + (uint)Memory.Align16(nodes.Count * TrackNodeSize);
             string info = "";
             for (int i = 0; i < nodes.Count; i++)
             {
@@ -491,7 +491,7 @@ namespace Dark_Cloud_Improved_Version
                         Memory.WriteBytesBatch(keyCave, kb);
                         BitConverter.GetBytes(keyCaveG).CopyTo(n, 0x10);
                         info += $" [n{BitConverter.ToInt32(n, 0)} t2 x{count} travel {travel:F2} → k {k:F2}]";
-                        int used = A16(count * TrackKeySize);
+                        int used = Memory.Align16(count * TrackKeySize);
                         keyCave += used; keyCaveG += (uint)used;
                     }
                 }
@@ -713,18 +713,5 @@ namespace Dark_Cloud_Improved_Version
             return true;
         }
 
-        private static void Rebase(byte[] block, int off, uint min, uint max, uint caveG, bool forceZero)
-        {
-            uint old = (uint)BitConverter.ToInt32(block, off) & Memory.PhysAddrMask;
-            uint neu = 0;
-            if (!forceZero && old >= min && old <= max) neu = caveG + (old - min);
-            BitConverter.GetBytes(neu).CopyTo(block, off);
-        }
-
-        /// <summary>Re-base every 4-byte word in <paramref name="b"/> that points into [src, src+size).</summary>
-        /// <summary>Pointer re-basing for copied blocks — shared, segment-checked (Memory.RebaseRange).</summary>
-        private static void RebaseRange(byte[] b, uint src, int size, uint dst) => Memory.RebaseRange(b, src, size, dst);
-
-        private static int A16(int n) => (n + 15) & ~15;
     }
 }
