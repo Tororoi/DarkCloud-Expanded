@@ -76,6 +76,11 @@ namespace Dark_Cloud_Improved_Version
             // Mirage haze: the draw loop's raster pass → the haze cave, which performs the pass and then draws one raster at
             // the clone's root (ElfPatches.PatchMirageHazeDraw writes the cave).
             new(MirageHazeHookAddr, MirageHazeHookOrig, MirageHazeHookNew, "mirage haze hook (jal DrawRaster__11CDungeonMap → cave)"),
+            // Super Steve's sphere icon: the HUD's status pass → the icon cave, which performs it and then draws the sphere
+            // weapon's icon over Steve (ElfPatches.PatchSuperSteveIconDraw writes the cave).
+            new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
+            new(SsIconCopyHookAddr, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook (jal DngActiveWeaponTextureCopy → cave)"),
+            new(SsIconCopyHookAddr2, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook 2 (the step path's jal DngActiveWeaponTextureCopy → cave)"),
         };
 
         /// <summary>The patched form of the first gauge word — what the runtime checks to know the patch is live.</summary>
@@ -95,6 +100,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint MirageHazeHookOrig = 0x0C071184;                                   // jal 0x1C4610 DrawRaster__11CDungeonMap
         internal const uint MirageHazeHookNew  = 0x0C000000u | (CodeCaves.ElfCave.MirageHazeDraw >> 2);
         internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
+
+        internal const uint SsIconHookAddr = 0x01DB0364;
+        internal const uint SsIconHookOrig = 0x0C06C13C;                                   // jal 0x1B04F0 topStatusInfo
+        internal const uint SsIconHookNew  = 0x0C000000u | (CodeCaves.ElfCave.SuperSteveIconDraw >> 2);
+        internal const long SsIconHookAddrMmu = 0x20000000L + SsIconHookAddr;
+        internal const uint SsIconCopyHookAddr = 0x01DAE608;                               // the overlay's two jal DngActiveWeaponTextureCopy sites
+        internal const uint SsIconCopyHookAddr2 = 0x01DAE36C;                              //   (the second sits beside the item copy in the step path)
+        internal const uint SsIconCopyHookOrig = 0x0C08A9AC;                               // jal 0x22A6B0
+        internal const uint SsIconCopyHookNew  = 0x0C000000u | (CodeCaves.ElfCave.SuperSteveIconCopy >> 2);
 
         internal static void Apply(FileStream fs, Rec dun, Action<string> progress)
         {

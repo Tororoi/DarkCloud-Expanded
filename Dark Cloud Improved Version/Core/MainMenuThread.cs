@@ -32,7 +32,6 @@ namespace Dark_Cloud_Improved_Version
             Mirage.ArmColdPatch();   // Ungaga's Mirage: host clean _GET_POSITION + _GET_DISTANCE in cold-PINE caves (per-slot target)
             GuardianReflector.ArmBlockPatch();   // Angel Gear shield: MoveCheck2's enemy-block addend becomes a data word (cold; enemy code never ran yet)
             GuardianReflector.ArmShotPatch();    // Angel Gear shield: checkCollision's player position becomes a pointer (cold) — shots can collide with the pouch
-            WeaponTextureSwap.StartSwapThread();   // Super Steve wears the attached sphere weapon's palette (dungeon + menus)
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
             GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes

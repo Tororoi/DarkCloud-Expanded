@@ -99,8 +99,6 @@ namespace Dark_Cloud_Improved_Version
 
                 int sphere = SuperSteveAbilities.AttachedSphere(rec);
                 bool active = !Player.CheckDunIsPaused();
-                // (The sphere-palette recolour is NOT driven here — WeaponTextureSwap runs its own always-on
-                // thread so the swap also covers town/menu, where this dungeon dispatcher never runs.)
 
                 // Toan Effects
                 // Divine Guard (7th Heaven) + Guard Crush (Dark Cloud; 7th Heaven inherits Guard Crush by lineage).
@@ -109,6 +107,9 @@ namespace Dark_Cloud_Improved_Version
 
                 // Defensive Legacy (Aga's Sword): +15 Xiao defense.
                 SuperSteveAbilities.DriveAgasSword(active && sphere == Items.agassword);
+
+                // The attached sphere's weapon icon on Xiao's character-menu panel (in place of the old palette swap).
+                SuperSteveAbilities.DriveSphereIcon(sphere);
 
                 // Hero's Courage (Brave Ark): clear Freeze/Poison/Curse/Goo each tick.
                 SuperSteveAbilities.DriveBraveArk(active && sphere == Items.braveark);
@@ -180,10 +181,9 @@ namespace Dark_Cloud_Improved_Version
             SuperSteveAbilities.DriveTsukikage(false);
             SuperSteveAbilities.DriveHeavensCloud(false);   // resets slingshot + flash latch
             SuperSteveAbilities.DriveAgasSword(false);
+            SuperSteveAbilities.DriveSphereIcon(0);
             SuperSteveAbilities.DriveMobiusRing(false);   // resets the damage ramp
             CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
-            // (palette restore is handled by WeaponTextureSwap's own thread — it repaints vanilla the
-            // moment Super Steve is no longer Xiao's equipped weapon)
         }
 
         /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are
