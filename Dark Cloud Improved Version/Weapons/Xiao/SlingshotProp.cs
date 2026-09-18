@@ -28,10 +28,17 @@ namespace Dark_Cloud_Improved_Version
     ///  · SLOT 3 (Mirage's clone-weapon slot — never co-wielded; Mirage's gate-flag writes stand
     ///    down while <see cref="Active"/>): the patched texgroup formula gives it the weapon's own
     ///    texture pass; NpcOpacity gives us the fade back.
+    ///
+    /// PROJECTILE MODE (<see cref="SpawnProjectile"/>, the Matador's charged shot): the same copy, but world-rooted (no weld),
+    /// placed on a pellet every frame by ElfCave.PropPelletFollow instead of orbiting her, textured as the weapon is under the
+    /// slot's ambient add and dim, with no pouch re-path (the authored keys, idle on the taut catch pose).
     /// </summary>
     internal static class SlingshotProp
     {
         internal static bool Active { get; private set; }
+        /// <summary>The copy is up AS THE SHIELD — the Guardian Reflector's prop. False while it flies as the Matador's projectile,
+        /// which the reflector must neither steer, fade nor tear down.</summary>
+        internal static bool Shield => Active && !_projectile;
         /// <summary>Held: the prop's slot is drawn but not stepped and the orbit stands still — a PAUSE screen or menu.
         /// Owned by <see cref="OrbitLoop"/>, which runs whether or not the reflector is calling <see cref="Maintain"/>.</summary>
         internal static bool Held { get; private set; }
@@ -61,6 +68,10 @@ namespace Dark_Cloud_Improved_Version
         // from the slot each frame, so this is baked into the root's child bone (chn30) instead —
         // never re-seeded, never motion-tracked — and the slot rotation stays zero.
         private const int OrientPreset = 7;     // pinned 2026-09-08
+        private const int ProjectilePreset = 5; // the projectile: the shield's pose turned a half-turn in pitch (7 flew upside down)
+        // The projectile's nudge, root space (+x = screen-left as it flies away, y up, z along the flight), on top of the pouch-on-root slide: the pouch
+        // BONE sits a little up and to the right of the cup the pellet should appear in. Tuned in game.
+        private static readonly float[] ProjectileNudge = { 0.0f, -0.3f, -0.3f };
 
         private static uint  _rootGuest;                 // copied tree root (guest)
         private static uint  _liveRoot, _playerRoot;     // for change detection
@@ -72,6 +83,9 @@ namespace Dark_Cloud_Improved_Version
         // each frame closes OrbitEase of the remaining angle, at most OrbitRate rad (≈ 180° in 0.3 s).
         private const int   OrbitTickMs = 16;
         private const float OrbitEase   = 0.18f, OrbitRate = 0.20f;   // user: 0.2 (2026-09-09)
+        private static bool  _projectile;                // SpawnProjectile: world-rooted, tinted, placed by the cave
+        private static float[] _tint = { 0f, 0f, 0f };   // projectile: the slot's ambient add
+        private static float _dim = 1f;                  // projectile: the slot's dim factor
         private static uint  _pouchGuest;                // the copy's pouch bone (null24)
         private static uint  _shotNodeGuest;             // extra geometry-less child of the root: the shot-target point
         private static uint  _muzzleGuest;               // the copy's eff30 — where Xiao's own pellets spawn (BattleActionPlay_Jinn: SearchFrame "eff30", zero offset)
@@ -85,6 +99,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool Spawn(float scale, float up, float ahead, float pull)
         {
             if (Active) return true;
+            _projectile = false;
             _scale = scale; _up = up; _ahead = ahead; _pull = pull;
             _orbit = _orbitTarget;                            // appear on the wanted bearing, no swing-in
             if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
@@ -94,6 +109,25 @@ namespace Dark_Cloud_Improved_Version
             _key = KeyIdle;
             Active = true;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"weapon copy up (x{scale}, slot {Slot}); her slingshot untouched");
+            return true;
+        }
+
+        /// <summary>The copy as a PROJECTILE: world-rooted at <paramref name="yaw"/>, drawn under <paramref name="tint"/> (the
+        /// slot's ambient add, over <paramref name="dim"/>), and left for ElfCave.PropPelletFollow to place — the caller names the
+        /// pellet in Mailbox.PropFollowSlot once this returns true. No pouch re-path: the authored keys, idle on the catch pose.</summary>
+        internal static bool SpawnProjectile(float scale, float yaw, float[] tint, float dim)
+        {
+            if (Active) return true;
+            _projectile = true; _tint = tint; _dim = dim;
+            _scale = scale; _up = 0f; _ahead = 0f; _pull = 0f;
+            _orbit = yaw;
+            if (!CopyTree() || !CopyMesh() || !RegisterSlot()) return false;
+            SlideToPouch();
+            long s = SlotAddr();
+            Memory.WriteFloat(s + CCharacter.CharRotY, yaw);
+            _key = KeyIdle;
+            Active = true;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"projectile copy up (x{scale}, slot {Slot}, yaw {yaw:F2}); her slingshot untouched");
             return true;
         }
 
@@ -122,7 +156,7 @@ namespace Dark_Cloud_Improved_Version
                     if (!Active) { Thread.Sleep(100); continue; }
                     bool held = Player.CheckDunIsPausedOrMenu();
                     if (held != Held) { Held = held; Memory.WriteInt(DungeonCharaDraw.StepSkipTable + (long)Slot * 4, held ? 1 : 0); }
-                    if (held) { Thread.Sleep(OrbitTickMs); continue; }
+                    if (held || _projectile) { Thread.Sleep(OrbitTickMs); continue; }   // a projectile is placed by the cave
                     float d = Wrap(_orbitTarget - _orbit);
                     if (Math.Abs(d) > 0.003f)
                     {
@@ -140,6 +174,21 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(OrbitTickMs);
             }
         }
+
+        /// <summary>Put the resident projectile copy at a world position and yaw — the frame it is shown, before the cave's
+        /// first placement lands, so it never flashes wherever it last stood.</summary>
+        internal static void PlaceProjectile(float x, float h, float y, float yaw)
+        {
+            if (!Active || !_projectile) return;
+            long s = SlotAddr();
+            Memory.WriteVec3 (s + CCharacter.CharPos, x, h, y);
+            Memory.WriteFloat(s + CCharacter.CharRotY, yaw);
+        }
+
+        /// <summary>GUEST address of the copy's root CFrame (0 when down).</summary>
+        internal static uint RootGuest => Active ? _rootGuest : 0u;
+        /// <summary>GUEST address of the spare node at the projectile's centre (0 when down or without one) — the glow's anchor.</summary>
+        internal static uint CentreGuest => Active && Memory.IsValidGuest(_shotNodeGuest) ? _shotNodeGuest : 0u;
 
         /// <summary>GUEST address of the copy's pouch-node world translation row (x, h, y, w) — a live vec4 the
         /// engine rewrites every draw; 0 when down. What the shot-vs-player pointer aims at.</summary>
@@ -231,16 +280,24 @@ namespace Dark_Cloud_Improved_Version
                 return;
             }
             long s = SlotAddr();
-            // Placement in HER space (root parented to her model root): `ahead` units out along the
-            // orbit bearing and facing along it. +Z = her forward, yaw about +Y — the same R_y that
-            // maps her forward to (sin yaw, cos yaw) in the world, so model (sin o, ·, cos o) lands
-            // on world bearing yaw+o. The grip orientation is baked below the root.
-            Memory.WriteFloat(s + CCharacter.CharPos,     (float)Math.Sin(_orbit) * _ahead);
-            Memory.WriteFloat(s + CCharacter.CharPos + 4, _up);
-            Memory.WriteFloat(s + CCharacter.CharPos + 8, (float)Math.Cos(_orbit) * _ahead);
-            Memory.WriteFloat(s + CCharacter.CharRot,     0f);
-            Memory.WriteFloat(s + CCharacter.CharRotY,    _orbit);
-            Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
+            if (!_projectile)                                                    // a projectile's position and yaw are the cave's
+            {
+                // Placement in HER space (root parented to her model root): `ahead` units out along the
+                // orbit bearing and facing along it. +Z = her forward, yaw about +Y — the same R_y that
+                // maps her forward to (sin yaw, cos yaw) in the world, so model (sin o, ·, cos o) lands
+                // on world bearing yaw+o. The grip orientation is baked below the root.
+                Memory.WriteFloat(s + CCharacter.CharPos,     (float)Math.Sin(_orbit) * _ahead);
+                Memory.WriteFloat(s + CCharacter.CharPos + 4, _up);
+                Memory.WriteFloat(s + CCharacter.CharPos + 8, (float)Math.Cos(_orbit) * _ahead);
+                Memory.WriteFloat(s + CCharacter.CharRot,     0f);
+                Memory.WriteFloat(s + CCharacter.CharRotY,    _orbit);
+                Memory.WriteFloat(s + CCharacter.CharRot + 8, 0f);
+            }
+            else
+            {
+                Memory.WriteVec3 (s + CCharacter.CharaTint, _tint[0], _tint[1], _tint[2]);
+                Memory.WriteFloat(s + CCharacter.DimFactor, _dim);
+            }
             Memory.WriteFloat(s + ObjScale,     _scale);
             Memory.WriteFloat(s + ObjScale + 4, _scale);
             Memory.WriteFloat(s + ObjScale + 8, _scale);
@@ -255,10 +312,10 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt  (DungeonCharaDraw.CharaRegistry + (long)Slot * 4, 1);
             Memory.WriteInt  (DungeonCharaDraw.StepSkipTable + (long)Slot * 4, Held ? 1 : 0);
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 1);            // scene + chara step unlocked
+            if (_projectile) return;
             long r = Memory.ToMmu(_rootGuest);
             if ((Memory.ReadGuestPtr(r + CFrameVu1.Parent)) != _playerRoot)
                 Memory.WriteUInt(r + CFrameVu1.Parent, _playerRoot);
-
         }
 
         internal static void Despawn()
@@ -272,7 +329,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(s + CCharacter.NpcOpacity, 0f);
             Memory.WriteInt  (CodeCaves.MirageSceneGateFlag, 2);            // restore vanilla gates
             Active = false;
-            _orbit = 0f;
+            _orbit = 0f; _projectile = false;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "weapon copy down");
         }
 
@@ -320,7 +377,7 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes(0).CopyTo(block, o + CFrameVu1.WorldCacheB);
                 Array.Clear(block, o + CFrameVu1.WorldMatrix, 0x40);
             }
-            BitConverter.GetBytes(_playerRoot).CopyTo(block, (int)rootOff + CFrameVu1.Parent);   // weld (ref flag kept as the live root's)
+            BitConverter.GetBytes(_projectile ? 0u : _playerRoot).CopyTo(block, (int)rootOff + CFrameVu1.Parent);   // weld to her, or world-rooted (ref flag kept as the live root's)
 
             // ORIENTATION BAKE on the root's direct children: M = grip(3x3, scale-free) · pitch^q · yaw^t
             // — the pose the welded live weapon had at preset 5 — applied as child.local' = child.local · M
@@ -334,8 +391,9 @@ namespace Dark_Cloud_Improved_Version
             for (int r0 = 0; r0 < 3; r0++)
             {
                 float p0 = g[r0 * 3], p1 = g[r0 * 3 + 1], p2 = g[r0 * 3 + 2];
-                for (int qp = OrientPreset & 3; qp > 0; qp--) { float m1 = p2, m2 = -p1; p1 = m1; p2 = m2; }
-                for (int qt = (OrientPreset >> 2) & 3; qt > 0; qt--) { float n0 = p2, n2 = -p0; p0 = n0; p2 = n2; }
+                int preset = _projectile ? ProjectilePreset : OrientPreset;
+                for (int qp = preset & 3; qp > 0; qp--) { float m1 = p2, m2 = -p1; p1 = m1; p2 = m2; }
+                for (int qt = (preset >> 2) & 3; qt > 0; qt--) { float n0 = p2, n2 = -p0; p0 = n0; p2 = n2; }
                 g[r0 * 3] = p0; g[r0 * 3 + 1] = p1; g[r0 * 3 + 2] = p2;
             }
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
@@ -365,6 +423,7 @@ namespace Dark_Cloud_Improved_Version
                 if (nm == "null24") _pouchGuest = caveG + (uint)o;
                 if (nm == "eff30")  _muzzleGuest = caveG + (uint)o;
             }
+
             // SHOT-TARGET NODE: one extra child of the root with no geometry, never animated (no track
             // names it), whose world position the engine recomputes every draw like any bone. Its local
             // offset is set by PlaceShotNode once the idle pouch pose is known.
@@ -394,8 +453,88 @@ namespace Dark_Cloud_Improved_Version
             }
             else _shotNodeGuest = 0;
             Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);      // re-write: the grown block + the root's new first child
-            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, pouch 0x{_pouchGuest:X}, shot node 0x{_shotNodeGuest:X}, parent = player root 0x{_playerRoot:X}");
+            Console.WriteLine(Tag + $"weapon tree copied ({_nodeCount} nodes) → 0x{_rootGuest:X}, pouch 0x{_pouchGuest:X}, shot node 0x{_shotNodeGuest:X}, parent = {(_projectile ? "the world" : $"player root 0x{_playerRoot:X}")}");
             return true;
+        }
+
+        /// <summary>PROJECTILE: the root is what the cave puts on the pellet, so the model is slid down its own tree until the
+        /// POUCH sits on the root — every root child's translation row (root space, post-bake) less the pouch's root-space
+        /// position, plus <see cref="ProjectileNudge"/> — and the spare node is set at the model's centre, the glow's anchor.
+        /// The pouch's translation is the IDLE key's (frame <see cref="IdleFrame"/>, the pose the copy holds), not the one her
+        /// live weapon was snapshotted in mid-snap: the pouch travels several units along the draw over frames 251–255, and a
+        /// slide from that pose led or trailed the pellet by the difference.</summary>
+        private static void SlideToPouch()
+        {
+            int blockSize = _nodeCount * CFrameVu1.NodeStride;
+            byte[] block = Memory.ReadBytesBatch(CodeCaves.WeaponCave, blockSize);
+            if (block == null) return;
+            uint caveG = (uint)CodeCaves.WeaponCaveGuest;
+            int rootOff = (int)(_rootGuest - caveG), pouchOff = (int)(_pouchGuest - caveG);
+            bool idle = IdlePouchTranslation(out float ix, out float iy, out float iz);
+            float[] p = { 0f, 0f, 0f, 1f };
+            for (int guard = 0, n = pouchOff; guard < MaxNodes && n != rootOff && n >= 0 && n + CFrameVu1.NodeStride <= block.Length; guard++)
+            {
+                float[] m = new float[16];
+                for (int k = 0; k < 16; k++) m[k] = BitConverter.ToSingle(block, n + CFrameVu1.LocalMatrix + k * 4);
+                if (n == pouchOff && idle) { m[12] = ix; m[13] = iy; m[14] = iz; }
+                float[] q = new float[4];
+                for (int c = 0; c < 4; c++) q[c] = p[0] * m[c] + p[1] * m[4 + c] + p[2] * m[8 + c] + p[3] * m[12 + c];
+                p = q;
+                n = (int)(((uint)BitConverter.ToInt32(block, n + CFrameVu1.Parent) & Memory.PhysAddrMask) - caveG);
+            }
+            for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
+            {
+                if (o == rootOff) continue;
+                if (((uint)BitConverter.ToInt32(block, o + CFrameVu1.Parent) & Memory.PhysAddrMask) != caveG + (uint)rootOff) continue;
+                bool centreNode = caveG + (uint)o == _shotNodeGuest;
+                for (int k = 0; k < 3; k++)
+                {
+                    long at = CodeCaves.WeaponCave + o + CFrameVu1.LocalMatrix + 0x30 + k * 4;
+                    float t = centreNode ? -p[k] * 0.5f + ProjectileNudge[k]                        // grip at nudge − p, pouch at nudge: the middle
+                                         : BitConverter.ToSingle(block, o + CFrameVu1.LocalMatrix + 0x30 + k * 4) - p[k] + ProjectileNudge[k];
+                    Memory.WriteFloat(at, t);
+                }
+                Memory.WriteInt(CodeCaves.WeaponCave + o + CFrameVu1.WorldCacheA, 0);
+            }
+            Console.WriteLine(Tag + $"projectile: pouch {(idle ? "(idle key)" : "(as snapshotted)")} was ({p[0]:F2},{p[1]:F2},{p[2]:F2}) from the root — model slid so the pouch rides the pellet");
+        }
+
+        /// <summary>The pouch bone's translation at <see cref="IdleFrame"/> from the weapon's own .mot — its one translate
+        /// track (every slingshot's is on `null24`), read off the live channel's shared track list.</summary>
+        private static bool IdlePouchTranslation(out float x, out float y, out float z)
+        {
+            x = y = z = 0f;
+            uint wpnObj = Memory.ReadGuestPtr(EquippedWeapon.WeaponObjGlobal);
+            if (!Memory.IsValidGuest(wpnObj)) return false;
+            for (int s = 0; s < CCharacter.MotionSlots; s++)
+            {
+                uint sp = Memory.ReadGuestPtr(Memory.ToMmu(wpnObj) + CCharacter.MotionSlotBase + s * 4);
+                if (!Memory.IsValidGuest(sp)) continue;
+                uint p = Memory.ReadGuestPtr(Memory.ToMmu(sp) + MotListHead);
+                for (int guard = 0; Memory.IsValidGuest(p) && guard < MaxTracks; guard++)
+                {
+                    byte[] n = Memory.ReadBytesBatch(Memory.ToMmu(p), TrackNodeSize);
+                    if (n == null) break;
+                    int type = BitConverter.ToInt32(n, 0x08), count = BitConverter.ToInt32(n, 0x0C);
+                    uint keys = (uint)BitConverter.ToInt32(n, 0x10) & Memory.PhysAddrMask;
+                    if (type == 2 && count > 0 && count < 512 && Memory.IsValidGuest(keys))
+                    {
+                        byte[] kb = Memory.ReadBytesBatch(Memory.ToMmu(keys), count * TrackKeySize);
+                        if (kb == null) return false;
+                        for (int i = 0; i < count; i++)
+                            if (BitConverter.ToUInt32(kb, i * TrackKeySize) == IdleFrame)
+                            {
+                                x = BitConverter.ToSingle(kb, i * TrackKeySize + 0x10);
+                                y = BitConverter.ToSingle(kb, i * TrackKeySize + 0x14);
+                                z = BitConverter.ToSingle(kb, i * TrackKeySize + 0x18);
+                                return true;
+                            }
+                        return false;
+                    }
+                    p = (uint)BitConverter.ToInt32(n, 0x14) & Memory.PhysAddrMask;
+                }
+            }
+            return false;
         }
 
         /// <summary>CopyMeshNodes' recipe for the weapon's software-skinned visual: visual + VU

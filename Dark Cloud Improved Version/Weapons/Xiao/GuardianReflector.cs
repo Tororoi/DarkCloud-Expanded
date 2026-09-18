@@ -242,23 +242,26 @@ namespace Dark_Cloud_Improved_Version
                 int sleep = IdleTickMs;
                 try
                 {
-                    bool inDun = Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId;
                     if (!_blockArmed && !Player.InDungeonFloor()) ArmBlockPatch();
                     if (!_shotArmed && !Player.InDungeonFloor()) ArmShotPatch();
-                    if (inDun) sleep = FastTickMs;
-                    bool held  = inDun && Player.CheckDunIsPausedOrMenu();   // PAUSE screen or menu: everything stands still
+                    // Live only with the Angel Gear, or Super Steve carrying its sphere: everything below — the gauge, the
+                    // ring, shot tracking — is that weapon's. Anything else, and one reset puts it all back to vanilla.
+                    bool inDun = Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId;
                     int  weaponId = inDun ? Memory.ReadUShort(WeaponHave.BattleWeaponRecord) : 0;
                     bool gear  = weaponId == Items.angelgear
                               || (weaponId == Items.supersteve && SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.angelgear);
-                    bool armed = inDun && gear && GuardWatch.IsGuarding();
-
-                    long pack = inDun ? Memory.ReadInt(NowShotEffectPtr) : 0;
+                    bool live  = inDun && gear;
+                    if (live) sleep = FastTickMs;
+                    long pack = live ? Memory.ReadInt(NowShotEffectPtr) : 0;
                     if (pack <= 0)
                     {
-                        HardReset();
+                        if (_live) { HardReset(); _live = false; }
                         Thread.Sleep(sleep);
                         continue;
                     }
+                    _live = true;
+                    bool held  = Player.CheckDunIsPausedOrMenu();   // PAUSE screen or menu: everything stands still
+                    bool armed = GuardWatch.IsGuarding();
                     pack += 0x20000000;
                     if (held) { Thread.Sleep(sleep); continue; }   // the prop holds its own slot; nothing here may advance
 
@@ -277,7 +280,7 @@ namespace Dark_Cloud_Improved_Version
                     if (_hitFlag)
                     {
                         _hitFlag = false;
-                        if (SlingshotProp.Active && !_dispelling)
+                        if (SlingshotProp.Shield && !_dispelling)
                         {
                             _shieldHp = Math.Max(0, _shieldHp - 1);
                             if (_gaugeLive) Memory.WriteFloat(GaugeAddr, _shieldHp * GaugePerHit);
@@ -294,7 +297,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     // Bar ownership: hold while the shield stands (and re-assert it if a hit on her reset the bar
                     // to 100), slow refill while broken, vanilla otherwise. Ready = the bar is full again.
-                    if (SlingshotProp.Active && !_dispelling)
+                    if (SlingshotProp.Shield && !_dispelling)
                     {
                         SetGaugeRate(0f);
                         if (_gaugeLive && Math.Abs(Memory.ReadFloat(GaugeAddr) - _shieldHp * GaugePerHit) > 0.5f)
@@ -316,22 +319,22 @@ namespace Dark_Cloud_Improved_Version
                     if (_dispelling)
                     {
                         _alpha = Math.Max(0f, _alpha - 1f / HitFadeTicks);
-                        if (_alpha <= 0f || !SlingshotProp.Active) { SlingshotProp.Despawn(); _dispelling = false; }
+                        if (_alpha <= 0f || !SlingshotProp.Shield) { SlingshotProp.Despawn(); _dispelling = false; }
                     }
                     else if (armed)
                     {
                         bool ready = !_cooling && (!_gaugeLive || Memory.ReadFloat(GaugeAddr) >= 99.5f);   // full bar, as her own shot needs
-                        if (!SlingshotProp.Active && ready
+                        if (!SlingshotProp.Shield && ready
                             && SlingshotProp.Spawn(PropScale, PouchHeight, PropAhead, PullLength))
                         { _alpha = 0f; _jingled = false; _shieldHp = ShieldHits; if (_gaugeLive) Memory.WriteFloat(GaugeAddr, 100f); }
-                        if (SlingshotProp.Active)
+                        if (SlingshotProp.Shield)
                         {
                             _alpha = Math.Min(1f, _alpha + 1f / FadeInTicks);
                             if (!_jingled && _alpha >= 1f)
                             { _jingled = true; SeSeq.Play(SeSeq.ChangeJingle, 90); }
                         }
                     }
-                    else if (SlingshotProp.Active)
+                    else if (SlingshotProp.Shield)
                     {
                         _alpha = Math.Max(0f, _alpha - 1f / FadeOutTicks);
                         if (_alpha <= 0f) SlingshotProp.Despawn();
@@ -340,14 +343,14 @@ namespace Dark_Cloud_Improved_Version
 
                     // Shots are only intercepted while the SHIELD is up (not while it is broken / cooling
                     // down / folding): with no slingshot they reach her exactly as vanilla.
-                    bool shieldUp = armed && SlingshotProp.Active && !_dispelling;
+                    bool shieldUp = armed && SlingshotProp.Shield && !_dispelling;
                     if (shieldUp) ClaimClosingShots(pack, xx, xh, xy);
 
                     // ORBIT: the copy circles her to face the nearest closing shot, else the nearest
                     // enemy, else straight ahead — and its fire target during a cycle. This tick only
                     // sets the wanted bearing; the prop's own frame-rate thread swings to it smoothly.
                     Claim faced = null;
-                    if (SlingshotProp.Active)
+                    if (SlingshotProp.Shield)
                     {
                         if (ChooseBearing(pack, xx, xh, xy, yaw, out float want, out faced))
                             SlingshotProp.OrbitTarget = Wrap(want - yaw);
@@ -355,7 +358,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     GetPouch(xx, xh, xy, yaw, out float px, out float ph, out float py);
                     RedirectShots(shieldUp && _alpha >= 1f);
-                    if (SlingshotProp.Active) UpdateRing(xx, xh, xy); else ReleaseRing();
+                    if (SlingshotProp.Shield) UpdateRing(xx, xh, xy); else ReleaseRing();
 
                     SustainClaims(pack, shieldUp, xx, xh, xy, px, ph, py, faced);
 
@@ -363,7 +366,7 @@ namespace Dark_Cloud_Improved_Version
                     // (the fresh projectile leaves on the shoot key) → back to the copy's idle hold (KEY 14).
                     // It begins once nothing else is inbound (or the queue has waited FireWaitMax
                     // ticks), giving the copy time to turn onto its target first.
-                    if (armed && SlingshotProp.Active && _alpha >= 1f && (_pending.Count > 0 || _pullTick >= 0))
+                    if (armed && SlingshotProp.Shield && _alpha >= 1f && (_pending.Count > 0 || _pullTick >= 0))
                     {
                         if (_pullTick < 0)
                         {
@@ -483,7 +486,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 return;
             }
-            bool armed = true, solid = SlingshotProp.Active && _alpha >= 1f;
+            bool armed = true, solid = SlingshotProp.Shield && _alpha >= 1f;
             for (int q = _claimed.Count - 1; q >= 0; q--)
             {
                 var c = _claimed[q];
@@ -602,7 +605,7 @@ namespace Dark_Cloud_Improved_Version
         /// analytic copy root (her position + the orbit offset).</summary>
         private static void GetPouch(float xx, float xh, float xy, float yaw, out float px, out float ph, out float py)
         {
-            if (SlingshotProp.Active && SlingshotProp.PouchWorld(out px, out ph, out py)) return;
+            if (SlingshotProp.Shield && SlingshotProp.PouchWorld(out px, out ph, out py)) return;
             float b = yaw + SlingshotProp.Orbit;
             px = xx + (float)Math.Sin(b) * PropAhead; ph = xh + PouchHeight; py = xy + (float)Math.Cos(b) * PropAhead;
         }
@@ -999,7 +1002,7 @@ namespace Dark_Cloud_Improved_Version
                 try
                 {
                     bool quiet = _dispelling;                       // fading out: still eat the swing that broke it, silently
-                    if (!SlingshotProp.Active || (_alpha < 1f && !quiet)) { Thread.Sleep(50); continue; }
+                    if (!SlingshotProp.Shield || (_alpha < 1f && !quiet)) { Thread.Sleep(50); continue; }
                     long pool = Memory.ReadInt(CollisionPool.Pointer);
                     if (pool <= 0) { Thread.Sleep(50); continue; }
                     pool += 0x20000000;
@@ -1054,6 +1057,8 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        private static bool _live;   // the loop's state is up (weapon live in a dungeon); one HardReset when it stops being
+
         private static void HardReset()
         {
             ReleaseRing();
@@ -1065,7 +1070,7 @@ namespace Dark_Cloud_Improved_Version
             _shieldHp = 0;
             SetGaugeRate(VanillaXiaoRefillMul);
             RedirectShots(false);
-            if (SlingshotProp.Active) SlingshotProp.Despawn();
+            if (SlingshotProp.Shield) SlingshotProp.Despawn();
             _claimed.Clear();
             _pending.Clear();
             _alpha = 0f;

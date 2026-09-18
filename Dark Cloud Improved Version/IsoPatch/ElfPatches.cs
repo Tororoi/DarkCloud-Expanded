@@ -112,6 +112,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
+            PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
@@ -368,6 +369,9 @@ namespace Dark_Cloud_Improved_Version
         // re-registers with `_SET_GUARD_FRAME` whenever its label runs. Chest mimics do exactly that (their wake IS a guard, from
         // our own disc patch), and the 20 Hz crush kept losing the race. The cave takes over the flag load and
         // reports "no window" when the entry is Xiao's with the cat's kick type (+0x58 == 1, +0x98 == 2).
+        internal const uint GuardBypassHookAddr = 0x001DAC78;                              // CheckDmg's guard-window load site
+        internal const long GuardBypassHookAddrMmu = 0x20000000L + GuardBypassHookAddr;
+        private  const uint GuardBypassPreviousCave = 0x01FB2250;                           // where the cave sat before it grew — an ISO patched then is re-hooked
         internal static void PatchCatGuardBypass(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = CodeCaves.ElfCave.CatGuardBypass;
@@ -376,18 +380,20 @@ namespace Dark_Cloud_Improved_Version
                 ?? throw new IOException("Embedded EE function missing: catGuardBypass.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
             const uint Return = 0x001DAC80;                    // the `beq v0,zero` right after the hooked load
-            // Shape: 27 words, opens `lw at,-0x6210(gp)`, both exits `j 0x1DAC80`, and word 24 is the vanilla `lh v0,0x550(at)`.
-            if (b.Length != 108 || U32(b, 0) != 0x8F819DF0u || U32(b, 72) != J(Return) || U32(b, 96) != 0x84220550u || U32(b, 100) != J(Return))
+            // Shape: opens `lw at,-0x6210(gp)`, both exits `j 0x1DAC80`, and carries the vanilla `lh v0,0x550(at)`.
+            int exits = 0; bool vanillaLoad = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == J(Return)) exits++; if (w == 0x84220550u) vanillaLoad = true; }
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || exits != 2 || !vanillaLoad)
                 throw new IOException($"catGuardBypass.bin malformed ({b.Length} B) or stale — reassemble its .s.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("catGuardBypass.bin overruns its cave — move ElfCave.NextFree.");
             // Hook the `addu`, NOT the `lh` after it: the `lh`'s own delay slot would be the `beq` at 0x1DAC80, and a branch in a
             // branch's delay slot is undefined on the R5900. Taking the `addu` leaves the `lh` as the delay slot, which is then
             // nop'd — the cave re-forms the address from a2/v1 itself and does the load, so neither word is needed.
-            const uint HookAddr = 0x001DAC78;                  // `addu at,v0,at`, feeding `lh v0,0x550(at)`
+            const uint HookAddr = GuardBypassHookAddr;         // `addu at,v0,at`, feeding `lh v0,0x550(at)`
             uint jump = J(CaveAddr);
             uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
-            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = cur0 == jump && cur1 == 0;
+            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || cur0 == J(GuardBypassPreviousCave)) && cur1 == 0;
             if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr - 4)) != 0x3C010006u || RdU32(fs, ElfOff(HookAddr + 8)) != 0x104000D1u)
                 throw new IOException($"Guard-window hook site 0x{HookAddr:X} is not vanilla `lui at,0x6; addu at,v0,at; lh v0,0x550(at); beq v0,zero` — unmodified Dark Cloud (USA) ISO expected.");
             for (int i = 0; i < b.Length; i += 4)
@@ -546,6 +552,26 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
                 throw new IOException("mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The prop-on-a-pellet cave (tools/stubs/prop_pellet_follow.s): the cat follower hook's new first stop. It must
+        /// call CatCopyQueue (the cat's chain performs the displaced step__5CSHOT) and read the shot pool.</summary>
+        internal static void PatchPropPelletFollow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.PropPelletFollow;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin")
+                ?? throw new IOException("Embedded EE function missing: propPelletFollow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            uint chain = 0x0C000000u | (CodeCaves.ElfCave.CatCopyQueue >> 2);
+            bool chained = false, pool = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chained = true; if (w == 0x8D4A35D4u) pool = true; }
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chained || !pool)
+                throw new IOException("propPelletFollow.bin malformed or stale — it must call CatCopyQueue and read the shot pool.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)
+                throw new IOException("propPelletFollow.bin overruns its gap — it must end before ElfCave.XiaoMeleeFlinch.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
