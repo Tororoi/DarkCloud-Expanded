@@ -198,6 +198,7 @@ namespace Dark_Cloud_Improved_Version
             public ushort Owner, Attr2;
             public byte   SndFlag, Reload;
             public float  LastX, LastH, LastY;         // where it was last seen (to judge an engine-side death)
+            public int    LastWait;                    // its flight countdown when last seen: 0 = it ran out, not a contact
         }
 
         private static Thread _thread;
@@ -406,9 +407,10 @@ namespace Dark_Cloud_Improved_Version
 
         // ───────────────────────────── absorb (claim + let it land) ─────────────────────────────
 
-        /// <summary>Every live in-flight shot inside the guard radius and closing on Xiao is claimed:
-        /// latched harmless and SNAPSHOTTED (species slot, speed, damage, owner fields, arrival
-        /// line), then left to fly — the engine's contact-kill on her IS the absorb.</summary>
+        /// <summary>Every live in-flight shot inside the guard radius, closing on Xiao and with the flight left to
+        /// reach the pouch (its countdown × speed against the distance, the pouch standing PropAhead out toward it) is
+        /// claimed: latched harmless and SNAPSHOTTED (species slot, speed, damage, owner fields, arrival line), then
+        /// left to fly — the engine's contact-kill on her IS the absorb. A shot that would expire short is left alone.</summary>
         private static void ClaimClosingShots(long pack, float xx, float xh, float xy)
         {
             for (int s = 0; s < PackSlots; s++)
@@ -431,6 +433,9 @@ namespace Dark_Cloud_Improved_Version
                     if (vx * dx + vh * dh + vy * dy <= 0f) continue;
 
                     float speed = Math.Max(1f, (float)Math.Sqrt(vx * vx + vh * vh + vy * vy));
+                    int wait = Memory.ReadInt(inst + OffWait + i * 4);
+                    float need = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy) - PropAhead - CaptureRadius;
+                    if (wait * speed < need) continue;                                         // out of range: it dies before the pouch
                     float inv = -1f / speed;
                     Memory.WriteByte(inst + OffLatch + i, LatchHold);
                     _claimed.Add(new Claim
@@ -488,7 +493,7 @@ namespace Dark_Cloud_Improved_Version
                 {
                     long obj = inst + OffObj + c.Idx * ObjStride;
                     float sx = Memory.ReadFloat(obj + ObjPos), sh = Memory.ReadFloat(obj + ObjPos + 4), sy = Memory.ReadFloat(obj + ObjPos + 8);
-                    c.LastX = sx; c.LastH = sh; c.LastY = sy;
+                    c.LastX = sx; c.LastH = sh; c.LastY = sy; c.LastWait = Memory.ReadInt(inst + OffWait + c.Idx * 4);
                     float bx = xx - sx, bh = xh - sh, by = xy - sy;          // shot → her body
                     float qx = px - sx, qh = ph - sh, qy = py - sy;          // shot → the pouch
                     float dq = qx * qx + qh * qh + qy * qy;
@@ -533,6 +538,11 @@ namespace Dark_Cloud_Improved_Version
                         // or expired): judge by where we last saw it.
                         float qx = px - c.LastX, qh = ph - c.LastH, qy = py - c.LastY;
                         float ex = xx - c.LastX, eh = xh - c.LastH, ey = xy - c.LastY;
+                        if (c.LastWait <= 1)
+                        {
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slot{c.Slot}#{c.Idx} ran out of flight short of the pouch — not re-fired");
+                            continue;
+                        }
                         if (qx * qx + qh * qh + qy * qy < EngineCatchNear * EngineCatchNear) { caught = true; how = "caught at the pouch (engine)"; }
                         else if (ex * ex + eh * eh + ey * ey < (AbsorbNear + c.Speed * 3f) * (AbsorbNear + c.Speed * 3f)) how = "ended on her";
                         else
