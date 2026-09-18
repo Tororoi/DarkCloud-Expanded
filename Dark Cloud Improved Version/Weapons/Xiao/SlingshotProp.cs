@@ -353,7 +353,9 @@ namespace Dark_Cloud_Improved_Version
             }
             Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);
             _rootGuest = caveG + rootOff;
-            // The pouch bone by NAME (every c04w## .mds orders pati2, chn30, jnt30_1, eff30, null24, mesh).
+            // The pouch bone by NAME (every c04w## .mds orders pati2, chn30, jnt30_1, eff30, null24, mesh; the main_wep trees
+            // — Super Steve's — put an identity `null27` root above pati2, which the bake above absorbs: the grip then
+            // sits in pati2, the root's child, and lands in the same place).
             _pouchGuest = _rootGuest + 4 * (uint)CFrameVu1.NodeStride;
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {

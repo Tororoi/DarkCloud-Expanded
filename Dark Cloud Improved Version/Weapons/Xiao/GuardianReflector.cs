@@ -6,8 +6,10 @@ namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
     /// Angel Gear "Guardian Reflector" (roadmap PR 7; pool RE in game_data/docs/angelgear-reflector-re.md).
-    /// While Xiao guards with the Angel Gear, a GIANT COPY of her slingshot stands IN FRONT of her
-    /// for the whole guard hold (transparent → solid over 0.25 s, folding away over 0.5 s on
+    /// While Xiao guards with the Angel Gear — or with Super Steve carrying an Angel Gear SynthSphere
+    /// (<see cref="SuperSteveAbilities.AttachedSphere"/>), the copy then being Super Steve itself: every slingshot
+    /// shares the rig, KEY table and pouch track the prop reads by name — a GIANT COPY of her slingshot stands IN
+    /// FRONT of her for the whole guard hold (transparent → solid over 0.25 s, folding away over 0.5 s on
     /// release). It ORBITS her to face, in priority: the nearest enemy shot closing on her (even
     /// when an enemy is nearer), else the nearest enemy, else straight ahead — and, while it fires,
     /// the enemy it is about to shoot.
@@ -244,9 +246,10 @@ namespace Dark_Cloud_Improved_Version
                     if (!_shotArmed && !Player.InDungeonFloor()) ArmShotPatch();
                     if (inDun) sleep = FastTickMs;
                     bool held  = inDun && Player.CheckDunIsPausedOrMenu();   // PAUSE screen or menu: everything stands still
-                    bool armed = inDun
-                              && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.angelgear
-                              && GuardWatch.IsGuarding();
+                    int  weaponId = inDun ? Memory.ReadUShort(WeaponHave.BattleWeaponRecord) : 0;
+                    bool gear  = weaponId == Items.angelgear
+                              || (weaponId == Items.supersteve && SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.angelgear);
+                    bool armed = inDun && gear && GuardWatch.IsGuarding();
 
                     long pack = inDun ? Memory.ReadInt(NowShotEffectPtr) : 0;
                     if (pack <= 0)
