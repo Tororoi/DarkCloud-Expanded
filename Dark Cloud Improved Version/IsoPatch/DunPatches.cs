@@ -91,9 +91,10 @@ namespace Dark_Cloud_Improved_Version
         /// know the native follower is live (DivineBeastCat falls back to its thread follower when it is not).</summary>
         internal const uint CatFollowHookAddr = 0x01DB874C;
         internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
-        // …and it lands on the COPY-QUEUE cave, which services the cat's mesh copy when one is pending and then jumps on to
-        // CatPelletFollow. Every frame but the one after a spawn it reads a single zero word and falls straight through.
-        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.CatCopyQueue >> 2);
+        // …and it lands on PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the
+        // cat's mesh copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then
+        // places its own prop. Every frame with nothing to do the chain reads a few zero words and falls straight through.
+        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.PropPelletFollow >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 
         internal const uint MirageHazeHookAddr = 0x01DAEBCC;

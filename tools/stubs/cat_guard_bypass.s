@@ -1,5 +1,5 @@
-# cat_guard_bypass.s — CheckDmg__12CMonstorUnit (main ELF 0x1D9F10): the Divine Beast cat's hit ignores an enemy's
-# GUARD WINDOW.
+# cat_guard_bypass.s — CheckDmg__12CMonstorUnit (main ELF 0x1D9F10): the Divine Beast cat's hit — and the Matador's charged
+# pellet — ignore an enemy's GUARD WINDOW. Assembled at 0x01FB3F40 (ElfCave.CatGuardBypass).
 #
 # WHY IT CANNOT BE DONE FROM THE MOD. The guard is entirely the defender's: for each of the 3 windows, its flag
 # (MainMonstorUnit + slot*0x20 + 0x60550) is non-zero and the enemy's live motion frame sits inside [start +0x60558,
@@ -16,25 +16,55 @@
 # owner +0x58 == 1 (Xiao) and kick type +0x98 == 2 (the cat stamps it; her pellets carry 0 — cat_pellet_follow.s).
 # Clobbers at and v0 only, both dead at the hook (v0 is re-loaded with 0x3510 at 0x1DAC88 on the taken path, and at is
 # re-formed by the `lui at,0x6` at 0x1DACA8).
+# THE PELLET. A pellet's entry carries kick type 0 and nothing that names the pellet, so the charged shot is told apart by
+# its BASE DAMAGE (+0x34): the mod gives the charged pellet a damage no ordinary pellet has and writes it to the mailbox
+# (0x01F10000 + 0xD0 PelletCrushDamage; 0 = no charged pellet out). A Xiao-owned entry with that base damage passes too,
+# and — since step__5CSHOT plants pellets with no kick at all (Set zeroes +0x80..+0x98 and only the melee planters call
+# SetKickBack) — it is given one here: strength +0xD4 PelletKickStrength and decay +0xD8 PelletKickDecay from the mailbox,
+# the melee type 2 (the Xiao flinch stub lets it stagger), and the entry's own position as the kick origin, so the enemy
+# is shoved away from the point of impact. The window test comes first in CheckDmg; the kick is read in the damage block.
+# Exactly 48 words: the cave fills its slot to the band's end.
 lw    $at, -0x6210($gp)        # NowColData
 sll   $v0, $s2, 5              # entry index × 0x20
 addu  $at, $at, $v0
 sll   $v0, $s2, 7              #            × 0x80  → × 0xA0 together
 addu  $at, $at, $v0            # the damage entry
-lw    $v0, 0x0098($at)         # its kick type
-addiu $at, $zero, 2            # 2 = the cat (a melee-style kick; pellets carry 0)
-bne   $v0, $at, vanilla
+lw    $v0, 0x0058($at)         # its owner
+addiu $v0, $v0, -1             # 1 = Xiao
+bne   $v0, $zero, vanilla
 nop
-lw    $at, -0x6210($gp)        # re-form the entry: at was the comparand
+lw    $v0, 0x0098($at)         # its kick type
+addiu $v0, $v0, -2             # 2 = the cat (a melee-style kick; pellets carry 0)
+beq   $v0, $zero, pass
+nop
+lw    $v0, 0x0034($at)         # its base damage
+lui   $at, 0x01F1
+lw    $at, 0x00D0($at)         # PelletCrushDamage (mod)
+beq   $at, $zero, vanilla      # no charged pellet out
+nop
+bne   $v0, $at, vanilla        # an ordinary pellet
+nop
+lw    $at, -0x6210($gp)        # the charged pellet: re-form the entry and give it its kick
 sll   $v0, $s2, 5
 addu  $at, $at, $v0
 sll   $v0, $s2, 7
 addu  $at, $at, $v0
-lw    $v0, 0x0058($at)         # its owner
-addiu $at, $zero, 1            # 1 = Xiao
-bne   $v0, $at, vanilla
-nop
-j     0x001DAC80               # the cat's hit: report "no window here" and let the damage through
+lui   $v0, 0x01F1
+lw    $v0, 0x00D4($v0)         # PelletKickStrength (mod)
+sw    $v0, 0x0090($at)
+lui   $v0, 0x01F1
+lw    $v0, 0x00D8($v0)         # PelletKickDecay (mod)
+sw    $v0, 0x0094($at)
+addiu $v0, $zero, 2            # melee-type kick
+sw    $v0, 0x0098($at)
+lw    $v0, 0x0000($at)         # kick origin = the entry's position, the point of impact
+sw    $v0, 0x0080($at)
+lw    $v0, 0x0004($at)
+sw    $v0, 0x0084($at)
+lw    $v0, 0x0008($at)
+sw    $v0, 0x0088($at)
+pass:
+j     0x001DAC80               # the cat's or the charged pellet's hit: report "no window here" and let the damage through
 move  $v0, $zero               # (delay slot)
 vanilla:
 sll   $v0, $a2, 1              # rebuild the vanilla address: (window × 2 + slot base) + 0x60000

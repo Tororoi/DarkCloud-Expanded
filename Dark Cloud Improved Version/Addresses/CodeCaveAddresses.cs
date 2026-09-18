@@ -411,7 +411,21 @@ namespace Dark_Cloud_Improved_Version
             internal const long SsIconDiagCopyCalls  = Base + 0xB4;
             internal const long SsIconDiagSheetSeen  = Base + 0xB8;
             internal const long SsIconDiagCopies     = Base + 0xBC;
-            internal const long NextFree = Base + 0xC0;   // +0xC0..+0xFF are free (⚠ +0x100 = AiStubBase)
+            /// <summary>A chara-slot prop riding one of Xiao's pellets (ElfCave.PropPelletFollow; SlingshotProp in projectile
+            /// mode on chara slot 3): the pellet slot + 1 (written LAST; 0 = off), a height lift, a yaw added per frame, and
+            /// the cave's "the pellet ended" word (it clears the slot itself; the mod fades the prop).</summary>
+            internal const long PropFollowSlot  = Base + 0xC0;
+            internal const long PropFollowLift  = Base + 0xC4;
+            internal const long PropFollowSpin  = Base + 0xC8;
+            internal const long PropFollowEnded = Base + 0xCC;
+            /// <summary>The Matador's charged pellet, for ElfCave.CatGuardBypass: a Xiao-owned damage entry whose base damage
+            /// (+0x34) equals this word passes an enemy's guard window. 0 = no charged pellet out.</summary>
+            internal const long PelletCrushDamage = Base + 0xD0;
+            /// <summary>…and the kick that cave stamps on it (step__5CSHOT plants pellets with none): strength and decay,
+            /// as SetKickBack takes them (Goro's hammer swing: 2.5 / 0.1).</summary>
+            internal const long PelletKickStrength = Base + 0xD4;
+            internal const long PelletKickDecay    = Base + 0xD8;
+            internal const long NextFree = Base + 0xDC;   // +0xDC..+0xFF are free (⚠ +0x100 = AiStubBase)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -462,7 +476,11 @@ namespace Dark_Cloud_Improved_Version
         ///   0x1FB0CD0  LadderRefusal        52 B → 0x1FB0D04   hand-built (PatchLadderRefusal)
         ///   0x1FB0D10  ExclamationHeight    24 B → 0x1FB0D28   hand-built (PatchExclamationHeight)
         ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
-        ///   0x1FB0D90  FREE → 0x1FB2000 (segment end, ~0x1270 B)
+        ///   0x1FB0D90  CatPelletFollow    4244 B → 0x1FB1E24   catPelletFollow.bin
+        ///   0x1FB1E30  PropPelletFollow    156 B → 0x1FB1ECC   propPelletFollow.bin
+        ///   0x1FB1ED0  FREE → 0x1FB1FA0 (208 B)
+        ///   0x1FB1FA0  XiaoMeleeFlinch      40 B → 0x1FB1FC8   xiaoMeleeFlinch.bin
+        ///   (the second band, 0x1FB2000 →, is the table in <see cref="ElfCave"/> below)
         /// </summary>
         internal static class ElfCave
         {
@@ -501,7 +519,11 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4244 B → 0x1FB1E24 (frame 0x80, sq/lq saves); the flinch stub sits at 0x1FB1FA0
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4244 B → 0x1FB1E24 (frame 0x80, sq/lq saves)
+            /// <summary>A chara-slot prop on one of Xiao's pellets (tools/stubs/prop_pellet_follow.s): the Matador's charged shot.
+            /// Now the hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
+            /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
+            internal const uint PropPelletFollow   = 0x01FB1E30;   // 156 B → 0x1FB1ECC; the flinch stub sits at 0x1FB1FA0
             /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
             /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
             /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
@@ -520,7 +542,7 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            internal const uint CatGuardBypass     = 0x01FB2250;   // 108 B → 0x1FB22BC: the cat's hits ignore an enemy's guard window
+            // 0x01FB2250..0x1FB22BC (108 B) FREE — CatGuardBypass lived here until it grew (an ISO patched then still carries its dead words)
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
             internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
@@ -537,7 +559,8 @@ namespace Dark_Cloud_Improved_Version
             internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)
             internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 200 B → 0x1FB3DA8: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
             internal const uint SuperSteveIconCopy = 0x01FB3DC0;   // 356 B → 0x1FB3F24: …and the copy that keeps the CURRENT sphere's icon in the HUD sheet (on every DngActiveWeaponTextureCopy call: four menu paths + two overlay sites)
-            internal const uint NextFree = 0x01FB3F40;   // the band runs to 0x1FB4000 (192 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint CatGuardBypass     = 0x01FB3F40;   // 192 B → 0x1FB4000: the cat's hits and the Matador's charged pellet (which it also gives a kick) ignore an enemy's guard window (main-ELF hook 0x1DAC78, ElfPatches)
+            internal const uint NextFree = RegionEnd;    // the band is FULL: the next cave goes in a gap — 0x1FB1ED0..0x1FB1FA0 (208 B) or 0x1FB2250..0x1FB22BC (108 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

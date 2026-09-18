@@ -39,9 +39,9 @@ STUBS = [
     ('water_order_gate.s',       'waterOrderGate.bin',       0x1FB0C50),
     ('cat_pellet_follow.s',      'catPelletFollow.bin',      0x1FB0D90),
     ('xiao_melee_flinch.s',      'xiaoMeleeFlinch.bin',      0x1FB1FA0),
+    ('prop_pellet_follow.s',     'propPelletFollow.bin',     0x1FB1E30),
     ('cat_glow_draw.s',          'catGlowDraw.bin',          0x1FB2000),
     ('cat_sphere_percent.s',     'catSpherePercent.bin',     0x1FB21E0),
-    ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1FB2250),
     ('cat_cape_tint.s',          'catCapeTint.bin',          0x1FB22C0),
     ('cat_mask_tint.s',          'catMaskTint.bin',          0x1FB2370),
     ('cat_copy_queue.s',         'catCopyQueue.bin',         0x1FB2480),
@@ -50,6 +50,7 @@ STUBS = [
     ('mirage_haze_draw.s',       'mirageHazeDraw.bin',       0x1FB3C40),
     ('supersteve_icon_draw.s',   'superSteveIconDraw.bin',   0x1FB3CE0),
     ('supersteve_icon_copy.s',   'superSteveIconCopy.bin',   0x1FB3DC0),
+    ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1FB3F40),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]
