@@ -48,6 +48,8 @@ STUBS = [
     ('cat_palette.s',            'catPalette.bin',           0x1FB2700),
     ('cat_glow_palette.s',       'catGlowPalette.bin',       0x1FB3A80),
     ('mirage_haze_draw.s',       'mirageHazeDraw.bin',       0x1FB3C40),
+    ('supersteve_icon_draw.s',   'superSteveIconDraw.bin',   0x1FB3CE0),
+    ('supersteve_icon_copy.s',   'superSteveIconCopy.bin',   0x1FB3DC0),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

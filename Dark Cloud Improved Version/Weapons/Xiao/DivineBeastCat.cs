@@ -741,7 +741,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Paint the flat texture's palette. build_cat_pack.flat_tim2 bakes the cape as 32×32 pixels that are ALL
         /// palette index 0 followed by 256 identical entries, so the whole cape is ONE palette entry: repainting the manager's
         /// own copy recolours it live, because the dungeon draw loop re-uploads the cat's texture group before drawing the
-        /// slot — the same path WeaponTextureSwap uses on Super Steve. Writing all 256 entries also makes it immune to CLUT
+        /// slot — the same live-recolour path the palette caves use. Writing all 256 entries also makes it immune to CLUT
         /// ordering. The mask SHARES catcape (wing_bake.MASK_TEX), so it follows with no work of its own. Cheap to re-assert:
         /// one 4-byte read, and the 1 KB write only when the colour is not already there (a script event can wipe the
         /// entries, and they come back from the pack).</summary>

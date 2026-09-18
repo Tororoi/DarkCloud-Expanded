@@ -115,6 +115,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
+            PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon on Xiao's character-menu panel
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
@@ -547,6 +548,54 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException("mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The dungeon HUD gains the icon of the weapon whose SynthSphere Super Steve carries, over Steve. Two
+        /// caves: the DRAW (the overlay's `jal topStatusInfo`, dun 0x1DB0364, hooked by DunPatches) and the COPY that keeps
+        /// the icon in a spare cell of the HUD sheet — on the game's own copy call, per frame (dun 0x1DAE608, DunPatches)
+        /// and on leaving the menu (main 0x226560, hooked here).</summary>
+        /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has
+        /// the wepicon sheet registered: WeaponSelectKey, BtMenuLoad2, ExitDunEnterMenu, CharaChangeLoop.</summary>
+        internal static readonly uint[] SsIconCopyMainHooks = { 0x001FE05C, 0x0020EA98, 0x00226560, 0x00228DDC };
+        internal static void PatchSuperSteveIconDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.SuperSteveIconDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: superSteveIconDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFC0u)   // opens its frame: addiu sp,sp,-0x40
+                throw new IOException($"superSteveIconDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The words that make it THIS cave: the displaced call (jal topStatusInfo) and the draw (jal set2DSprite).
+            bool orig = false, draw = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == DunPatches.SsIconHookOrig) orig = true; if (w == 0x0C0570C4u) draw = true; }
+            if (!orig || !draw)
+                throw new IOException("superSteveIconDraw.bin lacks the topStatusInfo call or the set2DSprite call.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("superSteveIconDraw.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+
+            const uint CopyAddr = CodeCaves.ElfCave.SuperSteveIconCopy;
+            using var st2 = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin")
+                ?? throw new IOException("Embedded EE function missing: superSteveIconCopy.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms2 = new MemoryStream(); st2.CopyTo(ms2); byte[] c = ms2.ToArray();
+            bool origCopy = false, move = false;
+            for (int i = 0; i + 4 <= c.Length; i += 4) { uint w = U32(c, i); if (w == DunPatches.SsIconCopyHookOrig) origCopy = true; if (w == 0x0C06C7BCu) move = true; }
+            if (c.Length < 8 || U32(c, 0) != 0x27BDFFE0u || !origCopy || !move)
+                throw new IOException("superSteveIconCopy.bin malformed or stale — it must call DngActiveWeaponTextureCopy and setItemToReserved.");
+            if (CopyAddr + (uint)c.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("superSteveIconCopy.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < c.Length; i += 4)
+                WrU32(fs, ElfOff(CopyAddr + (uint)i), U32(c, i));
+            foreach (uint site in SsIconCopyMainHooks)
+            {
+                uint cur = RdU32(fs, ElfOff(site));
+                if (cur != DunPatches.SsIconCopyHookOrig && cur != DunPatches.SsIconCopyHookNew)
+                    throw new IOException($"copy hook site 0x{site:X} is not `jal DngActiveWeaponTextureCopy` (0x{cur:X8}) — unmodified Dark Cloud (USA) is required.");
+                WrU32(fs, ElfOff(site), DunPatches.SsIconCopyHookNew);
+            }
         }
 
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)

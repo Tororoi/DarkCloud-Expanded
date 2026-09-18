@@ -58,6 +58,12 @@
     <EmbeddedResource Include="Resources\isoPatch\mirageHazeDraw.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\superSteveIconDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\superSteveIconCopy.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\catGlowPalettes.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin</LogicalName>
     </EmbeddedResource>

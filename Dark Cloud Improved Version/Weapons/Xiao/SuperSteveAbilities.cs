@@ -108,6 +108,50 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort(Player.Xiao.status, (ushort)(status & ~resistMask));
         }
 
+        // ── the attached sphere's icon, over Steve on the dungeon HUD ──
+        private const int SsIconX = 29, SsIconY = 367, SsIconSize = 20;   // just above Steve's raised hands: his icon (the equipped weapon's) is at (29, 388), 32 × 32 — tune in game
+        private static int _ssIconSphere = -1;                            // the sphere the mailbox describes; -1 = nothing written yet
+        private static bool _ssIconWarned;
+
+        /// <summary>Switch the sphere icon on with its screen placement (the copy cave finds the icon itself). Written
+        /// only when the sphere changes; 0 clears it. Nothing is drawn when the ISO lacks the hook.</summary>
+        internal static void DriveSphereIcon(int sphere)
+        {
+            if (sphere == _ssIconSphere) return;
+            if ((uint)Memory.ReadInt(DunPatches.SsIconHookAddrMmu) != DunPatches.SsIconHookNew)
+            {
+                if (!_ssIconWarned) { _ssIconWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] sphere-icon hook not in this ISO — no icon (re-patch the ISO)"); }
+                return;
+            }
+            _ssIconSphere = sphere;
+            long rec = ItemAddresses.ComItemInfo.RecordAddr(sphere);
+            if (sphere == 0 || rec < 0) { Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 0); return; }
+            int cls  = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.ClassOffset);
+            int icon = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.SubIndexOffset);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconX, SsIconX);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconY, SsIconY);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconSize, SsIconSize);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 1);                                       // on LAST
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere icon: weapon {sphere} (class {cls}, icon {icon}) → wepicon cell ({(icon & 7) * 32},{(icon >> 3) * 32}), drawn at ({SsIconX},{SsIconY}) size {SsIconSize}; manager has {SheetsRegistered()}; counters draw {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagDraws)} copy calls {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopyCalls)} sheet seen {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagSheetSeen)} copies {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopies)}");
+        }
+
+        /// <summary>Which of the sheets the icon cave can draw from are registered right now — the one failure it cannot report.</summary>
+        private static string SheetsRegistered()
+        {
+            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base + TextureManager.Count));
+            byte[] table = count > 0 ? Memory.ReadBytesBatch(TextureManager.Base + TextureManager.Entries, count * TextureManager.EntryStride) : null;
+            if (table == null) return "(table unreadable)";
+            var found = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < count; i++)
+            {
+                int o = i * TextureManager.EntryStride + TextureManager.EntryName, len = 0;
+                while (len < 16 && table[o + len] != 0) len++;
+                string nm = System.Text.Encoding.ASCII.GetString(table, o, len);
+                if (nm == "wepicon" || nm == "itemicon" || nm == "itempack") found.Add(nm);
+            }
+            return found.Count == 0 ? "none of wepicon/itemicon/itempack" : string.Join("+", found);
+        }
+
         // ── Moonlit Focus + Heaven's Cloud (two-stage charge → a wind-gem crowd-control blast) ──
         // Faithful to the real Heaven's Cloud: the payoff is CONTROL, not raw damage. Xiao's hold has TWO stages,
         // each announced by the game's own charge flash:
