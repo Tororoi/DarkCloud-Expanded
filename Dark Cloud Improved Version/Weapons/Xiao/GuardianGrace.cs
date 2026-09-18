@@ -27,9 +27,13 @@ namespace Dark_Cloud_Improved_Version
     /// ambient pulse (unitAmbientAnime, dun 0x1DC1050: colour × sin + 64 over Speed frames), a separate term, so the
     /// two add. The tint is cleared when the channel closes.
     ///
-    /// GATING: ability weapons only (Angel Shooter 309 / Angel Gear 313) with the live HEAL flag — a weapon whose Heal
+    /// GATING: the ability weapons (Angel Shooter 309 / Angel Gear 313) with the live HEAL flag — a weapon whose Heal
     /// was stripped (the Drain/Heal opposing-pair sanitizer after attaching a Drain item) gets nothing, matching the
-    /// native tick which gates on the same flag; other Heal-sphere weapons keep the plain vanilla tick.
+    /// native tick which gates on the same flag; other Heal-sphere weapons keep the plain vanilla tick. Super Steve
+    /// INHERITS it from an attached Angel Shooter / Angel Gear SynthSphere (<see cref="SuperSteveAbilities.AttachedSphere"/>),
+    /// with that weapon's presentation and colour; the overlay resets the counter whether or not the flag is set, so the
+    /// cadence and the Gear's party heal carry over as they are, and if Super Steve's record lacks the flag the +1 the
+    /// native tick would have granted is given here on each wrap instead.
     /// </summary>
     internal static class GuardianGrace
     {
@@ -102,20 +106,23 @@ namespace Dark_Cloud_Improved_Version
         private static void Loop()
         {
             bool open = false;
+            int prevCounter = -1;      // last counter seen while open (−1 = closed): a decrease is a proc
             while (true)
             {
                 int sleep = IdleTickMs;
                 try
                 {
-                    bool now = false; bool gear = false;
+                    bool now = false; bool gear = false; bool healFlag = false;
                     if (Enabled && Player.InDungeonFloor() && Player.CurrentCharacterNum() == XiaoId)
                     {
                         sleep = FastTickMs;
                         int weaponId  = Memory.ReadUShort(WeaponHave.BattleWeaponRecord);
-                        gear          = weaponId == Items.angelgear;
-                        bool ability  = gear || weaponId == Items.angelshooter;
-                        bool healFlag = (Memory.ReadUShort(WeaponHave.BattleWeaponRecord + HealFlagOffset) & HealFlagBit) != 0;
-                        now = ability && healFlag
+                        bool inherited = weaponId == Items.supersteve;
+                        int source    = inherited ? SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) : weaponId;
+                        gear          = source == Items.angelgear;
+                        bool ability  = gear || source == Items.angelshooter;
+                        healFlag      = (Memory.ReadUShort(WeaponHave.BattleWeaponRecord + HealFlagOffset) & HealFlagBit) != 0;
+                        now = ability && (healFlag || inherited)
                            && !Player.CheckDunIsPausedOrMenu()
                            && Player.Xiao.GetHp() > 0
                            && GuardWatch.IsGuarding();
@@ -141,7 +148,14 @@ namespace Dark_Cloud_Improved_Version
                         }
                         int threshold = HealThreshold(), floor = threshold - PulsePeriodFrames;
                         int c = Memory.ReadInt(HealAbility.TickCounter);
+                        bool wrapped = prevCounter >= 0 && c < prevCounter;                             // a proc since the last tick
                         if (c < floor) { Memory.WriteInt(HealAbility.TickCounter, floor); c = floor; }   // the native tick fires PulsePeriodFrames from now at the latest
+                        prevCounter = c;
+                        if (wrapped && !healFlag)                                                       // inherited without the flag: the +1 the native tick withheld
+                        {
+                            ushort hp = Player.Xiao.GetHp(), max = Player.Xiao.GetMaxHp();
+                            if (hp > 0 && hp < max) Player.Xiao.SetHp((ushort)(hp + 1));
+                        }
                         float phase = Math.Clamp((c - floor) / (float)(threshold - 1 - floor), 0f, 1f);
                         float ease  = 0.5f + 0.5f * (float)Math.Cos(2 * Math.PI * phase);              // peak at the proc, low mid-period, back to peak on the next: no cut at the wrap
                         float[] lo = gear ? GearLow : ShooterLow, hi = gear ? GearHigh : ShooterHigh;
@@ -152,7 +166,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     else if (open)
                     {
-                        open = false;
+                        open = false; prevCounter = -1;
                         Memory.WriteVec3(CCharacter.Base + CCharacter.CharaTint, 0f, 0f, 0f);
                         Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "channel closed");
                     }
