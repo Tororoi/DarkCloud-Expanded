@@ -400,19 +400,18 @@ namespace Dark_Cloud_Improved_Version
             /// size ElfCave.SuperSteveIconDraw draws at. The icon itself is kept in itempack's spare cell (64, 32) by
             /// ElfCave.SuperSteveIconCopy from the equipped record alone — nothing in that path reads the mailbox, so a
             /// save loaded straight into a dungeon is served by the entry-time copy. Steve — the equipped weapon's
-            /// icon — is at (29, 388), 32 × 32. +0xA4..+0xA8 and +0xB8..+0xBC are free.</summary>
+            /// icon — is at (29, 388), 32 × 32.</summary>
             internal const long SsIconOn    = Base + 0xA0;
-            internal const long SsIconX     = Base + 0xAC;
-            internal const long SsIconY     = Base + 0xB0;
-            internal const long SsIconSize  = Base + 0xB4;
-            /// <summary>Counters the two caves bump — diagnostics, read on demand: the draw cave's frames and draws issued;
-            /// the copy cave's calls, calls with wepicon registered, and copies issued. Nothing in the mod reads them.</summary>
-            internal const long SsIconDiagDrawFrames = Base + 0xC0;
-            internal const long SsIconDiagDraws      = Base + 0xC4;
-            internal const long SsIconDiagCopyCalls  = Base + 0xC8;
-            internal const long SsIconDiagSheetSeen  = Base + 0xCC;
-            internal const long SsIconDiagCopies     = Base + 0xD0;
-            internal const long NextFree = Base + 0xD4;   // +0xD4..+0xFF are free (⚠ +0x100 = AiStubBase)
+            internal const long SsIconX     = Base + 0xA4;
+            internal const long SsIconY     = Base + 0xA8;
+            internal const long SsIconSize  = Base + 0xAC;
+            /// <summary>Counters the two caves bump — the draw cave's draws issued; the copy cave's calls, calls with wepicon
+            /// registered, and copies issued — reported once in SuperSteveAbilities.DriveSphereIcon's log line.</summary>
+            internal const long SsIconDiagDraws      = Base + 0xB0;
+            internal const long SsIconDiagCopyCalls  = Base + 0xB4;
+            internal const long SsIconDiagSheetSeen  = Base + 0xB8;
+            internal const long SsIconDiagCopies     = Base + 0xBC;
+            internal const long NextFree = Base + 0xC0;   // +0xC0..+0xFF are free (⚠ +0x100 = AiStubBase)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -536,9 +535,9 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatGlowPalTables   = 0x01FB2880;   // 4608 B → 0x1FB3A80 (9 rows: 6 elements + 3 weapon looks)
             internal const uint CatGlowPalette     = 0x01FB3A80;   // the cave that copies one table into the disc's CLUT
             internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)
-            internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 188 B → 0x1FB3D9C: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
+            internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 176 B → 0x1FB3D90: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
             internal const uint SuperSteveIconCopy = 0x01FB3DC0;   // 356 B → 0x1FB3F24: …and the copy that keeps the CURRENT sphere's icon in the HUD sheet (on every DngActiveWeaponTextureCopy call: four menu paths + two overlay sites)
-            internal const uint NextFree = 0x01FB3F40;   // the band runs to 0x1FB4000 (192 B left)   // after the glow-palette tables and cave; the band runs to 0x1FB4000 (960 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = 0x01FB3F40;   // the band runs to 0x1FB4000 (192 B left) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
