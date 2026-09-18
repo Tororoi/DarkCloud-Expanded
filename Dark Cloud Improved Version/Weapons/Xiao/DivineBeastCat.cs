@@ -49,7 +49,7 @@ namespace Dark_Cloud_Improved_Version
         private const float  MoveFrac      = 0.20f;    // ground speed after the landing, as a fraction of the pellet's speed; below this it loses enemies
         // A full-charge pellet flies 5.0 u/frame, a lighter one 3.5, so a fraction made the walk jump between 0.56 and
         // 0.80. Pinned as an absolute speed instead: 16% of 3.5.
-        private const float  MoveSpeedAbs  = 0.20f * 3.5f;
+        private static float MoveSpeedAbs => 0.20f * 3.5f * Stride;
         // Walk clip rate from the ground speed, the TOWN's mapping for this very rig (EdMoveChara 0x16A160: rate =
         // 0.8·(0.2 + stick) capped at 0.85, ground = 1.6·stick → rate = 0.16 + 0.5·ground). Planted feet would need
         // 5× that (the clip's real stride is 0.196 u/clip-frame) and looked far too fast; this is the tuned look.
@@ -57,7 +57,7 @@ namespace Dark_Cloud_Improved_Version
         // 20% of the 3.5 u/frame pellet — rather than at the 1.36 u/frame the town formula literally implies (the two
         // contexts' units-per-frame do not read the same on screen). Slope = (cap − base) / that speed.
         private const float  RateBase = 0.16f, RateMax = 0.85f, WalkCapSpeed = 0.20f * 3.5f;   // cap and ground speed both at 20%
-        private const float  RatePerSpeed = (RateMax - RateBase) / WalkCapSpeed;   // ≈ 0.99 per unit of ground speed
+        private static float RatePerSpeed => (RateMax - RateBase) / (WalkCapSpeed * Stride);   // ≈ 0.99 per unit of ground speed at the tuned size
         private const double LifetimeSeconds = 20.0;   // from the bind: the cat stays until it lands a hit or this passes
         private const float  ProbeUp       = 8f;       // floor probe reach above the cat's root (catches a tread it is flying into)
         private const float  ProbeDown     = 40f;      // … and below (a drop off a ledge still finds the floor)
@@ -94,9 +94,12 @@ namespace Dark_Cloud_Improved_Version
         // The clip lowers the cat itself (hips 5.5 → 4.6 over 215..219), so it must start this many frames BEFORE the
         // physical touchdown for the paws to meet the floor at 219; the cave predicts the touchdown from the fall.
         private const float  LandLeadFrames = (LandStopFrame - LandClipStart) / LandClipSpeed;
-        private const float  CatScale      = 1.0f;                     // the rig's own size; the cave grows the cat to this via Mailbox.CatScaleMul
+        private static float CatScale => _look.Scale;                  // the cat's size for this look; the cave grows the cat to this via Mailbox.CatScaleMul
+        /// <summary>The ground speeds and glow are stated for the 1.0 cat and scale with its size, so the walk clip keeps
+        /// the same rate whatever the look's size.</summary>
+        private static float Stride => CatScale;
         // Ground game.
-        private const float  RunSpeed      = 1.3f;     // units/frame
+        private static float RunSpeed => 1.3f * Stride;   // units/frame
         private const float  PounceRange   = 30f;      // start the pounce within this of the target; the leap re-sizes itself at launch
         private const float  MaxTargetDistance = 300f; // PickTarget: only enemies within the vanilla render distance of Xiao
         private const float  KickStrength  = 2.0f, KickDecay = 0.3f;   // the hit's kickback, sized like Toan's heavier combo hits (1.2..3.0 / 0.2..0.4, type 2)
@@ -165,7 +168,7 @@ namespace Dark_Cloud_Improved_Version
 
         // ── how the cat LOOKS: the glow's geometry, then the per-weapon and per-element looks ──────────────
         private const string GlowNodeA = "cat_kosibone", GlowNodeB = "cat_sebone2";   // hips + upper spine: the glow sits at their midpoint (the middle of the torso)
-        private const float  GlowScale = 0.5f;         // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
+        private static float GlowScale => 0.5f * Stride;   // the torch routine's scale: the flame sprite is 45 × 22.5 units at 1.0 (a 90-unit haze, half of it z-culled by the floor); 0.5 ≈ 22.5 × 11 around the torso
         private const int    GlowFlags = 2;            // 1 = the steady glow pair (18 × 9 at 1.0), 2 = the flickering flame sprite (45 × 22.5 at 1.0), 3 = both (two sizes → two glows)
         private const float  GlowLift  = 0f;           // units added to the glow's height (negative lowers it)
         private const float  GlowPull  = 5.0f;         // how far toward the camera the sprite is pulled (the torches use 15 to clear their wall; the cat only needs to clear its own body)
@@ -178,30 +181,33 @@ namespace Dark_Cloud_Improved_Version
         // with a WHITE glow and a neutral add; the Angel Gear the wings with a GOLD glow and a gold-white add. Every look
         // draws the SAME 8-bit disc, differing only in the palette row (PalRow → Mailbox.CatGlowPalRow; the rows themselves
         // are build_cat_pack.GLOW_LOOKS 6-8). Wings are two mesh nodes the copy hides by zeroing their geometry.
-        private sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; }
-        private const int SuperSteveAngelKey = -2;   // Super Steve's look, keyed privately so a sphere swap rebuilds the copy
+        private sealed class WeaponLook { public int PalRow; public float[] Tint; public bool Wings; public bool Cape; public float Range = PounceRange; public bool Track; public float Scale = 1.0f; }
+        private const int SuperSteveShooterKey = -2, SuperSteveGearKey = -3;   // Super Steve's look per sphere, keyed privately so a sphere swap rebuilds the copy
+        // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
+        // mesh has its tint ADDED to its lit colour, so this blue lands on the mask too and turns red to pink. The mask is
+        // meant to be lit like the CAPE instead, which needs a per-node tint (see _capeTint).
+        private static WeaponLook SuperSteveLook(float scale) => new WeaponLook { PalRow = 0, Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true, Scale = scale };
         private static readonly Dictionary<int, WeaponLook> Looks = new Dictionary<int, WeaponLook>
         {
             { Items.divinebeasttitle, new WeaponLook { PalRow = 7, Tint = new[] { 12f, 24f, 48f }, Wings = false } },
-            { Items.angelshooter,     new WeaponLook { PalRow = 8, Tint = new[] { 20f, 20f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
-            { Items.angelgear,        new WeaponLook { PalRow = 9, Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true } },
-            // Super Steve: the BLUE cat of the Divine Beast Title, with a red cape. The mask's red cannot come from here — a
-            // mesh has its tint ADDED to its lit colour, so this blue lands on the mask too and turns red to pink. The mask is
-            // meant to be lit like the CAPE instead, which needs a per-node tint (see _capeTint).
-            { SuperSteveAngelKey,     new WeaponLook { PalRow = 0, Tint = new[] { 12f, 24f, 48f }, Wings = false, Cape = true, Range = PounceRangeWinged, Track = true } },
+            { Items.angelshooter,     new WeaponLook { PalRow = 8, Tint = new[] { 20f, 20f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true, Scale = 1.1f } },
+            { Items.angelgear,        new WeaponLook { PalRow = 9, Tint = new[] { 27f, 26f, 20f }, Wings = true, Range = PounceRangeWinged, Track = true, Scale = 1.2f } },
+            { SuperSteveShooterKey,   SuperSteveLook(1.1f) },
+            { SuperSteveGearKey,      SuperSteveLook(1.2f) },
         };
         private static WeaponLook _look = Looks[Items.divinebeasttitle];
         /// <summary>The look key for the equipped weapon: its own id, or −1 for none — the cat stays down. Super Steve
         /// inherits the cat from its attached SynthSphere: a Divine Beast Title sphere gives the Title's cat exactly, while an
         /// Angel Shooter or Angel Gear sphere gives the BLUE cat (the Title's look, no wings) wearing a solid-yellow cloth
-        /// cape, with the winged cat's range and tracking — keyed as <see cref="SuperSteveAngelKey"/> so a sphere swap
-        /// rebuilds the copy like a weapon change.</summary>
+        /// cape, with the winged cat's range and tracking, at that sphere's size — keyed per sphere so a sphere swap rebuilds
+        /// the copy like a weapon change.</summary>
         private static int LookKeyFor(int weapon)
         {
             if (weapon != Items.supersteve) return Looks.ContainsKey(weapon) ? weapon : -1;
             int sphere = SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord);
             if (sphere == Items.divinebeasttitle) return Items.divinebeasttitle;
-            if (sphere == Items.angelshooter || sphere == Items.angelgear) return SuperSteveAngelKey;
+            if (sphere == Items.angelshooter) return SuperSteveShooterKey;
+            if (sphere == Items.angelgear)    return SuperSteveGearKey;
             return -1;
         }
 
@@ -273,7 +279,7 @@ namespace Dark_Cloud_Improved_Version
                     // her own copy of the cape hangs off her cloth list from the moment the model loads — whatever the weapon is
                     if (inDun && Player.CurrentCharacterNum() == XiaoId && ++_capeSweepTick >= 4) { _capeSweepTick = 0; TakeHerCape(); }
                     bool armed = Enabled && inDun && Player.CurrentCharacterNum() == XiaoId
-                              && (weapon >= 0 || weapon == SuperSteveAngelKey)
+                              && Looks.ContainsKey(weapon)
                               && Memory.ReadInt(DungeonScriptEvent.BtEventMode) == 0;   // a script event deletes her MOTION 1 and rebuilds textures: stand down
                     if (armed && Active && weapon != _weapon)
                     {
@@ -444,6 +450,7 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes((uint)(CodeCaves.NodePoolGuest + anchor * CFrameVu1.NodeStride)).CopyTo(o, CCloth.ClothAttach);
                 uint bounds = CloneBounds((uint)BitConverter.ToInt32(o, CCloth.ClothBounds) & Memory.PhysAddrMask, out int nb);
                 BitConverter.GetBytes(bounds).CopyTo(o, CCloth.ClothBounds);                 // the cat's own body capsules
+                ScaleClothToCat(o, wide, hang);
                 BitConverter.GetBytes(0).CopyTo(o, 0x50);                                    // wind: the step refreshes it from the character
                 Array.Copy(o, CCloth.ClothCur, o, CCloth.ClothPrev, CCloth.ClothArrayBytes);                                    // previous = current: a quiet first step
                 Memory.WriteBytesBatch(cObj, o);
@@ -466,7 +473,7 @@ namespace Dark_Cloud_Improved_Version
                 }
                 TintCape();
                 string V(int off) => $"({BitConverter.ToSingle(o, off):F2},{BitConverter.ToSingle(o, off + 4):F2},{BitConverter.ToSingle(o, off + 8):F2})";
-                Log($"cape physics: K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
+                Log($"cape physics: cat scale {CatScale:F2}, K {V(CCloth.ClothK)} gravity {V(CCloth.ClothGravity)} follow {V(CCloth.ClothFollow)} wind {BitConverter.ToSingle(o, CCloth.ClothWindScale):F2} normal {BitConverter.ToSingle(o, CCloth.ClothNormal):F2} floor {BitConverter.ToSingle(o, 0x4C):F1} (flag {BitConverter.ToInt32(o, 0x48)})");
                 Log($"cape: {wide} wide × {hang} down cloth cloned from 0x{obj:X} → 0x{cObjG:X} (buffers 0x{bufSize:X} ×2 for a {packet} B packet, her gap was 0x{gap:X}), anchored to the copy's {CapeAnchorName} (n{anchor}), {nb} body capsule(s) on {string.Join("/", CapeBoundBones.Take(nb))}{(i >= 0 ? $"; her entry {i} cleared" : "")}");
             }
         }
@@ -481,6 +488,25 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Clone the template cape's CBound chain into the cave, re-pointing capsule <i>i</i> at the cat copy's
         /// <see cref="CapeBoundBones"/>[i] (in the .clo's own order) so the cloth collides with the cat instead of her. Returns the
         /// guest pointer to the head of the new chain (0 = none), and how many capsules it holds.</summary>
+        /// <summary>Size the cloth's world-unit terms to the cat. The sim's targets come through the anchor's matrix and so
+        /// carry the cat's scale, but the StretchBind rest lengths (<see cref="CCloth.ClothTie"/>) were measured from the
+        /// lattice at load in rig units and stay there — left alone, every tie is CatScale× too short for the sheet the
+        /// spring is pulling toward, and the cape bunches toward the collar. The wind gain is a world velocity, sized with
+        /// the sheet so the flutter reads the same. K, follow and the mod's own breeze are fractions or anchor-space: untouched.</summary>
+        private static void ScaleClothToCat(byte[] o, int wide, int hang)
+        {
+            for (int a = 0; a < wide; a++)
+                for (int b = 0; b < hang; b++)
+                {
+                    int t = CCloth.ClothTie + a * CCloth.ClothColumnStride + b * CCloth.ClothParticleStride;
+                    BitConverter.GetBytes(BitConverter.ToSingle(o, t)     * CatScale).CopyTo(o, t);       // across
+                    BitConverter.GetBytes(BitConverter.ToSingle(o, t + 4) * CatScale).CopyTo(o, t + 4);   // along the hang
+                }
+            BitConverter.GetBytes(BitConverter.ToSingle(o, CCloth.ClothWindScale) * CatScale).CopyTo(o, CCloth.ClothWindScale);
+        }
+
+        /// <summary>Clone the cape's body capsules onto the copy's own bones (<see cref="CapeBoundBones"/>), radii sized to the
+        /// cat: the capsule's endpoints ride the bone's scaled matrix, its radii are world constants.</summary>
         private static uint CloneBounds(uint bnd, out int count)
         {
             uint head = 0; long prev = 0; count = 0;
@@ -496,6 +522,12 @@ namespace Dark_Cloud_Improved_Version
                 BitConverter.GetBytes((uint)(CodeCaves.NodePoolGuest + bone * CFrameVu1.NodeStride)).CopyTo(b, CBound.BoundFrameA);
                 BitConverter.GetBytes(0).CopyTo(b, CBound.BoundFrameB);                       // A alone carries both endpoints
                 BitConverter.GetBytes(0).CopyTo(b, CBound.BoundNext);                         // the chain is re-linked below
+                for (int r = 0; r < 12; r += 4)
+                {
+                    float radius = BitConverter.ToSingle(b, CBound.BoundRadii + r) * CatScale;
+                    BitConverter.GetBytes(radius).CopyTo(b, CBound.BoundRadii + r);
+                    BitConverter.GetBytes(radius > 0f ? 1f / radius : 0f).CopyTo(b, CBound.BoundRadiiInv + r);
+                }
                 Memory.WriteBytesBatch(cB, b);
                 if (prev != 0) Memory.WriteUInt(prev + CBound.BoundNext, cBG); else head = cBG;
                 prev = cB; count++; bnd = next;
@@ -549,7 +581,7 @@ namespace Dark_Cloud_Improved_Version
 
         private const float CapeWindLift = 2.6f;         // how far the hem flies off the back
         private const float CapeWindEase = 1.6f;         // profile along the hang: > 1 keeps the shoulders down, flies the tail
-        private const float CapeTearSpan = 20f;          // collar corner to mid-hem; past this the cloth is torn and gets reseated
+        private const float CapeTearSpan = 20f;          // collar corner to mid-hem, per unit of cat scale; past this the cloth is torn and gets reseated
         private static int _capeTearLog;
         private static int  _capeHemParticle;                                // the hem's middle, from the cloth's own dimensions
         private static byte[] _capeRest;                                     // the rest shape as baked — the wind's baseline
@@ -577,7 +609,7 @@ namespace Dark_Cloud_Improved_Version
                 float sy = BitConverter.ToSingle(cur, 4) - BitConverter.ToSingle(pin, 4);
                 float sz = BitConverter.ToSingle(cur, 8) - BitConverter.ToSingle(pin, 8);
                 float span = (float)Math.Sqrt(sx * sx + sy * sy + sz * sz);
-                if (span > CapeTearSpan || float.IsNaN(span))
+                if (span > CapeTearSpan * CatScale || float.IsNaN(span))
                 {
                     if (--_capeTearLog <= 0) { _capeTearLog = 60; Log($"cape: torn — {span:F0} units from collar to hem; reseating the cloth"); }
                     ReseedCape();
@@ -1047,7 +1079,7 @@ namespace Dark_Cloud_Improved_Version
             if (_disarmTicks > 0 && --_disarmTicks == 0 && state == 3) { DisarmCave(); Hide(); Log("charge released without a shot — cat stays hidden"); return; }
             if (_target >= 0 && state >= 4) WriteTargetAim();                                                  // the aim point follows the target's body every tick
             // A lock-on made after the cat picked its target wins, or it keeps a far one: checked every ~0.5 s
-            // while walking or crouched. A closed mimic keeps the cat crouched (the cave loops the ready clip on CatHoldReady).
+            // while walking or crouched. A closed mimic keeps the cat crouched (the cave holds the ready clip on its last frame on CatHoldReady).
             if (_target >= 0 && (state == 6 || state == 10) && ++_retargetTick >= 30) { _retargetTick = 0; RetargetToLockOn(state); }
             // Hold the crouch while the target cannot be hit: a chest-mimic still shut, or any enemy inside its invincibility
             // frames (`_STATUS_SET_MUTEKI`: 9 after a hit, 100 when a mimic wakes, 1000 dying) — CheckDmg skips every hit then.

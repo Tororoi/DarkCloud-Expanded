@@ -319,6 +319,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothParticleStride = 0x10;
         internal const int  ClothArrayBytes     = 0x1000;
         internal const int  ClothRest      = 0x110;   // per particle: the shape it holds, in the anchor's space
+        internal const int  ClothTie       = 0x3110;  // per particle: x = the distance to (a−1, b), y = to (a, b+1) — the StretchBind rest lengths,
+                                                      // measured ONCE from the lattice at load (rig units) and never rescaled, while the targets
+                                                      // (+0x7550) carry the character's scale; w = the body-capsule damp accumulator, rewritten each step
         internal const int  ClothCur       = 0x1110;  // per particle: where it is now, world
         internal const int  ClothPrev      = 0x2110;  // per particle: where it was last step (the Verlet history)
         internal const int  ClothAnchorWorld = 0xF0;  // the anchor's world centroid as of last step — Step compares the new one
@@ -338,7 +341,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BoundNext   = 0x00;   // linked-list next
         internal const int  BoundFrameA = 0xE4;   // capsule endpoint bone A (CFrame*)
         internal const int  BoundFrameB = 0xE8;   // capsule endpoint bone B (CFrame*) — 0 when A alone carries both endpoints
-        internal const int  BoundRadii  = 0x10;   // (rx across, ry up, rz along A−B); +0x20 = their reciprocals
+        internal const int  BoundRadii  = 0x10;   // (rx across, ry up, rz along A−B) in WORLD units — the endpoints ride the bone's scaled
+                                                  // matrix, the radii do not
+        internal const int  BoundRadiiInv = 0x20; // their reciprocals, kept in step
         internal const int  BoundCentre = 0xC0;   // world centre, refreshed each step by UpDate__6CBound
     }
 
