@@ -1,10 +1,10 @@
 # supersteve_icon_copy.s — keeps the sphere weapon's icon in a spare cell of the HUD sheet, the way the game keeps the
-# equipped weapon's there. Assembled at 0x01FB3DC0 (ElfCave.SuperSteveIconCopy). Replaces both calls to
-# DngActiveWeaponTextureCopy — the overlay's per-frame one (dun 0x1DAE608, hooked by DunPatches) and the one on leaving
-# the menu (main 0x226560, where a sphere is attached): performs the call untouched, then — if the `wepicon` sheet is
-# registered right now — moves the CURRENT sphere's cell into `itempack` with the game's own routine. It does not wait
-# for the mod: the cell is kept current from the moment the game first copies (dungeon entry), so the icon can show the
-# instant the mod asks for it.
+# equipped weapon's there. Assembled at 0x01FB3DC0 (ElfCave.SuperSteveIconCopy). Replaces every call to
+# DngActiveWeaponTextureCopy — the four menu paths in the main ELF (ElfPatches.SsIconCopyMainHooks) and the overlay's
+# two sites (DunPatches; 0x1DAE36C is the step path, which fills the cell at dungeon entry): performs the call
+# untouched, then — if the `wepicon` sheet is registered right now — moves the CURRENT sphere's cell into `itempack`
+# with the game's own routine. It does not wait for the mod: the cell is kept current from the moment the game first
+# copies (dungeon entry), so the icon can show the instant the mod asks for it.
 #
 # The icon sheets are TRANSIENT: LoadActiveItemIcon registers `wepicon` and `itemicon` at floor start (and the menu
 # registers its own), the game's copies land while they exist, and only the cells moved into `itempack` — resident all
@@ -18,16 +18,17 @@
 #   source weapon id at +2); 0x0027DE50 ComItemInfo (8 B from item 81; +4 the icon index → cell (i&7)·32, (i>>3)·32).
 # The spare cell is (64, 32) — blank in the art and outside every game copy target — a constant here and in the draw
 # cave, so nothing in this path depends on the mod having run: a save loaded straight into a dungeon gets its copy at
-# the entry-time call. The only mailbox words touched are the diagnostic counters.
+# the entry-time call. The only mailbox words touched are the diagnostic counters (0x01F10000 + 0xB4 SsIconDiagCopyCalls,
+# +0xB8 SsIconDiagSheetSeen, +0xBC SsIconDiagCopies).
 
     addiu $sp, $sp, -0x20
     sw    $ra, 0x0010($sp)
     jal   0x0022A6B0               # DngActiveWeaponTextureCopy(), as before
     nop
     lui   $t0, 0x01F1
-    lw    $t9, 0x00C8($t0)         # SsIconDiagCopyCalls++
+    lw    $t9, 0x00B4($t0)         # SsIconDiagCopyCalls++
     addiu $t9, $t9, 1
-    sw    $t9, 0x00C8($t0)
+    sw    $t9, 0x00B4($t0)
     lui   $a0, 0x01C7
     ori   $a0, $a0, 0x5870         # the texture manager
     lui   $a1, 0x002A
@@ -37,9 +38,9 @@
     beq   $v0, $zero, ret          # the sheet is not registered right now
     nop
     lui   $t0, 0x01F1
-    lw    $t9, 0x00CC($t0)         # SsIconDiagSheetSeen++
+    lw    $t9, 0x00B8($t0)         # SsIconDiagSheetSeen++
     addiu $t9, $t9, 1
-    sw    $t9, 0x00CC($t0)
+    sw    $t9, 0x00B8($t0)
     lui   $t1, 0x01CD
     ori   $t1, $t1, 0x954C         # DngStatusData
     lbu   $t2, 0x0004($t1)         # the current character
@@ -101,9 +102,9 @@ found:
     lui   $a3, 0x0029
     ori   $a3, $a3, 0xF040         # "itempack"
     lui   $t0, 0x01F1
-    lw    $t9, 0x00D0($t0)         # SsIconDiagCopies++
+    lw    $t9, 0x00BC($t0)         # SsIconDiagCopies++
     addiu $t9, $t9, 1
-    sw    $t9, 0x00D0($t0)
+    sw    $t9, 0x00BC($t0)
     addiu $t0, $zero, 64           # dstX (the fifth argument): the spare cell (64, 32)
     addiu $t1, $zero, 32           # dstY (the sixth)
     jal   0x001B1EF0               # setItemToReserved(src, u, v, dst, dstX, dstY)

@@ -109,8 +109,8 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── the attached sphere's icon, over Steve on the dungeon HUD ──
-        private const int SsIconX = 29, SsIconY = 367, SsIconSize = 20;   // just above Steve's raised hands: his icon (the equipped weapon's) is at (29, 388), 32 × 32 — tune in game
-        private static int _ssIconSphere = -1;                            // the sphere the mailbox describes; -1 = nothing written yet
+        private const int SsIconX = 29, SsIconY = 367, SsIconSize = 20;   // just above Steve's raised hands: his icon (the equipped weapon's) is at (29, 388), 32 × 32
+        private static int _ssIconSphere = -1;                            // the sphere the icon is on for; -1 = nothing written yet
         private static bool _ssIconWarned;
 
         /// <summary>Switch the sphere icon on with its screen placement (the copy cave finds the icon itself). Written

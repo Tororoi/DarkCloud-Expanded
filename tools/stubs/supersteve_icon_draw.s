@@ -7,7 +7,8 @@
 # `itempack` at screen (29, 388). The sphere's icon sits in a spare cell of the same sheet, put there by
 # supersteve_icon_copy.s whenever the transient `wepicon` sheet is registered; `itempack` itself is resident all floor.
 #
-# Mailbox (0x01F10000 + …): +0xA0 SsIconOn int   +0xAC/+0xB0 SsIconX/Y int, screen position   +0xB4 SsIconSize int
+# Mailbox (0x01F10000 + …): +0xA0 SsIconOn int   +0xA4/+0xA8 SsIconX/Y int, screen position   +0xAC SsIconSize int
+#                           +0xB0 SsIconDiagDraws int, bumped per draw
 # Frame: 0x00 the callee's argument area, 0x10 dst rect, 0x20 src rect, 0x30 ra. a0..a2 pass straight through.
 
     addiu $sp, $sp, -0x40
@@ -18,9 +19,6 @@
     lw    $t5, 0x00A0($t0)         # SsIconOn
     beq   $t5, $zero, ret
     nop
-    lw    $t9, 0x00C0($t0)         # SsIconDiagDrawFrames++
-    addiu $t9, $t9, 1
-    sw    $t9, 0x00C0($t0)
     lui   $a0, 0x01C7
     ori   $a0, $a0, 0x5870         # the texture manager
     lui   $a1, 0x0029
@@ -31,14 +29,14 @@
     nop
     move  $a1, $v0                 # the sheet
     lui   $t0, 0x01F1
-    lw    $t9, 0x00C4($t0)         # SsIconDiagDraws++
+    lw    $t9, 0x00B0($t0)         # SsIconDiagDraws++
     addiu $t9, $t9, 1
-    sw    $t9, 0x00C4($t0)
-    lw    $t3, 0x00AC($t0)         # SsIconX
+    sw    $t9, 0x00B0($t0)
+    lw    $t3, 0x00A4($t0)         # SsIconX
     sw    $t3, 0x0010($sp)         # dst.x
-    lw    $t3, 0x00B0($t0)         # SsIconY
+    lw    $t3, 0x00A8($t0)         # SsIconY
     sw    $t3, 0x0014($sp)         # dst.y
-    lw    $t3, 0x00B4($t0)         # SsIconSize
+    lw    $t3, 0x00AC($t0)         # SsIconSize
     sw    $t3, 0x0018($sp)         # dst.w
     sw    $t3, 0x001C($sp)         # dst.h
     addiu $t3, $zero, 64           # the spare cell (64, 32) supersteve_icon_copy.s keeps the icon in
