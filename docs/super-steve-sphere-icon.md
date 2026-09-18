@@ -46,7 +46,10 @@ copy call is harmless in between (its `GetTexture` returns 0). So the sphere ico
   refuse, so the icon only appeared after a menu. Counters in the mailbox (`SsIconDiag*`) record each stage and are
   reported in the `sphere icon:` log line; they are how the dead overlay site was found.
 - **draw** (`ElfCave.SuperSteveIconDraw`, on `jal topStatusInfo`): `set2DSprite(Vif1Packet, GetTexture("itempack"),
-  dst, src (64, 32, 32, 32), 0x80)` at `SuperSteveAbilities.SsIconX/Y/Size`, tuned in game.
+  dst, src (64, 32, 32, 32), alpha)` at `SuperSteveAbilities.SsIconX/Y/Size`, tuned in game. The alpha is the HUD's own:
+  topStatusInfo draws Steve's icon at a fixed (29, 388) with `(x + 0x60) & 0xFF`, x its first argument, which the
+  caller animates when a menu opens (32 at rest → 0x80); the cave keeps that x and uses the same formula, skipping the
+  draw at 0, so the icon fades out with the HUD.
 
 `Vif1Packet` is the global at 0x2A23C4; the name strings are the ELF's own (`wepicon` 0x2A2190, `itempack` 0x29F040).
 
