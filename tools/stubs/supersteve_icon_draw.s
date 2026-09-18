@@ -7,13 +7,23 @@
 # `itempack` at screen (29, 388). The sphere's icon sits in a spare cell of the same sheet, put there by
 # supersteve_icon_copy.s whenever the transient `wepicon` sheet is registered; `itempack` itself is resident all floor.
 #
+# The HUD fades rather than moves when a menu opens: topStatusInfo draws Steve's icon at a fixed (29, 388) with alpha
+# (x + 0x60) & 0xFF, x being its first argument, which the caller animates (32 at rest = 0x80). The icon takes the
+# same alpha, so it fades with the HUD and is gone while the menu is up.
+#
 # Mailbox (0x01F10000 + …): +0xA0 SsIconOn int   +0xA4/+0xA8 SsIconX/Y int, screen position   +0xAC SsIconSize int
 #                           +0xB0 SsIconDiagDraws int, bumped per draw
-# Frame: 0x00 the callee's argument area, 0x10 dst rect, 0x20 src rect, 0x30 ra. a0..a2 pass straight through.
+# Frame: 0x00 the callee's argument area, 0x10 dst rect, 0x20 src rect, 0x30 ra, 0x34 the HUD x. a0..a2 pass straight through.
 
     addiu $sp, $sp, -0x40
     sw    $ra, 0x0030($sp)
+    sw    $a0, 0x0034($sp)         # the HUD x: the alpha comes from it
     jal   0x001B04F0               # topStatusInfo(a0, a1, a2), as before
+    nop
+    lw    $t4, 0x0034($sp)
+    addiu $t4, $t4, 0x60
+    andi  $t4, $t4, 0xFF           # the HUD's alpha this frame
+    beq   $t4, $zero, ret          # faded out (a menu is up): nothing to draw
     nop
     lui   $t0, 0x01F1
     lw    $t5, 0x00A0($t0)         # SsIconOn
@@ -51,7 +61,7 @@
     addiu $a2, $sp, 0x0010
     addiu $a3, $sp, 0x0020
     jal   0x0015C310               # set2DSprite(packet, tex, &dst, &src, alpha)
-    addiu $t0, $zero, 0x80         # (delay slot) the fifth argument: opaque
+    move  $t0, $t4                 # (delay slot) the fifth argument: the HUD's alpha
 ret:
     lw    $ra, 0x0030($sp)
     jr    $ra
