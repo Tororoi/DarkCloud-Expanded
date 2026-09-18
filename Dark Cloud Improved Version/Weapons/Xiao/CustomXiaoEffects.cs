@@ -20,16 +20,16 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Matador ────────────────────────────────────────────────────────────────────────
-        /// <summary>Xiao's Matador thread: hands every tick to <see cref="MatadorCharge.Drive"/> while the weapon is equipped,
+        /// <summary>Xiao's Matador thread: hands every tick to <see cref="ChargingBull.Drive"/> while the weapon is equipped,
         /// and stands it down once when it goes.</summary>
         public static void MatadorEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.matador)
             {
-                MatadorCharge.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                ChargingBull.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
                 Thread.Sleep(16);
             }
-            MatadorCharge.Stop();
+            ChargingBull.Stop();
         }
 
         private const ushort AngelGearHealAmount = 1;

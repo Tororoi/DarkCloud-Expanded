@@ -3,7 +3,7 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// Matador "Guard Crush" — hold the shot for <see cref="ChargeSeconds"/> and the pellet released is a charged one: it
+    /// Matador "Charging Bull" — hold the shot for <see cref="ChargeSeconds"/> and the pellet released is a charged one: it
     /// carries <see cref="DamageMult"/>× the weapon's damage, passes an enemy's guard window with a hammer-swing kick behind it
     /// (an ordinary pellet carries none), and flies as a projection of
     /// the slingshot itself — a copy of the model, tinted orange, riding the pellet, wrapped in the cat's glow.
@@ -13,7 +13,8 @@ namespace Dark_Cloud_Improved_Version
     ///  · the DAMAGE: the pool slot's damage word, scaled once at the bind, and made distinct so the guard bypass
     ///    (ElfCave.CatGuardBypass) can tell the entry apart: a Xiao-owned entry whose base damage equals
     ///    <see cref="Mailbox.PelletCrushDamage"/> passes the window and is stamped with the kick in
-    ///    <see cref="Mailbox.PelletKickStrength"/>/<see cref="Mailbox.PelletKickDecay"/>;
+    ///    <see cref="Mailbox.PelletKickStrength"/>/<see cref="Mailbox.PelletKickDecay"/>, its origin
+    ///    (<see cref="Mailbox.PelletKickOrigin"/>) a point behind the pellet on its flight line so the shove follows the flight;
     ///  · the MODEL: <see cref="SlingshotProp.SpawnProjectile"/> — the live weapon copied into chara slot 3, world-rooted,
     ///    at its own size, under the ambient add <see cref="Tint"/>. Built ONCE while the Matador is equipped and kept
     ///    resident at opacity 0 (the build is tens of milliseconds over PINE — the cat is kept the same way), so a shot only
@@ -24,15 +25,16 @@ namespace Dark_Cloud_Improved_Version
     ///    Matador, and the row is handed back to None when the shot ends so the cat repaints on its next spawn.
     /// Nothing is drawn or crushed when the ISO lacks the caves.
     /// </summary>
-    internal static class MatadorCharge
+    internal static class ChargingBull
     {
-        private const string Tag = "[Matador] ";
+        private const string Tag = "[ChargingBull] ";
 
         private const double ChargeSeconds  = 0.5;    // hold this long → the shot is charged (the game's charge-complete flash marks it)
         private const double ArmSeconds     = 0.5;    // a charged release must produce its pellet within this
         private const float  DamageMult     = 1.5f;   // × the pellet's damage
         private const float  KickStrength   = 2.5f;   // the kick the bypass cave stamps on the charged pellet's entry (an ordinary pellet
         private const float  KickDecay      = 0.1f;   // has none): Goro's hammer swing, as SetKickBack takes them
+        private const float  KickOriginBack = 30f;    // the kick's origin sits this far behind the pellet on its flight line, so the shove follows the flight
         private const float  ModelScale     = 1.0f;   // the slingshot copy at the weapon's own size
         private const float  Lift           = 0f;     // the copy's height above the pellet
         private const float  Spin           = 0f;     // yaw per frame: none — it flies as it left
@@ -163,6 +165,9 @@ namespace Dark_Cloud_Improved_Version
             }
             SlingshotProp.PlaceProjectile(Memory.ReadFloat(pa), Memory.ReadFloat(pa + 4) + Lift, Memory.ReadFloat(pa + 8), yaw);   // shown here, before the cave's first placement
             Memory.WriteInt  (dmgA, charged);
+            float vh = Memory.ReadFloat(va + 4), vl = (float)Math.Sqrt(vx * vx + vh * vh + vz * vz);
+            if (vl < 1e-3f) { vx = (float)Math.Sin(yaw); vh = 0f; vz = (float)Math.Cos(yaw); vl = 1f; }
+            Memory.WriteVec3 (CodeCaves.Mailbox.PelletKickOrigin, Memory.ReadFloat(pa) - vx / vl * KickOriginBack, Memory.ReadFloat(pa + 4) - vh / vl * KickOriginBack, Memory.ReadFloat(pa + 8) - vz / vl * KickOriginBack);
             Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
             Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
             Memory.WriteInt  (CodeCaves.Mailbox.PelletCrushDamage, charged);

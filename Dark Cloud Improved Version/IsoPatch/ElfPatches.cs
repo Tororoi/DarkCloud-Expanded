@@ -371,7 +371,7 @@ namespace Dark_Cloud_Improved_Version
         // reports "no window" when the entry is Xiao's with the cat's kick type (+0x58 == 1, +0x98 == 2).
         internal const uint GuardBypassHookAddr = 0x001DAC78;                              // CheckDmg's guard-window load site
         internal const long GuardBypassHookAddrMmu = 0x20000000L + GuardBypassHookAddr;
-        private  const uint GuardBypassPreviousCave = 0x01FB2250;                           // where the cave sat before it grew — an ISO patched then is re-hooked
+        private static readonly uint[] GuardBypassPreviousCaves = { 0x01FB2250, 0x01FB3F40 }; // where the cave sat before it grew — an ISO patched then is re-hooked
         internal static void PatchCatGuardBypass(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint CaveAddr = CodeCaves.ElfCave.CatGuardBypass;
@@ -385,15 +385,15 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == J(Return)) exits++; if (w == 0x84220550u) vanillaLoad = true; }
             if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || exits != 2 || !vanillaLoad)
                 throw new IOException($"catGuardBypass.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
-                throw new IOException("catGuardBypass.bin overruns its cave — move ElfCave.NextFree.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)
+                throw new IOException("catGuardBypass.bin overruns its gap — it must end before ElfCave.XiaoMeleeFlinch.");
             // Hook the `addu`, NOT the `lh` after it: the `lh`'s own delay slot would be the `beq` at 0x1DAC80, and a branch in a
             // branch's delay slot is undefined on the R5900. Taking the `addu` leaves the `lh` as the delay slot, which is then
             // nop'd — the cave re-forms the address from a2/v1 itself and does the load, so neither word is needed.
             const uint HookAddr = GuardBypassHookAddr;         // `addu at,v0,at`, feeding `lh v0,0x550(at)`
             uint jump = J(CaveAddr);
             uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
-            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || cur0 == J(GuardBypassPreviousCave)) && cur1 == 0;
+            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || Array.Exists(GuardBypassPreviousCaves, c => cur0 == J(c))) && cur1 == 0;
             if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr - 4)) != 0x3C010006u || RdU32(fs, ElfOff(HookAddr + 8)) != 0x104000D1u)
                 throw new IOException($"Guard-window hook site 0x{HookAddr:X} is not vanilla `lui at,0x6; addu at,v0,at; lh v0,0x550(at); beq v0,zero` — unmodified Dark Cloud (USA) ISO expected.");
             for (int i = 0; i < b.Length; i += 4)

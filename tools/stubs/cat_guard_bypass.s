@@ -1,5 +1,5 @@
 # cat_guard_bypass.s — CheckDmg__12CMonstorUnit (main ELF 0x1D9F10): the Divine Beast cat's hit — and the Matador's charged
-# pellet — ignore an enemy's GUARD WINDOW. Assembled at 0x01FB3F40 (ElfCave.CatGuardBypass).
+# pellet — ignore an enemy's GUARD WINDOW. Assembled at 0x01FB1ED0 (ElfCave.CatGuardBypass).
 #
 # WHY IT CANNOT BE DONE FROM THE MOD. The guard is entirely the defender's: for each of the 3 windows, its flag
 # (MainMonstorUnit + slot*0x20 + 0x60550) is non-zero and the enemy's live motion frame sits inside [start +0x60558,
@@ -21,9 +21,10 @@
 # (0x01F10000 + 0xD0 PelletCrushDamage; 0 = no charged pellet out). A Xiao-owned entry with that base damage passes too,
 # and — since step__5CSHOT plants pellets with no kick at all (Set zeroes +0x80..+0x98 and only the melee planters call
 # SetKickBack) — it is given one here: strength +0xD4 PelletKickStrength and decay +0xD8 PelletKickDecay from the mailbox,
-# the melee type 2 (the Xiao flinch stub lets it stagger), and the entry's own position as the kick origin, so the enemy
-# is shoved away from the point of impact. The window test comes first in CheckDmg; the kick is read in the damage block.
-# Exactly 48 words: the cave fills its slot to the band's end.
+# the melee type 2 (the Xiao flinch stub lets it stagger), and the kick ORIGIN +0xDC/+0xE0/+0xE4 PelletKickOrigin — CheckDmg
+# shoves along (enemy point − origin), so the mod puts it well behind the pellet on its flight line and the shove follows
+# the flight whichever side was struck (the melee planters use the player's position for the same reason). The window
+# test comes first in CheckDmg; the kick is read in the damage block.
 lw    $at, -0x6210($gp)        # NowColData
 sll   $v0, $s2, 5              # entry index × 0x20
 addu  $at, $at, $v0
@@ -57,11 +58,14 @@ lw    $v0, 0x00D8($v0)         # PelletKickDecay (mod)
 sw    $v0, 0x0094($at)
 addiu $v0, $zero, 2            # melee-type kick
 sw    $v0, 0x0098($at)
-lw    $v0, 0x0000($at)         # kick origin = the entry's position, the point of impact
+lui   $v0, 0x01F1
+lw    $v0, 0x00DC($v0)         # PelletKickOrigin x (mod)
 sw    $v0, 0x0080($at)
-lw    $v0, 0x0004($at)
+lui   $v0, 0x01F1
+lw    $v0, 0x00E0($v0)         #   height
 sw    $v0, 0x0084($at)
-lw    $v0, 0x0008($at)
+lui   $v0, 0x01F1
+lw    $v0, 0x00E4($v0)         #   y
 sw    $v0, 0x0088($at)
 pass:
 j     0x001DAC80               # the cat's or the charged pellet's hit: report "no window here" and let the damage through
