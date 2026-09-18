@@ -28,7 +28,7 @@
 #         apex to the floor — in the fall block and on in the landing block (the land clip starts a lead
 #         before the floor), the horizon being the frames left to the floor; then the trajectory is committed
 #   +0x270 CatApexH float (cave): the pounce's launch height, then the highest height while rising = the apex
-#   +0x254 CatHoldReady int 1 = keep looping the ready crouch instead of leaping (mod: the target is a dormant chest-mimic);
+#   +0x254 CatHoldReady int 1 = hold the ready crouch on its last frame instead of leaping (mod: the target is a dormant chest-mimic);
 #         checked every crouch frame — once it has looped, release = float-up at once (the crouch IS the wind-up)
 #   +0xB0 CatSeenMask int (cave)   +0xB4/+0xB8/+0xBC CatVx/Vh/Vz float fall velocity (cave, captured at breakaway)
 #   +0xC0 CatGravity float (mod)   +0xC4 CatFloorH float landing height (mod)   +0xC8 CatRunSpeed float = ½|v| (cave)
@@ -950,15 +950,7 @@ nop
 nop
 bc1t  readydone
 nop
-readyhold:                     # ── every frame of the crouch: face the target where it is NOW ──
-lw    $t5, 0x4254($t0)         # CatHoldReady still up? (a mimic still shut)
-bne   $t5, $zero, readyface
-nop
-lw    $t5, 0x0C64($t6)
-andi  $t5, $t5, 2              # play-once still set = the crouch's FIRST pass, the wind-up itself: let it finish
-beq   $t5, $zero, readygo      # released while looping: the cat is already wound up → the float-up NOW
-nop
-readyface:
+readyhold:                     # ── every frame of the crouch, playing or held: face the target where it is NOW ──
 lw    $t5, 0x40CC($t0)         # target position vector
 beq   $t5, $zero, readykey
 nop
@@ -989,17 +981,11 @@ addiu $t5, $zero, 65
 sw    $t5, 0x0C68($t6)         # hold the ready clip, in place
 b     done
 nop
-readydone:                     # ── crouch done: the float-up starts IN PLACE (state 11); the jump is decided at its feet-off frame ──
-lw    $t5, 0x4254($t0)         # CatHoldReady (mod): 1 = the target is a mimic still shut → stay crouched, looping
-beq   $t5, $zero, readygo
+readydone:                     # ── crouch at its last frame (play-once keeps it there; it never loops): the float-up starts IN PLACE
+                               #    (state 11) the moment nothing holds the cat; the jump is decided at its feet-off frame ──
+lw    $t5, 0x4254($t0)         # CatHoldReady (mod): 1 = the target cannot be hit yet → stay crouched on the last frame, facing it
+bne   $t5, $zero, readyhold
 nop
-lw    $t5, 0x0C64($t6)
-addiu $t7, $zero, -3
-and   $t5, $t5, $t7            # clear play-once: the crouch LOOPS natively (wraps) until the mod drops the hold
-sw    $t5, 0x0C64($t6)
-addiu $t5, $zero, 65
-b     done
-sw    $t5, 0x0C68($t6)         # (delay slot) key = ready, state stays 10 (readyhold keeps facing the target)
 readygo:
 lw    $t5, 0x0C64($t6)
 ori   $t5, $t5, 2              # play once, no restart: the crouch fades into the float-up, which runs to its end and HOLDS

@@ -91,6 +91,18 @@ with no restoring force. The baked .clo carries `CapeSpringAlong` as its seed fo
 per-normal lighting (the part that SHOWS the ripples) counts for. Enough to read red in a dark dungeon, not so much that
 it washes the shading out. The cat's blue is 12/24/48 for comparison.
 
+## The cape at the cat's size
+
+The cat is drawn at a per-look size (`WeaponLook.Scale`: the Title 1.0, the Angel Shooter 1.1, the Angel Gear 1.2) through the slot's scale, which every
+bone's matrix carries. The cloth sim is only half scale-aware: its **targets** (`+0x7550` = LW(anchor) × rest) and the
+pinned edge come through the anchor's matrix and grow with the cat, but the **StretchBind rest lengths** (`+0x3110`,
+x = across, y = along the hang) were measured from the lattice once at load, in rig units, and are never rescaled — so at
+any size but 1.0 every tie is `scale×` too short for the sheet the spring pulls toward, and the cape bunches toward the
+collar (mildly at 1.2, plainly at 1.4 when tried). The body capsules' **radii** (`CBound +0x10`) are world constants too, while their
+endpoints ride the bone. `ScaleClothToCat` and `CloneBounds` size both to the cat at spawn, plus the wind gain (a world
+velocity). K, follow and the mod's breeze (rest-space) need nothing. The gait speeds and glow are stated for the 1.0
+cat and scale with its size, so a bigger cat covers proportionally more ground at the same clip rate.
+
 ## Cape clone recipe and the element palette
 
 **The cape's CCloth (0x8550) is built by HER pack load**, not by the mod: the baked `cat_cape` node plus `catcape.clo`,

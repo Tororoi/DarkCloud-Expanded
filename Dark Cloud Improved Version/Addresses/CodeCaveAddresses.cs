@@ -377,7 +377,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long CatGlowObject    = CatBase + 0x200; // the cave's CFireOmni object, 0x40 B
             internal const long CatGlowLift      = CatBase + 0x240; // float, added to the glow's height (mod; negative lowers it)
             internal const long CatAimPos        = CatBase + 0x244; // float3 x,h,z: the point the cat walks to / jumps at — the target's biggest body sphere (mod, per tick); CatTargetPtr points here
-            internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave keeps the ready crouch looping instead of leaping (mod: the target is a mimic that has not opened yet)
+            internal const long CatHoldReady     = CatBase + 0x254; // int: 1 = the cave holds the ready crouch on its last frame instead of leaping (mod: the target cannot be hit yet)
             internal const long CatScaleMul      = CatBase + 0x250; // float: the cat's full size — the cave multiplies it into its growth k while the cat rides the pellet (mod writes DivineBeastCat.CatScale at spawn; 0 = unset → the cave uses 1.0)
             internal const long CatGlowName      = CatBase + 0x258; // char[16], NUL-terminated: the glow disc's texture entry — always "catglowp" now, because every look shares one 8-bit disc and differs only in the palette row (see CatGlowPalRow); the glow cave binds it (mod writes it, then clears CatGlowReady)
             internal const long CatTrackHalf     = CatBase + 0x268; // float: 0 = the flying pounce re-aims until the apex; > 0 = keep re-aiming past the apex until halfway down to the floor (the winged cat, mod)
@@ -501,7 +501,7 @@ namespace Dark_Cloud_Improved_Version
             /// step loop's `jal step__5CSHOT` (dun 0x1DB874C), performs it, tracks which pellet slots are active, and when
             /// armed (<see cref="Mailbox.CatState"/> = 3) binds chara slot 1 to the next NEW pellet on its birth frame,
             /// then places it every frame (head on the pellet, growth scale, sprite fade) until that pellet ends.</summary>
-            internal const uint CatPelletFollow    = 0x01FB0D90;   // 3940 B → 0x1FB1CF4 (frame 0x80, sq/lq saves); the flinch stub sits at 0x1FB1FA0
+            internal const uint CatPelletFollow    = 0x01FB0D90;   // 4244 B → 0x1FB1E24 (frame 0x80, sq/lq saves); the flinch stub sits at 0x1FB1FA0
             /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
             /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
             /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
