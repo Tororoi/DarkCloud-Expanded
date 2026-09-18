@@ -24,8 +24,8 @@ namespace Dark_Cloud_Improved_Version
         {
             // Passive HEAL ability (weapon flag 0x800) cadence: heal tick compares its frame counter with
             // `slti v0,v0,0xF0` (240 f = 4 s, dun 0x1DB8234); 0xB4 = 180 f = 3 s for every HEAL weapon
-            // (user 2026-09-09). Guardian Grace watches the counter wrap, so its sparkles/chime follow.
-            new(0x01DB8234, 0x284200F0, 0x284200B4, "heal-ability cadence 4 s → 3 s"),
+            // (user 2026-09-09). Guardian Grace reads the threshold from this word and floors the counter while Xiao guards.
+            new(HealCadenceAddr, HealCadenceOrig, HealCadenceNew, "heal-ability cadence 4 s → 3 s"),
             // Xiao's attack-gauge refill multiplier (motionDrive: `lui v0,0x3fc0; mtc1 v0,f0`, v0 dead after)
             // → `lui v0,HI; lwc1 f0,LO(v0)` of Mailbox.ShieldGaugeRate (pnach-seeded 1.5 = vanilla while idle).
             new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) >> 16),    "gauge refill multiplier → mailbox word (lui)"),
@@ -101,6 +101,10 @@ namespace Dark_Cloud_Improved_Version
         internal const uint MirageHazeHookNew  = 0x0C000000u | (CodeCaves.ElfCave.MirageHazeDraw >> 2);
         internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
 
+        internal const uint HealCadenceAddr = 0x01DB8234;                                 // the heal tick's `slti v0,v0,THRESHOLD`: low half = the period in frames
+        internal const uint HealCadenceOrig = 0x284200F0;
+        internal const uint HealCadenceNew  = 0x284200B4;
+        internal const long HealCadenceAddrMmu = 0x20000000L + HealCadenceAddr;
         internal const uint SsIconHookAddr = 0x01DB0364;
         internal const uint SsIconHookOrig = 0x0C06C13C;                                   // jal 0x1B04F0 topStatusInfo
         internal const uint SsIconHookNew  = 0x0C000000u | (CodeCaves.ElfCave.SuperSteveIconDraw >> 2);

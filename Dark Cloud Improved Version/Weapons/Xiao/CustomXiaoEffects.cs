@@ -26,12 +26,15 @@ namespace Dark_Cloud_Improved_Version
         /// weapon. It rides the native HEAL ability's own cadence: each wrap of <see cref="HealAbility.TickCounter"/> —
         /// the frame the game grants its +1 — heals each ally by <see cref="AngelGearHealAmount"/> (skipping the dead and
         /// the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal build-up attribute
-        /// (Special2 % 16 in 8..11), which already regenerates her. Opening mid-cycle never procs retroactively.</summary>
+        /// (Special2 % 16 in 8..11), which already regenerates her. Opening mid-cycle never procs retroactively. While Xiao
+        /// guards, <see cref="GuardianGrace"/> floors the counter so the native tick fires every second, and the party heal
+        /// follows — the counter only ever climbs, is set upward by that floor, or resets to 0 on a proc, so any decrease
+        /// is a proc.</summary>
         internal static void DriveAngelGear(bool active)
         {
             if (!active || Player.CheckDunIsPausedOrMenu() || !Player.CheckDunIsWalkingMode()) { _healTickPrev = -1; return; }
             int c = Memory.ReadInt(HealAbility.TickCounter);
-            bool wrapped = _healTickPrev >= 0 && c < _healTickPrev - 60;   // the native +1 just fired
+            bool wrapped = _healTickPrev >= 0 && c < _healTickPrev;   // the native +1 just fired
             _healTickPrev = c;
             if (!wrapped) return;
 
