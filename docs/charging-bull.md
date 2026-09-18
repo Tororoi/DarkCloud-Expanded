@@ -1,9 +1,9 @@
-# Matador — the charged Guard Crush shot
+# Matador — Charging Bull
 
 Hold the shot for half a second (the game's charge-complete flash marks it) and the pellet released is charged: 1.5×
 damage, passes an enemy's guard window with a hammer-swing kick behind it, and flies as a projection of the slingshot — a copy of
 the model, tinted orange, riding the pellet at its own size, wrapped in the cat's glow; the pellet itself is untouched
-and hidden inside. `Weapons/Xiao/MatadorCharge.cs` drives it from the Matador
+and hidden inside. `Weapons/Xiao/ChargingBull.cs` drives it from the Matador
 thread (`CustomXiaoEffects.MatadorEffect`).
 
 ## What rides on the pellet
@@ -16,9 +16,10 @@ The pellet is the game's own (`step__5CSHOT`, 0x1ABD10): it flies, collides and 
   damage (+0x34) equals `Mailbox.PelletCrushDamage`, and stamps that entry's kick: an ordinary pellet has none (`Set`
   zeroes +0x80..+0x98 and only the melee planters call `SetKickBack(strength, decay, origin, type)` — Goro's hammer
   swing 2.5 / 0.1 / the player's position / 2, Toan's combo 1.2/0.2 → 3.0/0.3), so the cave writes
-  `Mailbox.PelletKickStrength`/`PelletKickDecay`, type 2 (the Xiao flinch stub lets it stagger) and the entry's own
-  position as the origin. The cave grew past its slot and moved to 0x1FB3F40, where it now fills the band exactly; the
-  patcher re-hooks an ISO that still points at the old one.
+  `Mailbox.PelletKickStrength`/`PelletKickDecay`, type 2 (the Xiao flinch stub lets it stagger) and
+  `Mailbox.PelletKickOrigin`. CheckDmg shoves along (enemy point − origin), so the origin is a point 30 units BEHIND
+  the pellet on its flight line — the impact point itself (a point on the enemy's surface) shoved sideways on a side
+  hit. The cave has grown twice and now sits at 0x1FB1ED0; the patcher re-hooks an ISO pointing at either old one.
 - **Glow.** The Divine Beast cat's glow cave (`ElfCave.CatGlowDraw`) hung on the copy's root (both anchors the root),
   its `catglowp` disc painted by the palette cave in the Fire element's ramp (row 1). On the shot's end the row is handed
   back to None so the cat repaints on its next spawn. (A tenth, orange row cannot be baked: the palette tables end where

@@ -50,7 +50,7 @@ STUBS = [
     ('mirage_haze_draw.s',       'mirageHazeDraw.bin',       0x1FB3C40),
     ('supersteve_icon_draw.s',   'superSteveIconDraw.bin',   0x1FB3CE0),
     ('supersteve_icon_copy.s',   'superSteveIconCopy.bin',   0x1FB3DC0),
-    ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1FB3F40),
+    ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1FB1ED0),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]
