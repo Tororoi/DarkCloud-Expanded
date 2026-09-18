@@ -1119,6 +1119,7 @@ namespace Dark_Cloud_Improved_Version
                 float ddx = Memory.ReadFloat(CodeCaves.Mailbox.CatDirX), ddz = Memory.ReadFloat(CodeCaves.Mailbox.CatDirZ);
                 if (ddx * ddx + ddz * ddz > 1e-6f) { _dirX = ddx; _dirY = ddz; _yaw = (float)Math.Atan2(ddx, ddz); }
             }
+            if (state >= 4 && state <= 11 && LifetimeOver()) { FadeKeepingPose(); return; }   // the lifetime is absolute from the bind: on the ground, crouched at a shut mimic or mid-leap alike, it shrinks and fades as it stands
             switch (state)
             {
                 case 1:
@@ -1215,19 +1216,12 @@ namespace Dark_Cloud_Improved_Version
                     bool blocked = Memory.ReadInt(CodeCaves.Mailbox.CatBlocked) != 0;
                     if (blocked && !_blockedLogged) { _blockedLogged = true; Log("a wall stops the cat — waiting"); }
                     if (!blocked) _blockedLogged = false;
-                    if ((GameClock.Now - _boundAt).TotalSeconds >= LifetimeSeconds)
-                    {
-                        Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
-                        _scale = 1f; _caveOwns = false;
-                        Log("20 s lifetime over — shrinking away");
-                        FadeKeepingPose();                                       // sitting, walking or blocked: shrink + fade as it is (Phase.Fading; the glow follows)
-                    }
                     break;
                 }
                 case 11:                                                         // float-up wind-up: in place, turning, until the feet-off frame launches the leap
                     if (_pounceKind != 3) { _pounceKind = 3; _phase = Phase.TakeOff; Log($"float wind-up at enemy slot {_target} — jump at frame {FloatLaunchFrame:F0}"); }
                     break;
-                case 10:                                                         // ready: in place before the jump
+                case 10:                                                         // ready: in place before the jump, or held there while the target cannot be hit
                     if (!_pounceLogged) { _pounceLogged = true; _phase = Phase.TakeOff; _phaseStart = GameClock.Now; Log($"readying a pounce at enemy slot {_target} (cave compared distance {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgDist):F1} vs range {Memory.ReadFloat(CodeCaves.Mailbox.CatDbgRange):F1})"); }
                     break;
                 case 2:
@@ -1271,6 +1265,18 @@ namespace Dark_Cloud_Improved_Version
             _phase = Phase.Resident; _phaseStart = GameClock.Now;
             SetKey(KeyLeap);
             Maintain();
+        }
+
+        /// <summary>True once the cat has been out for <see cref="LifetimeSeconds"/> since its bind, releasing the cave
+        /// (state 0) so the caller can fade it from wherever it stands. Not applied while it still rides the pellet
+        /// (states 1–3): the pellet's own life ends that flight far sooner.</summary>
+        private static bool LifetimeOver()
+        {
+            if ((GameClock.Now - _boundAt).TotalSeconds < LifetimeSeconds) return false;
+            Memory.WriteInt(CodeCaves.Mailbox.CatState, 0);
+            _scale = 1f; _caveOwns = false;
+            Log("20 s lifetime over — shrinking away");
+            return true;
         }
 
         /// <summary>Fade out from the current pose without restarting the clip (the cave left the key as it stood).</summary>
