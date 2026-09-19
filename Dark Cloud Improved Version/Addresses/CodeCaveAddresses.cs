@@ -570,10 +570,10 @@ namespace Dark_Cloud_Improved_Version
             internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)
             internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 200 B → 0x1FB3DA8: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
             internal const uint SuperSteveIconCopy = 0x01FB3DC0;   // 356 B → 0x1FB3F24: …and the copy that keeps the CURRENT sphere's icon in the HUD sheet (on every DngActiveWeaponTextureCopy call: four menu paths + two overlay sites)
-            /// <summary>Keeps the Gemron shot config in GemronShotBlock entered in the floor's shot pack (tools/stubs/
-            /// gemron_shots_enter.s): the head of the step chain (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then
-            /// Entry()s the config whenever the pack no longer holds it, recording the slot. Sits where CatGuardBypass used to.</summary>
-            internal const uint GemronShotsEnter   = 0x01FB3F40;   // 180 B → 0x1FB3FF4
+            /// <summary>Keeps the borrowed shot config in BorrowedShotBlock entered in the floor's shot pack (tools/stubs/
+            /// borrowed_shots_enter.s): the head of the step chain (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then
+            /// Entry()s the config whenever the pack no longer holds it, recording the slot.</summary>
+            internal const uint BorrowedShotsEnter   = 0x01FB3F40;   // 180 B → 0x1FB3FF4
             internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2278..0x1FB22BC (68 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
@@ -748,15 +748,15 @@ namespace Dark_Cloud_Improved_Version
         /// The count is checked against this now rather than truncated.</summary>
         internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
 
-        /// <summary>The Gemron shot config in use (ElfCave.GemronShotsEnter keeps it entered, GemronShots writes it): +0x00
-        /// "GEMS" (0 = nothing to enter — the mod's clear, or the cave's after a full pack), the BT_SHOT_EFFECT copy (0x70,
+        /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered, BorrowedShots writes it): +0x00
+        /// "SHOT" (0 = nothing to enter — the mod's clear, or the cave's after a full pack), the BT_SHOT_EFFECT copy (0x70,
         /// victim mask = enemies) at +0x10, +0x250 its pack slot (−1 = enter it; the cave records the slot), +0x254 the
-        /// monster pool's used counter before the cave's entry (the mod rewinds to it to reuse the slot for another element).
+        /// monster pool's used counter before the cave's entry (the mod rewinds to it to reuse the slot for another config).
         /// Runtime data on a runtime-data page.</summary>
-        internal const long GemronShotBlock      = 0x21FAEF40;
-        internal const uint GemronShotBlockGuest = 0x01FAEF40;
-        internal const uint GemronShotMagic      = 0x534D4547;   // "GEMS"
-        internal const int  GemronShotCfgs       = 0x10, GemronShotSlots = 0x250, GemronShotWatermark = 0x254, GemronShotBlockSize = 0x270;
+        internal const long BorrowedShotBlock      = 0x21FAEF40;
+        internal const uint BorrowedShotBlockGuest = 0x01FAEF40;
+        internal const uint BorrowedShotMagic      = 0x544F4853;   // "SHOT"
+        internal const int  BorrowedShotCfg       = 0x10, BorrowedShotSlot = 0x250, BorrowedShotWatermark = 0x254, BorrowedShotBlockSize = 0x270;
 
         // ── FREE: 0x21FAF1B0 .. 0x21FB0000 (~0xE50 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still

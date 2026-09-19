@@ -51,7 +51,7 @@ STUBS = [
     ('supersteve_icon_draw.s',   'superSteveIconDraw.bin',   0x1FB3CE0),
     ('supersteve_icon_copy.s',   'superSteveIconCopy.bin',   0x1FB3DC0),
     ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1FB1ED0),
-    ('gemron_shots_enter.s',     'gemronShotsEnter.bin',     0x1FB3F40),
+    ('borrowed_shots_enter.s',     'borrowedShotsEnter.bin',     0x1FB3F40),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

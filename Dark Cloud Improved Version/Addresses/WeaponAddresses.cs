@@ -579,7 +579,7 @@ namespace Dark_Cloud_Improved_Version
     /// as CollisionData: +0x58 = <see cref="OffOwner"/>, +0x60 = <see cref="OffUserCol"/>, +0x64 = <see cref="OffAntiPtr"/>,
     /// +0x6C = <see cref="OffWepFlags"/>, +0x5C = <see cref="OffA060"/>, +0x68 = <see cref="OffA110"/>; the config gives the
     /// victim mask (+0x48: 1 = the player, 2 = enemies), the hit reaction (+0x44), the element (+0x40), the wait (+0x38) and
-    /// the default damage (+0x3C). RE: GuardianReflector (game_data/docs/angelgear-reflector-re.md), GemronShots.
+    /// the default damage (+0x3C). RE: GuardianReflector (game_data/docs/angelgear-reflector-re.md), BorrowedShots.
     /// </summary>
     internal static class ShotEffectPack
     {
@@ -628,9 +628,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
         internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
         internal const int  CfgFlyMotion = 0x4E;    // short — the flying motion id
-        /// <summary>The Gemrons' shot configs, in element order 00 Fire … 04 Holy: f_boll_3, i_boll, t_boll, e114a_ex, e115a_ex —
-        /// and at 05 (no element) the Black Dragon's shot, b_boll.</summary>
-        internal static readonly int[] GemronCfg = { 5, 20, 23, 24, 25, 22 };
+        /// <summary>Dragon's Y's charged shot per selected element, 00 Fire … 04 Holy: the Gemrons' f_boll_3, i_boll, t_boll,
+        /// e114a_ex, e115a_ex — and at 05 (no element) the Black Dragon's b_boll.</summary>
+        internal static readonly int[] DragonsYCfg = { 5, 20, 23, 24, 25, 22 };
         internal const long ReadBufferPtr   = 0x202A2384;   // → the dungeon loader's file read buffer (Entry's third argument)
         internal const uint MonsterPoolAlloc = 0x01F066D0;  // the CDataAlloc2 the floor's monster models and their shot effects come from
         internal const int  EntryParam4     = 0x26;         // what the species loader passes Entry as its fourth argument

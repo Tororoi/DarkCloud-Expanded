@@ -1,15 +1,15 @@
-# gemron_shots_enter.s — the Gemrons' elemental shot, kept entered in the floor's shot pack. Assembled at 0x01FB3F40
-# (ElfCave.GemronShotsEnter). The head of the dungeon step loop's `jal step__5CSHOT` chain (dun 0x1DB874C, DunPatches):
+# borrowed_shots_enter.s — a species' shot effect, borrowed by an ability of Xiao's, kept entered in the floor's shot pack. Assembled at 0x01FB3F40
+# (ElfCave.BorrowedShotsEnter). The head of the dungeon step loop's `jal step__5CSHOT` chain (dun 0x1DB874C, DunPatches):
 # calls PropPelletFollow — which runs the cat's chain and the displaced step__5CSHOT — with a0 (the pool) passed through,
-# then, once a frame, makes sure the config the mod keeps in GemronShotBlock is in the pack: if the slot recorded for it no
-# longer holds it (a floor load rebuilt the pack) or none is recorded (the mod seeded a new element), it records the
+# then, once a frame, makes sure the config the mod keeps in BorrowedShotBlock is in the pack: if the slot recorded for it no
+# longer holds it (a floor load rebuilt the pack) or none is recorded (the mod seeded another config), it records the
 # monster pool's fill level and enters the config the way the loader enters a species' —
 # Entry__17CSHOT_EFFECT_PACK(NowShotEffect, cfg, read_buffer, 0x26, the monster pool, 6) — recording the slot. The fill
-# level is what lets the mod REUSE that slot for the next element: it empties the slot, rewinds the pool to the level,
+# level is what lets the mod REUSE that slot for the next config: it empties the slot, rewinds the pool to the level,
 # and writes −1. −1 back from Entry (the pack's five slots taken) clears the block's magic, so nothing is retried until
-# the mod seeds again (a floor change or a new element).
+# the mod seeds again (a floor change or another config).
 #
-# Block (0x01FAEF40): +0x00 "GEMS" (else nothing is done)   +0x10 the BT_SHOT_EFFECT copy   +0x250 its slot (cave;
+# Block (0x01FAEF40): +0x00 "SHOT" (else nothing is done)   +0x10 the BT_SHOT_EFFECT copy   +0x250 its slot (cave;
 #   −1 = enter it, ≥ 0 = entered)   +0x254 the monster pool's used counter before the entry (cave)
 # Globals: *0x002A35D8 NowShotEffect   *0x002A2384 read_buffer   0x01F066D0 the monster pool's CDataAlloc2 (+8 used)
 
@@ -20,8 +20,8 @@
     lui   $t0, 0x01FA
     ori   $t0, $t0, 0xEF40         # the block
     lw    $t1, 0x0000($t0)
-    lui   $t2, 0x534D
-    ori   $t2, $t2, 0x4547         # "GEMS"
+    lui   $t2, 0x544F
+    ori   $t2, $t2, 0x4853         # "SHOT"
     bne   $t1, $t2, ret            # nothing seeded
     nop
     lui   $t3, 0x002A
