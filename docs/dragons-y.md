@@ -24,7 +24,11 @@ back with the Matador's kick (strength 2.5, decay 0.1): `ElfCave.CatGuardBypass`
 whose base damage equals `Mailbox.PelletKickDamage`, with the origin at the entry's own sphere centre (the burst), so
 every enemy caught in the burst is shoved straight out of it in whatever direction that is (Heaven's Cloud does the
 same from the mod side with `Enemies.RadialKnockback`); the guard window test then runs as vanilla — knockback
-without guard crush.
+without guard crush. The cave tests the two damage marks BEFORE its cat shortcut (owner 1 + kick type 2 → pass): a
+stamped entry carries the melee type from then on and outlives one CheckDmg, so with the shortcut first the shot passed
+every guard after its first hit. The reorder made the cave 332 B, and it now lives in dun.bin over `MemoryMapDump`'s body
+(`DunCave.CatGuardBypass` 0x1DAC070 — a printf-only debug routine; DunPatches writes the cave bytes and nops its three
+callers), since the cave band had no such gap.
 
 ### Borrowed shots on every floor (RE)
 
@@ -44,26 +48,77 @@ FLYING radius (+0x2C) is zeroed (the contact sweep still runs) and the fired sub
 impact's first frame is the one plant, with the full explosion radius, hitting every enemy inside it once; a miss's
 expiry burst plants once likewise.
 
-`BorrowedShots.Seed` writes a copy of the config of the element in use (mask → 2, flags masked to the element bits so
-the Black Dragon's Freeze does not ride along) into runtime data at 0x21FAEF40 ("SHOT"
-magic, count, copies from +0x10, slots from +0x250); `ElfCave.BorrowedShotsEnter` (0x1FB3F40), now the head of the per-frame step chain
-(`jal step__5CSHOT`, dun 0x1DB874C — ahead of the Matador's follower), keeps it entered: each frame it checks that the
-recorded slot still holds the config (a floor load rebuilds the pack) and that one is recorded at all (a re-seed for a
-new element writes −1), and calls Entry only then — a mid-floor disc load, which the engine also does for character
-switches. A full pack clears the block's magic until the mod seeds again (a floor change or a new element). One config at a
-time, in ONE slot: the cave records the monster pool's fill level before each entry, and on a new element the mod
-empties the slot (sub-shot flags, count, and the config pointer — an empty slot to Entry, as the loader leaves for a
-species without shots), rewinds the pool to that level so the old model's memory is reused, and writes −1; the new
-ball is entered the next frame. A first cut entering all five at floor load froze the load; a second left every
-switched-to element resident. The rewind assumes nothing else took monster-pool memory after our entry mid-floor. `BorrowedShots.Start` (app start) keeps the block matched to Xiao's equipped inventory weapon — Dragon's Y with an element
-→ that element's config, else cleared — so it is in place before a floor loads, and logs the slot word the cave writes. Firing is
-the Guardian Reflector's `Set` replica (`ShotEffectPack` now holds the pack layout for both). Ruby's own balls
-(`c05_f03`, loaded only for character 3) were rejected: the user wants the Gemrons', and her set would not fit Xiao's
-heap anyway.
+**Where Xiao's shots live (2026-09-19): the MAIN-CHARACTER effect instance, not the pack.** Beside the pack the ELF keeps
+two more CSHOT_EFFECTs of the same layout, `CharaMainEffect` @0x1E8DA60 and `CharaMainEffectCrash` @0x1E97BC0 (one config,
+six sub-shots each). The floor loader fills the first with the active character's own `wep_eff` effect
+(`Get_Main_EffectPtr(charId, element)` dun 0x1DBA060 → a dun.bin table: Toan `c01_fuusya`, Xiao `mgan01`, Goro
+`c06a_tameex`, Ruby `c05_?03` by element, Ungaga `c10a_ex`, Osmond his guns; `MainChara_Effect` dun 0x1DBA230 →
+`Entry2__12CSHOT_EFFECT` 0x1AD260 from the read buffer, allocator = the character effects pool 0x1F06680, texture block
+0x10) and the dungeon loop steps and draws it through the live pointer gp−0x6304 (0x2A34EC). Nothing of Xiao's ever fires
+hers, so the borrowed shots take it over — and the pack's five slots stay the monsters'. The character effects pool is
+only what her 4.24 MB heap has left after the cat-bearing model (211 KB, 70 KB of it mgan01), far too small for a
+Gemron ball (25,500 units ≈ 408 KB), so the cave hands Entry2 an allocator of its own: a region carved from the
+monster pool once per floor, reset to 0 used before every entry so a config switch mid-floor reuses it whole. The
+region's size is the largest measured need among the known effects plus 1,024 units (`BorrowedShots.KnownUnits`: t_boll
+19,867 … e114a_ex 23,822 → every known effect asks 24,846, so switching reuses one region; an unknown effect gets 32,768).
+A region is reused only when its capacity covers the wanted config's reserve — the game's allocator answers an overflow
+with an endless loop, which is what froze the game on an element switch when each effect carved with its own smaller
+reserve; otherwise the cave carves a fresh, larger region — a DBC floor's pool is ~413,600 units, Wise Owl's ~278,800, and a Gallery floor
+rostered with all five Gemrons had only 24,096 left after the species loaded. The enemy randomizer's per-floor budget
+therefore subtracts `BorrowedShots.Headroom` (the seeded effect's reserve, 0 when none) so the species leave the shot
+its room; a floor staged before Dragon's Y was equipped can still refuse it (state −1: the pellet ×5 fallback fires).
+
+`BorrowedShots.Seed` writes a copy of the config (mask → 2, flying radius 0, flags masked to the element bits so the
+Black Dragon's Freeze does not ride along) and the container's path into runtime data at 0x21FAEF40 ("SHOT" magic,
+config +0x10, state +0x250, path +0x258, the cave's CDataAlloc2 +0x298, LoadFile's size out +0x2A8, reserve +0x2AC)
+with state 0. `ElfCave.BorrowedShotsEnter` (in two pieces — the head at 0x1FB1ED0, the tail at 0x1FB3F40, the head ending
+in a `b` to the tail; build_ee_stubs.py assembles both from one `#SPLIT` source — because the band has no 470 B gap and
+can NEVER grow past 0x1FB4000: that is runtime data, the fishing bobber pointer and the cat's block, and code there
+crashed PCSX2), the head of the
+per-frame step chain (`jal step__5CSHOT`, dun 0x1DB874C — ahead of the Matador's follower), checks the instance each
+frame: config pointer ours and state 1 → nothing. Config pointer not ours → the loader ran: a new floor, or a DUNGEON MENU
+(`BtMenuLoadChara` reloads the character and calls `MainChara_Effect` again, refilling the instance with mgan01 — every
+menu visit). If the pool's used counter still equals the mark the cave stored after its last carve (+0x2B0), nothing was
+allocated since and the region is reused; otherwise carve a fresh one (pool used += reserve; over capacity → state −1,
+magic dropped — the game's own overflow is a hang). Before the mark, every menu visit carved another region and a
+nearly-full floor ran out after the first menu ("NOT entered" until the next floor). Then, and
+on state 0 (another config seeded), re-enter the way the weapon-change path does: `Initialize__12CSHOT_EFFECT`,
+`DeleteTextureBlock(mgr, 0x10)` + `CleanUpBuffer` + `CleanUpTextureList` (the previous effect's textures),
+`LoadFile(path, read_buffer, &size)` + `wait_now_loading_vsync` (a mid-floor disc read, which the engine also does for
+character switches), `Entry2(instance, cfg, read_buffer, 0x10, our allocator, 6)`, state 1, and the live pointer set to
+the instance. `BorrowedShots.Start` (app start) keeps the block matched to what the providers want so it is in place
+before a floor loads, restores the magic on each new floor, and logs the state the cave writes with the region's
+usage (for tuning the reserve). Firing is the Guardian Reflector's `Set` replica at the instance's address
+(`ShotEffectPack.CharaMainEffect`). Ruby's own balls (`c05_f03`, loaded only for character 3) were rejected: the user
+wants the Gemrons'.
+
+History: the first cut entered the ball into the monster pack (five slots shared with every shooting species on the
+floor: a first version entering all five configs at floor load froze the load; then one slot reused per element with a
+monster-pool watermark rewind). It cost the enemy randomizer a slot whenever Dragon's Y was out.
 
 ### BorrowedShots is the general loader
 
-`Weapons/BorrowedShots.cs` is not Dragon's Y's: any ability hands `BorrowedShots.Start(...)` a provider (`Func<int>`)
-answering with the `ShotEffectPack.CfgTable` index it wants entered right now (or −1), and fires it with
-`BorrowedShots.Fire(cfgIndex, …)`. One config is entered at a time (the first non-negative answer); Dragon's Y's
-provider is `DragonsY.WantedShot` (its per-element table `ShotEffectPack.DragonsYCfg`).
+`Weapons/BorrowedShots.cs` is not Dragon's Y's: any ability hands `BorrowedShots.Start(...)` a provider
+(`Func<BorrowedEffect>`) answering with the effect it wants entered right now (or null) — `BorrowedShots.TableConfig(index)`
+for one of the game's 34 (container under `dun/effect`), or `BorrowedShots.CustomConfig(template, name, muzzle, fly,
+impact, expire, dir)` for the mod's own: a game config's numbers naming any `<dir><name>.chr` (`EffectDir` or `WepEffDir`,
+so a character's effect such as Toan's `c01_fuusya` needs no archive copy) with the phase motions (KEY ordinals) that file
+has — and fires it with `BorrowedShots.Fire(effect, …)`. One effect is entered at a time (the first answer); Dragon's Y's
+provider is `DragonsY.WantedShot` (its per-element table `ShotEffectPack.DragonsYCfg`), which answers null unless Xiao
+is the ACTIVE character: the instance belongs to whoever is out, and Ruby's and Osmond's own shots live in it.
+
+Effect files under `dun/effect` no config names and no code references: `_b_boll`, `_f_boll_2`, `_f_boll_3`,
+`_i_boll` (KEY 0 flight, 1 burst — older balls), `_f_boll` (KEY 0 stop, 1 flight; bbp/wgt), `zibaku_f`/`zibaku_r`/
+`zibaku_t` (fire/ice/thunder bursts, one KEY), `explosion` (a large burst, one KEY), `es_zone` (one standing KEY).
+Config layout past the mask: +0x4C/+0x4E/+0x50/+0x52 the muzzle/flying/impact/expiry motions (shorts, −1 = none);
++0x58 a float, +0x5C..+0x6C ints (unmapped).
+
+**The loader's name rule.** `Entry__12CSHOT_EFFECT` (0x1ACC70) uses the config's one name twice: `dun/effect/%s.chr`
+for the archive file, then `%s.cfg` for the record it asks that container for. A container whose cfg record is named
+otherwise loads nothing — the slot is still handed back, but the monster pool watermark does not move (the tour log
+showed `257316 → 257316` for every underscore ball, against 6–9 k units for the zibaku bursts). That is why the five
+underscore balls (`b_boll.cfg` inside `_b_boll.chr`, …) and `es_zone` (`info.cfg`) showed nothing. The bake step
+`tools/iso_patch/borrow_shot_effects.py` (IsoPatcher.BakeBorrowedShots) copies each such container onto its own
+name with `<name>.cfg` appended (the source cfg's payload; the text still names the source's own records, which are
+in the copy), so they load. The same table line borrows any other character's effect onto a dead name — a copy with
+the appended record; the source file is never modified.

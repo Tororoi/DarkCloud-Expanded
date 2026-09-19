@@ -42,8 +42,8 @@ motion with forward kinematics (see game_data/docs/mot-format.md sec.10 for the 
 
 Usage:
     source .env
-    python3 tools/model_viewer/extract_model.py            # build every model, bake model_viewer.html
-    python3 tools/model_viewer/extract_model.py --dump c01d # print one model's skeleton/motion summary
+    python3 tools/lib/extract_model.py            # build every model, bake tools/model_viewer/model_viewer.html
+    python3 tools/lib/extract_model.py --dump c01d # print one model's skeleton/motion summary
 
 Heavy arrays (mesh positions, triangle indices, keyframe values) are quantized to int16/uint16 and
 base64-packed so the whole multi-model viewer stays small. The viewer template
@@ -61,7 +61,8 @@ from mdt_codec import parse_mdt                            # noqa: E402
 
 # ---- character code -> name, in the dropdown group order the coordinator asked for ----
 CHAR_MAP = [('c01', 'Toan'), ('c04', 'Xiao'), ('c05', 'Ruby'),
-            ('c06', 'Goro'), ('c10', 'Ungaga'), ('c18', 'Osmond')]
+            ('c06', 'Goro'), ('c10', 'Ungaga'), ('c18', 'Osmond'),
+            ('c07', 'c07 (unused)')]   # dun\mainchara\c07a.chr: a seventh dungeon body nothing references
 CHAR_ORDER = [n for _, n in CHAR_MAP]
 
 # ---- explicit motion-only packs the enumeration filter would otherwise drop (their `*d02s` basename
@@ -837,8 +838,9 @@ def bake_html(budget_mb=15.5):
             continue
         models.append(m); used_specs.append(sp); levels.append(0); nbytes.append(_model_bytes(m))
 
-    tpl_path = os.path.join(HERE, 'viewer_template.html')
-    out_path = os.path.join(HERE, 'model_viewer.html')
+    viewer_dir = os.path.join(HERE, '..', 'model_viewer')            # the template and the baked page live with the viewers
+    tpl_path = os.path.join(viewer_dir, 'viewer_template.html')
+    out_path = os.path.join(viewer_dir, 'model_viewer.html')
     with open(tpl_path, 'r', encoding='utf-8') as f:
         tpl = f.read()
     budget = int(budget_mb * 1024 * 1024) - len(tpl.encode('utf-8')) - 4096   # data budget

@@ -62,11 +62,9 @@ namespace Dark_Cloud_Improved_Version
             // squeezed to a 29,344 cap against a real demand of 70-190 KB. So the heap takes 5,000 more units (80,000 B) out
             // of the global buffer, which the same log measured at 103,984 B free; 23,984 B of it is left. 265000 = 0x40B28
             // no longer fits the `ori` alone (260000 was 0x3F7A0, still lui 3), so each site's `lui r2,3` goes to 4 as well.
-            new(0x01DAC0C0, 0x3C020003, 0x3C020004, "character heap → 265000 units (MemoryMapDump printf, lui)"),
             new(0x01DAC334, 0x3C020003, 0x3C020004, "character heap → 265000 units (GameInit carve, lui)"),
             new(0x01DB9A84, 0x3C020003, 0x3C020004, "character heap → 265000 units (LoadWeapon2 remaining, lui)"),
             new(0x01DBA8AC, 0x3C020003, 0x3C020004, "character heap → 265000 units (LoadChara2 remaining, lui)"),
-            new(0x01DAC0C4, 0x34463450, 0x34460B28, "character heap 210000 → 265000 units (MemoryMapDump printf)"),
             new(0x01DAC338, 0x34453450, 0x34450B28, "character heap 210000 → 265000 units (GameInit carve)"),
             new(0x01DB9A88, 0x34433450, 0x34430B28, "character heap 210000 → 265000 units (LoadWeapon2 remaining)"),
             new(0x01DBA8B0, 0x34423450, 0x34420B28, "character heap 210000 → 265000 units (LoadChara2 remaining)"),
@@ -88,7 +86,11 @@ namespace Dark_Cloud_Improved_Version
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
             // The loader's `jal MemoryMapDump` (dun 0x1DB9568) was the Gemron cave's first hook; the cave now sits at the head of
             // the per-frame chain instead, and an ISO patched with that first hook gets the vanilla word back.
-            new(BorrowedLoadHookAddr, BorrowedLoadHookOld, BorrowedLoadHookVanilla, "borrowed shots: the retired loader hook back to vanilla"),
+            // MemoryMapDump (dun 0x1DAC070, printf-only) hosts the guard-bypass cave (DunCave.CatGuardBypass, Caves below): its three
+            // callers become nops — the loader's (the borrowed shots' first hook site), the per-frame one and the bomb-effect draw's.
+            new(0x01DAD938, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (its body is the guard-bypass cave)"),
+            new(BorrowedLoadHookAddr, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (the loader's; its body is the guard-bypass cave)"),
+            new(0x01DBA8F4, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (its body is the guard-bypass cave)"),
             new(SsIconCopyHookAddr, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook (jal DngActiveWeaponTextureCopy → cave)"),
             new(SsIconCopyHookAddr2, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook 2 (the step path's jal DngActiveWeaponTextureCopy → cave)"),
         };
@@ -118,8 +120,15 @@ namespace Dark_Cloud_Improved_Version
         internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;
         internal const uint BorrowedLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
-        internal const uint BorrowedLoadHookVanilla = 0x0C76B01C;                          // jal 0x1DAC070
-        internal const uint BorrowedLoadHookOld     = 0x0C000000u | (CodeCaves.ElfCave.BorrowedShotsEnter >> 2);
+        internal const uint MemoryMapDumpCall       = 0x0C76B01C;                          // jal 0x1DAC070
+        private sealed record Cave(uint Addr, uint Span, uint VanillaWord0, string Resource, string What);
+        /// <summary>Whole functions of dead overlay code replaced by a cave's bytes (tools/stubs/*.s assembled at the function's
+        /// address). Skipped when the first word is already the cave's; otherwise the first word must be the function's vanilla
+        /// prologue word.</summary>
+        private static readonly Cave[] Caves =
+        {
+            new(CodeCaves.DunCave.CatGuardBypass, CodeCaves.DunCave.CatGuardBypassSpan, 0x27BDFFF0, "catGuardBypass.bin", "guard-bypass cave over MemoryMapDump"),
+        };
         internal const uint HealCadenceAddr = 0x01DB8234;                                 // the heal tick's `slti v0,v0,THRESHOLD`: low half = the period in frames
         internal const uint HealCadenceOrig = 0x284200F0;
         internal const uint HealCadenceNew  = 0x284200B4;
@@ -149,7 +158,26 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, off, w.New);
                 applied++;
             }
-            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 4.16 MB (read buffer + global slack), cat pellet-follower hook, cat glow hooks) …");
+            foreach (var c in Caves)
+            {
+                using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch." + c.Resource)
+                    ?? throw new IOException($"Embedded EE function missing: {c.Resource} (run tools/stubs/build_ee_stubs.py and rebuild)");
+                using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+                if (b.Length < 8 || b.Length % 4 != 0 || b.Length > c.Span)
+                    throw new IOException($"{c.Resource} malformed ({b.Length} B) or too big for its {c.Span} B host — {c.What}.");
+                uint rel = c.Addr - LoadBase;
+                if (rel + c.Span > dun.Size) throw new IOException($"dun.bin cave 0x{c.Addr:X} lies past the file ({c.What}).");
+                long off = baseOff + rel;
+                uint cur = RdU32(fs, off);
+                if (cur == U32(b, 0)) continue;                                  // already ours
+                if (cur != c.VanillaWord0)
+                    throw new IOException($"dun.bin @0x{c.Addr:X} is not vanilla ({cur:X8}, expected {c.VanillaWord0:X8}) — {c.What}. Unmodified Dark Cloud (USA) ISO expected.");
+                for (int i = 0; i < b.Length; i += 4) WrU32(fs, off + i, U32(b, i));
+                for (int i = b.Length; i < c.Span; i += 4) WrU32(fs, off + i, 0);   // the rest of the host: nops
+                applied++;
+            }
+            progress($"Patched dun.bin ({applied} word(s): heal cadence 3 s, gauge multiplier → cave word, character heap 3.36 → 4.16 MB (read buffer + global slack), cat pellet-follower hook, cat glow hooks, guard-bypass cave over MemoryMapDump) …");
         }
     }
 }

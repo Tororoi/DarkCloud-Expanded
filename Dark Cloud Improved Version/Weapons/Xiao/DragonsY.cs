@@ -8,7 +8,7 @@ namespace Dark_Cloud_Improved_Version
     /// appears and <see cref="BorrowedShots.Fire"/> launches the ball from its position with its velocity (the pellet's own
     /// speed) at <see cref="DamageMult"/>× its damage — with no element selected, the Black Dragon's shot instead;
     /// only when this floor has no slot for it does the pellet itself fly on at <see cref="PelletScale"/>× its sprite size
-    /// and the same damage. The shot carries the Matador's kick strength: ElfCave.CatGuardBypass stamps it on every entry
+    /// and the same damage. The shot carries the Matador's kick strength: DunCave.CatGuardBypass stamps it on every entry
     /// whose base damage is <see cref="Mailbox.PelletKickDamage"/>, with the ORIGIN at that entry's own sphere centre —
     /// the burst — so each enemy it catches is shoved straight out of the burst; the guard window stands (no crush here).
     /// A charged shot costs ChargedShotWhp's weapon HP.
@@ -109,7 +109,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
             Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
             Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
-            if (BorrowedShots.Fire(ShotEffectPack.DragonsYCfg[element], x, h, y, vx, vh, vy, damage, Memory.ReadInt(PlayerShotPool.LifetimeAddr(pool, slot))))
+            if (BorrowedShots.Fire(Shot(element), x, h, y, vx, vh, vy, damage, Memory.ReadInt(PlayerShotPool.LifetimeAddr(pool, slot))))
             {
                 Memory.WriteInt(PlayerShotPool.FlagAddr(pool, slot), 0);                    // the pellet gives way to the shot
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged shot: {(element == 5 ? "black dragon shot" : $"element {element} ball")} in the pellet's place, damage {damage}");
@@ -117,21 +117,27 @@ namespace Dark_Cloud_Improved_Version
             }
             Memory.WriteInt  (dmgA, damage);
             Memory.WriteFloat(PlayerShotPool.ScaleAddr(pool, slot), PelletScale);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged shot: pellet ×{PelletScale}, damage {damage} (no slot for element {element} on this floor)");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged shot: pellet ×{PelletScale}, damage {damage} (element {element}'s shot is not entered on this floor)");
         }
 
         /// <summary>The weapon or the floor went (or the lock/motion ended): the KEY rate again.</summary>
         /// <summary>The shot config Dragon's Y wants entered on every floor — its selected element's, read off Xiao's inventory
-        /// record (valid in town and dungeon alike) — or −1 while she has another weapon. BorrowedShots asks every tick.</summary>
-        internal static int WantedShot()
+        /// record (valid in town and dungeon alike) — or null while she has another weapon or is not the active character
+        /// (the main-character instance is every character's; Ruby's and Osmond's own shots live there when they are out).
+        /// BorrowedShots asks every tick.</summary>
+        internal static BorrowedEffect WantedShot()
         {
+            if (Player.CurrentCharacterNum() != Player.XiaoId) return null;
             int slot = Memory.ReadByte(DngStatusData.Base + DngStatusData.EquipSlotArrayOffset + Player.XiaoId);
-            if ((uint)slot > 9) return -1;
+            if ((uint)slot > 9) return null;
             long rec = DngStatusData.WeaponRecord(Player.XiaoId, slot);
-            if (Memory.ReadUShort(rec) != Items.dragonsy) return -1;
-            int element = Memory.ReadByte(rec + ElementOffset);
-            return element >= 0 && element < ShotEffectPack.DragonsYCfg.Length ? ShotEffectPack.DragonsYCfg[element] : -1;
+            if (Memory.ReadUShort(rec) != Items.dragonsy) return null;
+            return Shot(Memory.ReadByte(rec + ElementOffset));
         }
+
+        /// <summary>The config for a selected element (00 Fire … 04 Holy, 05 none), or null for anything else.</summary>
+        private static BorrowedEffect Shot(int element)
+            => element >= 0 && element < ShotEffectPack.DragonsYCfg.Length ? BorrowedShots.TableConfig(ShotEffectPack.DragonsYCfg[element]) : null;
 
         internal static void Stop() { if (_held) Release(); _holding = false; _armedUntil = DateTime.MinValue; Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0); }
 

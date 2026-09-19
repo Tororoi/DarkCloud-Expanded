@@ -627,11 +627,18 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgSize    = 0x70;
         internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
         internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
-        internal const int  CfgFlyMotion = 0x4E;    // short — the flying motion id
+        internal const int  CfgName    = 0x00, CfgNameLen = 0x28;   // the effect's file name: dun/effect/<name>.chr
+        // The motion (the .chr's KEY ordinal) each phase plays, shorts; −1 = none: muzzle, flying, impact, expiry burst.
+        internal const int  CfgMuzzleMotion = 0x4C, CfgFlyMotion = 0x4E, CfgImpactMotion = 0x50, CfgExpireMotion = 0x52;
         /// <summary>Dragon's Y's charged shot per selected element, 00 Fire … 04 Holy: the Gemrons' f_boll_3, i_boll, t_boll,
         /// e114a_ex, e115a_ex — and at 05 (no element) the Black Dragon's b_boll.</summary>
         internal static readonly int[] DragonsYCfg = { 5, 20, 23, 24, 25, 22 };
         internal const long ReadBufferPtr   = 0x202A2384;   // → the dungeon loader's file read buffer (Entry's third argument)
+        /// <summary>The MAIN-CHARACTER effect instances (CharaMainEffect, CharaMainEffectCrash): two more CSHOT_EFFECTs of this
+        /// same layout beside the pack, one config each, which the floor loader fills with the active character's wep_eff
+        /// effect (MainChara_Effect → Entry2) and the dungeon loop steps and draws through the live pointer at 0x2A34EC.
+        /// Xiao's holds mgan01, which nothing of hers fires — the borrowed shots take it over (BorrowedShots).</summary>
+        internal const long CharaMainEffect = 0x21E8DA60, CharaMainEffectCrash = 0x21E97BC0, MainEffectLivePtr = 0x202A34EC;
         internal const uint MonsterPoolAlloc = 0x01F066D0;  // the CDataAlloc2 the floor's monster models and their shot effects come from
         internal const int  EntryParam4     = 0x26;         // what the species loader passes Entry as its fourth argument
     }

@@ -238,6 +238,10 @@ namespace Dark_Cloud_Improved_Version
         internal const long Texture = 0x202AB030, P870 = 0x21F06870, P6A0 = 0x21F066A0, P6B0 = 0x21F066B0;
         internal const long P6C0 = 0x21F066C0, P840 = 0x21F06840, Monstor = 0x21F066D0, Map = 0x21F06650;
         internal const long Weapon = 0x21F06670, Effect = 0x21F06680;   // LoadChara2's counters inside the chara pool
+        /// <summary>BtCashBuffer: the floor system script's work allocator (BtSystemScriptRun). On a dungeon's first floor it
+        /// is aimed at BtScriptWorkBuffer (P840, 100,000 units — whose own counter therefore never moves); on every later
+        /// floor at the monster pool's region with its capacity + 35,000. Its used counter is the only record of that demand.</summary>
+        internal const long Cash = 0x21F06850;
         internal const long GlobalUsed = 0x21C74980;                    // the global buffer's bump counter (units)
         internal const int  GlobalCap  = 0x19C98F;
         internal static readonly (long addr, string name)[] InCarveOrder =

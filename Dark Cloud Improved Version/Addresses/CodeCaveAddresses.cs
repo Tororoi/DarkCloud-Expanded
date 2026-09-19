@@ -418,7 +418,7 @@ namespace Dark_Cloud_Improved_Version
             internal const long PropFollowLift  = Base + 0xC4;
             internal const long PropFollowSpin  = Base + 0xC8;
             internal const long PropFollowEnded = Base + 0xCC;
-            /// <summary>The Matador's charged pellet, for ElfCave.CatGuardBypass: a Xiao-owned damage entry whose base damage
+            /// <summary>The Matador's charged pellet, for DunCave.CatGuardBypass: a Xiao-owned damage entry whose base damage
             /// (+0x34) equals this word passes an enemy's guard window. 0 = no charged pellet out.</summary>
             internal const long PelletCrushDamage = Base + 0xD0;
             /// <summary>…and the kick that cave stamps on it (step__5CSHOT plants pellets with none): strength and decay,
@@ -437,6 +437,17 @@ namespace Dark_Cloud_Improved_Version
             internal const long XiaoShotWhpFactor = Base + 0xE8;
             internal const long XiaoShotWhpOwner  = Base + 0xEC;
             internal const long NextFree = Base + 0xF4;   // +0xF4..+0xFF are free (⚠ +0x100 = AiStubBase)
+        }
+
+        /// <summary>Caves that live INSIDE dun.bin (DunPatches writes their bytes over dead overlay code; the main-ELF hooks
+        /// that jump to them run only in dungeons, where the overlay is resident).</summary>
+        internal static class DunCave
+        {
+            /// <summary>tools/stubs/cat_guard_bypass.s over MemoryMapDump's body (a printf-only debug routine whose three callers
+            /// DunPatches nops): the cat's hits and the Matador's charged pellet ignore an enemy's guard window; Dragon's Y's
+            /// shot gets its kick without the bypass (main-ELF hook 0x1DAC78, ElfPatches.PatchCatGuardBypass).</summary>
+            internal const uint CatGuardBypass = 0x01DAC070;   // 332 B → 0x1DAC1BC = MemoryMapDump's whole span
+            internal const uint CatGuardBypassSpan = 0x14C;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -489,7 +500,7 @@ namespace Dark_Cloud_Improved_Version
         ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
         ///   0x1FB0D90  CatPelletFollow    4244 B → 0x1FB1E24   catPelletFollow.bin
         ///   0x1FB1E30  PropPelletFollow    156 B → 0x1FB1ECC   propPelletFollow.bin
-        ///   0x1FB1ED0  CatGuardBypass      304 B → 0x1FB2000   catGuardBypass.bin (fills the first band to its end)
+        ///   0x1FB1ED0  BorrowedShotsEnter  304 B → 0x1FB2000   borrowedShotsEnter.bin (the HEAD; its tail is at 0x1FB3F40)
         ///   (the second band, 0x1FB2000 →, is the table in <see cref="ElfCave"/> below)
         /// </summary>
         internal static class ElfCave
@@ -497,7 +508,7 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>Guest bounds of the hijacked-phdr3 segment; RegionEnd − RegionStart is its p_filesz/p_memsz.
             /// RegionStart must stay 16KB-aligned (page isolation — see the class doc) and 0x80-aligned (p_align).</summary>
             internal const uint RegionStart = 0x01FB0000;
-            internal const uint RegionEnd   = 0x01FB4000;   // grown from 0x1FB2000: the second band holds the cat glow cave
+            internal const uint RegionEnd   = 0x01FB4000;   // ⚠ the band can NEVER grow past this: 0x1FB4000.. is runtime data (TownAddresses.BobberPtr, then Mailbox.CatBase) — code there crashed PCSX2 (PINE writes into a compiled page, 2026-09-19)
             /// <summary>ELF-file offset the segment loads from (span RegionEnd−RegionStart, zero-filled at patch
             /// time; formerly .reldun debug bytes — outside every phdr's file extent, never read at runtime).</summary>
             internal const uint SegmentFileOff = 0x002AD000;   // 0x4000 B of dead .reldun (0x29FE60..0x2B11C8) — was 0x2AF000 for 0x2000
@@ -534,7 +545,7 @@ namespace Dark_Cloud_Improved_Version
             /// Now the hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
             /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
             internal const uint PropPelletFollow   = 0x01FB1E30;   // 156 B → 0x1FB1ECC
-            internal const uint CatGuardBypass     = 0x01FB1ED0;   // 304 B → 0x1FB2000 (the first band's end): the cat's hits and the Matador's charged pellet ignore an enemy's guard window; Dragon's Y's shot gets its kick without the bypass (main-ELF hook 0x1DAC78, ElfPatches)
+            // CatGuardBypass lives in dun.bin now — see DunCave.CatGuardBypass
             /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
             /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
             /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
@@ -570,11 +581,14 @@ namespace Dark_Cloud_Improved_Version
             internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)
             internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 200 B → 0x1FB3DA8: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
             internal const uint SuperSteveIconCopy = 0x01FB3DC0;   // 356 B → 0x1FB3F24: …and the copy that keeps the CURRENT sphere's icon in the HUD sheet (on every DngActiveWeaponTextureCopy call: four menu paths + two overlay sites)
-            /// <summary>Keeps the borrowed shot config in BorrowedShotBlock entered in the floor's shot pack (tools/stubs/
-            /// borrowed_shots_enter.s): the head of the step chain (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then
-            /// Entry()s the config whenever the pack no longer holds it, recording the slot.</summary>
-            internal const uint BorrowedShotsEnter   = 0x01FB3F40;   // 180 B → 0x1FB3FF4
-            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2278..0x1FB22BC (68 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            /// <summary>Keeps the borrowed shot config in BorrowedShotBlock entered in the MAIN-CHARACTER effect instance
+            /// (ShotEffectPack.CharaMainEffect; tools/stubs/borrowed_shots_enter.s): the head of the step chain
+            /// (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then re-enters the instance whenever the loader refilled
+            /// it or the mod seeded another config, from a signed region it carves from the monster pool. Two pieces: the head
+            /// here and the tail at <see cref="BorrowedShotsEnterTail"/> (the head ends in a `b` to it).</summary>
+            internal const uint BorrowedShotsEnter     = 0x01FB1ED0;   // 292 B → 0x1FB1FF4 (the first band's end is 0x1FB2000)
+            internal const uint BorrowedShotsEnterTail = 0x01FB3F40;   // 176 B → 0x1FB3FF0 (the band's end is 0x1FB4000)
+            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2278..0x1FB22BC (68 B)
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -748,17 +762,21 @@ namespace Dark_Cloud_Improved_Version
         /// The count is checked against this now rather than truncated.</summary>
         internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
 
-        /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered, BorrowedShots writes it): +0x00
-        /// "SHOT" (0 = nothing to enter — the mod's clear, or the cave's after a full pack), the BT_SHOT_EFFECT copy (0x70,
-        /// victim mask = enemies) at +0x10, +0x250 its pack slot (−1 = enter it; the cave records the slot), +0x254 the
-        /// monster pool's used counter before the cave's entry (the mod rewinds to it to reuse the slot for another config).
-        /// Runtime data on a runtime-data page.</summary>
+        /// <summary>The borrowed shot config in use (ElfCave.BorrowedShotsEnter keeps it entered in the main-character effect
+        /// instance, BorrowedShots writes it): +0x00 "SHOT" (0 = nothing to enter — the mod's clear, or the cave's after a
+        /// failure), the BT_SHOT_EFFECT copy (0x70, victim mask = enemies) at +0x10, +0x250 the state (mod: 0 = enter; cave:
+        /// 1 = entered, −1 = no room / failed), +0x258 the effect file's path (≤ 63 chars, mod), +0x298 the CDataAlloc2 the
+        /// cave carves from the monster pool once per floor {base, 0, used, cap}, +0x2A8 LoadFile's size out, +0x2AC the
+        /// region's size in 16-byte units (mod), +0x2B0 the pool's used counter right after the carve (cave: while the live
+        /// counter still equals it the region is the pool's top and is reused instead of carved again). Runtime data on a
+        /// runtime-data page.</summary>
         internal const long BorrowedShotBlock      = 0x21FAEF40;
         internal const uint BorrowedShotBlockGuest = 0x01FAEF40;
         internal const uint BorrowedShotMagic      = 0x544F4853;   // "SHOT"
-        internal const int  BorrowedShotCfg       = 0x10, BorrowedShotSlot = 0x250, BorrowedShotWatermark = 0x254, BorrowedShotBlockSize = 0x270;
+        internal const int  BorrowedShotCfg = 0x10, BorrowedShotState = 0x250, BorrowedShotPath = 0x258, BorrowedShotPathLen = 0x40,
+                            BorrowedShotAlloc = 0x298, BorrowedShotReserve = 0x2AC, BorrowedShotCarveMark = 0x2B0, BorrowedShotBlockSize = 0x2C0;
 
-        // ── FREE: 0x21FAF1B0 .. 0x21FB0000 (~0xE50 B) ────────────────────────────────────────────────────
+        // ── FREE: 0x21FAF200 .. 0x21FB0000 (0xE00 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

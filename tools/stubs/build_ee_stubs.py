@@ -20,7 +20,10 @@ from mips_asm import assemble
 
 DEST = os.path.join(HERE, '..', '..', 'Dark Cloud Improved Version', 'Resources', 'isoPatch')
 
-# (source .s in tools/, dest .bin in Resources/isoPatch/, assemble base VA)
+# (source .s in tools/, dest .bin in Resources/isoPatch/, assemble base VA[, tail dest .bin, tail base VA])
+# A stub with a `#SPLIT` line is assembled as ONE image at its base with the gap up to the tail base blanked
+# (`.space`), then written as two .bins: the head (before the marker) and the tail (from the tail base on).
+# Count: every instruction line before the marker is one word (no pseudo-instructions that expand).
 # The 0x1FB0xxx stubs live in the mod's own ELF PT_LOAD segment (the hijacked phdr3 —
 # CodeCaveAddresses.ElfCave is the registry; ElfPatches.HijackPhdr3CaveSegment creates it). Their
 # bases MUST match the ElfCave constants, and the segment start must stay 16KB-aligned: its host
@@ -50,28 +53,56 @@ STUBS = [
     ('mirage_haze_draw.s',       'mirageHazeDraw.bin',       0x1FB3C40),
     ('supersteve_icon_draw.s',   'superSteveIconDraw.bin',   0x1FB3CE0),
     ('supersteve_icon_copy.s',   'superSteveIconCopy.bin',   0x1FB3DC0),
-    ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1FB1ED0),
-    ('borrowed_shots_enter.s',     'borrowedShotsEnter.bin',     0x1FB3F40),
+    ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1DAC070),   # dun.bin: MemoryMapDump's body (DunPatches writes it)
+    ('borrowed_shots_enter.s',   'borrowedShotsEnter.bin',   0x1FB1ED0, 'borrowedShotsEnterTail.bin', 0x1FB3F40),
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]
 
 
+def _is_insn(line):
+    t = line.split('#', 1)[0].strip()
+    return bool(t) and not t.endswith(':') and not t.startswith('.')
+
+
+def _split_blobs(src_text, base, tail_base):
+    """Assemble a `#SPLIT` stub as one image with the gap blanked; return (head bytes, tail bytes)."""
+    head, tail = src_text.split('#SPLIT\n', 1)
+    head_len = 4 * sum(1 for l in head.splitlines() if _is_insn(l))
+    gap = tail_base - base - head_len
+    if gap < 0:
+        raise SystemExit(f'split stub: the head ({head_len} B) runs past the tail base 0x{tail_base:X}')
+    blob = assemble(head + f'.space {gap}\n' + tail, base)
+    if len(blob) <= tail_base - base:
+        raise SystemExit('split stub: no tail assembled')
+    return blob[:head_len], blob[tail_base - base:]
+
+
+def _emit(dest, blob, base, check, stale):
+    path = os.path.join(DEST, dest)
+    cur = open(path, 'rb').read() if os.path.exists(path) else None
+    if blob == cur:
+        print(f'  ok      {dest} ({len(blob)} B @0x{base:06X})')
+    elif check:
+        stale.append(dest)
+        print(f'  STALE   {dest} (committed {0 if cur is None else len(cur)} B != assembled {len(blob)} B or bytes differ)')
+    else:
+        open(path, 'wb').write(blob)
+        print(f'  WROTE   {dest} ({len(blob)} B @0x{base:06X})')
+
+
 def main():
     check = '--check' in sys.argv[1:]
     stale = []
-    for src, dest, base in STUBS:
-        blob = assemble(open(os.path.join(HERE, src)).read(), base)
-        path = os.path.join(DEST, dest)
-        cur = open(path, 'rb').read() if os.path.exists(path) else None
-        if blob == cur:
-            print(f'  ok      {dest} ({len(blob)} B @0x{base:06X})')
-        elif check:
-            stale.append(dest)
-            print(f'  STALE   {dest} (committed {0 if cur is None else len(cur)} B != assembled {len(blob)} B or bytes differ)')
-        else:
-            open(path, 'wb').write(blob)
-            print(f'  WROTE   {dest} ({len(blob)} B @0x{base:06X})')
+    for entry in STUBS:
+        src, dest, base = entry[:3]
+        text = open(os.path.join(HERE, src)).read()
+        if len(entry) == 5:
+            head, tail = _split_blobs(text, base, entry[4])
+            _emit(dest, head, base, check, stale)
+            _emit(entry[3], tail, entry[4], check, stale)
+            continue
+        _emit(dest, assemble(text, base), base, check, stale)
     if stale:
         raise SystemExit(f'--check failed: {", ".join(stale)} out of date — run tools/stubs/build_ee_stubs.py')
 

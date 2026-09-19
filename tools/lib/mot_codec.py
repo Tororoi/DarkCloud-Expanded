@@ -75,6 +75,22 @@ class Record:
         return f"<Record {self.name!r} dataOff=0x{self.data_off:X} size=0x{self.size:X} stride=0x{self.stride:X}>"
 
 
+REC_TAG = 0x00140E02          # word at record +0x4C on every vanilla record
+
+
+def new_record(name, payload, tag=REC_TAG):
+    """A fresh Record (header + payload, stride padded to 16 like every vanilla record)."""
+    data_off = DATA_OFF_STD
+    stride = (data_off + len(payload) + 15) & ~15
+    head = bytearray(data_off)
+    nb = name.encode('latin1')[:0x3F]
+    head[:len(nb)] = nb
+    struct.pack_into('<III', head, 0x40, data_off, len(payload), stride)
+    struct.pack_into('<I', head, 0x4C, tag)
+    raw = bytes(head) + payload + b'\x00' * (stride - data_off - len(payload))
+    return Record(name, data_off, len(payload), stride, raw)
+
+
 class Pack:
     """A .chr: a chained list of Records plus any trailing terminator bytes."""
     __slots__ = ('records', 'trailer')
