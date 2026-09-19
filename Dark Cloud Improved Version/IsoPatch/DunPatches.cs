@@ -88,7 +88,7 @@ namespace Dark_Cloud_Improved_Version
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
             // The loader's `jal MemoryMapDump` (dun 0x1DB9568) was the Gemron cave's first hook; the cave now sits at the head of
             // the per-frame chain instead, and an ISO patched with that first hook gets the vanilla word back.
-            new(GemronLoadHookAddr, GemronLoadHookOld, GemronLoadHookVanilla, "gemron shots: the retired loader hook back to vanilla"),
+            new(BorrowedLoadHookAddr, BorrowedLoadHookOld, BorrowedLoadHookVanilla, "borrowed shots: the retired loader hook back to vanilla"),
             new(SsIconCopyHookAddr, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook (jal DngActiveWeaponTextureCopy → cave)"),
             new(SsIconCopyHookAddr2, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook 2 (the step path's jal DngActiveWeaponTextureCopy → cave)"),
         };
@@ -101,11 +101,11 @@ namespace Dark_Cloud_Improved_Version
         /// know the native follower is live (DivineBeastCat falls back to its thread follower when it is not).</summary>
         internal const uint CatFollowHookAddr = 0x01DB874C;
         internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
-        // …and it lands on GemronShotsEnter (Dragon's Y: keeps the Gemron shot config entered in the floor's pack), which
+        // …and it lands on BorrowedShotsEnter (keeps a borrowed shot config entered in the floor's pack), which
         // calls PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the cat's mesh
         // copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then each places
         // its own thing. Every frame with nothing to do the chain reads a few zero words and falls straight through.
-        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.GemronShotsEnter >> 2);
+        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.BorrowedShotsEnter >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 
         internal const uint MirageHazeHookAddr = 0x01DAEBCC;
@@ -117,9 +117,9 @@ namespace Dark_Cloud_Improved_Version
         internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
         internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;
-        internal const uint GemronLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
-        internal const uint GemronLoadHookVanilla = 0x0C76B01C;                          // jal 0x1DAC070
-        internal const uint GemronLoadHookOld     = 0x0C000000u | (CodeCaves.ElfCave.GemronShotsEnter >> 2);
+        internal const uint BorrowedLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
+        internal const uint BorrowedLoadHookVanilla = 0x0C76B01C;                          // jal 0x1DAC070
+        internal const uint BorrowedLoadHookOld     = 0x0C000000u | (CodeCaves.ElfCave.BorrowedShotsEnter >> 2);
         internal const uint HealCadenceAddr = 0x01DB8234;                                 // the heal tick's `slti v0,v0,THRESHOLD`: low half = the period in frames
         internal const uint HealCadenceOrig = 0x284200F0;
         internal const uint HealCadenceNew  = 0x284200B4;

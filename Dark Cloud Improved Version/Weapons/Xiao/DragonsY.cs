@@ -5,7 +5,7 @@ namespace Dark_Cloud_Improved_Version
     /// <summary>
     /// Dragon's Y — while Xiao is locked on to an enemy she moves at double speed, and a shot held for
     /// <see cref="ChargeSeconds"/> fires the Gemron's ball of the selected element: the native pellet is taken the tick it
-    /// appears and <see cref="GemronShots.Fire"/> launches the ball from its position with its velocity (the pellet's own
+    /// appears and <see cref="BorrowedShots.Fire"/> launches the ball from its position with its velocity (the pellet's own
     /// speed) at <see cref="DamageMult"/>× its damage — with no element selected, the Black Dragon's shot instead;
     /// only when this floor has no slot for it does the pellet itself fly on at <see cref="PelletScale"/>× its sprite size
     /// and the same damage. The shot carries the Matador's kick strength: ElfCave.CatGuardBypass stamps it on every entry
@@ -36,6 +36,7 @@ namespace Dark_Cloud_Improved_Version
         private const double ArmSeconds    = 0.5;    // a charged release must produce its pellet within this
         private const float  DamageMult    = 1.5f;
         private const float  PelletScale   = 5.0f;   // no slot on this floor: the pellet itself, grown
+        private const int    ElementOffset = 0x16;   // the weapon record's selected element: 00 Fire … 04 Holy, 05 None
         private const float  KickStrength  = 2.5f, KickDecay = 0.1f;   // the Matador's kick (Goro's hammer swing), out of the burst
         private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
         private static bool     _holding, _charged, _nativeWarned;
@@ -108,7 +109,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteFloat(CodeCaves.Mailbox.PelletKickStrength, KickStrength);
             Memory.WriteFloat(CodeCaves.Mailbox.PelletKickDecay, KickDecay);
             Memory.WriteInt  (CodeCaves.Mailbox.PelletKickDamage, damage);
-            if (GemronShots.Fire(element, x, h, y, vx, vh, vy, damage, Memory.ReadInt(PlayerShotPool.LifetimeAddr(pool, slot))))
+            if (BorrowedShots.Fire(ShotEffectPack.DragonsYCfg[element], x, h, y, vx, vh, vy, damage, Memory.ReadInt(PlayerShotPool.LifetimeAddr(pool, slot))))
             {
                 Memory.WriteInt(PlayerShotPool.FlagAddr(pool, slot), 0);                    // the pellet gives way to the shot
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged shot: {(element == 5 ? "black dragon shot" : $"element {element} ball")} in the pellet's place, damage {damage}");
@@ -120,6 +121,18 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>The weapon or the floor went (or the lock/motion ended): the KEY rate again.</summary>
+        /// <summary>The shot config Dragon's Y wants entered on every floor — its selected element's, read off Xiao's inventory
+        /// record (valid in town and dungeon alike) — or −1 while she has another weapon. BorrowedShots asks every tick.</summary>
+        internal static int WantedShot()
+        {
+            int slot = Memory.ReadByte(DngStatusData.Base + DngStatusData.EquipSlotArrayOffset + Player.XiaoId);
+            if ((uint)slot > 9) return -1;
+            long rec = DngStatusData.WeaponRecord(Player.XiaoId, slot);
+            if (Memory.ReadUShort(rec) != Items.dragonsy) return -1;
+            int element = Memory.ReadByte(rec + ElementOffset);
+            return element >= 0 && element < ShotEffectPack.DragonsYCfg.Length ? ShotEffectPack.DragonsYCfg[element] : -1;
+        }
+
         internal static void Stop() { if (_held) Release(); _holding = false; _armedUntil = DateTime.MinValue; Memory.WriteInt(CodeCaves.Mailbox.PelletKickDamage, 0); }
 
         private static void Release()

@@ -3,7 +3,7 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>Helpers shared by everything that fabricates CSHOT_EFFECT sub-shots (the Guardian Reflector's re-fires,
-    /// the Gemron shots).</summary>
+    /// the borrowed shots).</summary>
     internal static class ShotEffects
     {
         /// <summary>Point a sub-shot's effect model along its direction of travel (Z = travel, X = up × Z).</summary>

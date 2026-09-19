@@ -113,7 +113,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
-            PatchGemronShotsEnter(fs, ElfOff);            // the Gemrons' shot configs entered into every floor's shot pack (dun.bin hook in DunPatches)
+            PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
@@ -578,22 +578,22 @@ namespace Dark_Cloud_Improved_Version
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
 
-        /// <summary>The Gemron-shots cave (tools/stubs/gemron_shots_enter.s): the head of the step chain — must call
+        /// <summary>The borrowed-shots cave (tools/stubs/borrowed_shots_enter.s): the head of the step chain — must call
         /// PropPelletFollow (the rest of the chain) and Entry__17CSHOT_EFFECT_PACK, and read NowShotEffect.</summary>
-        internal static void PatchGemronShotsEnter(FileStream fs, Func<uint, long> ElfOff)
+        internal static void PatchBorrowedShotsEnter(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.ElfCave.GemronShotsEnter;
+            const uint CaveAddr = CodeCaves.ElfCave.BorrowedShotsEnter;
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.gemronShotsEnter.bin")
-                ?? throw new IOException("Embedded EE function missing: gemronShotsEnter.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin")
+                ?? throw new IOException("Embedded EE function missing: borrowedShotsEnter.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
             bool dump = false, entry = false, pack = false;
             uint chain = 0x0C000000u | (CodeCaves.ElfCave.PropPelletFollow >> 2);
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) dump = true; if (w == 0x0C06B930u) entry = true; if (w == 0x8D6B35D8u) pack = true; }
             if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !dump || !entry || !pack)
-                throw new IOException("gemronShotsEnter.bin malformed or stale — it must call PropPelletFollow and Entry__17CSHOT_EFFECT_PACK and read NowShotEffect.");
+                throw new IOException("borrowedShotsEnter.bin malformed or stale — it must call PropPelletFollow and Entry__17CSHOT_EFFECT_PACK and read NowShotEffect.");
             if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.RegionEnd)
-                throw new IOException("gemronShotsEnter.bin overruns the band — it must end by ElfCave.RegionEnd.");
+                throw new IOException("borrowedShotsEnter.bin overruns the band — it must end by ElfCave.RegionEnd.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
