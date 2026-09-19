@@ -264,6 +264,14 @@ namespace Dark_Cloud_Improved_Version
             // How far into the EMPOWERED band (flash 1 → flash 2) the charge is: 0 below flash 1, 1 at full. This
             // one number drives the pellet, the burst visual, the blast radius and the blast damage.
             float empowered = EmpoweredFrac(_ssHoldFrac);
+            if (active && holding)                                       // the shot's weapon HP: charged from flash 1
+            {
+                ChargedShotWhp.Arm(empowered > 0f ? ChargedShotWhp.ChargedFactor : 1f);
+                // The charge on her: a ramp into flash 1, again into flash 2, nothing past it.
+                ChargeTint.Ramp(_ssHoldFrac < ChargeLevel1Frac ? (ChargeLevel1Frac - _ssHoldFrac) * ChargeGrowSeconds
+                              : _ssHoldFrac < ChargeLevel2Frac ? (ChargeLevel2Frac - _ssHoldFrac) * ChargeGrowSeconds : 0);
+            }
+            else if (active) ChargeTint.Clear();
 
             // Grow the fired pellet + scale its damage, once each. A shot fired while empowered arms the burst.
             long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
@@ -437,8 +445,10 @@ namespace Dark_Cloud_Improved_Version
                     _mrCycles = cycles;
                     Player.FlashChargeComplete();   // Ruby's Mobius flash per ramp step
                 }
+                ChargedShotWhp.Arm(_mrCycles >= 1 ? ChargedShotWhp.ChargedFactor : 1f);                                       // charged from the first ramp step
+                ChargeTint.Ramp(MobiusCycleSeconds * (_mrCycles + 1) - (GameClock.Now - _mrHoldStart).TotalSeconds);        // a ramp into every step's flash
             }
-            else _mrHolding = false;   // keep _mrCycles frozen for the pellet that fires
+            else { _mrHolding = false; ChargeTint.Clear(); }   // keep _mrCycles frozen for the pellet that fires
 
             // Stamp fresh pellets once each: damage ×1.5^cycles (capped) + Ruby's ball-growth sprite scale.
             long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);

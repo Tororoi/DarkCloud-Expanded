@@ -30,6 +30,13 @@ namespace Dark_Cloud_Improved_Version
             // → `lui v0,HI; lwc1 f0,LO(v0)` of Mailbox.ShieldGaugeRate (pnach-seeded 1.5 = vanilla while idle).
             new(0x01DB8090, 0x3C023FC0, 0x3C020000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) >> 16),    "gauge refill multiplier → mailbox word (lui)"),
             new(0x01DB8094, 0x44820000, 0xC4400000u | (uint)((CodeCaves.Mailbox.ShieldGaugeRate - 0x20000000) & 0xFFFF), "gauge refill multiplier → mailbox word (lwc1 f0)"),
+            // Xiao's per-shot WHP factor: BattleActionPlay_Jinn passes SwordDmgCheck1 an immediate 1.0 (`lui v0,0x3f80; mtc1 v0,f12`)
+            // at each of its two fire paths → `lui v0,HI; lwc1 f12,LO(v0)` of Mailbox.XiaoShotWhpFactor (pnach-seeded 1.0 = vanilla;
+            // ChargedShotWhp writes the charge's factor while the shot is held).
+            new(XiaoShotWhpSiteA,     0x3C023F80, XiaoShotWhpPatchedWord0, "Xiao shot WHP factor → mailbox word (lui, path A)"),
+            new(XiaoShotWhpSiteA + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path A)"),
+            new(XiaoShotWhpSiteB,     0x3C023F80, XiaoShotWhpPatchedWord0, "Xiao shot WHP factor → mailbox word (lui, path B)"),
+            new(XiaoShotWhpSiteB + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path B)"),
             // CHARACTER HEAP: the dungeon's character + weapons + shot-effect data share ONE CDataAlloc2 pool that
             // GameInit carves from the 27 MB global buffer as 210000 × 16 B = 3.36 MB, and an overflow is a silent
             // spin (Alloc__14CDataAlloc2: printf + while(true)). Vanilla Xiao already sits within ~150 KB of that
@@ -79,6 +86,9 @@ namespace Dark_Cloud_Improved_Version
             // Super Steve's sphere icon: the HUD's status pass → the icon cave, which performs it and then draws the sphere
             // weapon's icon over Steve (ElfPatches.PatchSuperSteveIconDraw writes the cave).
             new(SsIconHookAddr, SsIconHookOrig, SsIconHookNew, "super steve icon hook (jal topStatusInfo → cave)"),
+            // The loader's `jal MemoryMapDump` (dun 0x1DB9568) was the Gemron cave's first hook; the cave now sits at the head of
+            // the per-frame chain instead, and an ISO patched with that first hook gets the vanilla word back.
+            new(GemronLoadHookAddr, GemronLoadHookOld, GemronLoadHookVanilla, "gemron shots: the retired loader hook back to vanilla"),
             new(SsIconCopyHookAddr, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook (jal DngActiveWeaponTextureCopy → cave)"),
             new(SsIconCopyHookAddr2, SsIconCopyHookOrig, SsIconCopyHookNew, "super steve icon copy hook 2 (the step path's jal DngActiveWeaponTextureCopy → cave)"),
         };
@@ -91,10 +101,11 @@ namespace Dark_Cloud_Improved_Version
         /// know the native follower is live (DivineBeastCat falls back to its thread follower when it is not).</summary>
         internal const uint CatFollowHookAddr = 0x01DB874C;
         internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
-        // …and it lands on PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the
-        // cat's mesh copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then
-        // places its own prop. Every frame with nothing to do the chain reads a few zero words and falls straight through.
-        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.PropPelletFollow >> 2);
+        // …and it lands on GemronShotsEnter (Dragon's Y: keeps the Gemron shot config entered in the floor's pack), which
+        // calls PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the cat's mesh
+        // copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then each places
+        // its own thing. Every frame with nothing to do the chain reads a few zero words and falls straight through.
+        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.GemronShotsEnter >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 
         internal const uint MirageHazeHookAddr = 0x01DAEBCC;
@@ -102,6 +113,13 @@ namespace Dark_Cloud_Improved_Version
         internal const uint MirageHazeHookNew  = 0x0C000000u | (CodeCaves.ElfCave.MirageHazeDraw >> 2);
         internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
 
+        internal const uint XiaoShotWhpSiteA = 0x01DBCC58, XiaoShotWhpSiteB = 0x01DBCDD0;   // the two `lui v0,0x3f80` feeding SwordDmgCheck1 in BattleActionPlay_Jinn
+        internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
+        internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
+        internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;
+        internal const uint GemronLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
+        internal const uint GemronLoadHookVanilla = 0x0C76B01C;                          // jal 0x1DAC070
+        internal const uint GemronLoadHookOld     = 0x0C000000u | (CodeCaves.ElfCave.GemronShotsEnter >> 2);
         internal const uint HealCadenceAddr = 0x01DB8234;                                 // the heal tick's `slti v0,v0,THRESHOLD`: low half = the period in frames
         internal const uint HealCadenceOrig = 0x284200F0;
         internal const uint HealCadenceNew  = 0x284200B4;

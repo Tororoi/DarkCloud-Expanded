@@ -898,14 +898,18 @@ namespace Dark_Cloud_Improved_Version
         {
             int state = Memory.ReadInt(PlayerAction.ChargeActionState);
             bool holding = state == PlayerAction.XiaoShotDraw || state == PlayerAction.XiaoShotHold;
+            ChargedShotWhp.Tick();
             if (holding)
             {
                 if (!_holding) { _holding = true; _holdStart = GameClock.Now; _flashed = false; }
                 _holdSeconds = (GameClock.Now - _holdStart).TotalSeconds;
                 if (_holdSeconds >= ChargeSeconds && !_flashed) { Player.FlashChargeComplete(); _flashed = true; }
+                ChargedShotWhp.Arm(_holdSeconds >= ChargeSeconds ? ChargedShotWhp.ChargedFactor : 1f);   // the cat shot's weapon HP
+                ChargeTint.Ramp(_flashed ? 0 : ChargeSeconds - _holdSeconds);                            // toward the flash, then nothing
             }
             else
             {
+                ChargeTint.Clear();
                 if (_holding)
                 {
                     // Arm on RELEASE, not when the charge completes: arming HIDES the cat that is already out (scale 0,

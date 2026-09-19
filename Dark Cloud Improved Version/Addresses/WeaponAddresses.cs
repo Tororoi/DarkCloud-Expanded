@@ -207,6 +207,8 @@ namespace Dark_Cloud_Improved_Version
                                                                     //   ABS level-up absorbs the attachments
         internal const int  InventoryWeaponMaxWhpOffset = 0x0C;     // short: max WHP
         internal const int  InventoryWeaponWhpOffset    = 0x10;     // float: current WHP
+        internal const int  AbilityFlagsOffset          = 0xEE;     // ushort: the live ability flags (Effect1 | Effect2 << 8)
+        internal const int  FragileFlag = 0x100, DurableFlag = 0x200;   // WHP drain ×2 / ×0.5 (BattleSubWeaponDmg 0x1B5D90)
         internal const int  InventoryWeaponAbsOffset    = 0x14;     // short: current ABS points
         internal const int  WeaponAntiOffset            = 0x1C;     // 10 bytes: anti-category values in
                                                                     //   EnemyCategory order (Dragon..Mage), cap 99
@@ -566,6 +568,67 @@ namespace Dark_Cloud_Improved_Version
         internal static long DamageAddr(long poolBase, int slot)=> poolBase + DamageOffset + slot * ScalarStride;
         internal static long ScaleAddr(long poolBase, int slot) => poolBase + ScaleOffset  + slot * ScalarStride;
         internal static long NoCollideAddr(long poolBase, int slot) => poolBase + NoCollideOffset + slot * ScalarStride;
+        internal static long LifetimeAddr(long poolBase, int slot)  => poolBase + LifetimeOffset  + slot * ScalarStride;
+    }
+
+    /// <summary>
+    /// The monster SHOT-EFFECT pack (CSHOT_EFFECT_PACK at *NowShotEffect): five CSHOT_EFFECT slots of 0xA160, one per
+    /// BT_SHOT_EFFECT config entered for the floor (SetupBaseModel → Entry, from the species row's +0x68 into
+    /// <see cref="CfgTable"/>), each with eight sub-shots. Per-sub-shot fields index by sub-shot; the sub-shot's own
+    /// effect-CCharacter sits at <see cref="OffObj"/> + i × <see cref="ObjStride"/>. Step__12CSHOT_EFFECT plants each hit
+    /// as CollisionData: +0x58 = <see cref="OffOwner"/>, +0x60 = <see cref="OffUserCol"/>, +0x64 = <see cref="OffAntiPtr"/>,
+    /// +0x6C = <see cref="OffWepFlags"/>, +0x5C = <see cref="OffA060"/>, +0x68 = <see cref="OffA110"/>; the config gives the
+    /// victim mask (+0x48: 1 = the player, 2 = enemies), the hit reaction (+0x44), the element (+0x40), the wait (+0x38) and
+    /// the default damage (+0x3C). RE: GuardianReflector (game_data/docs/angelgear-reflector-re.md), GemronShots.
+    /// </summary>
+    internal static class ShotEffectPack
+    {
+        internal const long NowShotEffectPtr = 0x202A35D8;
+        internal const int  PackSlots  = 5;
+        internal const int  SlotStride = 0xA160;
+        internal const int  SubShots   = 8;
+        internal const int  OffCfg     = 0x000;     // BT_SHOT_EFFECT cfg ptr (EE): +0x38 wait, +0x3C life, +0x4E fly motion
+        internal const int  OffDir     = 0x9F40;    // + i*0x10, vec3 — per-frame position delta (velocity)
+        internal const int  OffAttr2   = 0x9FC0;    // + i*2, short — Set param_6
+        internal const int  OffWait    = 0x9FD0;    // + i*4 — phase-1 countdown
+        internal const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 3+ impact chain
+        internal const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
+        internal const int  OffDamage  = 0xA010;    // + i*4 — the shot's DAMAGE (Set: cfg+0x3C; SetDmg; Step passes it as entry +0x34). Life/wait = OffWait.
+        internal const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58
+        internal const int  OffA060    = 0xA060;    // + i*2, short — Set writes 0xFFFF; SetUserID2 (0x1AE400) then stamps the FIRING ENEMY SLOT
+        internal const int  OffUserCol = 0xA070;    // + i*4 — Set param_5 (user/collider id → entry +0x60); −1 default
+        internal const int  OffA0B0    = 0xA0B0;    // + i*4 — Set: -1
+        internal const int  OffA0D0    = 0xA0D0;    // + i*4 — Set: -1.0f
+        internal const int  OffA0F0    = 0xA0F0;    // + i*4 — Set: -1
+        internal const int  OffA110    = 0xA110;    // + i*4 — Set: -1
+        internal const int  OffSndFlag = 0xA130;    // + i, byte
+        internal const int  OffReload  = 0xA138;    // + i, byte — latch reload value
+        internal const int  OffLatch   = 0xA140;    // + i, byte — held ≥1 = plants no damage
+        internal const int  OffLastIdx = 0xA150;    // int — Set records the spawned index
+        internal const int  OffCount   = 0xA14C;
+        internal const int  OffObj     = 0x11C0;    // + i*0x11B0 — the sub-shot's effect-CCharacter
+        internal const int  ObjStride  = 0x11B0;
+        internal const int  ObjPos     = 0x10;      // vec: [+0] x, [+4] height, [+8] y
+        internal const int  ObjFrame   = 0x2F0;     // motion frame (float)
+        internal const int  ObjFrameTb = 0x344;     // → per-motion frame table (int per 0x10)
+        internal const int  ObjMotSpd  = 0xC60;     // -1.0f = keyframe rate
+        internal const int  ObjMotFlag = 0xC64;     // Set: 4 on the flying phase
+        internal const int  ObjMotId   = 0xC68;     // motion id
+        internal const int  CfgFlags = 0x40, CfgRadiusFlying = 0x2C;   // BT_SHOT_EFFECT: the element/attribute word (→ entry +0x50); the flying radius
+        internal const int  OffWepFlags = 0xA030;   // + i*4 — SetWepStatus: the weapon's ability flags → entry +0x6C
+        internal const int  OffAntiPtr  = 0xA090;   // + i*4 — SetVsMonster: → the weapon's anti-category bytes → entry +0x64
+        /// <summary>The 34 BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index.</summary>
+        internal const long CfgTable   = 0x2027FA70;
+        internal const int  CfgCount   = 34;
+        internal const int  CfgSize    = 0x70;
+        internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
+        internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
+        internal const int  CfgFlyMotion = 0x4E;    // short — the flying motion id
+        /// <summary>The Gemrons' shot configs, in element order 00 Fire … 04 Holy: f_boll_3, i_boll, t_boll, e114a_ex, e115a_ex.</summary>
+        internal static readonly int[] GemronCfg = { 5, 20, 23, 24, 25 };
+        internal const long ReadBufferPtr   = 0x202A2384;   // → the dungeon loader's file read buffer (Entry's third argument)
+        internal const uint MonsterPoolAlloc = 0x01F066D0;  // the CDataAlloc2 the floor's monster models and their shot effects come from
+        internal const int  EntryParam4     = 0x26;         // what the species loader passes Entry as its fourth argument
     }
 
     /// <summary>

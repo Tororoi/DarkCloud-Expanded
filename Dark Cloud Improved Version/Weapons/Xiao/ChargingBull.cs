@@ -29,7 +29,7 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[ChargingBull] ";
 
-        private const double ChargeSeconds  = 0.5;    // hold this long → the shot is charged (the game's charge-complete flash marks it)
+        private const double ChargeSeconds  = 1.0;    // hold this long → the shot is charged (the game's charge-complete flash marks it)
         private const double ArmSeconds     = 0.5;    // a charged release must produce its pellet within this
         private const float  DamageMult     = 1.5f;   // × the pellet's damage
         private const float  KickStrength   = 2.5f;   // the kick the bypass cave stamps on the charged pellet's entry (an ordinary pellet
@@ -77,16 +77,24 @@ namespace Dark_Cloud_Improved_Version
             // The hold: draw (0xB) / nocked hold (0xC) states; charged once it has lasted ChargeSeconds.
             int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
             bool holding = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
+            ChargedShotWhp.Tick();
             if (holding)
             {
                 if (!_holding) { _holding = true; _charged = false; _holdStart = GameClock.Now; }
-                if (!_charged && (GameClock.Now - _holdStart).TotalSeconds >= ChargeSeconds) { _charged = true; Player.FlashChargeComplete(); }
+                double held = (GameClock.Now - _holdStart).TotalSeconds;
+                if (!_charged && held >= ChargeSeconds) { _charged = true; Player.FlashChargeComplete(); }
+                ChargedShotWhp.Arm(_charged ? ChargedShotWhp.ChargedFactor : 1f);
+                ChargeTint.Ramp(_charged ? 0 : ChargeSeconds - held);            // toward the flash, then nothing
             }
-            else if (_holding)
+            else
             {
-                _holding = false;
-                if (_charged) _armedUntil = GameClock.Now.AddSeconds(ArmSeconds);   // the next new pellet is the charged one
-                _charged = false;
+                ChargeTint.Clear();
+                if (_holding)
+                {
+                    _holding = false;
+                    if (_charged) _armedUntil = GameClock.Now.AddSeconds(ArmSeconds);   // the next new pellet is the charged one
+                    _charged = false;
+                }
             }
 
             // The copy: resident and hidden between shots (its Maintain also notices a weapon change and despawns; the
