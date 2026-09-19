@@ -282,9 +282,10 @@ namespace Dark_Cloud_Improved_Version
             // Hook site (main ELF, CheckDmg__12CMonstorUnit 0x1D9F10): `li v0,1; bne s3,v0,+2; nop; clear s0` = the
             // "owner == Xiao → no flinch" rule; the stub replaces it and returns to the untouched tail at 0x1DB420.
             const uint HookAddr = 0x001DB410;
+            const uint FlinchPreviousCave = 0x01FB1FA0;      // where the stub sat before it moved — an ISO patched then is re-hooked
             uint jump = 0x08000000u | (CaveAddr >> 2);
             uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
-            bool vanilla = cur0 == 0x24020001u && cur1 == 0x16620002u, ours = cur0 == jump && cur1 == 0;
+            bool vanilla = cur0 == 0x24020001u && cur1 == 0x16620002u, ours = (cur0 == jump || cur0 == J(FlinchPreviousCave)) && cur1 == 0;
             if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr + 0x10)) != 0x8F829DF0u || RdU32(fs, ElfOff(HookAddr + 0x14)) != 0x0056A021u)
                 throw new IOException($"Xiao-flinch hook site 0x{HookAddr:X} is not vanilla `li v0,1; bne s3,v0` (tail `lw v0,NowColData; addu s4,v0,s6`) — unmodified Dark Cloud (USA) ISO expected.");
             for (int i = 0; i < b.Length; i += 4)
@@ -386,8 +387,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == J(Return)) exits++; if (w == 0x84220550u) vanillaLoad = true; }
             if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || exits != 2 || !vanillaLoad)
                 throw new IOException($"catGuardBypass.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)
-                throw new IOException("catGuardBypass.bin overruns its gap — it must end before ElfCave.XiaoMeleeFlinch.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGlowDraw)
+                throw new IOException("catGuardBypass.bin overruns its gap — it must end before ElfCave.CatGlowDraw (the second band).");
             // Hook the `addu`, NOT the `lh` after it: the `lh`'s own delay slot would be the `beq` at 0x1DAC80, and a branch in a
             // branch's delay slot is undefined on the R5900. Taking the `addu` leaves the `lh` as the delay slot, which is then
             // nop'd — the cave re-forms the address from a2/v1 itself and does the load, so neither word is needed.
@@ -571,8 +572,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chained = true; if (w == 0x8D4A35D4u) pool = true; }
             if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chained || !pool)
                 throw new IOException("propPelletFollow.bin malformed or stale — it must call CatCopyQueue and read the shot pool.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)
-                throw new IOException("propPelletFollow.bin overruns its gap — it must end before ElfCave.XiaoMeleeFlinch.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGuardBypass)
+                throw new IOException("propPelletFollow.bin overruns its gap — it must end before ElfCave.CatGuardBypass.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }

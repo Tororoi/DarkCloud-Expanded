@@ -17,9 +17,14 @@ possible if the fast-footed look is unwanted.)
 
 Hold the shot for a second (charge flash, `ChargeTint` ramp, `ChargedShotWhp` ×2.0) and the pellet released becomes the
 Gemron's ball of the selected element (elementHUD 00 Fire … 04 Holy): the pellet is taken the tick it appears and
-`GemronShots.Fire` launches the ball from its position with its velocity — the pellet's own speed — at 2× its damage and
-the pellet's remaining life. No element, or no slot for it on this floor, and the pellet itself flies on at ×5 sprite
-size with the same damage.
+`GemronShots.Fire` launches the ball from its position with its velocity — the pellet's own speed — at 1.5× its damage and
+the pellet's remaining life; with no element selected it is the Black Dragon's shot (`b_boll`, cfg 22). Only when
+this floor has no slot for it does the pellet itself fly on at ×5 sprite size with the same damage. The shot knocks
+back with the Matador's kick (strength 2.5, decay 0.1): `ElfCave.CatGuardBypass` stamps it on any Xiao-owned entry
+whose base damage equals `Mailbox.PelletKickDamage`, with the origin at the entry's own sphere centre (the burst), so
+every enemy caught in the burst is shoved straight out of it in whatever direction that is (Heaven's Cloud does the
+same from the mod side with `Enemies.RadialKnockback`); the guard window test then runs as vanilla — knockback
+without guard crush.
 
 ### Gemron shots on every floor (RE)
 
@@ -32,9 +37,15 @@ pointer matches is reused), the models go into the monster pool (~2.6 MB free). 
 +0x48 (1 = hurts the player, 2 = enemies), the element at +0x40, the wait at +0x38, the fly motion at +0x4E; the
 sub-shot's step plants its damage entry with per-sub-shot owner (+0xA050), collider (+0xA070), ability flags (+0xA030,
 SetWepStatus) and anti bytes (+0xA090, SetVsMonster) — so a Xiao-owned sub-shot with a mask-2 config is, to CheckDmg,
-one of her pellets with the ball's element.
+one of her pellets with the ball's element. The step plants that entry EVERY frame the phase has a radius (cfg +0x28 +
+phase × 4: muzzle, flying, impact, expiry) and then holds off for the sub-shot's reload (+0xA138) frames — a Gemron's
+explosion hurts an area for its whole animation, which on an enemy read as several hits per shot. So the copy's
+FLYING radius (+0x2C) is zeroed (the contact sweep still runs) and the fired sub-shot's reload is 120 frames: the
+impact's first frame is the one plant, with the full explosion radius, hitting every enemy inside it once; a miss's
+expiry burst plants once likewise.
 
-`GemronShots.Seed` writes a copy of the config of the element in use (mask → 2) into runtime data at 0x21FAEF40 ("GEMS"
+`GemronShots.Seed` writes a copy of the config of the element in use (mask → 2, flags masked to the element bits so
+the Black Dragon's Freeze does not ride along) into runtime data at 0x21FAEF40 ("GEMS"
 magic, count, copies from +0x10, slots from +0x250); `ElfCave.GemronShotsEnter` (0x1FB3F40), now the head of the per-frame step chain
 (`jal step__5CSHOT`, dun 0x1DB874C — ahead of the Matador's follower), keeps it entered: each frame it checks that the
 recorded slot still holds the config (a floor load rebuilds the pack) and that one is recorded at all (a re-seed for a

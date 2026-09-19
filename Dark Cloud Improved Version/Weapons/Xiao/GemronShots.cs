@@ -3,7 +3,7 @@ using System;
 namespace Dark_Cloud_Improved_Version
 {
     /// <summary>
-    /// The Gemrons' elemental shots, available on every floor. A species' shot is a BT_SHOT_EFFECT config the floor loader
+    /// The Gemrons' elemental shots — and, with no element, the Black Dragon's shot — available on every floor. A species' shot is a BT_SHOT_EFFECT config the floor loader
     /// enters into the shot pack (five slots) with the floor's monster pool as allocator; the Gemrons' five
     /// (<see cref="ShotEffectPack.GemronCfg"/>) are shared `dun\effect` files, so entering them on a floor with no Gemron
     /// works the same way. <see cref="Seed"/> writes a copy of the config of the element IN USE — victim mask switched from
@@ -17,11 +17,15 @@ namespace Dark_Cloud_Improved_Version
     /// frame. A full pack clears the block's magic until the mod seeds again. <see cref="Fire"/> is the
     /// Set replica the Guardian Reflector re-fires with, for a XIAO-owned shot: the engine steps it, collides it with
     /// enemies (the mask) and plants its damage entry with her owner id, ability flags and anti-category bytes, so CheckDmg
-    /// treats it exactly as one of her pellets — with the ball's own element.
+    /// treats it exactly as one of her pellets — with the ball's own element. The step plants that entry every frame a phase
+    /// has a radius, then keeps quiet for the sub-shot's reload frames; so the copy's FLYING radius is zeroed (the contact
+    /// sweep still runs) and <see cref="Fire"/> sets the reload past any impact animation: the impact's first frame is the
+    /// one plant — the whole explosion radius, every enemy inside it once — and a miss's expiry burst likewise.
     /// </summary>
     internal static class GemronShots
     {
         private const string Tag = "[GemronShots] ";
+        private const byte   PlantReload = 120;   // frames of silence after a plant (a byte): longer than any impact animation
         private const int    ElementOffset = 0x16;   // the weapon record's selected element: 00 Fire … 04 Holy, 05 None
         private static int _seededElement = -1;   // the element whose config is in the block (−1 = none)
         private static int _lastSlot = -3;         // the slot word last logged
@@ -52,7 +56,7 @@ namespace Dark_Cloud_Improved_Version
                         long rec = DngStatusData.WeaponRecord(Player.XiaoId, slot);
                         if (Memory.ReadUShort(rec) == Items.dragonsy) element = Memory.ReadByte(rec + ElementOffset);
                     }
-                    if (element >= 0 && element <= 4) Seed(element); else Clear();
+                    if (element >= 0 && element <= 5) Seed(element); else Clear();   // 5 = no element: the Black Dragon's shot
                     bool inFloor = Player.InDungeonFloor();
                     int floor = inFloor ? Memory.ReadUShort(Addresses.checkFloor) : -1;
                     if (_seededElement >= 0 && inFloor && (!_wasInFloor || floor != _lastFloor))
@@ -80,7 +84,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt(CodeCaves.GemronShotBlock, 0);         // no magic: the cave enters nothing
             ReleaseSlot();
             _seededElement = -1; _lastSlot = -3;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "block cleared (Dragon's Y not equipped, or no element)");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "block cleared (Dragon's Y not equipped)");
         }
 
         /// <summary>Put the element's config in the block unless it is there already, slot −1: the cave enters it on its
@@ -88,11 +92,14 @@ namespace Dark_Cloud_Improved_Version
         /// rewound first, so the new one takes the same slot and memory.</summary>
         private static void Seed(int element)
         {
-            if (element < 0 || element > 4 || element == _seededElement) return;
+            if (element < 0 || element > 5 || element == _seededElement) return;
             uint cfgAddr = Memory.ReadUInt(ShotEffectPack.CfgTable + ShotEffectPack.GemronCfg[element] * 4);
             byte[] c = Memory.ReadBytesBatch(0x20000000L + cfgAddr, ShotEffectPack.CfgSize);
             if (c == null) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "config table unreadable — no Gemron shots"); return; }
             BitConverter.GetBytes(2).CopyTo(c, ShotEffectPack.CfgVictimMask);                            // hurts enemies, not the player
+            BitConverter.GetBytes(0f).CopyTo(c, ShotEffectPack.CfgRadiusFlying);                         // no planting in flight: the impact's first frame is the first plant
+            int flags = BitConverter.ToInt32(c, ShotEffectPack.CfgFlags);
+            BitConverter.GetBytes(flags & ShotEffectPack.CfgElementBits).CopyTo(c, ShotEffectPack.CfgFlags);   // the element only — no ailment (the Black Dragon's shot carries Freeze)
             Memory.WriteInt(CodeCaves.GemronShotBlock, 0);                                               // quiet while the block changes
             ReleaseSlot();
             Memory.WriteBytesBatch(CodeCaves.GemronShotBlock + CodeCaves.GemronShotCfgs, c);
@@ -177,7 +184,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + ShotEffectPack.OffWepFlags + j * 4, Memory.ReadUShort(rec + WeaponHave.AbilityFlagsOffset));
             Memory.WriteUInt  (inst + ShotEffectPack.OffAntiPtr + j * 4, (uint)(rec - 0x20000000 + WeaponHave.WeaponAntiOffset));
             Memory.WriteByte  (inst + ShotEffectPack.OffSndFlag + j, 0);
-            Memory.WriteByte  (inst + ShotEffectPack.OffReload + j, 0);
+            Memory.WriteByte  (inst + ShotEffectPack.OffReload + j, PlantReload);
             Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, 0);                 // plants its damage
             Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
             ShotEffects.FaceAlong(obj, vx, vh, vy);
