@@ -83,6 +83,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread angelGearThread = new Thread(new ThreadStart(CustomXiaoEffects.AngelGearEffect));
         public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
         public static Thread matadorThread = new Thread(new ThreadStart(CustomXiaoEffects.MatadorEffect));
+        public static Thread dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
@@ -407,6 +408,14 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             matadorThread = new Thread(new ThreadStart(CustomXiaoEffects.MatadorEffect));
                                             matadorThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.dragonsy:
+                                        if (!dragonsYThread.IsAlive)
+                                        {
+                                            dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
+                                            dragonsYThread.Start();
                                         }
                                         break;
 

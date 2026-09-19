@@ -32,6 +32,19 @@ namespace Dark_Cloud_Improved_Version
             ChargingBull.Stop();
         }
 
+        // ── Dragon's Y ─────────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> while the weapon is equipped,
+        /// and stands it down once when it goes.</summary>
+        public static void DragonsYEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.dragonsy)
+            {
+                DragonsY.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            DragonsY.Stop();
+        }
+
         private const ushort AngelGearHealAmount = 1;
         private static int _healTickPrev = -1;   // the counter last seen; -1 = not watching, re-seed on the next tick
 
@@ -148,6 +161,9 @@ namespace Dark_Cloud_Improved_Version
 
                 // Heaven's Cloud (Heaven's Cloud): charge → grow the slingshot + pellet, flash, shrapnel burst.
                 SuperSteveAbilities.DriveHeavensCloud(active && sphere == Items.heavenscloud);
+
+                // A charged shot's weapon HP (Heaven's Cloud / Mobius Ring / the cat arm it): the word returns to 1.0 once fired.
+                ChargedShotWhp.Tick();
 
                 // Xiao Effects
 

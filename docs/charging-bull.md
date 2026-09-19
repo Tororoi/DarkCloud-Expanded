@@ -1,6 +1,6 @@
 # Matador — Charging Bull
 
-Hold the shot for half a second (the game's charge-complete flash marks it) and the pellet released is charged: 1.5×
+Hold the shot for a second (the game's charge-complete flash marks it) and the pellet released is charged: 1.5×
 damage, passes an enemy's guard window with a hammer-swing kick behind it, and flies as a projection of the slingshot — a copy of
 the model, tinted orange, riding the pellet at its own size, wrapped in the cat's glow; the pellet itself is untouched
 and hidden inside. `Weapons/Xiao/ChargingBull.cs` drives it from the Matador

@@ -40,6 +40,9 @@
     <EmbeddedResource Include="Resources\isoPatch\catSpherePercent.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\gemronShotsEnter.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.gemronShotsEnter.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\propPelletFollow.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin</LogicalName>
     </EmbeddedResource>

@@ -36,38 +36,7 @@ namespace Dark_Cloud_Improved_Version
 
         private const int  XiaoId = 1;
 
-        // ── the monster shot-effect pack (RE doc table) ──
-        private const long NowShotEffectPtr = 0x202A35D8;
-        private const int  PackSlots  = 5;
-        private const int  SlotStride = 0xA160;
-        private const int  SubShots   = 8;
-        private const int  OffCfg     = 0x000;     // BT_SHOT_EFFECT cfg ptr (EE): +0x38 wait, +0x3C life, +0x4E fly motion
-        private const int  OffDir     = 0x9F40;    // + i*0x10, vec3 — per-frame position delta (velocity)
-        private const int  OffAttr2   = 0x9FC0;    // + i*2, short — Set param_6
-        private const int  OffWait    = 0x9FD0;    // + i*4 — phase-1 countdown
-        private const int  OffPhase   = 0x9FF0;    // + i*2 — 0 muzzle, 1 flying, 3+ impact chain
-        private const int  OffActive  = 0xA000;    // + i*2 (Set writes it LAST)
-        private const int  OffDamage  = 0xA010;    // + i*4 — the shot's DAMAGE (Set: cfg+0x3C; SetDmg; Step passes it as entry +0x34). Life/wait = OffWait.
-        private const int  OffOwner   = 0xA050;    // + i*2, short — owner attr → CollisionData +0x58
-        private const int  OffA060    = 0xA060;    // + i*2, short — Set writes 0xFFFF; SetUserID2 (0x1AE400) then stamps the FIRING ENEMY SLOT
-        private const int  OffUserCol = 0xA070;    // + i*4 — Set param_5 (user/collider id → entry +0x60); −1 default
-        private const int  OffA0B0    = 0xA0B0;    // + i*4 — Set: -1
-        private const int  OffA0D0    = 0xA0D0;    // + i*4 — Set: -1.0f
-        private const int  OffA0F0    = 0xA0F0;    // + i*4 — Set: -1
-        private const int  OffA110    = 0xA110;    // + i*4 — Set: -1
-        private const int  OffSndFlag = 0xA130;    // + i, byte
-        private const int  OffReload  = 0xA138;    // + i, byte — latch reload value
-        private const int  OffLatch   = 0xA140;    // + i, byte — held ≥1 = plants no damage
-        private const int  OffLastIdx = 0xA150;    // int — Set records the spawned index
-        private const int  OffCount   = 0xA14C;
-        private const int  OffObj     = 0x11C0;    // + i*0x11B0 — the sub-shot's effect-CCharacter
-        private const int  ObjStride  = 0x11B0;
-        private const int  ObjPos     = 0x10;      // vec: [+0] x, [+4] height, [+8] y
-        private const int  ObjFrame   = 0x2F0;     // motion frame (float)
-        private const int  ObjFrameTb = 0x344;     // → per-motion frame table (int per 0x10)
-        private const int  ObjMotSpd  = 0xC60;     // -1.0f = keyframe rate
-        private const int  ObjMotFlag = 0xC64;     // Set: 4 on the flying phase
-        private const int  ObjMotId   = 0xC68;     // motion id
+        // The monster shot-effect pack's layout: WeaponAddresses.ShotEffectPack.
 
         // ── tuning ──
         private const float ClaimRadius  = 100f;   // claim a closing shot inside this range of Xiao
@@ -111,7 +80,6 @@ namespace Dark_Cloud_Improved_Version
         private const long   BattleWeaponAttack  = WeaponHave.BattleWeaponRecord + 0x04;   // short (BattleActionPlay_Jinn's pellet damage)
         private const float  TierDivisor = 14f;
         private const uint   ShotElementMask = 0x1F, ShotEnemyStatusMask = 0x100 | 0x200 | 0x800;
-        private const int    CfgFlags = 0x40, CfgRadiusFlying = 0x2C;                    // BT_SHOT_EFFECT fields
         private const float  HitMargin = 4f;                                              // contact slack + planted-entry reach
         private const int    PlantedLifeTicks = 2;                                       // retire an unconsumed entry
         private const int    ReflectMaxTicks = 260;                                      // give up tracking (FreshTimers + slack)
@@ -252,7 +220,7 @@ namespace Dark_Cloud_Improved_Version
                               || (weaponId == Items.supersteve && SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.angelgear);
                     bool live  = inDun && gear;
                     if (live) sleep = FastTickMs;
-                    long pack = live ? Memory.ReadInt(NowShotEffectPtr) : 0;
+                    long pack = live ? Memory.ReadInt(ShotEffectPack.NowShotEffectPtr) : 0;
                     if (pack <= 0)
                     {
                         if (_live) { HardReset(); _live = false; }
@@ -416,43 +384,43 @@ namespace Dark_Cloud_Improved_Version
         /// left to fly — the engine's contact-kill on her IS the absorb. A shot that would expire short is left alone.</summary>
         private static void ClaimClosingShots(long pack, float xx, float xh, float xy)
         {
-            for (int s = 0; s < PackSlots; s++)
+            for (int s = 0; s < ShotEffectPack.PackSlots; s++)
             {
-                long inst = pack + s * SlotStride;
-                int count = Memory.ReadInt(inst + OffCount);
-                if (count < 1 || count > SubShots) continue;
+                long inst = pack + s * ShotEffectPack.SlotStride;
+                int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
+                if (count < 1 || count > ShotEffectPack.SubShots) continue;
                 for (int i = 0; i < count; i++)
                 {
                     if (IsClaimed(s, i)) continue;
-                    if (Memory.ReadUShort(inst + OffActive + i * 2) == 0) continue;
-                    if (Memory.ReadUShort(inst + OffPhase + i * 2) != 1) continue;
-                    long obj = inst + OffObj + i * ObjStride;
-                    float dx = xx - Memory.ReadFloat(obj + ObjPos);
-                    float dh = xh - Memory.ReadFloat(obj + ObjPos + 4);
-                    float dy = xy - Memory.ReadFloat(obj + ObjPos + 8);
+                    if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + i * 2) == 0) continue;
+                    if (Memory.ReadUShort(inst + ShotEffectPack.OffPhase + i * 2) != 1) continue;
+                    long obj = inst + ShotEffectPack.OffObj + i * ShotEffectPack.ObjStride;
+                    float dx = xx - Memory.ReadFloat(obj + ShotEffectPack.ObjPos);
+                    float dh = xh - Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 4);
+                    float dy = xy - Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 8);
                     if (dx * dx + dh * dh + dy * dy > ClaimRadius * ClaimRadius) continue;
-                    long dirA = inst + OffDir + i * 0x10;
+                    long dirA = inst + ShotEffectPack.OffDir + i * 0x10;
                     float vx = Memory.ReadFloat(dirA), vh = Memory.ReadFloat(dirA + 4), vy = Memory.ReadFloat(dirA + 8);
                     if (vx * dx + vh * dh + vy * dy <= 0f) continue;
 
                     float speed = Math.Max(1f, (float)Math.Sqrt(vx * vx + vh * vh + vy * vy));
-                    int wait = Memory.ReadInt(inst + OffWait + i * 4);
+                    int wait = Memory.ReadInt(inst + ShotEffectPack.OffWait + i * 4);
                     float need = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy) - PropAhead - CaptureRadius;
                     if (wait * speed < need) continue;                                         // out of range: it dies before the pouch
                     float inv = -1f / speed;
-                    Memory.WriteByte(inst + OffLatch + i, LatchHold);
+                    Memory.WriteByte(inst + ShotEffectPack.OffLatch + i, LatchHold);
                     _claimed.Add(new Claim
                     {
                         Slot = s, Idx = i, Speed = speed,
                         RetX = vx * inv, RetH = vh * inv, RetY = vy * inv,
-                        Damage  = Memory.ReadInt(inst + OffDamage + i * 4),
-                        Owner   = Memory.ReadUShort(inst + OffOwner + i * 2),
-                        Attr2   = Memory.ReadUShort(inst + OffAttr2 + i * 2),
-                        SndFlag = Memory.ReadByte(inst + OffSndFlag + i),
-                        Reload  = Memory.ReadByte(inst + OffReload + i),
+                        Damage  = Memory.ReadInt(inst + ShotEffectPack.OffDamage + i * 4),
+                        Owner   = Memory.ReadUShort(inst + ShotEffectPack.OffOwner + i * 2),
+                        Attr2   = Memory.ReadUShort(inst + ShotEffectPack.OffAttr2 + i * 2),
+                        SndFlag = Memory.ReadByte(inst + ShotEffectPack.OffSndFlag + i),
+                        Reload  = Memory.ReadByte(inst + ShotEffectPack.OffReload + i),
                     });
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
-                        $"claimed shot slot{s}#{i} speed={speed:F2}/frame dmg={Memory.ReadInt(inst + OffDamage + i * 4)}");
+                        $"claimed shot slot{s}#{i} speed={speed:F2}/frame dmg={Memory.ReadInt(inst + ShotEffectPack.OffDamage + i * 4)}");
                 }
             }
         }
@@ -479,7 +447,7 @@ namespace Dark_Cloud_Improved_Version
                 if (_claimed.Count > 0 || _pending.Count > 0)
                 {
                     foreach (var c in _claimed)
-                        Memory.WriteByte(pack + c.Slot * SlotStride + OffLatch + c.Idx, 0);
+                        Memory.WriteByte(pack + c.Slot * ShotEffectPack.SlotStride + ShotEffectPack.OffLatch + c.Idx, 0);
                     Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
                         $"shield down — released {_claimed.Count} claimed, dropped {_pending.Count} pending");
                     _claimed.Clear(); _pending.Clear();
@@ -490,31 +458,31 @@ namespace Dark_Cloud_Improved_Version
             for (int q = _claimed.Count - 1; q >= 0; q--)
             {
                 var c = _claimed[q];
-                long inst = pack + c.Slot * SlotStride;
-                bool gone = Memory.ReadUShort(inst + OffActive + c.Idx * 2) == 0, caught = false, byEngine = gone;
+                long inst = pack + c.Slot * ShotEffectPack.SlotStride;
+                bool gone = Memory.ReadUShort(inst + ShotEffectPack.OffActive + c.Idx * 2) == 0, caught = false, byEngine = gone;
                 if (!gone)
                 {
-                    long obj = inst + OffObj + c.Idx * ObjStride;
-                    float sx = Memory.ReadFloat(obj + ObjPos), sh = Memory.ReadFloat(obj + ObjPos + 4), sy = Memory.ReadFloat(obj + ObjPos + 8);
-                    c.LastX = sx; c.LastH = sh; c.LastY = sy; c.LastWait = Memory.ReadInt(inst + OffWait + c.Idx * 4);
+                    long obj = inst + ShotEffectPack.OffObj + c.Idx * ShotEffectPack.ObjStride;
+                    float sx = Memory.ReadFloat(obj + ShotEffectPack.ObjPos), sh = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 4), sy = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 8);
+                    c.LastX = sx; c.LastH = sh; c.LastY = sy; c.LastWait = Memory.ReadInt(inst + ShotEffectPack.OffWait + c.Idx * 4);
                     float bx = xx - sx, bh = xh - sh, by = xy - sy;          // shot → her body
                     float qx = px - sx, qh = ph - sh, qy = py - sy;          // shot → the pouch
                     float dq = qx * qx + qh * qh + qy * qy;
                     float catchR = CaptureRadius + c.Speed * 2f, kill = AbsorbNear + c.Speed * 3f;
                     if (solid && dq < catchR * catchR)
                     {
-                        Memory.WriteUShort(inst + OffActive + c.Idx * 2, 0);   // into the pouch
+                        Memory.WriteUShort(inst + ShotEffectPack.OffActive + c.Idx * 2, 0);   // into the pouch
                         gone = true; caught = true;
                     }
                     else if (bx * bx + bh * bh + by * by < kill * kill
-                             || Memory.ReadUShort(inst + OffPhase + c.Idx * 2) > 1)
+                             || Memory.ReadUShort(inst + ShotEffectPack.OffPhase + c.Idx * 2) > 1)
                     {
-                        Memory.WriteUShort(inst + OffActive + c.Idx * 2, 0);   // quiet vanish into her
+                        Memory.WriteUShort(inst + ShotEffectPack.OffActive + c.Idx * 2, 0);   // quiet vanish into her
                         gone = true;
                     }
                     else if (solid && c == faced && dq < HomingRange * HomingRange)
                     {
-                        long dirA = inst + OffDir + c.Idx * 0x10;
+                        long dirA = inst + ShotEffectPack.OffDir + c.Idx * 0x10;
                         float vx = Memory.ReadFloat(dirA), vh = Memory.ReadFloat(dirA + 4), vy = Memory.ReadFloat(dirA + 8);
                         float vl = (float)Math.Sqrt(vx * vx + vh * vh + vy * vy), ql = (float)Math.Sqrt(dq);
                         if (vl > 1e-3f && ql > 1e-3f)
@@ -526,7 +494,7 @@ namespace Dark_Cloud_Improved_Version
                             if (nl > 1e-3f)
                             {
                                 WriteVec(dirA, nx / nl * vl, nh / nl * vl, ny / nl * vl);   // speed kept
-                                FaceAlong(obj, nx, nh, ny);
+                                ShotEffects.FaceAlong(obj, nx, nh, ny);
                             }
                         }
                     }
@@ -562,7 +530,7 @@ namespace Dark_Cloud_Improved_Version
                     }
                     continue;
                 }
-                Memory.WriteByte(inst + OffLatch + c.Idx, LatchHold);   // harmless to the end
+                Memory.WriteByte(inst + ShotEffectPack.OffLatch + c.Idx, LatchHold);   // harmless to the end
             }
         }
 
@@ -582,8 +550,8 @@ namespace Dark_Cloud_Improved_Version
             float best = float.MaxValue;
             foreach (var c in _claimed)
             {
-                long obj = pack + c.Slot * SlotStride + OffObj + c.Idx * ObjStride;
-                float sx = Memory.ReadFloat(obj + ObjPos), sy = Memory.ReadFloat(obj + ObjPos + 8);
+                long obj = pack + c.Slot * ShotEffectPack.SlotStride + ShotEffectPack.OffObj + c.Idx * ShotEffectPack.ObjStride;
+                float sx = Memory.ReadFloat(obj + ShotEffectPack.ObjPos), sy = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 8);
                 float d = (sx - xx) * (sx - xx) + (sy - xy) * (sy - xy);
                 if (d < best) { best = d; faced = c; want = (float)Math.Atan2(sx - xx, sy - xy); }
             }
@@ -619,20 +587,20 @@ namespace Dark_Cloud_Improved_Version
         {
             if (_pending.Count == 0) return;
             var c = _pending[0];
-            long inst = pack + c.Slot * SlotStride;
-            int count = Memory.ReadInt(inst + OffCount);
-            if (count < 1 || count > SubShots) { _pending.RemoveAt(0); return; }
+            long inst = pack + c.Slot * ShotEffectPack.SlotStride;
+            int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
+            if (count < 1 || count > ShotEffectPack.SubShots) { _pending.RemoveAt(0); return; }
 
             int j = -1;                                             // a free sub-shot to inhabit
             for (int i = 0; i < count; i++)
-                if (Memory.ReadUShort(inst + OffActive + i * 2) == 0) { j = i; break; }
+                if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + i * 2) == 0) { j = i; break; }
             if (j < 0) return;                                      // all busy — retry next tick
 
-            long cfg = Memory.ReadInt(inst + OffCfg);
+            long cfg = Memory.ReadInt(inst + ShotEffectPack.OffCfg);
             if (cfg <= 0) { _pending.RemoveAt(0); return; }
             cfg += 0x20000000;
-            long obj  = inst + OffObj + j * ObjStride;
-            long dirA = inst + OffDir + j * 0x10;
+            long obj  = inst + ShotEffectPack.OffObj + j * ShotEffectPack.ObjStride;
+            long dirA = inst + ShotEffectPack.OffDir + j * 0x10;
 
             // Leave from the fork's MUZZLE (the copy's eff30 — where her own pellets spawn), else the pouch.
             float poX = px, poH = ph, poY = py;
@@ -663,35 +631,35 @@ namespace Dark_Cloud_Improved_Version
 
             // ── the Set replica (fields in Set's own order; active LAST) ──
             int flyMot = (short)Memory.ReadUShort(cfg + 0x4E);
-            long ftab = Memory.ReadInt(obj + ObjFrameTb);
+            long ftab = Memory.ReadInt(obj + ShotEffectPack.ObjFrameTb);
             float startFrame = ftab > 0 ? Memory.ReadInt(ftab + 0x20000000 + flyMot * 0x10) : 1;
-            Memory.WriteUShort(inst + OffPhase + j * 2, 1);          // flying, no muzzle
-            Memory.WriteFloat (obj + ObjPos,     spX);
-            Memory.WriteFloat (obj + ObjPos + 4, spH);
-            Memory.WriteFloat (obj + ObjPos + 8, spY);
-            Memory.WriteFloat (obj + ObjPos + 12, 1f);
-            Memory.WriteInt   (obj + ObjMotId,  flyMot);
-            Memory.WriteInt   (obj + ObjMotFlag, 4);
-            Memory.WriteFloat (obj + ObjMotSpd, -1f);
-            Memory.WriteFloat (obj + ObjFrame,  startFrame);
+            Memory.WriteUShort(inst + ShotEffectPack.OffPhase + j * 2, 1);          // flying, no muzzle
+            Memory.WriteFloat (obj + ShotEffectPack.ObjPos,     spX);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjPos + 4, spH);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjPos + 8, spY);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjPos + 12, 1f);
+            Memory.WriteInt   (obj + ShotEffectPack.ObjMotId,  flyMot);
+            Memory.WriteInt   (obj + ShotEffectPack.ObjMotFlag, 4);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjMotSpd, -1f);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjFrame,  startFrame);
             WriteVec(dirA, ax * v, ah * v, ay * v);
-            Memory.WriteInt   (inst + OffWait + j * 4, FreshTimers);
-            Memory.WriteInt   (inst + OffDamage + j * 4, c.Damage);
-            Memory.WriteInt   (inst + OffUserCol + j * 4, -1);
-            Memory.WriteUShort(inst + OffOwner + j * 2, c.Owner);
-            Memory.WriteUShort(inst + OffAttr2 + j * 2, c.Attr2);
-            Memory.WriteUShort(inst + OffA060 + j * 2, 0xFFFF);
-            Memory.WriteInt   (inst + OffA0B0 + j * 4, -1);
-            Memory.WriteFloat (inst + OffA0D0 + j * 4, -1f);
-            Memory.WriteInt   (inst + OffA0F0 + j * 4, -1);
-            Memory.WriteInt   (inst + OffA110 + j * 4, -1);
-            Memory.WriteByte  (inst + OffSndFlag + j, c.SndFlag);
-            Memory.WriteByte  (inst + OffReload + j, c.Reload);
-            Memory.WriteByte  (inst + OffLatch + j, LatchHold);      // harmless until the damage stage
-            Memory.WriteInt   (inst + OffLastIdx, j);
-            FaceAlong(obj, ax, ah, ay);
-            Memory.WriteUShort(inst + OffActive + j * 2, 1);         // live — engine steps it from here
-            _flying.Add(new Fired { Slot = c.Slot, Idx = j, Flags = Memory.ReadUInt(cfg + CfgFlags), Radius = Math.Max(0.5f, Memory.ReadFloat(cfg + CfgRadiusFlying)) });
+            Memory.WriteInt   (inst + ShotEffectPack.OffWait + j * 4, FreshTimers);
+            Memory.WriteInt   (inst + ShotEffectPack.OffDamage + j * 4, c.Damage);
+            Memory.WriteInt   (inst + ShotEffectPack.OffUserCol + j * 4, -1);
+            Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, c.Owner);
+            Memory.WriteUShort(inst + ShotEffectPack.OffAttr2 + j * 2, c.Attr2);
+            Memory.WriteUShort(inst + ShotEffectPack.OffA060 + j * 2, 0xFFFF);
+            Memory.WriteInt   (inst + ShotEffectPack.OffA0B0 + j * 4, -1);
+            Memory.WriteFloat (inst + ShotEffectPack.OffA0D0 + j * 4, -1f);
+            Memory.WriteInt   (inst + ShotEffectPack.OffA0F0 + j * 4, -1);
+            Memory.WriteInt   (inst + ShotEffectPack.OffA110 + j * 4, -1);
+            Memory.WriteByte  (inst + ShotEffectPack.OffSndFlag + j, c.SndFlag);
+            Memory.WriteByte  (inst + ShotEffectPack.OffReload + j, c.Reload);
+            Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, LatchHold);      // harmless until the damage stage
+            Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
+            ShotEffects.FaceAlong(obj, ax, ah, ay);
+            Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);         // live — engine steps it from here
+            _flying.Add(new Fired { Slot = c.Slot, Idx = j, Flags = Memory.ReadUInt(cfg + ShotEffectPack.CfgFlags), Radius = Math.Max(0.5f, Memory.ReadFloat(cfg + ShotEffectPack.CfgRadiusFlying)) });
 
             _pending.RemoveAt(0);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag +
@@ -897,11 +865,11 @@ namespace Dark_Cloud_Improved_Version
             for (int q = _flying.Count - 1; q >= 0; q--)
             {
                 var f = _flying[q];
-                long inst = pack + f.Slot * SlotStride;
-                if (Memory.ReadUShort(inst + OffActive + f.Idx * 2) == 0 || ++f.Ticks > ReflectMaxTicks) { _flying.RemoveAt(q); continue; }
-                Memory.WriteByte(inst + OffLatch + f.Idx, LatchHold);                      // never plants on its own
-                long obj = inst + OffObj + f.Idx * ObjStride, dirA = inst + OffDir + f.Idx * 0x10;
-                float sx = Memory.ReadFloat(obj + ObjPos), sh = Memory.ReadFloat(obj + ObjPos + 4), sy = Memory.ReadFloat(obj + ObjPos + 8);
+                long inst = pack + f.Slot * ShotEffectPack.SlotStride;
+                if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + f.Idx * 2) == 0 || ++f.Ticks > ReflectMaxTicks) { _flying.RemoveAt(q); continue; }
+                Memory.WriteByte(inst + ShotEffectPack.OffLatch + f.Idx, LatchHold);                      // never plants on its own
+                long obj = inst + ShotEffectPack.OffObj + f.Idx * ShotEffectPack.ObjStride, dirA = inst + ShotEffectPack.OffDir + f.Idx * 0x10;
+                float sx = Memory.ReadFloat(obj + ShotEffectPack.ObjPos), sh = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 4), sy = Memory.ReadFloat(obj + ShotEffectPack.ObjPos + 8);
                 float vx = Memory.ReadFloat(dirA), vh = Memory.ReadFloat(dirA + 4), vy = Memory.ReadFloat(dirA + 8);
                 float speed = (float)Math.Sqrt(vx * vx + vh * vh + vy * vy);
                 for (int e = 0; e < EnemyAddresses.FloorSlots.Count; e++)
@@ -923,7 +891,7 @@ namespace Dark_Cloud_Improved_Version
                     if (dx * dx + dy * dy > reach * reach) continue;
                     if (Math.Abs(dh) > body + HitMargin + 12f) continue;
 
-                    Memory.WriteInt(inst + OffWait + f.Idx * 4, 0);                        // flight ends next frame: impact motion, no entry (latched)
+                    Memory.WriteInt(inst + ShotEffectPack.OffWait + f.Idx * 4, 0);                        // flight ends next frame: impact motion, no entry (latched)
                     PlantReflectedHit(sx, sh, sy, body + f.Radius + HitMargin, f.Flags, e);
                     _flying.RemoveAt(q);
                     break;
@@ -1090,29 +1058,5 @@ namespace Dark_Cloud_Improved_Version
         /// SetTransMatrix (0x128560) is pure data — copy the matrix to frame+0x1D0, zero the world
         /// cache +0x240 — so we rebuild the same look-at basis (row Z = flight direction, Y kept
         /// upright) and write it ourselves. Translation row is left alone.</summary>
-        private static void FaceAlong(long obj, float dx, float dh, float dy)
-        {
-            float len = (float)Math.Sqrt(dx * dx + dh * dh + dy * dy);
-            if (len < 1e-4f) return;
-            uint frame = Memory.ReadGuestPtr(obj + CCharacter.CharModel);
-            if (!Memory.IsValidGuest(frame)) return;
-            float zx = dx / len, zh = dh / len, zy = dy / len;          // Z = direction of travel
-            float xx, xh, xy;                                            // X = up × Z (up = +height)
-            if (Math.Abs(zh) > 0.99f) { xx = 1f; xh = 0f; xy = 0f; }     // near-vertical: any horizontal X
-            else
-            {
-                xx = zy; xh = 0f; xy = -zx;                              // (0,1,0) × (zx,zh,zy)
-                float xl = (float)Math.Sqrt(xx * xx + xy * xy);
-                xx /= xl; xy /= xl;
-            }
-            float yx = zh * xy - zy * xh, yh = zy * xx - zx * xy, yy = zx * xh - zh * xx;   // Y = Z × X
-            long f = Memory.ToMmu(frame);
-            var m = new byte[0x30];
-            BitConverter.GetBytes(xx).CopyTo(m, 0x00); BitConverter.GetBytes(xh).CopyTo(m, 0x04); BitConverter.GetBytes(xy).CopyTo(m, 0x08);
-            BitConverter.GetBytes(yx).CopyTo(m, 0x10); BitConverter.GetBytes(yh).CopyTo(m, 0x14); BitConverter.GetBytes(yy).CopyTo(m, 0x18);
-            BitConverter.GetBytes(zx).CopyTo(m, 0x20); BitConverter.GetBytes(zh).CopyTo(m, 0x24); BitConverter.GetBytes(zy).CopyTo(m, 0x28);
-            Memory.WriteBytesBatch(f + CFrameVu1.LocalMatrix, m);
-            Memory.WriteInt(f + CFrameVu1.WorldCacheA, 0);
-        }
     }
 }

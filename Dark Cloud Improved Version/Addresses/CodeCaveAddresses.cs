@@ -428,7 +428,12 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>…and the kick's origin (x, height, y): CheckDmg shoves along (enemy point − origin), so a point well behind
             /// the pellet on its flight line makes the shove follow the flight.</summary>
             internal const long PelletKickOrigin   = Base + 0xDC;
-            internal const long NextFree = Base + 0xE8;   // +0xE8..+0xFF are free (⚠ +0x100 = AiStubBase)
+            /// <summary>Xiao's per-shot WHP factor (float): the ISO's dun.bin patch (DunPatches) makes her fire routine pass THIS
+            /// to SwordDmgCheck1 instead of its immediate 1.0 — 1.0 = vanilla, ChargedShotWhp's 1.5 / 2.25 while a charged shot
+            /// is held. While the owner word is 0 (the app is not running it) the PNACH re-seeds 1.0 every frame.</summary>
+            internal const long XiaoShotWhpFactor = Base + 0xE8;
+            internal const long XiaoShotWhpOwner  = Base + 0xEC;
+            internal const long NextFree = Base + 0xF0;   // +0xF0..+0xFF are free (⚠ +0x100 = AiStubBase)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -563,8 +568,11 @@ namespace Dark_Cloud_Improved_Version
             internal const uint MirageHazeDraw     = 0x01FB3C40;   // 152 B → 0x1FB3CD8: one more raster, at the Mirage clone (dun hook in DunPatches)
             internal const uint SuperSteveIconDraw = 0x01FB3CE0;   // 200 B → 0x1FB3DA8: the sphere's weapon icon over Steve on the HUD (dun hook in DunPatches)
             internal const uint SuperSteveIconCopy = 0x01FB3DC0;   // 356 B → 0x1FB3F24: …and the copy that keeps the CURRENT sphere's icon in the HUD sheet (on every DngActiveWeaponTextureCopy call: four menu paths + two overlay sites)
-            // 0x01FB3F40..0x1FB4000 (192 B) FREE — CatGuardBypass sat here until it outgrew it again (an ISO patched then still carries its dead words)
-            internal const uint NextFree = 0x01FB3F40;   // the band runs to 0x1FB4000 (192 B left); another gap: 0x1FB2250..0x1FB22BC (108 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            /// <summary>Keeps the Gemron shot config in GemronShotBlock entered in the floor's shot pack (tools/stubs/
+            /// gemron_shots_enter.s): the head of the step chain (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then
+            /// Entry()s the config whenever the pack no longer holds it, recording the slot. Sits where CatGuardBypass used to.</summary>
+            internal const uint GemronShotsEnter   = 0x01FB3F40;   // 180 B → 0x1FB3FF4
+            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2250..0x1FB22BC (108 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>
@@ -738,7 +746,17 @@ namespace Dark_Cloud_Improved_Version
         /// The count is checked against this now rather than truncated.</summary>
         internal const int  CatCopyMaxPairs   = 16;                                           // → the block ends at 0xA10
 
-        // ── FREE: 0x21FAEF30 .. 0x21FB0000 (~0x10D0 B) ───────────────────────────────────────────────────
+        /// <summary>The Gemron shot config in use (ElfCave.GemronShotsEnter keeps it entered, GemronShots writes it): +0x00
+        /// "GEMS" (0 = nothing to enter — the mod's clear, or the cave's after a full pack), the BT_SHOT_EFFECT copy (0x70,
+        /// victim mask = enemies) at +0x10, +0x250 its pack slot (−1 = enter it; the cave records the slot), +0x254 the
+        /// monster pool's used counter before the cave's entry (the mod rewinds to it to reuse the slot for another element).
+        /// Runtime data on a runtime-data page.</summary>
+        internal const long GemronShotBlock      = 0x21FAEF40;
+        internal const uint GemronShotBlockGuest = 0x01FAEF40;
+        internal const uint GemronShotMagic      = 0x534D4547;   // "GEMS"
+        internal const int  GemronShotCfgs       = 0x10, GemronShotSlots = 0x250, GemronShotWatermark = 0x254, GemronShotBlockSize = 0x270;
+
+        // ── FREE: 0x21FAF1B0 .. 0x21FB0000 (~0xE50 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

@@ -35,7 +35,8 @@ namespace Dark_Cloud_Improved_Version
             HarderEnemyAI.StartThread();   // "Harder enemy AI" toggle: enemies with a get-up motion can revive
             GameClock.Start();           // the play clock every dungeon feature times against
             Mirage.Start();   // Ungaga's Mirage: watches for charge-release, drives the decoy via data writes
-            GuardianGrace.Start();   // Xiao's Angel Shooter guard-heal + spring sparkle (roadmap PR 2)
+            GuardianGrace.Start();
+            GemronShots.Start();     // Dragon's Y: the selected element's Gemron shot config, ready before any floor loads   // Xiao's Angel Shooter guard-heal + spring sparkle (roadmap PR 2)
             GuardianReflector.Start();   // Xiao's Angel Gear projectile reflect, Stage A (roadmap PR 7)
             DivineBeastCat.Start();      // Xiao's Divine Beast Title charged cat shot (roadmap PR 8)
             CustomFishingSpot.InstallShallowLinePatch();   // COLD: rewrite FishLineStep's bobber anchor to read a data global (before any fishing JITs it)
