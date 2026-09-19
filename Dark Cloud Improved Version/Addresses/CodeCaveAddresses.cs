@@ -428,12 +428,15 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>…and the kick's origin (x, height, y): CheckDmg shoves along (enemy point − origin), so a point well behind
             /// the pellet on its flight line makes the shove follow the flight.</summary>
             internal const long PelletKickOrigin   = Base + 0xDC;
+            /// <summary>A pellet-planted entry (Xiao-owned) with THIS base damage gets the kick above WITHOUT passing the guard
+            /// window — Dragon's Y's ball. 0 = none.</summary>
+            internal const long PelletKickDamage   = Base + 0xF0;
             /// <summary>Xiao's per-shot WHP factor (float): the ISO's dun.bin patch (DunPatches) makes her fire routine pass THIS
             /// to SwordDmgCheck1 instead of its immediate 1.0 — 1.0 = vanilla, ChargedShotWhp's 1.5 / 2.25 while a charged shot
             /// is held. While the owner word is 0 (the app is not running it) the PNACH re-seeds 1.0 every frame.</summary>
             internal const long XiaoShotWhpFactor = Base + 0xE8;
             internal const long XiaoShotWhpOwner  = Base + 0xEC;
-            internal const long NextFree = Base + 0xF0;   // +0xF0..+0xFF are free (⚠ +0x100 = AiStubBase)
+            internal const long NextFree = Base + 0xF4;   // +0xF4..+0xFF are free (⚠ +0x100 = AiStubBase)
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
@@ -486,8 +489,7 @@ namespace Dark_Cloud_Improved_Version
         ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
         ///   0x1FB0D90  CatPelletFollow    4244 B → 0x1FB1E24   catPelletFollow.bin
         ///   0x1FB1E30  PropPelletFollow    156 B → 0x1FB1ECC   propPelletFollow.bin
-        ///   0x1FB1ED0  CatGuardBypass      204 B → 0x1FB1F9C   catGuardBypass.bin
-        ///   0x1FB1FA0  XiaoMeleeFlinch      40 B → 0x1FB1FC8   xiaoMeleeFlinch.bin
+        ///   0x1FB1ED0  CatGuardBypass      304 B → 0x1FB2000   catGuardBypass.bin (fills the first band to its end)
         ///   (the second band, 0x1FB2000 →, is the table in <see cref="ElfCave"/> below)
         /// </summary>
         internal static class ElfCave
@@ -532,11 +534,11 @@ namespace Dark_Cloud_Improved_Version
             /// Now the hook's target (DunPatches.CatFollowHookNew): calls CatCopyQueue — the cat's chain, which performs the
             /// displaced step__5CSHOT — then places chara slot 3 on the pellet Mailbox.PropFollowSlot names.</summary>
             internal const uint PropPelletFollow   = 0x01FB1E30;   // 156 B → 0x1FB1ECC
-            internal const uint CatGuardBypass     = 0x01FB1ED0;   // 204 B → 0x1FB1F9C: the cat's hits and the Matador's charged pellet (which it also gives a kick) ignore an enemy's guard window (main-ELF hook 0x1DAC78, ElfPatches); the flinch stub sits at 0x1FB1FA0
+            internal const uint CatGuardBypass     = 0x01FB1ED0;   // 304 B → 0x1FB2000 (the first band's end): the cat's hits and the Matador's charged pellet ignore an enemy's guard window; Dragon's Y's shot gets its kick without the bypass (main-ELF hook 0x1DAC78, ElfPatches)
             /// <summary>Xiao melee-type flinch (tools/stubs/xiao_melee_flinch.s): CheckDmg's \"Xiao's hits never stagger\" rule,
             /// re-entered from main-ELF 0x1DB410 (CheckDmg is ELF code, not the dun overlay) so that a Xiao-owned entry with a melee-type kick (+0x98 == 2, the Divine Beast cat)
             /// takes the normal flinch decision; plain pellets (kick 0) are unchanged. Returns to 0x1DB420.</summary>
-            internal const uint XiaoMeleeFlinch    = 0x01FB1FA0;   // 40 B → 0x1FB1FC8
+            internal const uint XiaoMeleeFlinch    = 0x01FB2250;   // 40 B → 0x1FB2278 (moved from 0x1FB1FA0 to let CatGuardBypass grow; an ISO patched then is re-hooked)
             /// <summary>Divine Beast cat glow (tools/stubs/cat_glow_draw.s): hooked in place of the dungeon draw loop's two torch
             /// passes (dun 0x1DAEBF8 / 0x1DAEC10), performs them, then draws the `catglow` disc at the cat's torso with the torch
             /// routine. +0x00 = the "catglow" name, +0x08 = entry A (DrawFire), +0x20 = entry B (DrawFireFreeStyle).</summary>
@@ -551,7 +553,7 @@ namespace Dark_Cloud_Improved_Version
 
             /// <summary>The next unclaimed spot. Take it, then MOVE THIS — and add the cave to the table above
             /// (address order, size, end) so the next placement can see it.</summary>
-            // 0x01FB2250..0x1FB22BC (108 B) FREE — CatGuardBypass lived here until it grew (an ISO patched then still carries its dead words)
+            // 0x01FB2278..0x1FB22BC (68 B) FREE
             internal const uint CatCapeTint        = 0x01FB22C0;   // 176 B → 0x1FB2370: the cape's cloth draws under its own ambient
             internal const uint CatMaskTint        = 0x01FB2370;   // 228 B → 0x1FB2454: the mask's MESH does too, via a private vtable
             internal const uint CatCopyQueue       = 0x01FB2480;   // 584 B → 0x1FB26C8: the cat's mesh copy, done inside the machine; its tail also calls CatPalette
@@ -572,7 +574,7 @@ namespace Dark_Cloud_Improved_Version
             /// gemron_shots_enter.s): the head of the step chain (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then
             /// Entry()s the config whenever the pack no longer holds it, recording the slot. Sits where CatGuardBypass used to.</summary>
             internal const uint GemronShotsEnter   = 0x01FB3F40;   // 180 B → 0x1FB3FF4
-            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2250..0x1FB22BC (108 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
+            internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2278..0x1FB22BC (68 B) — ⚠ code pages: never a runtime-written data word (PINE SIGBUS) — use the Mailbox
         }
 
         /// <summary>Back-compat alias — prefer <see cref="Mailbox.MirageSceneGate"/>.</summary>

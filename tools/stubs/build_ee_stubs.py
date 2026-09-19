@@ -38,7 +38,7 @@ STUBS = [
     ('stilts_heal.s',            'stiltsHeal.bin',           0x1FB0BD0),
     ('water_order_gate.s',       'waterOrderGate.bin',       0x1FB0C50),
     ('cat_pellet_follow.s',      'catPelletFollow.bin',      0x1FB0D90),
-    ('xiao_melee_flinch.s',      'xiaoMeleeFlinch.bin',      0x1FB1FA0),
+    ('xiao_melee_flinch.s',      'xiaoMeleeFlinch.bin',      0x1FB2250),
     ('prop_pellet_follow.s',     'propPelletFollow.bin',     0x1FB1E30),
     ('cat_glow_draw.s',          'catGlowDraw.bin',          0x1FB2000),
     ('cat_sphere_percent.s',     'catSpherePercent.bin',     0x1FB21E0),

@@ -602,7 +602,7 @@ namespace Dark_Cloud_Improved_Version
         internal const int  OffA0F0    = 0xA0F0;    // + i*4 — Set: -1
         internal const int  OffA110    = 0xA110;    // + i*4 — Set: -1
         internal const int  OffSndFlag = 0xA130;    // + i, byte
-        internal const int  OffReload  = 0xA138;    // + i, byte — latch reload value
+        internal const int  OffReload  = 0xA138;    // + i, byte — after each planted entry the latch is set to this: frames without another plant
         internal const int  OffLatch   = 0xA140;    // + i, byte — held ≥1 = plants no damage
         internal const int  OffLastIdx = 0xA150;    // int — Set records the spawned index
         internal const int  OffCount   = 0xA14C;
@@ -615,6 +615,10 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ObjMotFlag = 0xC64;     // Set: 4 on the flying phase
         internal const int  ObjMotId   = 0xC68;     // motion id
         internal const int  CfgFlags = 0x40, CfgRadiusFlying = 0x2C;   // BT_SHOT_EFFECT: the element/attribute word (→ entry +0x50); the flying radius
+        internal const int  CfgElementBits = 0x1F;                     // CfgFlags: 1 Fire, 2 Ice, 4 Thunder, 8 Wind, 16 Holy; 0x100+ are ailments
+        // The per-phase damage radius the step plants with EVERY frame the phase lasts (cfg +0x28 + phase × 4): 0 muzzle, 1 flying,
+        // 2 the impact after a contact, 3 the burst when the wait runs out. 0 = that phase plants nothing.
+        internal const int  CfgRadiusMuzzle = 0x28, CfgRadiusImpact = 0x30, CfgRadiusExpire = 0x34;
         internal const int  OffWepFlags = 0xA030;   // + i*4 — SetWepStatus: the weapon's ability flags → entry +0x6C
         internal const int  OffAntiPtr  = 0xA090;   // + i*4 — SetVsMonster: → the weapon's anti-category bytes → entry +0x64
         /// <summary>The 34 BT_SHOT_EFFECT configs (0x70 B each, the effect's file name at +0) the species rows index.</summary>
@@ -624,8 +628,9 @@ namespace Dark_Cloud_Improved_Version
         internal const int  CfgVictimMask = 0x48;   // 1 = hurts the player, 2 = hurts enemies
         internal const int  CfgWait    = 0x38;      // frames of flight before the impact chain
         internal const int  CfgFlyMotion = 0x4E;    // short — the flying motion id
-        /// <summary>The Gemrons' shot configs, in element order 00 Fire … 04 Holy: f_boll_3, i_boll, t_boll, e114a_ex, e115a_ex.</summary>
-        internal static readonly int[] GemronCfg = { 5, 20, 23, 24, 25 };
+        /// <summary>The Gemrons' shot configs, in element order 00 Fire … 04 Holy: f_boll_3, i_boll, t_boll, e114a_ex, e115a_ex —
+        /// and at 05 (no element) the Black Dragon's shot, b_boll.</summary>
+        internal static readonly int[] GemronCfg = { 5, 20, 23, 24, 25, 22 };
         internal const long ReadBufferPtr   = 0x202A2384;   // → the dungeon loader's file read buffer (Entry's third argument)
         internal const uint MonsterPoolAlloc = 0x01F066D0;  // the CDataAlloc2 the floor's monster models and their shot effects come from
         internal const int  EntryParam4     = 0x26;         // what the species loader passes Entry as its fourth argument
