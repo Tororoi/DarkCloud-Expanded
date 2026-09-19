@@ -164,6 +164,11 @@ namespace Dark_Cloud_Improved_Version
             progress("Baking monster script fixes (hurt spheres, mimic wake guard) …");
             BakeMonsterSpheres(outIso, progress);
 
+            // Effect containers the shot-effect pack can load under the dead dun\effect names (BorrowedShots): each is a copy
+            // with the cfg record the pack's loader asks for by name appended; the sources are untouched.
+            progress("Baking borrowed shot effects …");
+            BakeBorrowedShots(outIso, progress);
+
             progress("Publishing pnach to PCSX2 …");
             ReshipPnach(crc);
             return outIso;   // the caller sets the final informative message (avoids overwriting it)
@@ -343,6 +348,11 @@ namespace Dark_Cloud_Improved_Version
         // redirects them into the DATA.DAT tail. Idempotent (appended marker).
         static void BakeMonsterSpheres(string outIso, Action<string> progress)
             => RunPythonBake("patch_monster_scripts.py", "monster script", outIso, progress);
+
+        // tools/iso_patch/borrow_shot_effects.py copies effect containers onto the unused dun\effect archive names with a
+        // `<name>.cfg` record appended, so Entry__12CSHOT_EFFECT (which asks the container for that record) can load them.
+        static void BakeBorrowedShots(string outIso, Action<string> progress)
+            => RunPythonBake("borrow_shot_effects.py", "borrowed shot effect", outIso, progress);
 
         /// <summary>Runs tools/iso_patch/<paramref name="scriptName"/> --iso <paramref name="outIso"/> and relays its
         /// progress lines. Missing script → warning, not a failure (the rest of the patch still applies).</summary>

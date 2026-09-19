@@ -128,7 +128,6 @@ CAT_KEYS = [                       # (start, end, speed, comment) — s86 c04cat
     (30,  40,  0.1,  "cat sit (s86 KEY 1)"),                    # 72: in place when there is no enemy to go for
 ]
 MOT_WINDOWS = [(k[0], k[1]) for k in CAT_KEYS]
-REC_TAG = 0x00140E02               # word at record +0x4C on every vanilla record
 
 # ⚠ The cat must NOT go into the WEAPON packs — that overflows the weapon menu's model arena. Their vanilla
 # DATA.HD2 records (USA disc), so an ISO patched by that version is put back before the character bake.
@@ -141,16 +140,7 @@ WEAPON_REVERT = {
 
 
 # ───────────────────────────────────────────── pack helpers ─────────────────────────────────────────────
-def _new_record(name, payload, tag=REC_TAG):
-    data_off = mc.DATA_OFF_STD
-    stride = (data_off + len(payload) + 15) & ~15
-    head = bytearray(data_off)
-    nb = name.encode("latin1")[:0x3F]
-    head[:len(nb)] = nb
-    struct.pack_into("<III", head, 0x40, data_off, len(payload), stride)
-    struct.pack_into("<I", head, 0x4C, tag)
-    raw = bytes(head) + payload + b"\x00" * (stride - data_off - len(payload))
-    return mc.Record(name, data_off, len(payload), stride, raw)
+_new_record = mc.new_record          # a fresh pack record (header + payload, 16-byte stride)
 
 
 def _mds_nodes(pl):

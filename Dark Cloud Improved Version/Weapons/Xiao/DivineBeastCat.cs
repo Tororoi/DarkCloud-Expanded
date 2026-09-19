@@ -870,6 +870,7 @@ namespace Dark_Cloud_Improved_Version
                 var pools = new System.Text.StringBuilder();
                 foreach (var (addr, name) in DataPools.InCarveOrder)
                     pools.Append($" {name} {Memory.ReadInt(addr + DataPools.Used) * 16L:N0}/{Memory.ReadInt(addr + DataPools.Cap) * 16L:N0}");
+                pools.Append($" cash {Memory.ReadInt(DataPools.Cash + DataPools.Used) * 16L:N0}/{Memory.ReadInt(DataPools.Cash + DataPools.Cap) * 16L:N0}");   // the floor script's work allocator (P840 on a first floor, the monster pool after)
                 Log("pools (used/cap B):" + pools);
             }
             var bg = new System.Text.StringBuilder();

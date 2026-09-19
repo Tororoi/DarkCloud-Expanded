@@ -146,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const uint SegVa   = CodeCaves.ElfCave.RegionStart;
             const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
-            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (2026-09-12: grown for the cat glow cave)
+            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (2026-09-12: grown for the cat glow cave; it can never grow past 0x1FB4000 — runtime data there)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");
@@ -373,10 +373,10 @@ namespace Dark_Cloud_Improved_Version
         // reports "no window" when the entry is Xiao's with the cat's kick type (+0x58 == 1, +0x98 == 2).
         internal const uint GuardBypassHookAddr = 0x001DAC78;                              // CheckDmg's guard-window load site
         internal const long GuardBypassHookAddrMmu = 0x20000000L + GuardBypassHookAddr;
-        private static readonly uint[] GuardBypassPreviousCaves = { 0x01FB2250, 0x01FB3F40 }; // where the cave sat before it grew — an ISO patched then is re-hooked
+        private static readonly uint[] GuardBypassPreviousCaves = { 0x01FB2250, 0x01FB3F40, 0x01FB1ED0, 0x01FB40C0, 0x01FB4120 }; // where the cave sat before it moved — an ISO patched then is re-hooked
         internal static void PatchCatGuardBypass(FileStream fs, Func<uint, long> ElfOff)
         {
-            const uint CaveAddr = CodeCaves.ElfCave.CatGuardBypass;
+            const uint CaveAddr = CodeCaves.DunCave.CatGuardBypass;
             using var st = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGuardBypass.bin")
                 ?? throw new IOException("Embedded EE function missing: catGuardBypass.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
@@ -387,8 +387,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == J(Return)) exits++; if (w == 0x84220550u) vanillaLoad = true; }
             if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || exits != 2 || !vanillaLoad)
                 throw new IOException($"catGuardBypass.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGlowDraw)
-                throw new IOException("catGuardBypass.bin overruns its gap — it must end before ElfCave.CatGlowDraw (the second band).");
+            if (b.Length > CodeCaves.DunCave.CatGuardBypassSpan)
+                throw new IOException("catGuardBypass.bin overruns MemoryMapDump's span in dun.bin.");
             // Hook the `addu`, NOT the `lh` after it: the `lh`'s own delay slot would be the `beq` at 0x1DAC80, and a branch in a
             // branch's delay slot is undefined on the R5900. Taking the `addu` leaves the `lh` as the delay slot, which is then
             // nop'd — the cave re-forms the address from a2/v1 itself and does the load, so neither word is needed.
@@ -398,8 +398,7 @@ namespace Dark_Cloud_Improved_Version
             bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || Array.Exists(GuardBypassPreviousCaves, c => cur0 == J(c))) && cur1 == 0;
             if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr - 4)) != 0x3C010006u || RdU32(fs, ElfOff(HookAddr + 8)) != 0x104000D1u)
                 throw new IOException($"Guard-window hook site 0x{HookAddr:X} is not vanilla `lui at,0x6; addu at,v0,at; lh v0,0x550(at); beq v0,zero` — unmodified Dark Cloud (USA) ISO expected.");
-            for (int i = 0; i < b.Length; i += 4)
-                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            // the cave bytes themselves go into dun.bin (DunPatches.Caves); only the hook is main-ELF
             WrU32(fs, ElfOff(HookAddr), jump);                 // j cave
             WrU32(fs, ElfOff(HookAddr + 4), 0);                // delay slot nop (was the lh the cave now performs)
         }
@@ -572,8 +571,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chained = true; if (w == 0x8D4A35D4u) pool = true; }
             if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chained || !pool)
                 throw new IOException("propPelletFollow.bin malformed or stale — it must call CatCopyQueue and read the shot pool.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGuardBypass)
-                throw new IOException("propPelletFollow.bin overruns its gap — it must end before ElfCave.CatGuardBypass.");
+            if (CaveAddr + (uint)b.Length > 0x01FB2000u)
+                throw new IOException("propPelletFollow.bin overruns its gap — it must end before 0x1FB2000 (the first band's end).");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
         }
@@ -587,15 +586,29 @@ namespace Dark_Cloud_Improved_Version
                 .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin")
                 ?? throw new IOException("Embedded EE function missing: borrowedShotsEnter.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
             using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
-            bool dump = false, entry = false, pack = false;
+            bool chainCall = false;
             uint chain = 0x0C000000u | (CodeCaves.ElfCave.PropPelletFollow >> 2);
-            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) dump = true; if (w == 0x0C06B930u) entry = true; if (w == 0x8D6B35D8u) pack = true; }
-            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !dump || !entry || !pack)
-                throw new IOException("borrowedShotsEnter.bin malformed or stale — it must call PropPelletFollow and Entry__17CSHOT_EFFECT_PACK and read NowShotEffect.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.RegionEnd)
-                throw new IOException("borrowedShotsEnter.bin overruns the band — it must end by ElfCave.RegionEnd.");
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chainCall = true; }
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chainCall)
+                throw new IOException("borrowedShotsEnter.bin (the head) malformed or stale — it must call PropPelletFollow.");
+            if (CaveAddr + (uint)b.Length > 0x01FB2000u)
+                throw new IOException("borrowedShotsEnter.bin (the head) overruns its gap — it must end by 0x1FB2000.");
             for (int i = 0; i < b.Length; i += 4)
                 WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            // …and the tail piece, at the band's end
+            using var st2 = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnterTail.bin")
+                ?? throw new IOException("Embedded EE function missing: borrowedShotsEnterTail.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms2 = new MemoryStream(); st2.CopyTo(ms2); byte[] t = ms2.ToArray();
+            const uint TailAddr = CodeCaves.ElfCave.BorrowedShotsEnterTail;
+            bool jrRa = false;
+            for (int i = 0; i + 4 <= t.Length; i += 4) if (U32(t, i) == 0x03E00008u) jrRa = true;
+            if (t.Length < 8 || t.Length % 4 != 0 || !jrRa)
+                throw new IOException("borrowedShotsEnterTail.bin malformed or stale — reassemble its .s.");
+            if (TailAddr + (uint)t.Length > CodeCaves.ElfCave.RegionEnd)
+                throw new IOException("borrowedShotsEnterTail.bin overruns the band — it must end by ElfCave.RegionEnd.");
+            for (int i = 0; i < t.Length; i += 4)
+                WrU32(fs, ElfOff(TailAddr + (uint)i), U32(t, i));
         }
 
         /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has

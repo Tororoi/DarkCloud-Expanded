@@ -11,7 +11,7 @@ namespace Dark_Cloud_Improved_Version
     /// The pellet is the game's, untouched: it flies, collides and plants its damage entry as any pellet does
     /// (step__5CSHOT), its own sprite hidden inside the model. Three things ride on it —
     ///  · the DAMAGE: the pool slot's damage word, scaled once at the bind, and made distinct so the guard bypass
-    ///    (ElfCave.CatGuardBypass) can tell the entry apart: a Xiao-owned entry whose base damage equals
+    ///    (DunCave.CatGuardBypass) can tell the entry apart: a Xiao-owned entry whose base damage equals
     ///    <see cref="Mailbox.PelletCrushDamage"/> passes the window and is stamped with the kick in
     ///    <see cref="Mailbox.PelletKickStrength"/>/<see cref="Mailbox.PelletKickDecay"/>, its origin
     ///    (<see cref="Mailbox.PelletKickOrigin"/>) a point behind the pellet on its flight line so the shove follows the flight;
@@ -60,7 +60,7 @@ namespace Dark_Cloud_Improved_Version
 
         private static bool Native =>
             (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew
-            && (uint)Memory.ReadInt(ElfPatches.GuardBypassHookAddrMmu) == (0x08000000u | (CodeCaves.ElfCave.CatGuardBypass >> 2));
+            && (uint)Memory.ReadInt(ElfPatches.GuardBypassHookAddrMmu) == (0x08000000u | (CodeCaves.DunCave.CatGuardBypass >> 2));
 
         /// <summary>Drive every tick (16 ms) while the Matador is equipped; <paramref name="active"/> false HOLDS everything
         /// as it stands (pause, menu, chest, conversation — the pellet and the prop's slot stand still natively).

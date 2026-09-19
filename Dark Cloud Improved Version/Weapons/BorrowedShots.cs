@@ -1,23 +1,38 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace Dark_Cloud_Improved_Version
 {
+    /// <summary>A shot effect an ability borrows: a BT_SHOT_EFFECT config and the archive container it names.</summary>
+    internal sealed class BorrowedEffect
+    {
+        internal readonly byte[] Cfg;      // the BT_SHOT_EFFECT (0x70 B), as the provider built it
+        internal readonly string Path;     // the container in the archive, e.g. dun/effect/f_boll_3.chr
+        internal BorrowedEffect(byte[] cfg, string path) { Cfg = cfg; Path = path; }
+        internal string Name => BorrowedShots.Name(Cfg);
+        internal bool Same(BorrowedEffect o) => o != null && Path == o.Path && Cfg.SequenceEqual(o.Cfg);
+    }
+
     /// <summary>
-    /// A species' shot effect, borrowed by one of Xiao's abilities, available on every floor. A species' shot is a
-    /// BT_SHOT_EFFECT config (<see cref="ShotEffectPack.CfgTable"/>) the floor loader enters into the shot pack (five slots)
-    /// with the floor's monster pool as allocator; the configs name shared `dun\effect` files, so entering one on a floor
-    /// without its species works the same way. Each ability hands <see cref="Start"/> a provider naming the config it wants
-    /// right now (−1 = none); the first non-negative answer wins. <see cref="Seed"/> writes a copy of that config — victim mask
-    /// switched from the player to ENEMIES, flags cut to the element bits — into <see cref="CodeCaves.BorrowedShotBlock"/> (one
-    /// at a time: each costs the floor its file in the monster pool and one of the pack's five slots, and a first cut
-    /// entering five froze a floor load); ElfCave.BorrowedShotsEnter, at the head of the per-frame step chain, keeps it
-    /// entered — after a floor load rebuilds the pack, and the frame after another config is seeded — recording the slot
-    /// and, before each entry, the monster pool's fill level. ANOTHER config on the same floor reuses that one slot:
-    /// <see cref="Seed"/> empties it (the sub-shots' active flags and the slot's config pointer, which is what the loader
-    /// leaves for a species without shots), rewinds the pool to the recorded level so the old model's memory is reused, and
-    /// writes −1 — the cave enters the new config the next frame. A full pack clears the block's magic until the mod seeds
-    /// again. <see cref="Fire"/> is the Set replica the Guardian Reflector re-fires with, for a XIAO-owned shot: the engine
-    /// steps it, collides it with enemies (the mask) and plants its damage entry with her owner id, ability flags and
+    /// A shot effect borrowed by one of Xiao's abilities, available on every floor. A shot effect is a BT_SHOT_EFFECT
+    /// config (<see cref="ShotEffectPack.CfgTable"/> holds the species' 34; the characters' wep_eff ones sit in dun.bin)
+    /// naming a `.chr` container the game builds a CSHOT_EFFECT from. Xiao's live in the MAIN-CHARACTER effect instance
+    /// (<see cref="ShotEffectPack.CharaMainEffect"/>) — the sixth CSHOT_EFFECT beside the monster pack, which the floor
+    /// loader fills with the active character's own wep_eff effect and the dungeon loop steps and draws; Xiao's holds an
+    /// unused mgan01 — so the pack's five slots stay the monsters'. Each ability hands <see cref="Start"/> a provider
+    /// returning the <see cref="BorrowedEffect"/> it wants right now (null = none): one of the game's 34 configs
+    /// (<see cref="TableConfig"/>) or one of the mod's own naming any container (<see cref="CustomConfig"/>); the first
+    /// answer wins. <see cref="Seed"/> writes a copy of that config — victim mask switched from the player to ENEMIES, flags
+    /// cut to the element bits — and the file's path into <see cref="CodeCaves.BorrowedShotBlock"/> with state 0;
+    /// ElfCave.BorrowedShotsEnter, at the head of the per-frame step chain, re-enters the instance whenever the loader
+    /// refilled it (a new floor) or the state asks (another config): it carves a region from the monster pool once per
+    /// floor (<see cref="ReserveUnits"/>), empties the instance, clears its texture block, reads the file and enters the
+    /// config with that region as allocator — a re-entry reuses the region whole, so switching configs mid-floor costs
+    /// the pool nothing more. No room, or a failed entry, drops the block's magic until the mod seeds again (a new floor).
+    /// <see cref="Fire"/> is the Set replica the Guardian Reflector re-fires with, for a XIAO-owned shot: the engine steps
+    /// it, collides it with enemies (the mask) and plants its damage entry with her owner id, ability flags and
     /// anti-category bytes, so CheckDmg treats it exactly as one of her pellets — with the shot's own element. The step
     /// plants that entry every frame a phase has a radius, then keeps quiet for the sub-shot's reload frames; so the copy's
     /// FLYING radius is zeroed (the contact sweep still runs) and <see cref="Fire"/> sets the reload past any impact
@@ -28,18 +43,40 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[BorrowedShots] ";
         private const byte   PlantReload = 120;   // frames of silence after a plant (a byte): longer than any impact animation
-        private static Func<int>[] _wanted = Array.Empty<Func<int>>();   // each ability's answer: the config index it wants, or −1
-        private static int _seededCfg = -1;       // the config index in the block (−1 = none)
-        private static int _lastSlot = -3;         // the slot word last logged
-        private static int _lastFloor = -1;        // checkFloor last seen in a floor: a change → the slot word back to −1 (retry)
-        private static bool _wasInFloor, _lastQuiet;
+        internal const string EffectDir = "dun/effect/", WepEffDir = "dun/mainchara/wep_eff/";   // where the species' and the characters' containers live
+        /// <summary>The region the cave carves from the monster pool per floor, in 16-byte units, for an effect not in
+        /// <see cref="KnownUnits"/>: the largest effect measured so far (an old fireball, 30,468) with headroom. An effect that
+        /// needs more than its reserve hangs the game in the allocator, so the log line after each entry reports the units
+        /// used — add a new effect's figure to the table once seen.</summary>
+        internal const int ReserveUnits = 32768;
+        /// <summary>Units each container's entry took (deterministic per file; the log line after each entry), so the region
+        /// reserved for it is only slightly larger than what it needs — a floor whose pool is nearly full can still fit it.</summary>
+        private static readonly Dictionary<string, int> KnownUnits = new Dictionary<string, int>
+        {
+            ["t_boll"] = 19867, ["i_boll"] = 20540, ["f_boll_3"] = 21167, ["e115a_ex"] = 21235, ["b_boll"] = 21695, ["e114a_ex"] = 23822,
+        };
+        private const int ReserveMargin = 1024;
+        /// <summary>The region an effect is given, in units. Every KNOWN effect asks for the same amount — the largest known need
+        /// plus a margin — so switching between them reuses one region (the cave carves a fresh, larger region only when a
+        /// config needs more than the region holds, leaving the old one behind); an unknown effect asks for
+        /// <see cref="ReserveUnits"/>.</summary>
+        internal static int ReserveFor(BorrowedEffect fx) => KnownUnits.ContainsKey(fx.Name) ? KnownUnits.Values.Max() + ReserveMargin : ReserveUnits;
+        /// <summary>The monster-pool units the seeded effect will ask for on each floor (0 when none is seeded) — the roster
+        /// builders leave this much of the pool unspent, or the effect finds no room on a full floor.</summary>
+        internal static int Headroom => _seeded == null ? 0 : ReserveFor(_seeded);
+        private static Func<BorrowedEffect>[] _wanted = Array.Empty<Func<BorrowedEffect>>();   // each ability's answer: the effect it wants, or null
+        private static BorrowedEffect _seeded;    // the effect in the block, as the provider gave it (null = none)
+        private static readonly Dictionary<string, BorrowedEffect> _effects = new Dictionary<string, BorrowedEffect>();   // TableConfig/CustomConfig results, by key
+        private static int _lastState = -3;        // the state word last logged
+        private static int _lastFloor = -1;        // checkFloor last seen in a floor: a change → magic restored (retry after a quiet floor)
+        private static bool _wasInFloor;
         private static System.Threading.Thread _thread;
 
         /// <summary>Keep the block matched to what the abilities want, from app start — ready BEFORE a floor loads (the loader
-        /// runs before any ability thread does). Each <paramref name="wanted"/> answers with a config index or −1, reading
-        /// whatever it keys on (an equipped weapon's inventory record is valid in town and dungeon alike); the first
-        /// non-negative answer is seeded, none → cleared.</summary>
-        internal static void Start(params Func<int>[] wanted)
+        /// runs before any ability thread does). Each <paramref name="wanted"/> answers with an effect or null, reading
+        /// whatever it keys on (an equipped weapon's inventory record is valid in town and dungeon alike); the first answer
+        /// is seeded, none → cleared.</summary>
+        internal static void Start(params Func<BorrowedEffect>[] wanted)
         {
             _wanted = wanted;
             if (_thread != null && _thread.IsAlive) return;
@@ -53,23 +90,35 @@ namespace Dark_Cloud_Improved_Version
             {
                 try
                 {
-                    int cfg = -1;
-                    foreach (var want in _wanted) { cfg = want(); if (cfg >= 0) break; }
-                    if (cfg >= 0 && cfg < ShotEffectPack.CfgCount) Seed(cfg); else Clear();
+                    BorrowedEffect fx = null;
+                    foreach (var want in _wanted) { fx = want(); if (fx != null) break; }
+                    if (fx != null) Seed(fx); else Clear();
                     bool inFloor = Player.InDungeonFloor();
                     int floor = inFloor ? Memory.ReadUShort(Addresses.checkFloor) : -1;
-                    if (_seededCfg >= 0 && inFloor && (!_wasInFloor || floor != _lastFloor))
-                    {   // a new floor: enter it again (the cave's own check catches the rebuilt pack too; this restores a full pack's cleared magic)
-                        Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotSlot, -1);
+                    if (_seeded != null && inFloor && (!_wasInFloor || floor != _lastFloor))
+                    {   // a new floor: the cave sees the loader's refill by itself; this restores the magic a quiet floor dropped
+                        Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState, 0);
                         Memory.WriteInt(CodeCaves.BorrowedShotBlock, (int)CodeCaves.BorrowedShotMagic);
+                        _lastState = -3;
                     }
                     _wasInFloor = inFloor; _lastFloor = floor;
-                    int packSlot = Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotSlot);
-                    bool quiet = Memory.ReadInt(CodeCaves.BorrowedShotBlock) == 0;
-                    if (_seededCfg >= 0 && inFloor && (packSlot != _lastSlot || quiet != _lastQuiet))
+                    WatchDonorPools();
+                    int state = Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState);
+                    if (_seeded != null && inFloor && state != _lastState)
                     {
-                        _lastSlot = packSlot; _lastQuiet = quiet;
-                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"config {_seededCfg} → pack slot {packSlot}" + (quiet ? " (the pack is full on this floor)" : packSlot < 0 ? " (to be entered)" : ""));
+                        _lastState = state;
+                        long alloc = CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotAlloc;
+                        Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + _seeded.Name + (state == 1
+                            ? $" entered in the main-character effect: region {Memory.ReadInt(alloc + 8):N0} of {Memory.ReadInt(alloc + 12):N0} units used (base 0x{Memory.ReadUInt(alloc):X}); monster pool {Memory.ReadInt(DataPools.Monstor + DataPools.Used):N0} of {Memory.ReadInt(DataPools.Monstor + DataPools.Cap):N0}"
+                            : state < 0 ? " NOT entered (no room in the monster pool, or the entry failed) — quiet until the next floor" : " (to be entered)"));
+                        if (state < 0)
+                        {   // what the cave saw: the pool it tried to carve from, the region it holds, the instance's config pointer
+                            long pool = DataPools.Monstor;
+                            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag
+                                + $"  monster pool used {Memory.ReadInt(pool + DataPools.Used):N0} of cap {Memory.ReadInt(pool + DataPools.Cap):N0} units, reserve {Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotReserve):N0}; "
+                                + $"region base 0x{Memory.ReadUInt(alloc):X} used {Memory.ReadInt(alloc + 8):N0} cap {Memory.ReadInt(alloc + 12):N0}; "
+                                + $"instance cfg 0x{Memory.ReadUInt(ShotEffectPack.CharaMainEffect):X} (ours 0x{CodeCaves.BorrowedShotBlockGuest + CodeCaves.BorrowedShotCfg:X}), live effect ptr 0x{Memory.ReadUInt(ShotEffectPack.MainEffectLivePtr):X}");
+                        }
                     }
                 }
                 catch (Exception e) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "tick failed: " + e.Message); }
@@ -77,87 +126,126 @@ namespace Dark_Cloud_Improved_Version
             }
         }
 
+        // ── pool-growth survey: the peak of the two carves that might donate units to the map/monster pool ─────────────
+        // The floor script's work allocator ("cash") is reset around its run, so a sample after the load reads 0; only a
+        // poll that catches it mid-run shows the demand. Logged whenever a new peak appears.
+        private static readonly Dictionary<uint, int> _cashPeak = new Dictionary<uint, int>();   // the scratch allocator is re-aimed (work buffer, monster pool, read buffer): a peak per base
+        private static int _texturePeak;
+        private static void WatchDonorPools()
+        {
+            int cash = Memory.ReadInt(DataPools.Cash + DataPools.Used), tex = Memory.ReadInt(DataPools.Texture + DataPools.Used);
+            uint cashBase = Memory.ReadUInt(DataPools.Cash);
+            if (cash < 4_000_000 && cash > (_cashPeak.TryGetValue(cashBase, out int peak) ? peak : 0))
+            {
+                _cashPeak[cashBase] = cash;
+                string where = cashBase == Memory.ReadUInt(DataPools.P840) ? "the script work buffer" : cashBase == Memory.ReadUInt(DataPools.Monstor) ? "the monster pool" : "elsewhere";
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"[survey] scratch allocator peak {cash:N0} of {Memory.ReadInt(DataPools.Cash + DataPools.Cap):N0} units at base 0x{cashBase:X} ({where})");
+            }
+            if (tex > _texturePeak && tex < 4_000_000)
+            {
+                _texturePeak = tex;
+                Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"[survey] texture-data pool peak {tex:N0} of {Memory.ReadInt(DataPools.Texture + DataPools.Cap):N0} units");
+            }
+        }
+
         private static void Clear()
         {
-            if (_seededCfg < 0) return;
-            Memory.WriteInt(CodeCaves.BorrowedShotBlock, 0);         // no magic: the cave enters nothing
-            ReleaseSlot();
-            _seededCfg = -1; _lastSlot = -3;
+            if (_seeded == null) return;
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock, 0);         // no magic: the cave enters nothing (an entered effect stays until the next floor, unused)
+            _seeded = null; _lastState = -3;
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "block cleared (no ability wants a shot)");
         }
 
-        /// <summary>Put the config in the block unless it is there already, slot −1: the cave enters it on its next frame in
-        /// a floor. When another config is entered on this floor, its slot is emptied and the pool rewound first, so the new
-        /// one takes the same slot and memory.</summary>
-        private static void Seed(int cfgIndex)
+        /// <summary>Put the effect in the block unless it is there already, state 0: the cave enters it on its next frame in
+        /// a floor (re-entering the instance if another config was in it, reusing the floor's region).</summary>
+        private static void Seed(BorrowedEffect fx)
         {
-            if (cfgIndex == _seededCfg) return;
-            uint cfgAddr = Memory.ReadUInt(ShotEffectPack.CfgTable + cfgIndex * 4);
-            byte[] c = Memory.ReadBytesBatch(0x20000000L + cfgAddr, ShotEffectPack.CfgSize);
-            if (c == null) { Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "config table unreadable — no borrowed shots"); return; }
+            if (fx.Same(_seeded)) return;
+            byte[] c = (byte[])fx.Cfg.Clone();
             BitConverter.GetBytes(2).CopyTo(c, ShotEffectPack.CfgVictimMask);                            // hurts enemies, not the player
             BitConverter.GetBytes(0f).CopyTo(c, ShotEffectPack.CfgRadiusFlying);                         // no planting in flight: the impact's first frame is the first plant
             int flags = BitConverter.ToInt32(c, ShotEffectPack.CfgFlags);
             BitConverter.GetBytes(flags & ShotEffectPack.CfgElementBits).CopyTo(c, ShotEffectPack.CfgFlags);   // the element only — no ailment (the Black Dragon's shot carries Freeze)
+            byte[] path = new byte[CodeCaves.BorrowedShotPathLen];
+            Encoding.ASCII.GetBytes(fx.Path, 0, Math.Min(fx.Path.Length, path.Length - 1), path, 0);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock, 0);                                               // quiet while the block changes
-            ReleaseSlot();
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg, c);
-            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotSlot, -1);
+            Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotPath, path);
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotReserve, ReserveFor(fx));
+            if (_seeded == null) Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCarveMark, 0);   // no region yet
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState, 0);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock, (int)CodeCaves.BorrowedShotMagic);
-            _seededCfg = cfgIndex; _lastSlot = -3;
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"config {cfgIndex} seeded — entered on the next frame in a floor");
+            _seeded = fx; _lastState = -3;
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} ({fx.Path}) seeded, reserve {ReserveFor(fx):N0} units — entered on the next frame in a floor");
         }
 
-        /// <summary>Give the entered slot back: nothing in flight, the slot's config pointer cleared (an empty slot to Entry),
-        /// the monster pool rewound to before its model was loaded. Only while in a floor with a slot recorded.</summary>
-        private static void ReleaseSlot()
+        /// <summary>One of the game's 34 configs (<see cref="ShotEffectPack.CfgTable"/>) and its container under dun/effect, as
+        /// the species loader uses it.</summary>
+        internal static BorrowedEffect TableConfig(int index)
         {
-            int slot = Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotSlot);
-            if (slot < 0 || !Player.InDungeonFloor()) return;
-            long pack = Memory.ReadInt(ShotEffectPack.NowShotEffectPtr);
-            if (pack <= 0) return;
-            long inst = pack + 0x20000000 + slot * ShotEffectPack.SlotStride;
-            if (Memory.ReadInt(inst + ShotEffectPack.OffCfg) != CodeCaves.BorrowedShotBlockGuest + CodeCaves.BorrowedShotCfg) return;   // not ours (a rebuilt pack)
-            for (int i = 0; i < ShotEffectPack.SubShots; i++) Memory.WriteUShort(inst + ShotEffectPack.OffActive + i * 2, 0);
-            Memory.WriteInt(inst + ShotEffectPack.OffCount, 0);
-            Memory.WriteInt(inst + ShotEffectPack.OffLastIdx, -1);
-            Memory.WriteInt(inst + ShotEffectPack.OffCfg, 0);
-            int mark = Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotWatermark);
-            int used = Memory.ReadInt(DataPools.Monstor + DataPools.Used);
-            if (mark > 0 && mark <= used) Memory.WriteInt(DataPools.Monstor + DataPools.Used, mark);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"slot {slot} released (monster pool {used} → {mark} units)");
+            string key = "#" + index;
+            if (_effects.TryGetValue(key, out var fx)) return fx;
+            uint cfgAddr = Memory.ReadUInt(ShotEffectPack.CfgTable + index * 4);
+            byte[] c = cfgAddr == 0 ? null : Memory.ReadBytesBatch(0x20000000L + cfgAddr, ShotEffectPack.CfgSize);
+            if (c == null) return null;
+            fx = new BorrowedEffect(c, EffectDir + Name(c) + ".chr");
+            _effects[key] = fx;
+            return fx;
         }
 
-        /// <summary>The pack slot holding the config's shot on this floor, or −1 (also when another config is seeded).</summary>
-        internal static int SlotFor(int cfgIndex)
+        /// <summary>A config of the mod's own: the game's config <paramref name="templateIndex"/> (radii, wait, damage,
+        /// element, reaction) naming the container <paramref name="dir"/><paramref name="name"/>.chr instead, with its phases'
+        /// motions (the .chr's KEY ordinals; −1 = none) — any effect container (a species' under <see cref="EffectDir"/>, a
+        /// character's under <see cref="WepEffDir"/>), whether or not the game itself uses it. The container's cfg record must
+        /// be named <paramref name="name"/>.cfg: the loader asks for it by that name.</summary>
+        internal static BorrowedEffect CustomConfig(int templateIndex, string name, short muzzleMotion, short flyMotion, short impactMotion, short expireMotion, string dir = EffectDir)
         {
-            if (cfgIndex != _seededCfg) return -1;
-            int slot = Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotSlot);
-            return slot < 0 ? -1 : slot;
+            string key = $"{dir}{name}/{templateIndex}/{muzzleMotion},{flyMotion},{impactMotion},{expireMotion}";
+            if (_effects.TryGetValue(key, out var fx)) return fx;
+            BorrowedEffect t = TableConfig(templateIndex);
+            if (t == null) return null;
+            byte[] c = (byte[])t.Cfg.Clone();
+            Array.Clear(c, ShotEffectPack.CfgName, ShotEffectPack.CfgNameLen);
+            Encoding.ASCII.GetBytes(name, 0, Math.Min(name.Length, ShotEffectPack.CfgNameLen - 1), c, ShotEffectPack.CfgName);
+            BitConverter.GetBytes(muzzleMotion).CopyTo(c, ShotEffectPack.CfgMuzzleMotion);
+            BitConverter.GetBytes(flyMotion).CopyTo(c, ShotEffectPack.CfgFlyMotion);
+            BitConverter.GetBytes(impactMotion).CopyTo(c, ShotEffectPack.CfgImpactMotion);
+            BitConverter.GetBytes(expireMotion).CopyTo(c, ShotEffectPack.CfgExpireMotion);
+            fx = new BorrowedEffect(c, dir + name + ".chr");
+            _effects[key] = fx;
+            return fx;
         }
 
-        /// <summary>Fire the config's shot from <paramref name="x"/>/<paramref name="h"/>/<paramref name="y"/> with velocity
+        /// <summary>The effect file a config names.</summary>
+        internal static string Name(byte[] cfg)
+        {
+            int n = Array.IndexOf(cfg, (byte)0, ShotEffectPack.CfgName, ShotEffectPack.CfgNameLen);
+            return Encoding.ASCII.GetString(cfg, ShotEffectPack.CfgName, (n < 0 ? ShotEffectPack.CfgNameLen : n) - ShotEffectPack.CfgName);
+        }
+
+        /// <summary>Whether the effect is entered in the main-character instance right now (false also when another effect is
+        /// seeded, or this floor had no room).</summary>
+        internal static bool Entered(BorrowedEffect fx)
+            => fx != null && fx.Same(_seeded) && Memory.ReadInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState) == 1;
+
+        /// <summary>Fire the effect's shot from <paramref name="x"/>/<paramref name="h"/>/<paramref name="y"/> with velocity
         /// <paramref name="vx"/>/<paramref name="vh"/>/<paramref name="vy"/> (units per frame), <paramref name="damage"/> base
-        /// damage and <paramref name="life"/> frames of flight, as Xiao's. False when the config has no slot on this floor or
-        /// its sub-shots are all busy.</summary>
-        internal static bool Fire(int cfgIndex, float x, float h, float y, float vx, float vh, float vy, int damage, int life)
+        /// damage and <paramref name="life"/> frames of flight, as Xiao's. False when the effect is not entered on this floor
+        /// or its sub-shots are all busy.</summary>
+        internal static bool Fire(BorrowedEffect fx, float x, float h, float y, float vx, float vh, float vy, int damage, int life)
         {
-            int slot = SlotFor(cfgIndex);
-            if (slot < 0) return false;
-            long pack = Memory.ReadInt(ShotEffectPack.NowShotEffectPtr);
-            if (pack <= 0) return false;
-            long inst = pack + 0x20000000 + slot * ShotEffectPack.SlotStride;
+            if (!Entered(fx)) return false;
+            byte[] cfg = fx.Cfg;
+            long inst = ShotEffectPack.CharaMainEffect;
             int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
             if (count < 1 || count > ShotEffectPack.SubShots) return false;
             int j = -1;
             for (int i = 0; i < count; i++)
                 if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + i * 2) == 0) { j = i; break; }
             if (j < 0) return false;
-            long cfg = Memory.ReadInt(inst + ShotEffectPack.OffCfg);
-            if (cfg <= 0) return false;
-            cfg += 0x20000000;
             long obj = inst + ShotEffectPack.OffObj + j * ShotEffectPack.ObjStride, dirA = inst + ShotEffectPack.OffDir + j * 0x10;
-            int flyMot = (short)Memory.ReadUShort(cfg + ShotEffectPack.CfgFlyMotion);
+            int flyMot = BitConverter.ToInt16(cfg, ShotEffectPack.CfgFlyMotion);
+            if (flyMot < 0) flyMot = 0;
             long ftab = Memory.ReadInt(obj + ShotEffectPack.ObjFrameTb);
             float startFrame = ftab > 0 ? Memory.ReadInt(ftab + 0x20000000 + flyMot * 0x10) : 1;
             long rec = WeaponHave.BattleWeaponRecord;
@@ -188,7 +276,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
             ShotEffects.FaceAlong(obj, vx, vh, vy);
             Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);
-            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"config {cfgIndex} shot from slot {slot}#{j}: damage {damage}, {life} frames, v=({vx:F2},{vh:F2},{vy:F2})");
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} from the main-character effect #{j}: damage {damage}, {life} frames, v=({vx:F2},{vh:F2},{vy:F2})");
             return true;
         }
     }

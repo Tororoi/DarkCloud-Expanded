@@ -125,7 +125,12 @@ namespace Dark_Cloud_Improved_Version
                 if (ti < 0) { parts.Add("-1"); continue; }
                 parts.Add(_speciesByTI != null && _speciesByTI.TryGetValue(ti, out var sp) ? $"{ti}:{sp.code}:{sp.name}" : $"{ti}:?");
             }
-            Console.WriteLine($"[BufferSample] dun={dungeon} floor={floor} back={back} used={used} cap={cap} "
+            // The pools the monster pool competes with, in units, sampled the same moment (the pool is the map carve's remainder;
+            // the floor script's "cash" work area and the texture data are the carves that might donate to it).
+            string pools = $"map={Memory.ReadInt(DataPools.Map + DataPools.Used)}/{Memory.ReadInt(DataPools.Map + DataPools.Cap)} "
+                + $"cash={Memory.ReadInt(DataPools.Cash + DataPools.Used)}/{Memory.ReadInt(DataPools.Cash + DataPools.Cap)} "
+                + $"texture={Memory.ReadInt(DataPools.Texture + DataPools.Used)}/{Memory.ReadInt(DataPools.Texture + DataPools.Cap)}";
+            Console.WriteLine($"[BufferSample] dun={dungeon} floor={floor} back={back} used={used} cap={cap} {pools} "
                 + $"species=[{string.Join(" | ", parts)}]");
         }
 
@@ -247,10 +252,10 @@ namespace Dark_Cloud_Improved_Version
             _stagedFloors[floor] = (snap[0], snap[1]);
             if (themedRoster != null)
                 Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
-                    + $"theme: \"{themeName}\"; {capEdits.Count} cap edit(s); budget {budget}B.");
+                    + $"theme: \"{themeName}\"; {capEdits.Count} cap edit(s); budget {budget}B (borrowed-shot headroom {BorrowedShots.Headroom}).");
             else
                 Console.WriteLine($"[Randomizer] staged dungeon {dungeon} floor {floor} (normal+Ura); "
-                    + $"theme: none (random mix); native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}; budget {budget}B.");
+                    + $"theme: none (random mix); native mimic {mimicTI}@{MimicChance:P0}, king {kingTI}@{KingMimicChance:P0}; budget {budget}B (borrowed-shot headroom {BorrowedShots.Headroom}).");
         }
 
         // ── Budget-aware roster sizing (prevents the floor-load buffer overflow / hang) ──────────────────────────
@@ -276,7 +281,8 @@ namespace Dark_Cloud_Improved_Version
             else if (known > 0)        basis = known;
             else if (liveSane)         basis = live;       // e.g. Demon Shaft (no constant yet) — trust the live cap
             else                       basis = 270_000;    // neither available — conservative floor
-            return (int)(basis * BufferSafetyFactor);
+            // Xiao's borrowed shot (Dragon's Y) takes its region from the same pool after the species load: leave it room.
+            return (int)(basis * BufferSafetyFactor) - BorrowedShots.Headroom;
         }
 
         // One floor's roster: weighted native mimic/king (each at most once), the rest distinct random eligible species.
