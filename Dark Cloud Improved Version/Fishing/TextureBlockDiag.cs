@@ -14,10 +14,6 @@ namespace Dark_Cloud_Improved_Version
     {
         internal static bool Enabled = false;   // stilts investigation CLOSED (PatchStiltsHeal shipped) — re-arm for future block-table forensics
 
-        private const long Manager    = 0x21C75870;      // CTextureManager instance
-        private const long BlocksOff  = 0x18;            // first block struct
-        private const int  BlockSize  = 0x3C;            // per-block stride (loaded flag @ +0x28)
-        private const int  BlockCount = 0x48;            // blocks 0x00..0x47
         private const long FishTexB   = 0x202A2B50;      // fishing texture block index global
 
         private static string _dumpedTag;
@@ -30,15 +26,15 @@ namespace Dark_Cloud_Improved_Version
 
             int fishTexb = Memory.ReadInt(FishTexB);
             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
-                $"[TexBlocks] ===== {tag} ===== fish_texb=0x{fishTexb:X2} (mgr 0x{Manager:X})");
-            for (int n = 0; n < BlockCount; n++)
+                $"[TexBlocks] ===== {tag} ===== fish_texb=0x{fishTexb:X2} (mgr 0x{TextureManager.Base:X})");
+            for (int n = 0; n < TextureManager.BlockCount; n++)
             {
-                long b = Manager + BlocksOff + n * BlockSize;
+                long b = TextureManager.Base + TextureManager.Blocks + n * TextureManager.BlockStride;
                 var sb = new StringBuilder();
-                for (int o = 0; o < BlockSize; o += 4)
-                    sb.Append(Memory.ReadUInt(b + o).ToString("X8")).Append(o + 4 < BlockSize ? " " : "");
+                for (int o = 0; o < TextureManager.BlockStride; o += 4)
+                    sb.Append(Memory.ReadUInt(b + o).ToString("X8")).Append(o + 4 < TextureManager.BlockStride ? " " : "");
                 bool allZero = true;                             // dump every non-empty block, loaded or not
-                for (int o = 0; o < BlockSize && allZero; o += 4) allZero = Memory.ReadUInt(b + o) == 0;
+                for (int o = 0; o < TextureManager.BlockStride && allZero; o += 4) allZero = Memory.ReadUInt(b + o) == 0;
                 if (allZero) continue;
                 Console.WriteLine(ReusableFunctions.GetDateTimeForLog() +
                     $"[TexBlocks] blk 0x{n:X2} @0x{b:X}: {sb}");

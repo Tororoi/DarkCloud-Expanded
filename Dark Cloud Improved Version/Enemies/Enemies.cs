@@ -657,9 +657,26 @@ namespace Dark_Cloud_Improved_Version
 
 
 
+
+        /// <summary>Earth/Moon Digger's max jump distance — an address the original author recorded while testing
+        /// (eccfe62, 2020-08-30) and never wired up. Kept as a breadcrumb, NOT a working constant: it is a vanilla-layout
+        /// address inside a dungeon pool, so it moved when the character heap grew (see DungeonPools). Anything that uses
+        /// it must resolve it, and re-confirm the value live first.</summary>
         internal class Digger
         {
             public const int maxJumpDistance = 0x213F3D70;
+        }
+
+        /// <summary>
+        /// Whether a floor slot holds an enemy that can be targeted or hit: a real species id, RenderStatus at least 1
+        /// (0 both before the enemy is placed on the floor and after it is gone) and HP above zero.
+        /// </summary>
+        internal static bool IsLive(int slot)
+        {
+            int id = Memory.ReadUShort(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.EnemySpeciesId));
+            if (id == 0 || id == 0xFFFF) return false;
+            if (Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.RenderStatus)) < 1) return false;
+            return Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(slot, EnemySlotOffsets.Hp)) > 0;
         }
 
         /// <summary>

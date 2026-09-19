@@ -38,7 +38,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Resolve the EDIT_MAP_INFO buffer, or 0 if no town is loaded.</summary>
         internal static long Base()
         {
-            uint p = Memory.ReadUInt(EditInfoPtr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(EditInfoPtr);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
 
@@ -111,7 +111,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static long Base()
         {
-            uint p = Memory.ReadUInt(EditGroundPtr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(EditGroundPtr);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
 
@@ -151,7 +151,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static long Ptr(long groundBase, int i)
         {
-            uint p = Memory.ReadUInt(groundBase + EditGround.AreaPtrBase + i * 4) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(groundBase + EditGround.AreaPtrBase + i * 4);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
     }
@@ -366,7 +366,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool TryReadPlayerPos(out float x, out float y, out float z)
         {
             x = y = z = 0f;
-            uint p = Memory.ReadUInt(CharaPtr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(CharaPtr);
             if (!Memory.IsValidGuest(p)) return false;
             long c = Memory.ToMmu(p) + CharaPosition;
             x = Memory.ReadFloat(c); y = Memory.ReadFloat(c + 4); z = Memory.ReadFloat(c + 8);
@@ -378,7 +378,7 @@ namespace Dark_Cloud_Improved_Version
         internal static bool TryReadPlayerYaw(out float yaw)
         {
             yaw = 0f;
-            uint p = Memory.ReadUInt(CharaPtr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(CharaPtr);
             if (!Memory.IsValidGuest(p)) return false;
             yaw = Memory.ReadFloat(Memory.ToMmu(p) + CharaRotation + 4);
             return true;
@@ -416,7 +416,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>The camera object as an MMU address, or 0 if the pointer isn't live.</summary>
         internal static long Base()
         {
-            uint p = Memory.ReadUInt(Ptr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(Ptr);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
     }
@@ -584,7 +584,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>Resolve the array, or 0.</summary>
         internal static long Base()
         {
-            uint p = Memory.ReadUInt(ArrayPtr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(ArrayPtr);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
     }
@@ -720,6 +720,9 @@ namespace Dark_Cloud_Improved_Version
 
         internal const int InUse    = 0x00;        // set when QUEUED — NOT a completion signal
         internal const int Complete = 0x08;        // entry[2] — set when the read has actually landed
+        internal const int Name     = 0x0C;        // the file, inline
+        internal const int Dest     = 0x8C;        // where it lands
+        internal const int Size     = 0x90;
     }
 
     /// <summary>
@@ -764,7 +767,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static long Base()
         {
-            uint p = Memory.ReadUInt(EdEventData) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(EdEventData);
             return Memory.IsValidGuest(p) ? Memory.ToMmu(p) : 0;
         }
     }

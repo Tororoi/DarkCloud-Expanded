@@ -111,8 +111,8 @@ namespace Dark_Cloud_Improved_Version
         /// </summary>
         private static void EnsureFrames()
         {
-            if (Memory.IsValidGuest((uint)Memory.ReadInt(WeaponTrailFx.Base + WeaponTrailFx.FrameA) & Memory.PhysAddrMask) &&
-                Memory.IsValidGuest((uint)Memory.ReadInt(WeaponTrailFx.Base + WeaponTrailFx.FrameB) & Memory.PhysAddrMask))
+            if (Memory.IsValidGuest(Memory.ReadGuestPtr(WeaponTrailFx.Base + WeaponTrailFx.FrameA)) &&
+                Memory.IsValidGuest(Memory.ReadGuestPtr(WeaponTrailFx.Base + WeaponTrailFx.FrameB)))
                 return;   // the weapon supplies its own (Toan / Ungaga) — leave the engine's alone
 
             int root = WeaponModelRoot();
@@ -127,7 +127,7 @@ namespace Dark_Cloud_Improved_Version
         /// or 0 if nothing is equipped.</summary>
         private static int WeaponModelRoot()
         {
-            uint nw = (uint)Memory.ReadInt(WeaponModel.NowWeaponPtr) & Memory.PhysAddrMask;
+            uint nw = Memory.ReadGuestPtr(WeaponModel.NowWeaponPtr);
             if (!Memory.IsValidGuest(nw)) return 0;
 
             int root = Memory.ReadInt(Memory.ToMmu(nw) + WeaponModel.WeaponModelRootOffset);
@@ -137,8 +137,8 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>True if the ribbon will render at all — i.e. both frame pointers are non-null, which is what
         /// <c>Step</c> and <c>Draw</c> gate on. <see cref="Arm"/> supplies them when the weapon does not.</summary>
         internal static bool Ready()
-            => Memory.IsValidGuest((uint)Memory.ReadInt(WeaponTrailFx.Base + WeaponTrailFx.FrameA) & Memory.PhysAddrMask) &&
-               Memory.IsValidGuest((uint)Memory.ReadInt(WeaponTrailFx.Base + WeaponTrailFx.FrameB) & Memory.PhysAddrMask);
+            => Memory.IsValidGuest(Memory.ReadGuestPtr(WeaponTrailFx.Base + WeaponTrailFx.FrameA)) &&
+               Memory.IsValidGuest(Memory.ReadGuestPtr(WeaponTrailFx.Base + WeaponTrailFx.FrameB));
 
         /// <summary>Start a frame: every lane goes dark until something claims it.</summary>
         internal static void Begin()

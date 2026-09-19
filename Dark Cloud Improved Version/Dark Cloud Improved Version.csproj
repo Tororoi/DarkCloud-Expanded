@@ -28,6 +28,54 @@
     <EmbeddedResource Include="Resources\isoPatch\stiltsHeal.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.stiltsHeal.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catPelletFollow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\xiaoMeleeFlinch.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catSpherePercent.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\borrowedShotsEnter.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\propPelletFollow.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGuardBypass.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGuardBypass.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCapeTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCapeTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catMaskTint.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catPalette.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowPalette.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalette.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\mirageHazeDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\superSteveIconDraw.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\superSteveIconCopy.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catGlowPalettes.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\catCopyQueue.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\waterOrderGate.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.waterOrderGate.bin</LogicalName>
     </EmbeddedResource>
@@ -94,4 +142,14 @@
     <Content Include="ModIcon.ico" />
     <AvaloniaResource Include="Resources\d06o_out_result.png" />
   </ItemGroup>
+  <!-- The embedded binaries above are GENERATED from sources in tools/ (the EE cave stubs' .s files, and the glow
+       ramp tables from build_cat_pack.GLOW_ELEMENTS). Editing a source without re-running its generator embeds stale
+       bytes and fails SILENTLY — the glow kept its old colours through a whole patch-and-test cycle that way
+       (2026-09-16) — so the build regenerates them first. Missing prerequisites skip with a message rather than
+       failing, which keeps a checkout without the extracted disc buildable. -->
+  <Target Name="RegenerateGeneratedResources" BeforeTargets="BeforeBuild">
+    <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/../tools/build_resources.py&quot;"
+          StandardOutputImportance="high" />
+  </Target>
+
 </Project>

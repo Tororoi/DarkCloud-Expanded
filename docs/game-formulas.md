@@ -239,7 +239,15 @@ WHP -= (1.5 − 0.01 × Endurance) × factor  +  0.1 × monster.whpCost   // +0x
 - **Durable** (0x200) halves `factor`; **Fragile** (0x100) doubles it.
 - Endurance 150 zeroes the per-swing term (only the monster's `whpCost` remains).
 - `factor` per move: melee swing 1.0, guarded hit 0.1, Toan charge 3.0, Toan lunge 2.0,
-  Ruby 0.8 / 1.2 / 1.8 (normal / partial / full charge), Osmond standard 0.5.
+  Ruby 0.8 / 1.2 / 1.8 (normal / partial / full charge), Osmond standard 0.5, Xiao 1.0.
+- WHEN it drains differs by class: `CheckDmg` calls it per LANDED hit for owners 0/2/4 only (Toan, Goro,
+  Ungaga — and the guarded 0.1); the ranged characters drain per SHOT inside their fire routines
+  (`BattleActionPlay_Jinn` dun 0x1DBC930 → `SwordDmgCheck1(1.0)`, `BattleActionPlay_Ruby` 0.8/1.2/1.8 by charge,
+  Osmond's 0.5), a miss costing the same as a hit.
+- Mod: Xiao's charged shots (the cat, Charging Bull, Heaven's Cloud and Mobius Ring on Super Steve) fire at 2.0
+  against her 1.0. The ISO's dun.bin patch makes `BattleActionPlay_Jinn` pass the mailbox
+  word `XiaoShotWhpFactor` (pnach-seeded 1.0) to `SwordDmgCheck1` at both its fire paths (0x1DBCC58 / 0x1DBCDD0), and
+  `ChargedShotWhp` writes the charge's factor while the shot is held — the game's own drain does the rest.
 - **Serpent Sword** (item 268) takes **no WHP damage** until game flag 0x30 is set
   (its story event).
 - Warnings at 10 % and 5 % of max WHP; at 0 an owned Repair Powder (item 0xB7) is

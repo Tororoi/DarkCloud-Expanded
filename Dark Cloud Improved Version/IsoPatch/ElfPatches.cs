@@ -104,6 +104,22 @@ namespace Dark_Cloud_Improved_Version
             PatchSprayBiasShim(fs, ElfOff);               // EffectWaterSpray → add a per-emitter velocity bias (mist facing + height)
             PatchFishLineSplit(fs, ElfOff);               // fishing rope: per-segment rest length (distpAbove/distpBelow) split at anchor 18
             PatchStiltsHeal(fs, ElfOff);                  // Brownboo stilts: re-upload scene bank 1 after FishLineDraw, before the waterside redraw (v4; chains the water-redraw jal)
+            PatchCatPelletFollow(fs, ElfOff);             // Divine Beast cat: native pellet follower cave (the dun.bin hook is in DunPatches)
+            PatchXiaoMeleeFlinch(fs, ElfOff);             // Divine Beast cat: its melee-type hits may stagger (dun.bin hook in DunPatches)
+            PatchCatGlowDraw(fs, ElfOff);                 // Divine Beast cat: blue torch-glow at its torso (dun.bin hooks in DunPatches)
+            PatchCatSpherePercent(fs, ElfOff);            // Divine Beast cat: a hurt sphere may admit the cat's kick (spare[1]) at its own % (spare[0]) — Minotaur Joe's face
+            PatchCatGuardBypass(fs, ElfOff);              // Divine Beast cat: its hits pass an enemy's guard window (mimics re-register theirs faster than the mod can crush them)
+            PatchCatCapeTint(fs, ElfOff);                 // Divine Beast cat: the Super Steve cape draws under its own ambient, not the cat's
+            PatchCatMaskTint(fs, ElfOff);                 // …and its mask does too, reached through a private vtable rather than a hook
+            PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
+            PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
+            PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
+            PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
+            PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
+            PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
+            PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
+            PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
+            PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -118,7 +134,7 @@ namespace Dark_Cloud_Improved_Version
         // ── The ELF cave SEGMENT: hijack the degenerate phdr3 into a real PT_LOAD ────────────────────
         // SCUS_971.11 ships 4 program headers; phdr3 is a DEGENERATE placeholder (PT_LOAD, filesz=0,
         // MEMSZ=0 — it loads and reserves nothing). Rewrite it to load file span
-        // [ElfCave.SegmentFileOff, +0x2000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
+        // [ElfCave.SegmentFileOff, +0x4000) at guest [ElfCave.RegionStart, RegionEnd): that file span is
         // dead .reldun debug data BEYOND every phdr's file extent (phdr0 loads only 0x100..0x1a2480;
         // phdr1-3 have filesz=0), so PCSX2 never reads it — and RE tooling uses the PRISTINE extracted
         // ELF, so clobbering it in the PATCHED ISO loses nothing. The guest band is inside the mod's
@@ -130,7 +146,7 @@ namespace Dark_Cloud_Improved_Version
         {
             const uint SegVa   = CodeCaves.ElfCave.RegionStart;
             const uint SegOff  = CodeCaves.ElfCave.SegmentFileOff;
-            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x2000
+            const uint SegSize = CodeCaves.ElfCave.RegionEnd - CodeCaves.ElfCave.RegionStart;   // 0x4000 (2026-09-12: grown for the cat glow cave)
 
             if (phnum != 4)
                 throw new IOException($"Expected 4 ELF program headers, got {phnum} — wrong ISO/version.");
@@ -220,6 +236,416 @@ namespace Dark_Cloud_Improved_Version
         // to 0x16a6b0 (the c60 stores). Scratch = $v0 (reloaded by `lui v0` at the return) and $at (dead after
         // the guard branch), both dead across the hook; $ra is stack-saved at function entry (`sq ra,0xc0(sp)`),
         // so the jal's $ra clobber is safe. $s0/$s2 are read-only. (Cave hand-built via the MipsAsm encoders.)
+        // ── Divine Beast cat: native pellet follower ─────────────────────────────────────────────────────
+        // The charged shot's cat rides the live pellet (head on the pellet's point) and grows in over a few
+        // frames — a mod-thread follower trails and jitters, so a cave does it: DunPatches redirects the dungeon
+        // step loop's `jal step__5CSHOT` (dun 0x1DB874C, once per frame, a0 = the player shot pool) to this cave,
+        // which performs that call and then places chara slot 1 from the pellet the Mailbox names (see
+        // Mailbox.CatPelletSlot). Stub: tools/stubs/cat_pellet_follow.s → catPelletFollow.bin.
+        internal static void PatchCatPelletFollow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatPelletFollow;   // registry: CodeCaveAddresses.ElfCave
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catPelletFollow.bin")
+                ?? throw new IOException("Embedded EE function missing: catPelletFollow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape check: opens a stack frame (`addiu sp,sp,-N`) and performs the displaced `jal step__5CSHOT` within
+            // its first eight words (after the register saves) — the frame size and save count vary by stub version.
+            bool opensFrame = b.Length >= 32 && (b.Length & 3) == 0 && (U32(b, 0) & 0xFFFF8000) == 0x27BD8000;
+            bool callsStep = false;
+            for (int i = 4; i < 32 && i < b.Length; i += 4) if (U32(b, i) == Jal(0x001ABD10)) callsStep = true;
+            if (!opensFrame || !callsStep)
+                throw new IOException($"catPelletFollow.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.XiaoMeleeFlinch)   // the flinch stub sits right after it
+                throw new IOException("catPelletFollow.bin overruns its cave — move ElfCave.XiaoMeleeFlinch/NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        // ── Xiao melee-type flinch ───────────────────────────────────────────────────────────────────────
+        // CheckDmg__12CMonstorUnit hard-codes "Xiao's hits never stagger" (the monster step starts an enemy's damage
+        // reaction, script label 110, only when CheckDmg returns 1). The Divine Beast cat's hit entry carries a
+        // melee-type kick (+0x98 == 2; pellets carry 0), so DunPatches re-routes the start of that rule (dun 0x1DB410)
+        // to this stub, which applies it only to entries WITHOUT that kick. Stub: tools/stubs/xiao_melee_flinch.s.
+        internal static void PatchXiaoMeleeFlinch(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.XiaoMeleeFlinch;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.xiaoMeleeFlinch.bin")
+                ?? throw new IOException("Embedded EE function missing: xiaoMeleeFlinch.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 10 words, opens with `lw v0,-0x6210(gp)` (NowColData) and returns with `j 0x1DB420` + nop.
+            if (b.Length != 40 || U32(b, 0) != 0x8F829DF0u || U32(b, 32) != 0x08076D08u || U32(b, 36) != 0)
+                throw new IOException($"xiaoMeleeFlinch.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("xiaoMeleeFlinch.bin overruns its cave — move ElfCave.NextFree.");
+            // Hook site (main ELF, CheckDmg__12CMonstorUnit 0x1D9F10): `li v0,1; bne s3,v0,+2; nop; clear s0` = the
+            // "owner == Xiao → no flinch" rule; the stub replaces it and returns to the untouched tail at 0x1DB420.
+            const uint HookAddr = 0x001DB410;
+            const uint FlinchPreviousCave = 0x01FB1FA0;      // where the stub sat before it moved — an ISO patched then is re-hooked
+            uint jump = 0x08000000u | (CaveAddr >> 2);
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
+            bool vanilla = cur0 == 0x24020001u && cur1 == 0x16620002u, ours = (cur0 == jump || cur0 == J(FlinchPreviousCave)) && cur1 == 0;
+            if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr + 0x10)) != 0x8F829DF0u || RdU32(fs, ElfOff(HookAddr + 0x14)) != 0x0056A021u)
+                throw new IOException($"Xiao-flinch hook site 0x{HookAddr:X} is not vanilla `li v0,1; bne s3,v0` (tail `lw v0,NowColData; addu s4,v0,s6`) — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jump);          // j cave
+            WrU32(fs, ElfOff(HookAddr + 4), 0);         // delay slot nop (was the bne)
+        }
+
+        // ── Divine Beast cat glow ────────────────────────────────────────────────────────────────────────
+        // The dungeon draw loop's two torch passes (dun 0x1DAEBF8 / 0x1DAEC10, hooked by DunPatches) come here;
+        // the cave performs them and then draws the cat's `catglow` disc at its torso with CFireOmni::DrawFire.
+        // Stub: tools/stubs/cat_glow_draw.s (name string at +0, entries at +0x08 / +0x20).
+        internal static void PatchCatGlowDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatGlowDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: catGlowDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: "catglow\0" then two entries that each open a 0x40 frame and jal the pass they replace.
+            if (b.Length < 0x40 || (b.Length & 3) != 0 || U32(b, 0) != 0x67746163u || U32(b, 4) != 0x00776F6Cu
+                || U32(b, 0x08) != 0x27BDFFC0u || U32(b, 0x10) != Jal(0x001C40C0) || U32(b, 0x20) != 0x27BDFFC0u || U32(b, 0x28) != Jal(0x001C3CC0))
+                throw new IOException($"catGlowDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatSpherePercent)   // the sphere-percent cave sits right after it
+                throw new IOException("catGlowDraw.bin overruns its cave — move ElfCave.CatSpherePercent/NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        // ── Blizzard: immune to ice ──────────────────────────────────────────────────────────────────────
+        // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
+        // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
+        // like Ice Gemron. EnemyData.cs carries the patched value so the mod's tables agree with the disc.
+        internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex
+            long rec = ElfOff((uint)EnemySpeciesTable.RecordAddress(Row));
+            long ice = rec + EnemySpeciesTable.IceRes;
+            ushort cur = U16(Rd(fs, ice, 2), 0);
+            bool vanilla = cur == 100, ours = cur == 0;
+            if (RdU32(fs, rec) != 0x61353665u /* "e65a" */ || !(vanilla || ours)
+                || U16(Rd(fs, rec + EnemySpeciesTable.FireRes, 2), 0) != 100 || U16(Rd(fs, rec + EnemySpeciesTable.ThunderRes, 2), 0) != 140)
+                throw new IOException($"Species row {Row} is not Blizzard as shipped (\"e65a\", fire 100 / ice 100 / thunder 140) — unmodified Dark Cloud (USA) ISO expected.");
+            Wr(fs, ice, new byte[] { 0, 0 });                                                       // IceRes = 0: immune
+        }
+
+        // ── Divine Beast cat: per-sphere cat percentage ─────────────────────────────────────────────────
+        // CheckDmg scales a hit by the hurt sphere's per-attacker % (`_SET_BODY_COL_PARA(10+char, %)`); Minotaur Joe's
+        // face is 0 % for Xiao. The cave (tools/stubs/cat_sphere_percent.s) re-forms that load's address: a Xiao-owned
+        // hit whose kick type (+0x98) equals the sphere's spare[1] (`_SET_BODY_COL_PARA(1, kick)`, +0x55490 table — no
+        // vanilla reader or writer, reset to 100 by every _SET_BODY_COL) reads spare[0] instead. The disc side
+        // (tools/iso_patch/patch_monster_scripts.py, run by IsoPatcher.BakeMonsterSpheres) arms Joe's face with (100, 2).
+        internal static void PatchCatSpherePercent(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatSpherePercent;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catSpherePercent.bin")
+                ?? throw new IOException("Embedded EE function missing: catSpherePercent.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 28 words, opens `li v1,1; bne s3,v1`, both exits `j 0x1DC08C`; the last word is the vanilla `addu at,v1,at`.
+            const uint Return = 0x001DC08C;
+            if (b.Length != 112 || U32(b, 0) != 0x24030001u || (U32(b, 4) >> 16) != 0x1663u || U32(b, 64) != J(Return) || U32(b, 104) != J(Return) || U32(b, 108) != 0x00610821u)
+                throw new IOException($"catSpherePercent.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catSpherePercent.bin overruns its cave — move ElfCave.NextFree.");
+            // Hook site (main ELF, CheckDmg__12CMonstorUnit 0x1D9F10): `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8`
+            // — the per-attacker % load; the first two words become the jump, the lw stays and the cave returns onto it.
+            const uint HookAddr = 0x001DC084;
+            uint jump = J(CaveAddr);
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
+            bool vanilla = cur0 == 0x3C010005u && cur1 == 0x00610821u, ours = cur0 == jump && cur1 == 0;
+            if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr + 8)) != 0x8C2655D0u || RdU32(fs, ElfOff(HookAddr + 12)) != 0x3C0342C8u)
+                throw new IOException($"Sphere-percent hook site 0x{HookAddr:X} is not vanilla `lui at,5; addu at,v1,at; lw a2,0x55d0(at); lui v1,0x42c8` — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jump);          // j cave
+            WrU32(fs, ElfOff(HookAddr + 4), 0);         // delay slot nop (was the addu)
+        }
+
+        // Divine Beast cat: its hits pass an enemy's GUARD WINDOW (tools/stubs/cat_guard_bypass.s). CheckDmg decides a guard
+        // purely from the defender — a window flag (slot*0x20 + 0x60550) and the enemy's live motion frame inside that window's
+        // [start, end] — and consults nothing on the attacking entry, so the mod could only zero the windows, which a script
+        // re-registers with `_SET_GUARD_FRAME` whenever its label runs. Chest mimics do exactly that (their wake IS a guard, from
+        // our own disc patch), and the 20 Hz crush kept losing the race. The cave takes over the flag load and
+        // reports "no window" when the entry is Xiao's with the cat's kick type (+0x58 == 1, +0x98 == 2).
+        internal const uint GuardBypassHookAddr = 0x001DAC78;                              // CheckDmg's guard-window load site
+        internal const long GuardBypassHookAddrMmu = 0x20000000L + GuardBypassHookAddr;
+        private static readonly uint[] GuardBypassPreviousCaves = { 0x01FB2250, 0x01FB3F40 }; // where the cave sat before it grew — an ISO patched then is re-hooked
+        internal static void PatchCatGuardBypass(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatGuardBypass;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGuardBypass.bin")
+                ?? throw new IOException("Embedded EE function missing: catGuardBypass.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            const uint Return = 0x001DAC80;                    // the `beq v0,zero` right after the hooked load
+            // Shape: opens `lw at,-0x6210(gp)`, both exits `j 0x1DAC80`, and carries the vanilla `lh v0,0x550(at)`.
+            int exits = 0; bool vanillaLoad = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == J(Return)) exits++; if (w == 0x84220550u) vanillaLoad = true; }
+            if (b.Length % 4 != 0 || U32(b, 0) != 0x8F819DF0u || exits != 2 || !vanillaLoad)
+                throw new IOException($"catGuardBypass.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGlowDraw)
+                throw new IOException("catGuardBypass.bin overruns its gap — it must end before ElfCave.CatGlowDraw (the second band).");
+            // Hook the `addu`, NOT the `lh` after it: the `lh`'s own delay slot would be the `beq` at 0x1DAC80, and a branch in a
+            // branch's delay slot is undefined on the R5900. Taking the `addu` leaves the `lh` as the delay slot, which is then
+            // nop'd — the cave re-forms the address from a2/v1 itself and does the load, so neither word is needed.
+            const uint HookAddr = GuardBypassHookAddr;         // `addu at,v0,at`, feeding `lh v0,0x550(at)`
+            uint jump = J(CaveAddr);
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4));
+            bool vanilla = cur0 == 0x00410821u && cur1 == 0x84220550u, ours = (cur0 == jump || Array.Exists(GuardBypassPreviousCaves, c => cur0 == J(c))) && cur1 == 0;
+            if (!(vanilla || ours) || RdU32(fs, ElfOff(HookAddr - 4)) != 0x3C010006u || RdU32(fs, ElfOff(HookAddr + 8)) != 0x104000D1u)
+                throw new IOException($"Guard-window hook site 0x{HookAddr:X} is not vanilla `lui at,0x6; addu at,v0,at; lh v0,0x550(at); beq v0,zero` — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jump);                 // j cave
+            WrU32(fs, ElfOff(HookAddr + 4), 0);                // delay slot nop (was the lh the cave now performs)
+        }
+
+        // Divine Beast cat: the Super Steve cape draws under its own ambient (tools/stubs/cat_cape_tint.s). Draw__10CCharacter
+        // saves the global ambient, adds the CHARACTER's tint, then draws its meshes AND its cloth list inside that window — so a
+        // cloth is lit by the character's colour and has none of its own (writing its material's colour rows does nothing). The
+        // cave wraps the cloth-draw call and, for the one cloth the mod names in Mailbox.CatCapeCloth, adds Mailbox.CatCapeTint
+        // to the ambient for that draw alone; every other cloth in the game is untouched.
+        internal static void PatchCatCapeTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatCapeTint;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catCapeTint.bin")
+                ?? throw new IOException("Embedded EE function missing: catCapeTint.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 44 words, opens `addiu sp,sp,-0x50`, and calls Draw__6CCloth (0x13B640) on both paths.
+            if (b.Length != 176 || U32(b, 0) != 0x27BDFFB0u || U32(b, 124) != Jal(0x0013B640u) || U32(b, 156) != Jal(0x0013B640u))
+                throw new IOException($"catCapeTint.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catCapeTint.bin overruns its cave — move ElfCave.NextFree.");
+            const uint HookAddr = 0x00139694;              // `jal Draw__6CCloth` in Draw__10CCharacter's cloth-list loop
+            uint jal = Jal(CaveAddr), vanilla = Jal(0x0013B640u);
+            uint cur = RdU32(fs, ElfOff(HookAddr));
+            if (!(cur == vanilla || cur == jal) || RdU32(fs, ElfOff(HookAddr - 8)) != 0x10800003u)
+                throw new IOException($"Cloth-draw hook site 0x{HookAddr:X} is not vanilla `beq a0,zero,+3; nop; jal Draw__6CCloth` — unmodified Dark Cloud (USA) ISO expected.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            WrU32(fs, ElfOff(HookAddr), jal);              // the cave calls Draw__6CCloth itself, on both paths
+        }
+
+        /// <summary>The Super Steve cat's MASK under the cape's ambient. Unlike every other cave here this one patches NO hook
+        /// site: a mesh draws through a C++ virtual call, so there is no `jal` to take. The bytes just have to exist, and
+        /// DivineBeastCat.MaskTint reaches them at runtime by giving the mask's own copied CVisualMDT a private vtable whose
+        /// two DrawVu1 slots point in here. Nothing else in the game can arrive at it.</summary>
+        internal static void PatchCatMaskTint(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatMaskTint;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catMaskTint.bin")
+                ?? throw new IOException("Embedded EE function missing: catMaskTint.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: 57 words, two entries that load the real DrawVu1 overloads (0x1360E0 / 0x136200) and fall into one body.
+            if (b.Length != 228 || U32(b, 0) != 0x3C190013u || U32(b, 8) != 0x373960E0u || U32(b, 20) != 0x37396200u)
+                throw new IOException($"catMaskTint.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catMaskTint.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The cat's mesh-copy queue. Like the mask's cave this patches NO hook site of its own: DunPatches already
+        /// aims the dungeon step loop's once-per-frame call at the cat, and that aim now lands here instead of straight on
+        /// CatPelletFollow — this cave services the queue when there is one and jumps on to the follower either way.</summary>
+        internal static void PatchCatCopyQueue(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatCopyQueue;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catCopyQueue.bin")
+                ?? throw new IOException("Embedded EE function missing: catCopyQueue.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: opens by materialising the queue address and ends `j CatPelletFollow` (its tail calls CatPalette and
+            // CatGlowPalette first — the cape's colour, then the glow's).
+            if (b.Length != 592 || U32(b, 0) != 0x3C0801FAu || U32(b, b.Length - 8) != (0x08000000u | (CodeCaves.ElfCave.CatPelletFollow >> 2)))
+                throw new IOException($"catCopyQueue.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catCopyQueue.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The cape/mask element colour, repainted in the machine (tools/stubs/cat_palette.s). Called once per
+        /// dungeon frame from the copy-queue cave's tail; the first six words are the colour table, so the code — and the
+        /// call target — start at +0x18.</summary>
+        internal static void PatchCatPalette(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatPalette;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catPalette.bin")
+                ?? throw new IOException("Embedded EE function missing: catPalette.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: six colour words, then `lui t0,0x01CD` (Xiao's equipped-slot byte) at the entry point.
+            if (b.Length < 0x18 + 8 || U32(b, 0x18) != 0x3C0801CDu)
+                throw new IOException($"catPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catPalette.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The GLOW disc's six per-element palettes: pure DATA, 512 B each in element order (00 Fire … 05 None).
+        /// Baked by `build_cat_pack.py --palettes` off the SAME luminance index map as the disc it colours, so the two are
+        /// regenerated together — a table built against a different map paints the right colours onto the wrong levels.</summary>
+        internal static void PatchCatGlowPalettes(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatGlowPalTables;
+            const int Expected = 9 * 128 * 4;         // nine rows (6 elements + 3 weapon looks) x the 128 permutation-safe CLUT words
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalettes.bin")
+                ?? throw new IOException("Embedded data missing: catGlowPalettes.bin (run build_cat_pack.py --palettes and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length != Expected)
+                throw new IOException($"catGlowPalettes.bin is {b.Length} B, expected {Expected} — re-run build_cat_pack.py --palettes.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGlowPalette)
+                throw new IOException("catGlowPalettes.bin overruns its table cave — the stub starts right after it.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The element GLOW's palette, repainted in the machine (tools/stubs/cat_glow_palette.s). Rides the same
+        /// once-per-frame call from the copy-queue cave's tail that the cape's palette does.</summary>
+        internal static void PatchCatGlowPalette(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.CatGlowPalette;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.catGlowPalette.bin")
+                ?? throw new IOException("Embedded EE function missing: catGlowPalette.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: all code, opening `lui t5,0x01FB` (the mailbox page, for the row the mod asks for) — no leading
+            // data table, unlike CatPalette.
+            if (b.Length < 8 || U32(b, 0) != 0x3C0D01FBu)
+                throw new IOException($"catGlowPalette.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The by-name scan is the one part of this cave that fails INVISIBLY: a mistyped name word matches nothing, the
+            // cave returns, and the glow silently keeps its baked colour (0x706F776C spells "lwop", which
+            // spells "lwop"). So require the compare's own immediate to be present, twice: cached-entry check and scan loop.
+            int nameWords = 0;
+            for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == 0x37186F6Cu) nameWords++;
+            if (nameWords < 2)
+                throw new IOException("catGlowPalette.bin does not spell \"lowp\" (0x70776F6C) — its by-name scan would match nothing.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("catGlowPalette.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        // The dungeon draw loop's raster pass (dun 0x1DAEBCC, hooked by DunPatches) comes here; the cave performs it and then
+        // draws one raster at the Mirage clone's root when the mailbox says so.
+        internal static void PatchMirageHazeDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.MirageHazeDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.mirageHazeDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: mirageHazeDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u)   // opens its frame: addiu sp,sp,-0x20
+                throw new IOException($"mirageHazeDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The two words that make it THIS cave: the "alpha01" string's address (ori a1,a1,0xA0E8) and the draw call
+            // (jal DrawRaster__9CFireOmni 0x162310). A wrong immediate in either fails invisibly — nothing drawn, no error.
+            bool name = false, draw = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x34A5A0E8u) name = true; if (w == 0x0C0588C4u) draw = true; }
+            if (!name || !draw)
+                throw new IOException("mirageHazeDraw.bin lacks the \"alpha01\" address or the DrawRaster call — it would draw nothing.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("mirageHazeDraw.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The prop-on-a-pellet cave (tools/stubs/prop_pellet_follow.s): the cat follower hook's new first stop. It must
+        /// call CatCopyQueue (the cat's chain performs the displaced step__5CSHOT) and read the shot pool.</summary>
+        internal static void PatchPropPelletFollow(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.PropPelletFollow;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin")
+                ?? throw new IOException("Embedded EE function missing: propPelletFollow.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            uint chain = 0x0C000000u | (CodeCaves.ElfCave.CatCopyQueue >> 2);
+            bool chained = false, pool = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) chained = true; if (w == 0x8D4A35D4u) pool = true; }
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !chained || !pool)
+                throw new IOException("propPelletFollow.bin malformed or stale — it must call CatCopyQueue and read the shot pool.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.CatGuardBypass)
+                throw new IOException("propPelletFollow.bin overruns its gap — it must end before ElfCave.CatGuardBypass.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>The borrowed-shots cave (tools/stubs/borrowed_shots_enter.s): the head of the step chain — must call
+        /// PropPelletFollow (the rest of the chain) and Entry__17CSHOT_EFFECT_PACK, and read NowShotEffect.</summary>
+        internal static void PatchBorrowedShotsEnter(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.BorrowedShotsEnter;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnter.bin")
+                ?? throw new IOException("Embedded EE function missing: borrowedShotsEnter.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            bool dump = false, entry = false, pack = false;
+            uint chain = 0x0C000000u | (CodeCaves.ElfCave.PropPelletFollow >> 2);
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == chain) dump = true; if (w == 0x0C06B930u) entry = true; if (w == 0x8D6B35D8u) pack = true; }
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFE0u || !dump || !entry || !pack)
+                throw new IOException("borrowedShotsEnter.bin malformed or stale — it must call PropPelletFollow and Entry__17CSHOT_EFFECT_PACK and read NowShotEffect.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.RegionEnd)
+                throw new IOException("borrowedShotsEnter.bin overruns the band — it must end by ElfCave.RegionEnd.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+        }
+
+        /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has
+        /// the wepicon sheet registered: WeaponSelectKey, BtMenuLoad2, ExitDunEnterMenu, CharaChangeLoop.</summary>
+        internal static readonly uint[] SsIconCopyMainHooks = { 0x001FE05C, 0x0020EA98, 0x00226560, 0x00228DDC };
+        /// <summary>The dungeon HUD gains the icon of the weapon whose SynthSphere Super Steve carries, over Steve. Two
+        /// caves: the DRAW (the overlay's `jal topStatusInfo`, dun 0x1DB0364, hooked by DunPatches) and the COPY that keeps
+        /// the icon in a spare cell of the HUD sheet on every DngActiveWeaponTextureCopy call — the overlay's two sites
+        /// (DunPatches) and the four menu paths in <see cref="SsIconCopyMainHooks"/> (hooked here).</summary>
+        internal static void PatchSuperSteveIconDraw(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.ElfCave.SuperSteveIconDraw;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconDraw.bin")
+                ?? throw new IOException("Embedded EE function missing: superSteveIconDraw.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            if (b.Length < 8 || U32(b, 0) != 0x27BDFFC0u)   // opens its frame: addiu sp,sp,-0x40
+                throw new IOException($"superSteveIconDraw.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            // The words that make it THIS cave: the displaced call (jal topStatusInfo) and the draw (jal set2DSprite).
+            bool orig = false, draw = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == DunPatches.SsIconHookOrig) orig = true; if (w == 0x0C0570C4u) draw = true; }
+            if (!orig || !draw)
+                throw new IOException("superSteveIconDraw.bin lacks the topStatusInfo call or the set2DSprite call.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("superSteveIconDraw.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+
+            const uint CopyAddr = CodeCaves.ElfCave.SuperSteveIconCopy;
+            using var st2 = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.superSteveIconCopy.bin")
+                ?? throw new IOException("Embedded EE function missing: superSteveIconCopy.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms2 = new MemoryStream(); st2.CopyTo(ms2); byte[] c = ms2.ToArray();
+            bool origCopy = false, move = false;
+            for (int i = 0; i + 4 <= c.Length; i += 4) { uint w = U32(c, i); if (w == DunPatches.SsIconCopyHookOrig) origCopy = true; if (w == 0x0C06C7BCu) move = true; }
+            if (c.Length < 8 || U32(c, 0) != 0x27BDFFE0u || !origCopy || !move)
+                throw new IOException("superSteveIconCopy.bin malformed or stale — it must call DngActiveWeaponTextureCopy and setItemToReserved.");
+            if (CopyAddr + (uint)c.Length > CodeCaves.ElfCave.NextFree)
+                throw new IOException("superSteveIconCopy.bin overruns its cave — move ElfCave.NextFree.");
+            for (int i = 0; i < c.Length; i += 4)
+                WrU32(fs, ElfOff(CopyAddr + (uint)i), U32(c, i));
+            foreach (uint site in SsIconCopyMainHooks)
+            {
+                uint cur = RdU32(fs, ElfOff(site));
+                if (cur != DunPatches.SsIconCopyHookOrig && cur != DunPatches.SsIconCopyHookNew)
+                    throw new IOException($"copy hook site 0x{site:X} is not `jal DngActiveWeaponTextureCopy` (0x{cur:X8}) — unmodified Dark Cloud (USA) is required.");
+                WrU32(fs, ElfOff(site), DunPatches.SsIconCopyHookNew);
+            }
+        }
+
         internal static void PatchIdleMotionOverride(FileStream fs, Func<uint, long> ElfOff)
         {
             const uint HookAddr = 0x0016A6A8;   // EdMoveChara grounded locomotion store `sw s0,0xc68(s2)`

@@ -267,6 +267,16 @@ namespace Dark_Cloud_Improved_Version
 
         // Convert a PS2-native pointer (read from PS2 RAM) to a PCSX2-addressable address.
         internal static long ToMmu(long nativePtr) => (nativePtr & PhysAddrMask) | Pcsx2Base;
+        internal static uint ToGuest(long mmuAddr) => (uint)(mmuAddr - Pcsx2Base);   // the inverse, for a word the console will read
+        internal static uint ReadGuestPtr(long addr) => (uint)ReadInt(addr) & PhysAddrMask;   // a native pointer field, as a guest address
+
+        /// <summary>Three floats at <paramref name="addr"/> in one write — a position, scale, rotation or colour.</summary>
+        internal static void WriteVec3(long addr, float x, float y, float z)
+        {
+            var b = new byte[12];
+            BitConverter.GetBytes(x).CopyTo(b, 0); BitConverter.GetBytes(y).CopyTo(b, 4); BitConverter.GetBytes(z).CopyTo(b, 8);
+            WriteBytesBatch(addr, b);
+        }
 
         /// <summary>Is <paramref name="guestPtr"/> a usable PS2 pointer — non-null and inside the EE's 32 MB of
         /// RAM? Pointers chased out of live game memory (model trees, map/fire structs, cloth lists) are null or
@@ -279,6 +289,51 @@ namespace Dark_Cloud_Improved_Version
         internal static bool IsValidGuest(long guestPtr) => guestPtr > 0 && guestPtr < EeRamSize;
 
         private static uint PhysAddr(long address) => (uint)(address & PhysAddrMask);
+
+        /// <summary>Does this 32-bit word LOOK like an EE pointer? Only the segments the EE maps RAM through
+        /// qualify: kuseg 0x0, kseg0 0x8, kseg1 0xA, and the 0x2/0x3 uncached forms. Any other top nibble is data —
+        /// most importantly a float: 3.3f is 0x4053651E, and masking it with <see cref="PhysAddrMask"/> first
+        /// yields 0x0053651E, a perfectly plausible heap address. That exact accident bent five muzzle vertices of
+        /// the Divine Beast cat copy into the floor (2026-09-10): a byte-copied MDT re-based against the source
+        /// MDT's own address range had those Y floats "re-pointed" into the cave (≈ denormal 0). Test the raw word
+        /// with this BEFORE masking.</summary>
+        internal static bool LooksLikePointer(uint word)
+        {
+            uint seg = word >> 28;
+            return seg == 0x0 || seg == 0x2 || seg == 0x3 || seg == 0x8 || seg == 0xA;
+        }
+
+        /// <summary>Re-base every pointer-looking word of <paramref name="block"/> that points into
+        /// [<paramref name="src"/>, src + size) so it points into the copy at <paramref name="dst"/> instead
+        /// (guest addresses; the word keeps its own segment bits). Words that are not pointers — floats, GS register
+        /// halves, VIF tags — are left alone even when their low bits happen to fall inside the range.</summary>
+        internal static void RebaseRange(byte[] block, uint src, int size, uint dst)
+        {
+            for (int o = 0; o + 4 <= block.Length; o += 4)
+            {
+                uint w = (uint)BitConverter.ToInt32(block, o);
+                if (!LooksLikePointer(w)) continue;
+                uint v = w & PhysAddrMask;
+                if (v >= src && v < src + (uint)size)
+                    BitConverter.GetBytes((w & ~PhysAddrMask) | (dst + (v - src))).CopyTo(block, o);
+            }
+        }
+
+        /// <summary>Re-point ONE link word of a copied block: a value inside [<paramref name="min"/>, <paramref name="max"/>]
+        /// moves to the same offset from <paramref name="dst"/>; anything else — an external reference, or the word
+        /// <paramref name="forceZero"/> names — is zeroed. For known pointer fields only (tree links): unlike
+        /// <see cref="RebaseRange"/> it does not test the word's segment first.</summary>
+        internal static void Rebase(byte[] block, int off, uint min, uint max, uint dst, bool forceZero)
+        {
+            uint old = (uint)BitConverter.ToInt32(block, off) & PhysAddrMask;
+            uint neu = 0;
+            if (!forceZero && old >= min && old <= max) neu = dst + (old - min);
+            BitConverter.GetBytes(neu).CopyTo(block, off);
+        }
+
+        /// <summary>Round up to the 16-byte quadword the cave allocators hand out in.</summary>
+        internal static int  Align16(int n)  => (n + 15) & ~15;
+        internal static long Align16(long n) => (n + 15) & ~15L;
 
         private static byte[] BuildReadPacket(byte opcode, long address)
         {
@@ -320,8 +375,16 @@ namespace Dark_Cloud_Improved_Version
         /// than a few bytes). <paramref name="address"/> may be unaligned; alignment is handled
         /// internally.
         /// </summary>
+        /// <summary>How many times we have crossed to the emulator, and how many bytes went with it. Round trips are the thing
+        /// that costs: a 300 KB batch lands in tens of milliseconds while a few hundred four-byte reads take over a second, and
+        /// the per-trip latency swings so much between runs that wall-clock timings of the same code varied by 16× (2026-09-15).
+        /// The trip count does not move, so it is what to optimise against.</summary>
+        internal static long Trips, TripBytes;
+        internal static void ResetTrips() { Trips = 0; TripBytes = 0; }
+
         internal static byte[] ReadBytesBatch(long address, int numBytes)
         {
+            Trips++; TripBytes += numBytes;
             const int ChunkWords = 2048;   // 8KB of data per round-trip
             long alignedStart = address & ~3L;
             int alignedLen = (int)(((address + numBytes + 3) & ~3L) - alignedStart);
@@ -468,12 +531,14 @@ namespace Dark_Cloud_Improved_Version
 
         internal static uint ReadUInt(long address)
         {
+            Trips++; TripBytes += 4;
             var r = SendBatch(BuildReadPacket(0x02, address));
             return r.Length >= 4 ? BitConverter.ToUInt32(r, 0) : 0u;
         }
 
         internal static int ReadInt(long address)
         {
+            Trips++; TripBytes += 4;
             var r = SendBatch(BuildReadPacket(0x02, address));
             return r.Length >= 4 ? BitConverter.ToInt32(r, 0) : 0;
         }
@@ -523,6 +588,7 @@ namespace Dark_Cloud_Improved_Version
         // pixels) where per-byte round-trips would take seconds and alignment rules out 32-bit packing.
         internal static void WriteBytesBatch(long startAddr, byte[] data)
         {
+            Trips++; TripBytes += data.Length;
             const int chunk = 500;                 // 500*6+4 = 3004 bytes/packet — well under the PINE buffer
             byte op = OpWrite8;
             for (int start = 0; start < data.Length; start += chunk)
@@ -550,6 +616,7 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool WriteInt(long address, int value)
         {
+            Trips++; TripBytes += 4;
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;
         }
@@ -581,12 +648,14 @@ namespace Dark_Cloud_Improved_Version
 
         internal static bool WriteUInt(long address, uint value)
         {
+            Trips++; TripBytes += 4;
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;
         }
 
         internal static bool WriteFloat(long address, float value)
         {
+            Trips++; TripBytes += 4;
             // No dedicated WriteFloat opcode in current PINE spec — write raw bytes as Write32
             SendBatch(BuildWritePacket(OpWrite32, address, BitConverter.GetBytes(value)));
             return true;

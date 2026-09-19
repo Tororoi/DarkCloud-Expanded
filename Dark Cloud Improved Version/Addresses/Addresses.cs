@@ -101,13 +101,15 @@ namespace Dark_Cloud_Improved_Version
         public const int dunToggle2 = 0x21EA76AC;               //Toggles the message on/off
         public const int dunMessageWidth = 0x21EB6438;          // Value is equal to the number of chars in a string (Ex: 5 -> width of a 5 char string)
         public const int dunMessageHeight = 0x21EB643C;         // Value is equal to the number of lines of a string paragraph (Ex: 2 -> paragraph with 2 lines)
-        public const int dunMessage10 = 0x20998BB8;             //The address pointing to the text of the 10th dungeon message. 157 Byte array
-        public const int dunMessage11 = 0x20998C8E;             //The address pointing to the text of the 11th dungeon message. 172 Byte array
-        public const int dunMessageLastEnemyName = 0x20999EE8;  //The address for the last enemy/last message content
+        // ⚠ The dungeon message TEXT addresses are not constants: they live in a pool the dungeon carves at GameInit, so they
+        // move whenever a pool before them changes size (the cat's character heap moved them 880,512 B, and the writes then
+        // landed on a glyph sheet — struck letters everywhere, 2026-09-15). Resolve them with DungeonMessageBank.TextAddress
+        // (message ids 10 and 3319). These three are what a VANILLA dungeon happened to use, kept for reference only.
+        //   dunMessage10 = 0x20998BB8 (157 B)   dunMessage11 = 0x20998C8E (172 B)   dunMessageLastEnemyName = 0x20999EE8
         public const int dunMessageDuration = 0x21EA7694;       //How long to show the message
         public const int dunMessageDelay = 0x21EA7698;          //How long to wait until the message is shown
         public const int healingSpeed = 0x202A2B88;             //Counts every 10 frames when the player is inside a fountain
-        public const int BoneDoorOpenType = 0x20931768;         //Default value is 21, change it to 5 and the bone door will open by pressing Square
+        public const int BoneDoorOpenType = 0x20931768;         //Default 21, set 5 to open the bone door with Square. VANILLA-LAYOUT: it sits in a dungeon pool, so resolve with DungeonPools.Resolve before reading/writing
         public const int dungDoorType = 0x21D56770;             //Tells us the type of door when interacting with X or Square
         public const int checkFloor = 0x21CD954E;               //Tells the current floor player is on, updates when entering the floor (0-indexed: displayed floor = checkFloor+1)
         public const int checkDungeon = 0x202A3594;             //Tells what dungeon we are in. DBC = 0, Wise Owl = 1 etc.

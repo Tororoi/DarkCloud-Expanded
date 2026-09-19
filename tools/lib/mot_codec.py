@@ -40,10 +40,11 @@ FORMAT (reverse-engineered from SCUS_971.11; see game_data/docs/mot-format.md fo
   model B play model A's motion, copy A's keyframes in A's window into B's window, per matching bone.
 
   Companion files: `.bbp` = the memcpy'd header/bind block (param_3[1..2] of MOTION_FILE_INFO);
-  `.wgt` = a SECOND track list in the identical format but vertex-morph (keyframe +0x00 = vertex
-  index, +0x10 = weight; consumed by MotionProc2 @0x148860). Neither is needed to SPLICE a skeletal
-  motion: the `.mot` is self-contained per-frame rotation data. (If a transplant looks wrong on the
-  fingers/cloth, the `.wgt` morph is what differs — but the body run does not depend on it.)
+  `.wgt` = a SECOND track list in the identical format holding the SKIN WEIGHTS (corrected 2026-09-12; it is
+  not a morph): one track per bone — w0 = the skinned mesh's node index, w1 = the bone's node index,
+  w2 = 20 — whose "keyframes" are (frame = vertex index, value[0] = weight in percent); every vertex
+  covered, weights sum to 100 (consumed by MotionProc2 @0x148860). Not needed to SPLICE a skeletal
+  motion: the `.mot` is self-contained per-frame rotation data.
 
 This module is byte-exact: parse -> rebuild of an unmodified record equals the original.
 """

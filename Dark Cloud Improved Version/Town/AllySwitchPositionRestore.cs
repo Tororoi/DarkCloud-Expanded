@@ -173,7 +173,7 @@ namespace Dark_Cloud_Improved_Version
             if (Memory.ReadInt(EditLoop.GameMode) != EditLoop.GameModeWalking) return;
             if (Memory.ReadInt(EditLoop.AreaFrames) < 2) return;
 
-            uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+            uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
             if (!Memory.IsValidGuest(chara)) return;
             long c = Memory.ToMmu(chara);
 

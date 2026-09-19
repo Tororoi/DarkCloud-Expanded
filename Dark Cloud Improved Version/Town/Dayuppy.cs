@@ -806,9 +806,16 @@ namespace Dark_Cloud_Improved_Version
                 continue;
             }
 
+            // WHERE the text goes is resolved from the live message bank, never hardcoded. The dungeon carves its pools out
+            // of one buffer in order, so any change to the character heap moves this bank: the cat's heap growth moved it
+            // 880,512 B and these writes landed on the `gaiji` glyph sheet instead — a band of message text struck through
+            // the letters in every dungeon window (user 2026-09-15). See DungeonMessageBank.
+            long messageAddress = DungeonMessageBank.TextAddress(isFloorClearMessage ? DungeonMessageBank.FloorClearId
+                                                                                     : DungeonMessageBank.CustomId);
+            if (messageAddress == 0) return new byte[0];   // bank unreadable: drop the message rather than write over whatever is there
+
             byte[] customMessage = Encoding.GetEncoding(10000).GetBytes(message);
-            if (isFloorClearMessage) { dungeonMessage = Memory.ReadByteArray(Addresses.dunMessageLastEnemyName, message.Length); }
-            else { dungeonMessage = Memory.ReadByteArray(Addresses.dunMessage10, message.Length); }
+            dungeonMessage = Memory.ReadByteArray(messageAddress, message.Length);
 
             byte[] outputMessage = new byte[customMessage.Length * 2];
 
@@ -880,8 +887,7 @@ namespace Dark_Cloud_Improved_Version
             }
             */
 
-            if(isFloorClearMessage) Memory.WriteByteArray(Addresses.dunMessageLastEnemyName, dungeonMessage);
-            else Memory.WriteByteArray(Addresses.dunMessage10, dungeonMessage);
+            Memory.WriteByteArray(messageAddress, dungeonMessage);
 
             for (int i = 0; i < customMessage.Length; i++)
             {
@@ -957,10 +963,7 @@ namespace Dark_Cloud_Improved_Version
 
                 if(i == customMessage.Length - 1)
                 {
-                    int aux;
-
-                    if (isFloorClearMessage) { aux = Addresses.dunMessageLastEnemyName + outputMessage.Length; }
-                    else { aux = Addresses.dunMessage10 + outputMessage.Length; }
+                    long aux = messageAddress + outputMessage.Length;
 
                     Memory.WriteByte(aux, 1);
                     Memory.WriteByte(aux + 0x1, 255);
@@ -970,13 +973,11 @@ namespace Dark_Cloud_Improved_Version
 
             byte[] hornHead = { 40, 253, 73, 253, 76, 253, 72, 253, 40, 253, 63, 253, 59, 253, 62, 253, 1, 255 };
             byte[] original10Message = {52, 253, 66, 253, 63, 253, 76, 253, 63, 253, 2, 255, 67, 253, 77, 253, 2, 255, 72, 253, 73, 253, 2, 255, 77, 253, 67, 253, 65, 253, 72, 253, 2, 255, 73, 253, 64, 253, 2, 255, 71, 253, 73, 253, 72, 253, 77, 253, 78, 253, 63, 253, 76, 253, 77, 253, 2, 255, 0, 255, 73, 253, 72, 253, 2, 255, 78, 253, 66, 253, 67, 253, 77, 253, 2, 255, 64, 253, 70, 253, 73, 253, 73, 253, 76, 253, 109, 253, 2, 255, 57, 253, 73, 253, 79, 253, 2, 255, 61, 253, 59, 253, 72, 253, 2, 255, 79, 253, 77, 253, 63, 253, 2, 255, 83, 253, 73, 253, 79, 253, 76, 253, 2, 255, 0, 255, 63, 253, 77, 253, 61, 253, 59, 253, 74, 253, 63, 253, 2, 255, 77, 253, 69, 253, 67, 253, 70, 253, 70, 253, 109, 253, 0, 255, 3, 252, 87, 253, 44, 253, 63, 253, 59, 253, 80, 253, 63, 253, 2, 255, 36, 253, 79, 253, 72, 253, 65, 253, 63, 253, 73, 253, 72, 253, 87, 253, 0, 252, 2, 255, 59, 253, 80, 253, 59, 253, 67, 253, 70, 253, 59, 253, 60, 253, 70, 253, 63, 253, 88, 253, 1, 255};
-            int messageId = 10;
-            int messageAddress = Addresses.dunMessage10;
+            int messageId = DungeonMessageBank.CustomId;
 
             if (isFloorClearMessage)
             {
-                messageId = 3319;
-                messageAddress = Addresses.dunMessageLastEnemyName;
+                messageId = DungeonMessageBank.FloorClearId;
                 outputMessage = original10Message;
             }
 
@@ -1239,7 +1240,8 @@ namespace Dark_Cloud_Improved_Version
                             CallGameFunction(Addresses.functionBGMStop);
                             Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "New Function value: " + BitConverter.ToString(Memory.ReadByteArray(Addresses.functionEntryPoint, 4)));
                             TestElementFunctionStuff();
-                            Memory.WriteByteArray(Addresses.dunMessageLastEnemyName, DisplayMessageProcess("Background music stopped.", 1, 36, 3000, false));
+                            long lastEnemyName = DungeonMessageBank.TextAddress(DungeonMessageBank.FloorClearId);
+                            if (lastEnemyName != 0) Memory.WriteByteArray(lastEnemyName, DisplayMessageProcess("Background music stopped.", 1, 36, 3000, false));
                         }
                     }
                 }

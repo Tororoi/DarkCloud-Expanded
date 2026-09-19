@@ -39,10 +39,10 @@ namespace Dark_Cloud_Improved_Version
         internal static void Tick()
         {
             if (!Enabled) return;
-            uint structRaw = Memory.ReadUInt(WorkBufferPtr) & Memory.PhysAddrMask;
+            uint structRaw = Memory.ReadGuestPtr(WorkBufferPtr);
             if (!Memory.IsValidGuest(structRaw)) return;
             long s = Memory.ToMmu(structRaw);
-            uint data = Memory.ReadUInt(s) & Memory.PhysAddrMask;
+            uint data = Memory.ReadGuestPtr(s);
 
             bool town = Memory.ReadByte(Addresses.mode) == 2;
             if (town)

@@ -108,37 +108,48 @@ namespace Dark_Cloud_Improved_Version
                 Memory.WriteUShort(Player.Xiao.status, (ushort)(status & ~resistMask));
         }
 
-        // ── Angel Gear (Xiao's own weapon: slow party-wide HP regen) ──
-        private const double AngelGearHealSeconds = 5.0;   // matches CustomXiaoEffects.AngelGearEffect's 5000ms cadence
-        private const ushort AngelGearHealAmount  = 1;
-        private static DateTime _angelGearNextHeal = DateTime.MinValue;
+        // ── the attached sphere's icon, over Steve on the dungeon HUD ──
+        private const int SsIconX = 29, SsIconY = 367, SsIconSize = 20;   // just above Steve's raised hands: his icon (the equipped weapon's) is at (29, 388), 32 × 32
+        private static int _ssIconSphere = -1;                            // the sphere the icon is on for; -1 = nothing written yet
+        private static bool _ssIconWarned;
 
-        /// <summary>Angel Gear: while <paramref name="active"/> and in walking mode, every
-        /// <see cref="AngelGearHealSeconds"/> heal each ally by <see cref="AngelGearHealAmount"/> (skipping the
-        /// dead and the already-full). Xiao is healed too UNLESS the equipped weapon carries the native Heal
-        /// build-up attribute (Special2 % 16 in 8..11), which already regenerates her — avoids double-healing.
-        /// Stateless apart from the interval timer, so it just no-ops when inactive.</summary>
-        internal static void DriveAngelGear(bool active)
+        /// <summary>Switch the sphere icon on with its screen placement (the copy cave finds the icon itself). Written
+        /// only when the sphere changes; 0 clears it. Nothing is drawn when the ISO lacks the hook.</summary>
+        internal static void DriveSphereIcon(int sphere)
         {
-            if (!active || !Player.CheckDunIsWalkingMode()) return;
-            if (DateTime.UtcNow < _angelGearNextHeal) return;
-            _angelGearNextHeal = DateTime.UtcNow.AddSeconds(AngelGearHealSeconds);
-
-            HealAlly(Player.Toan.GetHp(),   Player.Toan.GetMaxHp(),   Player.Toan.SetHp);
-            HealAlly(Player.Goro.GetHp(),   Player.Goro.GetMaxHp(),   Player.Goro.SetHp);
-            HealAlly(Player.Ruby.GetHp(),   Player.Ruby.GetMaxHp(),   Player.Ruby.SetHp);
-            HealAlly(Player.Ungaga.GetHp(), Player.Ungaga.GetMaxHp(), Player.Ungaga.SetHp);
-            HealAlly(Player.Osmond.GetHp(), Player.Osmond.GetMaxHp(), Player.Osmond.SetHp);
-
-            // Xiao only if the equipped weapon lacks the native Heal attribute (else the game already regens her).
-            int special2 = Player.Weapon.GetCurrentWeaponSpecial2() % 16;
-            if (special2 < 8 || special2 > 11)
-                HealAlly(Player.Xiao.GetHp(), Player.Xiao.GetMaxHp(), Player.Xiao.SetHp);
+            if (sphere == _ssIconSphere) return;
+            if ((uint)Memory.ReadInt(DunPatches.SsIconHookAddrMmu) != DunPatches.SsIconHookNew)
+            {
+                if (!_ssIconWarned) { _ssIconWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] sphere-icon hook not in this ISO — no icon (re-patch the ISO)"); }
+                return;
+            }
+            _ssIconSphere = sphere;
+            long rec = ItemAddresses.ComItemInfo.RecordAddr(sphere);
+            if (sphere == 0 || rec < 0) { Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 0); return; }
+            int cls  = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.ClassOffset);
+            int icon = Memory.ReadUShort(rec + ItemAddresses.ComItemInfo.SubIndexOffset);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconX, SsIconX);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconY, SsIconY);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconSize, SsIconSize);
+            Memory.WriteInt(CodeCaves.Mailbox.SsIconOn, 1);                                       // on LAST
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] sphere icon: weapon {sphere} (class {cls}, icon {icon}) → wepicon cell ({(icon & 7) * 32},{(icon >> 3) * 32}), drawn at ({SsIconX},{SsIconY}) size {SsIconSize}; manager has {SheetsRegistered()}; counters draw {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagDraws)} copy calls {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopyCalls)} sheet seen {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagSheetSeen)} copies {Memory.ReadInt(CodeCaves.Mailbox.SsIconDiagCopies)}");
         }
 
-        private static void HealAlly(ushort hp, int maxHp, Action<ushort> setHp)
+        /// <summary>Which of the sheets the icon cave can draw from are registered right now — the one failure it cannot report.</summary>
+        private static string SheetsRegistered()
         {
-            if (hp > 0 && hp < maxHp) setHp((ushort)(hp + AngelGearHealAmount));
+            int count = Math.Min(TextureManager.MaxEntries, Memory.ReadInt(TextureManager.Base + TextureManager.Count));
+            byte[] table = count > 0 ? Memory.ReadBytesBatch(TextureManager.Base + TextureManager.Entries, count * TextureManager.EntryStride) : null;
+            if (table == null) return "(table unreadable)";
+            var found = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < count; i++)
+            {
+                int o = i * TextureManager.EntryStride + TextureManager.EntryName, len = 0;
+                while (len < 16 && table[o + len] != 0) len++;
+                string nm = System.Text.Encoding.ASCII.GetString(table, o, len);
+                if (nm == "wepicon" || nm == "itemicon" || nm == "itempack") found.Add(nm);
+            }
+            return found.Count == 0 ? "none of wepicon/itemicon/itempack" : string.Join("+", found);
         }
 
         // ── Moonlit Focus + Heaven's Cloud (two-stage charge → a wind-gem crowd-control blast) ──
@@ -245,14 +256,22 @@ namespace Dark_Cloud_Improved_Version
             // Hold time → 0..1 charge fraction; frozen on release (draw 0xB / nocked-hold 0xC), base on a tap.
             if (holding)
             {
-                if (!_ssHolding) { _ssHoldStart = DateTime.UtcNow; _ssHolding = true; }
-                _ssHoldFrac = (float)Math.Min(1.0, (DateTime.UtcNow - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
+                if (!_ssHolding) { _ssHoldStart = GameClock.Now; _ssHolding = true; }
+                _ssHoldFrac = (float)Math.Min(1.0, (GameClock.Now - _ssHoldStart).TotalSeconds / ChargeGrowSeconds);
             }
             else _ssHolding = false;
 
             // How far into the EMPOWERED band (flash 1 → flash 2) the charge is: 0 below flash 1, 1 at full. This
             // one number drives the pellet, the burst visual, the blast radius and the blast damage.
             float empowered = EmpoweredFrac(_ssHoldFrac);
+            if (active && holding)                                       // the shot's weapon HP: charged from flash 1
+            {
+                ChargedShotWhp.Arm(empowered > 0f ? ChargedShotWhp.ChargedFactor : 1f);
+                // The charge on her: a ramp into flash 1, again into flash 2, nothing past it.
+                ChargeTint.Ramp(_ssHoldFrac < ChargeLevel1Frac ? (ChargeLevel1Frac - _ssHoldFrac) * ChargeGrowSeconds
+                              : _ssHoldFrac < ChargeLevel2Frac ? (ChargeLevel2Frac - _ssHoldFrac) * ChargeGrowSeconds : 0);
+            }
+            else if (active) ChargeTint.Clear();
 
             // Grow the fired pellet + scale its damage, once each. A shot fired while empowered arms the burst.
             long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
@@ -419,15 +438,17 @@ namespace Dark_Cloud_Improved_Version
             bool holding = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
             if (holding)
             {
-                if (!_mrHolding) { _mrHoldStart = DateTime.UtcNow; _mrHolding = true; _mrCycles = 0; }
-                int cycles = (int)((DateTime.UtcNow - _mrHoldStart).TotalSeconds / MobiusCycleSeconds);
+                if (!_mrHolding) { _mrHoldStart = GameClock.Now; _mrHolding = true; _mrCycles = 0; }
+                int cycles = (int)((GameClock.Now - _mrHoldStart).TotalSeconds / MobiusCycleSeconds);
                 if (cycles > _mrCycles)
                 {
                     _mrCycles = cycles;
                     Player.FlashChargeComplete();   // Ruby's Mobius flash per ramp step
                 }
+                ChargedShotWhp.Arm(_mrCycles >= 1 ? ChargedShotWhp.ChargedFactor : 1f);                                       // charged from the first ramp step
+                ChargeTint.Ramp(MobiusCycleSeconds * (_mrCycles + 1) - (GameClock.Now - _mrHoldStart).TotalSeconds);        // a ramp into every step's flash
             }
-            else _mrHolding = false;   // keep _mrCycles frozen for the pellet that fires
+            else { _mrHolding = false; ChargeTint.Clear(); }   // keep _mrCycles frozen for the pellet that fires
 
             // Stamp fresh pellets once each: damage ×1.5^cycles (capped) + Ruby's ball-growth sprite scale.
             long poolBase = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);

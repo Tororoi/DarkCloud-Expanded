@@ -105,11 +105,11 @@ namespace Dark_Cloud_Improved_Version
             bool armed = false;
             if (low)
             {
-                uint chara = Memory.ReadUInt(EditLoop.CharaPtr) & Memory.PhysAddrMask;
+                uint chara = Memory.ReadGuestPtr(EditLoop.CharaPtr);
                 if (Memory.IsValidGuest(chara))
                 {
                     long charaMmu = Memory.ToMmu(chara);
-                    uint root = Memory.ReadUInt(charaMmu + CharModelOff) & Memory.PhysAddrMask;
+                    uint root = Memory.ReadGuestPtr(charaMmu + CharModelOff);
                     if (Memory.IsValidGuest(root))
                     {
                         // The BODY early-draw (root -> MGDraw) is safe: root swaps atomically. The CAPE
@@ -121,7 +121,7 @@ namespace Dark_Cloud_Improved_Version
                         // (the model has settled); until then leave CapeCharPtr=0 so the cave skips the
                         // cloth loop (its own null-guard) and just draws the body.
                         uint sig = 0; bool clothOk = true;
-                        uint clothList = Memory.ReadUInt(charaMmu + ClothListOff) & Memory.PhysAddrMask;
+                        uint clothList = Memory.ReadGuestPtr(charaMmu + ClothListOff);
                         if (clothList != 0)
                         {
                             if (Memory.IsValidGuest(clothList))
@@ -130,7 +130,7 @@ namespace Dark_Cloud_Improved_Version
                                 long listMmu = Memory.ToMmu(clothList);
                                 for (int i = 0; i < ClothMaxPieces; i++)
                                 {
-                                    uint piece = Memory.ReadUInt(listMmu + i * 4) & Memory.PhysAddrMask;
+                                    uint piece = Memory.ReadGuestPtr(listMmu + i * 4);
                                     if (piece != 0 && !Memory.IsValidGuest(piece)) { clothOk = false; break; }
                                     sig = (sig << 3 | sig >> 29) ^ piece;   // order-sensitive fold
                                 }

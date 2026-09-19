@@ -92,7 +92,7 @@ namespace Dark_Cloud_Improved_Version
         internal static void ForceSpecies8OnFish()
         {
             if (!Enabled || !ForceAllSpecies8) return;
-            uint p = Memory.ReadUInt(FishArrayPtr) & Memory.PhysAddrMask;
+            uint p = Memory.ReadGuestPtr(FishArrayPtr);
             if (!Memory.IsValidGuest(p)) return;
             long arr = Memory.ToMmu(p);
             int n = Memory.ReadInt(FishingSpot.FishNum);
@@ -110,7 +110,7 @@ namespace Dark_Cloud_Improved_Version
             // Gate on the fish being REELED (BattleFish) actually being species 8. BattleFish holds the CFish
             // address and is cleared to 0 by the build, so this window is exactly the catch. When it closes,
             // re-arm for the next catch.
-            uint bf = Memory.ReadUInt(BattleFishPtr) & Memory.PhysAddrMask;
+            uint bf = Memory.ReadGuestPtr(BattleFishPtr);
             if (!Memory.IsValidGuest(bf))
             {
                 _injected.Clear();
@@ -132,7 +132,7 @@ namespace Dark_Cloud_Improved_Version
                 if (Memory.ReadInt(slot + BgActive) == 0) continue;
                 int d1 = Memory.ReadInt(slot + BgDone1), d2 = Memory.ReadInt(slot + BgDone2);
                 string fn = (Memory.ReadString(slot + BgName, 20) ?? "").Split('\0')[0];
-                uint bp = Memory.ReadUInt(slot + BgBuffer) & Memory.PhysAddrMask;
+                uint bp = Memory.ReadGuestPtr(slot + BgBuffer);
                 if (!_reelDiag)
                     Log($"DIAG: BG slot {s} active — done={d1}/{d2} file='{fn}' buf=0x{bp:X8}");
                 if (fn.IndexOf(StandInTag, StringComparison.Ordinal) < 0) continue;

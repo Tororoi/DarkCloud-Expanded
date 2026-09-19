@@ -179,7 +179,13 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothList      = 0xC74;   // → up to 4 CCloth ptrs (null list = no cloth)
         internal const int  MotionSlotBase = 0xC20;   // channel[i] MOTION_TYPE ptr at +0xC20 + i*4
         internal const int  MotionSlots    = 8;
-        internal const int  MotionFlags    = 0xC64;   // per-step motion flags
+        internal const int  MotionFlags    = 0xC64;   // per-step motion flags: 0x1 stop, 0x2 play once + hold the last frame, 0x4 restart (Step clears 0x4)
+        internal const int  MotionStop     = 0x1;     //   bit0 = hold the frame: rate 0 — and Step zeroes the channel's blend
+                                                      //   increment (MotionType.StateSpeed) while it is set; nothing re-seeds it
+                                                      //   (MOTION_END does so at load only), so clearing the bit without writing
+                                                      //   it back leaves every later cross-fade unable to finish. To hold a chara
+                                                      //   slot, DungeonCharaDraw.StepSkipTable freezes it without this cost.
+        internal const int  MotionPlayOnce = 0x2;
         internal const int  MotionRestart  = 0x4;     //   bit2 = clean restart (frame 0, no blend); consumed once
         internal const int  MotionId       = 0xC68;   // current motion id; Step__10CCharacter early-outs when < 0 → pose FROZEN
         internal const int  CharaTint      = 0xCE0;   // float3 ambient ADD (tint)
@@ -253,10 +259,17 @@ namespace Dark_Cloud_Improved_Version
     internal static class CVisualMDT
     {
         internal const int  VisualSize   = 0x30;        // the visual struct itself
+        internal const int  VisVtable    = 0x08;        // → its C++ vtable (__vt__13CVisualMDTVu1 0x2A11A0). NOT offset 0 as
+                                                        // single inheritance usually puts it — __ct__13CVisualMDTVu1 stores it
+                                                        // with `sw v0,8(s0)` (0x134FC8), and word 0 reads back ZERO in game.
         internal const int  VisVU        = 0x18;        // → VU data ptr; +0x1C = its size
         internal const int  VisMDT       = 0x20;        // → MDT block
         internal const uint MdtMagic     = 0x0054444D;  // "MDT\0" at MDT+0x00
+        internal const uint Vu1Vtable    = 0x002A11A0;  // __vt__13CVisualMDTVu1: 32 B, slots 6/7 (+0x18/+0x1C) = DrawVu1
+        internal const int  Vu1VtableBytes = 32, Vu1VtableDrawSlot = 0x18;
         internal const int  MdtSizeField = 0x08;        // MDT+0x08 = total block size
+        internal const int  MdtVertCount = 0x0C;        // MDT+0x0C = vertex count (AnimeDataInit 0x1493A0 loops over it)
+        internal const int  MdtVertOffset = 0x10;       // MDT+0x10 = offset of the 16-byte vertex table from the MDT start
     }
 
     /// <summary>
@@ -270,6 +283,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BoneMtxEntry  = 0x40;  //   per-bone stride
         internal const int  MotionSkinList = 0x08; // → MotionProc2 (software-skinning) list; +0x04 = the rigid list
         internal const int  FrameInfPtr   = 0x60;  // → FRAME_INF, the per-bone SKINNING matrix buffer
+        internal const int  MotionInfoPtr = 0x64;  // → MOTION_INFO (the cfg KEY table: {int start, int end, float speed, pad} × 0x10);
+                                                   //   Step__10CCharacter 0x138530 reads the key HERE (GetMotionParam → channel)
+        internal const int  StateFrame    = 0x10;  // MOTION_STATE float — the LIVE motion frame (CCharacter +0x2F0 is NOT it)
+        internal const int  StateSpeed    = 0x18;  // MOTION_STATE float — 1.0 on restart, 0 on stop
+        internal const int  StateKeyIdx   = 0x24;  // MOTION_STATE int — current KEY ordinal (+0x28 = previous)
         internal const int  FrameInfEntry = 0xD0;  //   per-bone stride
     }
 
@@ -281,7 +299,37 @@ namespace Dark_Cloud_Improved_Version
         internal const int  ClothMaxPieces = 4;       // length of the CCharacter +0xC74 list
         internal const int  ClothActive    = 0x18;    // active draw-packet ptr (engine sets it each frame)
         internal const int  ClothBuf0      = 0x24;    // DBuffID0 packet; +0x28 = DBuffID1 (double-buffered)
+        internal const int  ClothPacketUnits = 0x1C;  // size of the draw packet CreateVUData builds, in 16-byte units — the ONLY
+                                                      // honest measure of how big those two buffers must be (Initialize 0x13cbf0
+                                                      // builds the packet first, then Allocs this many units for each)
         internal const int  ClothAttach    = 0x3C;    // anchor CFrame — drives the SIM when the cloth is stepped
+        internal const int  ClothMaterial  = 0x60;    // the MDT_MATERIAL the packet builder copies from every draw (SetMaterial
+                                                      // 0x134D40 takes its first three 16-byte rows): +0x00 diffuse RGBA,
+                                                      // +0x10 second colour (w = 0), +0x20 third — zero in every model on the
+                                                      // disc, so it reads as the emissive/ambient term; +0x34 is the texture name
+        internal const int  ClothBounds    = 0x44;    // → CBound linked list (body collision; 0 = the cloth passes through the body)
+        internal const int  ClothWindScale = 0x54;    // WINDEFFECT (+0x50 = the CWind the character hands it each step)
+        internal const int  ClothNormal    = 0x58;    // NORMAL: sign of the generated normals
+        internal const int  ClothGravity   = 0xC0;    // GRAVITY, added to every particle's velocity each step
+        internal const int  ClothFollow    = 0xD0;    // FOLLOW: share of the anchor's movement applied straight to each particle
+        internal const int  ClothK         = 0xE0;    // K: per-step pull toward LW(anchor) × rest — a POSITION correction, no momentum
+        // The per-particle arrays below are lattices: particle (a, b) = a * ClothColumnStride + b * ClothParticleStride, a
+        // counting across the collar and b down the hang; each array spans ClothArrayBytes (16 columns of 16 vec4s).
+        internal const int  ClothColumnStride   = 0x100;
+        internal const int  ClothParticleStride = 0x10;
+        internal const int  ClothArrayBytes     = 0x1000;
+        internal const int  ClothRest      = 0x110;   // per particle: the shape it holds, in the anchor's space
+        internal const int  ClothTie       = 0x3110;  // per particle: x = the distance to (a−1, b), y = to (a, b+1) — the StretchBind rest lengths,
+                                                      // measured ONCE from the lattice at load (rig units) and never rescaled, while the targets
+                                                      // (+0x7550) carry the character's scale; w = the body-capsule damp accumulator, rewritten each step
+        internal const int  ClothCur       = 0x1110;  // per particle: where it is now, world
+        internal const int  ClothPrev      = 0x2110;  // per particle: where it was last step (the Verlet history)
+        internal const int  ClothAnchorWorld = 0xF0;  // the anchor's world centroid as of last step — Step compares the new one
+                                                      // against it and TELEPORTS the whole sheet when they differ by > 10
+        internal const int  ClothAnchorLocal = 0x100; // …the same centroid in the anchor's own frame (set once at init)
+        internal const int  ClothVel       = 0x4110;  // per particle: its velocity — the engine only ever ADDS gravity here, so a
+                                                      // zero-mean wave written in rides along without dragging the cloth anywhere
+        internal const int  ClothTarget    = 0x7550;  // per particle: LW(anchor) × rest, i.e. where the rest shape wants it
     }
 
     /// <summary><c>CBound</c> — a body collision capsule the cloth sim collides against. Linked list off
@@ -292,7 +340,11 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BoundSize   = 0x130;  // Sizeof__6CBound
         internal const int  BoundNext   = 0x00;   // linked-list next
         internal const int  BoundFrameA = 0xE4;   // capsule endpoint bone A (CFrame*)
-        internal const int  BoundFrameB = 0xE8;   // capsule endpoint bone B (CFrame*)
+        internal const int  BoundFrameB = 0xE8;   // capsule endpoint bone B (CFrame*) — 0 when A alone carries both endpoints
+        internal const int  BoundRadii  = 0x10;   // (rx across, ry up, rz along A−B) in WORLD units — the endpoints ride the bone's scaled
+                                                  // matrix, the radii do not
+        internal const int  BoundRadiiInv = 0x20; // their reciprocals, kept in step
+        internal const int  BoundCentre = 0xC0;   // world centre, refreshed each step by UpDate__6CBound
     }
 
     /// <summary>The EQUIPPED WEAPON is a separate object from the character: its model root (+0xBC) is PARENTED
