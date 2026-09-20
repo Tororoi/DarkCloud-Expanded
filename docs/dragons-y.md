@@ -103,9 +103,15 @@ monster-pool watermark rewind). It cost the enemy randomizer a slot whenever Dra
 for one of the game's 34 (container under `dun/effect`), or `BorrowedShots.CustomConfig(template, name, muzzle, fly,
 impact, expire, dir)` for the mod's own: a game config's numbers naming any `<dir><name>.chr` (`EffectDir` or `WepEffDir`,
 so a character's effect such as Toan's `c01_fuusya` needs no archive copy) with the phase motions (KEY ordinals) that file
-has — and fires it with `BorrowedShots.Fire(effect, …)`. One effect is entered at a time (the first answer); Dragon's Y's
-provider is `DragonsY.WantedShot` (its per-element table `ShotEffectPack.DragonsYCfg`), which answers null unless Xiao
-is the ACTIVE character: the instance belongs to whoever is out, and Ruby's and Osmond's own shots live in it.
+has — and fires it with `BorrowedShots.Fire(effect, …)` (a flying shot) or `BorrowedShots.Burst(effect, x, h, y, damage,
+scale)` (a stationary one, played in its muzzle phase where it is planted). `BorrowedShots.DunConfig(addr, name)` reads a
+character's own wep_eff config out of dun.bin once the overlay is resident — Toan's whirlwind (`ShotEffectPack.
+WhirlwindCfg`: muzzle radius 20, motion 0, nothing after) was tried as Heaven's Cloud's blast on Super Steve through
+`Burst` + `SetPhaseRadius` + `SetElement` and looked wrong as a burst, so Heaven's Cloud keeps the wind gem burst; the
+plumbing stays for the next borrowed effect. One effect is entered at a time
+(the first answer); Dragon's Y's provider is `DragonsY.WantedShot` (its per-element table `ShotEffectPack.DragonsYCfg`).
+Every provider answers null unless Xiao is the ACTIVE character: the instance belongs to whoever is out, and Ruby's and
+Osmond's own shots live in it.
 
 Effect files under `dun/effect` no config names and no code references: `_b_boll`, `_f_boll_2`, `_f_boll_3`,
 `_i_boll` (KEY 0 flight, 1 burst — older balls), `_f_boll` (KEY 0 stop, 1 flight; bbp/wgt), `zibaku_f`/`zibaku_r`/

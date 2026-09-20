@@ -639,6 +639,10 @@ namespace Dark_Cloud_Improved_Version
         /// effect (MainChara_Effect → Entry2) and the dungeon loop steps and draws through the live pointer at 0x2A34EC.
         /// Xiao's holds mgan01, which nothing of hers fires — the borrowed shots take it over (BorrowedShots).</summary>
         internal const long CharaMainEffect = 0x21E8DA60, CharaMainEffectCrash = 0x21E97BC0, MainEffectLivePtr = 0x202A34EC;
+        /// <summary>dun.bin's table of the characters' wep_eff configs (Get_Main_EffectPtr, dun 0x1DBA060 → pointers at 0x1DC21F0):
+        /// Toan's whirlwind `c01_fuusya` — muzzle radius 20, wait 160, damage 8, Wind, reaction 2, mask 2, muzzle motion 0 (the
+        /// swoosh, KEY 5–40), nothing after: the effect plays out where it is planted.</summary>
+        internal const long WhirlwindCfg = 0x201DC1B60;
         internal const uint MonsterPoolAlloc = 0x01F066D0;  // the CDataAlloc2 the floor's monster models and their shot effects come from
         internal const int  EntryParam4     = 0x26;         // what the species loader passes Entry as its fourth argument
     }

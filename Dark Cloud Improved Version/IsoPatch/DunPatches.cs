@@ -88,6 +88,18 @@ namespace Dark_Cloud_Improved_Version
             // the per-frame chain instead, and an ISO patched with that first hook gets the vanilla word back.
             // MemoryMapDump (dun 0x1DAC070, printf-only) hosts the guard-bypass cave (DunCave.CatGuardBypass, Caves below): its three
             // callers become nops — the loader's (the borrowed shots' first hook site), the per-frame one and the bomb-effect draw's.
+            // THE MONSTER POOL IS THE MAP CARVE'S REMAINDER (BtMapJumpLoad: cap = 0xA7F80 − the floor's map data), and the
+            // 27 MB global buffer is full, so it grows by shrinking the dungeon EVENT work buffer (BtScriptWorkBuffer, 100,000
+            // units): the memory an in-floor event (kind 0 — the floor keeps its monsters: chests, the cat meetings, the
+            // picture) loads its models into through the scratch allocator (BtCashBuffer). A full event (kind 1 — boss and
+            // story floors) empties the monsters and uses the monster pool region instead (cap + 35,000). The largest set of
+            // assets in any dungeon event folder that could be a kind-0 load is Wise Owl's d02eb02 + d02ebc01d, 1,048,320 B =
+            // 65,520 units (Divine Beast Cave's e28 set is 2.8 MB — more than the vanilla buffer, so it can only be a full
+            // event), so 70,000 stay for events and 30,000 move to the map carve: +480 KB of monster pool on every floor.
+            // The remainder computation in the main ELF moves with it (ElfPatches.PatchMapCarveRemainder).
+            new(0x01DAC3C8, 0x344586A0, 0x34451170, "event work buffer carve 100,000 → 70,000 units"),
+            new(0x01DB4A04, 0x344286A0, 0x34421170, "in-floor event scratch cap 100,000 → 70,000 units"),
+            new(MapCarveAddr, 0x34457F80, MapCarveGrownWord, "map carve 688,000 → 718,000 units"),
             new(0x01DAD938, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (its body is the guard-bypass cave)"),
             new(BorrowedLoadHookAddr, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (the loader's; its body is the guard-bypass cave)"),
             new(0x01DBA8F4, MemoryMapDumpCall, 0, "MemoryMapDump call → nop (its body is the guard-bypass cave)"),
@@ -121,6 +133,11 @@ namespace Dark_Cloud_Improved_Version
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;
         internal const uint BorrowedLoadHookAddr    = 0x01DB9568;                          // OpB_InitProcess: jal MemoryMapDump after the species loop
         internal const uint MemoryMapDumpCall       = 0x0C76B01C;                          // jal 0x1DAC070
+        /// <summary>The map carve's `ori a1,v0,LO` in GameInit — the runtime reads it to know the pool is the grown one.</summary>
+        internal const uint MapCarveAddr      = 0x01DAC450;
+        internal const uint MapCarveGrownWord = 0x3445F470;                                // ori a1,v0,0xF470 (0xAF470 = 718,000; the lui 0xA is unchanged)
+        internal const long MapCarveAddrMmu   = 0x20000000L + MapCarveAddr;
+        internal const int  MapCarveExtraUnits = 30000;                                    // what every floor's monster pool gains
         private sealed record Cave(uint Addr, uint Span, uint VanillaWord0, string Resource, string What);
         /// <summary>Whole functions of dead overlay code replaced by a cave's bytes (tools/stubs/*.s assembled at the function's
         /// address). Skipped when the first word is already the cave's; otherwise the first word must be the function's vanilla

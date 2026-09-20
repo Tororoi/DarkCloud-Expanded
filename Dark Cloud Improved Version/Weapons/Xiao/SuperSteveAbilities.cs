@@ -373,6 +373,7 @@ namespace Dark_Cloud_Improved_Version
 
             // VISUAL: on the impact. Its geometry rises from its own origin and that rise scales with the model,
             // so the origin has to drop proportionally for the burst to stay centred on the impact at every size.
+            // (Toan's whirlwind, borrowed through BorrowedShots.Burst, was tried here and looked wrong as a burst — 2026-09-19.)
             float fxSpeed = WindFxSpeedAtMin + charge * (WindFxSpeedAtMax - WindFxSpeedAtMin);
             GemBurst.Show(MasekiEffect.Wind, _ssArmedX, _ssArmedH - scale * WindFxRisePerScale, _ssArmedY,
                           scale, damage, radius * WindColRadiusFrac, fxSpeed, _ssArmedElement);

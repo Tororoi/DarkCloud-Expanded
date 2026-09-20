@@ -61,9 +61,11 @@ namespace Dark_Cloud_Improved_Version
         /// config needs more than the region holds, leaving the old one behind); an unknown effect asks for
         /// <see cref="ReserveUnits"/>.</summary>
         internal static int ReserveFor(BorrowedEffect fx) => KnownUnits.ContainsKey(fx.Name) ? KnownUnits.Values.Max() + ReserveMargin : ReserveUnits;
-        /// <summary>The monster-pool units the seeded effect will ask for on each floor (0 when none is seeded) — the roster
-        /// builders leave this much of the pool unspent, or the effect finds no room on a full floor.</summary>
+        /// <summary>The monster-pool units the seeded effect will ask for on each floor (0 when none is seeded).</summary>
         internal static int Headroom => _seeded == null ? 0 : ReserveFor(_seeded);
+        /// <summary>The most any known effect asks for — what the roster builders keep clear of every floor, since a floor is
+        /// staged before the weapon carried onto it is known.</summary>
+        internal static int MaxReserve => KnownUnits.Values.Max() + ReserveMargin;
         private static Func<BorrowedEffect>[] _wanted = Array.Empty<Func<BorrowedEffect>>();   // each ability's answer: the effect it wants, or null
         private static BorrowedEffect _seeded;    // the effect in the block, as the provider gave it (null = none)
         private static readonly Dictionary<string, BorrowedEffect> _effects = new Dictionary<string, BorrowedEffect>();   // TableConfig/CustomConfig results, by key
@@ -172,7 +174,8 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg, c);
             Memory.WriteBytesBatch(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotPath, path);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotReserve, ReserveFor(fx));
-            if (_seeded == null) Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCarveMark, 0);   // no region yet
+            // The carve mark and the region are left as they are: the cave proves a region by its signature and the pool's counter,
+            // so a floor's region outlives a Clear (a weapon switch) and the next effect re-enters it instead of carving another.
             Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotState, 0);
             Memory.WriteInt(CodeCaves.BorrowedShotBlock, (int)CodeCaves.BorrowedShotMagic);
             _seeded = fx; _lastState = -3;
@@ -191,6 +194,88 @@ namespace Dark_Cloud_Improved_Version
             fx = new BorrowedEffect(c, EffectDir + Name(c) + ".chr");
             _effects[key] = fx;
             return fx;
+        }
+
+        /// <summary>A character's wep_eff config as dun.bin holds it (Get_Main_EffectPtr's table: Toan's whirlwind is at
+        /// <see cref="ShotEffectPack.WhirlwindCfg"/>), read once the overlay is resident — null until then (the overlay is not
+        /// loaded in town, so the first floor after app start enters it a frame after the load instead of before).</summary>
+        internal static BorrowedEffect DunConfig(long addr, string expectName)
+        {
+            string key = "@" + addr.ToString("X");
+            if (_effects.TryGetValue(key, out var fx)) return fx;
+            if (!Player.InDungeonFloor()) return null;
+            byte[] c = Memory.ReadBytesBatch(addr, ShotEffectPack.CfgSize);
+            if (c == null || Name(c) != expectName) return null;
+            fx = new BorrowedEffect(c, WepEffDir + expectName + ".chr");
+            _effects[key] = fx;
+            return fx;
+        }
+
+        /// <summary>Set the radius the effect's phase <paramref name="phase"/> (0 muzzle, 1 flying, 2 impact, 3 expiry) plants
+        /// damage with, on the copy the instance runs from — the step reads it live, so it can differ per shot.</summary>
+        internal static void SetPhaseRadius(BorrowedEffect fx, int phase, float radius)
+        {
+            if (!Entered(fx)) return;
+            Memory.WriteFloat(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg + ShotEffectPack.CfgRadiusMuzzle + phase * 4, radius);
+        }
+
+        /// <summary>Set the element bits the effect's damage carries (CfgFlags, element bits only) on the copy the instance
+        /// runs from — the step reads it live, so a burst can hurt with the weapon's element rather than the effect's own.</summary>
+        internal static void SetElement(BorrowedEffect fx, int elementBits)
+        {
+            if (!Entered(fx)) return;
+            Memory.WriteInt(CodeCaves.BorrowedShotBlock + CodeCaves.BorrowedShotCfg + ShotEffectPack.CfgFlags, elementBits & ShotEffectPack.CfgElementBits);
+        }
+
+        /// <summary>Play the effect where it stands: a sub-shot in its MUZZLE phase at <paramref name="x"/>/<paramref name="h"/>/
+        /// <paramref name="y"/> with no velocity, its muzzle motion once at <paramref name="scale"/>× size — Toan's whirlwind is
+        /// exactly such an effect (muzzle radius 20, motion 0, nothing after). Its damage entry is Xiao's, planted once
+        /// (the reload) with the muzzle radius set by <see cref="SetPhaseRadius"/>. False when not entered or all busy.</summary>
+        internal static bool Burst(BorrowedEffect fx, float x, float h, float y, int damage, float scale)
+        {
+            if (!Entered(fx)) return false;
+            byte[] cfg = fx.Cfg;
+            long inst = ShotEffectPack.CharaMainEffect;
+            int count = Memory.ReadInt(inst + ShotEffectPack.OffCount);
+            if (count < 1 || count > ShotEffectPack.SubShots) return false;
+            int j = -1;
+            for (int i = 0; i < count; i++)
+                if (Memory.ReadUShort(inst + ShotEffectPack.OffActive + i * 2) == 0) { j = i; break; }
+            if (j < 0) return false;
+            long obj = inst + ShotEffectPack.OffObj + j * ShotEffectPack.ObjStride, dirA = inst + ShotEffectPack.OffDir + j * 0x10;
+            int mot = BitConverter.ToInt16(cfg, ShotEffectPack.CfgMuzzleMotion);
+            if (mot < 0) mot = 0;
+            long ftab = Memory.ReadInt(obj + ShotEffectPack.ObjFrameTb);
+            float startFrame = ftab > 0 ? Memory.ReadInt(ftab + 0x20000000 + mot * 0x10) : 1;
+            long rec = WeaponHave.BattleWeaponRecord;
+            Memory.WriteUShort(inst + ShotEffectPack.OffPhase + j * 2, 0);              // the muzzle phase: plays out, then the sub-shot ends
+            Memory.WriteVec3  (obj + ShotEffectPack.ObjPos, x, h, y);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjPos + 12, 1f);
+            Memory.WriteVec3  (obj + CCharacter.CharScale, scale, scale, scale);
+            Memory.WriteInt   (obj + ShotEffectPack.ObjMotId, mot);
+            Memory.WriteInt   (obj + ShotEffectPack.ObjMotFlag, 6);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjMotSpd, -1f);
+            Memory.WriteFloat (obj + ShotEffectPack.ObjFrame, startFrame);
+            Memory.WriteVec3  (dirA, 0f, 0f, 0f);
+            Memory.WriteInt   (inst + ShotEffectPack.OffWait + j * 4, -1);              // no flight to time out
+            Memory.WriteInt   (inst + ShotEffectPack.OffDamage + j * 4, damage);
+            Memory.WriteInt   (inst + ShotEffectPack.OffUserCol + j * 4, 0);
+            Memory.WriteUShort(inst + ShotEffectPack.OffOwner + j * 2, 1);
+            Memory.WriteUShort(inst + ShotEffectPack.OffAttr2 + j * 2, 0);
+            Memory.WriteUShort(inst + ShotEffectPack.OffA060 + j * 2, 0xFFFF);
+            Memory.WriteInt   (inst + ShotEffectPack.OffA0B0 + j * 4, -1);
+            Memory.WriteFloat (inst + ShotEffectPack.OffA0D0 + j * 4, -1f);
+            Memory.WriteInt   (inst + ShotEffectPack.OffA0F0 + j * 4, -1);
+            Memory.WriteInt   (inst + ShotEffectPack.OffA110 + j * 4, -1);
+            Memory.WriteInt   (inst + ShotEffectPack.OffWepFlags + j * 4, Memory.ReadUShort(rec + WeaponHave.AbilityFlagsOffset));
+            Memory.WriteUInt  (inst + ShotEffectPack.OffAntiPtr + j * 4, (uint)(rec - 0x20000000 + WeaponHave.WeaponAntiOffset));
+            Memory.WriteByte  (inst + ShotEffectPack.OffSndFlag + j, 0);
+            Memory.WriteByte  (inst + ShotEffectPack.OffReload + j, PlantReload);
+            Memory.WriteByte  (inst + ShotEffectPack.OffLatch + j, damage > 0 ? (byte)0 : PlantReload);   // no damage → never plants
+            Memory.WriteInt   (inst + ShotEffectPack.OffLastIdx, j);
+            Memory.WriteUShort(inst + ShotEffectPack.OffActive + j * 2, 1);
+            Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{fx.Name} burst from the main-character effect #{j}: damage {damage}, scale {scale:F2} at ({x:F0},{h:F0},{y:F0})");
+            return true;
         }
 
         /// <summary>A config of the mod's own: the game's config <paramref name="templateIndex"/> (radii, wait, damage,

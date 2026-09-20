@@ -75,8 +75,9 @@ native:
     bne   $t5, $zero, carve        # below the mark: rewound, the region is above the pool's top — carve at the new top
     nop
 fits:
-    lw    $t2, 0x02AC($s0)         # what the wanted config needs
-    lw    $t3, 0x02A4($s0)         # what the region holds
+    lw    $t2, 0x02AC($s0)         # what the wanted config needs (the reserve it was, or will be, carved with)
+    lw    $t3, 0x02A4($s0)         # what the region holds …
+    addiu $t3, $t3, 1              # … plus the unit its signature took: the reserve it was carved with
     slt   $t5, $t3, $t2
     beq   $t5, $zero, reenter      # it fits: reuse the region
     nop

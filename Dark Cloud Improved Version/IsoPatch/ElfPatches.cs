@@ -120,6 +120,7 @@ namespace Dark_Cloud_Improved_Version
             PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
+            PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
             PatchExclamationHeight(fs, ElfOff);           // player "!" mark Y store: add ExclamationYBoost mailbox (0 = vanilla) → lift the mark off a shorter swapped-in ally's mesh (the cat)
@@ -319,6 +320,18 @@ namespace Dark_Cloud_Improved_Version
         // The enemy species table is static ELF data (EnemySpeciesTable @0x27FB00, 0x9C per record; element resistances
         // are signed shorts, 0 = immune, 100 = neutral). Blizzard (row 57, "e65a") ships ice-neutral; the user wants it ice-immune
         // like Ice Gemron. EnemyData.cs carries the patched value so the mod's tables agree with the disc.
+        /// <summary>BtMapJumpLoad sizes the monster pool as `0xA7F80 − map.used` (`lui v0,0xA; ori a1,v0,0x7F80` @0x1B2724):
+        /// the same 688,000 → 718,000 as DunPatches' map carve, or the pool would end 30,000 units short of its memory.</summary>
+        internal static void PatchMapCarveRemainder(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Site = 0x001B2728;                                                   // the ori; the lui 0xA before it is unchanged
+            uint cur = RdU32(fs, ElfOff(Site));
+            if (RdU32(fs, ElfOff(Site - 4)) != 0x3C02000Au || (cur != 0x34457F80u && cur != DunPatches.MapCarveGrownWord))
+                throw new IOException($"BtMapJumpLoad's map-carve remainder @0x{Site:X} is not vanilla ({cur:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+            if (cur == DunPatches.MapCarveGrownWord) return;
+            WrU32(fs, ElfOff(Site), DunPatches.MapCarveGrownWord);
+        }
+
         internal static void PatchBlizzardIceImmunity(FileStream fs, Func<uint, long> ElfOff)
         {
             const int Row = 57;                                                                     // EnemyData.Blizzard.TableIndex

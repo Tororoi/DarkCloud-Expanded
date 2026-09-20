@@ -530,7 +530,7 @@ namespace Dark_Cloud_Improved_Version
             Memory.WriteInt   (recordAddr + EnemySpeciesTable.Abs,            Memory.ReadInt   (srcAddr + EnemySpeciesTable.Abs));
             // Memory.WriteInt   (recordAddr + EnemySpeciesTable.MinGoldDrop,    Memory.ReadInt   (srcAddr + EnemySpeciesTable.MinGoldDrop));
             // Memory.WriteInt   (recordAddr + EnemySpeciesTable.DropChance,     Memory.ReadInt   (srcAddr + EnemySpeciesTable.DropChance));
-            // Memory.WriteInt   (recordAddr + EnemySpeciesTable.SpawnCap,       Memory.ReadInt   (srcAddr + EnemySpeciesTable.SpawnCap));
+            // Memory.WriteInt   (recordAddr + EnemySpeciesTable.MonsterType,       Memory.ReadInt   (srcAddr + EnemySpeciesTable.MonsterType));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.EnemySpeciesId, Memory.ReadUShort(srcAddr + EnemySpeciesTable.EnemySpeciesId));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.StealItemId,    Memory.ReadUShort(srcAddr + EnemySpeciesTable.StealItemId));
             Memory.WriteUShort(recordAddr + EnemySpeciesTable.DeathDropFlag,      Memory.ReadUShort(srcAddr + EnemySpeciesTable.DeathDropFlag));

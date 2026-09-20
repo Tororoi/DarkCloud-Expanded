@@ -500,7 +500,7 @@ namespace Dark_Cloud_Improved_Version
         ///   0x1FB0D50  IdleMotionOverride   36 B → 0x1FB0D74   hand-built (PatchIdleMotionOverride)
         ///   0x1FB0D90  CatPelletFollow    4244 B → 0x1FB1E24   catPelletFollow.bin
         ///   0x1FB1E30  PropPelletFollow    156 B → 0x1FB1ECC   propPelletFollow.bin
-        ///   0x1FB1ED0  BorrowedShotsEnter  304 B → 0x1FB2000   borrowedShotsEnter.bin (the HEAD; its tail is at 0x1FB3F40)
+        ///   0x1FB1ED0  BorrowedShotsEnter  296 B → 0x1FB1FF8   borrowedShotsEnter.bin (the HEAD; its tail is at 0x1FB3F40)
         ///   (the second band, 0x1FB2000 →, is the table in <see cref="ElfCave"/> below)
         /// </summary>
         internal static class ElfCave
@@ -586,7 +586,7 @@ namespace Dark_Cloud_Improved_Version
             /// (DunPatches.CatFollowHookNew) — calls PropPelletFollow, then re-enters the instance whenever the loader refilled
             /// it or the mod seeded another config, from a signed region it carves from the monster pool. Two pieces: the head
             /// here and the tail at <see cref="BorrowedShotsEnterTail"/> (the head ends in a `b` to it).</summary>
-            internal const uint BorrowedShotsEnter     = 0x01FB1ED0;   // 292 B → 0x1FB1FF4 (the first band's end is 0x1FB2000)
+            internal const uint BorrowedShotsEnter     = 0x01FB1ED0;   // 296 B → 0x1FB1FF8 (the first band's end is 0x1FB2000)
             internal const uint BorrowedShotsEnterTail = 0x01FB3F40;   // 176 B → 0x1FB3FF0 (the band's end is 0x1FB4000)
             internal const uint NextFree = RegionEnd;    // the band is FULL; the last gap: 0x1FB2278..0x1FB22BC (68 B)
         }

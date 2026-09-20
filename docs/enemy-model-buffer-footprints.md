@@ -18,6 +18,17 @@ gives a visible, damaging enemy with bugged movement; a complete boss needs both
 
 ## Per-dungeon buffer capacity (`cap`)
 
+The pool is the MAP CARVE's remainder: `BtMapJumpLoad` sets `cap = 0xA7F80 − map.used` after the floor's map data
+loads. The patched ISO grows that carve by 30,000 units (688,000 → 718,000; `DunPatches` + `ElfPatches.
+PatchMapCarveRemainder`), taken from the dungeon EVENT work buffer (100,000 → 70,000: the memory an in-floor, kind-0
+event loads its models into; the largest candidate set on disc, Wise Owl's d02eb02 + d02ebc01d, is 65,520 units, and
+full events use the monster pool region instead), so every figure below reads 30,000 higher on the patched disc, and
+the randomizer counts it when it sees the grown carve live:
+its budget is cap × 0.9 − `BorrowedShots.MaxReserve` (the most any known borrowed effect asks for, kept clear whether
+or not Dragon's Y is equipped when the floor is staged), so a roster can never take the shot's room. Footprints already
+include a species' shots (the five Gemrons' table sum, 321,783, matched a measured 324,568); forced rosters from the test
+injector are not budgeted at all.
+
 The buffer is sized per dungeon (vanilla rosters fit exactly), so the budget is read **live** at
 `0x21F066DC`. Observed:
 

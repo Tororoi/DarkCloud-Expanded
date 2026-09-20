@@ -163,7 +163,7 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// SpawnRoster.Restoring handler (dungeon exit / defensive restore): revert every floor we staged this visit
         /// to its captured vanilla Ids, then reset so the next entry re-randomizes from scratch. SpawnRoster reverts
-        /// the SpawnCap edits separately (it owns the species-record snapshots).
+        /// the MonsterType edits separately (it owns the species-record snapshots).
         /// </summary>
         private static void OnRosterRestoring()
         {
@@ -214,7 +214,7 @@ namespace Dark_Cloud_Improved_Version
             int[] bases = { BtEnemyLayout.LayoutBase[dungeon], BtEnemyLayout.UraLayoutBase[dungeon] };
 
             // Decide ONCE per floor whether to use a themed group. A themed floor shares one roster (and one set of
-            // SpawnCap edits) across normal + Ura, so the global per-species caps stay consistent whichever side
+            // MonsterType edits) across normal + Ura, so the global per-species caps stay consistent whichever side
             // loads. A non-themed floor falls back to the existing budget-aware random mix, rolled per layout.
             var capEdits = new System.Collections.Generic.List<(int ti, int cap)>();
             string themeName = null;
@@ -242,12 +242,12 @@ namespace Dark_Cloud_Improved_Version
             // population (it's added before the king and stays repeatable).
             if (kingInRoster && themeName != "Mimics")
                 capEdits.Add((kingTI, 1));
-            // Apply this floor's SpawnCap edits (snapshotted for restore on dungeon exit). Written at stage time —
+            // Apply this floor's MonsterType edits (snapshotted for restore on dungeon exit). Written at stage time —
             // i.e. just before this floor loads — so the per-species cap is correct when BtLoadMonstor reads it.
             foreach (var (ti, cap) in capEdits)
             {
                 SpawnRoster.SnapshotSpeciesRecordIfNeeded(ti);
-                Memory.WriteInt(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.SpawnCap, cap);
+                Memory.WriteInt(EnemySpeciesTable.RecordAddress(ti) + EnemySpeciesTable.MonsterType, cap);
             }
             _stagedFloors[floor] = (snap[0], snap[1]);
             if (themedRoster != null)
@@ -273,7 +273,11 @@ namespace Dark_Cloud_Improved_Version
         // reported at dungeon entry (clamped by the per-dungeon constant) and to unmeasured dungeons (falls back to live).
         private static int FloorBufferBudget(int dungeon)
         {
+            // The ISO's grown map carve (DunPatches.MapCarveExtraUnits) counts when it is live: the roster may fill into it,
+            // because the budget below always keeps the player's shot reserve and the safety margin clear of the roster.
             int known = Dungeons.TryGetValue((byte)dungeon, out var d) ? d.ModelBufferCapMin : 0;
+            if (known > 0 && (uint)Memory.ReadInt(DunPatches.MapCarveAddrMmu) == DunPatches.MapCarveGrownWord)
+                known += DunPatches.MapCarveExtraUnits;
             int live  = Memory.ReadInt(ModelBufCap);
             bool liveSane = live > 100_000 && live < 4_000_000;
             int basis;
@@ -281,8 +285,9 @@ namespace Dark_Cloud_Improved_Version
             else if (known > 0)        basis = known;
             else if (liveSane)         basis = live;       // e.g. Demon Shaft (no constant yet) — trust the live cap
             else                       basis = 270_000;    // neither available — conservative floor
-            // Xiao's borrowed shot (Dragon's Y) takes its region from the same pool after the species load: leave it room.
-            return (int)(basis * BufferSafetyFactor) - BorrowedShots.Headroom;
+            // Xiao's borrowed shot takes its region from the same pool after the species load: its reserve is kept clear of
+            // every roster, equipped or not — a floor is staged before the weapon on it is known.
+            return (int)(basis * BufferSafetyFactor) - BorrowedShots.MaxReserve;
         }
 
         // One floor's roster: weighted native mimic/king (each at most once), the rest distinct random eligible species.
@@ -313,10 +318,10 @@ namespace Dark_Cloud_Improved_Version
 
         // ── Themed roster ────────────────────────────────────────────────────────────────────────────────────
         // Build a floor roster from a single themed group (EnemySpecies.ThemeGroups, plus the per-dungeon "Mimics"
-        // theme). Returns the roster and, via capEdits, the (TableIndex, SpawnCap) writes the caller must apply:
-        //   • whole-group floor (ThemeCapOneChance miss): every group member at SpawnCap 0 (repeatable) so the floor
+        // theme). Returns the roster and, via capEdits, the (TableIndex, MonsterType) writes the caller must apply:
+        //   • whole-group floor (ThemeCapOneChance miss): every group member at MonsterType 0 (repeatable) so the floor
         //     fills with them — the roster is just the group, rest empty.
-        //   • capped floor (ThemeCapOneChance hit): every group member at SpawnCap 1 (one-of-each), then the rest of
+        //   • capped floor (ThemeCapOneChance hit): every group member at MonsterType 1 (one-of-each), then the rest of
         //     the roster is filled by repeatable fillers — the dungeon mimic + king mimic, or dungeon-native regulars
         //     forced repeatable — added FIRST so the floor always has a repeatable species (else the load hangs).
         // Theme conditions (data in EnemySpecies):
@@ -326,7 +331,7 @@ namespace Dark_Cloud_Improved_Version
         //   • requireFullFit themes (cards/days/gemrons): excluded by PickTheme on any floor that can't fit the WHOLE
         //     group, and placed in full first (never trimmed). They go capped only if a repeatable filler still fits;
         //     otherwise they stay whole-group so nothing is dropped.
-        //   • ThemeSingleSpawnByTheme members (e.g. Captain/Sil/Gol in Pirates): pinned to SpawnCap 1 within that
+        //   • ThemeSingleSpawnByTheme members (e.g. Captain/Sil/Gol in Pirates): pinned to MonsterType 1 within that
         //     theme even on a whole-group floor.
         // Budget-aware like BuildFloorRoster: shuffles candidates and stops adding once the next model would overflow
         // the model buffer, so an over-budget (non-requireFullFit) theme contributes a random subset; no species twice.
@@ -387,7 +392,7 @@ namespace Dark_Cloud_Improved_Version
             }
             else if (_randomizerRng.NextDouble() >= ThemeCapOneChance)
             {
-                // Whole-group floor: the themed species ARE the roster, repeatable (SpawnCap 0; single-spawn members
+                // Whole-group floor: the themed species ARE the roster, repeatable (MonsterType 0; single-spawn members
                 // excepted) so the floor populates from them. Budget may trim the group.
                 foreach (int ti in members)
                 {
@@ -398,7 +403,7 @@ namespace Dark_Cloud_Improved_Version
             }
             else
             {
-                // Capped floor: each themed species appears at most once (SpawnCap 1). But the floor's population
+                // Capped floor: each themed species appears at most once (MonsterType 1). But the floor's population
                 // target exceeds the 9 roster slots, so a roster of ONLY once-per-floor species can never fill every
                 // spawn position and the load hangs forever (the spawn-once retry trap). Repeatable fillers — the
                 // dungeon's mimics, or dungeon natives forced repeatable — must carry the population. Add one filler
@@ -417,7 +422,7 @@ namespace Dark_Cloud_Improved_Version
                     capEdits.Add((ti, 1));
                 }
 
-                foreach (int ti in fillers)             // remaining slots: more repeatable fillers (SpawnCap 0)
+                foreach (int ti in fillers)             // remaining slots: more repeatable fillers (MonsterType 0)
                 {
                     if (roster.Count >= RosterFillCount) break;
                     if (ti == guaranteed || roster.Contains(ti)) continue;

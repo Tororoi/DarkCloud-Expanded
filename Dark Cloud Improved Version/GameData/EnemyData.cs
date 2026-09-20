@@ -2426,7 +2426,7 @@ namespace Dark_Cloud_Improved_Version
         // tightest floor the pair may not fit alongside a full requireFullFit group). See BuildThemedRoster.
         internal static readonly HashSet<string> ThemeGuaranteedMimics = new() { "Pirates" };
 
-        // Per-theme single-spawn: members pinned to SpawnCap 1 (one-of-each) only within the named theme, even on a
+        // Per-theme single-spawn: members pinned to MonsterType 1 (one-of-each) only within the named theme, even on a
         // whole-group floor; the rest of the group carries the floor population. Members spawn normally in their other
         // themes (e.g. Sil/Gol are one-of-each in Pirates but repeatable in Precious and the Demon Shaft regions).
         internal static readonly Dictionary<string, HashSet<int>> ThemeSingleSpawnByTheme = new()

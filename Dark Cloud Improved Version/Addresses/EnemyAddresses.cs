@@ -733,14 +733,23 @@ namespace Dark_Cloud_Improved_Version
         internal const int Abs        = 0x06C; // int    — XP rewarded to the player on kill; written to slot Abs (0x0B0) at spawn
         internal const int MinGoldDrop= 0x070; // int    — minimum gold dropped on death; written to slot MinGoldDrop (0x034) at spawn
         internal const int DropChance = 0x074; // int    — item drop chance (0–100); written to slot DropChance (0x038) at spawn
-        // +0x078: per-species SPAWN-CAP flag, read (as a halfword) by CMonstorUnit::ArrangementPos when
-        // assigning species to floor slots. Value 0 or 3 = repeatable (may fill many slots); any other
-        // value (observed 2, 4) = spawn at most ONCE per floor — the placement loop retries so the other
-        // slots still fill (floor enemy total is unchanged). The game ships ~19/90 species flagged once.
-        // Confirmed 2026-06-09 by disassembly + the EnemyModelInjector spawn-once experiment.
-        internal const int SpawnCap   = 0x078; // int    — spawn-cap: 0/3 = repeatable, else once-per-floor
+        // +0x078: the species' MONSTER TYPE (halfword), copied to the unit at spawn (SetupViewMonstor → unit +0x1E410):
+        //   0 = regular   2 = boss (and boss companions)   3 = mimic   4 = king mimic   (1 = nothing shipped; see below)
+        // Every reader (docs/enemy-monster-type-field.md):
+        //   ArrangementPos (placement): 0 and 3 may fill many slots; ANY other value spawns at most once per floor (the loop
+        //     retries, the floor total is unchanged) — so 1 is a "once per floor" with no other effect.
+        //   CheckViewLevel: type 2 is never proximity-activated (bosses are script-started).
+        //   SoundCheck: type 2 is audible from 350/1000 instead of 50/500 units.
+        //   CheckDmg: type 2 is immune to the Critical ability (docs/game-formulas.md).
+        //   Step (death): type 2 skips the rare-drop roll.
+        //   setTargetCursor / DrawTargetLife: type 2 hides the HP gauge and aims the lock-on cursor differently.
+        // The randomizer's one-of-each floors write 1; the injector's spawn-once writes 1 too (2 would make the enemy a boss).
+        internal const int MonsterType = 0x078; // halfword (int-sized slot) — see above; formerly named MonsterType
 
-        internal const int EnemySpeciesId    = 0x07C; // ushort — enemy species ID stored in table (matches EnemyDefaults.Id); used by engine to verify record ownership
+        // +0x07C: the enemy's ID (EnemyDefaults.Id; boss companions carry 0), copied to the unit at +0x1E412: the lock-on
+        // cursor shows the HP gauge and name only for id > 0, and Steve's monster chatter (weapons 303/312) picks message
+        // 4000 + id × 10 from it.
+        internal const int EnemySpeciesId    = 0x07C; // ushort — enemy species ID stored in table (matches EnemyDefaults.Id)
         // +0x07E: 2 bytes padding (always 0)
 
         internal const int StealItemId= 0x080; // ushort — item ID for steal mechanic; 65535 if none
