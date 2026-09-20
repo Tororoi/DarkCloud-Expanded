@@ -181,14 +181,12 @@ namespace Dark_Cloud_Improved_Version
         // On impact the burst detonates as a wind shockwave: damage in a LARGE radius plus a heavy RADIAL launch
         // that throws everything caught in it clear of the blast (Enemies.RadialKnockback).
         private const float HcPelletScale    = 8f;          // pellet size at MAX charge (shot-pool +0x310)
-        private const float HcSlingshotScale = 1f;          // slingshot 'c04w' mesh at MAX charge
         private const double ChargeGrowSeconds = 3;         // hold time from base to FULL charge
         private const float HcMaxDamageMult  = 1.5f;        // pellet damage at full charge (partial-charge payoff)
         private const float ChargeLevel1Frac = 0.125f;        // flash 1: scaling + the wind burst start here
         private const float ChargeLevel2Frac = 0.98f;       // flash 2: max (just shy of 1.0 so it reliably latches)
         private static bool _ssFlashedLevel1;               // edge latch: one flash per charge stage
         private static bool _ssFlashedLevel2;
-        private static float _ssSlingScale = 1f;            // current slingshot mesh scale
         private static bool  _ssHolding;                    // currently drawing/holding a shot
         private static DateTime _ssHoldStart;               // when the current hold began
         private static float _ssHoldFrac;                   // 0..1 charge fraction (frozen on release for the pellet)
@@ -271,7 +269,6 @@ namespace Dark_Cloud_Improved_Version
         {
             int shotState = Memory.ReadInt(PlayerAction.ChargeActionState);
             bool holding  = shotState == PlayerAction.XiaoShotDraw || shotState == PlayerAction.XiaoShotHold;
-            bool shooting = shotState == PlayerAction.XiaoShotShoot;
 
             // Hold time → 0..1 charge fraction; frozen on release (draw 0xB / nocked-hold 0xC), base on a tap.
             if (holding)
@@ -317,11 +314,6 @@ namespace Dark_Cloud_Improved_Version
                     else if (!live) _hcHandled[i] = false;
                 }
             }
-
-            // Slingshot 'c04w' mesh: grow with the hold, HOLD through the shoot (0xD), snap back after. Multiply-
-            // scale preserves the frame's baked rotation; _ssHoldFrac stays frozen for 0xB/0xC/0xD.
-            _ssSlingScale = (active && (holding || shooting)) ? 1f + empowered * (HcSlingshotScale - 1f) : 1f;
-            Weapons.ScaleWeaponFrameByName(WeaponModel.XiaoSlingMeshNameWord, _ssSlingScale);
 
             // TWO flashes, each edge-latched and re-armed on release: flash 1 = "empowered from here", flash 2 =
             // "maxed, holding longer buys nothing". Both use the game's own charge-complete pulse.

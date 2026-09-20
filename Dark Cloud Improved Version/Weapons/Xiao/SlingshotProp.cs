@@ -69,6 +69,11 @@ namespace Dark_Cloud_Improved_Version
         // never re-seeded, never motion-tracked — and the slot rotation stays zero.
         private const int OrientPreset = 7;     // the shield's pose (tuned by eye)
         private const int ProjectilePreset = 5; // the projectile: the shield's pose turned a half-turn in pitch (7 flew upside down)
+        // Xiao's slingshot rigs come in two shapes. Most (Super Steve's included) root at the grip bone `pati2`, whose bind
+        // rotation is a half-turn; the Matador's dungeon model puts an identity `null27` root above it. A world-rooted copy
+        // keeps its root's own 3x3 under the slot's yaw, so the same bake came out a half-turn apart between the two shapes
+        // (the projectile pose was tuned on the Matador's). The projectile bake therefore folds the root's rotation into its
+        // children and leaves the root at a plain scale, so every rig flies as the Matador does.
         // The projectile's nudge, root space (+x = screen-left as it flies away, y up, z along the flight), on top of the pouch-on-root slide: the pouch
         // BONE sits a little up and to the right of the cup the pellet should appear in. Tuned in game.
         private static readonly float[] ProjectileNudge = { 0.0f, -0.3f, -0.3f };
@@ -388,6 +393,10 @@ namespace Dark_Cloud_Improved_Version
                     g[r0 * 3 + c0] = BitConverter.ToSingle(block, (int)rootOff + CFrameVu1.LocalMatrix + r0 * 0x10 + c0 * 4);
             float gl = (float)Math.Sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
             if (gl > 1e-6f) for (int k = 0; k < 9; k++) g[k] /= gl;
+            if (_projectile)                                                    // the root keeps only its scale: its grip rotation goes into the children with the preset
+                for (int r0 = 0; r0 < 3; r0++)
+                    for (int c0 = 0; c0 < 3; c0++)
+                        BitConverter.GetBytes(r0 == c0 ? gl : 0f).CopyTo(block, (int)rootOff + CFrameVu1.LocalMatrix + r0 * 0x10 + c0 * 4);
             for (int r0 = 0; r0 < 3; r0++)
             {
                 float p0 = g[r0 * 3], p1 = g[r0 * 3 + 1], p2 = g[r0 * 3 + 2];
@@ -411,9 +420,9 @@ namespace Dark_Cloud_Improved_Version
             }
             Memory.WriteBytesBatch(CodeCaves.WeaponCave, block);
             _rootGuest = caveG + rootOff;
-            // The pouch bone by NAME (every c04w## .mds orders pati2, chn30, jnt30_1, eff30, null24, mesh; the main_wep trees
-            // — Super Steve's — put an identity `null27` root above pati2, which the bake above absorbs: the grip then
-            // sits in pati2, the root's child, and lands in the same place).
+            // The pouch bone by NAME (every c04w## .mds orders pati2, chn30, jnt30_1, eff30, null24, mesh; the Matador's
+            // dungeon rig puts an identity `null27` root above pati2, so the grip sits one node down and the bake above lands
+            // on it instead of on chn30).
             _pouchGuest = _rootGuest + 4 * (uint)CFrameVu1.NodeStride;
             for (int o = 0; o < blockSize; o += CFrameVu1.NodeStride)
             {

@@ -34,6 +34,15 @@ The pellet is the game's own (`step__5CSHOT`, 0x1ABD10): it flies, collides and 
   cat's chain, which performs the displaced `step__5CSHOT`) then writes slot 3's position and adds `PropFollowSpin` (0 for the Matador) to its
   yaw; when the pellet ends it clears `PropFollowSlot` and raises `PropFollowEnded`, and the mod fades the copy out.
 
+## The two slingshot rigs
+
+Xiao's dungeon weapon models (`commenu\c04wtes.chr` → `c04wNN.chr`, NN = item id − 299) come in two shapes: most root at the
+grip bone `pati2` (bind rotation a half-turn about z); the Matador's (item 311, `c04w12.chr`) puts an identity `null27` root
+above it. A copy drawn from a chara slot keeps its root's own 3×3 under the slot's yaw, so the same orientation bake landed a
+half-turn apart between the shapes: the projectile preset was tuned on the Matador's rig and Super Steve's (item 312, a
+`pati2` root with a second mesh `c04w11`) flew upside down. The projectile bake now leaves the copy's root at a plain scale
+and folds its rotation into the children, which is a no-op on the Matador's rig and rights every other.
+
 ## The VU packet (RE, for the record)
 
 `CreateVUdataFromMDT` (0x135AA0) builds a weapon's VU packet once at load: per material a TEX0 resolved by name through

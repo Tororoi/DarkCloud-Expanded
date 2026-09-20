@@ -315,10 +315,6 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Heaven's Cloud's visible-blade mesh frame name ("w14\0"). Scaling this frame's local 3x3
         /// grows the blade + its dcol collision children together (the runtime reach lever above).</summary>
-
-        /// <summary>Xiao's slingshot weapon mesh frame name ("c04w"). Scaled by Super Steve's Heaven's Cloud
-        /// charge (Weapons.ScaleWeaponFrameByName).</summary>
-        internal const uint XiaoSlingMeshNameWord = 0x77343063;
     }
 
     /// <summary>
