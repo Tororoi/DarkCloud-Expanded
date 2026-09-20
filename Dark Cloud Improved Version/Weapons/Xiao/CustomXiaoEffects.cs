@@ -46,6 +46,19 @@ namespace Dark_Cloud_Improved_Version
             DragonsY.Stop();
         }
 
+        // ── Double Impact ──────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Double Impact thread: hands every tick to <see cref="DoubleImpact.Drive"/> while the weapon is
+        /// equipped, and stands it down once when it goes.</summary>
+        public static void DoubleImpactEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.doubleimpact)
+            {
+                DoubleImpact.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            DoubleImpact.Stop();
+        }
+
         // ── Lock-on speed (Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ─────────
         /// <summary>The lock-on movement buff's thread: hands every tick to <see cref="LockOnSpeed.Drive"/> while one of the
         /// weapons that carry it is equipped (<see cref="LockOnSpeed.Grants"/>), and releases it once when it goes. Super Steve
@@ -156,6 +169,9 @@ namespace Dark_Cloud_Improved_Version
                 // The attached sphere's weapon icon on Xiao's character-menu panel (in place of the old palette swap).
                 SuperSteveAbilities.DriveSphereIcon(sphere);
 
+                // …and its pellet, when the sphere came from a slingshot.
+                SuperSteveAbilities.DriveSphereSprite(sphere);
+
                 // Hero's Courage (Brave Ark): clear Freeze/Poison/Curse/Goo each tick.
                 SuperSteveAbilities.DriveBraveArk(active && sphere == Items.braveark);
 
@@ -191,6 +207,9 @@ namespace Dark_Cloud_Improved_Version
 
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
+
+                // Double Impact: every shot is two pellets, each at 0.75× the attack.
+                DoubleImpact.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.doubleimpact);
 
                 // Matador (Charging Bull): the charged pellet crushes guards and flies as a projection of the slingshot — Super
                 // Steve's own model, since the copy is of the live weapon. A held copy goes with the sphere.
@@ -242,11 +261,13 @@ namespace Dark_Cloud_Improved_Version
             SuperSteveAbilities.DriveHeavensCloud(false);   // resets slingshot + flash latch
             SuperSteveAbilities.DriveAgasSword(false);
             SuperSteveAbilities.DriveSphereIcon(0);
+            SuperSteveAbilities.DriveSphereSprite(0);
             SuperSteveAbilities.DriveMobiusRing(false);   // resets the damage ramp
             CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
             LockOnSpeed.Stop();
             DragonsY.Stop();
             ChargingBull.Stop();   // the resident slingshot copy too
+            DoubleImpact.Stop();
         }
 
         /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are

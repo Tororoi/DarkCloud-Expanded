@@ -85,6 +85,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread matadorThread = new Thread(new ThreadStart(CustomXiaoEffects.MatadorEffect));
         public static Thread dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
         public static Thread lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
+        public static Thread doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
@@ -423,6 +424,14 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
                                             dragonsYThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.doubleimpact:
+                                        if (!doubleImpactThread.IsAlive)
+                                        {
+                                            doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
+                                            doubleImpactThread.Start();
                                         }
                                         break;
 

@@ -6,6 +6,15 @@ The sphere is shown as that weapon's icon drawn over Steve on the dungeon HUD, n
 `SuperSteveAbilities.DriveSphereIcon` switches it on with its screen position in the mailbox once per sphere change.
 This replaced the earlier palette swap, which recoloured the slingshot model with the source weapon's CLUT.
 
+## The pellet
+
+A slingshot's sphere also brings its pellet. Every player pellet is drawn by `draw__5CSHOT` (main 0x1ABC40) as one
+32 × 32 cell of `dun\effect\basefx01.img`, cell = the equipped weapon's item id − 300, read off `*NowWeaponHave` at
+every draw. `DebugInfoCave.PelletSprite` (`tools/stubs/pellet_sprite.s`, hooked at that read, 0x1ABC74) hands back
+`Mailbox.PelletSpriteId` instead when it is non-zero; `SuperSteveAbilities.DriveSphereSprite` writes the sphere
+weapon's id there when the sphere is a slingshot's (Wooden Slingshot … Angel Gear, not Super Steve's own) and 0
+otherwise. The Matador's sphere therefore also carries its orange ball, which Charging Bull's glow scale expects.
+
 ## The dungeon HUD (RE)
 
 `topStatusInfo(x, y, floor)` (0x1B04F0, called each frame from the overlay's `MotionProcess`) draws the whole status

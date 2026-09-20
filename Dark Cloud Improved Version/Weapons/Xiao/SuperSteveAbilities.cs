@@ -115,6 +115,26 @@ namespace Dark_Cloud_Improved_Version
 
         /// <summary>Switch the sphere icon on with its screen placement (the copy cave finds the icon itself). Written
         /// only when the sphere changes; 0 clears it. Nothing is drawn when the ISO lacks the hook.</summary>
+        private static int _spriteSphere = -1;   // the sphere the pellet sprite was last set for (−1 = never)
+        private static bool _spriteWarned;
+        /// <summary>Super Steve's pellet drawn as the sphere weapon's when the sphere came from a slingshot (the pellet sprite is
+        /// a per-weapon cell of basefx01, so a slingshot's sphere brings its pellet): Mailbox.PelletSpriteId = that weapon's id,
+        /// read by DebugInfoCave.PelletSprite at every pellet draw; 0 (vanilla) for any other sphere, or none.</summary>
+        internal static void DriveSphereSprite(int sphere)
+        {
+            if (sphere == _spriteSphere) return;
+            bool slingshot = sphere >= Items.woodenslingshot && sphere <= Items.angelgear && sphere != Items.supersteve;
+            if (slingshot && (uint)Memory.ReadInt(0x20000000L + 0x001ABC74) != Jal(CodeCaves.DebugInfoCave.PelletSprite))
+            {
+                if (!_spriteWarned) { _spriteWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + "[SuperSteve] pellet-sprite hook not in this ISO — the pellet stays Super Steve's (re-patch the ISO)"); }
+                return;
+            }
+            Memory.WriteInt(CodeCaves.Mailbox.PelletSpriteId, slingshot ? sphere : 0);
+            _spriteSphere = sphere;
+            if (slingshot) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + $"[SuperSteve] pellet sprite: the sphere weapon's (item {sphere})");
+        }
+        private static uint Jal(uint target) => 0x0C000000u | ((target >> 2) & 0x03FFFFFF);
+
         internal static void DriveSphereIcon(int sphere)
         {
             if (sphere == _ssIconSphere) return;

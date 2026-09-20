@@ -115,6 +115,7 @@ namespace Dark_Cloud_Improved_Version
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
             PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
             PatchSharedShots(fs, ElfOff);                 // the monster shot pack's five slots shared among every config a floor needs (the step hook in DunPatches)
+            PatchPelletSprite(fs, ElfOff);                // a player pellet drawn as the sprite of the item id the mod names (Super Steve with a slingshot's sphere)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
@@ -648,8 +649,8 @@ namespace Dark_Cloud_Improved_Version
             }
             if (b.Length % 4 != 0 || b.Length < 0x40 || (U32(b, 0) >> 16) != 0x1000 || (U32(b, 8) >> 16) != 0x1000 || !hasKeeper || !hasEntry17 || !hasInit || !hasEntry12)
                 throw new IOException($"sharedShots.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (8 + b.Length > CodeCaves.DebugInfoCave.HostSpan)
-                throw new IOException("sharedShots.bin overruns DebugInfomationDraw's span.");
+            if (CodeCaves.DebugInfoCave.SharedShots + (uint)b.Length > CodeCaves.DebugInfoCave.PelletSprite)
+                throw new IOException("sharedShots.bin overruns into the pellet-sprite cave that follows it in DebugInfomationDraw.");
             uint w0 = RdU32(fs, ElfOff(Host));
             if (w0 != CodeCaves.DebugInfoCave.VanillaWord0 && w0 != 0x03E00008u)
                 throw new IOException($"DebugInfomationDraw at 0x{Host:X} is not vanilla (`addiu sp,sp,-0x170`) — unmodified Dark Cloud (USA) ISO expected.");
@@ -675,6 +676,35 @@ namespace Dark_Cloud_Improved_Version
                     throw new IOException($"Monster fire site at 0x{site:X} is not vanilla `lui at,0x6; addu at,a0,at; lw v1,…(at); addiu v0,zero,2` — unmodified Dark Cloud (USA) ISO expected.");
                 WrU32(fs, ElfOff(site), ours);
             }
+        }
+
+        /// <summary>A player pellet's sprite cell taken from the item id in Mailbox.PelletSpriteId when it is set (tools/stubs/
+        /// pellet_sprite.s, after the sharing cave in DebugInfomationDraw's body): draw__5CSHOT's read of the equipped weapon's
+        /// id (0x1ABC74 `lw v0,-0x62FC(gp); lh v0,0(v0)`) becomes a call to it.</summary>
+        internal static void PatchPelletSprite(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.DebugInfoCave.PelletSprite, HookAddr = 0x001ABC74;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.pelletSprite.bin")
+                ?? throw new IOException("Embedded EE function missing: pelletSprite.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: reads the mailbox word, carries the vanilla `lw v0,-0x62FC(gp)` and `lh v0,0(v0)`, ends in `jr ra`.
+            bool vanillaRead = false, jrRa = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x8F829D04u) vanillaRead = true; if (w == 0x03E00008u) jrRa = true; }
+            if (b.Length % 4 != 0 || b.Length < 0x20 || U32(b, 0) != 0x3C0101F1u || !vanillaRead || !jrRa)
+                throw new IOException($"pelletSprite.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("pelletSprite.bin overruns DebugInfomationDraw's span.");
+            if (RdU32(fs, ElfOff(CodeCaves.DebugInfoCave.Host)) != 0x03E00008u)
+                throw new IOException("PatchPelletSprite must follow PatchSharedShots (the host's `jr ra`).");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            uint cur0 = RdU32(fs, ElfOff(HookAddr)), cur1 = RdU32(fs, ElfOff(HookAddr + 4)), ours = Jal(CaveAddr);
+            bool vanilla = cur0 == 0x8F829D04u && cur1 == 0x84420000u, patched = cur0 == ours && cur1 == 0;
+            if (!(vanilla || patched) || RdU32(fs, ElfOff(HookAddr + 8)) != 0x2443FED5u)
+                throw new IOException($"Pellet draw site 0x{HookAddr:X} is not vanilla `lw v0,-0x62FC(gp); lh v0,0(v0); addiu v1,v0,-0x12B` — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(HookAddr), ours);
+            WrU32(fs, ElfOff(HookAddr + 4), 0);
         }
 
         /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has

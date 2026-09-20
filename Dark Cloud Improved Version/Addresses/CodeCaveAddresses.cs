@@ -436,7 +436,11 @@ namespace Dark_Cloud_Improved_Version
             /// is held. While the owner word is 0 (the app is not running it) the PNACH re-seeds 1.0 every frame.</summary>
             internal const long XiaoShotWhpFactor = Base + 0xE8;
             internal const long XiaoShotWhpOwner  = Base + 0xEC;
-            internal const long NextFree = Base + 0xF4;   // +0xF4..+0xFF are free (⚠ +0x100 = AiStubBase)
+            /// <summary>The item id whose basefx01 cell every player pellet is drawn as (DebugInfoCave.PelletSprite, hooked into
+            /// draw__5CSHOT): Super Steve carrying a slingshot's SynthSphere shows that slingshot's pellet. 0 = the equipped
+            /// weapon's (vanilla).</summary>
+            internal const long PelletSpriteId    = Base + 0xF4;
+            internal const long NextFree = Base + 0xF8;   // +0xF8..+0xFF are free (⚠ +0x100 = AiStubBase)
         }
 
         /// <summary>Caves that live INSIDE dun.bin (DunPatches writes their bytes over dead overlay code; the main-ELF hooks
@@ -461,11 +465,14 @@ namespace Dark_Cloud_Improved_Version
             /// needs (<see cref="SharedShots"/>, block <see cref="SharedShotBlock"/>). Entry points at fixed offsets: +8 the
             /// dungeon step loop's chain head (DunPatches.CatFollowHookNew), +0x10/+0x18 Step__12CMonstorUnit's two fire sites
             /// (0x1DEED0 / 0x1DEFD8), +0x20 SetupBaseModel's two pack calls (0x1E01B0 / 0x1E0224).</summary>
-            internal const uint SharedShots      = Host + 0x8;    // 2,864 B → 0x1B42B8 (the host ends at 0x1B4700)
+            internal const uint SharedShots      = Host + 0x8;    // 2,864 B → 0x1B42B8 (PelletSprite follows; the host ends at 0x1B4700)
             internal const uint SharedShotsStep  = Host + 0x8;
             internal const uint SharedShotsFire0 = Host + 0x10;
             internal const uint SharedShotsFire1 = Host + 0x18;
             internal const uint SharedShotsEnter = Host + 0x20;
+            /// <summary>tools/stubs/pellet_sprite.s: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
+            /// when set, else the equipped weapon's (the hook at draw__5CSHOT 0x1ABC74).</summary>
+            internal const uint PelletSprite     = Host + 0xB40;  // 0x1B42C0, 32 B → 0x1B42E0
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
