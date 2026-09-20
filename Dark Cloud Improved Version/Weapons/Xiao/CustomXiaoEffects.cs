@@ -60,6 +60,32 @@ namespace Dark_Cloud_Improved_Version
             BanditSlingshot.Stop();
         }
 
+        // ── Hardshooter ────────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Hardshooter thread: hands every tick to <see cref="Hardshooter.Drive"/> while the weapon is equipped,
+        /// and stands it down once when it goes.</summary>
+        public static void HardshooterEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.hardshooter)
+            {
+                Hardshooter.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            Hardshooter.Stop();
+        }
+
+        // ── Steel Slingshot ────────────────────────────────────────────────────────────────
+        /// <summary>Xiao's Steel Slingshot thread: hands every tick to <see cref="SteelSlingshot.Drive"/> while the weapon is
+        /// equipped, and stands it down once when it goes.</summary>
+        public static void SteelSlingshotEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.steelslingshot)
+            {
+                SteelSlingshot.Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            SteelSlingshot.Stop();
+        }
+
         // ── Double Impact ──────────────────────────────────────────────────────────────────
         /// <summary>Xiao's Double Impact thread: hands every tick to <see cref="DoubleImpact.Drive"/> while the weapon is
         /// equipped, and stands it down once when it goes.</summary>
@@ -73,7 +99,7 @@ namespace Dark_Cloud_Improved_Version
             DoubleImpact.Stop();
         }
 
-        // ── Lock-on reach (Flamingo, Matador, Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ──
+        // ── Lock-on reach (Flamingo, Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ──
         /// <summary>The lock-on reach's thread: hands every tick to <see cref="Flamingo.Drive"/> while one of the weapons that
         /// carry it is equipped (<see cref="Flamingo.GrantsReach"/>), and releases it once when it goes. Super Steve drives the
         /// same reach from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
@@ -204,7 +230,7 @@ namespace Dark_Cloud_Improved_Version
                 SuperSteveAbilities.DriveBraveArk(active && sphere == Items.braveark);
 
                 // Bone Rapier: bone-door bypass (the Xiao dispatcher no longer force-clears it, so this owns it).
-                CustomToanEffects.BoneRapierEffect(active && sphere == Items.bonerapier);
+                CustomToanEffects.BoneRapierEffect(active && (sphere == Items.bonerapier || sphere == Items.boneslingshot));
 
                 // Solar Harvest (Sun Sword / Big Bang): ~1% of the floor's enemies drop a Sun attachment.
                 CustomToanEffects.SunHarvestDrive(sphere == Items.sunsword || sphere == Items.bigbang, ssSun);
@@ -233,7 +259,7 @@ namespace Dark_Cloud_Improved_Version
                 // Lock-on speed (Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): ×1.3 movement while locked on.
                 LockOnSpeed.Drive(active && LockOnSpeed.Grants(sphere));
 
-                // Lock-on reach (Flamingo / Matador / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): enemies locked from twice as far.
+                // Lock-on reach (Flamingo / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): enemies locked from twice as far.
                 Flamingo.Drive(active && Flamingo.GrantsReach(sphere));
 
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
@@ -242,8 +268,16 @@ namespace Dark_Cloud_Improved_Version
                 // Bandit Slingshot / Bandit's Ring: a steal takes the enemy's projectile; every pellet is that shot at 2× the attack.
                 BanditSlingshot.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && (sphere == Items.banditslingshot || sphere == Items.banditsring));
 
-                // Double Impact: every shot is two pellets, each at 0.75× the attack.
+                // Double Impact: every shot is two pellets, each at 0.75× the attack (their ricochets driven with them).
                 DoubleImpact.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.doubleimpact);
+
+                // Hardshooter: a pellet that lands on an enemy ricochets at the next one.
+                if (lastSphere == Items.hardshooter && sphere != Items.hardshooter) Hardshooter.Stop();
+                Hardshooter.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.hardshooter);
+
+                // Steel Slingshot: half the WHP per shot while the weapon's WHP is low (the level-up bonus stays the Steel's own).
+                if (lastSphere == Items.steelslingshot && sphere != Items.steelslingshot) SteelSlingshot.Stop();
+                SteelSlingshot.Drive(active && sphere == Items.steelslingshot);
 
                 // Matador (Charging Bull): the charged pellet crushes guards and flies as a projection of the slingshot — Super
                 // Steve's own model, since the copy is of the live weapon. A held copy goes with the sphere.
@@ -304,6 +338,8 @@ namespace Dark_Cloud_Improved_Version
             ChargingBull.Stop();   // the resident slingshot copy too
             DoubleImpact.Stop();
             BanditSlingshot.Stop();
+            SteelSlingshot.Stop();
+            Hardshooter.Stop();
         }
 
         /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are

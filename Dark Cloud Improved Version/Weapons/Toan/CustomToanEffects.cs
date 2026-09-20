@@ -192,9 +192,9 @@ namespace Dark_Cloud_Improved_Version
         {
             while (!Dungeon.doorIsOpen &&
                     Player.InDungeonFloor() &&
-                    Player.Weapon.GetCurrentWeaponId() == 290)
+                    (Player.Weapon.GetCurrentWeaponId() == Items.bonerapier || Player.Weapon.GetCurrentWeaponId() == Items.boneslingshot))
             {
-                //Bone door opened through Bone Rapier
+                //Bone door opened through Bone Rapier (or Xiao's Bone Slingshot, which shares the key)
                 if (Memory.ReadByte(Addresses.dungDoorType) == 250 &&
                     Dungeon.IsBypassBoneDoor() &&
                     Memory.ReadInt(0x21D56800) == 15903712) //Aux address to help determine if the bone door specifically was opened)
@@ -691,7 +691,7 @@ namespace Dark_Cloud_Improved_Version
         }
 
         /// <summary>
-        /// Ability Name: Sanctifier (Cross Hinder)
+        /// Ability Name: Sanctifier (Cross Hinder; Super Steve with its sphere has it too — <see cref="CrossHinderWielded"/>)
         /// Against UNDEAD enemies (slot category 1):
         ///   • ~2× damage — the BATTLE weapon record's anti-undead byte (+0x1C+1) is raised past the 99 menu
         ///     cap to the value the damage formula (dmg += dmg × 0.015 × anti) needs for double damage:
@@ -712,7 +712,7 @@ namespace Dark_Cloud_Improved_Version
             int nativeAnti = -1, targetAnti = -1;
             long antiAddr = WeaponHave.BattleWeaponRecord + WeaponHave.AntiArrayOffset + (int)EnemyCategory.Undead;
 
-            while (Player.Weapon.GetCurrentWeaponId() == Items.crosshinder && Player.InDungeonFloor())
+            while (CrossHinderWielded() && Player.InDungeonFloor())
             {
                 Thread.Sleep(250);   // nothing here is latency-critical — all writes are one-time/asserted
                 byte f = Memory.ReadByte(Addresses.checkFloor);
@@ -743,7 +743,7 @@ namespace Dark_Cloud_Improved_Version
                 // ~2× damage: keep the battle record's anti-undead byte asserted. The record is rebuilt
                 // (re-capped) whenever equipment changes, which this self-heals: any value other than our
                 // target is treated as the fresh native value and boosted from it.
-                if (Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.crosshinder)
+                if (CrossHinderWielded())
                 {
                     int cur = Memory.ReadByte(antiAddr);
                     if (cur != targetAnti)
@@ -765,9 +765,57 @@ namespace Dark_Cloud_Improved_Version
                         Memory.ReadInt(EnemyAddresses.FloorSlots.SlotAddr(h, EnemySlotOffsets.RenderStatus)) > 0)
                         Memory.WriteInt(EnemyAddresses.FloorSlots.SlotAddr(h, EnemySlotOffsets.Abs), absOriginal[h]);
             }
-            if (nativeAnti >= 0 && Memory.ReadUShort(WeaponHave.BattleWeaponRecord) == Items.crosshinder &&
-                Memory.ReadByte(antiAddr) == targetAnti)
+            if (nativeAnti >= 0 && Memory.ReadByte(antiAddr) == targetAnti)
                 Memory.WriteByte(antiAddr, (byte)nativeAnti);
+        }
+
+        /// <summary>Whether the equipped weapon is the Cross Hinder, or Super Steve carrying its SynthSphere (the anti-undead
+        /// byte, the ABS and the no-revival then apply to Super Steve's own record).</summary>
+        internal static bool CrossHinderWielded()
+        {
+            int id = Player.Weapon.GetCurrentWeaponId();
+            if (id == Items.crosshinder) return true;
+            return id == Items.supersteve && SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord) == Items.crosshinder;
+        }
+
+        /// <summary>Whether the equipped weapon carries the bone key: the Bone Rapier, Xiao's Bone Slingshot, or Super Steve
+        /// with either one's SynthSphere.</summary>
+        internal static bool BoneKeyWielded()
+        {
+            int id = Player.Weapon.GetCurrentWeaponId();
+            if (id == Items.bonerapier || id == Items.boneslingshot) return true;
+            if (id != Items.supersteve) return false;
+            int sphere = SuperSteveAbilities.AttachedSphere(WeaponHave.BattleWeaponRecord);
+            return sphere == Items.bonerapier || sphere == Items.boneslingshot;
+        }
+
+        /// <summary>The bone key's second half, the Cross Hinder's NO REVIVAL: while the Bone Rapier or Bone Slingshot is out
+        /// (or Super Steve with either sphere), the loaded death scripts of the reviving undead are patched once per floor so
+        /// the revive roll never wins (<see cref="PatchUndeadRevivers"/>), and put back when the key goes. Runs while one of
+        /// the three weapons is equipped; a sphere change on Super Steve patches or restores mid-floor.</summary>
+        public static void BoneKeyNoRevivalEffect()
+        {
+            var patched = new List<(long CellValueAddr, int OrigThr)>();
+            byte floor = 0xFF; bool applied = false;
+            while (Player.InDungeonFloor())
+            {
+                int id = Player.Weapon.GetCurrentWeaponId();
+                if (id != Items.bonerapier && id != Items.boneslingshot && id != Items.supersteve) break;
+                Thread.Sleep(250);
+                byte f = Memory.ReadByte(Addresses.checkFloor);
+                if (f != floor) { floor = f; patched.Clear(); applied = false; }   // the old floor's STBs are gone
+                bool wanted = BoneKeyWielded();
+                if (wanted && !applied) { PatchUndeadRevivers(patched); applied = true; }
+                else if (!wanted && applied) { RestoreUndeadRevivers(patched); applied = false; }
+            }
+            if (applied && Memory.ReadByte(Addresses.checkFloor) == floor) RestoreUndeadRevivers(patched);
+        }
+
+        private static void RestoreUndeadRevivers(List<(long CellValueAddr, int OrigThr)> patched)
+        {
+            foreach ((long addr, int orig) in patched)
+                if (Memory.ReadInt(addr) == CrossHinderPatchedThreshold) Memory.WriteInt(addr, orig);
+            patched.Clear();
         }
 
         /// <summary>Locate every loaded reviver STB (one 32MB sweep matching all five 96-byte signatures —

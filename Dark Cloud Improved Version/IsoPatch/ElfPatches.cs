@@ -116,12 +116,15 @@ namespace Dark_Cloud_Improved_Version
             PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
             PatchSharedShots(fs, ElfOff);                 // the monster shot pack's five slots shared among every config a floor needs (the step hook in DunPatches)
             PatchPelletSprite(fs, ElfOff);                // a player pellet drawn as the sprite of the item id the mod names (Super Steve with a slingshot's sphere)
+            PatchSteelLevelUp(fs, ElfOff);                // the Steel Slingshot's level-ups: endurance and max WHP grow twice as much
+            PatchFlameSpacing(fs, ElfOff);                // Osmond's flamethrower reach from a mailbox word (the Skunk doubles it)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
             PatchSuperSteveIconDraw(fs, ElfOff);          // Super Steve: the attached sphere's weapon icon over Steve on the dungeon HUD (dun.bin hooks in DunPatches)
             PatchCatGlowPalette(fs, ElfOff);              // … and the cave that paints one of them into the 8-bit glow disc
             PatchBlizzardIceImmunity(fs, ElfOff);         // Blizzard takes no ice damage (species-table IceRes 100 → 0, like Ice Gemron)
+            PatchXiaoBuildUp(fs, ElfOff);                 // Xiao's build-up tree: Hardshooter → Double Impact only, Double Impact → Matador only
             PatchMapCarveRemainder(fs, ElfOff);           // the monster pool = the (grown) map carve minus the floor's map data (DunPatches grows the carve)
             PatchIdleMotionOverride(fs, ElfOff);          // town idle motion (char+0xc68): idle(0)+mailbox → override index (idle→sit for the swapped-in cat); run/walk untouched
             PatchLadderRefusal(fs, ElfOff);               // town ladder-mount gate: BlockLadder mailbox → skip EdInitHashigo + climbing flag (non-Toan ally can't climb) and raise RefusalRequested
@@ -693,8 +696,8 @@ namespace Dark_Cloud_Improved_Version
             for (int i = 0; i + 4 <= b.Length; i += 4) { uint w = U32(b, i); if (w == 0x8F829D04u) vanillaRead = true; if (w == 0x03E00008u) jrRa = true; }
             if (b.Length % 4 != 0 || b.Length < 0x20 || U32(b, 0) != 0x3C0101F1u || !vanillaRead || !jrRa)
                 throw new IOException($"pelletSprite.bin malformed ({b.Length} B) or stale — reassemble its .s.");
-            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
-                throw new IOException("pelletSprite.bin overruns DebugInfomationDraw's span.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.SteelLevelUp)
+                throw new IOException("pelletSprite.bin overruns into the level-up cave that follows it in DebugInfomationDraw.");
             if (RdU32(fs, ElfOff(CodeCaves.DebugInfoCave.Host)) != 0x03E00008u)
                 throw new IOException("PatchPelletSprite must follow PatchSharedShots (the host's `jr ra`).");
             for (int i = 0; i < b.Length; i += 4)
@@ -705,6 +708,80 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException($"Pellet draw site 0x{HookAddr:X} is not vanilla `lw v0,-0x62FC(gp); lh v0,0(v0); addiu v1,v0,-0x12B` — unmodified Dark Cloud (USA) ISO expected.");
             WrU32(fs, ElfOff(HookAddr), ours);
             WrU32(fs, ElfOff(HookAddr + 4), 0);
+        }
+
+        /// <summary>Xiao's build-up tree, baked: the weapon template table's build-up word (WeaponList +0x3C, bit k = the weapon
+        /// 299 + k may be built up into) — Hardshooter → Double Impact alone (vanilla: Double Impact or Matador), Double Impact →
+        /// Matador alone (vanilla: Divine Beast Title).</summary>
+        internal static void PatchXiaoBuildUp(FileStream fs, Func<uint, long> ElfOff)
+        {
+            foreach (var (item, vanilla, ours, what) in new[]
+            {
+                (Items.hardshooter,  0x00001080u, 0x00000080u, "Hardshooter → Double Impact"),
+                (Items.doubleimpact, 0x00000200u, 0x00001000u, "Double Impact → Matador"),
+            })
+            {
+                uint addr = (uint)(Weapons.buildup - 0x20000000 + Weapons.xiaooffset + Weapons.weaponoffset * (item - Weapons.woodenid));
+                uint cur = RdU32(fs, ElfOff(addr));
+                if (cur != vanilla && cur != ours)
+                    throw new IOException($"Build-up word of weapon {item} at 0x{addr:X} is 0x{cur:X}, not vanilla 0x{vanilla:X} — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(addr), ours);   // {what}
+            }
+        }
+
+        /// <summary>The Steel Slingshot's level-up bonus is +2 endurance instead of +1 and twice the max-WHP roll (tools/stubs/
+        /// steel_level_up.s, after the pellet-sprite cave in DebugInfomationDraw's body): one add per stat in the commit routine
+        /// and the item-use routine becomes a call into the cave, which reads the record's item id and does the vanilla add for
+        /// every other weapon. The attached items' sums are untouched.</summary>
+        internal static void PatchSteelLevelUp(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint CaveAddr = CodeCaves.DebugInfoCave.SteelLevelUp;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.steelLevelUp.bin")
+                ?? throw new IOException("Embedded EE function missing: steelLevelUp.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            int jrRa = 0;
+            for (int i = 0; i + 4 <= b.Length; i += 4) if (U32(b, i) == 0x03E00008u) jrRa++;
+            if (b.Length % 4 != 0 || b.Length < 0x50 || (U32(b, 0) >> 16) != 0x1000 || (U32(b, 0x18) >> 16) != 0x1000 || jrRa != 4)
+                throw new IOException($"steelLevelUp.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (CaveAddr + (uint)b.Length > CodeCaves.DebugInfoCave.Host + CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("steelLevelUp.bin overruns DebugInfomationDraw's span.");
+            if (RdU32(fs, ElfOff(CodeCaves.DebugInfoCave.Host)) != 0x03E00008u)
+                throw new IOException("PatchSteelLevelUp must follow PatchSharedShots (the host's `jr ra`).");
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(CaveAddr + (uint)i), U32(b, i));
+            // (site, the vanilla word it replaces, the delay-slot word that stays, the cave entry)
+            foreach (var (site, vanilla, delay, entry) in new[]
+            {
+                (0x002367CCu, 0x24630001u, 0xA4830006u, CodeCaves.DebugInfoCave.SteelLevelUpB),   // SetLevelUpWeaponData: addiu v1,v1,1; sh v1,6(a0)
+                (0x00236880u, 0x00641821u, 0xA6230000u, CodeCaves.DebugInfoCave.SteelLevelUpC),   // SetLevelUpWeaponData: addu v1,v1,a0; sh v1,0(s1)
+                (0x00235D94u, 0x87A200AAu, 0x24430001u, CodeCaves.DebugInfoCave.SteelLevelUpD),   // WeaponLevelUpValueCalc: lh v0,0xAA(sp); addiu v1,v0,1
+                (0x00235EE4u, 0x00641821u, 0xA6A3000Cu, CodeCaves.DebugInfoCave.SteelLevelUpE),   // WeaponLevelUpValueCalc: addu v1,v1,a0; sh v1,0xC(s5)
+            })
+            {
+                uint cur = RdU32(fs, ElfOff(site)), ours = Jal(entry);
+                if ((cur != vanilla && cur != ours) || RdU32(fs, ElfOff(site + 4)) != delay)
+                    throw new IOException($"Weapon level-up site 0x{site:X} is not vanilla (0x{vanilla:X8} then 0x{delay:X8}) — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(site), ours);
+            }
+        }
+
+        /// <summary>Osmond's flamethrower reach from a data word: Set__13CSHOT_FIREBAR (0x1AED88) and Init__13CSHOT_FIREBAR (0x1AEB6C)
+        /// each load the particle spacing as `lui v0,0x4000; mtc1 v0,f12` (2.0) before scaling the aim by it → `lui v0,HI;
+        /// lwc1 f12,LO(v0)` of Mailbox.FlameSpacing (pnach-seeded 2.0; the Skunk writes 4.0 = twice the reach).</summary>
+        internal static void PatchFlameSpacing(FileStream fs, Func<uint, long> ElfOff)
+        {
+            uint hi = 0x3C020000u | (uint)((CodeCaves.Mailbox.FlameSpacing - 0x20000000) >> 16);
+            uint lo = 0xC44C0000u | (uint)((CodeCaves.Mailbox.FlameSpacing - 0x20000000) & 0xFFFF);
+            foreach (var (site, next) in new[] { (0x001AED88u, 0x27A40060u), (0x001AEB6Cu, 0x27A40070u) })
+            {
+                uint w0 = RdU32(fs, ElfOff(site)), w1 = RdU32(fs, ElfOff(site + 4));
+                bool vanilla = w0 == 0x3C024000u && w1 == 0x44826000u, ours = w0 == hi && w1 == lo;
+                if (!(vanilla || ours) || RdU32(fs, ElfOff(site + 8)) != next)
+                    throw new IOException($"Flamethrower spacing site 0x{site:X} is not vanilla `lui v0,0x4000; mtc1 v0,f12` — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(site), hi);
+                WrU32(fs, ElfOff(site + 4), lo);
+            }
         }
 
         /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has

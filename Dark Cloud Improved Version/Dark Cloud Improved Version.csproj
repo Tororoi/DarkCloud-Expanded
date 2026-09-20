@@ -52,6 +52,9 @@
     <EmbeddedResource Include="Resources\isoPatch\pelletSprite.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.pelletSprite.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\steelLevelUp.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.steelLevelUp.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\propPelletFollow.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin</LogicalName>
     </EmbeddedResource>

@@ -440,7 +440,13 @@ namespace Dark_Cloud_Improved_Version
             /// draw__5CSHOT): Super Steve carrying a slingshot's SynthSphere shows that slingshot's pellet. 0 = the equipped
             /// weapon's (vanilla).</summary>
             internal const long PelletSpriteId    = Base + 0xF4;
-            internal const long NextFree = Base + 0xF8;   // +0xF8..+0xFF are free (⚠ +0x100 = AiStubBase)
+            /// <summary>Osmond's flamethrower (CSHOT_FIREBAR, gun mode 2: the Blessing Gun and the Skunk): the spacing of its 24
+            /// flame particles along the aim, in units — the reach is 23 × this. The ISO's ELF patch makes Set and Init read it
+            /// here instead of their immediate 2.0; the PNACH re-seeds 2.0 every frame while the owner word is 0, the mod sets
+            /// the owner to 1 and writes 4.0 while the Skunk is equipped (Skunk).</summary>
+            internal const long FlameSpacing      = Base + 0xF8;
+            internal const long FlameSpacingOwner = Base + 0xFC;
+            internal const long NextFree = Base + 0x100;  // ⚠ FULL: +0x100 = AiStubBase — the next runtime word goes to the free band below the ELF caves (CodeCaves, 0x21FAF4B0..)
         }
 
         /// <summary>Caves that live INSIDE dun.bin (DunPatches writes their bytes over dead overlay code; the main-ELF hooks
@@ -473,6 +479,12 @@ namespace Dark_Cloud_Improved_Version
             /// <summary>tools/stubs/pellet_sprite.s: the item id a player pellet's sprite cell is taken from — Mailbox.PelletSpriteId
             /// when set, else the equipped weapon's (the hook at draw__5CSHOT 0x1ABC74).</summary>
             internal const uint PelletSprite     = Host + 0xB40;  // 0x1B42C0, 32 B → 0x1B42E0
+            /// <summary>tools/stubs/steel_level_up.s: the Steel Slingshot's level-up bonus is +2 endurance and twice the max-WHP
+            /// roll — four entries at fixed offsets, one per hooked add in SetLevelUpWeaponData (B endurance, C max WHP) and
+            /// WeaponLevelUpValueCalc (D endurance, E max WHP).</summary>
+            internal const uint SteelLevelUp     = Host + 0xB60;  // 0x1B42E0 → 0x1B43E0 at most
+            internal const uint SteelLevelUpB = SteelLevelUp, SteelLevelUpC = SteelLevelUp + 0x8, SteelLevelUpD = SteelLevelUp + 0x10,
+                                SteelLevelUpE = SteelLevelUp + 0x18;
         }
 
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────

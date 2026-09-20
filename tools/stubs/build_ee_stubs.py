@@ -57,6 +57,7 @@ STUBS = [
     ('borrowed_shots_enter.s',   'borrowedShotsEnter.bin',   0x1FB1ED0, 'borrowedShotsEnterTail.bin', 0x1FB3F40),
     ('shared_shots.s',           'sharedShots.bin',          0x1B3788),    # main ELF: DebugInfomationDraw's body + 8 (ElfPatches.PatchSharedShots)
     ('pellet_sprite.s',          'pelletSprite.bin',         0x1B42C0),    # main ELF: DebugInfomationDraw's body, after sharedShots (ElfPatches.PatchPelletSprite)
+    ('steel_level_up.s',         'steelLevelUp.bin',         0x1B42E0),    # main ELF: DebugInfomationDraw's body, after pelletSprite (ElfPatches.PatchSteelLevelUp)
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

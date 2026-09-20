@@ -20,6 +20,9 @@ namespace Dark_Cloud_Improved_Version
     {
         private const string Tag = "[ChargedShotWhp] ";
         internal const float ChargedFactor = 2.0f;   // a charged shot's WHP, against the ordinary shot's 1.0
+        /// <summary>What an ordinary shot costs, and what the word returns to after a charged one: 1.0, or what a weapon's own
+        /// rule sets (the Steel Slingshot's 0.5 while its WHP is low). A charged shot's factor multiplies it.</summary>
+        internal static float Base { get; private set; } = 1f;
         private const double ArmSeconds    = 1.5;    // a factor armed but never fired (a cancelled charge) is dropped after this
 
         private static readonly bool[] _seen = new bool[PlayerShotPool.SlotCount];
@@ -33,15 +36,24 @@ namespace Dark_Cloud_Improved_Version
         /// reached). Stays armed through the release until the pellet leaves.</summary>
         internal static void Arm(float factor)
         {
-            Write(factor);
+            Write(factor * Base);
             _armedAt = GameClock.Now;
+        }
+
+        /// <summary>A weapon's own ordinary-shot factor (1.0 = vanilla); written at once unless a charged shot is armed.</summary>
+        internal static void SetBase(float factor)
+        {
+            if (factor == Base) return;
+            bool armed = _written > Base;
+            Base = factor;
+            if (!armed) Write(Base);
         }
 
         /// <summary>Every tick on a weapon with a charged shot: back to 1.0 once the armed shot's pellet has left (or the
         /// charge was cancelled).</summary>
         internal static void Tick()
         {
-            if (_written < 0f) { Memory.WriteInt(CodeCaves.Mailbox.XiaoShotWhpOwner, 1); Write(1f); }
+            if (_written < 0f) { Memory.WriteInt(CodeCaves.Mailbox.XiaoShotWhpOwner, 1); Write(Base); }
             long pool = (uint)Memory.ReadInt(PlayerShotPool.BasePtr);
             if (!Memory.IsValidGuest(pool)) return;
             bool fired = false;
@@ -51,14 +63,14 @@ namespace Dark_Cloud_Improved_Version
                 if (live && !_seen[i]) { _seen[i] = true; fired = true; }
                 else if (!live) _seen[i] = false;
             }
-            if (_written <= 1f) return;
+            if (_written <= Base) return;
             if (fired)
             {
                 if (Native) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"charged shot fired at WHP factor ×{_written:F2}");
                 else if (!_nativeWarned) { _nativeWarned = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + "the shot-WHP patch is not in this ISO — charged shots cost their vanilla WHP (re-patch the ISO)"); }
-                Write(1f);
+                Write(Base);
             }
-            else if ((GameClock.Now - _armedAt).TotalSeconds > ArmSeconds) Write(1f);   // cancelled: nothing came
+            else if ((GameClock.Now - _armedAt).TotalSeconds > ArmSeconds) Write(Base);   // cancelled: nothing came
         }
 
         private static void Write(float factor)

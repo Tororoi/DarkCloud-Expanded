@@ -9,16 +9,16 @@ namespace Dark_Cloud_Improved_Version
     /// Ungaga 1.0, Osmond 1.8 — which the ISO's dun.bin patch (DunPatches) moves from the overlay to
     /// <see cref="CodeCaves.LockOnFactorTable"/>, runtime data the PNACH seeds with the vanilla six while nobody owns it.
     /// While a granting weapon is equipped the driver owns the table and holds Xiao's factor at <see cref="XiaoFactor"/>; the
-    /// vanilla 1.4 goes back when the weapon goes. The reach is the Flamingo's, inherited by the Matador, Dragon's Y, Divine
-    /// Beast Title, Angel Shooter and Angel Gear (<see cref="GrantsReach"/>), and by Super Steve carrying any of their
+    /// vanilla 1.4 goes back when the weapon goes. The reach is the Flamingo's, inherited by Dragon's Y, Divine Beast
+    /// Title, Angel Shooter and Angel Gear (<see cref="GrantsReach"/>), and by Super Steve carrying any of their
     /// SynthSpheres (<see cref="CustomXiaoEffects.SuperSteveEffect"/> drives it; the others share
     /// <see cref="CustomXiaoEffects.LockOnReachEffect"/>).
     ///
-    /// Owning one (Xiao's bag or the storage) is a passive for fishing: every bait's notice radius — the distance at which a
+    /// Owning them (Xiao's bag or the storage) is a passive for fishing: every bait's notice radius — the distance at which a
     /// fish turns toward the hook, copied from <see cref="BaitDetectionRadiusTable"/> into each fish every frame — is
-    /// <see cref="BaitNoticeBonus"/> units more, the bare hook's too. The table is written at each fishing session's start
-    /// (<see cref="Fishing.OnSessionStart"/>): the game's figures plus the bonus while a Flamingo is owned, the game's figures
-    /// otherwise (the table keeps whatever was last written).
+    /// <see cref="BaitNoticeBonus"/> units more per Flamingo owned, up to <see cref="BaitNoticeMaxOwned"/> of them, the bare
+    /// hook's too. The table is written at each fishing session's start (<see cref="Fishing.OnSessionStart"/>): the game's
+    /// figures plus the bonus, or the game's figures alone when none is owned (the table keeps whatever was last written).
     /// </summary>
     internal static class Flamingo
     {
@@ -26,13 +26,15 @@ namespace Dark_Cloud_Improved_Version
         private const float XiaoFactor = 2.8f;      // twice the vanilla 1.4
         private static readonly long XiaoEntry = CodeCaves.LockOnFactorTable + Player.XiaoId * 4;
         private static bool _held, _nativeWarned;
-        private const float BaitNoticeBonus = 25f;
+        private const float BaitNoticeBonus = 10f;   // per Flamingo owned …
+        private const int   BaitNoticeMaxOwned = 3;  // … up to this many
         private const int   StorageSlots = 30;
 
-        /// <summary>Whether a weapon carries the reach: the Flamingo and the five that inherit it. Also the test for a
-        /// SynthSphere's source weapon on Super Steve.</summary>
+        /// <summary>Whether a weapon carries the reach: the Flamingo and the four that inherit it (Dragon's Y, Divine Beast
+        /// Title, Angel Shooter, Angel Gear — the lock-on speed's line). Also the test for a SynthSphere's source weapon on
+        /// Super Steve.</summary>
         internal static bool GrantsReach(int weaponId)
-            => weaponId == Items.flamingo || weaponId == Items.matador || LockOnSpeed.Grants(weaponId);
+            => weaponId == Items.flamingo || LockOnSpeed.Grants(weaponId);
 
         /// <summary>Drive every tick while a granting weapon (or sphere) is equipped; <paramref name="active"/> false releases.</summary>
         internal static void Drive(bool active)
@@ -49,24 +51,26 @@ namespace Dark_Cloud_Improved_Version
             if (!_held) { _held = true; Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"lock-on reach ×{XiaoFactor / CodeCaves.LockOnFactorVanilla[Player.XiaoId]:F1}"); }
         }
 
-        /// <summary>Whether a Flamingo is anywhere in the inventory: Xiao's ten bag slots or the thirty storage slots.</summary>
-        internal static bool Owned()
+        /// <summary>How many Flamingos are in the inventory: Xiao's ten bag slots and the thirty storage slots.</summary>
+        internal static int Owned()
         {
+            int n = 0;
             for (int s = 0; s < DngStatusData.MaxWeaponSlots; s++)
-                if (Memory.ReadUShort(DngStatusData.WeaponRecord(Player.XiaoId, s)) == Items.flamingo) return true;
+                if (Memory.ReadUShort(DngStatusData.WeaponRecord(Player.XiaoId, s)) == Items.flamingo) n++;
             for (int s = 0; s < StorageSlots; s++)
-                if (Memory.ReadUShort(Addresses.firstStorageWeapon + s * WeaponHave.InventoryWeaponSlotStride) == Items.flamingo) return true;
-            return false;
+                if (Memory.ReadUShort(Addresses.firstStorageWeapon + s * WeaponHave.InventoryWeaponSlotStride) == Items.flamingo) n++;
+            return n;
         }
 
-        /// <summary>The bait notice table for this fishing session: each entry's own figure, plus the bonus while a Flamingo is
-        /// owned.</summary>
+        /// <summary>The bait notice table for this fishing session: each entry's own figure, plus the bonus per Flamingo owned
+        /// (up to <see cref="BaitNoticeMaxOwned"/>).</summary>
         internal static void ApplyBaitBonus()
         {
-            bool owned = Owned();
+            int owned = Math.Min(Owned(), BaitNoticeMaxOwned);
+            float bonus = owned * BaitNoticeBonus;
             foreach (var bait in BaitDetectionRadiusTable.All)
-                Memory.WriteFloat(bait.Radius, bait.DefaultRadius + (owned ? BaitNoticeBonus : 0f));
-            if (owned) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"owned: every bait notices from {BaitNoticeBonus} units further this session");
+                Memory.WriteFloat(bait.Radius, bait.DefaultRadius + bonus);
+            if (owned > 0) Console.WriteLine(ReusableFunctions.GetDateTimeForLog() + Tag + $"{owned} owned: every bait notices from {bonus:F0} units further this session");
         }
 
         /// <summary>The weapon or the floor went: Xiao's vanilla factor back.</summary>

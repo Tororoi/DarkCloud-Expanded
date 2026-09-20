@@ -90,6 +90,18 @@ namespace Dark_Cloud_Improved_Version
         /// <summary>
         /// Triggers Supernova effect: Chance on hit to apply a random status
         /// </summary>
+        /// <summary>Osmond's Skunk thread: hands every tick to <see cref="Skunk.Drive"/> while the weapon is equipped, and
+        /// stands it down once when it goes.</summary>
+        public static void SkunkEffect()
+        {
+            while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.skunk)
+            {
+                Skunk.Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            Skunk.Stop();
+        }
+
         public static void SupernovaEffect()
         {
             //Get a read on all the enemies hp on the current floor

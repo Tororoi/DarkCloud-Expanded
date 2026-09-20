@@ -76,6 +76,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread sunSwordThread = new Thread(new ThreadStart(CustomToanEffects.SunSwordEffect));
         public static Thread bigBangThread = new Thread(new ThreadStart(CustomToanEffects.BigBangEffect));
         public static Thread crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
+        public static Thread boneNoRevivalThread = new Thread(new ThreadStart(CustomToanEffects.BoneKeyNoRevivalEffect));
         public static Thread tsukikageThread = new Thread(new ThreadStart(CustomToanEffects.TsukikageEffect));
         public static Thread smallSwordThread = new Thread(new ThreadStart(CustomToanEffects.SmallSwordEffect));
         public static Thread darkCloudThread = new Thread(new ThreadStart(CustomToanEffects.DarkCloudEffect));
@@ -87,6 +88,8 @@ namespace Dark_Cloud_Improved_Version
         public static Thread lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
         public static Thread doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
         public static Thread banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
+        public static Thread steelSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.SteelSlingshotEffect));
+        public static Thread hardshooterThread = new Thread(new ThreadStart(CustomXiaoEffects.HardshooterEffect));
         public static Thread lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
@@ -101,6 +104,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread cactusThread = new Thread(new ThreadStart(CustomUngagaEffects.CactusEffect));
         public static Thread supernovaThread = new Thread(new ThreadStart(CustomOsmondEffects.SupernovaEffect));
         public static Thread starBreakerThread = new Thread(new ThreadStart(CustomOsmondEffects.StarBreakerEffect));
+        public static Thread skunkThread = new Thread(new ThreadStart(CustomOsmondEffects.SkunkEffect));
         public static Thread wiseOwlSwordThread = new Thread(new ThreadStart(CustomToanEffects.WiseOwlSwordEffect));
         public static Thread elementSwapThread = new Thread(new ThreadStart(Dayuppy.ElementSwapping)); //Create a new thread to run monitorElementSwapping()
         public static Thread dunEscapeConfirmThread;
@@ -198,6 +202,11 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
                                             boneDoorThread.Start();
+                                        }
+                                        if (!boneNoRevivalThread.IsAlive)
+                                        {
+                                            boneNoRevivalThread = new Thread(new ThreadStart(CustomToanEffects.BoneKeyNoRevivalEffect));
+                                            boneNoRevivalThread.Start();
                                         }
                                         break;
                                     case Items.seventhheaven:
@@ -384,8 +393,8 @@ namespace Dark_Cloud_Improved_Version
 
                             //Xiao
                             case Player.XiaoId:
-                                // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier sphere).
-                                if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve) CustomToanEffects.BoneRapierEffect(false);
+                                // Super Steve manages the bone-door bypass itself (via an attached Bone Rapier / Bone Slingshot sphere); the Bone Slingshot has it below.
+                                if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve && Player.Weapon.GetCurrentWeaponId() != Items.boneslingshot) CustomToanEffects.BoneRapierEffect(false);
                                 if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
                                 // The lock-on movement buff: Dragon's Y's, and the three weapons that inherit it (Super Steve's own loop drives its sphere's).
@@ -394,7 +403,7 @@ namespace Dark_Cloud_Improved_Version
                                     lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
                                     lockOnSpeedThread.Start();
                                 }
-                                // The lock-on reach: the Flamingo's, and the five weapons that inherit it (Super Steve's own loop drives its sphere's).
+                                // The lock-on reach: the Flamingo's, and the four weapons that inherit it (Super Steve's own loop drives its sphere's).
                                 if (Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()) && !lockOnReachThread.IsAlive)
                                 {
                                     lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
@@ -416,6 +425,16 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
                                             superSteveThread.Start();
+                                        }
+                                        if (!boneNoRevivalThread.IsAlive)   // the bone key's no-revival, for a Bone Rapier / Bone Slingshot sphere (the thread checks)
+                                        {
+                                            boneNoRevivalThread = new Thread(new ThreadStart(CustomToanEffects.BoneKeyNoRevivalEffect));
+                                            boneNoRevivalThread.Start();
+                                        }
+                                        if (!crossHinderThread.IsAlive && CustomToanEffects.CrossHinderWielded())   // Sanctifier, for a Cross Hinder sphere
+                                        {
+                                            crossHinderThread = new Thread(new ThreadStart(CustomToanEffects.CrossHinderEffect));
+                                            crossHinderThread.Start();
                                         }
                                         break;
 
@@ -448,6 +467,38 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             banditSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.BanditSlingshotEffect));
                                             banditSlingshotThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.boneslingshot:
+                                        // the skeleton key, the Bone Rapier's: bone doors open without their key, the undead stay down
+                                        CustomToanEffects.BoneRapierEffect(true);
+
+                                        if (!boneDoorThread.IsAlive)
+                                        {
+                                            boneDoorThread = new Thread(new ThreadStart(CustomToanEffects.BoneDoorTrigger));
+                                            boneDoorThread.Start();
+                                        }
+                                        if (!boneNoRevivalThread.IsAlive)
+                                        {
+                                            boneNoRevivalThread = new Thread(new ThreadStart(CustomToanEffects.BoneKeyNoRevivalEffect));
+                                            boneNoRevivalThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.steelslingshot:
+                                        if (!steelSlingshotThread.IsAlive)
+                                        {
+                                            steelSlingshotThread = new Thread(new ThreadStart(CustomXiaoEffects.SteelSlingshotEffect));
+                                            steelSlingshotThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.hardshooter:
+                                        if (!hardshooterThread.IsAlive)
+                                        {
+                                            hardshooterThread = new Thread(new ThreadStart(CustomXiaoEffects.HardshooterEffect));
+                                            hardshooterThread.Start();
                                         }
                                         break;
 
@@ -590,6 +641,14 @@ namespace Dark_Cloud_Improved_Version
                                         {
                                             snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
                                             snailThread.Start();
+                                        }
+                                        break;
+
+                                    case Items.skunk:
+                                        if (!skunkThread.IsAlive)
+                                        {
+                                            skunkThread = new Thread(new ThreadStart(CustomOsmondEffects.SkunkEffect));
+                                            skunkThread.Start();
                                         }
                                         break;
                                     default:
