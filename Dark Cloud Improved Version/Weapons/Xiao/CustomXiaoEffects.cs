@@ -33,8 +33,9 @@ namespace Dark_Cloud_Improved_Version
         }
 
         // ── Dragon's Y ─────────────────────────────────────────────────────────────────────
-        /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> while the weapon is equipped,
-        /// and stands it down once when it goes.</summary>
+        /// <summary>Xiao's Dragon's Y thread: hands every tick to <see cref="DragonsY.Drive"/> (the charged shot) while the
+        /// weapon is equipped, and stands it down once when it goes. Its movement buff has its own thread,
+        /// <see cref="LockOnSpeedEffect"/>, shared with the weapons that inherit it.</summary>
         public static void DragonsYEffect()
         {
             while (Player.InDungeonFloor() && Player.Weapon.GetCurrentWeaponId() == Items.dragonsy)
@@ -43,6 +44,20 @@ namespace Dark_Cloud_Improved_Version
                 Thread.Sleep(16);
             }
             DragonsY.Stop();
+        }
+
+        // ── Lock-on speed (Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ─────────
+        /// <summary>The lock-on movement buff's thread: hands every tick to <see cref="LockOnSpeed.Drive"/> while one of the
+        /// weapons that carry it is equipped (<see cref="LockOnSpeed.Grants"/>), and releases it once when it goes. Super Steve
+        /// drives the same buff from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
+        public static void LockOnSpeedEffect()
+        {
+            while (Player.InDungeonFloor() && LockOnSpeed.Grants(Player.Weapon.GetCurrentWeaponId()))
+            {
+                LockOnSpeed.Drive(!Player.CheckDunIsPaused() && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest());
+                Thread.Sleep(16);
+            }
+            LockOnSpeed.Stop();
         }
 
         private const ushort AngelGearHealAmount = 1;
@@ -116,6 +131,7 @@ namespace Dark_Cloud_Improved_Version
             var ssCactus = new CustomUngagaEffects.CactusState();
             var ssSnail = new CustomOsmondEffects.SnailState();
             var ssStarBreaker = new CustomOsmondEffects.StarBreakerState();
+            int lastSphere = 0;   // the sphere last seen: Charging Bull keeps a resident copy that must go when its sphere does
             while (Player.InDungeonFloor())
             {
                 int ch = Player.CurrentCharacterNum();
@@ -170,6 +186,18 @@ namespace Dark_Cloud_Improved_Version
                 // Angel Gear: slow party-wide HP regen.
                 DriveAngelGear(active && sphere == Items.angelgear);
 
+                // Lock-on speed (Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): ×1.3 movement while locked on.
+                LockOnSpeed.Drive(active && LockOnSpeed.Grants(sphere));
+
+                // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
+                DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
+
+                // Matador (Charging Bull): the charged pellet crushes guards and flies as a projection of the slingshot — Super
+                // Steve's own model, since the copy is of the live weapon. A held copy goes with the sphere.
+                if (lastSphere == Items.matador && sphere != Items.matador) ChargingBull.Stop();
+                ChargingBull.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.matador);
+                lastSphere = sphere;
+
                 // Goro Effects
 
                 // Cold Storage (Frozen Tuna): WHP losses bank a healing pool that drains after Xiao is hit;
@@ -216,6 +244,9 @@ namespace Dark_Cloud_Improved_Version
             SuperSteveAbilities.DriveSphereIcon(0);
             SuperSteveAbilities.DriveMobiusRing(false);   // resets the damage ramp
             CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
+            LockOnSpeed.Stop();
+            DragonsY.Stop();
+            ChargingBull.Stop();   // the resident slingshot copy too
         }
 
         /// <summary>Pack three contiguous floats for a single batched write. Position and velocity are

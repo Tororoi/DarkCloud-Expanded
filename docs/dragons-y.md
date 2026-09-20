@@ -1,15 +1,21 @@
 # Dragon's Y — lock-on speed and the Gemron shot
 
-`Weapons/Xiao/DragonsY.cs` (thread `CustomXiaoEffects.DragonsYEffect`), `Weapons/Xiao/BorrowedShots.cs`.
+`Weapons/Xiao/DragonsY.cs` (thread `CustomXiaoEffects.DragonsYEffect`), `Weapons/Xiao/LockOnSpeed.cs` (thread
+`CustomXiaoEffects.LockOnSpeedEffect`), `Weapons/Xiao/BorrowedShots.cs`.
 
 ## Lock-on speed
 
-While a lock is on (`PlayerAction.LockOnActive` / `LockOnTargetSlot`) Xiao moves at double speed. The dungeon walk is
+`LockOnSpeed.cs`. The buff is Dragon's Y's and is inherited by its line — Divine Beast Title, Angel Shooter and Angel
+Gear (`LockOnSpeed.Grants`) — and by Super Steve carrying any of the four's SynthSphere (driven from
+`SuperSteveEffect`). Super Steve with a Dragon's Y sphere also has the charged shot below, of its own selected element
+(`DragonsY.Wields`).
+
+While a lock is on (`PlayerAction.LockOnActive` / `LockOnTargetSlot`) Xiao moves at 1.3× speed. The dungeon walk is
 ROOT MOTION: `motionDrive` copies her position from her root frame's accumulated translation every frame and the
 camera-relative stick vector (built by `MoveChara`, dun 0x1DB08A0 → 0x1DC4540) only steers, so there is no ground-speed
 constant — the speed is the moving clip at its play rate. Locked on she strafes with the attack-stance clips (c04b KEYs
 19–22, frames 180–230 / 120–170; 18 is the stance idle), so the motion-speed override (+0xC60, −1 = the KEY rate) is held
-at 1.5 while one of those plays, and put back otherwise. The game writes −1 on every motion change, so the hold is
+at 1.3 while one of those plays, and put back otherwise. The game writes −1 on every motion change, so the hold is
 re-asserted each tick. (A native alternative — amplifying the per-frame root displacement, animation untouched — is
 possible if the fast-footed look is unwanted.)
 
@@ -95,6 +101,9 @@ wants the Gemrons'.
 History: the first cut entered the ball into the monster pack (five slots shared with every shooting species on the
 floor: a first version entering all five configs at floor load froze the load; then one slot reused per element with a
 monster-pool watermark rewind). It cost the enemy randomizer a slot whenever Dragon's Y was out.
+
+The pack's five slots are the monsters' — and since 2026-09-19 they are shared among every config a floor needs, so a
+roster is no longer limited to five: docs/shot-slot-sharing.md.
 
 ### BorrowedShots is the general loader
 

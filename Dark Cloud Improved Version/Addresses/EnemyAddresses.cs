@@ -24,7 +24,13 @@ namespace Dark_Cloud_Improved_Version
         internal static class MainMonstorUnit
         {
             internal const long Base      = 0x21DF87D0;
+            internal const int  SpeciesRowCount = 0x48;   // int — species rows the loader has set up on the floor (SetupBaseModel counts them)
             internal const int  LiveCount = 0x4C;     // int — number of live enemies on the floor; decrement when freeing a slot
+            /// <summary>The loader's copy of each species' record (EnemySpeciesTable's 0x9C bytes), one per row: SetupBaseModel
+            /// overwrites its shot-config indices (+0x68/+0x6A) with the pack SLOT each config got, and SetupViewMonstor copies
+            /// them to a unit's FloorSlots block (+0xAC/+0xAE) when it spawns. A refused config is stored as −(index + 2) by the
+            /// shot-slot sharing cave (SharedShots).</summary>
+            internal const int  SpeciesRows = 0x1DE30;
         }
 
         /// <summary>

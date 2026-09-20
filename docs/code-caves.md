@@ -53,6 +53,16 @@ merged across sessions — never overwritten):
 - Guest addresses in the findings file match ELF/Ghidra; add `0x20000000` for
   PINE/mod access.
 
+## Dead functions as hosts
+
+When the ELF cave band is full, a cave can take the body of a function nothing reaches in retail: its first word
+becomes `jr ra` (so any caller returns at once) and the cave starts at +8. In use: `MemoryMapDump` in dun.bin
+(printf-only, 332 B — `CodeCaves.DunCave`, its callers nop'd) and `DebugInfomationDraw` in the main ELF (the debug
+overlay behind `DebugStatus`, 3,952 B — `CodeCaves.DebugInfoCave`, docs/shot-slot-sharing.md). Prove deadness by
+scanning both binaries for `jal`/`j` words and pointer values naming the function (symtab entries past the loaded
+segments do not count); dun symbols past dun.bin's 100,224 B (e.g. `Setsumei` at 0x1DC6E70) belong to other overlays
+and are not hosts.
+
 ## Executing code from a cave
 
 A cave found here can hold **DATA** freely. Running our own **native code** from one

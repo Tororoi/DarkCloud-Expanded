@@ -298,11 +298,13 @@ namespace Dark_Cloud_Improved_Version
         private static int[] BuildFloorRoster(int mimicTI, int kingTI, int budget)
         {
             var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
+            var shotConfigs = new System.Collections.Generic.HashSet<int>();   // the shot configs the roster carries: each costs an image store
             int used = 0;
             bool TryAdd(int ti)
             {
-                if (roster.Count > 0 && used + Footprint(ti) > budget) return false;
-                roster.Add(ti); used += Footprint(ti); return true;
+                int cost = Footprint(ti) + SharedShots.ImageCost(ti, shotConfigs);
+                if (roster.Count > 0 && used + cost > budget) return false;
+                roster.Add(ti); used += cost; SharedShots.NoteConfigs(ti, shotConfigs); return true;
             }
             if (_randomizerRng.NextDouble() < MimicChance)     TryAdd(mimicTI);
             if (_randomizerRng.NextDouble() < KingMimicChance) TryAdd(kingTI);
@@ -341,12 +343,14 @@ namespace Dark_Cloud_Improved_Version
             PickTheme(dungeon, budget, out themeName, out int[] members, out bool requireFullFit, out bool isMimicTheme);
             string theme = themeName;   // local copy: out params can't be captured by the local functions below
             var roster = new System.Collections.Generic.List<int>(BtEnemyLayout.EntriesPerFloor);
+            var shotConfigs = new System.Collections.Generic.HashSet<int>();   // the shot configs the roster carries: each costs an image store
             int used = 0;
             bool TryAdd(int ti)
             {
                 if (roster.Contains(ti)) return true;                             // already present — treat as a no-op success
-                if (roster.Count > 0 && used + Footprint(ti) > budget) return false;
-                roster.Add(ti); used += Footprint(ti); return true;
+                int cost = Footprint(ti) + SharedShots.ImageCost(ti, shotConfigs);
+                if (roster.Count > 0 && used + cost > budget) return false;
+                roster.Add(ti); used += cost; SharedShots.NoteConfigs(ti, shotConfigs); return true;
             }
             // Cap for a themed member on a whole-group (repeatable) floor: members listed in this theme's
             // ThemeSingleSpawnByTheme set are pinned to one spawn; everything else is repeatable so it can carry
@@ -476,11 +480,12 @@ namespace Dark_Cloud_Improved_Version
             members = new System.Collections.Generic.List<int>(dict.Keys).ToArray();
         }
 
-        // Total model-buffer footprint of a themed group (sum of member footprints).
+        // Total model-buffer footprint of a themed group (sum of member footprints, plus an image store per shot config).
         private static int ThemeFootprint(System.Collections.Generic.Dictionary<int, EnemyDefaults> members)
         {
             int sum = 0;
-            foreach (int ti in members.Keys) sum += Footprint(ti);
+            var shotConfigs = new System.Collections.Generic.HashSet<int>();
+            foreach (int ti in members.Keys) { sum += Footprint(ti) + SharedShots.ImageCost(ti, shotConfigs); SharedShots.NoteConfigs(ti, shotConfigs); }
             return sum;
         }
 

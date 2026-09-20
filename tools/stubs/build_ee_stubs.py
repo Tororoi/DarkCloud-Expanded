@@ -55,6 +55,7 @@ STUBS = [
     ('supersteve_icon_copy.s',   'superSteveIconCopy.bin',   0x1FB3DC0),
     ('cat_guard_bypass.s',       'catGuardBypass.bin',       0x1DAC070),   # dun.bin: MemoryMapDump's body (DunPatches writes it)
     ('borrowed_shots_enter.s',   'borrowedShotsEnter.bin',   0x1FB1ED0, 'borrowedShotsEnterTail.bin', 0x1FB3F40),
+    ('shared_shots.s',           'sharedShots.bin',          0x1B3788),    # main ELF: DebugInfomationDraw's body + 8 (ElfPatches.PatchSharedShots)
     ('town_camera_collision.s',  'townCameraCollision.bin',  0x14B838),
     ('camera_height.s',          'cameraHeight.bin',         0x27D090),
 ]

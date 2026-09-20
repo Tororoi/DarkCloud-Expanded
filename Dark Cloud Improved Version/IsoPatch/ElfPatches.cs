@@ -114,6 +114,7 @@ namespace Dark_Cloud_Improved_Version
             PatchCatCopyQueue(fs, ElfOff);                // the cat's mesh copy runs inside the machine instead of over PINE
             PatchPropPelletFollow(fs, ElfOff);            // a chara-slot prop on one of Xiao's pellets — the Matador's charged shot (the hook in DunPatches now lands here)
             PatchBorrowedShotsEnter(fs, ElfOff);            // a species' shot config, borrowed by an ability, entered into every floor's shot pack (dun.bin hook in DunPatches)
+            PatchSharedShots(fs, ElfOff);                 // the monster shot pack's five slots shared among every config a floor needs (the step hook in DunPatches)
             PatchCatPalette(fs, ElfOff);                  // …and the cape/mask take the equipped weapon's element colour there too
             PatchCatGlowPalettes(fs, ElfOff);             // the six glow ramps (data) …
             PatchMirageHazeDraw(fs, ElfOff);              // Mirage: the heat shimmer drawn at the clone itself (dun.bin hook in DunPatches)
@@ -622,6 +623,58 @@ namespace Dark_Cloud_Improved_Version
                 throw new IOException("borrowedShotsEnterTail.bin overruns the band — it must end by ElfCave.RegionEnd.");
             for (int i = 0; i < t.Length; i += 4)
                 WrU32(fs, ElfOff(TailAddr + (uint)i), U32(t, i));
+        }
+
+        /// <summary>The monster shot pack's five slots shared among every shot config a floor needs (tools/stubs/shared_shots.s,
+        /// hosted in the dead DebugInfomationDraw — its first word becomes `jr ra`, so its debug-flag caller returns at once):
+        /// the species loader's two pack calls store a refused config's negative form in the species row, Step's two fire sites
+        /// acquire a config that is not in the pack before firing, and the dungeon step loop's chain head (DunPatches.
+        /// CatFollowHookNew) preloads one a frame while a slot is free.</summary>
+        internal static void PatchSharedShots(FileStream fs, Func<uint, long> ElfOff)
+        {
+            const uint Host = CodeCaves.DebugInfoCave.Host;
+            using var st = System.Reflection.Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("Dark_Cloud_Improved_Version.Resources.isoPatch.sharedShots.bin")
+                ?? throw new IOException("Embedded EE function missing: sharedShots.bin (run tools/stubs/build_ee_stubs.py and rebuild)");
+            using var ms = new MemoryStream(); st.CopyTo(ms); byte[] b = ms.ToArray();
+            // Shape: opens with the four-entry branch table, calls the keeper (its chain), Entry__17, Initialize__12 and Entry__12.
+            uint keeper = Jal(CodeCaves.ElfCave.BorrowedShotsEnter);
+            bool hasKeeper = false, hasEntry17 = false, hasInit = false, hasEntry12 = false;
+            for (int i = 0; i + 4 <= b.Length; i += 4)
+            {
+                uint w = U32(b, i);
+                if (w == keeper) hasKeeper = true; if (w == Jal(0x001AE4C0)) hasEntry17 = true;
+                if (w == Jal(0x001AE440)) hasInit = true; if (w == Jal(0x001ACC70)) hasEntry12 = true;
+            }
+            if (b.Length % 4 != 0 || b.Length < 0x40 || (U32(b, 0) >> 16) != 0x1000 || (U32(b, 8) >> 16) != 0x1000 || !hasKeeper || !hasEntry17 || !hasInit || !hasEntry12)
+                throw new IOException($"sharedShots.bin malformed ({b.Length} B) or stale — reassemble its .s.");
+            if (8 + b.Length > CodeCaves.DebugInfoCave.HostSpan)
+                throw new IOException("sharedShots.bin overruns DebugInfomationDraw's span.");
+            uint w0 = RdU32(fs, ElfOff(Host));
+            if (w0 != CodeCaves.DebugInfoCave.VanillaWord0 && w0 != 0x03E00008u)
+                throw new IOException($"DebugInfomationDraw at 0x{Host:X} is not vanilla (`addiu sp,sp,-0x170`) — unmodified Dark Cloud (USA) ISO expected.");
+            WrU32(fs, ElfOff(Host), 0x03E00008u);                                   // jr ra: the overlay draws nothing
+            WrU32(fs, ElfOff(Host + 4), 0);                                          // (its delay slot)
+            for (int i = 0; i < b.Length; i += 4)
+                WrU32(fs, ElfOff(Host + 8 + (uint)i), U32(b, i));
+            // SetupBaseModel's two pack calls: `jal Entry__17CSHOT_EFFECT_PACK; nop; addiu v1,zero,-1`
+            uint enter = Jal(CodeCaves.DebugInfoCave.SharedShotsEnter);
+            foreach (uint site in new[] { 0x001E01B0u, 0x001E0224u })
+            {
+                uint cur = RdU32(fs, ElfOff(site));
+                if ((cur != Jal(0x001AE4C0) && cur != enter) || RdU32(fs, ElfOff(site + 4)) != 0 || RdU32(fs, ElfOff(site + 8)) != 0x2403FFFFu)
+                    throw new IOException($"Species-loader pack call at 0x{site:X} is not vanilla `jal Entry__17CSHOT_EFFECT_PACK; nop; addiu v1,zero,-1` — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(site), enter);
+            }
+            // Step's two fire sites: the `lui at,0x6` before the request load; its delay slot, the vanilla `addu at,a0,at`, stays
+            // (the cave re-forms at = a0 + 0x60000 before returning to the load)
+            foreach (var (site, entry, load) in new[] { (0x001DEED0u, CodeCaves.DebugInfoCave.SharedShotsFire0, 0x8C23FF74u), (0x001DEFD8u, CodeCaves.DebugInfoCave.SharedShotsFire1, 0x8C230274u) })
+            {
+                uint cur = RdU32(fs, ElfOff(site)), ours = Jal(entry);
+                if ((cur != 0x3C010006u && cur != ours) || RdU32(fs, ElfOff(site + 4)) != 0x00810821u || RdU32(fs, ElfOff(site + 8)) != load || RdU32(fs, ElfOff(site + 12)) != 0x24020002u)
+                    throw new IOException($"Monster fire site at 0x{site:X} is not vanilla `lui at,0x6; addu at,a0,at; lw v1,…(at); addiu v0,zero,2` — unmodified Dark Cloud (USA) ISO expected.");
+                WrU32(fs, ElfOff(site), ours);
+            }
         }
 
         /// <summary>Every main-ELF call of DngActiveWeaponTextureCopy — the game's copy opportunities, each while a menu has

@@ -450,6 +450,24 @@ namespace Dark_Cloud_Improved_Version
             internal const uint CatGuardBypassSpan = 0x14C;
         }
 
+        /// <summary>A cave INSIDE a dead main-ELF function: the body of DebugInfomationDraw (0x1B3780, 3,952 B), the developers'
+        /// on-screen debug overlay. ElfPatches.PatchSharedShots turns its first word into `jr ra` — its one caller (dun.bin's
+        /// DrawProcess, behind a debug flag) returns at once — and writes the cave from +8. The band (<see cref="ElfCave"/>) is
+        /// full and may not grow; a dead function's body is the home for a cave of this size.</summary>
+        internal static class DebugInfoCave
+        {
+            internal const uint Host = 0x001B3780, HostSpan = 3952, VanillaWord0 = 0x27BDFE90;   // `addiu sp,sp,-0x170`
+            /// <summary>tools/stubs/shared_shots.s: the monster shot pack's five slots shared among every shot config a floor
+            /// needs (<see cref="SharedShots"/>, block <see cref="SharedShotBlock"/>). Entry points at fixed offsets: +8 the
+            /// dungeon step loop's chain head (DunPatches.CatFollowHookNew), +0x10/+0x18 Step__12CMonstorUnit's two fire sites
+            /// (0x1DEED0 / 0x1DEFD8), +0x20 SetupBaseModel's two pack calls (0x1E01B0 / 0x1E0224).</summary>
+            internal const uint SharedShots      = Host + 0x8;    // 2,864 B → 0x1B42B8 (the host ends at 0x1B4700)
+            internal const uint SharedShotsStep  = Host + 0x8;
+            internal const uint SharedShotsFire0 = Host + 0x10;
+            internal const uint SharedShotsFire1 = Host + 0x18;
+            internal const uint SharedShotsEnter = Host + 0x20;
+        }
+
         // ── ELF-BAKED CAVES — the mod's own PT_LOAD segment (hijacked phdr3) ─────────────────────────
         /// <summary>
         /// Every ISO-baked cave in the ELF. They live in a NEW loadable segment the ISO patcher creates by
@@ -776,7 +794,21 @@ namespace Dark_Cloud_Improved_Version
         internal const int  BorrowedShotCfg = 0x10, BorrowedShotState = 0x250, BorrowedShotPath = 0x258, BorrowedShotPathLen = 0x40,
                             BorrowedShotAlloc = 0x298, BorrowedShotReserve = 0x2AC, BorrowedShotCarveMark = 0x2B0, BorrowedShotBlockSize = 0x2C0;
 
-        // ── FREE: 0x21FAF200 .. 0x21FB0000 (0xE00 B) ────────────────────────────────────────────────────
+        /// <summary>The shot-slot sharing block (DebugInfoCave.SharedShots shares the monster pack's five slots among every config
+        /// a floor needs; SharedShots seeds and reads it): +0x00 "SHRE" (mod; without it a refused config is only skipped when it
+        /// fires), +0x04 the cave's frame counter, +0x08 disc entries, +0x0C restores, +0x10 skipped fires, +0x14 no room, +0x18 /
+        /// +0x1C the monster-pool headroom an entry needs for two / six sub-shots, units of 16 B (mod; 0 = the cave's 24,000 /
+        /// 48,000), +0x20 five stamps (the frame a slot last fired), +0x40 the config table (34 × {image store, mark}), +0x150 the
+        /// event ring (16 × {kind, slot, config in, config out — bytes; frame; data units}), +0x250 its write index, +0x260 the
+        /// allocator handed to the entry. Runtime data on a runtime-data page.</summary>
+        internal const long SharedShotBlock      = 0x21FAF200;
+        internal const uint SharedShotBlockGuest = 0x01FAF200;
+        internal const uint SharedShotMagic      = 0x45524853;   // "SHRE"
+        internal const int  SharedShotFrame = 0x04, SharedShotEntries = 0x08, SharedShotRestores = 0x0C, SharedShotSkips = 0x10, SharedShotNoRoom = 0x14,
+                            SharedShotNeed2 = 0x18, SharedShotNeed6 = 0x1C, SharedShotStamps = 0x20, SharedShotCfgTable = 0x40, SharedShotRing = 0x150,
+                            SharedShotRingCount = 16, SharedShotRingIndex = 0x250, SharedShotAlloc = 0x260, SharedShotBlockSize = 0x270;
+
+        // ── FREE: 0x21FAF480 .. 0x21FB0000 (0xB80 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.

@@ -23,7 +23,9 @@ namespace Dark_Cloud_Improved_Version
     ///  · the GLOW: the Divine Beast cat's glow cave (ElfCave.CatGlowDraw) hung on the copy's root — the same `catglowp`
     ///    disc in the Fire element's ramp (the palette cave paints <see cref="FireRow"/>). The cat never coexists with the
     ///    Matador, and the row is handed back to None when the shot ends so the cat repaints on its next spawn.
-    /// Nothing is drawn or crushed when the ISO lacks the caves.
+    /// Nothing is drawn or crushed when the ISO lacks the caves. Super Steve carrying a Matador SynthSphere has the ability
+    /// too (<see cref="CustomXiaoEffects.SuperSteveEffect"/> drives it): the copy is of the LIVE weapon, so it flies as Super
+    /// Steve's own model.
     /// </summary>
     internal static class ChargingBull
     {
@@ -62,7 +64,7 @@ namespace Dark_Cloud_Improved_Version
             (uint)Memory.ReadInt(DunPatches.CatFollowHookAddrMmu) == DunPatches.CatFollowHookNew
             && (uint)Memory.ReadInt(ElfPatches.GuardBypassHookAddrMmu) == (0x08000000u | (CodeCaves.DunCave.CatGuardBypass >> 2));
 
-        /// <summary>Drive every tick (16 ms) while the Matador is equipped; <paramref name="active"/> false HOLDS everything
+        /// <summary>Drive every tick (16 ms) while the Matador (or Super Steve with its sphere) is equipped; <paramref name="active"/> false HOLDS everything
         /// as it stands (pause, menu, chest, conversation — the pellet and the prop's slot stand still natively).
         /// <see cref="Stop"/> ends it when the weapon goes.</summary>
         internal static void Drive(bool active)

@@ -46,6 +46,9 @@
     <EmbeddedResource Include="Resources\isoPatch\borrowedShotsEnterTail.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.borrowedShotsEnterTail.bin</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\isoPatch\sharedShots.bin">
+      <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.sharedShots.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\isoPatch\propPelletFollow.bin">
       <LogicalName>Dark_Cloud_Improved_Version.Resources.isoPatch.propPelletFollow.bin</LogicalName>
     </EmbeddedResource>

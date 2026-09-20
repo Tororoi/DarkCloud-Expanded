@@ -115,11 +115,12 @@ namespace Dark_Cloud_Improved_Version
         /// know the native follower is live (DivineBeastCat falls back to its thread follower when it is not).</summary>
         internal const uint CatFollowHookAddr = 0x01DB874C;
         internal const uint CatFollowHookOrig = 0x0C06AF44;                                   // jal 0x1ABD10
-        // …and it lands on BorrowedShotsEnter (keeps a borrowed shot config entered in the floor's pack), which
+        // …and it lands on the shot-slot sharing cave's step (preloads a monster shot config into a free slot of the pack), which
+        // calls BorrowedShotsEnter (keeps a borrowed shot config entered in the main-character effect instance), which
         // calls PropPelletFollow (the Matador's charged shot), which calls the COPY-QUEUE cave — that services the cat's mesh
         // copy when one is pending and jumps on to CatPelletFollow, where the displaced step__5CSHOT runs — then each places
         // its own thing. Every frame with nothing to do the chain reads a few zero words and falls straight through.
-        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.ElfCave.BorrowedShotsEnter >> 2);
+        internal const uint CatFollowHookNew  = 0x0C000000u | (CodeCaves.DebugInfoCave.SharedShotsStep >> 2);
         internal const long CatFollowHookAddrMmu = 0x20000000L + CatFollowHookAddr;
 
         internal const uint MirageHazeHookAddr = 0x01DAEBCC;

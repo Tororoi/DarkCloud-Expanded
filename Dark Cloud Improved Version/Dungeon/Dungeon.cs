@@ -84,6 +84,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread superSteveThread = new Thread(new ThreadStart(CustomXiaoEffects.SuperSteveEffect));
         public static Thread matadorThread = new Thread(new ThreadStart(CustomXiaoEffects.MatadorEffect));
         public static Thread dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
+        public static Thread lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
@@ -384,6 +385,12 @@ namespace Dark_Cloud_Improved_Version
                                 if (Player.Weapon.GetCurrentWeaponId() != Items.supersteve) CustomToanEffects.BoneRapierEffect(false);
                                 if (magicCircleChanged) CustomRubyEffects.SecretArmletDisable(); magicCircleChanged = false;
 
+                                // The lock-on movement buff: Dragon's Y's, and the three weapons that inherit it (Super Steve's own loop drives its sphere's).
+                                if (LockOnSpeed.Grants(Player.Weapon.GetCurrentWeaponId()) && !lockOnSpeedThread.IsAlive)
+                                {
+                                    lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
+                                    lockOnSpeedThread.Start();
+                                }
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {
 
