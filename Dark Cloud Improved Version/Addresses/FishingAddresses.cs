@@ -99,7 +99,13 @@ namespace Dark_Cloud_Improved_Version
         internal static readonly BaitTableEntry Minon           = new BaitTableEntry(0x2026AEDC,  25.0f); // id=188
         internal static readonly BaitTableEntry Battan          = new BaitTableEntry(0x2026AEE4,  25.0f); // id=189
         internal static readonly BaitTableEntry Petitefish      = new BaitTableEntry(0x2026AEEC,  25.0f); // id=190
-        internal static readonly BaitTableEntry Unknown14       = new BaitTableEntry(0x2026AEF4,  40.0f); // id=0 — purpose unknown
+        internal static readonly BaitTableEntry BareHook        = new BaitTableEntry(0x2026AEF4,  40.0f); // id=0 — no bait on the hook
+        /// <summary>Every entry, the bare hook included (the Flamingo's passive raises them all).</summary>
+        internal static readonly BaitTableEntry[] All =
+        {
+            Evy, Mimi, Prickly, ThrobbingCherry, GooeyPeach, Bombnuts, PoisonousApple, MellowBanana, Carrot, PotatoCake, Minon,
+            Battan, Petitefish, BareHook,
+        };
     }
 
     /// <summary>

@@ -62,6 +62,7 @@ namespace Dark_Cloud_Improved_Version
             questActive.Clear();
             TakeBagSnapshot();
             CheckMardanSword();
+            Flamingo.ApplyBaitBonus();   // the bait notice table: +25 units on every bait while a Flamingo is owned
             if (FishingAreas.TryGetValue(_fishingAreaId, out AreaFishData areaData) && ResolveLiveSlotBase(ref areaData))
             {
                 InitSlots(areaData);

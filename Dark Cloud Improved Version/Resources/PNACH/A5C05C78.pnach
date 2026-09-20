@@ -399,6 +399,18 @@ patch=1,EE,21F10090,extended,3FC00000 //  refill multiplier = 1.5
 patch=1,EE,E1010000,extended,01F100EC //if nobody owns the word (apply next 1)
 patch=1,EE,21F100E8,extended,3F800000 //  WHP factor = 1.0
 
+//Lock-on reach factor table — one float per character (the enemy's lock-on distance × this = how far the player can lock on).
+//The ISO's dun.bin patch makes SetNearLockOnTarget and setTargetCursor read the table from 0x01FAF480 instead of dun.bin.
+//While 0x01FAF4A0 == 0 (the app is not driving it) PCSX2 re-seeds the vanilla six every frame; the app sets 0x01FAF4A0 = 1
+//and writes Xiao's entry (2.8 while the Flamingo is equipped).
+patch=1,EE,E1060000,extended,01FAF4A0 //if nobody owns the table (apply next 6)
+patch=1,EE,21FAF480,extended,3F99999A //  Toan 1.2
+patch=1,EE,21FAF484,extended,3FB33333 //  Xiao 1.4
+patch=1,EE,21FAF488,extended,3F8CCCCD //  Goro 1.1
+patch=1,EE,21FAF48C,extended,3FC00000 //  Ruby 1.5
+patch=1,EE,21FAF490,extended,3F800000 //  Ungaga 1.0
+patch=1,EE,21FAF494,extended,3FE66666 //  Osmond 1.8
+
 patch=1,EE,E1010001,extended,01F10028 //Option 1 Flag
 patch=1,EE,2025E036,extended,00000000 //beeping sound value
 patch=1,EE,E1010000,extended,01F10028 //Option 1 Flag

@@ -59,6 +59,20 @@ namespace Dark_Cloud_Improved_Version
             DoubleImpact.Stop();
         }
 
+        // ── Lock-on reach (Flamingo, Matador, Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ──
+        /// <summary>The lock-on reach's thread: hands every tick to <see cref="Flamingo.Drive"/> while one of the weapons that
+        /// carry it is equipped (<see cref="Flamingo.GrantsReach"/>), and releases it once when it goes. Super Steve drives the
+        /// same reach from <see cref="SuperSteveEffect"/> when its sphere is one of theirs.</summary>
+        public static void LockOnReachEffect()
+        {
+            while (Player.InDungeonFloor() && Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()))
+            {
+                Flamingo.Drive(!Player.CheckDunIsPaused());
+                Thread.Sleep(16);
+            }
+            Flamingo.Stop();
+        }
+
         // ── Lock-on speed (Dragon's Y, Divine Beast Title, Angel Shooter, Angel Gear) ─────────
         /// <summary>The lock-on movement buff's thread: hands every tick to <see cref="LockOnSpeed.Drive"/> while one of the
         /// weapons that carry it is equipped (<see cref="LockOnSpeed.Grants"/>), and releases it once when it goes. Super Steve
@@ -205,6 +219,9 @@ namespace Dark_Cloud_Improved_Version
                 // Lock-on speed (Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): ×1.3 movement while locked on.
                 LockOnSpeed.Drive(active && LockOnSpeed.Grants(sphere));
 
+                // Lock-on reach (Flamingo / Matador / Dragon's Y / Divine Beast Title / Angel Shooter / Angel Gear): enemies locked from twice as far.
+                Flamingo.Drive(active && Flamingo.GrantsReach(sphere));
+
                 // Dragon's Y: the charged shot — the Gemron ball of Super Steve's own selected element.
                 DragonsY.Drive(active && !Player.CheckDunIsInteracting() && !Player.CheckDunIsOpeningChest() && sphere == Items.dragonsy);
 
@@ -265,6 +282,7 @@ namespace Dark_Cloud_Improved_Version
             SuperSteveAbilities.DriveMobiusRing(false);   // resets the damage ramp
             CustomGoroEffects.FrozenTunaDrive(false, xiaoTuna, 0, ssTuna);   // resets the healing pool
             LockOnSpeed.Stop();
+            Flamingo.Stop();
             DragonsY.Stop();
             ChargingBull.Stop();   // the resident slingshot copy too
             DoubleImpact.Stop();

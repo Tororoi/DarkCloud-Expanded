@@ -86,6 +86,7 @@ namespace Dark_Cloud_Improved_Version
         public static Thread dragonsYThread = new Thread(new ThreadStart(CustomXiaoEffects.DragonsYEffect));
         public static Thread lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
         public static Thread doubleImpactThread = new Thread(new ThreadStart(CustomXiaoEffects.DoubleImpactEffect));
+        public static Thread lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
         public static Thread heavensCloudThread = new Thread(new ThreadStart(CustomToanEffects.HeavensCloudEffect));
         public static Thread snailThread = new Thread(new ThreadStart(CustomOsmondEffects.SnailEffect));
         public static Thread agasSwordThread = new Thread(new ThreadStart(CustomToanEffects.AgasSwordEffect));
@@ -391,6 +392,12 @@ namespace Dark_Cloud_Improved_Version
                                 {
                                     lockOnSpeedThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnSpeedEffect));
                                     lockOnSpeedThread.Start();
+                                }
+                                // The lock-on reach: the Flamingo's, and the five weapons that inherit it (Super Steve's own loop drives its sphere's).
+                                if (Flamingo.GrantsReach(Player.Weapon.GetCurrentWeaponId()) && !lockOnReachThread.IsAlive)
+                                {
+                                    lockOnReachThread = new Thread(new ThreadStart(CustomXiaoEffects.LockOnReachEffect));
+                                    lockOnReachThread.Start();
                                 }
                                 switch (Player.Weapon.GetCurrentWeaponId())
                                 {

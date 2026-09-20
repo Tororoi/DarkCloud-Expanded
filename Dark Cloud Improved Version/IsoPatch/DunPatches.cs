@@ -37,6 +37,13 @@ namespace Dark_Cloud_Improved_Version
             new(XiaoShotWhpSiteA + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path A)"),
             new(XiaoShotWhpSiteB,     0x3C023F80, XiaoShotWhpPatchedWord0, "Xiao shot WHP factor → mailbox word (lui, path B)"),
             new(XiaoShotWhpSiteB + 4, 0x44826000, XiaoShotWhpPatchedWord1, "Xiao shot WHP factor → mailbox word (lwc1 f12, path B)"),
+            // The lock-on reach factor table (six floats by character, dun 0x1DC1B20; SetNearLockOnTarget and setTargetCursor each
+            // copy it to the stack with `lui v0,0x1DC; addiu v0,v0,0x1B20; lq/ld`) → the mod's copy in runtime data
+            // (CodeCaves.LockOnFactorTable, pnach-seeded vanilla while idle; the Flamingo writes Xiao's 2.8).
+            new(0x01DC01A0, 0x3C0201DC, LockOnTableWord0, "lock-on factor table → mod copy (lui, SetNearLockOnTarget)"),
+            new(0x01DC01A4, 0x24421B20, LockOnTableWord1, "lock-on factor table → mod copy (addiu, SetNearLockOnTarget)"),
+            new(0x01DC07C0, 0x3C0201DC, LockOnTableWord0, "lock-on factor table → mod copy (lui, setTargetCursor)"),
+            new(0x01DC07C4, 0x24421B20, LockOnTableWord1, "lock-on factor table → mod copy (addiu, setTargetCursor)"),
             // CHARACTER HEAP: the dungeon's character + weapons + shot-effect data share ONE CDataAlloc2 pool that
             // GameInit carves from the 27 MB global buffer as 210000 × 16 B = 3.36 MB, and an overflow is a silent
             // spin (Alloc__14CDataAlloc2: printf + while(true)). Vanilla Xiao already sits within ~150 KB of that
@@ -129,6 +136,10 @@ namespace Dark_Cloud_Improved_Version
         internal const long MirageHazeHookAddrMmu = 0x20000000L + MirageHazeHookAddr;
 
         internal const uint XiaoShotWhpSiteA = 0x01DBCC58, XiaoShotWhpSiteB = 0x01DBCDD0;   // the two `lui v0,0x3f80` feeding SwordDmgCheck1 in BattleActionPlay_Jinn
+        // `lui v0,HI; addiu v0,v0,LO` of the guest address, LO sign-extended (the table sits at 0x1FAF480 = 0x1FB0000 − 0xB80)
+        internal const uint LockOnTableWord0 = 0x3C020000u | ((CodeCaves.LockOnFactorTableGuest + 0x8000u) >> 16);
+        internal const uint LockOnTableWord1 = 0x24420000u | (CodeCaves.LockOnFactorTableGuest & 0xFFFFu);
+        internal const long LockOnTableHookAddrMmu = 0x20000000L + 0x01DC01A0;
         internal const uint XiaoShotWhpPatchedWord0 = 0x3C020000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) >> 16);
         internal const uint XiaoShotWhpPatchedWord1 = 0xC44C0000u | (uint)((CodeCaves.Mailbox.XiaoShotWhpFactor - 0x20000000) & 0xFFFF);
         internal const long XiaoShotWhpPatchAddrMmu = 0x20000000L + XiaoShotWhpSiteA;

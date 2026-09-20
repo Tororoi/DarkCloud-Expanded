@@ -815,7 +815,17 @@ namespace Dark_Cloud_Improved_Version
                             SharedShotNeed2 = 0x18, SharedShotNeed6 = 0x1C, SharedShotStamps = 0x20, SharedShotCfgTable = 0x40, SharedShotRing = 0x150,
                             SharedShotRingCount = 16, SharedShotRingIndex = 0x250, SharedShotAlloc = 0x260, SharedShotBlockSize = 0x270;
 
-        // ── FREE: 0x21FAF480 .. 0x21FB0000 (0xB80 B) ────────────────────────────────────────────────────
+        /// <summary>The lock-on reach factor per character (DunPatches: SetNearLockOnTarget and setTargetCursor read their
+        /// six-float table from HERE instead of dun 0x1DC1B20 — the enemy's lock-on distance × this = the reach): Toan 1.2,
+        /// Xiao 1.4, Goro 1.1, Ruby 1.5, Ungaga 1.0, Osmond 1.8, indexed by character id. The PNACH re-seeds the six every frame
+        /// while the owner word at +0x20 is 0; the mod sets it to 1 and writes what it wants (the Flamingo: Xiao's 2.8).
+        /// 16-byte aligned (the routines copy it with lq). Runtime data on a runtime-data page.</summary>
+        internal const long LockOnFactorTable      = 0x21FAF480;
+        internal const uint LockOnFactorTableGuest = 0x01FAF480;
+        internal const int  LockOnFactorCount = 6, LockOnFactorOwner = 0x20;
+        internal static readonly float[] LockOnFactorVanilla = { 1.2f, 1.4f, 1.1f, 1.5f, 1.0f, 1.8f };
+
+        // ── FREE: 0x21FAF4B0 .. 0x21FB0000 (0xB50 B) ────────────────────────────────────────────────────
         // What remains of the MeshCave margin below the ELF cave segment — the last heap-tail span still
         // free for RUNTIME data (its pages already carry runtime-written words: mizu mailboxes, MeshCave).
         // Inside the CodeCaveScanner ModReserved heap-tail claim (0x1F10000..0x1FB4300), so it stays clean.
